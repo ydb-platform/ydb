@@ -43,7 +43,7 @@ def _throughput_gain(lower, upper):
     if lower > 0:
         return 100.0 * (upper - lower) / lower
     if upper > lower:
-        return float("inf")
+        return None
     return 0.0
 
 
@@ -103,7 +103,9 @@ def _run_throughput(config, measure, on_attempt):
             failing_load = load if failing_load is None else min(failing_load, load)
         else:
             decision = reason
-            if gain is not None:
+            if baseline is not None and gain is None:
+                decision += "; throughput increased from zero baseline"
+            elif gain is not None:
                 decision += "; throughput gain {:.3f}%".format(gain)
             if metrics["errors"]:
                 decision += "; {} workload errors allowed".format(metrics["errors"])
@@ -148,7 +150,9 @@ def _run_throughput(config, measure, on_attempt):
             high = upper_load - 1
             continue
         gain = _throughput_gain(lower["throughput"], upper["throughput"])
-        saturated_plateau = gain < objective["plateau_gain_percent"] and upper["target_cpu_saturated"]
+        saturated_plateau = (
+            gain is not None and gain < objective["plateau_gain_percent"] and upper["target_cpu_saturated"]
+        )
         if saturated_plateau:
             plateau += 1
             plateau_confirmed = plateau_confirmed or plateau >= objective["plateau_points"]

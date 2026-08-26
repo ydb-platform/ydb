@@ -845,6 +845,41 @@ def _aggregate_measurements(rows):
     return result
 
 
+def _search_scaling_evidence(result, saturation_percent):
+    """Return the attempt which explains why adding dynamic nodes may help."""
+
+    def attempt_at(load):
+        if load is None:
+            return None
+        return next((item for item in result.attempts if item["load"] == load), None)
+
+    # A failing boundary is the closest observation of the bottleneck.  This
+    # also covers a search whose minimum load failed and therefore has no
+    # selected passing point.
+    def dynamic_limited(item):
+        return (
+            item.get("dynamic_cpu_mean", 0) >= saturation_percent
+            and item.get("static_cpu_mean", 0) < saturation_percent
+        )
+
+    failing = attempt_at(result.failing_load)
+    if failing is not None:
+        reason = "minimum-failing-load" if result.passing_load is None else "failing-boundary"
+        return failing, reason
+
+    # The selected point can precede the probe which exposed a dynamic-only
+    # bottleneck.  Storage profiles target static CPU by default, so this check
+    # must use the role metrics directly rather than target_cpu_saturated.
+    saturated = [item for item in result.attempts if dynamic_limited(item)]
+    if saturated:
+        return max(saturated, key=lambda item: item["load"]), "dynamic-saturation"
+
+    selected = attempt_at(result.selected_load)
+    if selected is not None:
+        return selected, "selected-load"
+    return None, None
+
+
 def _role_capacity(mask, topology):
     return len(mask) if mask is not None else len(topology.allowed_cpus)
 
@@ -1064,18 +1099,19 @@ def run_local_ydb(
                                 "dynamic": _role_capacity(affinities["dynamic_nodes"], topology),
                                 "cli": _role_capacity(affinities["ydb_cli"], topology),
                             },
-                        ).start()
-                        command = _run_workload_command(
-                            cluster,
-                            table_path,
-                            profile["workload"],
-                            profile["load"],
-                            load,
-                            profile["measurement"]["duration"],
-                            profile["client"]["threads"],
                         )
-                        cluster.ensure_running("cannot start workload measurement")
+                        monitor.start()
                         try:
+                            command = _run_workload_command(
+                                cluster,
+                                table_path,
+                                profile["workload"],
+                                profile["load"],
+                                load,
+                                profile["measurement"]["duration"],
+                                profile["client"]["threads"],
+                            )
+                            cluster.ensure_running("cannot start workload measurement")
                             publish_progress(
                                 "measuring",
                                 **progress_fields,
@@ -1197,10 +1233,11 @@ def run_local_ydb(
             geometry = profile["geometry"]
             can_scale = geometry["preset"] == "storage" and dynamic_nodes < geometry["max_dynamic_nodes"]
             saturation_percent = profile["load"].get("objective", {}).get("cpu_saturation_percent", 95)
+            scaling_evidence, scaling_evidence_reason = _search_scaling_evidence(result, saturation_percent)
             compute_limited = (
-                selected is not None
-                and selected["dynamic_cpu_mean"] >= saturation_percent
-                and selected["static_cpu_mean"] < saturation_percent
+                scaling_evidence is not None
+                and scaling_evidence["dynamic_cpu_mean"] >= saturation_percent
+                and scaling_evidence["static_cpu_mean"] < saturation_percent
             )
             search_record = {
                 "stage": search_stage,
@@ -1211,6 +1248,8 @@ def run_local_ydb(
                 "duration_seconds": time.monotonic() - search_started_monotonic,
                 "selected_load": result.selected_load,
                 "selected_metrics": selected,
+                "scaling_evidence_metrics": scaling_evidence,
+                "scaling_evidence_reason": scaling_evidence_reason,
                 "passing_load": result.passing_load,
                 "failing_load": result.failing_load,
                 "outcome": result.outcome,
@@ -1294,9 +1333,21 @@ def run_local_ydb(
             )
         write_manifest(manifest_path, manifest)
         return manifest
-    except BenchmarkInterrupted as error:
-        manifest.update({"status": "interrupted", "state": "cancelled", "finished_at": _utc_now(), "error": str(error)})
-        publish_progress("cancelled", error=str(error))
+    except (BenchmarkInterrupted, KeyboardInterrupt) as error:
+        interruption = (
+            error
+            if isinstance(error, BenchmarkInterrupted)
+            else BenchmarkInterrupted("local YDB benchmark was interrupted")
+        )
+        manifest.update(
+            {
+                "status": "interrupted",
+                "state": "cancelled",
+                "finished_at": _utc_now(),
+                "error": str(interruption),
+            }
+        )
+        publish_progress("cancelled", error=str(interruption))
         write_manifest(manifest_path, manifest)
         if event_sink is not None:
             event_sink(
@@ -1304,10 +1355,12 @@ def run_local_ydb(
                     "type": "step-finished",
                     **step,
                     "state": "cancelled",
-                    "fields": {"finished_at": manifest["finished_at"], "reason": str(error)},
+                    "fields": {"finished_at": manifest["finished_at"], "reason": str(interruption)},
                 }
             )
-        raise
+        if interruption is error:
+            raise
+        raise interruption from error
     except BenchmarkError as error:
         manifest.update({"status": "failed", "state": "failed", "finished_at": _utc_now(), "error": str(error)})
         publish_progress("failed", error=str(error))

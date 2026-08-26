@@ -2,6 +2,7 @@
 
 import csv
 import io
+import math
 import statistics
 
 from ydb.tools.ydb_bench.benchmarks.registry import (
@@ -57,7 +58,7 @@ def parse_cli_metrics(stdout):
             if len(values) != 8:
                 break
             try:
-                return {
+                result = {
                     "transactions": int(values[0]),
                     "throughput": float(values[1]),
                     "retries": int(values[2]),
@@ -67,6 +68,11 @@ def parse_cli_metrics(stdout):
                     "p99_ms": float(values[6]),
                     "pmax_ms": float(values[7]),
                 }
+                if not all(
+                    math.isfinite(result[name]) for name in ("throughput", "p50_ms", "p95_ms", "p99_ms", "pmax_ms")
+                ):
+                    raise ValueError("non-finite workload metric")
+                return result
             except ValueError:
                 break
     raise BenchmarkError("YDB CLI workload output does not contain a valid Total row")
@@ -100,7 +106,8 @@ def summarize_metrics(repetition_rows, benchmark):
     result = []
     for key in sorted(grouped):
         rows = grouped[key]
-        record = {item.name: value for item, value in zip(benchmark.dimensions, key)}
+        record = {"affinity_mode": "roles"}
+        record.update({item.name: value for item, value in zip(benchmark.dimensions, key)})
         record["samples"] = len(rows)
         for metric in benchmark.metrics:
             values = [row[metric.name] for row in rows]
@@ -112,7 +119,7 @@ def summarize_metrics(repetition_rows, benchmark):
 
 
 def render_summary(rows, benchmark):
-    columns = [item.name for item in benchmark.dimensions] + ["samples"]
+    columns = ["affinity_mode"] + [item.name for item in benchmark.dimensions] + ["samples"]
     for metric in benchmark.metrics:
         columns += ["median_" + metric.name, "min_" + metric.name, "max_" + metric.name]
     output = io.StringIO()

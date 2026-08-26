@@ -25,7 +25,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
 from ydb.tools.ydb_bench.lib.config import BACKGROUND_LOAD_MODES, build_run_plan, load_config
-from ydb.tools.ydb_bench.lib.results import ResultStore, load_manifest
+from ydb.tools.ydb_bench.lib.results import ResultStore, _non_finite_json_as_null, load_manifest
 from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
 from ydb.tools.ydb_bench.lib.common import extract_executable
 from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, export_archive, import_archive
@@ -2063,6 +2063,10 @@ class RunService:
         event = dict(event)
         event["sequence"] = run["store"].manifest.get("events", 0) + 1
         event["at"] = _utc_now()
+        try:
+            serialized_event = json.dumps(event, sort_keys=True, allow_nan=False)
+        except ValueError as error:
+            raise BenchmarkError("event contains a non-finite JSON number") from error
         if event.get("type") in ("stdout", "stderr"):
             key = event["type"]
             run["tail"][key] = (run["tail"][key] + str(event.get("data", "")))[-self.tail_limit :]
@@ -2087,7 +2091,7 @@ class RunService:
         run["events"].append(event)
         run["store"].manifest["events"] = event["sequence"]
         with (run["root"] / "events.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(event, sort_keys=True) + "\n")
+            stream.write(serialized_event + "\n")
         run["store"].write()
 
     def _unsupported_executor(self, run, emit, cancelled):
@@ -2308,6 +2312,11 @@ class RunService:
     def local_ydb_profile(self, run_id, profile):
         root = _run_directory(self.output, run_id)
         manifest = load_manifest(root / "run.json")
+        steps = [
+            item
+            for item in manifest.get("steps", [])
+            if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+        ]
         record = next(
             (
                 item
@@ -2316,17 +2325,54 @@ class RunService:
             ),
             None,
         )
+
+        def unavailable_profile(record_status=None, error=None):
+            state_by_status = {
+                "completed": "passed",
+                "interrupted": "cancelled",
+                "pending": "preparing",
+                "queued": "preparing",
+                "running": "preparing",
+            }
+            if record_status:
+                state = state_by_status.get(record_status, record_status)
+                status = record_status
+            elif any(item.get("state") == "running" for item in steps):
+                state = status = "preparing"
+            elif any(item.get("state") == "failed" for item in steps):
+                state = status = "failed"
+            elif any(item.get("state") == "pending" for item in steps):
+                state = status = "preparing"
+            elif any(item.get("state") == "cancelled" for item in steps):
+                state = status = "cancelled"
+            elif steps and all(item.get("state") == "unsupported" for item in steps):
+                state = status = "unsupported"
+            else:
+                state, status = "passed", "completed"
+
+            top_state = manifest.get("state")
+            if state == "preparing" and top_state not in ("pending", "queued", "running"):
+                state = top_state or "failed"
+                status = manifest.get("status") or state
+
+            value = {
+                "benchmark": "local-ydb",
+                "profile": profile,
+                "status": status,
+                "state": state,
+            }
+            step_error = next(
+                (item.get("error") or item.get("reason") for item in steps if item.get("error") or item.get("reason")),
+                None,
+            )
+            error = error or step_error or (manifest.get("error") if state not in ("preparing", "passed") else None)
+            if error:
+                value["error"] = error
+            return value
+
         if record is None:
-            if any(
-                item.get("benchmark") == "local-ydb" and item.get("profile") == profile
-                for item in manifest.get("steps", [])
-            ):
-                return {
-                    "benchmark": "local-ydb",
-                    "profile": profile,
-                    "status": "preparing",
-                    "state": "preparing",
-                }
+            if steps:
+                return unavailable_profile()
             raise BenchmarkError("local-ydb profile not found: {}".format(profile))
         relative = record.get("manifest") or str(Path(record.get("directory", "")) / "run.json")
         unresolved = root / relative
@@ -2334,15 +2380,16 @@ class RunService:
         if candidate == root or root not in candidate.parents or unresolved.is_symlink():
             raise BenchmarkError("local-ydb profile manifest escapes the run directory")
         if not candidate.is_file():
-            return {
-                "benchmark": "local-ydb",
-                "profile": profile,
-                "status": record.get("status", "preparing"),
-                "state": "preparing",
-            }
+            return unavailable_profile(record.get("status"), record.get("error"))
         if candidate.stat().st_size > 16 * 1024 * 1024:
             raise BenchmarkError("local-ydb profile manifest is too large")
         value = load_manifest(candidate)
+        top_state = manifest.get("state")
+        if value.get("state") in ("preparing", "running") and top_state not in ("pending", "queued", "running"):
+            value["state"] = top_state or "failed"
+            value["status"] = manifest.get("status") or value["state"]
+            if manifest.get("error"):
+                value["error"] = manifest["error"]
         fields = (
             "schema_version",
             "benchmark",
@@ -2392,17 +2439,43 @@ class RunService:
         return item
 
     def events(self, run_id, after=0):
+        path = _run_directory(self.output, run_id) / "events.jsonl"
         with self._lock:
             run = self._runs.get(run_id)
         if run:
             with run["lock"]:
-                return [dict(e) for e in run["events"] if e["sequence"] > after]
-        path = _run_directory(self.output, run_id) / "events.jsonl"
+                live_events = [dict(event) for event in run["events"]]
+                last_sequence = run["store"].manifest.get("events", 0)
+                if after >= last_sequence:
+                    return []
+                if live_events and after >= live_events[0]["sequence"] - 1:
+                    return [event for event in live_events if event["sequence"] > after]
+                if path.is_symlink():
+                    raise BenchmarkError("run event log must be a regular file")
+                try:
+                    snapshot_size = path.stat().st_size
+                except FileNotFoundError:
+                    return [event for event in live_events if event["sequence"] > after]
+            # Capture the byte boundary while emissions are locked, then read
+            # outside the lock.  Later appends belong to the next poll and
+            # cannot expose a partially written JSON line in this replay.
+            with path.open("rb") as stream:
+                payload = stream.read(snapshot_size)
+            return [
+                event
+                for line in payload.decode("utf-8").splitlines()
+                if (event := json.loads(line, parse_constant=_non_finite_json_as_null))["sequence"] > after
+            ]
+        if path.is_symlink():
+            raise BenchmarkError("run event log must be a regular file")
         if not path.is_file():
             return []
+        snapshot_size = path.stat().st_size
+        with path.open("rb") as stream:
+            payload = stream.read(snapshot_size)
         events = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            event = json.loads(line)
+        for line in payload.decode("utf-8").splitlines():
+            event = json.loads(line, parse_constant=_non_finite_json_as_null)
             if event["sequence"] > after:
                 events.append(event)
         return events
@@ -2556,7 +2629,12 @@ def _handler(service):
             self.wfile.write(body)
 
         def _json(self, status, value):
-            self._send(status, "application/json", json.dumps(value).encode())
+            try:
+                body = json.dumps(value, allow_nan=False).encode()
+            except ValueError:
+                status = 500
+                body = b'{"error": "response contains a non-finite JSON number"}'
+            self._send(status, "application/json", body)
 
         def _attachment(self, content_type, filename, body):
             self._send(200, content_type, body, {"Content-Disposition": _content_disposition(filename)})
@@ -2682,10 +2760,14 @@ def _handler(service):
             if path.startswith("/api/runs/") and path.endswith("/manifest"):
                 run_id = unquote(path[len("/api/runs/") : -len("/manifest")])
                 manifest = load_manifest(_run_directory(service.output, run_id) / "run.json")
+                try:
+                    body = (json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+                except ValueError:
+                    return self._json(500, {"error": "run manifest contains a non-finite JSON number"})
                 return self._attachment(
                     "application/json",
                     "{}-run.json".format(run_id.replace("/", "-")),
-                    (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
+                    body,
                 )
             if path.startswith("/api/runs/") and path.endswith("/archive"):
                 run_id = unquote(path[len("/api/runs/") : -len("/archive")])
@@ -2705,10 +2787,16 @@ def _handler(service):
                 except ValueError:
                     return self._json(400, {"error": "events after must be an integer"})
                 events = service.events(run_id, after)
-                payload = (
-                    b"".join(("id: %s\ndata: %s\n\n" % (e["sequence"], json.dumps(e))).encode() for e in events)
-                    or b": connected\n\n"
-                )
+                try:
+                    payload = (
+                        b"".join(
+                            ("id: %s\ndata: %s\n\n" % (event["sequence"], json.dumps(event, allow_nan=False))).encode()
+                            for event in events
+                        )
+                        or b": connected\n\n"
+                    )
+                except ValueError:
+                    return self._json(500, {"error": "event log contains a non-finite JSON number"})
                 return self._send(200, "text/event-stream", payload)
             if path.startswith("/api/runs/"):
                 item = service.detail(unquote(path[len("/api/runs/") :]))

@@ -27,6 +27,7 @@ import yaml
 from ydb.tools.ydb_bench.lib import (
     actors_core,
     cli,
+    common,
     import_results,
     linux_telemetry,
     load_control,
@@ -191,6 +192,13 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(metrics["throughput"], 10)
         self.assertEqual(metrics["p99_ms"], 419)
 
+    def test_local_ydb_cli_total_row_rejects_non_finite_metrics(self):
+        with self.assertRaisesRegex(BenchmarkError, "valid Total row"):
+            parse_cli_metrics("""
+                Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+                20 nan 0 0 1 2 3 4
+            """)
+
     def test_local_ydb_profile_parses_geometry_load_and_role_affinity(self):
         loaded = load_config(self._config("""
                 local-ydb:
@@ -217,6 +225,7 @@ class YdbBenchTest(unittest.TestCase):
                         type: latency-slo
                         percentile: p99
                         max-ms: 10
+                        cpu-saturation-percent: 80
                     affinity:
                       ydb-cli:
                         mode: pack-numa-pack-chiplet-spread-core
@@ -234,6 +243,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(profile["geometry"]["max_dynamic_nodes"], 6)
         self.assertEqual(profile["load"]["search"]["resolution_percent"], 5)
         self.assertEqual(profile["load"]["objective"]["max_ms"], 10)
+        self.assertEqual(profile["load"]["objective"]["cpu_saturation_percent"], 80)
         self.assertTrue(profile["load"]["allow_errors"])
         self.assertEqual(profile["affinity"]["ydb_cli"]["cpus"], "one-chiplet")
 
@@ -279,6 +289,7 @@ class YdbBenchTest(unittest.TestCase):
                       start: 100
                       maximum: 1000
                       search-resolution-percent: 5
+                      cpu-saturation-percent: 85
                       slo: {percentile: p95, max-ms: 20}
             """))
         load = loaded.runs[0].parameters["local_ydb"]["load"]
@@ -286,6 +297,31 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(load["search"]["resolution_percent"], 5)
         self.assertEqual(load["objective"]["type"], "latency-slo")
         self.assertEqual(load["objective"]["percentile"], "p95")
+        self.assertEqual(load["objective"]["cpu_saturation_percent"], 85)
+
+    def test_local_ydb_legacy_slo_requires_known_mapping_fields(self):
+        invalid_slos = (
+            "1",
+            "{type: maximize-throughput, max-ms: 20}",
+        )
+        for index, slo in enumerate(invalid_slos):
+            with self.subTest(slo=slo), self.assertRaisesRegex(BenchmarkError, r"load\.slo"):
+                load_config(
+                    self._config(
+                        """
+                        local-ydb:
+                          invalid:
+                            workload: {type: kv, operation: upsert}
+                            load:
+                              mode: latency-slo
+                              parameter: rate
+                              start: 10
+                              maximum: 100
+                              slo: __SLO__
+                        """.replace("__SLO__", slo),
+                        name="invalid-slo-{}.yaml".format(index),
+                    )
+                )
 
     def test_local_ydb_profile_is_editable_by_web_builder(self):
         loaded = load_config(self._config("""
@@ -652,6 +688,38 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(no_feasible.outcome, "no-feasible-point")
         self.assertEqual(no_feasible.failing_load, 10)
 
+    def test_throughput_controller_keeps_zero_baseline_gain_json_safe(self):
+        result = load_control.search_load(
+            {
+                "parameter": "rate",
+                "search": {"start": 1, "maximum": 10, "multiplier": 2, "resolution_percent": 2},
+                "objective": {
+                    "type": "maximize-throughput",
+                    "target_role": "dynamic",
+                    "cpu_saturation_percent": 90,
+                    "plateau_gain_percent": 1,
+                    "plateau_points": 2,
+                },
+            },
+            lambda load: {
+                "throughput": 0 if load <= 4 else load,
+                "errors": 0,
+                "dynamic_cpu_mean": 20,
+                "static_cpu_mean": 10,
+                "host_cpu_mean": 30,
+            },
+        )
+        zero_baseline_probe = next(item for item in result.attempts if item["load"] == 7)
+        self.assertIsNone(zero_baseline_probe["throughput_gain_percent"])
+        self.assertIn("zero baseline", zero_baseline_probe["decision"])
+        json.dumps([dict(item) for item in result.attempts], allow_nan=False)
+
+    def test_atomic_json_rejects_non_finite_numbers(self):
+        path = self.root / "non-finite.json"
+        with self.assertRaisesRegex(BenchmarkError, "finite values"):
+            common.atomic_write_json(path, {"value": float("inf")})
+        self.assertFalse(path.exists())
+
     def test_load_controllers_can_accept_reported_request_errors(self):
         strict = load_control.search_load(
             {"parameter": "rate", "values": [10]},
@@ -737,6 +805,160 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(metrics["throughput"], 20)
         self.assertEqual(metrics["errors"], 100)
+
+    def test_local_ydb_scaling_uses_failing_boundary_and_minimum_attempt(self):
+        attempts = (
+            {"load": 50, "dynamic_cpu_mean": 90, "static_cpu_mean": 20},
+            {"load": 100, "dynamic_cpu_mean": 100, "static_cpu_mean": 20},
+        )
+        boundary = load_control.LoadSearchResult(
+            attempts,
+            50,
+            "latency SLO boundary",
+            "boundary-found",
+            passing_load=50,
+            failing_load=100,
+        )
+        evidence, reason = local_ydb._search_scaling_evidence(boundary, 95)
+        self.assertEqual(evidence["load"], 100)
+        self.assertEqual(reason, "failing-boundary")
+
+        minimum = load_control.LoadSearchResult(
+            (attempts[-1],),
+            None,
+            "minimum load failed",
+            "no-feasible-point",
+            failing_load=100,
+        )
+        evidence, reason = local_ydb._search_scaling_evidence(minimum, 95)
+        self.assertEqual(evidence["load"], 100)
+        self.assertEqual(reason, "minimum-failing-load")
+
+        dynamic_probe = load_control.LoadSearchResult(
+            (
+                {"load": 40, "throughput": 40, "dynamic_cpu_mean": 80, "static_cpu_mean": 20},
+                {"load": 70, "throughput": 35, "dynamic_cpu_mean": 100, "static_cpu_mean": 20},
+            ),
+            40,
+            "best observed point",
+            "best-observed",
+            passing_load=40,
+        )
+        evidence, reason = local_ydb._search_scaling_evidence(dynamic_probe, 95)
+        self.assertEqual(evidence["load"], 70)
+        self.assertEqual(reason, "dynamic-saturation")
+
+        static_boundary = load_control.LoadSearchResult(
+            (
+                {"load": 50, "dynamic_cpu_mean": 100, "static_cpu_mean": 20},
+                {"load": 100, "dynamic_cpu_mean": 100, "static_cpu_mean": 100},
+            ),
+            50,
+            "static CPU boundary",
+            "boundary-found",
+            passing_load=50,
+            failing_load=100,
+        )
+        evidence, reason = local_ydb._search_scaling_evidence(static_boundary, 95)
+        self.assertEqual(evidence["load"], 100)
+        self.assertEqual(reason, "failing-boundary")
+
+    def test_local_ydb_stops_cpu_monitor_when_node_dies_before_measurement(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              monitor-cleanup:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        command_result = runner.CommandResult(
+            command=("ydb", "workload", "kv", "init"),
+            stdout="",
+            stderr="",
+            exit_code=0,
+            started_at="2026-08-26T10:00:00+00:00",
+            finished_at="2026-08-26T10:00:01+00:00",
+            duration_seconds=1.0,
+        )
+        cluster = mock.Mock(
+            ydb_cli=Path("ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            dynamic_nodes=[{}],
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.return_value = (command_result, [command_result])
+        cluster._run.return_value = command_result
+        cluster.ensure_running.side_effect = BenchmarkError("dynamic node exited")
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {}
+        binaries = {
+            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            for name in ("ydbd", "ydb_cli", "process_guard")
+        }
+        cpu_topology = CpuTopology(
+            allowed_cpus=(0,),
+            numa_nodes=((0, (0,)),),
+            chiplets=(),
+            physical_cores=((0,),),
+        )
+        with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
+            local_ydb, "LinuxCpuMonitor", return_value=monitor
+        ), mock.patch.object(local_ydb, "discover_topology", return_value=cpu_topology), mock.patch.object(
+            local_ydb, "collect_system_info", return_value={}
+        ):
+            with self.assertRaisesRegex(BenchmarkError, "dynamic node exited"):
+                local_ydb.run_local_ydb(
+                    binaries,
+                    configuration,
+                    self.root / "monitor-cleanup",
+                    tool_revision="test",
+                )
+
+        monitor.start.assert_called_once_with()
+        monitor.stop.assert_called_once_with()
+        cluster.stop.assert_called_once_with()
+
+    def test_local_ydb_ctrl_c_marks_profile_cancelled(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              interrupted-startup:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        cluster = mock.Mock()
+        cluster.start.side_effect = KeyboardInterrupt()
+        binaries = {
+            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            for name in ("ydbd", "ydb_cli", "process_guard")
+        }
+        cpu_topology = CpuTopology(
+            allowed_cpus=(0,),
+            numa_nodes=((0, (0,)),),
+            chiplets=(),
+            physical_cores=((0,),),
+        )
+        output = self.root / "interrupted-startup"
+        with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
+            local_ydb, "discover_topology", return_value=cpu_topology
+        ), mock.patch.object(local_ydb, "collect_system_info", return_value={}):
+            with self.assertRaisesRegex(BenchmarkInterrupted, "was interrupted"):
+                local_ydb.run_local_ydb(binaries, configuration, output, tool_revision="test")
+
+        manifest = json.loads((output / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "interrupted")
+        self.assertEqual(manifest["state"], "cancelled")
+        self.assertEqual(manifest["progress"]["phase"], "cancelled")
+        cluster.stop.assert_called_once_with()
 
     def test_role_masks_are_split_without_overlap(self):
         masks = local_ydb._split_mask((0, 1, 2, 3, 4, 5), 3)
@@ -2710,7 +2932,7 @@ class WebTest(unittest.TestCase):
     def test_run_service_events_decodes_each_persisted_line_once(self):
         self._manifest(self.root / "complete")
         (self.root / "complete" / "events.jsonl").write_text(
-            '{"sequence":1,"type":"first"}\n{"sequence":2,"type":"second"}\n',
+            '{"sequence":1,"type":"first"}\n' '{"sequence":2,"type":"second","throughput_gain_percent":Infinity}\n',
             encoding="utf-8",
         )
         service = RunService(self.root)
@@ -2718,13 +2940,56 @@ class WebTest(unittest.TestCase):
         with mock.patch.object(web.json, "loads", wraps=loads) as decode:
             events = service.events("complete", after=1)
         self.assertEqual([event["type"] for event in events], ["second"])
+        self.assertIsNone(events[0]["throughput_gain_percent"])
         self.assertEqual(decode.call_count, 2)
+
+    def test_run_service_migrates_non_finite_manifest_values_on_recovery(self):
+        run_root = self.root / "non-finite-recovery"
+        self._manifest(run_root, "running")
+        path = run_root / "run.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["attempts"] = [{"throughput_gain_percent": float("inf")}]
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        service = RunService(self.root)
+        try:
+            stored_text = path.read_text(encoding="utf-8")
+            stored = json.loads(stored_text)
+            self.assertNotIn("Infinity", stored_text)
+            self.assertIsNone(stored["attempts"][0]["throughput_gain_percent"])
+            self.assertEqual(stored["state"], "recovery_required")
+        finally:
+            service.shutdown()
+
+    def test_run_service_replays_events_evicted_from_live_deque(self):
+        def fake_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            for index in range(5):
+                emit({"type": "step-progress", "step_id": step_id, "fields": {"progress": {"index": index}}})
+            emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
+
+        service = RunService(self.root, executor=fake_executor, event_limit=2)
+        try:
+            run_id = service.start(
+                "ping-bench:\n  replay: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+            )["id"]
+            run = service._runs[run_id]
+            self.assertTrue(run["finished"].wait(2))
+            replayed = service.events(run_id, after=0)
+            persisted = [json.loads(line) for line in (run["root"] / "events.jsonl").read_text().splitlines()]
+            self.assertGreater(len(replayed), service.event_limit)
+            self.assertEqual(replayed, persisted)
+            self.assertEqual(service.events(run_id, after=replayed[-3]["sequence"]), replayed[-2:])
+        finally:
+            service.shutdown()
 
     def test_local_ydb_profile_projection_supports_preparing_and_live_results(self):
         run_root = self.root / "local-ydb-run"
         self._manifest(run_root, "running")
         main_path = run_root / "run.json"
         main = json.loads(main_path.read_text(encoding="utf-8"))
+        main.update({"status": "queued", "state": "queued"})
         main["runs"] = []
         main["steps"] = [
             {
@@ -2800,6 +3065,60 @@ class WebTest(unittest.TestCase):
             self.assertEqual(projected["attempts"][0]["commands"][0]["argv"][-1], "add-rand-order")
             self.assertEqual(projected["timeout_seconds"], 300)
             self.assertEqual(projected["role_affinity"]["dynamic_nodes"], [1, 2])
+
+            main.update({"status": "recovery_required", "state": "recovery_required"})
+            main_path.write_text(json.dumps(main), encoding="utf-8")
+            recovered = service.local_ydb_profile("local-ydb-run", "capacity")
+            self.assertEqual(recovered["status"], "recovery_required")
+            self.assertEqual(recovered["state"], "recovery_required")
+        finally:
+            service.shutdown()
+
+    def test_local_ydb_profile_projection_preserves_terminal_state_without_nested_manifest(self):
+        run_root = self.root / "terminal-local-ydb-run"
+        self._manifest(run_root)
+        main_path = run_root / "run.json"
+        main = json.loads(main_path.read_text(encoding="utf-8"))
+        main.update({"status": "cancelled", "state": "cancelled"})
+        main["runs"] = []
+        main["steps"] = [
+            {
+                "id": "step-1",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "affinity": "roles",
+                "threads": 64,
+                "case": 1,
+                "parameters": {},
+                "repeat": 1,
+                "state": "cancelled",
+                "reason": "cancelled before startup",
+                "artifacts": [],
+            }
+        ]
+        main_path.write_text(json.dumps(main), encoding="utf-8")
+        service = RunService(self.root)
+        try:
+            cancelled = service.local_ydb_profile("terminal-local-ydb-run", "capacity")
+            self.assertEqual(cancelled["status"], "cancelled")
+            self.assertEqual(cancelled["state"], "cancelled")
+
+            main.update({"status": "failed", "state": "failed", "error": "startup failed"})
+            main["runs"] = [
+                {
+                    "benchmark": "local-ydb",
+                    "profile": "capacity",
+                    "status": "failed",
+                    "directory": "local-ydb/capacity",
+                    "error": "startup failed",
+                }
+            ]
+            main["steps"][0].update({"state": "failed", "error": "startup failed"})
+            main_path.write_text(json.dumps(main), encoding="utf-8")
+            failed = service.local_ydb_profile("terminal-local-ydb-run", "capacity")
+            self.assertEqual(failed["status"], "failed")
+            self.assertEqual(failed["state"], "failed")
+            self.assertEqual(failed["error"], "startup failed")
         finally:
             service.shutdown()
 
@@ -2927,6 +3246,24 @@ class WebTest(unittest.TestCase):
         self.assertIsNone(value["series"][0]["cpus"])
         self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
         self.assertIn("dimension_metadata", value)
+
+    def test_local_ydb_summary_is_available_to_comparison_charts(self):
+        self._manifest(self.root / "complete")
+        summary = self.root / "complete" / "local-ydb" / "capacity" / "summary.csv"
+        summary.parent.mkdir(parents=True)
+        row = {"load": 10, "dynamic_nodes": 2}
+        row.update({metric.name: index + 1 for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
+        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics([row], LOCAL_YDB_BENCHMARK)
+        summary.write_text(
+            LOCAL_YDB_BENCHMARK.render_summary(summarized, LOCAL_YDB_BENCHMARK),
+            encoding="utf-8",
+        )
+
+        value = chart_data(self.root, ["complete"])
+        self.assertEqual(len(value["series"]), 1)
+        self.assertEqual(value["series"][0]["benchmark"], "local-ydb")
+        self.assertEqual(value["series"][0]["affinity"], "roles")
+        self.assertEqual(value["series"][0]["rows"][0]["load"], 10)
 
     def test_memory_fairness_is_derived_per_repeat_before_aggregation(self):
         dimensions = ["threads", "random_percent", "scope", "worker_aggregation"]

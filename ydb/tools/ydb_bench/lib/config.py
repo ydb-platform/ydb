@@ -666,6 +666,11 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         "parameter": parameter,
         "allow_errors": _boolean(load.get("allow-errors", False), location + ".load.allow-errors"),
     }
+    legacy_slo = _mapping(
+        load.get("slo"),
+        location + ".load.slo",
+        ("percentile", "max-ms", "max-errors", "min-achieved-rate-ratio"),
+    )
     if "search" not in load and "objective" not in load:
         load_mode = _choice(
             load.get("mode", "points"),
@@ -692,7 +697,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
                 "plateau-gain-percent": load.get("plateau-gain-percent", 2),
                 "plateau-points": load.get("plateau-points", 2),
                 "cpu-saturation-percent": load.get("cpu-saturation-percent", 95),
-                **(load.get("slo") or {}),
+                **legacy_slo,
             }
     else:
         if "search" not in load or "objective" not in load:
@@ -754,7 +759,16 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
             ("maximize-throughput", "latency-slo"),
             location + ".load.objective.type",
         )
-        parsed_objective = {"type": objective_type}
+        parsed_objective = {
+            "type": objective_type,
+            "cpu_saturation_percent": _finite_number(
+                objective.get("cpu-saturation-percent", 95),
+                location + ".load.objective.cpu-saturation-percent",
+                0,
+                100,
+                True,
+            ),
+        }
         if objective_type == "maximize-throughput":
             parsed_objective.update(
                 {
@@ -770,13 +784,6 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
                     ),
                     "plateau_points": _positive_integer(
                         objective.get("plateau-points", 2), location + ".load.objective.plateau-points"
-                    ),
-                    "cpu_saturation_percent": _finite_number(
-                        objective.get("cpu-saturation-percent", 95),
-                        location + ".load.objective.cpu-saturation-percent",
-                        0,
-                        100,
-                        True,
                     ),
                 }
             )

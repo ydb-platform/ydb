@@ -20,6 +20,12 @@ _TRANSITIONS = {
 }
 
 
+def _non_finite_json_as_null(_value):
+    """Migrate manifests written before strict finite-number serialization."""
+
+    return None
+
+
 def transition(record, state, **fields):
     """Return a new record after one valid lifecycle transition."""
     old = record["state"]
@@ -36,7 +42,7 @@ def load_manifest(path):
 
     try:
         with Path(path).open(encoding="utf-8") as stream:
-            value = json.load(stream)
+            value = json.load(stream, parse_constant=_non_finite_json_as_null)
     except (OSError, ValueError) as error:
         raise BenchmarkError("cannot read result manifest {}: {}".format(path, error)) from error
     if not isinstance(value, dict):

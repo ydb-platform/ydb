@@ -7,5 +7,5 @@ items:
     href: global-options.md
   - name: Список устройств
     href: device-list.md
-  - name: pdisk populate
-  - name: Populate a PDisk
+  - name: Заполнение PDisk
+    href: pdisk-populate.md

@@ -388,11 +388,26 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     TExprNode::TPtr result;
     if (op == "Exists" || op == "NotExists") {
-        result = ctx.Builder(pos)
-            .Apply(BuildNormalRangeLambdaRaw(pos, keyType, op, ctx))
-                .With(0, value) // value is not actually used for Exists/NotExists
-            .Seal()
-            .Build();
+        if (keyType->GetKind() != ETypeAnnotationKind::Optional &&
+            keyType->GetKind() != ETypeAnnotationKind::Pg)
+        {
+            if (op == "NotExists") {
+                result = emptyRange;
+            } else {
+                // A required key always exists.  Do not exclude NaN from the
+                // resulting full range: NaN is a present value too.
+                const bool excludeNaN = false;
+                result = BuildRangeSingle(pos,
+                    BuildMinusInf(pos, keyType, ctx),
+                    BuildPlusInf(pos, keyType, ctx, excludeNaN), ctx);
+            }
+        } else {
+            result = ctx.Builder(pos)
+                .Apply(BuildNormalRangeLambdaRaw(pos, keyType, op, ctx))
+                    .With(0, value) // value is not actually used for Exists/NotExists
+                .Seal()
+                .Build();
+        }
     } else if (op == "==" || op == "!=" || op == "===") {
         YQL_ENSURE(rangeForNullCast);
         result = ctx.Builder(pos)

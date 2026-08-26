@@ -1,4 +1,6 @@
 #include "yql_expr_optimize.h"
+#include "yql_expr_type_annotation.h"
+#include "yql_opt_range.h"
 #include "yql_opt_rewrite_io.h"
 #include "yql_opt_proposed_by_data.h"
 
@@ -9,10 +11,55 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/facade/yql_facade.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {
+
+namespace {
+
+TExprNode::TPtr MakePresenceRangeFor(
+    TExprContext& ctx,
+    TStringBuf operation,
+    const TTypeAnnotationNode* keyType)
+{
+    const auto pos = TPositionHandle();
+    auto value = ctx.NewCallable(pos, "Void", {});
+    value->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    auto type = ExpandType(pos, *keyType, ctx);
+    type->SetTypeAnn(ctx.MakeType<TTypeExprType>(keyType));
+    return ctx.NewCallable(pos, "RangeFor", {
+        ctx.NewAtom(pos, operation),
+        std::move(value),
+        std::move(type),
+    });
+}
+
+const TExprNode& AssertSingleRange(const TExprNode::TPtr& result) {
+    UNIT_ASSERT(result->IsCallable("AsRange"));
+    UNIT_ASSERT_VALUES_EQUAL(result->ChildrenSize(), 1);
+    const auto& range = result->Head();
+    UNIT_ASSERT(range.IsList());
+    UNIT_ASSERT_VALUES_EQUAL(range.ChildrenSize(), 2);
+    return range;
+}
+
+void AssertBoundaryFlag(
+    const TExprNode& range,
+    size_t boundaryIndex,
+    TStringBuf expected)
+{
+    const auto& boundary = *range.Child(boundaryIndex);
+    UNIT_ASSERT(boundary.IsList());
+    UNIT_ASSERT_VALUES_EQUAL(boundary.ChildrenSize(), 2);
+    const auto& flag = *boundary.Child(1);
+    UNIT_ASSERT(flag.IsCallable("Int32"));
+    UNIT_ASSERT_VALUES_EQUAL(flag.ChildrenSize(), 1);
+    UNIT_ASSERT(flag.Head().IsAtom(expected));
+}
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TOptimizeYqlExpr) {
 Y_UNIT_TEST(CombineAtoms) {
@@ -562,6 +609,60 @@ Y_UNIT_TEST(NthArgNotCallable) {
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
     UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Error, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
     UNIT_ASSERT_VALUES_EQUAL("<main>:2:20: Error: Expected callable, but got: Atom\n", exprCtx.IssueManager.GetIssues().ToString());
+}
+
+Y_UNIT_TEST(RangeForExistsOnRequiredKeyIsFullAndNotExistsIsEmpty) {
+    TExprContext exprCtx;
+
+    for (const auto slot : {EDataSlot::Int64, EDataSlot::Double}) {
+        const auto* keyType = exprCtx.MakeType<TDataExprType>(slot);
+        const auto exists = ExpandRangeFor(
+            MakePresenceRangeFor(exprCtx, "Exists", keyType), exprCtx);
+        const auto& range = AssertSingleRange(exists);
+        AssertBoundaryFlag(range, 0, "0");
+        AssertBoundaryFlag(range, 1, "0");
+
+        const auto notExists = ExpandRangeFor(
+            MakePresenceRangeFor(exprCtx, "NotExists", keyType), exprCtx);
+        UNIT_ASSERT(notExists->IsCallable("RangeEmpty"));
+        UNIT_ASSERT_VALUES_EQUAL(notExists->ChildrenSize(), 1);
+
+        if (slot == EDataSlot::Double) {
+            UNIT_ASSERT_C(
+                !FindNode(exists, [](const TExprNode::TPtr& node) {
+                    return node->IsAtom("nan");
+                }),
+                "Exists over a required floating-point key must include NaN");
+        }
+    }
+}
+
+Y_UNIT_TEST(RangeForExistsRetainsOptionalAndPgNullRanges) {
+    TExprContext exprCtx;
+    const auto* int64Type = exprCtx.MakeType<TDataExprType>(EDataSlot::Int64);
+    const auto* optionalType = exprCtx.MakeType<TOptionalExprType>(int64Type);
+    const auto* pgType = exprCtx.MakeType<TPgExprType>(
+        NPg::LookupType("int4").TypeId);
+    const TTypeAnnotationNode* keyTypes[] = {optionalType, pgType};
+
+    for (const auto* keyType : keyTypes) {
+        const auto exists = ExpandRangeFor(
+            MakePresenceRangeFor(exprCtx, "Exists", keyType), exprCtx);
+        const auto& existsRange = AssertSingleRange(exists);
+        AssertBoundaryFlag(existsRange, 0, "0");
+        AssertBoundaryFlag(existsRange, 1, "0");
+        UNIT_ASSERT(existsRange.Head().Head().IsCallable("Just"));
+
+        const auto notExists = ExpandRangeFor(
+            MakePresenceRangeFor(exprCtx, "NotExists", keyType), exprCtx);
+        const auto& notExistsRange = AssertSingleRange(notExists);
+        AssertBoundaryFlag(notExistsRange, 0, "1");
+        AssertBoundaryFlag(notExistsRange, 1, "1");
+        UNIT_ASSERT(notExistsRange.Head().Head().IsCallable("Just"));
+        UNIT_ASSERT_EQUAL(
+            notExistsRange.Child(0)->Child(0),
+            notExistsRange.Child(1)->Child(0));
+    }
 }
 } // Y_UNIT_TEST_SUITE(TOptimizeYqlExpr)
 

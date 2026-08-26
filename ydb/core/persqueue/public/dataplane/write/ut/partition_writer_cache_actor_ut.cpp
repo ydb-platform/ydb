@@ -177,9 +177,13 @@ Y_UNIT_TEST_F(TxWriterInitErrorSendsWriteResponse, TPartitionWriterCacheActorFix
     UNIT_ASSERT(!write->IsSuccess());
     UNIT_ASSERT_VALUES_EQUAL(write->SessionId, "sessionId");
     UNIT_ASSERT_VALUES_EQUAL(write->TxId, "txId-A");
+    UNIT_ASSERT_VALUES_EQUAL(write->Record.GetPartitionResponse().GetCookie(), 1);
 
     auto extraInit = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>(TDuration::Seconds(1));
     UNIT_ASSERT(!extraInit);
+
+    auto extraWrite = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvWriteResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(!extraWrite);
 }
 
 Y_UNIT_TEST_F(WriteBeforeInitResultIsHeld, TPartitionWriterCacheActorFixture)

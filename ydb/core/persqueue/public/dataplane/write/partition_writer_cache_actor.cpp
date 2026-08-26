@@ -152,12 +152,6 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr&
 
     if (result.IsSuccess()) {
         p->second->OnEvInitResult(ev);
-    } else if (result.SessionId || result.TxId) {
-        // Default writer already forwards TEvInitResult; do not also send TEvWriteResponse.
-        auto response = result.GetError().Response;
-        ctx.Send(Owner, new TEvPartitionWriter::TEvWriteResponse(result.SessionId, result.TxId,
-                                                                 EErrorCode::InternalError, result.GetError().Reason,
-                                                                 std::move(response)));
     }
 
     if (!result.SessionId && !result.TxId) {
@@ -330,10 +324,11 @@ STFUNC(TPartitionWriterCacheActor::StateBroken)
 {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPartitionWriter::TEvTxWriteRequest, HandleOnBroken);
-        HFunc(TEvPartitionWriter::TEvInitResult, Handle);
-        HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
-        HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
-        HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
+        IgnoreFunc(TEvPartitionWriter::TEvRequestDeferredDestinationUpsert);
+        IgnoreFunc(TEvPartitionWriter::TEvInitResult);
+        IgnoreFunc(TEvPartitionWriter::TEvWriteAccepted);
+        IgnoreFunc(TEvPartitionWriter::TEvWriteResponse);
+        IgnoreFunc(TEvPartitionWriter::TEvDisconnected);
         HFunc(TEvents::TEvPoison, Handle);
     }
 }

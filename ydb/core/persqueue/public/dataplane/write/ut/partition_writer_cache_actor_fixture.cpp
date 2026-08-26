@@ -74,8 +74,10 @@ TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(cons
         PQTabletId,
         options));
 
-    auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>();
-    UNIT_ASSERT(event != nullptr);
+    if (params.WaitForInitResult) {
+        auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>();
+        UNIT_ASSERT(event != nullptr);
+    }
 
     return actorId;
 }

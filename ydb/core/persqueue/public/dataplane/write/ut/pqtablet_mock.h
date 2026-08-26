@@ -18,6 +18,7 @@ public:
     TPQTabletMock(const TActorId& tablet, TTabletStorageInfo* info);
 
     void AppendWriteReply(ui64 cookie);
+    void FailGetOwnership();
 
 private:
     using TEvRequestPtr = std::unique_ptr<TEvPersQueue::TEvRequest>;
@@ -63,6 +64,7 @@ private:
 
     TString OwnerCookie = "owner-cookie";
     ui64 MaxSeqNo = 0;
+    bool OwnershipFailed = false;
 
     TCommandReplies CmdReserve;
     TCommandReplies CmdWrite;

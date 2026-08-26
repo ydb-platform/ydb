@@ -16,9 +16,21 @@ TMaybe<ui64> TPQTabletMock::GetPartitionRequestCookie() const
     return {};
 }
 
+void TPQTabletMock::FailGetOwnership()
+{
+    OwnershipFailed = true;
+}
+
 void TPQTabletMock::PrepareGetOwnershipResponse()
 {
     Response = std::make_unique<TEvPersQueue::TEvResponse>();
+    if (OwnershipFailed) {
+        Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        Response->Record.SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
+        Response->Record.SetErrorReason("tablet is initializing");
+        return;
+    }
+
     Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 

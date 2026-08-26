@@ -151,7 +151,8 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr&
 
     if (result.IsSuccess()) {
         p->second->OnEvInitResult(ev);
-    } else {
+    } else if (result.SessionId || result.TxId) {
+        // Default writer already forwards TEvInitResult; do not also send TEvWriteResponse.
         auto response = result.GetError().Response;
         ctx.Send(Owner, new TEvPartitionWriter::TEvWriteResponse(result.SessionId, result.TxId,
                                                                  EErrorCode::InternalError, result.GetError().Reason,

@@ -17,6 +17,7 @@ struct TCreatePartitionWriterCacheActorParams {
     TString SourceId = "source_id";
     bool WithDeduplication = true;
     TString Database = "database";
+    bool WaitForInitResult = true;
 };
 
 struct TSendTxWriteRequestParams {

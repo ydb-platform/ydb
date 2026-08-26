@@ -136,6 +136,26 @@ Y_UNIT_TEST_F(DropOldWriter, TPartitionWriterCacheActorFixture)
     EnsureWriteSessionClosed(EErrorCode::OverloadError);
 }
 
+Y_UNIT_TEST_F(DefaultWriterInitErrorDoesNotSendWriteResponse, TPartitionWriterCacheActorFixture)
+{
+    PQTablet->FailGetOwnership();
+    CreatePartitionWriterCacheActor({.WaitForInitResult = false});
+
+    TAutoPtr<IEventHandle> handle;
+    auto events = Ctx->Runtime->GrabEdgeEvents<
+        NPQ::TEvPartitionWriter::TEvInitResult,
+        NPQ::TEvPartitionWriter::TEvWriteResponse>(handle);
+
+    auto* init = std::get<0>(events);
+    UNIT_ASSERT(init);
+    UNIT_ASSERT(!init->IsSuccess());
+    UNIT_ASSERT(init->SessionId.empty());
+    UNIT_ASSERT(init->TxId.empty());
+
+    auto extra = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvWriteResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(!extra);
+}
+
 }
 
 }

@@ -91,6 +91,7 @@ The trusted Python code is deliberately split into explicit semantic modules:
 
 ```text
 rbo_verifier/ir.py          strict, versioned snapshot decoding
+rbo_verifier/types.py       supported type identities, domains, and compatibility
 rbo_verifier/smt.py         typed SMT terms and deterministic SMT-LIB output
 rbo_verifier/string_order.py exact finite String/Utf8 byte-order quotient
 rbo_verifier/decimal.py     exact Decimal values, comparison, arithmetic, and ordering
@@ -941,6 +942,21 @@ Implementation sequence:
     the sole supplemental pair-only row. The authoritative floor is 100
     formulas, 101 exact pairs, and the unchanged 32 bounded proofs; all four
     complete dashboard/proof gates are green below. M4 remains current.
+79. M4: exact TPC-DS q51 ordered contextual Decimal `ROWS` windows. Four
+    distinct leaves are confined to three private Projects: web/store
+    running SUM definitions use local order zero, followed by independent
+    running MAX definitions with local orders zero and one. Each partitions by
+    item, orders nullable Date ascending with NULLs first, and uses ROWS from
+    unbounded preceding through the current row. The model preserves exact
+    task-local NULL-ignoring Decimal aggregation, independent peer orders, and
+    an item-only HashV2 boundary; Date remains live as a window-order input but
+    is not a window shuffle key. Production range robustness commits `9faa9c19a82` and
+    `877d65c8f12`, window transport commits `43af260c8a6`, `a749e7800be`, and
+    `82fc8b25bd2`, exporter isolation commit `26f2210d0d7`, and verifier/export
+    commits `beb329debc8` and `d2965d0a765` implement the slice. Policy commit
+    `4609f334b0c` promotes q51, making the supplemental pair-only sets empty and
+    pinning formulas for all 101/101 exact pairs. The proof floor remains 32;
+    both dashboards and both proof gates are green below. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -3266,6 +3282,99 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   (32.0%), and 32/32 curated obligations after 17,919/198,601 ms of summed
   preparation/verifier work.
 
+  Milestone 79 closes the last exact-pair formula gap with only the ordered
+  q51 corridor. Its four leaves and three private Projects are fixed exactly:
+  `_yql_anonymous_window0` and `_yql_anonymous_window1` are the web and store
+  running SUM definitions at local order zero; `_yql_anonymous_window2` and
+  `_yql_anonymous_window3` are the subsequent running MAX definitions at
+  independent local orders zero and one. Every leaf partitions on item using
+  `IS NOT DISTINCT FROM`, orders `Optional<Date>` ascending with NULLs first,
+  and has a `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` frame. The SUM
+  partitions are required Int64; the outer MAX partitions are Optional<Int64>.
+  SUM and MAX take and return `Optional<Decimal(35,2)>` and ignore NULL inputs. SUM
+  uses exact Decimal addition with a fail-closed finite-headroom check; MAX uses
+  the existing raw Decimal order, including specials. Each leaf owns its
+  peer-order choices, evaluates task-locally within each current StageGraph
+  task, preserves row association, and publishes no result sequence.
+  Each of the three Final window-stage boundaries is HashV2 on item alone;
+  Date remains live as a window-order input but is not a window shuffle key. The SUM leaves require
+  exact Aggregate provenance. The two MAX leaves require distinct typed inputs;
+  those inputs are the two running-SUM results in captured q51. Mixed windows,
+  extra ROWS-window-bearing Projects, fanout, or subplans remain unsupported.
+
+  The production work is intentionally split. Commits `43af260c8a6` and
+  `a749e7800be` centralize conservative untracked-window barriers and strengthen
+  transport tests; `82fc8b25bd2` transports only the exact q51 metadata and
+  routes it on item. Commit `26f2210d0d7` isolates the private window expression
+  and topology audits. Commits `beb329debc8` and `d2965d0a765` add the strict
+  Python model and C++ export. Two range changes are robustness work, not a
+  semantic finding: `9faa9c19a82` maps presence ranges on a required Data key
+  to full for `Exists` and empty for `NotExists`, while `877d65c8f12` keeps the
+  exact new-RBO required-Data `Exists(Member(...))` as a residual so a useless
+  first component of a composite-key prefix is not emitted. Optional and Pg
+  behavior is unchanged, and the verifier's closed q9/q45 range grammar is not
+  widened.
+
+  Focused q51 formula-only evidence is `FORMULA_EMITTED` after 521/8,669 ms;
+  later physical preparation fails at `Missed callable: YqlAggWin`. The
+  13,003,250-byte / 1,335-line formula has SHA-256
+  `c586384f88740e8921061f144a1e10ba0a0038bd7f8ca7dd51e3e95addc05858`.
+  Initial and Final snapshots have SHA-256 values
+  `a30ef1787e372b35e60ddfb494fe92af374be7145cdcabbc9cc5870aadea648c`
+  and
+  `1191849569247abc1d7984f9b4ed0b69d084bf9252b34e307caba1db61133865`;
+  raw verdict and report SHA-256 values are
+  `a2188cce10af92e93157698517f54a1d7548ff5f0e5be8ce4835242221caf690`
+  and
+  `d06d19114300e81124eaf569e724829d34d18e478c3e0740fed1f44e8ebe1ff0`.
+  The focused test takes 12.862 seconds. A normal 60-second solver run is
+  `UNKNOWN` after 549/68,659 ms, expiring before branch 2/4
+  (`right_language_empty`); its formula differs only in the timeout setting
+  and has SHA-256
+  `4bed335535e6ed921df9b22e639893b1dc9e1b90f2366b9d2c1a0195cac16157`,
+  while verdict/report SHA-256 values are
+  `23c6015297c07fdad7dc0deca4ed1f089a08094c6f2aeb69f08ab23ebf931d72`
+  and
+  `842fb654f6e71fc42d89e6afbb5ef187398596006221a8a7311caa82cd231e66`.
+  The test takes 72.734 seconds. Neither row is a bounded proof, runtime result
+  oracle, or replay result.
+
+  Policy commit `4609f334b0c` promotes q51 and makes both supplemental
+  exact-pair lists empty. Focused validation passes the direct required-range
+  tests 2/2, the RBO build in 46.37 seconds, q51 plus inspector Python tests
+  21/21, a broader direct Python regression 172 passed / 8 skipped, focused C++
+  18/18, focused real-host q51 1/1 in 4.094 seconds, and policy 16/16 in 1.043
+  seconds. Complete component gates pass three packaged Python suites with
+  747/747 checks (one import, 21 flake8, 725 Python; 492.372-second graph),
+  C++ 318/318, and real-host integration 46/46 in 18.333 seconds.
+
+  At exact policy HEAD `4609f334b0c`, the authoritative TPCH dashboard has 20
+  formulas / zero unsupported / two no-pair optimizer failures after
+  3,357/109,633 ms, with preparation 20/2; its report SHA-256 is
+  `aedcfb95a6b1d510af703ecbdf0133253d80c242855dd5b3d7297b00080758d9`
+  and its test/`ya` wall times are 115.186/142.11 seconds. TPC-DS has 81
+  formulas / zero unsupported / 18 no-pair failures after 78,289/952,127 ms,
+  with preparation 73/26; q51 spends 498/8,549 ms. Its report SHA-256 is
+  `edddfa59297588bfa0e0d73c2cdbbb94551650e782de90b6c6d0583ddb01c983`
+  and its test/graph wall times are 1,036.156/1,654.743 seconds. Both report
+  empty supplemental pair lists and zero policy violations.
+
+  The authoritative M79 partition is therefore 101 formulas / zero semantic
+  unsupported / 20 no-pair optimizer failures: 101/121 workload formulas
+  (83.5%), formulas for all 101/101 exact pairs (100%), all 93 preparation
+  successes, and 28 failures; 20 have no pair, while eight fail later after an
+  exact pair and formula. Fresh proof gates intentionally retain 32 obligations.
+  TPCH verifies 13/13 after 1,781/83,003 ms (report
+  SHA-256
+  `1ed710bf0b97ac232a18a0dd23a32dbeeb1b7a09c5b7a676c559996a275b8b29`;
+  86.794/91.855 seconds test/graph), and TPC-DS verifies 19/19 after
+  15,717/118,814 ms (report SHA-256
+  `2bf878ed597ca712d6831482067ae63d4fc679bae7717896409344cbc74f942f`;
+  138.573/278.987 seconds test/graph). This remains 32/121 workload queries
+  (26.4%), now 32/101 formula-covered exact pairs (31.7%), and 32/32 curated
+  obligations. q51 still fails later physical compilation and has no runtime
+  result oracle or proof.
+
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
@@ -3300,6 +3409,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   contextual aggregate window and a secondary range boundary. Both M78 formula
   gates and both proof gates are closed: 100 formulas and all 32/32 curated
   proofs are green.
+  Milestone 79 subsequently closes that q51 exporter gap under the fixed
+  four-leaf ordered-ROWS contract above. The current floor is 101 formulas for
+  all 101 exact pairs; the 20 no-pair workload entries still require
+  frontend/optimizer progress, and formula construction is still not proof.
 
   q54's row spends 50,737 ms in verifier/formula-construction work. Its
   separate 60-second solver experiment is `UNKNOWN`: the global deadline
@@ -3542,7 +3655,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   q3, q8, q9, q16, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93,
   q94, q95, and q96 with a fixed 60-second per-query budget. The current
   policy covers 13 TPCH and 19 TPC-DS queries: 32 obligations, 32/121 (26.4%)
-  of the workload, and 32/100 (32.0%) of formula-covered queries. Fresh
+  of the workload, and 32/101 (31.7%) of formula-covered queries. Fresh
   post-M78 reports verify all 32/32 as `VERIFIED_BOUNDED`: TPCH passes 13/13
   after 1,745/82,550 ms (SHA-256
   `8a3ca5e010d927d5f90d06c59a0dec6aeba73338adcfdba4b5d5234267428ffd`),
@@ -3551,6 +3664,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   Both policies are valid with no violations; combined summed
   preparation/verifier work is 17,919/198,601 ms, and proof mode does not
   enforce the dashboard-only exact-pair floor.
+
+  Fresh post-M79 reports retain the same obligations and verify all 32/32:
+  TPCH passes 13/13 after 1,781/83,003 ms (SHA-256
+  `1ed710bf0b97ac232a18a0dd23a32dbeeb1b7a09c5b7a676c559996a275b8b29`),
+  and TPC-DS passes 19/19 after 15,717/118,814 ms (SHA-256
+  `2bf878ed597ca712d6831482067ae63d4fc679bae7717896409344cbc74f942f`).
+  Both policies are valid with zero violations; q51 does not join the proof
+  floor.
 
   The immediately preceding complete policy gate on source `4c2c1359e28`
   passed 10/10 TPCH and 12/12 TPC-DS. Its TPCH proof-floor report spent
@@ -4283,6 +4404,11 @@ regression locks the corrected boundary.
   32-proof floors remain unchanged. Focused construction and the 60-second
   `UNKNOWN` result, both complete dashboards, both fresh proof gates, and the
   bounded routing evidence are recorded in the M78 closeout above.
+  M79 policy commit `4609f334b0c` raises the formula floor to 101 by promoting
+  q51 and empties both supplemental pair-only lists. Exact-pair and proof floors
+  remain 101 and 32. Focused construction, the separate 60-second `UNKNOWN`,
+  complete dashboards, and fresh unchanged proof gates are recorded in the M79
+  closeout above.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

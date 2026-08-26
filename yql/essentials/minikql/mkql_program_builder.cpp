@@ -3250,6 +3250,43 @@ TRuntimeNode TProgramBuilder::AggrCompare(const std::string_view& callableName, 
     return InvokeBinary(callableName, NewDataType(NUdf::TDataType<bool>::Id), data1, data2);
 }
 
+TRuntimeNode TProgramBuilder::ConvertIntegralToDecimal(TRuntimeNode data) {
+    bool isOptional;
+    const auto dataType = UnpackOptionalData(data, isOptional);
+    const auto& dataTypeInfo = NUdf::GetDataTypeInfo(*dataType->GetDataSlot());
+    MKQL_ENSURE(dataTypeInfo.Features & NUdf::EDataTypeFeatures::IntegralType, "Expected integral data.");
+    return ToDecimal(data, dataTypeInfo.DecimalDigits, 0);
+}
+
+std::pair<TRuntimeNode, TRuntimeNode> TProgramBuilder::ConvertIntegralToDecimalForComparison(std::pair<TRuntimeNode, TRuntimeNode> comparisonData) {
+    bool isOptionalLeft;
+    bool isOptionalRight;
+    const auto leftType = UnpackOptionalData(comparisonData.first, isOptionalLeft);
+    const auto rightType = UnpackOptionalData(comparisonData.second, isOptionalRight);
+    const auto convertIntegral = [this](TRuntimeNode integralData, const TDataType* integralType, const TDataDecimalType* decimalType) {
+        if (RuntimeVersion < 85U) {
+            const auto scale = decimalType->GetParams().second;
+            return ToDecimal(
+                integralData,
+                std::min<ui8>(NYql::NDecimal::MaxPrecision,
+                              NUdf::GetDataTypeInfo(*integralType->GetDataSlot()).DecimalDigits + scale),
+                scale);
+        }
+        return ConvertIntegralToDecimal(integralData);
+    };
+    if (leftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        NUdf::GetDataTypeInfo(*rightType->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType) {
+        comparisonData.second = convertIntegral(comparisonData.second, rightType, static_cast<const TDataDecimalType*>(leftType));
+        return comparisonData;
+    }
+    if (rightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        NUdf::GetDataTypeInfo(*leftType->GetDataSlot()).Features & NUdf::EDataTypeFeatures::IntegralType) {
+        comparisonData.first = convertIntegral(comparisonData.first, leftType, static_cast<const TDataDecimalType*>(rightType));
+        return comparisonData;
+    }
+    return comparisonData;
+}
+
 TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2) {
     bool isOptionalLeft;
     bool isOptionalRight;
@@ -3271,32 +3308,23 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
                               std::min<ui8>(rDec.first + lDec.second - rDec.second, NYql::NDecimal::MaxPrecision),
                               lDec.second);
         }
-    } else if (lId == NUdf::TDataType<NUdf::TDecimal>::Id &&
-               NUdf::GetDataTypeInfo(NUdf::GetDataSlot(rId)).Features & NUdf::EDataTypeFeatures::IntegralType) {
-        const auto scale = static_cast<TDataDecimalType*>(leftType)->GetParams().second;
-        data2 = ToDecimal(data2,
-                          std::min<ui8>(NYql::NDecimal::MaxPrecision,
-                                        NUdf::GetDataTypeInfo(NUdf::GetDataSlot(rId)).DecimalDigits + scale),
-                          scale);
-    } else if (rId == NUdf::TDataType<NUdf::TDecimal>::Id &&
-               NUdf::GetDataTypeInfo(NUdf::GetDataSlot(lId)).Features & NUdf::EDataTypeFeatures::IntegralType) {
-        const auto scale = static_cast<TDataDecimalType*>(rightType)->GetParams().second;
-        data1 = ToDecimal(data1,
-                          std::min<ui8>(NYql::NDecimal::MaxPrecision,
-                                        NUdf::GetDataTypeInfo(NUdf::GetDataSlot(lId)).DecimalDigits + scale),
-                          scale);
     }
+    const auto convertedData = ConvertIntegralToDecimalForComparison({data1, data2});
+    data1 = convertedData.first;
+    data2 = convertedData.second;
 
     const auto boolType = NewDataType(NUdf::TDataType<bool>::Id);
     const auto resultType = isOptionalLeft || isOptionalRight ? NewOptionalType(boolType) : boolType;
     TString comparisonName(callableName);
-    if (leftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
-        rightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+    const auto comparisonLeftType = UnpackOptionalData(data1, isOptionalLeft);
+    const auto comparisonRightType = UnpackOptionalData(data2, isOptionalRight);
+    if (comparisonLeftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        comparisonRightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
         RuntimeVersion >= 84U) {
         comparisonName = WrapDecimalComparationName(
             NUdf::TStringRef(callableName.data(), callableName.size()),
-            *static_cast<const TDataDecimalType*>(leftType),
-            *static_cast<const TDataDecimalType*>(rightType));
+            *static_cast<const TDataDecimalType*>(comparisonLeftType),
+            *static_cast<const TDataDecimalType*>(comparisonRightType));
     }
     return InvokeBinary(comparisonName, resultType, data1, data2);
 }

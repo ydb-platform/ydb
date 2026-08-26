@@ -330,7 +330,8 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildMapJoin(const TString& joinType, TExp
 }
 
 void TPhysicalJoinBuilder::PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExprNode::TPtr& rightLambda, TExprNode::TPtr& commonLambda,
-                                              const TVector<TString>& leftInputColumns, const TVector<TString>& rightInputColumns) {
+                                              const TVector<TString>& leftInputColumns, const TVector<TString>& rightInputColumns,
+                                              const TString& joinType) {
     TVector<TExpression> leftFilters;
     TVector<TExpression> rightFilters;
     TVector<TExpression> commonFilters;
@@ -338,6 +339,18 @@ void TPhysicalJoinBuilder::PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExpr
     TVector<TInfoUnit> rightInputs;
     std::for_each(leftInputColumns.begin(), leftInputColumns.end(), [&](const TString& column) { leftInputs.emplace_back(TInfoUnit(column)); });
     std::for_each(rightInputColumns.begin(), rightInputColumns.end(), [&](const TString& column) { rightInputs.emplace_back(TInfoUnit(column)); });
+    const auto* rightInputType = Join->GetRightInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    TVector<bool> leftUnwrapInputs(leftInputs.size(), false);
+    TVector<bool> rightUnwrapInputs(rightInputs.size(), false);
+
+    // Unwrap optional from non optional column, instead we can get an optional from optional.
+    if (joinType == "Left") {
+        for (ui32 i = 0; i < rightInputs.size(); ++i) {
+            const auto* itemType = rightInputType->FindItemType(rightInputs[i].GetFullName());
+            rightUnwrapInputs[i] = itemType && itemType->GetKind() != ETypeAnnotationKind::Optional;
+        }
+    }
 
     for (const auto& filterExpr : Join->JoinFilters) {
         if (IUIsSubset(filterExpr.GetInputIUs(), leftInputs)) {
@@ -351,16 +364,17 @@ void TPhysicalJoinBuilder::PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExpr
 
     // Left filter.
     auto leftFilter = leftFilters.size() ? MakeConjunction(leftFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
-    leftLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(leftFilter, leftInputs, Ctx);
+    leftLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(leftFilter, leftInputs, leftUnwrapInputs, Ctx);
 
     // Right filter.
     auto rightFilter = rightFilters.size() ? MakeConjunction(rightFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
-    rightLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(rightFilter, rightInputs, Ctx);
+    rightLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(rightFilter, rightInputs, rightUnwrapInputs, Ctx);
 
     // Common filter.
+    leftUnwrapInputs.insert(leftUnwrapInputs.end(), rightUnwrapInputs.begin(), rightUnwrapInputs.end());
     leftInputs.insert(leftInputs.end(), rightInputs.begin(), rightInputs.end());
     auto commonFilter = commonFilters.size() ? MakeConjunction(commonFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
-    commonLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(commonFilter, leftInputs, Ctx);
+    commonLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(commonFilter, leftInputs, leftUnwrapInputs, Ctx);
 }
 
 TExprNode::TPtr TPhysicalJoinBuilder::BuildBlockHashJoin(const TString& joinType, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput,
@@ -382,7 +396,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildBlockHashJoin(const TString& joinType
     TExprNode::TPtr leftFilter;
     TExprNode::TPtr rightFilter;
     TExprNode::TPtr commonFilter;
-    PrepareJoinFilters(leftFilter, rightFilter, commonFilter, leftInputColumns, rightInputColumns);
+    PrepareJoinFilters(leftFilter, rightFilter, commonFilter, leftInputColumns, rightInputColumns, joinType);
 
     // clang-format off
     return Build<TDqBlockHashJoinCore>(Ctx, Pos)
@@ -636,10 +650,11 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
 TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const auto joinKind = to_lower(Join->JoinKind);
-    if (joinKind == "cross") {
+    if (joinKind == "cross" && !useBlockHashJoin) {
         return BuildCrossJoin(leftInput, rightInput);
     }
 
-    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" || joinKind == "full");
+    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" ||
+             joinKind == "full" || joinKind == "cross");
     return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
 }

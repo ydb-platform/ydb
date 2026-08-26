@@ -208,7 +208,7 @@ TAstNodePtr TAstBuilder::BuildPrimary(const TRule_primary& node) {
         }
         case TRule_primary::kAltPrimary4: {
             const auto& primary = node.GetAlt_primary4().GetBlock1();
-            const auto input = BuildExpr(primary.GetRule_expr2());
+            auto input = BuildExpr(primary.GetRule_expr2());
             if (primary.HasBlock4()) {
                 const auto& token = primary.GetBlock4().GetToken1();
                 return new TIsUnknownPredicateNode(GetPos(token), input);
@@ -305,7 +305,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
     switch (node.GetAltCase()) {
         case TRule_predicate_expr::kAltPredicateExpr1: {
             const auto& predicate = node.GetAlt_predicate_expr1().GetBlock1();
-            const auto input = BuildPlainExpr(predicate.GetRule_plain_expr1());
+            auto input = BuildPlainExpr(predicate.GetRule_plain_expr1());
             if (!predicate.HasBlock2()) {
                 return input;
             }
@@ -337,7 +337,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
 }
 
 TAstNodePtr TAstBuilder::BuildUnaryExpr(const TRule_unary_expr& node) {
-    const auto predicateExpr = BuildPredicateExpr(node.GetRule_predicate_expr2());
+    auto predicateExpr = BuildPredicateExpr(node.GetRule_predicate_expr2());
     if (!node.HasBlock1()) {
         return predicateExpr;
     }

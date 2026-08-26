@@ -22,8 +22,7 @@ class TListLiteral;
 template <typename T>
 class TTaggedPointer {
 public:
-    TTaggedPointer() {
-    }
+    TTaggedPointer() = default;
     TTaggedPointer(T* ptr, bool mark) {
         Y_DEBUG_ABORT_UNLESS((uintptr_t(ptr) & 1) == 0);
         Raw_ = (void*)(uintptr_t(ptr) | (mark ? 1 : 0));
@@ -58,8 +57,7 @@ struct TRuntimeNode {
         return Data.GetPtr();
     }
 
-    ~TRuntimeNode() {
-    }
+    ~TRuntimeNode() = default;
 
     TType* GetRuntimeType() const;
 
@@ -329,19 +327,11 @@ class TPgType;
 // Created only by TTypeEnvironment::InternName
 class TInternName {
 public:
-    TInternName()
-    {
-    }
+    TInternName() = default;
 
-    TInternName(const TInternName& other)
-        : StrBuf_(other.StrBuf_)
-    {
-    }
+    TInternName(const TInternName& other) = default;
 
-    TInternName& operator=(const TInternName& other) {
-        StrBuf_ = other.StrBuf_;
-        return *this;
-    }
+    TInternName& operator=(const TInternName& other) = default;
 
     size_t Hash() const {
         return (size_t)StrBuf_.data();

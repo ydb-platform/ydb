@@ -37,6 +37,39 @@ namespace {
 constexpr TStringBuf TypeResourceTag = "_Type";
 constexpr TStringBuf CodeResourceTag = "_Expr";
 
+struct TDecimalParts {
+    ui8 IntegralDigits;
+    ui8 Scale;
+};
+
+TDecimalParts GetDecimalParts(const TDataExprType& decimal) {
+    YQL_ENSURE(IsDataTypeDecimal(decimal.GetSlot()), "Expected Decimal type");
+    const auto& extra = static_cast<const TDataExprParamsType&>(decimal);
+    const auto precision = FromString<ui8>(extra.GetParamOne());
+    const auto scale = FromString<ui8>(extra.GetParamTwo());
+    return {
+        .IntegralDigits = static_cast<ui8>(precision - scale),
+        .Scale = scale,
+    };
+}
+
+bool CanConvertIntegralToDecimal(EDataSlot integral, const TDataExprType& decimal) {
+    YQL_ENSURE(IsDataTypeIntegral(integral), "Expected integral source type");
+    return GetDecimalWidthOfIntegral(integral) <= GetDecimalParts(decimal).IntegralDigits;
+}
+
+TDecimalParts GetDecimalPartsForCommonType(const TDataExprType& type) {
+    if (IsDataTypeDecimal(type.GetSlot())) {
+        return GetDecimalParts(type);
+    }
+
+    YQL_ENSURE(IsDataTypeIntegral(type.GetSlot()), "Expected Decimal or integral type");
+    return {
+        .IntegralDigits = GetDecimalWidthOfIntegral(type.GetSlot()),
+        .Scale = 0U,
+    };
+}
+
 TExprNode::TPtr RebuildDict(const TExprNode::TPtr& node, const TExprNode::TPtr& lambda, TExprContext& ctx) {
     auto ret = ctx.Builder(node->Pos())
         .Callable("ToDict")
@@ -461,24 +494,24 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
             return IGraphTransformer::TStatus::Repeat;
         } else if (IsDataTypeDecimal(from) && IsDataTypeDecimal(to)) {
-            auto* sourceDecimal = sourceType.Cast<TDataExprParamsType>();
-            auto* expectedDecimal = expectedType.Cast<TDataExprParamsType>();
-            ui8 p1 = FromString(sourceDecimal->GetParamOne());
-            ui8 s1 = FromString(sourceDecimal->GetParamTwo());
-            ui8 p2 = FromString(expectedDecimal->GetParamOne());
-            ui8 s2 = FromString(expectedDecimal->GetParamTwo());
-            if (s1 > s2) {
+            const auto sourceParts = GetDecimalParts(*sourceType.Cast<TDataExprType>());
+            const auto expectedParts = GetDecimalParts(*expectedType.Cast<TDataExprType>());
+            if (sourceParts.Scale > expectedParts.Scale) {
                 TString message = TStringBuilder() << "Implicit decimal cast would lose precision";
                 auto issue = TIssue(node->Pos(ctx), message);
                 ctx.AddError(issue);
                 return IGraphTransformer::TStatus::Error;
             }
-            if (p1 - s1 > p2 - s2) {
+            if (sourceParts.IntegralDigits > expectedParts.IntegralDigits) {
                 TString message = TStringBuilder() << "Implicit decimal cast would narrow the range";
                 auto issue = TIssue(node->Pos(ctx), message);
                 ctx.AddError(issue);
                 return IGraphTransformer::TStatus::Error;
             }
+            allow = true;
+            useCast = true;
+        } else if (IsDataTypeIntegral(from) && IsDataTypeDecimal(to) &&
+                   CanConvertIntegralToDecimal(from, *expectedType.Cast<TDataExprType>())) {
             allow = true;
             useCast = true;
         }
@@ -1054,14 +1087,6 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
     return IGraphTransformer::TStatus::Error;
 }
 
-std::pair<ui8, ui8> GetDecimalParts(const TDataExprType& decimal) {
-    const auto extra = static_cast<const TDataExprParamsType&>(decimal);
-    const auto pr = FromString<ui8>(extra.GetParamOne());
-    const auto sc = FromString<ui8>(extra.GetParamTwo());
-    const auto dp = ui8(pr - sc);
-    return {dp, sc};
-}
-
 using TFieldsOfStructs = std::unordered_map<std::string_view, std::array<const TTypeAnnotationNode*, 2U>>;
 
 TFieldsOfStructs GetFieldsTypes(const TStructExprType& left, const TStructExprType& right) {
@@ -1093,10 +1118,10 @@ NUdf::TCastResultOptions CastResult(const TDataExprType* source, const TDataExpr
             const auto sParts = GetDecimalParts(*source);
             const auto tParts = GetDecimalParts(*target);
 
-            if (sParts.first <= tParts.first && sParts.second <= tParts.second) {
+            if (sParts.IntegralDigits <= tParts.IntegralDigits && sParts.Scale <= tParts.Scale) {
                 return NUdf::ECastOptions::Complete;
             }
-            if (std::min(sParts.first, tParts.first) + std::min(sParts.second, tParts.second)) {
+            if (std::min(sParts.IntegralDigits, tParts.IntegralDigits) + std::min(sParts.Scale, tParts.Scale)) {
                 return Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData;
             }
             return NUdf::ECastOptions::Impossible;
@@ -1106,22 +1131,19 @@ NUdf::TCastResultOptions CastResult(const TDataExprType* source, const TDataExpr
 
     if (EDataSlot::Decimal == tSlot && IsDataTypeIntegral(sSlot)) {
         const auto tParts = GetDecimalParts(*target);
-        const auto dSrc = NUdf::GetDataTypeInfo(sSlot).DecimalDigits;
-        if (dSrc <= tParts.first) {
+        if (CanConvertIntegralToDecimal(sSlot, *target)) {
             return NUdf::ECastOptions::Complete;
         }
-        return tParts.first ? Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::Impossible;
+        return tParts.IntegralDigits ? Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::Impossible;
     }
 
     if (EDataSlot::Decimal == sSlot && IsDataTypeIntegral(tSlot)) {
         const auto sParts = GetDecimalParts(*source);
         const auto dDst = NUdf::GetDataTypeInfo(tSlot).DecimalDigits;
-        if (!sParts.first) {
+        if (!sParts.IntegralDigits) {
             return NUdf::ECastOptions::Impossible;
         }
-        return Strong ? NUdf::ECastOptions::MayFail:
-            NUdf::ECastOptions::MayFail |
-            ((sParts.first >= dDst || sParts.second >0U) ? NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::Complete);
+        return Strong ? NUdf::ECastOptions::MayFail : NUdf::ECastOptions::MayFail | ((sParts.IntegralDigits >= dDst || sParts.Scale > 0U) ? NUdf::ECastOptions::MayLoseData : NUdf::ECastOptions::Complete);
     }
 
     const auto option = *NUdf::GetCastResult(sSlot, tSlot);
@@ -1486,15 +1508,19 @@ template <bool Silent>
 const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, const TDataExprType* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn) {
     const auto slot1 = one->GetSlot();
     const auto slot2 = two->GetSlot();
-    if (IsDataTypeDecimal(slot1) && IsDataTypeDecimal(slot2)) {
-        const auto parts1 = GetDecimalParts(*one);
-        const auto parts2 = GetDecimalParts(*two);
+    const bool hasDecimal = IsDataTypeDecimal(slot1) || IsDataTypeDecimal(slot2);
+    const bool hasOnlyDecimalsAndIntegrals =
+        (IsDataTypeDecimal(slot1) || IsDataTypeIntegral(slot1)) &&
+        (IsDataTypeDecimal(slot2) || IsDataTypeIntegral(slot2));
+    if (hasDecimal && hasOnlyDecimalsAndIntegrals) {
+        const auto parts1 = GetDecimalPartsForCommonType(*one);
+        const auto parts2 = GetDecimalPartsForCommonType(*two);
         ui8 whole = 0;
         ui8 scale = 0;
-        switch (typesCtx.DecimalConversionMode) {
+        switch (typesCtx.GetDecimalConversionMode()) {
             case EDecimalConversionMode::WithCommonTypeFixup:
-                whole = std::max<ui8>(parts1.first, parts2.first);
-                scale = std::max<ui8>(parts1.second, parts2.second);
+                whole = std::max<ui8>(parts1.IntegralDigits, parts2.IntegralDigits);
+                scale = std::max<ui8>(parts1.Scale, parts2.Scale);
                 if (whole + scale > NDecimal::MaxPrecision) {
                     if constexpr (!Silent) {
                         ctx.AddError(TIssue(ctx.GetPosition(pos),
@@ -1509,8 +1535,8 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
                 }
                 break;
             case EDecimalConversionMode::WithoutCommonTypeFixup:
-                whole = std::min<ui8>(NDecimal::MaxPrecision, std::max<ui8>(parts1.first - parts1.second, parts2.first - parts2.second));
-                scale = std::min<ui8>(NDecimal::MaxPrecision - whole, std::max<ui8>(parts1.second, parts2.second));
+                whole = std::min<ui8>(NDecimal::MaxPrecision, std::max<ui8>(parts1.IntegralDigits - parts1.Scale, parts2.IntegralDigits - parts2.Scale));
+                scale = std::min<ui8>(NDecimal::MaxPrecision - whole, std::max<ui8>(parts1.Scale, parts2.Scale));
                 break;
         }
         return ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(whole + scale), ToString(scale));

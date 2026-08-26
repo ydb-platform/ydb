@@ -596,46 +596,21 @@ Y_UNIT_TEST(NegativeReadSpeedRejected) {
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "partition_total_read_speed_bytes_per_second");
 }
 
-Y_UNIT_TEST(FccTopicNameFormatsCreateAndDescribeAliases) {
+Y_UNIT_TEST(FccKeepsLiteralDashDashTopicName) {
     auto setup = CreateSetup("PQv1NameFormatsFcc");
     auto& runtime = setup->GetRuntime();
 
-    MkDir(*setup, "/Root", "fcclegacy");
+    const TString name = "TestSchemeList--test-topic-1";
+    const TString path = "/Root/" + name;
+    CreateTopic(runtime, name);
+    AssertDescribeAliases(runtime, {name, path}, path);
+
     MkDir(*setup, "/Root", "fccmodern");
-    MkDir(*setup, "/Root", "fccshort");
-
-    CreateTopic(runtime, "rt3.dc1--fcclegacy--topic");
-    AssertDescribeAliases(
-        runtime,
-        {
-            "rt3.dc1--fcclegacy--topic",
-            "fcclegacy--topic",
-            "fcclegacy/topic",
-            "/Root/fcclegacy/topic",
-        },
-        "/Root/fcclegacy/topic");
-
     CreateTopic(runtime, "fccmodern/topic");
     AssertDescribeAliases(
         runtime,
-        {
-            "rt3.dc1--fccmodern--topic",
-            "fccmodern--topic",
-            "fccmodern/topic",
-            "/Root/fccmodern/topic",
-        },
+        {"fccmodern/topic", "/Root/fccmodern/topic"},
         "/Root/fccmodern/topic");
-
-    CreateTopic(runtime, "fccshort--topic");
-    AssertDescribeAliases(
-        runtime,
-        {
-            "rt3.dc1--fccshort--topic",
-            "fccshort--topic",
-            "fccshort/topic",
-            "/Root/fccshort/topic",
-        },
-        "/Root/fccshort/topic");
 }
 
 Y_UNIT_TEST(FederationTopicNameFormats) {

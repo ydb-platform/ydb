@@ -935,6 +935,40 @@ TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, co
         .Done().Ptr();
 }
 
+TExprNode::TPtr ApplyExtractMembersToSqlCombine(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoSqlCombine sqlCombine(node);
+    YQL_CLOG(DEBUG, Core) << "Propagate ExtractMembers over " << node->Content() << logSuffix;
+
+    const auto usingLambda = sqlCombine.UsingLambda();
+    const auto usingBody = usingLambda.Body();
+    TMaybeNode<TExprBase> newUsing;
+    if (usingBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+        newUsing = Build<TCoFilterMembers>(ctx, node->Pos())
+            .Input(usingBody)
+            .Members(members)
+            .Done();
+    } else {
+        newUsing = Build<TCoExtractMembers>(ctx, node->Pos())
+            .Input(usingBody)
+            .Members(members)
+            .Done();
+    }
+
+    const auto usingArgs = usingLambda.Args();
+    return Build<TCoSqlCombine>(ctx, node->Pos())
+        .InitFrom(sqlCombine)
+        .UsingLambda()
+            .Args({"key", "leftList", "rightList"})
+            .Body<TExprApplier>()
+                .Apply(newUsing.Cast())
+                .With(usingArgs.Arg(0), "key")
+                .With(usingArgs.Arg(1), "leftList")
+                .With(usingArgs.Arg(2), "rightList")
+                .Build()
+            .Build()
+        .Done().Ptr();
+}
+
 TExprNode::TPtr ApplyExtractMembersToWithWorld(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoWithWorld withWorld(node);
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over WithWorld" << logSuffix;

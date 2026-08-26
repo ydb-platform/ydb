@@ -48,23 +48,29 @@ namespace NKikimr::NDDisk {
 
         creds.SerializeResolvedForRequest(record.MutableCredentials());
         if constexpr (requires { record.ChecksumsSize(); record.GetSelector(); }) {
-            const auto& selector = record.GetSelector();
-            if (!HasRequiredBlockChecksums(record.ChecksumsSize(),
-                    selector.GetOffsetInBytes(), selector.GetSize())) {
-                if (record.ChecksumsSize() == 0) {
-                    Counters.Checksums.WritesWithoutChecksums->Inc();
+            if (!Config.EnableChecksums) {
+                // Do not forward sender-supplied checksums into the checksum-less PB v0 format.
+                // They are intentionally neither required nor validated in this mode.
+                record.ClearChecksums();
+            } else {
+                const auto& selector = record.GetSelector();
+                if (!HasRequiredBlockChecksums(record.ChecksumsSize(),
+                        selector.GetOffsetInBytes(), selector.GetSize())) {
+                    if (record.ChecksumsSize() == 0) {
+                        Counters.Checksums.WritesWithoutChecksums->Inc();
+                    }
+                    auto result = std::make_unique<TEvWritePersistentBuffersResult>();
+                    for (const auto& id : record.GetPersistentBufferIds()) {
+                        auto* item = result->Record.AddResult();
+                        item->MutablePersistentBufferId()->CopyFrom(id);
+                        item->MutableResult()->SetStatus(
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST);
+                        item->MutableResult()->SetErrorReason(
+                            "one checksum per aligned 4 KiB block is required");
+                    }
+                    SendReply(*ev, std::move(result));
+                    return;
                 }
-                auto result = std::make_unique<TEvWritePersistentBuffersResult>();
-                for (const auto& id : record.GetPersistentBufferIds()) {
-                    auto* item = result->Record.AddResult();
-                    item->MutablePersistentBufferId()->CopyFrom(id);
-                    item->MutableResult()->SetStatus(
-                        NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST);
-                    item->MutableResult()->SetErrorReason(
-                        "one checksum per aligned 4 KiB block is required");
-                }
-                SendReply(*ev, std::move(result));
-                return;
             }
         }
         Y_ABORT_UNLESS(WritePersistentBuffersActor);
@@ -302,6 +308,11 @@ namespace {
         } else {
             Become(&TThis::StateFuncDDisk);
             RegisterMonPage();
+            if (!Config.EnableChecksums) {
+                YDB_LOG_NOTICE("TDDiskActor booting with integrity checksums disabled",
+                    {"marker", "BSDD55"},
+                    {"DDiskId", DDiskId});
+            }
             InitPDiskInterface();
         }
     }
@@ -584,6 +595,7 @@ namespace {
             hFunc(TEvPrivate::TEvHandleSerializedWriteForChunk, Handle)
             hFunc(TEvPrivate::TEvDDiskIoResult, Handle)
             hFunc(TEvPrivate::TEvIntegrityIoResult, Handle)
+            hFunc(TEvPrivate::TEvChunkFormatIoResult, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
             hFunc(TEvReadPersistentBufferResult, Handle)
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)

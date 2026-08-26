@@ -3705,9 +3705,10 @@ public:
             input = Y(ctx.UseUnordered(*Source_) ? "OrderedMap" : "Map", input, extraMembersLambda);
         }
 
-        return Y("SqlCombineInput", input, presortKeySelector, presortDirection,
-                 BuildLambda(Pos_, Y("row"), extractKey),
-                 BuildLambda(Pos_, Y("row"), Arg_));
+        return Y("SqlCombineInput", input,
+                 Y("Void"), presortKeySelector, presortDirection,
+                 Y("Void"), BuildLambda(Pos_, Y("row"), extractKey),
+                 Y("Void"), BuildLambda(Pos_, Y("row"), Arg_));
     }
 
     TPtr CloneCombineInputSource() const {

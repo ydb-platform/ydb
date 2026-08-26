@@ -174,6 +174,15 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
+    const ui64 copyRangeBandwidth =
+        StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
+    if (copyRangeBandwidth) {
+        CopyRangeBucket.emplace(
+            ActorSystem->Timestamp(),
+            copyRangeBandwidth,
+            copyRangeBandwidth);
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -399,7 +408,7 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
+TPersistResultFuture TFastPathService::UpdateVChunkConfig(
     const TVChunkConfig& cfg)
 {
     auto event =
@@ -409,7 +418,7 @@ NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
     return result;
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateDirtyMapState(
+TPersistResultFuture TFastPathService::UpdateDirtyMapState(
     ui32 vChunkIndex,
     TDirtyMapStateProto state)
 {
@@ -461,6 +470,16 @@ bool TFastPathService::TryAdvancePBufferBarrier(
         return true;
     }
     return false;
+}
+
+TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
+{
+    if (!CopyRangeBucket) {
+        return {};
+    }
+
+    auto guard = Guard(CopyRangeBucketLock);
+    return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
 }
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const

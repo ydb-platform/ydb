@@ -1332,6 +1332,13 @@ void TDirectBlockGroup::OnAddHostResult(
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
 }
 
+TDuration TDirectBlockGroup::TakeCopyRangeBudget(ui64 byteCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return Service->TakeVolumeCopyRangeBudget(byteCount);
+}
+
 ui32 TDirectBlockGroup::GetNodeId(THostIndex host) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());

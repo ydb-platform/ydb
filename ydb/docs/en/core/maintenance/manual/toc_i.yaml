@@ -31,8 +31,6 @@ items:
   href: dynamic-config.md
 - name: Temporary configurations
   href: dynamic-config-volatile-config.md
-- name: CMS
-  href: cms.md
 - name: BlobDepot
   href: blobdepot.md
 - name: BlobDepot decommit

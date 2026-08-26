@@ -20,28 +20,28 @@ TSimpleLeakyBucket::TSimpleLeakyBucket(
     double initialBudget)
     : Rate(rate)
     , MaxBudget(initialBudget)
-    , BonusBudget(Rate * MinWaitTime.SecondsFloat())
+    , MinDelayedBudget(-Rate * MinWaitTime.SecondsFloat())
     , Budget(initialBudget)
     , LastUpdateTs(ts)
-{}
-
-TDuration TSimpleLeakyBucket::Register(TInstant ts, double valueToSpent)
 {
-    Y_DEBUG_ABORT_UNLESS(valueToSpent > 0);
+    Y_ABORT_UNLESS(Rate > 0);
+    Y_ABORT_UNLESS(MinDelayedBudget < 0);
+}
+
+TDuration TSimpleLeakyBucket::Register(TInstant ts, double valueToSpend)
+{
+    Y_DEBUG_ABORT_UNLESS(valueToSpend > 0);
 
     const TDuration timePassed = ts - LastUpdateTs;
     if (timePassed) {
-        Budget = std::min(Budget + Rate * timePassed.SecondsFloat(), MaxBudget);
+        Budget = Min(Budget + Rate * timePassed.SecondsFloat(), MaxBudget);
     }
+
     LastUpdateTs = ts;
+    Budget -= valueToSpend;
 
-    if (Budget + BonusBudget >= valueToSpent) {
-        Budget -= valueToSpent;
-        return {};
-    }
-
-    Budget -= valueToSpent;
-    return TDuration::Seconds(-Budget / Rate);
+    return Budget >= MinDelayedBudget ? TDuration()
+                                      : TDuration::Seconds(-Budget / Rate);
 }
 
 double TSimpleLeakyBucket::GetBudget() const

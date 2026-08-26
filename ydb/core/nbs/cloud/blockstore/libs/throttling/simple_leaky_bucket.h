@@ -19,7 +19,7 @@ public:
     TSimpleLeakyBucket(TInstant ts, double rate, double initialBudget);
 
     // Returns the time to wait before executing the registered operation.
-    [[nodiscard]] TDuration Register(TInstant ts, double valueToSpent);
+    [[nodiscard]] TDuration Register(TInstant ts, double valueToSpend);
 
     // Returns the budget at the last update. The value may be negative.
     [[nodiscard]] double GetBudget() const;
@@ -30,7 +30,7 @@ private:
 
     // Extra budget used to suppress very short waits. The operation may execute
     // immediately, but the corresponding debt is retained in the budget.
-    const double BonusBudget;
+    const double MinDelayedBudget;
 
     double Budget = 0;   // accumulated budget
     TInstant LastUpdateTs;

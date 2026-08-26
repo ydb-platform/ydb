@@ -222,7 +222,7 @@ public:
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
     // by all DirectBlockGroups. Returns the delay before the operation may
     // start. Zero means it may start immediately or throttling is disabled.
-    virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
+    [[nodiscard]] virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
 
     // Translate host index to NodeId.
     [[nodiscard]] virtual ui32 GetNodeId(THostIndex host) const = 0;

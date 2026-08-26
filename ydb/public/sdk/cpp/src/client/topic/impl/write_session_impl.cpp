@@ -924,6 +924,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         if (delay)
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
+
         // Previous operations contexts.
 
         // Set new context

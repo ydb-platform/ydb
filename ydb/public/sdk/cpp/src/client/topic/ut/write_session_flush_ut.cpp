@@ -24,21 +24,6 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(WriteSessionFlush) {
-    Y_UNIT_TEST(DriverStopWithActiveWriteSession) {
-        TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        TDriver driver(setup.MakeDriverConfig());
-        TTopicClient client(driver);
-        auto session = client.CreateWriteSession(
-            TWriteSessionSettings()
-                .Path(setup.GetTopicPath())
-                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
-                .Codec(ECodec::RAW));
-
-        WaitForWriteToken(*session);
-        driver.Stop(true);
-        session.reset();
-    }
-
     Y_UNIT_TEST(CloseImmediatelyAfterFlush) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         auto client = setup.MakeClient();

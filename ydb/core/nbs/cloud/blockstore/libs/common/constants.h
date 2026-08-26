@@ -36,6 +36,11 @@ constexpr size_t DirectBlockGroupsCount = 32;
 // The size of the data copied at a time.
 constexpr ui64 CopyRangeSize = 1_MB;
 
+// Max allowed VChunk size.
+constexpr ui64 MaxVChunkSize = RegionSize / DirectBlockGroupsCount;
+// Max allowed VChunk block count (when block size is minimum).
+constexpr ui64 MaxVChunkBlockCount = MaxVChunkSize / DefaultBlockSize;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

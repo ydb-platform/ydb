@@ -23,8 +23,6 @@ items:
   href: replacing_nodes.md
 - name: Config overview
   href: config-overview.md
-- name: Dynamic cluster configuration
-  href: dynamic-config.md
 - name: Temporary configurations
   href: dynamic-config-volatile-config.md
 - name: BlobDepot

@@ -1825,14 +1825,28 @@ FROM `{table_name}`"""
                             bar: String?,
                             baz: List<Int>?,
                             bat: Tuple<Int, String?>?,
-                            bet: Dict<String, Int>?>?,
+                            bet: Dict<String, Int>?,
+                            bum: Variant<
+                                a: Tuple<Int, String>?,
+                                b: List<Int>,
+                                c: bool,
+                                d: Int8,
+                                e: Int64,
+                                f: Dict<String,Int?>
+                            >
+                        >?,
                         test String
                     )
                 )
                 WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0
                       {comment_for_pushdown} OR ListLength(foo.baz) > 5
                 ;
-                $in = SELECT foo.bar AS bar, foo.baz AS baz, foo.bat AS bat, foo.bet AS bet, test FROM $in;
+                $in = SELECT * FROM $in FLATTEN COLUMNS; -- expand foo
+                $in = SELECT
+                        i.*,
+                        bum.a AS ua, bum.b AS ub, bum.c AS uc, bum.d AS ud, bum.e AS ue, bum.f AS uf
+                      WITHOUT bum
+                      FROM $in AS i;
                 -- $in = SELECT * FROM $in FLATTEN LIST BY baz; -- prevents pushdown
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
             END DO;'''
@@ -1852,14 +1866,20 @@ FROM `{table_name}`"""
 
         longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
         data = [
-            '{"foo":{"bar":"before lunch", "bat":[0]}}',
-            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2}},"test":"xy{longstr}z"}',
-            '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3}},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"before lunch", "bat":[0], "bum":null}}',
+            '{"foo":{"bar":"lunch time", "baz":[1,2], "bat":[1,"{longstr}"],"bet":{"a":1,"b{longstr}c":2},"bum":[123,456]},"test":"xy{longstr}z"}',
+            '{"foo":{"bar":"after lunch", "baz":[], "bat":[2,"t{longstr}a"],"bet":{"a":2,"c{longstr}d":3},"bum":[789,"foo"]},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"is lunch over", "bat":[3],"bum":true},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"lunch was yummy", "bat":[4,null,"that"],"bum":1234},"test":"x{longstr}yz"}',
+            '{"foo":{"bar":"lunch time again", "bat":[5],"bum":{"foo": 12356789,"bar":987654321,"xyz":null}},"test":"x{longstr}yz"}',
         ]
         data = [*map(lambda x: x.replace('{longstr}', longstr), data)]
         expected_data = [
-            '{"bar":"lunch time","bat":[1,"{longstr}"],"baz":[1,2],"bet":{"a":1,"b{longstr}c":2},"test":"xy{longstr}z"}',
-            '{"bar":"after lunch","bat":[2,"t{longstr}a"],"baz":[],"bet":{"a":2,"c{longstr}d":3},"test":"x{longstr}yz"}',
+            '{"bar":"lunch time","bat":[1,"{longstr}"],"baz":[1,2],"bet":{"a":1,"b{longstr}c":2},"test":"xy{longstr}z","ua":null,"ub":[123,456],"uc":null,"ud":null,"ue":null,"uf":null}',
+            '{"bar":"after lunch","bat":[2,"t{longstr}a"],"baz":[],"bet":{"a":2,"c{longstr}d":3},"test":"x{longstr}yz","ua":[789,"foo"],"ub":null,"uc":null,"ud":null,"ue":null,"uf":null}',
+            '{"bar":"is lunch over","bat":[3,null],"baz":null,"bet":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":true,"ud":null,"ue":null,"uf":null}',
+            '{"bar":"lunch was yummy","bat":[4,null],"baz":null,"bet":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":null,"ud":null,"ue":1234,"uf":null}',
+            '{"bar":"lunch time again","bat":[5,null],"baz":null,"bet":null,"test":"x{longstr}yz","ua":null,"ub":null,"uc":null,"ud":null,"ue":null,"uf":{"bar":987654321,"foo":12356789,"xyz":null}}',
         ] * 2
         expected_data = [*map(lambda x: x.replace('{longstr}', longstr), expected_data)]
 

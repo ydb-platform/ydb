@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_compact_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
@@ -2621,7 +2622,7 @@ Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
     auto verifyIndexWorksCorrectly = [&](){
         UpsertTexts(db);
         auto index = ReadIndex(db);
-        CompareYson(R"([
+        CompareYsonUnordered(R"([
             [[100u];1u;"animals"];
             [[100u];1u;"cats"];
             [[200u];1u;"cats"];
@@ -2635,7 +2636,7 @@ Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
             [[400u];1u;"love"];
             [[100u];1u;"small"];
             [[200u];1u;"small"]
-        ])", NYdb::FormatResultSetYson(index));
+        ])", FormatFulltextIndex(kikimr, "/Root/Texts/fulltext_idx", true));
     };
 
     verifyIndexWorksCorrectly();

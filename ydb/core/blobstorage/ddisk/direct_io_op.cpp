@@ -84,10 +84,10 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
         bytesProcessed = static_cast<ui32>(result);
     }
 
-    // EAGAIN/ENOMEM/ENOSPC on integrity I/O must not brick the DDisk: retry the same op
+    // EAGAIN/ENOMEM/ENOSPC on integrity/formatting I/O must not brick the DDisk: retry the same op
     // (buffers still owned here) through the short-I/O path. Defer Done() until the retry
     // completes or a hard error is reported.
-    if (Y_UNLIKELY(result < 0 && IsIntegrityIo()
+    if (Y_UNLIKELY(result < 0 && IsCriticalDDiskIo()
             && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED)) {
         auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvShortIO>(std::move(guard));
         actorSystem->Send(new IEventHandle(DDiskId, {}, ev.release()));
@@ -494,6 +494,25 @@ void TDDiskActor::TIntegrityIoOp::Reply(NActors::TActorSystem* actorSystem, TRep
     actorSystem->Send(DDiskId, new TEvPrivate::TEvIntegrityIoResult(
         IoId, status, std::move(reason), std::move(data),
         GetOperationType() == TUringOperationBase::EREAD));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDDiskActor::TChunkFormatIoOp
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void TDDiskActor::TChunkFormatIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status,
+        TString reason) noexcept {
+    if (status != TReplyStatus::OK && !reason) {
+        const i32 result = GetResult();
+        if (result < 0) {
+            reason = TStringBuilder() << "chunk zero-format write failed: " << strerror(-result)
+                << " (errno " << (-result) << ")";
+        } else {
+            reason = "chunk zero-format write failed";
+        }
+    }
+    actorSystem->Send(DDiskId, new TEvPrivate::TEvChunkFormatIoResult(
+        ChunkIdx, OffsetInBytes, Size, status, std::move(reason)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

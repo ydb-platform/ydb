@@ -330,15 +330,21 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         // groups of this tablet share the same counters chain, so per-group
         // increments naturally sum up into disk-level counters.
         std::unique_ptr<NTransport::IStorageTransport> transport;
+        const bool enableChecksums =
+            nbsService->StorageConfig->GetEnableChecksums();
         if (nbsService->StorageConfig->GetUseDirectSessionTransport()) {
             transport = NTransport::CreateDirectStorageTransport(
                 TActivationContext::ActorSystem(),
                 DiskDescription,
-                dbgIndex);
+                dbgIndex,
+                enableChecksums);
         } else {
             transport = std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(DiskDescription, dbgIndex));
+                NTransport::CreateTransportActor(
+                    DiskDescription,
+                    dbgIndex,
+                    enableChecksums));
         }
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(

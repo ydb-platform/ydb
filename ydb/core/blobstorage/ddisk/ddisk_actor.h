@@ -100,6 +100,7 @@ namespace NKikimr::NDDisk {
         class TPersistentBufferPartIoOp;
         class TInternalSyncWriteOp;
         class TIntegrityIoOp;
+        class TChunkFormatIoOp;
 
         std::queue<std::unique_ptr<TDirectIoOpBase>> DirectIoQueue;
 
@@ -308,6 +309,7 @@ namespace NKikimr::NDDisk {
                 EvDDiskIoResult,
                 EvIntegrityIoResult,
                 EvHandleSerializedWriteForChunk,
+                EvChunkFormatIoResult,
             };
 
            struct TEvRetryListPersistentBuffer : TEventLocal<TEvRetryListPersistentBuffer, EvRetryListPersistentBuffer> {
@@ -474,6 +476,24 @@ namespace NKikimr::NDDisk {
                 {}
             };
 
+            struct TEvChunkFormatIoResult : TEventLocal<TEvChunkFormatIoResult, EvChunkFormatIoResult> {
+                TChunkIdx ChunkIdx = 0;
+                ui32 OffsetInBytes = 0;
+                ui32 Size = 0;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status =
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN;
+                TString ErrorMessage;
+
+                TEvChunkFormatIoResult(TChunkIdx chunkIdx, ui32 offsetInBytes, ui32 size,
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage = {})
+                    : ChunkIdx(chunkIdx)
+                    , OffsetInBytes(offsetInBytes)
+                    , Size(size)
+                    , Status(status)
+                    , ErrorMessage(std::move(errorMessage))
+                {}
+            };
+
             struct TEvInternalSyncWriteResult : TEventLocal<TEvInternalSyncWriteResult, EvInternalSyncWriteResult> {
                 ui64 SyncId = 0;
                 ui64 RequestId = 0;
@@ -529,6 +549,9 @@ namespace NKikimr::NDDisk {
         TString BrokenReason;
 
         bool IsBroken() const;
+        bool ChecksumsEnabled() const {
+            return Config.EnableChecksums;
+        }
         TString GetBrokenReason() const;
         void EnterBroken(TString reason);
         void FailPendingDDiskQuery(std::unique_ptr<IEventHandle> ev);
@@ -626,6 +649,9 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 MinChunksReservedPersistentBuffer = 2;
         const ui32 MinChunksReserved;
         std::queue<TChunkIdx> ChunkReserve;
+        // Newly reserved chunks are zeroed in slices before they become allocatable in
+        // checksums-disabled mode. Value is the next byte offset to format.
+        absl::flat_hash_map<TChunkIdx, ui32> FormattingChunks;
         bool ReserveInFlight = false;
 
         struct TChunkForData {
@@ -667,6 +693,8 @@ namespace NKikimr::NDDisk {
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
         void HandleChunkReserved();
+        void IssueNextChunkFormatWrite(TChunkIdx chunkIdx);
+        void Handle(TEvPrivate::TEvChunkFormatIoResult::TPtr ev);
         void Handle(NPDisk::TEvLogResult::TPtr ev);
         void Handle(TEvPrivate::TEvHandleEventForChunk::TPtr ev);
         void Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev);
@@ -700,7 +728,7 @@ namespace NKikimr::NDDisk {
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapIncrement(ui64 tabletId, ui64 vChunkIndex,
-            TChunkIdx chunkIdx, const TIntegrityManager::TExtentRef& extentRef,
+            TChunkIdx chunkIdx, const TIntegrityManager::TExtentRef* extentRef,
             const TIntegrityManager::TMappingSnapshot::TIntegrityChunkEntry* integrityChunk = nullptr);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -721,6 +749,11 @@ namespace NKikimr::NDDisk {
         // concurrently written snapshot already includes the chunk - by the time that snapshot is
         // read back the commit has landed.
         std::vector<TIntegrityManager::TMappingSnapshot::TIntegrityChunkEntry> CommittedIntegrityChunks;
+
+        // Integrity chunks inherited during the supported checksums-on -> checksums-off
+        // transition. Disabled mode keeps them owned forever and repeats them in snapshots.
+        absl::flat_hash_map<TChunkIdx, ui64> InheritedIntegrityChunks;
+        bool LegacyChecksumsTransitionWarningLogged = false;
 
         // DataChunk -> IntegrityExtent mapping accumulated from the chunk-map snapshot and log
         // increments during boot; fed to IntegrityManager->ApplyMappingSnapshot at end-of-log.
@@ -1036,6 +1069,7 @@ namespace NKikimr::NDDisk {
         void ReplySync(TSyncIt it);
         void MaybeReplySync(TSyncIt it);
         void MaybeFinishSyncSegment(ui64 integrityOperationId);
+        void FinishSyncSegment(TPendingSyncSegment segment);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Persistent buffer services

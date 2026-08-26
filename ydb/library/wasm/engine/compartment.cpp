@@ -414,7 +414,17 @@ public:
 
         auto objectCode = std::vector<U8>(bytecode.ObjectCode.size());
         ::memcpy(objectCode.data(), bytecode.ObjectCode.data(), bytecode.ObjectCode.size());
-        auto wavmModule = std::make_shared<Runtime::Module>(std::move(irModule), std::move(objectCode));
+
+        Runtime::ModuleRef wavmModule;
+        if (bytecode.Format == EBytecodeFormat::Binary) {
+            wavmModule = Runtime::loadPrecompiledModule(
+                irModule,
+                objectCode,
+                std::bit_cast<const U8*>(bytecode.Data.begin()),
+                bytecode.Data.size());
+        } else {
+            wavmModule = Runtime::loadPrecompiledModule(irModule, objectCode);
+        }
         auto linkResult = LinkModule(wavmModule->ir);
         AddExportsToGlobalOffsetTable(wavmModule->ir);
         InstantiateModule(wavmModule, linkResult, name);

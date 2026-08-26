@@ -79,11 +79,15 @@ TGuardedSgList MakeSgList(TString& buffer)
     return result;
 }
 
-void CheckDirectWriteChecksums(TDBGFixture& fixture, bool directSession)
+void CheckDirectWriteChecksums(
+    TDBGFixture& fixture,
+    bool directSession,
+    bool enableChecksums)
 {
     auto executor = fixture.MakeExecutor();
-    auto transport =
-        std::make_unique<TICStorageTransportTestAdapter>(fixture.Runtime.get());
+    auto transport = std::make_unique<TICStorageTransportTestAdapter>(
+        fixture.Runtime.get(),
+        enableChecksums);
     if (directSession) {
         transport->EnableFakeDirectSession();
     }
@@ -135,11 +139,17 @@ void CheckDirectWriteChecksums(TDBGFixture& fixture, bool directSession)
         NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
     UNIT_ASSERT_VALUES_EQUAL(writeRequests, 1u);
     UNIT_ASSERT_VALUES_EQUAL(observedPayload, writeBuf);
-    UNIT_ASSERT_VALUES_EQUAL(
-        observedChecksums.size(),
-        expectedChecksums.size());
-    for (size_t i = 0; i < expectedChecksums.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(observedChecksums[i], expectedChecksums[i]);
+    if (enableChecksums) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            observedChecksums.size(),
+            expectedChecksums.size());
+        for (size_t i = 0; i < expectedChecksums.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                observedChecksums[i],
+                expectedChecksums[i]);
+        }
+    } else {
+        UNIT_ASSERT(observedChecksums.empty());
     }
     UNIT_ASSERT_VALUES_EQUAL(
         transport->GetFakeDirectSessionSentEventCount(),
@@ -186,12 +196,34 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
     Y_UNIT_TEST_F(ActorPathDirectWriteCarriesPerBlockChecksums, TDBGFixture)
     {
-        CheckDirectWriteChecksums(*this, /*directSession=*/false);
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/false,
+            /*enableChecksums=*/true);
     }
 
     Y_UNIT_TEST_F(DirectSessionWriteCarriesPerBlockChecksums, TDBGFixture)
     {
-        CheckDirectWriteChecksums(*this, /*directSession=*/true);
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/true,
+            /*enableChecksums=*/true);
+    }
+
+    Y_UNIT_TEST_F(ActorPathCanDisableWriteChecksums, TDBGFixture)
+    {
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/false,
+            /*enableChecksums=*/false);
+    }
+
+    Y_UNIT_TEST_F(DirectSessionCanDisableWriteChecksums, TDBGFixture)
+    {
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/true,
+            /*enableChecksums=*/false);
     }
 
     // With a fake IDirectSession injected, WriteToDDisk / ReadFromDDisk go

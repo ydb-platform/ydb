@@ -4,6 +4,7 @@
 #include "dsproxy_test_state_ut.h"
 #include "dsproxy_vdisk_mock_ut.h"
 
+#include <ydb/core/blobstorage/dsproxy/dsproxy_patch.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -12,6 +13,37 @@
 
 namespace NKikimr {
 namespace NDSProxyPatchTest {
+
+Y_UNIT_TEST_SUITE(TVPatchMirror3dcQuorumTest) {
+    Y_UNIT_TEST(UsesTopologyAwareQuorum) {
+        const TBlobStorageGroupInfo info(TErasureType::ErasureMirror3dc, 1, 3, 3);
+
+        UNIT_ASSERT(NVPatch::HasMirror3dcQuorum(info, 0b000000111)); // 1+1+1
+        UNIT_ASSERT(NVPatch::HasMirror3dcQuorum(info, 0b000011011)); // 2+2
+        UNIT_ASSERT(!NVPatch::HasMirror3dcQuorum(info, 0b000001011)); // 2+1
+        UNIT_ASSERT(!NVPatch::HasMirror3dcQuorum(info, 0b001001001)); // one realm only
+    }
+
+    Y_UNIT_TEST(PrefersOneReplicaFromEachRealm) {
+        const TBlobStorageGroupInfo info(TErasureType::ErasureMirror3dc, 1, 3, 3);
+
+        // Realm 0: bits 0, 3; realm 1: bits 1, 4; realm 2: bit 2.
+        constexpr ui32 available = 0b000011111; // 2+2+1
+        constexpr ui32 expected = 0b000011100; // bits 2, 3, 4: 1+1+1
+        UNIT_ASSERT_VALUES_EQUAL(NVPatch::SelectMirror3dcQuorum(info, available), expected);
+    }
+
+    Y_UNIT_TEST(FallsBackToTwoByTwo) {
+        const TBlobStorageGroupInfo info(TErasureType::ErasureMirror3dc, 1, 3, 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NVPatch::SelectMirror3dcQuorum(info, 0b000011011),
+            0b000011011); // 2+2 available
+        UNIT_ASSERT_VALUES_EQUAL(
+            NVPatch::SelectMirror3dcQuorum(info, 0b000001011),
+            0); // only 2+1 available
+    }
+}
 
 struct TVDiskPointer {
     ui32 VDiskIdx;
@@ -613,6 +645,149 @@ void SetLogPriorities(TTestBasicRuntime &runtime) {
     }
     runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_CRIT);
     runtime.SetLogPriority(NKikimrServices::BS_QUEUE, NLog::PRI_CRIT);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TMirror3dcVPatchActorTest {
+    struct TDiffEvents {
+        ui32 SelectedMask = 0;
+        ui32 ForceEndMask = 0;
+        TVector<TEvBlobStorage::TEvVPatchDiff::TPtr> Selected;
+    };
+
+    TTestArgs Args;
+    TTestBasicRuntime Runtime{1, false};
+    TDSProxyEnv Env;
+    TActorId PatchActorId;
+
+    void SendFoundParts(ui32 availableMask) {
+        for (ui32 vdiskIdx = 0; vdiskIdx < Args.GType.BlobSubgroupSize(); ++vdiskIdx) {
+            auto start = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchStart>({Env.VDisks[vdiskIdx]});
+            auto& record = start->Get()->Record;
+            UNIT_ASSERT(record.HasCookie());
+            const ui32 subgroupIdx = record.GetCookie();
+            UNIT_ASSERT(subgroupIdx < 32);
+
+            const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
+            UNIT_ASSERT_VALUES_EQUAL(Env.Info->GetIdxInSubgroup(vdisk, Args.OriginalId.Hash()), subgroupIdx);
+
+            auto foundParts = std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>(NKikimrProto::OK,
+                Args.OriginalId, Args.PatchedId, vdisk, record.GetCookie(), Runtime.GetCurrentTime(), "", &record,
+                nullptr, nullptr, nullptr, 0);
+            if (availableMask & ui32{1} << subgroupIdx) {
+                foundParts->AddPart(subgroupIdx % 3 + 1);
+            }
+            SendByHandle(Runtime, start, std::move(foundParts));
+        }
+    }
+
+    TDiffEvents CollectDiffEvents(ui32 availableMask) {
+        TDiffEvents result;
+        for (ui32 vdiskIdx = 0; vdiskIdx < Args.GType.BlobSubgroupSize(); ++vdiskIdx) {
+            const auto [_, subgroupIdx] = TVDiskPointer::GetVDiskIdx(vdiskIdx).GetIndecies(Env, Args.OriginalId.Hash());
+            const ui32 bit = ui32{1} << subgroupIdx;
+            if (!(availableMask & bit)) {
+                continue;
+            }
+
+            auto diff = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchDiff>({Env.VDisks[vdiskIdx]});
+            UNIT_ASSERT(diff->Get()->Record.HasCookie());
+            UNIT_ASSERT_VALUES_EQUAL(diff->Get()->Record.GetCookie(), subgroupIdx);
+            if (diff->Get()->IsForceEnd()) {
+                result.ForceEndMask |= bit;
+            } else {
+                result.SelectedMask |= bit;
+                result.Selected.push_back(std::move(diff));
+            }
+        }
+        return result;
+    }
+
+    void SendResult(const TEvBlobStorage::TEvVPatchDiff::TPtr& diff, NKikimrProto::EReplyStatus status) {
+        auto& record = diff->Get()->Record;
+        const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
+        auto result = std::make_unique<TEvBlobStorage::TEvVPatchResult>(status, Args.OriginalId, Args.PatchedId,
+            vdisk, record.GetCookie(), Runtime.GetCurrentTime(), &record, nullptr, nullptr, nullptr, 0);
+        result->SetStatusFlagsAndFreeSpace(Args.StatusFlags, Args.ApproximateFreeSpaceShare);
+        SendByHandle(Runtime, diff, std::move(result));
+    }
+
+public:
+    TMirror3dcVPatchActorTest() {
+        Args.MakeDefault(TErasureType::ErasureMirror3dc);
+        SetLogPriorities(Runtime);
+        SetupRuntime(Runtime);
+        Env.Configure(Runtime, Args.GType, Args.CurrentGroupId, 0, TBlobStorageGroupInfo::EEM_NONE);
+    }
+
+    TDiffEvents Start(ui32 availableMask) {
+        auto patch = CreatePatch(Runtime, Env, Args);
+        auto patchActor = Env.CreatePatchRequestActor(patch, true, true);
+        PatchActorId = Runtime.Register(patchActor.release(), 0, 0, TMailboxType::Simple, 0, Env.FakeProxyActorId);
+
+        SendFoundParts(availableMask);
+        return CollectDiffEvents(availableMask);
+    }
+
+    void CompleteSuccessfully(const TDiffEvents& events) {
+        UNIT_ASSERT(!events.Selected.empty());
+        for (ui32 i = 0; i < events.Selected.size(); ++i) {
+            SendResult(events.Selected[i], NKikimrProto::OK);
+            if (i + 1 != events.Selected.size()) {
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvBlobStorage::TEvVPatchResult::EventType);
+                Runtime.DispatchEvents(options);
+                UNIT_ASSERT(Runtime.FindActor(PatchActorId));
+            }
+        }
+        ReceivePatchResult(Runtime, Args, NKikimrProto::OK);
+        UNIT_ASSERT(!Runtime.FindActor(PatchActorId));
+    }
+
+    void FailAndFallback(const TDiffEvents& events) {
+        UNIT_ASSERT(!events.Selected.empty());
+        SendResult(events.Selected.front(), NKikimrProto::ERROR);
+        ConductFallbackPatch(Runtime, Args);
+    }
+
+    void CompleteFallback() {
+        ConductFallbackPatch(Runtime, Args);
+    }
+};
+
+Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
+    Y_UNIT_TEST(SelectsOneReplicaFromEachRealm) {
+        TMirror3dcVPatchActorTest test;
+        const auto events = test.Start(0b000000111); // 1+1+1
+        UNIT_ASSERT_VALUES_EQUAL(events.SelectedMask, 0b000000111);
+        UNIT_ASSERT_VALUES_EQUAL(events.ForceEndMask, 0);
+        test.CompleteSuccessfully(events);
+    }
+
+    Y_UNIT_TEST(SelectsTwoReplicasFromTwoRealms) {
+        TMirror3dcVPatchActorTest test;
+        const auto events = test.Start(0b000011011); // 2+2
+        UNIT_ASSERT_VALUES_EQUAL(events.SelectedMask, 0b000011011);
+        UNIT_ASSERT_VALUES_EQUAL(events.ForceEndMask, 0);
+        test.CompleteSuccessfully(events);
+    }
+
+    Y_UNIT_TEST(FallsBackWithoutQuorum) {
+        TMirror3dcVPatchActorTest test;
+        const auto events = test.Start(0b000001011); // 2+1
+        UNIT_ASSERT_VALUES_EQUAL(events.SelectedMask, 0);
+        UNIT_ASSERT_VALUES_EQUAL(events.ForceEndMask, 0b000001011);
+        test.CompleteFallback();
+    }
+
+    Y_UNIT_TEST(FallsBackOnSelectedVDiskError) {
+        TMirror3dcVPatchActorTest test;
+        const auto events = test.Start(0b000011111); // 2+2+1
+        UNIT_ASSERT_VALUES_EQUAL(events.SelectedMask, 0b000011100); // 1+1+1
+        UNIT_ASSERT_VALUES_EQUAL(events.ForceEndMask, 0b000000011);
+        test.FailAndFallback(events);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

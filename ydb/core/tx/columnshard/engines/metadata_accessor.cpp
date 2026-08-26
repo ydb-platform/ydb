@@ -41,27 +41,17 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
     AFL_VERIFY(pathId.IsValid());
 }
 
-std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
+std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
-<<<<<<< HEAD
-        context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
-            readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions, context.GetOrbit(), readDescription.TxId, readDescription.ScanId);
-    
-=======
         context.GetEngine().Select(PathId.InternalPathId, readDescription, context.GetDataLocksManager());
     const bool needDuplicateFiltering = readDescription.NeedDuplicateFiltering();
 
->>>>>>> dc4af3bb31e ( Fix wrong scan results in CS scans (#46747))
     switch (readerClass) {
         case NReader::EReaderClass::Plain: {
-            std::vector<std::shared_ptr<TPortionInfo>> sources;
-            for (auto&& i : portions) {
-                sources.emplace_back(i.GetPortion());
-            }
-            return std::make_unique<NReader::NPlain::TPortionSources>(std::move(sources));
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::move(portions));
         }
         case NReader::EReaderClass::Simple: {
             std::deque<NReader::NSimple::TSourceConstructor> sources;
@@ -87,7 +77,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::Sel
     const NReader::TReadDescription& /*readDescription*/, const NReader::EReaderClass readerClass) const {
     switch (readerClass) {
         case NReader::EReaderClass::Plain:
-            return std::make_unique<NReader::NPlain::TPortionSources>(std::vector<std::shared_ptr<TPortionInfo>>());
+            return std::make_unique<NReader::NPlain::TPortionSources>(std::vector<IColumnEngine::TSelectedPortionInfo>());
         case NReader::EReaderClass::Simple:
             return NReader::NSimple::TPortionsSources::BuildEmpty();
         case NReader::EReaderClass::Trivial:

@@ -1,6 +1,4 @@
 items:
-- name: Expanding a cluster
-  href: cluster_expansion.md
 - name: Adding storage groups
   href: adding_storage_groups.md
 - name: Safe restart and shutdown of nodes
@@ -23,6 +21,12 @@ items:
   href: balancing_load.md
 - name: Freeing up space on physical devices
   href: disk_end_space.md
+- name: BlobDepot
+  href: blobdepot.md
+- name: BlobDepot decommissioning
+  href: blobdepot_decommit.md
+- name: Expanding a cluster
+  href: cluster_expansion.md
 - name: Replacing a node's FQDN
   href: replacing_nodes.md
 - name: Config overview
@@ -35,7 +39,3 @@ items:
   href: dynamic-config-volatile-config.md
 - name: CMS
   href: cms.md
-- name: BlobDepot
-  href: blobdepot.md
-- name: BlobDepot decommit
-  href: blobdepot_decommit.md

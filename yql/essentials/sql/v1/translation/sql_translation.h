@@ -32,7 +32,7 @@ inline TPosition GetPos(const TToken& token) {
 
 template <typename TToken>
 TIdentifier GetIdentifier(TTranslation& ctx, const TToken& node) {
-    auto token = node.GetToken1();
+    const auto& token = node.GetToken1();
     return TIdentifier(TPosition(token.GetColumn(), token.GetLine()), ctx.Identifier(token));
 }
 

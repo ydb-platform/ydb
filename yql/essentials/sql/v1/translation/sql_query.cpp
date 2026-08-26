@@ -4962,7 +4962,7 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
     FillTargetList(*this, stmt.GetRule_set_target_list1(), targetList);
 
     const TPosition pos(Ctx_.Pos());
-    auto parenthesis = stmt.GetRule_smart_parenthesis3();
+    const auto& parenthesis = stmt.GetRule_smart_parenthesis3();
 
     TNodePtr node = TSqlExpression(*this).BuildSourceOrNode(parenthesis);
     if (TSourcePtr source = MoveOutIfSource(node)) {

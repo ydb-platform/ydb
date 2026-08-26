@@ -276,7 +276,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
             case TRule_row_pattern_primary::kAltRowPatternPrimary2: {
                 const auto& primary = primaryAlt.GetAlt_row_pattern_primary2();
                 const auto& token = primary.GetToken1();
-                const auto varName = token.GetValue();
+                const auto& varName = token.GetValue();
                 const auto var = BuildQuotedAtom(GetPos(token), varName);
                 if (PatternVarNames_.insert(varName).second) {
                     PatternVars_->Add(var);
@@ -286,7 +286,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
             case TRule_row_pattern_primary::kAltRowPatternPrimary3: {
                 const auto& primary = primaryAlt.GetAlt_row_pattern_primary3();
                 const auto& token = primary.GetToken1();
-                const auto varName = token.GetValue();
+                const auto& varName = token.GetValue();
                 const auto var = BuildQuotedAtom(GetPos(token), varName);
                 if (PatternVarNames_.insert(varName).second) {
                     PatternVars_->Add(var);

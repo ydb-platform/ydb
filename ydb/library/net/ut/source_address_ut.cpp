@@ -2,6 +2,7 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
+#include <util/network/address.h>
 #include <util/network/sock.h>
 #include <util/network/socket.h>
 
@@ -81,7 +82,7 @@ TEST(FormatSourceAddress, ISockAddrInet6MatchesHttpProxyPath) {
 
 TEST(FormatSourceAddress, UnknownFamilyIsUnknown) {
     sockaddr addr{};
-    addr.sa_family = AF_UNIX;
+    addr.sa_family = AF_UNSPEC;
     EXPECT_EQ(FormatSourceAddress(&addr), "unknown");
 }
 
@@ -101,10 +102,10 @@ TEST(PeerSourceAddressFromSocket, InvalidSocket) {
     EXPECT_EQ(PeerSourceAddressFromSocket(INVALID_SOCKET), "unknown");
 }
 
-TEST(PeerSourceAddressFromSocket, UnixDomainIsUnknown) {
+TEST(PeerSourceAddressFromSocket, UnixDomainUsesPrintHost) {
     SOCKET fds[2];
     ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
     TSocketHolder a(fds[0]);
     TSocketHolder b(fds[1]);
-    EXPECT_EQ(PeerSourceAddressFromSocket(a), "unknown");
+    EXPECT_EQ(PeerSourceAddressFromSocket(a), NAddr::PrintHost(*NAddr::GetPeerAddr(a)));
 }

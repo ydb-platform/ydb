@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TPC-C Now</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --border: #d0d7de; --text: #1f2328;
+    --muted: #656d76; --bad: #cf222e; --warn: #bf8700; --ok: #1a7f37; --info: #0969da;
+    --broken: #a40e26; --broken-bg: #ffd7d5;
+    --regress: #bc4c00; --regress-bg: #fff1e5;
+    --miss: #8250df; --miss-bg: #fbefff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.4;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 10px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .note {
+    background: #ddf4ff; border: 1px solid #54aeff66; border-radius: 8px;
+    padding: 10px 12px; font-size: 13px; color: #0550ae; margin: 0 0 14px;
+  }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px;
+    border-radius: 999px; text-transform: uppercase; white-space: nowrap;
+  }
+  .badge.broken { background: var(--broken-bg); color: var(--broken); }
+  .badge.missing { background: var(--miss-bg); color: var(--miss); }
+  .badge.regression, .badge.both, .badge.lat, .badge.tpmc { background: var(--regress-bg); color: var(--regress); }
+  .badge.lat_tpmc { background: var(--regress-bg); color: var(--regress); }
+  .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
+  .badge.in_progress { background: #ddf4ff; color: var(--info); }
+  .badge.ok { background: #dafbe1; color: var(--ok); }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
+    background: #eaeef2; color: var(--muted); font-weight: 600;
+  }
+  .counters {
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px;
+  }
+  @media (max-width: 800px) { .counters { grid-template-columns: repeat(2, 1fr); } }
+  .counter {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .counter .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .counter .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .counter.hot .n { color: var(--broken); }
+  .counter.regress .n { color: var(--regress); }
+  .counter.miss .n { color: var(--miss); }
+  .counter.info .n { color: var(--info); }
+  .counter.warn .n { color: var(--warn); }
+  .counter.ok .n { color: var(--ok); }
+
+  .heat-wrap {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    overflow: auto; margin-bottom: 18px;
+  }
+  table.heat { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.heat th, table.heat td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  table.heat th:first-child, table.heat td:first-child { text-align: left; position: sticky; left: 0; background: #fafbfc; }
+  table.heat th { color: var(--muted); font-weight: 600; background: #fafbfc; }
+  .cell {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 72px; padding: 6px 8px; border-radius: 8px; font-weight: 650; cursor: default;
+  }
+  .cell.ok { background: #dafbe1; color: var(--ok); }
+  .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
+  .cell.regression { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
+  .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
+  .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
+  .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  .cell .cnt { font-size: 11px; opacity: .85; }
+  .heat-legend {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
+    font-size: 11px; color: var(--muted);
+  }
+  .heat-legend .swatch { display: inline-flex; align-items: center; gap: 6px; }
+  .heat-legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 0 0 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+  select, input[type="date"] {
+    min-width: 140px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; font: inherit;
+  }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .toolbar button, .btn {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 6px;
+    padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .toolbar button:hover, .btn:hover { border-color: var(--info); color: var(--info); }
+
+  table.inbox { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table.inbox th {
+    text-align: left; font-size: 11px; color: var(--muted); font-weight: 600;
+    padding: 8px 10px; border-bottom: 1px solid var(--border); background: #fafbfc;
+  }
+  table.inbox td {
+    padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top;
+    font-variant-numeric: tabular-nums;
+  }
+  table.inbox tr:last-child td { border-bottom: 0; }
+  table.inbox tr.row { cursor: pointer; }
+  table.inbox tr.row:hover { filter: brightness(0.985); }
+  table.inbox tr.row.open { background: #f6f8fa; }
+  table.inbox tr.detail td { background: #f6f8fa; padding: 12px 14px; }
+  table.inbox tr.detail.hidden { display: none; }
+  .cluster { font-weight: 700; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--info); }
+  .muted { color: var(--muted); font-size: 12px; }
+  .bad { color: var(--bad); }
+  .num { text-align: right; }
+
+  .dive { display: grid; gap: 12px; }
+  .runs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  @media (max-width: 800px) { .runs { grid-template-columns: 1fr; } }
+  .run-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  }
+  .run-card .t { font-weight: 650; margin-bottom: 4px; }
+  .chart-box { height: 220px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  a { color: var(--info); }
+  .wave-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin: 0 0 14px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .wave-bar .lbl { font-size: 13px; color: var(--muted); margin-right: 4px; }
+  .wave-btn {
+    border: 1px solid var(--border); background: #fff; color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 650;
+    cursor: pointer;
+  }
+  .wave-btn[aria-pressed="true"] { color: #fff; border-color: transparent; background: var(--info); }
+  .wave-btn:hover { filter: brightness(0.97); }
+  .counter.info .n { color: var(--info); }
+  .badge.ok { background: #dafbe1; color: var(--ok); }
+  .cell.ok { background: #dafbe1; color: var(--ok); cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>TPC-C Now</h1>
+  <div class="sub" id="subtitle"></div>
+  <div class="note">
+    Now = последние <b id="lblNow">3</b> прогона vs предыдущие <b id="lblBase">7</b>
+    (median). <b>Lat↑</b> ≥ +10% · <b>tpmC↓</b> ≤ −10% · <b>broken</b> = lat cap ≥30000 или outlier &gt;3×.
+    <b>Missing</b> = slice нет в завершённой day-wave (Branch × Cluster × день).
+  </div>
+
+  <div class="wave-bar" id="waveBar">
+    <span class="lbl">Wave view:</span>
+    <button type="button" class="wave-btn" data-wave="finished" aria-pressed="true">finished runs</button>
+    <button type="button" class="wave-btn" data-wave="all" aria-pressed="false">all</button>
+    <span class="muted" style="font-size:12px">finished = последний завершённый · all = latest (в т.ч. in progress)</span>
+  </div>
+
+  <div class="filters" id="branchBar" style="margin-bottom:14px">
+    <label>Branch
+      <select id="fBranch"></select>
+    </label>
+    <label>From
+      <input type="date" id="winFrom" />
+    </label>
+    <label>To
+      <input type="date" id="winTo" />
+    </label>
+    <div class="toolbar" style="margin:0;align-self:end">
+      <button type="button" id="winApply">Apply dates</button>
+      <button type="button" id="winReset">Reset</button>
+    </div>
+    <label class="muted" style="align-self:end;padding-bottom:6px">
+      ветка → только её clusters · даты режут inbox / last wave / графики
+      (<span id="lblAllBranches">all</span>)
+    </label>
+  </div>
+
+  <div class="counters" id="counters"></div>
+
+  <h2>Heatmap · Cluster × run_type</h2>
+  <div class="heat-wrap">
+    <div class="heat-legend">
+      <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · lat cap / outlier</span>
+      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>lat↑ / tpmC↓ · с Δ%</span>
+      <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
+      <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
+      <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
+      <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
+    </div>
+    <div id="heatmap"></div>
+  </div>
+
+  <h2>Problem inbox</h2>
+  <div class="filters">
+    <label>Issue
+      <select id="fIssue">
+        <option value="">all hot</option>
+        <option value="ok">ok / watch</option>
+        <option value="missing">missing</option>
+        <option value="in_progress">in progress</option>
+        <option value="broken">broken</option>
+        <option value="lat">lat↑</option>
+        <option value="tpmc">tpmC↓</option>
+        <option value="both">lat+tpmc</option>
+        <option value="stale">stale</option>
+      </select>
+    </label>
+    <label>Cluster
+      <select id="fDb"><option value="">all</option></select>
+    </label>
+    <label>Run type
+      <select id="fFam"><option value="">all</option></select>
+    </label>
+  </div>
+  <div id="inbox"></div>
+</div>
+
+<script>
+const DATA = __TPCC_REPORT_DATA__;
+const charts = {};
+const UI = DATA.ui || {};
+let winFrom = UI.default_from || null;
+let winTo = UI.default_to || null;
+const WAVE_KEY = 'tpcc_now_wave_view';
+function defaultWave() { return 'finished'; }
+function loadWave() {
+  try {
+    const v = localStorage.getItem(WAVE_KEY);
+    return (v === 'all' || v === 'finished') ? v : defaultWave();
+  } catch (_) {
+    return defaultWave();
+  }
+}
+let waveState = loadWave();
+function waveView() { return waveState; }
+function syncWaveButtons() {
+  const v = waveView();
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.wave === v ? 'true' : 'false');
+  });
+}
+function setWave(v) {
+  if (v !== 'all' && v !== 'finished') return;
+  waveState = v;
+  try { localStorage.setItem(WAVE_KEY, waveState); } catch (_) {}
+  syncWaveButtons();
+  destroyCharts();
+  renderAll();
+}
+function rowKey(r) {
+  return r.id || `${r.branch || ''}|${r.db || ''}|${r.suite || ''}|${r.issue || ''}`;
+}
+function suiteKey(r) {
+  return `${r.branch || ''}|${r.db || ''}|${r.suite || ''}`;
+}
+function preferLatestBySuite(rows) {
+  const by = new Map();
+  const passthrough = [];
+  for (const r of rows) {
+    if (!r.suite || r.suite === '—') {
+      passthrough.push(r);
+      continue;
+    }
+    const sk = suiteKey(r);
+    const prev = by.get(sk);
+    if (!prev) { by.set(sk, r); continue; }
+    if (r.issue === 'in_progress') by.set(sk, r);
+    else if (prev.issue !== 'in_progress') by.set(sk, r);
+  }
+  return [...passthrough, ...by.values()];
+}
+function candidateRows() {
+  const mode = waveView();
+  const seen = new Set();
+  const rows = [];
+  for (const r of (DATA.inbox || [])) {
+    if (mode === 'finished' && r.issue === 'in_progress') continue;
+    const k = rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    rows.push(r);
+  }
+  if (mode === 'all') return preferLatestBySuite(rows);
+  return rows;
+}
+
+function fmt(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 1000) return n.toFixed(0);
+  if (Math.abs(n) >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+function pct(v) {
+  if (v == null) return '—';
+  const s = v >= 0 ? '+' : '';
+  return s + v.toFixed(0) + '%';
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function destroyCharts(prefix) {
+  for (const k of Object.keys(charts)) {
+    if (!prefix || k.startsWith(prefix)) {
+      try { charts[k].destroy(); } catch (_) {}
+      delete charts[k];
+    }
+  }
+}
+function dayOf(ts) {
+  if (!ts) return null;
+  return String(ts).slice(0, 10);
+}
+function dayInRange(day, from, to) {
+  if (!day) return false;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+function itemInWindow(r) {
+  const days = [dayOf(r.last_ts), dayOf(r.last_seen)].filter(Boolean);
+  for (const run of (r.now_runs || [])) {
+    if (run.day) days.push(run.day);
+    else if (run.ts) days.push(dayOf(run.ts));
+    else if (run.label) days.push(dayOf(run.label));
+  }
+  for (const lab of ((r.history && r.history.labels) || [])) days.push(dayOf(lab));
+  if (!days.length) return true;
+  return days.some(d => dayInRange(d, winFrom, winTo));
+}
+function metricBits(r) {
+  /** Human label of what went wrong + delta. Uses finished twin for in_progress. */
+  const m = (r.issue === 'in_progress' && r.finished) ? r.finished : r;
+  const issue = (r.issue === 'in_progress' && r.finished) ? (r.finished.issue || r.finished.kind) : (r.issue || r.kind);
+  const bits = [];
+  const latHot = issue === 'lat' || issue === 'both' || issue === 'broken'
+    || (m.lat_pct != null && m.lat_pct >= 10) || (m.capped_now > 0);
+  const tpmcHot = issue === 'tpmc' || issue === 'both'
+    || (m.tpmc_pct != null && m.tpmc_pct <= -10);
+  if (issue === 'broken' || (m.capped_now > 0)) {
+    if (m.capped_now > 0) bits.push(`lat capped ×${m.capped_now}`);
+    else bits.push('lat broken');
+    if (m.lat_pct != null && m.lat_pct >= 10) bits.push(`lat↑ ${pct(m.lat_pct)}`);
+  } else if (latHot && m.lat_pct != null) {
+    bits.push(`lat↑ ${pct(m.lat_pct)}`);
+  } else if (latHot) {
+    bits.push('lat↑');
+  }
+  if (tpmcHot && m.tpmc_pct != null) {
+    bits.push(`tpmC↓ ${pct(m.tpmc_pct)}`);
+  } else if (tpmcHot) {
+    bits.push('tpmC↓');
+  }
+  if (issue === 'watch' && m.lat_pct != null) bits.push(`lat↑ ${pct(m.lat_pct)} watch`);
+  return bits;
+}
+function statusLabel(r) {
+  if (r.issue === 'missing') return 'missing';
+  if (r.issue === 'stale') return 'stale';
+  if (r.issue === 'in_progress') {
+    if (!r.finished) return 'in progress';
+    const finBits = metricBits({ ...r.finished, issue: r.finished.issue || r.finished.kind });
+    return finBits.length
+      ? `in progress · fin ${finBits.join(' · ')}`
+      : `in progress · fin ${r.finished.issue || r.finished.status || 'ok'}`;
+  }
+  if (r.issue === 'ok') return 'ok';
+  const bits = metricBits(r);
+  if (bits.length) return bits.join(' · ');
+  return r.issue || r.status || 'ok';
+}
+function badgeClass(r) {
+  if (r.issue === 'in_progress') return 'in_progress';
+  if (r.issue === 'missing') return 'missing';
+  if (r.issue === 'stale') return 'stale';
+  if (r.issue === 'broken' || r.status === 'broken') return 'broken';
+  if (r.issue === 'both') return 'both';
+  if (r.issue === 'lat' || r.issue === 'watch') return 'lat';
+  if (r.issue === 'tpmc') return 'tpmc';
+  if (r.status === 'regression') return 'regression';
+  return r.status || 'ok';
+}
+function liveCell(branch, db, fam) {
+  const rows = candidateRows().filter(r => {
+    if (branch && r.branch !== branch) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    return itemInWindow(r);
+  });
+  if (!rows.length) return { status: 'ok', n_hot: 0, n_lat: 0, n_tpmc: 0, n_broken: 0 };
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4,
+    lat: 3, tpmc: 3, stale: 2, in_progress: 1, ok: 0, watch: 2,
+  };
+  let best = null;
+  let n_lat = 0, n_tpmc = 0, n_broken = 0;
+  for (const r of rows) {
+    const st = r.status || r.issue || 'ok';
+    if (!best || (rank[st] || 0) > (rank[best] || 0)) best = st;
+    const issue = r.issue;
+    if (issue === 'broken' || (issue === 'both' && r.status === 'broken')) n_broken++;
+    if (issue === 'lat' || issue === 'both' || issue === 'broken') n_lat++;
+    if (issue === 'tpmc' || issue === 'both') n_tpmc++;
+  }
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  return { status: best || 'ok', n_hot: hot.length, n_lat, n_tpmc, n_broken };
+}
+function cellLabel(st, live) {
+  if (st === 'ok') return 'ok';
+  const parts = [];
+  if (live.n_broken) parts.push(`broken ${live.n_broken}`);
+  else if (st === 'broken') parts.push('broken');
+  if (live.n_lat && st !== 'broken') parts.push(`lat↑ ${live.n_lat}`);
+  else if (st === 'regression' && !live.n_tpmc) parts.push('lat↑');
+  if (live.n_tpmc) parts.push(`tpmC↓ ${live.n_tpmc}`);
+  if (st === 'missing') parts.push(live.n_hot ? `missing ${live.n_hot}` : 'missing');
+  if (st === 'stale') parts.push(live.n_hot ? `stale ${live.n_hot}` : 'stale');
+  if (st === 'in_progress') parts.push(live.n_hot ? `in progress ${live.n_hot}` : 'in progress');
+  if (!parts.length) {
+    const ns = live.n_hot || 0;
+    return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
+  }
+  return parts.map(esc).join(' · ');
+}
+function sliceHist(hist) {
+  if (!hist || !(hist.labels || []).length) return hist;
+  if (!winFrom && !winTo) return hist;
+  const out = { labels: [], tpmc: [], lat90: [], markers: [], versions: [] };
+  for (let i = 0; i < hist.labels.length; i++) {
+    const day = dayOf(hist.labels[i]);
+    if (!dayInRange(day, winFrom, winTo)) continue;
+    out.labels.push(hist.labels[i]);
+    out.tpmc.push(hist.tpmc ? hist.tpmc[i] : null);
+    out.lat90.push(hist.lat90 ? hist.lat90[i] : null);
+    out.markers.push(hist.markers ? hist.markers[i] : 'ok');
+    out.versions.push(hist.versions ? hist.versions[i] : null);
+  }
+  return out;
+}
+function selectedBranch() {
+  return document.getElementById('fBranch')?.value || '';
+}
+function summarizeRows(rows) {
+  const hot = rows.filter(r => r.issue !== 'in_progress');
+  return {
+    missing: rows.filter(r => r.issue === 'missing').length,
+    in_progress: rows.filter(r => r.issue === 'in_progress').length,
+    broken: rows.filter(r => (r.issue === 'broken' || r.issue === 'both') && r.status === 'broken').length,
+    lat: rows.filter(r => r.issue === 'lat' || r.issue === 'both').length,
+    tpmc: rows.filter(r => r.issue === 'tpmc' || r.issue === 'both').length,
+    stale: rows.filter(r => r.issue === 'stale').length,
+    ok_slices: (currentSummaryBase().ok_slices) || 0,
+    hot: hot.length,
+    slices: currentSummaryBase().slices || 0,
+  };
+}
+function currentSummaryBase() {
+  const br = selectedBranch();
+  if (!br) return DATA.summary || {};
+  return (DATA.by_branch && DATA.by_branch[br]) || DATA.summary || {};
+}
+function currentSummary() {
+  const br = selectedBranch();
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  const rows = candidateRows().filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+  const s = summarizeRows(rows);
+  const base = currentSummaryBase();
+  s.ok_slices = base.ok_slices || 0;
+  s.slices = base.slices || 0;
+  return s;
+}
+function renderHeader() {
+  const ui = DATA.ui || {};
+  const s = currentSummary();
+  const br = selectedBranch();
+  const wv = waveView();
+  const nInProg = (DATA.inbox || []).filter(r => r.issue === 'in_progress' && itemInWindow(r)
+    && (!br || r.branch === br)).length;
+  document.getElementById('lblNow').textContent = String(ui.now_runs || 3);
+  document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
+  document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
+  document.getElementById('subtitle').innerHTML =
+    `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
+    `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
+    `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · hot ${s.hot || 0}`;
+
+  document.getElementById('counters').innerHTML = `
+    <div class="counter miss"><div class="n">${s.missing || 0}</div><div class="lbl">Missing</div></div>
+    <div class="counter info"><div class="n">${nInProg}</div><div class="lbl">In progress</div></div>
+    <div class="counter hot"><div class="n">${s.broken || 0}</div><div class="lbl">Broken</div></div>
+    <div class="counter regress"><div class="n">${s.lat || 0}</div><div class="lbl">Lat↑</div></div>
+    <div class="counter regress"><div class="n">${s.tpmc || 0}</div><div class="lbl">tpmC↓</div></div>
+    <div class="counter warn"><div class="n">${s.stale || 0}</div><div class="lbl">Stale</div></div>
+    <div class="counter ok"><div class="n">${s.ok_slices || 0}</div><div class="lbl">OK slices</div></div>
+  `;
+}
+function formatWave(w) {
+  if (!w) return '—';
+  const day = w.day || String(w.max_ts || '').slice(0, 10) || '—';
+  const cov = (w.suites != null && w.expected != null) ? `${w.suites}/${w.expected}` : 'activity';
+  const age = (w.age_hours != null) ? `${w.age_hours}h` : '—';
+  const only = w.activity_only ? ' <span class="pill">no wave</span>' : '';
+  return `${esc(day)} · ${esc(cov)} · ${esc(age)}${only}`;
+}
+function waveInWindow(w) {
+  if (!w) return null;
+  const day = w.day || dayOf(w.max_ts);
+  if (!dayInRange(day, winFrom, winTo)) return null;
+  return w;
+}
+function waveFor(branch, db) {
+  const waves = DATA.waves || {};
+  const act = DATA.last_activity || {};
+  let w = null;
+  if (branch && waves[`${branch}|${db}`]) w = waves[`${branch}|${db}`];
+  else if (branch && act[`${branch}|${db}`]) w = act[`${branch}|${db}`];
+  else if (!branch) {
+    const byDb = DATA.waves_by_db || {};
+    if (byDb[db]) w = byDb[db];
+    else if (act[db]) w = act[db];
+  }
+  return waveInWindow(w);
+}
+function dbsForBranch(branch) {
+  const h = DATA.heatmap || {};
+  const map = h.dbs_by_branch || (DATA.ui && DATA.ui.dbs_by_branch) || {};
+  if (branch && map[branch] && map[branch].length) return map[branch];
+  if (!branch) {
+    const all = new Set(h.dbs || []);
+    Object.values(map).forEach(list => (list || []).forEach(d => all.add(d)));
+    return [...all].sort();
+  }
+  return [];
+}
+function uiBranches() {
+  return (DATA.ui && DATA.ui.focus_branches) || (DATA.heatmap && DATA.heatmap.branches) || [];
+}
+function renderHeatmap() {
+  const h = DATA.heatmap || { dbs: [], families: [], cells: {}, branches: [] };
+  let br = selectedBranch();
+  const branches = br ? [br] : (h.branches || uiBranches());
+  let html = '';
+  for (const branch of branches) {
+    const dbs = dbsForBranch(branch);
+    if (branches.length > 1) {
+      html += `<div class="muted" style="padding:10px 12px 0;font-weight:650">${esc(branch)} · ${dbs.length} clusters</div>`;
+    }
+    if (!dbs.length) {
+      html += `<div class="empty">Нет кластеров с прогонами ветки ${esc(branch)}</div>`;
+      continue;
+    }
+    html += `<table class="heat"><thead><tr><th>Cluster</th>`;
+    for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
+    html += `<th>Last wave</th></tr></thead><tbody>`;
+    for (const db of dbs) {
+      html += `<tr><td><span class="cluster">${esc(db)}</span></td>`;
+      for (const fam of h.families) {
+        const live = liveCell(branch, db, fam);
+        const st = live.status || 'ok';
+        html += `<td><div class="cell ${st}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}">${cellLabel(st, live)}</div></td>`;
+      }
+      html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(waveFor(branch, db))}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  const root = document.getElementById('heatmap');
+  root.innerHTML = html || '<div class="empty">нет данных</div>';
+  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok').forEach(el => {
+    el.addEventListener('click', () => {
+      if (el.dataset.branch) document.getElementById('fBranch').value = el.dataset.branch;
+      document.getElementById('fDb').value = el.dataset.db || '';
+      document.getElementById('fFam').value = el.dataset.fam || '';
+      document.getElementById('fIssue').value = el.classList.contains('ok')
+        ? 'ok'
+        : (el.classList.contains('in_progress') ? 'in_progress' : '');
+      renderAll();
+      document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+function filteredInbox() {
+  const issue = document.getElementById('fIssue').value;
+  const db = document.getElementById('fDb').value;
+  const fam = document.getElementById('fFam').value;
+  const br = selectedBranch();
+  let pool;
+  if (issue === 'ok') pool = DATA.ok || [];
+  else if (issue === 'in_progress') pool = (DATA.inbox || []).filter(r => r.issue === 'in_progress');
+  else pool = candidateRows();
+  return pool.filter(r => {
+    if (br && r.branch !== br) return false;
+    if (issue === 'ok') {
+      if (r.issue !== 'ok' && r.issue !== 'watch') return false;
+    } else if (issue && issue !== 'in_progress' && r.issue !== issue) {
+      return false;
+    }
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+}
+function medianOf(nums) {
+  const a = nums.filter(x => x != null && Number.isFinite(Number(x))).map(Number).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+/** Higher-worse metric (lat): red if above trailing median. */
+function colorsLatVsMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    if (n >= 30000) return '#8a1f1a';
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n > ref * 3) return '#8a1f1a';
+    if (n > ref * 1.1) return '#e5534b';
+    if (n < ref * 0.93) return '#3fb950';
+    return '#5b8def';
+  });
+}
+/** Higher-better metric (tpmC): red if below trailing median. */
+function colorsTpmcVsMavg(vals, win) {
+  const w = Math.max(2, win || (DATA.ui && DATA.ui.baseline_runs) || 7);
+  const arr = vals || [];
+  return arr.map((v, i) => {
+    if (v == null) return '#8c959f';
+    const n = Number(v);
+    const start = Math.max(0, i - w);
+    const window = arr.slice(start, i);
+    const ref = medianOf(window.length ? window : arr.slice(start, i + 1));
+    if (ref == null || ref <= 0) return '#5b8def';
+    if (n < ref * (1 / 3)) return '#8a1f1a';
+    if (n < ref * 0.9) return '#e5534b';
+    if (n > ref * 1.07) return '#3fb950';
+    return '#5b8def';
+  });
+}
+function mountHistory(item, id) {
+  const metrics = (item.issue === 'in_progress' && item.finished) ? item.finished : item;
+  const src = (item.issue === 'in_progress' && item.finished && item.finished.history)
+    ? item.finished.history
+    : (item.history || {});
+  const hist = sliceHist(src);
+  const box = document.getElementById(id + '_hist');
+  if (!box) return;
+  if (!(hist.labels || []).length) {
+    box.innerHTML = '<div class="empty">Нет истории в выбранном интервале дат</div>';
+    return;
+  }
+  const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  const tpmcBase = metrics.tpmc_base;
+  const latBase = metrics.lat_base;
+  let showBase = true;
+  box.innerHTML = `
+  <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
+    <input type="checkbox" id="${id}_base" checked /> показать alert baseline (median prev${win} runs)
+  </label>
+  <div class="pair">
+    <div class="chart-box"><canvas id="${id}_tpmc"></canvas></div>
+    <div class="chart-box"><canvas id="${id}_lat"></canvas></div>
+  </div>
+  <div class="muted" style="margin-top:6px">
+    Сырые прогоны · цвет vs median mavg(prev${win}) · тёмно-красный = lat cap ·
+    синий = synthetic in_progress · оранжевый = synthetic missing
+    ${(tpmcBase != null || latBase != null)
+      ? ` · alert: tpmC ${fmt(tpmcBase)} · lat ${fmt(latBase)}`
+      : ''}
+  </div>`;
+
+  const markers = hist.markers || [];
+  const markColors = (colors) => colors.map((c, i) => {
+    const m = markers[i];
+    if (m === 'in_progress') return '#54aeff';
+    if (m === 'missing') return '#fb8500';
+    if (m === 'capped') return '#8a1f1a';
+    return c;
+  });
+
+  function paint() {
+    destroyCharts(id + '_');
+    function bar(cid, vals, label, colors, alertBase) {
+      const el = document.getElementById(cid);
+      if (!el) return;
+      charts[cid] = new Chart(el, {
+        type: 'bar',
+        data: {
+          labels: hist.labels,
+          datasets: [{ data: vals, backgroundColor: colors, borderSkipped: false, barPercentage: 0.9 }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: {
+            legend: { display: false },
+            title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
+            tooltip: {
+              callbacks: {
+                afterLabel: (it) => {
+                  const bits = [];
+                  const i = it.dataIndex;
+                  const m = markers[i];
+                  if (m === 'in_progress') bits.push('SYNTHETIC · day-wave in progress');
+                  else if (m === 'missing') bits.push('SYNTHETIC · missing in completed wave');
+                  else if (m === 'capped') bits.push('lat capped');
+                  const cur = vals[i];
+                  const start = Math.max(0, i - win);
+                  const ref = medianOf(vals.slice(start, i));
+                  if (cur != null && ref != null && ref > 0) {
+                    bits.push(`vs median mavg(${win} runs) ${pct(((cur - ref) / ref) * 100)} (ref ${fmt(ref)})`);
+                  }
+                  if (showBase && alertBase != null) {
+                    bits.push(`alert baseline ${fmt(alertBase)}`);
+                  }
+                  return bits.join(' · ');
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
+            y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
+          }
+        },
+        plugins: [{
+          id: 'tpccbase',
+          afterDraw(chart) {
+            if (!showBase || alertBase == null) return;
+            const y = chart.scales.y.getPixelForValue(alertBase);
+            const { left, right, top, bottom } = chart.chartArea;
+            if (y < top || y > bottom) return;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.beginPath(); ctx.setLineDash([4, 3]); ctx.strokeStyle = '#0969da'; ctx.lineWidth = 1;
+            ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+            ctx.fillStyle = '#0969da'; ctx.font = '10px sans-serif';
+            ctx.fillText('alert baseline', left + 4, Math.max(top + 10, y - 4));
+            ctx.restore();
+          }
+        }]
+      });
+    }
+    bar(id + '_tpmc', hist.tpmc || [], 'tpmC · raw runs (↑ better)',
+      markColors(colorsTpmcVsMavg(hist.tpmc)), tpmcBase);
+    bar(id + '_lat', hist.lat90 || [], 'NewOrder p90 · raw runs (↓ better)',
+      markColors(colorsLatVsMavg(hist.lat90)), latBase);
+  }
+
+  const chk = document.getElementById(id + '_base');
+  if (chk) {
+    chk.addEventListener('change', () => { showBase = chk.checked; paint(); });
+  }
+  paint();
+}
+function diveHtml(r, id) {
+  const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
+  const data = fin || r;
+  const waveNote = (r.issue === 'in_progress')
+    ? `<div class="muted" style="margin-bottom:8px">Day-wave <code>${esc(r.wave || '')}</code> in progress` +
+      (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '') +
+      (fin ? ` · ниже — <b>последний завершённый</b> (${esc(statusLabel({ ...fin, issue: fin.issue || fin.kind }))})` : ' · finished twin нет') +
+      `</div>`
+    : '';
+  if (fin) {
+    r.now_runs = data.now_runs;
+    r.history = data.history || r.history;
+  }
+  const runs = (data.now_runs || []).map(run => {
+    const lat = run.lat_capped
+      ? `<span class="bad">CAPPED ${fmt(run.lat_raw)}</span>`
+      : fmt(run.lat90);
+    return `<div class="run-card">
+      <div class="t">${esc(run.label)}</div>
+      <div>tpmC ${fmt(run.tpmc)} · lat ${lat}</div>
+      <div class="muted">${esc(run.version || '')}</div>
+    </div>`;
+  }).join('') || `<div class="muted">${
+    r.issue === 'in_progress' && !fin
+      ? `Day-wave <code>${esc(r.wave || '')}</code> ещё едет` + (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+      : r.issue === 'missing'
+        ? `Нет в завершённой day-wave <code>${esc(r.wave || '')}</code>` + (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
+        : 'Нет последних прогонов (missing/stale)'
+  }</div>`;
+
+  return `<div class="dive">
+    ${waveNote}
+    <div class="muted">${esc((r.reasons || []).join(' · '))}</div>
+    <div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> (Now window)${fin ? ' <span class="pill">finished</span>' : ''}</div>
+      <div class="runs">${runs}</div>
+    </div>
+    <div class="toolbar" style="margin:0">
+      <button type="button" class="btn" data-hist="${id}">Show history</button>
+    </div>
+    <div id="${id}_hist"></div>
+  </div>`;
+}
+function renderInbox() {
+  destroyCharts();
+  const rows = filteredInbox();
+  const root = document.getElementById('inbox');
+  if (!rows.length) {
+    const issue = document.getElementById('fIssue').value;
+    root.innerHTML = issue === 'ok'
+      ? '<div class="empty">Нет ok-slice под фильтры.</div>'
+      : '<div class="empty">Нет hot-проблем под фильтры — good.</div>';
+    return;
+  }
+  const body = rows.map((r, idx) => {
+    const id = 'dive_' + idx;
+    const metrics = (r.issue === 'in_progress' && r.finished) ? r.finished : r;
+    const latDelta = metrics.lat_pct == null ? '—' : `<span class="${metrics.lat_pct >= 10 ? 'bad' : ''}">${pct(metrics.lat_pct)}</span>`;
+    const tpmcDelta = metrics.tpmc_pct == null ? '—' : `<span class="${metrics.tpmc_pct <= -10 ? 'bad' : ''}">${pct(metrics.tpmc_pct)}</span>`;
+    const statusLbl = esc(statusLabel(r));
+    const badgeCls = badgeClass(r);
+    return `
+      <tr class="row" data-idx="${idx}" data-id="${id}">
+        <td><span class="badge ${esc(badgeCls)}">${statusLbl}</span></td>
+        <td><span class="cluster">${esc(r.db)}</span>
+          <div class="muted">${esc(r.branch)}</div></td>
+        <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
+          <div class="muted">${esc(r.wh_label || '')} WH · ${esc(r.wave || r.version || '')}</div></td>
+        <td class="num">${fmt(metrics.lat_base)} → ${fmt(metrics.lat_now)}<div class="muted">${latDelta}</div></td>
+        <td class="num">${fmt(metrics.tpmc_base)} → ${fmt(metrics.tpmc_now)}<div class="muted">${tpmcDelta}</div></td>
+        <td class="muted">${esc(r.last_ts || '—')}
+          ${r.last_seen && r.last_seen !== r.last_ts ? `<div class="muted">seen ${esc(r.last_seen)}</div>` : ''}
+        </td>
+      </tr>
+      <tr class="detail hidden" data-detail="${id}"><td colspan="6">${diveHtml(r, id)}</td></tr>`;
+  }).join('');
+
+  root.innerHTML = `<table class="inbox">
+    <thead><tr>
+      <th>Status</th><th>Cluster</th><th>Slice</th>
+      <th class="num">Lat p90</th><th class="num">tpmC</th><th>Wave / last</th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>
+  <div class="muted" style="margin-top:8px">Показано ${rows.length} · клик = deep dive</div>`;
+
+  root.querySelectorAll('tr.row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const id = tr.dataset.id;
+      const detail = root.querySelector(`tr.detail[data-detail="${id}"]`);
+      const open = tr.classList.toggle('open');
+      detail.classList.toggle('hidden', !open);
+      if (!open) destroyCharts(id + '_');
+      else {
+        const idx = Number(tr.dataset.idx);
+        const item = rows[idx];
+        if (item && (item.issue === 'missing' || item.issue === 'in_progress')) {
+          mountHistory(item, id);
+        }
+      }
+    });
+  });
+  root.querySelectorAll('button[data-hist]').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const id = btn.dataset.hist;
+      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+      const item = rows[idx];
+      if (item) mountHistory(item, id);
+    });
+  });
+}
+function renderAll() {
+  renderHeader();
+  renderHeatmap();
+  renderInbox();
+}
+function setupDateBar() {
+  const fromEl = document.getElementById('winFrom');
+  const toEl = document.getElementById('winTo');
+  fromEl.value = winFrom || UI.default_from || '';
+  toEl.value = winTo || UI.default_to || '';
+  if (UI.default_from) { fromEl.min = UI.default_from; toEl.min = UI.default_from; }
+  if (UI.default_to) { fromEl.max = UI.default_to; toEl.max = UI.default_to; }
+  document.getElementById('winApply').addEventListener('click', () => {
+    let a = fromEl.value || null;
+    let b = toEl.value || null;
+    if (a && b && a > b) { const t = a; a = b; b = t; }
+    winFrom = a; winTo = b;
+    fromEl.value = winFrom || ''; toEl.value = winTo || '';
+    destroyCharts(); renderAll();
+  });
+  document.getElementById('winReset').addEventListener('click', () => {
+    winFrom = UI.default_from || null;
+    winTo = UI.default_to || null;
+    fromEl.value = winFrom || ''; toEl.value = winTo || '';
+    destroyCharts(); renderAll();
+  });
+  [fromEl, toEl].forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') document.getElementById('winApply').click();
+    });
+  });
+}
+function setupFilters() {
+  const ui = DATA.ui || {};
+  const branches = uiBranches();
+  const def = ui.default_branch || 'main';
+  document.getElementById('fBranch').innerHTML =
+    `<option value="">all</option>` +
+    branches.map(b => `<option value="${esc(b)}"${b === def ? ' selected' : ''}>${esc(b)}</option>`).join('');
+  if (branches.includes(def)) document.getElementById('fBranch').value = def;
+
+  const fams = [...new Set([
+    ...((DATA.heatmap && DATA.heatmap.families) || []),
+    ...(DATA.inbox || []).map(r => r.family).filter(Boolean),
+  ])].sort();
+  document.getElementById('fFam').innerHTML = '<option value="">all</option>' +
+    fams.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  refreshDbFilter();
+  setupDateBar();
+  syncWaveButtons();
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.addEventListener('click', () => setWave(btn.dataset.wave));
+  });
+  ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      if (id === 'fBranch') refreshDbFilter();
+      renderAll();
+    });
+  });
+}
+function refreshDbFilter() {
+  const br = selectedBranch();
+  const keep = document.getElementById('fDb').value;
+  const dbs = br
+    ? dbsForBranch(br)
+    : [...new Set((DATA.inbox || []).map(r => r.db).filter(Boolean))].sort();
+  document.getElementById('fDb').innerHTML = '<option value="">all</option>' +
+    dbs.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  if (dbs.includes(keep)) document.getElementById('fDb').value = keep;
+}
+
+setupFilters();
+renderAll();
+</script>
+</body>
+</html>

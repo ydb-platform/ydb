@@ -20,7 +20,7 @@ ENDIF()
 PY_SRCS(
     conftest.py
 )
-#TIMEOUT(60)
+
 REQUIREMENTS(cpu:4)
 REQUIREMENTS(ram:16)
 IF (SANITIZER_TYPE)

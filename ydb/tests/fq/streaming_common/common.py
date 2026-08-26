@@ -51,7 +51,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
-
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
@@ -148,12 +147,10 @@ def get_ydb_config(request, enable_fq_connector=None):
     config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
-
     config.yaml_config["auth_config"]["local_metadata_service"] = {
         "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
         "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
     }
-
     config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
     config.yaml_config["auth_config"]["use_access_service_tls"] = False
     return config
@@ -412,7 +409,7 @@ class Kikimr:
 
         if tenant_database is not None:
             token = config.default_clusteradmin
-            logger.info(f"Sleep")
+            logger.info("Sleep")
             time.sleep(10)
             logger.info(f"Creating tenant {tenant_database} with token={token!r}")
             self.cluster.create_database(
@@ -448,14 +445,13 @@ class Kikimr:
     def recreate_driver(self):
         self.ydb_client.stop()
         self.ydb_client = YdbClient(
-            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False)
+            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
+        )
 
     @staticmethod
     def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
         return YdbClient.from_driver_config(
-            database=endpoint.database,
-            endpoint=f"grpc://{endpoint.endpoint}",
-            enable_discovery=enable_discovery
+            database=endpoint.database, endpoint=f"grpc://{endpoint.endpoint}", enable_discovery=enable_discovery
         )
 
     def stop(self) -> None:

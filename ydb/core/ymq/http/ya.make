@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     http.cpp
-    peer_source_address.cpp
     types.cpp
     xml.cpp
 )
@@ -23,11 +22,8 @@ PEERDIR(
     ydb/core/ymq/base
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
+    ydb/library/net
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
 

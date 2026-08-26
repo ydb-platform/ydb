@@ -1,7 +1,7 @@
 #include "http.h"
-#include "peer_source_address.h"
 #include "xml.h"
 
+#include <ydb/library/net/source_address.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/core/http_proxy/sqs_xml/params.h>
@@ -992,7 +992,7 @@ void THttpRequest::SetupUntagQueue(TUntagQueueRequest* const req) {
 }
 
 void THttpRequest::ExtractSourceAddressFromSocket() {
-    SourceAddress_ = PeerSourceAddressFromSocket(Socket());
+    SourceAddress_ = NKikimr::NNet::PeerSourceAddressFromSocket(Socket());
 }
 
 void THttpRequest::GenerateRequestId(const TString& sourceReqId) {

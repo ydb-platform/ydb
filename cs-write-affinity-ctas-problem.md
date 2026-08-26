@@ -1,259 +1,171 @@
-# CreateAsSelect_DisableDataShard Test Failure Analysis
+# CS Write Affinity: Анализ падения CTAS теста с EnableCsWriteAffinity
 
-## 1. Test Scenario
+## Тест
 
-### Test: `KqpQuery::CreateAsSelect_DisableDataShard`
+```
+CS_WriteAffinity::Ctas+EnableCsWriteAffinity
+```
 
-**File:** [`ydb/core/kqp/ut/query/kqp_query_ut.cpp`](ydb/core/kqp/ut/query/kqp_query_ut.cpp:2527)
+Файл: [`kqp_write_affinity_ut.cpp:395-494`](ydb/core/kqp/ut/query/kqp_write_affinity_ut.cpp:395)
 
-**Purpose:** Tests CTAS (Create Table As Select) with `SetEnableDataShardCreateTableAs(false)`.
+## Шаги теста
 
-### Семантика `EnableDataShardCreateTableAs`
+1. **CREATE TABLE Source** (8 shard'ов) — ✓ проходит
+2. **REPLACE INTO Source** (80 строк) — ✓ проходит
+3. **CREATE TABLE Destination AS SELECT * FROM Source** (2 shard'а) — ✗ **краш**
 
-Флаг `EnableDataShardCreateTableAs` **НЕ выбирает тип таблиц**. Он контролирует, разрешено ли использовать CTAS для **не-OLAP таблиц** (row-oriented / DataShard).
+## Ошибка
 
-Из [`kqp_statement_rewrite.cpp:409`](ydb/core/kqp/host/kqp_statement_rewrite.cpp:409):
+```
+VERIFY failed (2026-08-26T01:51:49.176750Z): verification=TargetShardIds.has_value();fline=kqp_write_table.cpp:457;
+```
+
+Краш в конструкторе `TColumnShardPayloadSerializer` при проверке `AFL_VERIFY(TargetShardIds.has_value())`.
+
+## Стек вызовов
+
+```
+TColumnShardPayloadSerializer::TColumnShardPayloadSerializer()  [kqp_write_table.cpp:457]
+  <- CreateColumnShardPayloadSerializer()  [kqp_write_table.cpp:1112]
+    <- TShardedWriteController::OnPartitioningChanged()  [kqp_write_table.cpp:1877]
+      <- TKqpTableWriteActor::Prepare()  [kqp_write_actor.cpp:1601]
+```
+
+## Корневая причина
+
+**Цель ветки**: Каждый WriteActor должен получать данные только одного ColumnShard.
+
+Для этого в [`kqp_write_table.cpp:457`](ydb/core/kqp/runtime/kqp_write_table.cpp:457) стоит проверка:
 ```cpp
-if (!IsOlapCreateTableAs(node, exprCtx) && !enableDataShardCreateTableAs) {
-    ++notOlapCreateTableAsCount;
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+    AFL_VERIFY(TargetShardIds.has_value());
+#endif
+```
+
+`KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK` определен в [`kqp_write_table.h`](ydb/core/kqp/runtime/kqp_write_table.h) и включен для build `relwithdebinfo`.
+
+### Почему TargetShardIds = std::nullopt?
+
+Потому что пользователь откатил изменения в `kqp_write_actor.cpp`, которые ранее возвращали пустой set для OLAP таблиц:
+
+**Текущий код** (`kqp_write_actor.cpp:2859`):
+```cpp
+static std::optional<THashSet<ui64>> TargetShardIdsFromSettings(const NKikimrKqp::TKqpTableSinkSettings& settings) {
+    if (settings.GetTargetShardIds().size() > 0) {
+        return THashSet<ui64>(settings.GetTargetShardIds().begin(), settings.GetTargetShardIds().end());
+    }
+    return std::nullopt;  // <-- Возвращает nullopt, если TargetShardIds пуст!
 }
-...
-if (notOlapCreateTableAsCount > 0) {
-    exprCtx.AddError(..., "CTAS statement is disabled for row-oriented tables.");
-    return false;
-}
 ```
 
-- `EnableDataShardCreateTableAs=true`: CTAS разрешен для всех типов таблиц (OLAP и row)
-- `EnableDataShardCreateTableAs=false`: CTAS **только** для OLAP таблиц (STORE=COLUMN). Попытка CTAS для STORE=ROW дает ошибку.
+### Почему settings.GetTargetShardIds() пуст?
 
-**Тест проверяет именно это:** что при `EnableDataShardCreateTableAs=false` CTAS для row-таблиц отклоняется, а для column-таблиц работает.
-
-### Запросы в Тесте (6 запросов)
-
-| # | Запрос | Ожидаемый Результат | Тип |
-|---|--------|---------------------|-----|
-| 1 | `CREATE TABLE ... WITH (STORE = ROW) AS SELECT 1 AS Col1` | **Ошибка** "CTAS statement is disabled for row-oriented tables" | CTAS ROW |
-| 2 | `CREATE TABLE ... WITH (STORE = row) AS SELECT 1 AS Col1` | **Ошибка** "CTAS statement is disabled for row-oriented tables" | CTAS ROW |
-| 3 | `CREATE TABLE ... WITH (STORE = COLUMN) AS SELECT 1 AS Col1` | **Успех** | CTAS COLUMN |
-| 4 | `CREATE TABLE ... WITH (STORE = column) AS SELECT 1 AS Col1` | **Успех** | CTAS COLUMN |
-| 5 | `CREATE TABLE /Root/Src (Col1 Uint32 NOT NULL, PRIMARY KEY (Col1)) WITH (STORE = row)` | **Успех** | CREATE TABLE (не CTAS) |
-| 6 | `CREATE TABLE ... WITH (STORE = column) AS SELECT * From /Root/Src` | **Успех** | CTAS COLUMN (из row источника) |
-
-**Запросы 3, 4, 6** — это CTAS для column-таблиц. Они должны работать. Именно они падают с нашей ошибкой affinity routing.
-
-**Запрос, который падает:** Первый успешный CTAS COLUMN (запрос #3):
-```sql
-CREATE TABLE `/Root/RowDst` (
-    PRIMARY KEY (Col1)
-)
-WITH (STORE = COLUMN) AS
-SELECT 1 AS Col1;
-```
-
-## 2. Query Execution Plan
-
-The CTAS query produces a physical plan with the following stages:
-
-```
-Stage 0: Literal (generates constant row: Col1=1)
-    |
-    v (Transform/HashShuffle)
-Stage 1: Sink (MODE_FILL - writes to the newly created table)
-```
-
-### Key Plan Characteristics
-
-- **Sink Type:** `MODE_FILL` (CTAS fill operation)
-- **Target Table:** Newly created column table with multiple column shards
-- **IsOlap:** `true` (set by table resolver for column table sinks)
-- **EnableCsWriteAffinity:** `true` (default in query compiler)
-- **CsShardingColumns:** Populated by table resolver (contains primary key columns)
-
-## 3. Where the Problem Manifests
-
-### Error Message
-
-```
-VERIFY failed: verification=std::all_of(ActualShardIds.begin(), ActualShardIds.end(),
-    [&](ui64 shardId) { return TargetShardIds->contains(shardId); });
-expected={72075186224037888};actual={72075186224037949};
-```
-
-**Location:** [`ydb/core/kqp/runtime/kqp_write_table.cpp:524`](ydb/core/kqp/runtime/kqp_write_table.cpp:524)
+Потому что в `BuildInternalSinks` ([`kqp_tasks_graph.cpp:3877-3948`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:3877)) условие для заполнения `TargetShardIds`:
 
 ```cpp
-~TColumnShardPayloadSerializer() {
-    TGuard guard(*Alloc);
-    UnpreparedBatches.clear();
-    Batches.clear();
-    if (TargetShardIds.has_value()) {
-        // ActualShardIds must be a subset of TargetShardIds
-        AFL_VERIFY(std::all_of(ActualShardIds.begin(), ActualShardIds.end(),
-            [&](ui64 shardId) { return TargetShardIds->contains(shardId); }))
-            ("expected", GetTargetShardIdsDebugString())
-            ("actual", GetActualShardIdsDebugString());
+if (settings.GetIsOlap()
+        && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+    // ... заполнение resolvedShardIds из ColumnTableInfoPtr или ShardKey
+    if (!resolvedShardIds.empty()) {
+        // ... заполнение settings.AddTargetShardIds(shardId)
     }
 }
 ```
 
-### What the Error Means
+**Для CTAS Destination таблицы** `stageInfo.Meta.ColumnTableInfoPtr` может быть **null**, потому что:
+1. CTAS создает новую таблицу
+2. Табличный резолвер может не установить `ColumnTableInfoPtr` для destination таблицы до момента создания
+3. Без `ColumnTableInfoPtr` и `ShardKey`, `resolvedShardIds` остается пустым
+4. `settings.AddTargetShardIds()` не вызывается
+5. `TargetShardIds` остается пустым в proto settings
 
-- **`TargetShardIds = {72075186224037888}`**: The task was assigned shard `72075186224037888`
-- **`ActualShardIds = {72075186224037949}`**: The task actually received data for shard `72075186224037949`
+### Почему CountComputeTasks не создал per-shard задачи?
 
-The task was told it owns shard A, but received data destined for shard B. This is a **routing mismatch**.
-
-## 4. Root Cause Analysis
-
-### The CS Write Affinity Feature
-
-When `EnableCsWriteAffinity=true` (default), the following happens for OLAP sinks:
-
-1. **`CountComputeTasks`** creates N tasks (one per column shard), each pinned to the node hosting that shard
-2. **`BuildColumnShardHashV1ForWriteAffinity`** builds a hash routing table (`taskIndexByHash`) that maps PK hash buckets to task indices
-3. **`BuildInternalSinks`** assigns `TargetShardIds` to each task (which shards the task owns)
-4. At runtime, rows are routed to tasks via `ColumnShardHashV1` hash shuffle based on PK hash
-
-### The Problem: Task Reordering by `PlaceTasks`
-
-The critical issue is that `TMaxTasksGraph::PlaceTasks` reorders tasks in `stageInfo.Tasks` from **creation order** to **node-major order**:
-
-**[`max_tasks_graph.cpp:528-549`](ydb/core/kqp/executer_actor/max_tasks_graph.cpp:528)**
+В [`CountComputeTasks`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4875):
 ```cpp
-// Lay the surviving tasks into stageInfo.Tasks (node-major order)
-std::vector<std::vector<ui64>> byNode(NodesCount());
-for (size_t columnIdx = 0; columnIdx < stage.Tasks.size(); ++columnIdx) {
-    const ui64 id = idMap.at(stage.Tasks[columnIdx]);
-    if (const auto& node = group.ColumnNodes[columnIdx]) {
-        byNode[*node].push_back(id);  // Group by node
+if (isCsWriteAffinitySink && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+    // Build a list of (shardId, nodeId) for shards.
+    TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;
+
+    // For OLAP, use ColumnTableInfo to get column shard IDs
+    if (stageInfo.Meta.ColumnTableInfoPtr
+            && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
+        // ... заполнение shardNodes
+    } else if (stageInfo.Meta.ShardKey) {
+        // ... заполнение shardNodes из ShardKey
     }
-}
 
-auto& stageTasks = stage.Info->Tasks;
-stageTasks.clear();
-for (TNodeIdx n = 0; n < NodesCount(); ++n) {
-    for (ui64 id : byNode[n]) {
-        stageTasks.push_back(id);  // Node 0 tasks first, then node 1, etc.
+    if (!shardNodes.empty()) {
+        // Создать per-shard задачи
+        // ...
+        return; // Early-return
     }
+    // Fall through: стандартный путь с 1 задачей
 }
 ```
 
-### The Mismatch
+Для CTAS `ColumnTableInfoPtr` может быть null, поэтому `shardNodes` пустой и происходит fall-through к стандартному пути с 1 задачей.
 
-| Component | Uses | Order |
-|-----------|------|-------|
-| `CountComputeTasks` | `GetColumnShards()` | Shard creation order |
-| `PlaceTasks` | Groups by node | **Node-major order** |
-| `BuildInternalSinks` | `stageInfo.Tasks` position | **Node-major order** (WRONG) |
-| `BuildColumnShardHashV1ForWriteAffinity` | `stageInfo.Tasks` position | **Node-major order** (WRONG) |
+## Решение
 
-**Before the fix:** Both `BuildInternalSinks` and `BuildColumnShardHashV1ForWriteAffinity` assumed that `stageInfo.Tasks[ti]` corresponds to `GetColumnShards()[ti]`. After `PlaceTasks`, this assumption is broken.
+Поскольку цель — **каждый WriteActor получает данные только одного CS**, нужно обеспечить:
 
-**After the fix:** Both functions read `CsWriteAffinityShardId` from task params (set in `CountComputeTasks`), which survives `PlaceTasks` reordering.
+1. **ColumnTableInfoPtr должен быть доступен** для CTAS destination таблицы ДО `CountComputeTasks`
+2. **CountComputeTasks** должен создать per-shard задачи
+3. **BuildInternalSinks** должен установить `TargetShardIds` с ровно 1 shard'ом на задачу
+4. **TargetShardIdsFromSettings** должен вернуть этот set (не nullopt)
 
-### Why the Fix Doesn't Fully Work for CTAS
+### Вариант 1: Установить ColumnTableInfoPtr в резолвере для CTAS
 
-Even after the fix, the `CreateAsSelect_DisableDataShard` test still fails. The reason:
+В [`kqp_table_resolver.cpp`](ydb/core/kqp/executer_actor/kqp_table_resolver.cpp) нужно убедиться, что для CTAS destination таблицы `ColumnTableInfoPtr` устанавливается после создания таблицы.
 
-1. **Single-node test environment:** All shards are on the same node (node 1)
-2. **`PlaceTasks` still reorders:** Even on a single node, the task order in `stageInfo.Tasks` may differ from creation order due to the internal `TMaxTasksGraph` placement logic
-3. **`CsWriteAffinityShardId` is set correctly:** The task params contain the correct shard ID
-4. **But the hash routing still fails:** The `taskIndexByHash` table built by `BuildColumnShardHashV1ForWriteAffinity` maps hash buckets to task indices, but the task indices in `stageInfo.Tasks` don't match the expected order
+### Вариант 2: Использовать GetColumnShards из шардинга в runtime
 
-### Detailed Flow for the Failing Test
-
-1. **Table creation:** CTAS creates a column table with, say, 8 column shards
-2. **`CountComputeTasks`:** Creates 8 tasks, one per shard, in `GetColumnShards()` order:
-   - Task 0 → Shard 72075186224037888
-   - Task 1 → Shard 72075186224037889
-   - ...
-   - Task N → Shard 72075186224037949
-   - Each task gets `CsWriteAffinityShardId` set in `TaskParams`
-
-3. **`PlaceTasks`:** Reorders tasks in `stageInfo.Tasks` (node-major order). On a single node, the order might still change due to internal placement logic.
-
-4. **`BuildColumnShardHashV1ForWriteAffinity`:** Reads `CsWriteAffinityShardId` from each task and builds `shardToTaskIdx` map. This should be correct after the fix.
-
-5. **`BuildInternalSinks`:** Reads `CsWriteAffinityShardId` from each task and sets `TargetShardIds`. This should be correct after the fix.
-
-6. **Runtime:** Row with `Col1=1` is hashed. The hash maps to bucket i, which corresponds to shard `72075186224037949`. The `taskIndexByHash[i]` gives the task index. But the task at that index has `TargetShardIds = {72075186224037888}`.
-
-### The Core Issue
-
-The `taskIndexByHash` table maps hash bucket → task index. The hash bucket is determined by `hash(pk) % N` where N is the number of shards. The bucket-to-shard mapping is: bucket i → `orderedShardIds[i]` (from `GetColumnShards()`).
-
-The `shardToTaskIdx` map is: shard ID → task index in `stageInfo.Tasks`.
-
-If `shardToTaskIdx[orderedShardIds[i]]` gives the wrong task index, then `taskIndexByHash[i]` is wrong, and rows are routed to the wrong task.
-
-**The fix reads `CsWriteAffinityShardId` from task params, but the task params might not be set correctly, or the task IDs in `stageInfo.Tasks` might not match the tasks that have the params set.**
-
-## 5. Why This Test Passes on `origin/main`
-
-On `origin/main`, the CS Write Affinity feature doesn't exist. The CTAS query uses Broadcast routing:
-- Single task handles all shards
-- All rows go to the single task
-- No per-shard filtering needed
-
-## 6. Possible Solutions
-
-### Option A: Disable CS Write Affinity for CTAS (MODE_FILL)
-
-Add a check in `CountComputeTasks` to skip the affinity path for MODE_FILL sinks:
+В `OnPartitioningChanged` ([`kqp_write_table.cpp:1872-1884`](ydb/core/kqp/runtime/kqp_write_table.cpp:1872)) уже доступен `schemeEntry` с полной информацией о таблице. Можно использовать его для заполнения `TargetShardIds` когда он пуст:
 
 ```cpp
-// Skip affinity for CTAS MODE_FILL
-if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
-    isCsWriteAffinitySink = false;
+void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
+    IsOlap = true;
+    SchemeEntry = schemeEntry;
+    BeforePartitioningChanged();
+
+    // If TargetShardIds is empty but CS Write Affinity is enabled for OLAP,
+    // populate it from scheme entry sharding info.
+    if (Settings.TargetShardIds.has_value() && Settings.TargetShardIds->empty() && Settings.GetIsOlap()) {
+        if (schemeEntry.ColumnTableInfo && schemeEntry.ColumnTableInfo->Description.HasSharding()) {
+            const auto& sharding = schemeEntry.ColumnTableInfo->Description.GetSharding();
+            *Settings.TargetShardIds = THashSet<ui64>(
+                sharding.GetColumnShards().begin(),
+                sharding.GetColumnShards().end());
+        }
+    }
+
+    for (auto& [_, writeInfo] : WriteInfos) {
+        writeInfo.Serializer = CreateColumnShardPayloadSerializer(
+            *SchemeEntry,
+            Settings.TargetShardIds,
+            writeInfo.Metadata.InputColumnsMetadata,
+            Alloc);
+    }
+    AfterPartitioningChanged();
 }
 ```
 
-**Pros:** Simple, doesn't break existing tests
-**Cons:** CTAS doesn't get the affinity optimization
+**НО** это нарушает цель ветки — каждый WriteActor получает данные только одного CS. Этот вариант назначает все shard'ы одному актору.
 
-### Option B: Fix the Task Ordering for CTAS
+### Вариант 3 (Правильный): Обеспечить ColumnTableInfoPtr в резолвере
 
-Investigate why the task ordering differs for CTAS and ensure `PlaceTasks` preserves the creation order for affinity stages.
+Необходимо в [`kqp_table_resolver.cpp`](ydb/core/kqp/executer_actor/kqp_table_resolver.cpp) в функции обработки CTAS убедиться, что `ColumnTableInfoPtr` устанавливается для destination таблицы. Это позволит:
 
-**Pros:** CTAS gets the affinity optimization
-**Cons:** More complex, requires changes to `TMaxTasksGraph`
+1. `CountComputeTasks` создать per-shard задачи
+2. `BuildInternalSinks` установить `TargetShardIds` с 1 shard'ом на задачу
+3. `TargetShardIdsFromSettings` вернуть корректный set
 
-### Option C: Use Broadcast for CTAS, Affinity for Other OLAP Writes
+## Итог
 
-In `BuildKqpStageChannels`, detect CTAS and use Broadcast instead of ColumnShardHashV1:
-
-```cpp
-if (isModeFill) {
-    // Use Broadcast for CTAS
-    return std::nullopt;
-}
-```
-
-**Pros:** Targeted fix, doesn't affect other operations
-**Cons:** CTAS doesn't get the affinity optimization
-
-## 7. Files Involved
-
-| File | Role |
-|------|------|
-| [`kqp_tasks_graph.cpp`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp) | Task creation, routing, sink configuration |
-| [`max_tasks_graph.cpp`](ydb/core/kqp/executer_actor/max_tasks_graph.cpp) | Task placement and reordering |
-| [`kqp_write_table.cpp`](ydb/core/kqp/runtime/kqp_write_table.cpp) | Runtime verification of shard routing |
-| [`kqp_query_ut.cpp`](ydb/core/kqp/ut/query/kqp_query_ut.cpp:2527) | The failing test |
-| [`kqp_opt_effects.cpp`](ydb/core/kqp/opt/kqp_opt_effects.cpp) | Optimizer (sets EnableCsWriteAffinity) |
-| [`kqp_query_compiler.cpp`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp) | Sets EnableCsWriteAffinity in tx proto |
-
-## 8. Timeline of Changes
-
-1. **Initial state:** CS Write Affinity feature added, `EnableCsWriteAffinity=true` by default
-2. **First fix:** Store `CsWriteAffinityShardId` on tasks in `CountComputeTasks`
-3. **Second fix:** Read `CsWriteAffinityShardId` in `BuildInternalSinks` instead of positional index
-4. **Third fix:** Read `CsWriteAffinityShardId` in `BuildColumnShardHashV1ForWriteAffinity` instead of positional index
-5. **Current state:** The `CreateAsSelect_DisableDataShard` test still fails with shard routing mismatch
-
-## 9. Conclusion
-
-The `CreateAsSelect_DisableDataShard` test fails because the CS Write Affinity feature (designed for INSERT/REPLACE/UPDATE/DELETE on existing tables) is being applied to CTAS queries that create new tables. The task ordering after `PlaceTasks` doesn't match the expected shard-to-task mapping, causing rows to be routed to the wrong tasks.
-
-The simplest fix is to disable CS Write Affinity for CTAS (MODE_FILL) queries, as they have different semantics and the affinity feature is not designed for them.
+| Компонент | Проблема | Решение |
+|-----------|----------|---------|
+| Table Resolver | ColumnTableInfoPtr не установлен для CTAS destination | Установить в HandleResolveNames |
+| CountComputeTasks | Fall-through к 1 задаче из-за отсутствия ColumnTableInfoPtr | Будет работать после исправления резолвера |
+| BuildInternalSinks | Не может заполнить TargetShardIds без ColumnTableInfoPtr | Будет работать после исправления резолвера |
+| TargetShardIdsFromSettings | Возвращает nullopt когда TargetShardIds пуст | Будет работать после исправления резолвера |

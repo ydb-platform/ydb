@@ -81,9 +81,19 @@ static void VerifyPlanWithAffinity(const NJson::TJsonValue& plan, TString planSt
     }
 }
 
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+const bool CHECK_MODE_ON = true;
+#else
+const bool CHECK_MODE_ON = false;
+#endif
+
+#define SKIP_EXPECTED_FAILURE() if (CHECK_MODE_ON && !EnableCsWriteAffinity) { return; }
+
+
 Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
 
     Y_UNIT_TEST_TWIN(Replace, EnableCsWriteAffinity) {
+        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -164,6 +174,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     }
 
     Y_UNIT_TEST_TWIN(Insert, EnableCsWriteAffinity) {
+        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -244,6 +255,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     }
 
     Y_UNIT_TEST_TWIN(Update, EnableCsWriteAffinity) {
+        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -319,6 +331,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     }
 
     Y_UNIT_TEST_TWIN(Delete, EnableCsWriteAffinity) {
+        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -393,6 +406,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     }
 
     Y_UNIT_TEST_TWIN(Ctas, EnableCsWriteAffinity) {
+        SKIP_EXPECTED_FAILURE()
         // Verify CTAS produces identical results with EnableCsWriteAffinity=true/false
         // and checks that the query plan has different number of stages:
         // - Without pragma: single stage (transform + sink together)

@@ -1342,9 +1342,23 @@ static std::optional<std::vector<TString>> BuildColumnShardHashV1ForWriteAffinit
         hasShardInfo = true;
     }
 
+    YDB_LOG_INFO("CS Write Affinity: BuildColumnShardHashV1ForWriteAffinity called",
+        {"stageId", stageInfo.Id}
+        , {"csShardingColumnsSize", stageInfo.Meta.CsShardingColumns.size()}
+        , {"hasShardInfo", hasShardInfo}
+        , {"shardsResolved", graph.GetMeta().ShardsResolved}
+        , {"hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr}
+        , {"hasResolvedSinkSettings", stageInfo.Meta.ResolvedSinkSettings.has_value()}
+        , {"tasksCount", stageInfo.Tasks.size()});
+
     if (stageInfo.Meta.CsShardingColumns.empty()
             || !hasShardInfo
             || !graph.GetMeta().ShardsResolved) {
+        YDB_LOG_WARN("CS Write Affinity: BuildColumnShardHashV1ForWriteAffinity returning nullopt",
+            {"stageId", stageInfo.Id}
+            , {"csShardingColumnsEmpty", stageInfo.Meta.CsShardingColumns.empty()}
+            , {"hasShardInfo", hasShardInfo}
+            , {"shardsResolved", graph.GetMeta().ShardsResolved});
         return std::nullopt;
     }
 
@@ -1746,16 +1760,14 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                                 ctasKeyColumns = std::move(*csKeyColumns);
                                 hashKind = EHashShuffleFuncType::ColumnShardHashV1;
                             } else {
-                                // Could not build ColumnShardHashV1 params (e.g., single task,
-                                // missing settings, or column mismatch). Fall back to HashV1
-                                // with the proto's key columns, which provides correct hash
-                                // routing using equal-sized buckets.
-                                YDB_LOG_WARN("ColumnShardHashV1 write affinity: falling back to HashV1",
-                                    {"stageId", stageInfo.Id.StageId}
-                                    , {"inputStageId", inputStageInfo.Id.StageId}
-                                    , {"outputIdx", outputIdx}
-                                    , {"tasks", stageInfo.Tasks.size()});
-                                hashKind = EHashShuffleFuncType::HashV1;
+                                // ColumnShardHashV1 params couldn't be built. This is an error
+                                // because the optimizer emitted ColumnShardHashV1, meaning the
+                                // sink stage expects per-shard routing. Falling back to HashV1
+                                // would route rows to wrong tasks (equal-sized buckets vs actual
+                                // shard intervals), causing data corruption.
+                                Y_ENSURE(false, TStringBuilder{}
+                                    << "ColumnShardHashV1 write affinity: params couldn't be built for stage "
+                                    << stageInfo.Id.StageId);
                             }
                         } else {
                             // Shuffle elimination: params already populated from source scan stage.
@@ -3852,10 +3864,17 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         //    Rows are routed to the right task via ColumnShardHashV1 HashShuffle.
         //  - Single-task path (pure stage or fallback): the one task gets ALL shards.
         //    The WriteActor handles all shards without per-shard filtering.
-        if (settings.GetIsOlap() && stageInfo.Tasks.size() > 1
-                && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
-                && !stageInfo.Meta.CsShardingColumns.empty()) {
-            // Multi-task per-shard path: assign exactly 1 shard per task.
+        YDB_LOG_INFO("CS Write Affinity: BuildInternalSinks decision",
+            {"stageId", stageInfo.Id}
+            , {"isOlap", settings.GetIsOlap()}
+            , {"enableCsWriteAffinity", stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()}
+            , {"csShardingColumnsSize", stageInfo.Meta.CsShardingColumns.size()}
+            , {"tasksCount", stageInfo.Tasks.size()}
+            , {"hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr}
+            , {"hasShardKey", stageInfo.Meta.ShardKey != nullptr}
+            , {"taskCsWriteAffinityShardId", task.Meta.TaskParams.contains("CsWriteAffinityShardId") ? task.Meta.TaskParams.at("CsWriteAffinityShardId") : "N/A"});
+
+        if (settings.GetIsOlap()) {
             // Collect all target shards from ColumnTableInfo (for OLAP) or ShardKey (for DataShards).
             TVector<ui64> resolvedShardIds;
             if (stageInfo.Meta.ColumnTableInfoPtr
@@ -3864,51 +3883,92 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
                 for (const auto& shardId : sharding.GetColumnShards()) {
                     resolvedShardIds.push_back(shardId);
                 }
+                YDB_LOG_INFO("CS Write Affinity: BuildInternalSinks using ColumnTableInfo",
+                    {"stageId", stageInfo.Id}
+                    , {"resolvedShardIdsCount", resolvedShardIds.size()});
             } else if (stageInfo.Meta.ShardKey) {
                 // Fallback: use ShardKey partitions (for data shards)
                 for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
                     resolvedShardIds.push_back(partition.ShardId);
                 }
+                YDB_LOG_INFO("CS Write Affinity: BuildInternalSinks using ShardKey",
+                    {"stageId", stageInfo.Id}
+                    , {"resolvedShardIdsCount", resolvedShardIds.size()});
             }
 
             if (!resolvedShardIds.empty()) {
-                // Read the shard ID stored on the task by CountComputeTasks.
-                // This is necessary because PlaceTasks reorders tasks by node,
-                // breaking the creation order assumption.
-                auto it = task.Meta.TaskParams.find("CsWriteAffinityShardId");
-                if (it != task.Meta.TaskParams.end()) {
-                    ui64 shardId = 0;
-                    try {
-                        shardId = std::stoull(it->second);
-                    } catch (...) {
-                        AFL_ENSURE(false)("shardIdStr", it->second)("msg", "Failed to parse CsWriteAffinityShardId");
-                    }
-                    if (shardId && std::find(resolvedShardIds.begin(), resolvedShardIds.end(), shardId) != resolvedShardIds.end()) {
-                        settings.AddTargetShardIds(shardId);
+                if (stageInfo.Tasks.size() > 1) {
+                    YDB_LOG_INFO("CS Write Affinity: BuildInternalSinks multi-task path",
+                        {"stageId", stageInfo.Id}
+                        , {"tasksCount", stageInfo.Tasks.size()});
+                    // Multi-task per-shard path: assign exactly 1 shard per task.
+                    // Read the shard ID stored on the task by CountComputeTasks.
+                    // This is necessary because PlaceTasks reorders tasks by node,
+                    // breaking the creation order assumption.
+                    auto it = task.Meta.TaskParams.find("CsWriteAffinityShardId");
+                    if (it != task.Meta.TaskParams.end()) {
+                        ui64 shardId = 0;
+                        try {
+                            shardId = std::stoull(it->second);
+                        } catch (...) {
+                            AFL_ENSURE(false)("shardIdStr", it->second)("msg", "Failed to parse CsWriteAffinityShardId");
+                        }
+                        if (shardId && std::find(resolvedShardIds.begin(), resolvedShardIds.end(), shardId) != resolvedShardIds.end()) {
+                            settings.AddTargetShardIds(shardId);
+                        } else {
+                            AFL_ENSURE(false)
+                                ("shardId", shardId)
+                                ("msg", "CsWriteAffinityShardId from task params not found in resolvedShardIds");
+                        }
                     } else {
-                        AFL_ENSURE(false)
-                            ("shardId", shardId)
-                            ("msg", "CsWriteAffinityShardId from task params not found in resolvedShardIds");
+                        // Fallback: task doesn't have CsWriteAffinityShardId (shouldn't happen for affinity tasks).
+                        // Try to find by node assignment.
+                        const ui64 taskNodeId = task.Meta.ExpectedNodeId.value_or(GetMeta().ExecuterId.NodeId());
+                        for (const auto& shardId : resolvedShardIds) {
+                            auto sit = GetMeta().ShardIdToNodeId.find(shardId);
+                            if (sit != GetMeta().ShardIdToNodeId.end() && sit->second == taskNodeId) {
+                                settings.AddTargetShardIds(shardId);
+                            }
+                        }
                     }
                 } else {
-                    // Fallback: task doesn't have CsWriteAffinityShardId (shouldn't happen for affinity tasks).
-                    // Try to find by node assignment.
-                    const ui64 taskNodeId = task.Meta.ExpectedNodeId.value_or(GetMeta().ExecuterId.NodeId());
+                    // Single-task path: assign all shards to the single task.
+                    // This is used when CS Write Affinity is enabled but per-shard tasks
+                    // were not created (e.g., ColumnTableInfoPtr is null).
+                    // The runtime will handle all shards in this single task.
+                    YDB_LOG_INFO("CS Write Affinity: BuildInternalSinks single-task path",
+                        {"stageId", stageInfo.Id}
+                        , {"resolvedShardIdsCount", resolvedShardIds.size()});
                     for (const auto& shardId : resolvedShardIds) {
-                        auto sit = GetMeta().ShardIdToNodeId.find(shardId);
-                        if (sit != GetMeta().ShardIdToNodeId.end() && sit->second == taskNodeId) {
-                            settings.AddTargetShardIds(shardId);
-                        }
+                        settings.AddTargetShardIds(shardId);
                     }
                 }
             }
+        } else {
+            // Log when we skip the OLAP affinity path entirely.
+            YDB_LOG_WARN("CS Write Affinity: BuildInternalSinks skipping OLAP affinity path",
+                {"stageId", stageInfo.Id}
+                , {"isOlap", settings.GetIsOlap()}
+                , {"enableCsWriteAffinity", stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()}
+                , {"msg", "TargetShardIds will remain empty!"});
         }
-        // NOTE: There is intentionally NO single-task fallback for OLAP sinks.
-        // The runtime (TColumnShardPayloadSerializer) requires exactly 1 shard per
-        // WriteActor task (KQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT=1).
-        // If an OLAP sink stage has only 1 task but multiple shards, that is a bug
-        // in CountComputeTasks — it must create N tasks (one per shard) for OLAP
         // sink stages with enableCsWriteAffinity.
+
+        // Final diagnostic: check if TargetShardIds is populated for OLAP with affinity.
+        if (settings.GetIsOlap() && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+            YDB_LOG_INFO("CS Write Affinity: BuildInternalSinks final TargetShardIds",
+                {"stageId", stageInfo.Id}
+                , {"targetShardIdsSize", settings.TargetShardIdsSize()}
+                , {"tasksCount", stageInfo.Tasks.size()});
+            if (settings.TargetShardIdsSize() == 0) {
+                YDB_LOG_WARN("CS Write Affinity: TargetShardIds is EMPTY for OLAP task!",
+                    {"stageId", stageInfo.Id}
+                    , {"tasksCount", stageInfo.Tasks.size()}
+                    , {"hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr}
+                    , {"hasShardKey", stageInfo.Meta.ShardKey != nullptr}
+                    , {"msg", "This will cause AFL_VERIFY failure in TColumnShardPayloadSerializer!"});
+            }
+        }
 
 #ifdef QP_FORCE_CS_WRITE_AFFINITY
         if (settings.GetIsOlap()) {
@@ -4814,25 +4874,23 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             }
         }
 
-        // Disable CS Write Affinity for CTAS MODE_FILL.
-        // The runtime TColumnShardHashV1 hash function uses equal-sized buckets
-        // (hash / (MAX / N)), but SplitByShardsToArrowBatches uses the sharding
-        // object's hash intervals which may differ for newly created CTAS tables.
-        // This causes rows to be routed to the wrong task at runtime.
-        if (isModeFill) {
-            isCsWriteAffinitySink = false;
-        }
+        // NOTE: Per-shard task creation is always enabled for OLAP sinks (regardless of
+        // EnableCsWriteAffinity or isModeFill). CTAS uses Broadcast routing: all rows
+        // are sent to all tasks, each task filters to its own shard via TargetShardIds.
+        // ColumnShardHashV1 routing (affinity optimization) is only used when
+        // EnableCsWriteAffinity=true AND isModeFill=false.
 
-        // Disable CS Write Affinity for non-CTAS OLAP writes (INSERT/REPLACE/UPDATE/DELETE).
-        // These cases lack the WriteIndexes populated by the table resolver, causing
-        // runtime crashes in CreateColumnDataBatcher. Only CTAS (MODE_FILL) has
-        // complete sink settings with WriteIndexes properly set.
-        if (isCsWriteAffinitySink && !isModeFill) {
-            isCsWriteAffinitySink = false;
-        }
+        YDB_LOG_INFO("CS Write Affinity: CountComputeTasks decision",
+            {"stageId", stageInfo.Id}
+            , {"isCsWriteAffinitySink", isCsWriteAffinitySink}
+            , {"isModeFill", isModeFill}
+            , {"enableCsWriteAffinity", stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()}
+            , {"csShardingColumnsSize", stageInfo.Meta.CsShardingColumns.size()}
+            , {"hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr}
+            , {"hasShardKey", stageInfo.Meta.ShardKey != nullptr}
+            , {"hasResolvedSinkSettings", stageInfo.Meta.ResolvedSinkSettings.has_value()});
 
-        if (isCsWriteAffinitySink && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
-                && !stageInfo.Meta.CsShardingColumns.empty()) {
+        if (isCsWriteAffinitySink) {
             // Build a list of (shardId, nodeId) for shards. One task is created per shard.
             // If nodeId is known (in ShardIdToNodeId), task is pinned to that node.
             // Otherwise, task is pinned to the executer node (no affinity benefit, but per-shard routing works).
@@ -4848,6 +4906,9 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                     ui64 nodeId = (it != GetMeta().ShardIdToNodeId.end()) ? it->second : defaultNodeId;
                     shardNodes.emplace_back(shardId, nodeId);
                 }
+                YDB_LOG_INFO("CS Write Affinity: Using ColumnTableInfo for shards",
+                    {"stageId", stageInfo.Id}
+                    , {"shardNodesCount", shardNodes.size()});
             } else if (stageInfo.Meta.ShardKey) {
                 // Fallback: use ShardKey partitions (for data shards)
                 for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
@@ -4856,19 +4917,20 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                     ui64 nodeId = (it != GetMeta().ShardIdToNodeId.end()) ? it->second : defaultNodeId;
                     shardNodes.emplace_back(shardId, nodeId);
                 }
+                YDB_LOG_INFO("CS Write Affinity: Using ShardKey for shards",
+                    {"stageId", stageInfo.Id}
+                    , {"shardNodesCount", shardNodes.size()});
+            } else {
+                YDB_LOG_INFO("CS Write Affinity: No shard source available",
+                    {"stageId", stageInfo.Id}
+                    , {"hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr}
+                    , {"hasShardKey", stageInfo.Meta.ShardKey != nullptr});
             }
 
             if (!shardNodes.empty()) {
-                // DEBUG: Verify CsShardingColumns is populated for ColumnShardHashV1 routing.
-                // If empty, BuildKqpStageChannels will fall back to Broadcast, which is
-                // incompatible with per-shard tasks (each task expects only its own shard).
-                AFL_VERIFY(!stageInfo.Meta.CsShardingColumns.empty())
-                    ("stageId", stageInfo.Id)
-                    ("shardNodesCount", shardNodes.size())
-                    ("isOlapSink", isCsWriteAffinitySink)
-                    ("hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr)
-                    ("hasShardKey", stageInfo.Meta.ShardKey != nullptr)
-                    ("shardsResolved", GetMeta().ShardsResolved);
+                YDB_LOG_INFO("CS Write Affinity: Creating per-shard tasks",
+                    {"stageId", stageInfo.Id}
+                    , {"shardNodesCount", shardNodes.size()});
 
                 // FIXED: task count is determined here, independent of the upstream stage.
                 // One task per shard, pinned to the node hosting that shard.
@@ -4897,6 +4959,14 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             // doesn't add target shards to the global map). Fall through to single-task
             // standard path: all shards handled by one task on the executer node.
             // TargetShardIds in BuildInternalSinks will be populated with all shards.
+            YDB_LOG_WARN("CS Write Affinity: CountComputeTasks falling through to single-task path",
+                {"stageId", stageInfo.Id}
+                , {"shardNodesEmpty", shardNodes.empty()}
+                , {"hasColumnTableInfo", stageInfo.Meta.ColumnTableInfoPtr != nullptr}
+                , {"hasShardKey", stageInfo.Meta.ShardKey != nullptr}
+                , {"isCsWriteAffinitySink", isCsWriteAffinitySink}
+                , {"enableCsWriteAffinity", stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()}
+                , {"msg", "This will cause TargetShardIds to be empty in runtime!"});
         }
     }
 

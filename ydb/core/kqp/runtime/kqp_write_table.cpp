@@ -453,8 +453,13 @@ public:
             , Columns(BuildColumns(inputColumns))
             , WriteColumnIds(BuildWriteColumnIds(inputColumns))
             , Alloc(std::move(alloc)) {
+//DO NOT REMOVE THESE CHECKS 
 #ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
-        AFL_VERIFY(TargetShardIds.has_value());
+        AFL_VERIFY(TargetShardIds.has_value())
+            ("targetShardIdsHasValue", TargetShardIds.has_value())
+            ("targetShardIdsSize", TargetShardIds.has_value() ? TargetShardIds->size() : 0)
+            ("schemeEntryHasColumnTableInfo", schemeEntry.ColumnTableInfo != nullptr)
+            ("msg", "TargetShardIds must be set for OLAP writes with CS Write Affinity");
 #endif
 #ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT
         if (TargetShardIds.has_value()) {
@@ -564,6 +569,11 @@ public:
     void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
         for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
                                                     unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
+
+            if (TargetShardIds.has_value()) {
+                //DO NOT REMOVE THESE CHECKS 
+                AFL_VERIFY(TargetShardIds->contains(shardId))("shard_id", shardId)("target_shard_ids", GetTargetShardIdsDebugString());
+            }
 
             ActualShardIds.insert(shardId);
 
@@ -1872,6 +1882,16 @@ public:
     void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
         IsOlap = true;
         SchemeEntry = schemeEntry;
+//DO NOT REMOVE THESE CHECKS 
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK 
+        // Diagnostic: Verify TargetShardIds is set before creating serializer.
+        AFL_VERIFY(Settings.TargetShardIds.has_value())
+            ("targetShardIdsHasValue", Settings.TargetShardIds.has_value())
+            ("targetShardIdsSize", Settings.TargetShardIds.has_value() ? Settings.TargetShardIds->size() : 0)
+            ("schemeEntryHasColumnTableInfo", schemeEntry.ColumnTableInfo != nullptr)
+            ("hasSharding", schemeEntry.ColumnTableInfo && schemeEntry.ColumnTableInfo->Description.HasSharding())
+            ("msg", "TargetShardIds must be populated before OnPartitioningChanged for OLAP writes");
+#endif
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateColumnShardPayloadSerializer(

@@ -108,6 +108,31 @@ private:
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
+                    // For OLAP (column table) writes, set ColumnTableInfoPtr and CsShardingColumns
+                    // here in HandleResolveNames, because non-CTAS cases (INSERT/REPLACE/UPDATE/DELETE)
+                    // don't go through HandleResolveKeys where these would normally be set.
+                    YDB_LOG_INFO("CS Write Affinity: HandleResolveNames",
+                        {"stageId", stageId}
+                        , {"isOlap", isOlap}
+                        , {"hasColumnTableInfo", entry.ColumnTableInfo != nullptr}
+                        , {"enableCsWriteAffinity", stageMeta.Tx.Body->EnableCsWriteAffinity()});
+
+                    if (isOlap && entry.ColumnTableInfo) {
+                        stageMeta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+
+                        // Extract hash sharding columns for per-shard routing.
+                        // This is needed for all OLAP sinks, not just EnableCsWriteAffinity.
+                        const auto& desc = entry.ColumnTableInfo->Description;
+                        if (desc.HasSharding() && desc.GetSharding().HasHashSharding()) {
+                            for (const auto& col : desc.GetSharding().GetHashSharding().GetColumns()) {
+                                stageMeta.CsShardingColumns.emplace_back(col);
+                            }
+                            YDB_LOG_INFO("CS Write Affinity: Set CsShardingColumns in HandleResolveNames",
+                                {"stageId", stageId}
+                                , {"csShardingColumnsSize", stageMeta.CsShardingColumns.size()});
+                        }
+                    }
+
                     const auto& stage = stageMeta.GetStage(stageId);
                     const NKqpProto::TKqpInternalSink* intSinkPtr = nullptr;
 
@@ -223,7 +248,26 @@ private:
                             }
                         }
                     }
-                    // For non-CTAS OLAP operations, columns and write indexes are already populated
+                    // For non-CTAS OLAP operations (INSERT/REPLACE/UPDATE/DELETE), ensure
+                    // columns and write indexes are populated for ColumnShardHashV1 routing.
+                    // The optimizer may have set columns, but we guarantee consistency
+                    // with the actual table schema. WriteIndexes is needed by the runtime
+                    // CreateColumnDataBatcher which requires writeIndex.size() == columns.size().
+                    if (settings.GetColumns().empty() && isOlap) {
+                        for (const auto& [index, columnInfo] : entry.Columns) {
+                            auto columnProto = settings.AddColumns();
+                            fillColumnProto(columnInfo, columnProto);
+                        }
+                    }
+                    // Populate WriteIndexes as identity mapping when columns are present
+                    // but write indexes are not (non-CTAS OLAP case).
+                    // For INSERT VALUES, the input columns match the table column order,
+                    // so WriteIndexes is simply (0, 1, 2, ..., N-1).
+                    if (isOlap && settings.GetWriteIndexes().empty() && !settings.GetColumns().empty()) {
+                        for (ui32 i = 0; i < static_cast<ui32>(settings.GetColumns().size()); ++i) {
+                            settings.AddWriteIndexes(i);
+                        }
+                    }
 
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                         AFL_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
@@ -275,6 +319,12 @@ private:
                 auto& stageMeta = TasksGraph.GetStageInfo(stageId).Meta;
                 stageMeta.ColumnTableInfoPtr = entry.ColumnTableInfo;
 
+                YDB_LOG_INFO("CS Write Affinity: Table resolver setting ColumnTableInfoPtr",
+                    {"stageId", stageId}
+                    , {"hasColumnTableInfo", entry.ColumnTableInfo != nullptr}
+                    , {"hasSharding", entry.ColumnTableInfo && entry.ColumnTableInfo->Description.HasSharding()}
+                    , {"hasResolvedSinkSettings", stageMeta.ResolvedSinkSettings.has_value()});
+
                 // For CTAS affinity (EnableCsWriteAffinity): extract hash sharding columns
                 // from the target column table so they can be used later in BuildKqpStageChannels
                 // to configure ColumnShardHashV1 shuffle on the upstream Transform Stage.
@@ -300,17 +350,17 @@ private:
                     }
                 }
 
-                if (entry.ColumnTableInfo
-                        && isOlapSink
-                        && stageMeta.Tx.Body->EnableCsWriteAffinity()) {
+                // Populate sharding metadata for ALL OLAP sinks (not just when
+                // EnableCsWriteAffinity=true). This is needed for per-shard task creation
+                // in CountComputeTasks to ensure each WriteActor handles exactly one CS.
+                if (entry.ColumnTableInfo && isOlapSink) {
                     const auto& desc = entry.ColumnTableInfo->Description;
                     if (desc.HasSharding() && desc.GetSharding().HasHashSharding()) {
                         for (const auto& col : desc.GetSharding().GetHashSharding().GetColumns()) {
                             stageMeta.CsShardingColumns.emplace_back(col);
                         }
 
-                        // Populate ShardKey with ColumnShard partitions for ColumnShardHashV1 routing.
-                        // This is needed for INSERT (not just CTAS/FILL) to enable per-shard routing.
+                        // Populate ShardKey with ColumnShard partitions for per-shard task routing.
                         TVector<TKeyDesc::TPartitionInfo> partitions;
                         for (const auto& shardId : desc.GetSharding().GetColumnShards()) {
                             partitions.emplace_back(shardId);

@@ -1648,8 +1648,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 79, 80, 82, 83, 84, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
             }));
         UNIT_ASSERT(
-            policy.Suites.at(Tpcds.Name).RequiredSnapshotPairQueries ==
-            std::set<ui32>({51}));
+            policy.Suites.at(Tpcds.Name).RequiredSnapshotPairQueries.empty());
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({5, 8, 9, 59, 65, 72, 78, 80}));
@@ -1658,7 +1657,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({
                 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21,
                 22, 24, 25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 42, 43, 45,
-                46, 48, 49, 50, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62, 63,
+                46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62, 63,
                 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82,
                 83, 84,
                 85, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 98, 99,
@@ -1674,7 +1673,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             81);
         UNIT_ASSERT_VALUES_EQUAL(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries.size(),
-            80);
+            81);
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2219,7 +2218,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             "q65 has no coverage outcome; expected FORMULA_EMITTED"));
     }
 
-    Y_UNIT_TEST(PolicyReportsQ51ZeroCaptureRegression) {
+    Y_UNIT_TEST(PolicyReportsQ51PairAndFormulaRegression) {
         const auto policy = LoadCoveragePolicy();
         std::set<ui32> selected;
         for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
@@ -2243,8 +2242,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(baseline.SnapshotPairFloorEnforced);
         UNIT_ASSERT(baseline.Violations.empty());
-        UNIT_ASSERT_VALUES_EQUAL(
-            baseline.RequiredSnapshotPairQueries.size(), 1);
+        UNIT_ASSERT(baseline.RequiredSnapshotPairQueries.empty());
+        UNIT_ASSERT(baseline.RequiredFormulaQueries.contains(51));
         UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), 81);
         UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), 81);
 
@@ -2265,22 +2264,28 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             verifierEntries,
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
-        UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
-        UNIT_ASSERT(regressed.Violations.front().Contains(
+        UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 2);
+        UNIT_ASSERT(regressed.Violations[0].Contains(
             "q51 regressed before exact Initial/Final snapshot pair with status "
             "OPTIMIZER_FAILURE"));
+        UNIT_ASSERT(regressed.Violations[1].Contains(
+            "q51 regressed from FORMULA_EMITTED to OPTIMIZER_FAILURE"));
 
         const auto report = PolicyEvaluationJson(regressed);
         UNIT_ASSERT_VALUES_EQUAL(
             report["version"].GetUIntegerSafe(),
             CoveragePolicyEvaluationVersion);
         UNIT_ASSERT(report["snapshot_pair_floor_enforced"].GetBooleanSafe());
-        UNIT_ASSERT_VALUES_EQUAL(
-            report["required_snapshot_pair_queries"].GetArraySafe().size(), 1);
+        UNIT_ASSERT(
+            report["required_snapshot_pair_queries"].GetArraySafe().empty());
         UNIT_ASSERT_VALUES_EQUAL(
             report["snapshot_pair_floor_queries"].GetArraySafe().size(), 81);
         UNIT_ASSERT_VALUES_EQUAL(
             report["snapshot_pair_queries"].GetArraySafe().size(), 80);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["required_formula_queries"].GetArraySafe().size(), 81);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["formula_emitted_queries"].GetArraySafe().size(), 80);
     }
 
     Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {

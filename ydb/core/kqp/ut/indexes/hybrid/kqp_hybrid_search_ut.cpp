@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
     }
 
-    Y_UNIT_TEST(FulltextNamedOptionsAreApplied) {
+    Y_UNIT_TEST(FulltextFloatNamedOptionsAreApplied) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
         SetupDocs(db);
@@ -202,8 +202,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                 FullTextScore(Text, "cats love dogs",
                     "or" AS DefaultOperator,
                     "2" AS MinimumShouldMatch,
-                    1.2 AS K1,
-                    0.75 AS B),
+                    1.2f AS K1,
+                    0.75f AS B),
                 Knn::CosineDistance(Embedding, $target),
                 (4, 1) AS Limits)
             LIMIT 4;

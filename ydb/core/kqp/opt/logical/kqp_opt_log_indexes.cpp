@@ -1571,14 +1571,14 @@ bool StringOrAtomOrParameter(const TExprBase& exprBase) {
     return type && (type->GetSlot() == EDataSlot::String || type->GetSlot() == EDataSlot::Utf8);
 }
 
-bool DoubleOrParameter(const TExprBase& exprBase) {
+bool FloatingPointOrParameter(const TExprBase& exprBase) {
     auto unwrapped = exprBase.Maybe<TCoJust>() ? exprBase.Maybe<TCoJust>().Cast().Input() : exprBase;
-    if (unwrapped.Maybe<TCoDouble>()) {
+    if (unwrapped.Maybe<TCoDouble>() || unwrapped.Maybe<TCoFloat>()) {
         return true;
     }
 
     const auto* type = ParameterDataType(unwrapped);
-    return type && type->GetSlot() == EDataSlot::Double;
+    return type && (type->GetSlot() == EDataSlot::Double || type->GetSlot() == EDataSlot::Float);
 }
 
 } // anonymous namespace
@@ -1684,11 +1684,11 @@ struct TFulltextQuery {
             auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
             TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
             TString name = nameValueTuple.Name().StringValue();
-            if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName && !DoubleOrParameter(value)) {
+            if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName && !FloatingPointOrParameter(value)) {
                 return false;
             }
 
-            if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName  && !DoubleOrParameter(value)) {
+            if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName  && !FloatingPointOrParameter(value)) {
                 return false;
             }
 
@@ -2842,9 +2842,9 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName
                         || name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName)
                     {
-                        if (!DoubleOrParameter(value)) {
+                        if (!FloatingPointOrParameter(value)) {
                             return addError(TStringBuilder() << "FullTextScore named argument '" << name << "' (" << branchId
-                                << ") must be a Double literal or parameter");
+                                << ") must be a Float or Double literal or parameter");
                         }
                     } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName
                         || name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName)

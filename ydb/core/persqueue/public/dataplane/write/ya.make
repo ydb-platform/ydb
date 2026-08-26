@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/persqueue/common
     ydb/core/persqueue/deferred_publish
     ydb/core/persqueue/events
     ydb/core/persqueue/writer

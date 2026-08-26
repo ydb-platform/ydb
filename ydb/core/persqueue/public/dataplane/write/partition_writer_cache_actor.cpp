@@ -3,12 +3,6 @@
 
 #include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/library/actors/core/log.h>
-
-#include <util/system/backtrace.h>
-#include <util/system/type_name.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
 
 namespace NKikimr::NPQ {
 
@@ -17,11 +11,12 @@ using namespace NActors;
 TPartitionWriterCacheActor::TPartitionWriterCacheActor(const TActorId& owner,
                                                        ui32 partition,
                                                        ui64 tabletId,
-                                                       const TPartitionWriterOpts& opts) :
-    Owner(owner),
-    Partition(partition),
-    TabletId(tabletId),
-    Opts(opts)
+                                                       const TPartitionWriterOpts& opts)
+    : TBase(NKikimrServices::PQ_WRITE_PROXY)
+    , Owner(owner)
+    , Partition(partition)
+    , TabletId(tabletId)
+    , Opts(opts)
 {
 }
 
@@ -32,20 +27,28 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
     this->Become(&TPartitionWriterCacheActor::StateWork);
 }
 
-bool TPartitionWriterCacheActor::OnUnhandledException(const std::exception& exc) {
-    auto ctx = *NActors::TlsActivationContext;
-    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
-        {"typeName", TypeName(exc)},
-        {"exception", exc.what()},
-        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+TString TPartitionWriterCacheActor::BuildLogPrefix() const {
+    return TStringBuilder() << " (TabletId=" << TabletId << ", Partition=" << Partition << ") ";
+}
 
-    for (auto& [k, w] : Writers) {
-        ReplyError(k.first, k.second, EErrorCode::InternalError, "Internal error", 0, ctx.AsActorContext());
+void TPartitionWriterCacheActor::PoisonWriters() {
+    for (auto& [_, writer] : std::exchange(Writers, {})) {
+        Send(writer->Actor, new TEvents::TEvPoisonPill());
     }
+}
 
-    this->Become(&TPartitionWriterCacheActor::StateBroken);
+void TPartitionWriterCacheActor::OnException(const std::exception& exc) {
+    // Do not Die here: TBaseActor::OnUnhandledException will PassAway.
+    const TString reason = TStringBuilder() << "Unhandled exception: " << exc.what();
+    for (auto& [k, _] : Writers) {
+        ReplyError(k.first, k.second, EErrorCode::InternalError, reason, 0);
+    }
+    PoisonWriters();
+}
 
-    return true;
+void TPartitionWriterCacheActor::PassAway() {
+    PoisonWriters();
+    TBase::PassAway();
 }
 
 void TPartitionWriterCacheActor::RegisterPartitionWriter(
@@ -83,13 +86,12 @@ STFUNC(TPartitionWriterCacheActor::StateWork)
 
 void TPartitionWriterCacheActor::ReplyError(const TString& sessionId, const TString& txId,
                                             EErrorCode code, const TString& reason,
-                                            ui64 cookie,
-                                            const TActorContext& ctx)
+                                            ui64 cookie)
 {
     NKikimrClient::TResponse response;
     response.MutablePartitionResponse()->SetCookie(cookie);
 
-    ctx.Send(Owner, new TEvPartitionWriter::TEvWriteResponse(sessionId, txId,
+    Send(Owner, new TEvPartitionWriter::TEvWriteResponse(sessionId, txId,
                                                              code, reason,
                                                              std::move(response)));
 }
@@ -111,20 +113,19 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvTxWriteRequest::T
     } else {
         ReplyError(event.SessionId, event.TxId,
                    EErrorCode::OverloadError, "limit of active transactions has been exceeded",
-                   event.Request->GetCookie(),
-                   ctx);
+                   event.Request->GetCookie());
         this->Become(&TPartitionWriterCacheActor::StateBroken);
     }
 }
 
 void TPartitionWriterCacheActor::HandleOnBroken(TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx)
 {
+    Y_UNUSED(ctx);
     auto& event = *ev->Get();
 
     ReplyError(event.SessionId, event.TxId,
                EErrorCode::OverloadError, "limit of active transactions has been exceeded",
-               event.Request->GetCookie(),
-               ctx);
+               event.Request->GetCookie());
 }
 
 void TPartitionWriterCacheActor::HandleDeferredDestinationUpsertRequest(
@@ -204,8 +205,7 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TP
     } else {
         ReplyError(result.SessionId, result.TxId,
                    EErrorCode::InternalError, "out of order reserve bytes response from server, may be previous is lost",
-                   p->second->SentRequests.front().Cookie,
-                   ctx);
+                   p->second->SentRequests.front().Cookie);
         this->Become(&TPartitionWriterCacheActor::StateBroken);
     }
 }
@@ -229,8 +229,7 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvWriteResponse::TP
         } else {
             ReplyError(result.SessionId, result.TxId,
                        EErrorCode::InternalError, "out of order write response from server, may be previous is lost",
-                       p->second->AcceptedRequests.front().Cookie,
-                       ctx);
+                       p->second->AcceptedRequests.front().Cookie);
             this->Become(&TPartitionWriterCacheActor::StateBroken);
         }
     } else {
@@ -246,11 +245,6 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvDisconnected::TPt
 void TPartitionWriterCacheActor::Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx)
 {
     Y_UNUSED(ev);
-
-    for (auto& [_, writer] : Writers) {
-        ctx.Send(writer->Actor, new TEvents::TEvPoisonPill());
-    }
-
     Die(ctx);
 }
 

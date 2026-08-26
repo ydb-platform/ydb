@@ -2,20 +2,25 @@
 
 #include "partition_writer.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/persqueue/common/actor.h>
 
 namespace NKikimr::NPQ {
 
-class TPartitionWriterCacheActor : public NActors::TActorBootstrapped<TPartitionWriterCacheActor>
-                                 , public NActors::IActorExceptionHandler {
+class TPartitionWriterCacheActor : public TBaseActor<TPartitionWriterCacheActor>
+                                 , public TConstantLogPrefix {
 public:
+    using TBase = TBaseActor<TPartitionWriterCacheActor>;
+
     TPartitionWriterCacheActor(const TActorId& owner,
                                ui32 partition,
                                ui64 tabletId,
                                const TPartitionWriterOpts& opts);
 
     void Bootstrap(const TActorContext& ctx);
-    bool OnUnhandledException(const std::exception& exc) override;
+    void PassAway() override;
+    void OnException(const std::exception& exc) override;
+
+    TString BuildLogPrefix() const override;
 
 private:
     using TPartitionWriterPtr = std::unique_ptr<TCachedPartitionWriter>;
@@ -48,8 +53,8 @@ private:
 
     void ReplyError(const TString& sessionId, const TString& txId,
                     EErrorCode code, const TString& reason,
-                    ui64 cookie,
-                    const TActorContext& ctx);
+                    ui64 cookie);
+    void PoisonWriters();
 
     TCachedPartitionWriter* GetPartitionWriter(const TString& sessionId, const TString& txId,
                                                const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,

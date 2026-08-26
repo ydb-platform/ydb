@@ -382,8 +382,13 @@ def _replace_config_via_cms(cluster, full_yaml_config):
 
 
 class Kikimr:
-    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240, enable_discovery: bool = True,
-                 tenant_database: Optional[str] = None):
+    def __init__(
+        self,
+        config: KikimrConfigGenerator,
+        timeout_seconds: int = 240,
+        enable_discovery: bool = True,
+        tenant_database: Optional[str] = None,
+    ):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 

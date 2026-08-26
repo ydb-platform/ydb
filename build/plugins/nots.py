@@ -1064,7 +1064,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         if not found:
             missing_outputs.append(output)
 
-    if missing_outputs:
+    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes":
         ymake.report_configure_error(
             "\n"
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"

@@ -43,9 +43,7 @@ ISource::ISource(TPosition pos)
 {
 }
 
-ISource::~ISource()
-{
-}
+ISource::~ISource() = default;
 
 TSourcePtr ISource::CloneSource() const {
     Y_DEBUG_ABORT_UNLESS(dynamic_cast<ISource*>(Clone().Get()), "Cloned node is no source");
@@ -1071,9 +1069,7 @@ IJoin::IJoin(TPosition pos)
 {
 }
 
-IJoin::~IJoin()
-{
-}
+IJoin::~IJoin() = default;
 
 IJoin* IJoin::GetJoin() {
     return this;

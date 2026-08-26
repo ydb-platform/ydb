@@ -2897,7 +2897,7 @@ namespace NTypeAnnImpl {
             TExprContext& ctx,
             const TTypeAnnotationContext& typeCtx)
         {
-            if (typeCtx.DecimalConversionMode != EDecimalConversionMode::WithCommonTypeFixup) {
+            if (typeCtx.GetDecimalConversionMode() != EDecimalConversionMode::WithCommonTypeFixup) {
                 ctx.AddError(TIssue(ctx.GetPosition(left->Pos()),
                                     TStringBuilder() << "Decimal common type fix must be enabled for arithmetic operations on different Decimal types"));
                 return IGraphTransformer::TStatus::Error;

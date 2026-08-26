@@ -3800,7 +3800,7 @@ TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStri
         return maybeUdfApply.Cast().Arg(1).Ptr();
     };
 
-    const auto directRes = directCase(apply);
+    auto directRes = directCase(apply);
     if (directRes.Get() != node.Get()) {
         return directRes;
     }

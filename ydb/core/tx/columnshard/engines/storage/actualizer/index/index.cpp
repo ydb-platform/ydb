@@ -92,4 +92,11 @@ std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataReque
     return result;
 }
 
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {
+    if (!MoveDataActualizer) {
+        return {};
+    }
+    return MoveDataActualizer->BuildMoveDataMetadataRequests(portions, MoveDataActualizer);
+}
+
 }   // namespace NKikimr::NOlap::NActualizer

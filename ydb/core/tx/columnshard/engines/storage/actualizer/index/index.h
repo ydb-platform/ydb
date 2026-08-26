@@ -33,6 +33,7 @@ private:
 
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
 
     bool IsStarted() const {
         return Actualizers.size();

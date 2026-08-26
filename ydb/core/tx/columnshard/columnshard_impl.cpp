@@ -823,11 +823,16 @@ public:
     }
 };
 
-class TCSMetadataSubscriber: public TDataAccessorsSubscriberBase, public TObjectCounter<TCSMetadataSubscriber> {
+class TCSMetadataSubscriber: public TDataAccessorsSubscriberBase {
 private:
     NActors::TActorId TabletActorId;
     const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
     const ui64 Generation;
+    // Owned by the tablet, so the in-flight gate below is per-tablet. TObjectCounter counts
+    // instances process-wide: with several ColumnShards on a node, one tablet's request closed
+    // every other tablet's gate, and a tablet re-opens it only when its own request finishes -
+    // which it never got to issue.
+    const std::shared_ptr<TAtomicCounter> InFlight;
 
     virtual void DoOnRequestsFinished(
         NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
@@ -837,12 +842,18 @@ private:
     }
 
 public:
-    TCSMetadataSubscriber(
-        const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen)
+    TCSMetadataSubscriber(const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor,
+        const ui64 gen, const std::shared_ptr<TAtomicCounter>& inFlight)
         : TabletActorId(tabletActorId)
         , Processor(processor)
         , Generation(gen)
+        , InFlight(inFlight)
     {
+        InFlight->Inc();
+    }
+
+    ~TCSMetadataSubscriber() {
+        InFlight->Dec();
     }
 };
 
@@ -877,25 +888,38 @@ public:
     }
 };
 
-void TColumnShard::SetupMetadata() {
-    if (TObjectCounter<TCSMetadataSubscriber>::ObjectCount()) {
-        return;
-    }
-    std::vector<NOlap::TCSMetadataRequest> requests = TablesManager.MutablePrimaryIndex().CollectMetadataRequests();
+void TColumnShard::StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests) {
     for (auto&& i : requests) {
         const ui64 accessorsMemory =
             i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(),
-                                        TTLTaskSubscription, std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                                        std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
-                                        DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
+            std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), TTLTaskSubscription,
+                std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
+                std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation(), MetadataRequestsInFlight),
+                DataAccessorsManager.GetObjectPtrVerified(), nullptr));
     }
 }
 
+void TColumnShard::SetupMetadata() {
+    if (MetadataRequestsInFlight->Val()) {
+        return;
+    }
+    StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests());
+}
+
+void TColumnShard::SetupMoveDataMetadata() {
+    if (!MoveDataState.Active || !HasIndex()) {
+        return;
+    }
+    StartMetadataRequests(GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests());
+}
+
 bool TColumnShard::SetupTtl() {
-    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() ||
-        !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL)) {
+    // This loop is also where the move actualizer extracts its rewrite tasks, so an operator
+    // turning TTL off must not silently turn decommission off with it.
+    if (!MoveDataState.Active &&
+        (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() ||
+            !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL))) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_ttl"},
             {"reason", "disabled"});
@@ -1254,7 +1278,11 @@ void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const 
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
-    SetupMetadata();
+    // Re-arm the move only. The generic SetupMetadata() is gated on this tablet having no request
+    // in flight, and the subscriber that just delivered this result may still be holding that gate
+    // open - which would silently end the move's request chain. Everything else re-arms on the
+    // periodic wakeup.
+    SetupMoveDataMetadata();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {

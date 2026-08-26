@@ -59,7 +59,7 @@ public:
 
 }   // namespace
 
-void TTester::Setup(TTestActorRuntime& runtime) {
+void TTester::Setup(TTestActorRuntime& runtime, TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
     //    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
@@ -83,7 +83,9 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
-    SetupTabletServices(runtime, &app);
+    // Explicit proxies replace the default group set, so the fake disk has to be mocked too.
+    const bool mockDisk = !dsProxies.empty();
+    SetupTabletServices(runtime, &app, mockDisk, {}, nullptr, /*forceFollowers=*/false, std::move(dsProxies));
 
     // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
     // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and

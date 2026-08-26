@@ -288,6 +288,10 @@ namespace NKikimr {
                 Send(ev->Forward(KeeperId));
             }
 
+            void Handle(TEvSyncLogSpaceStat::TPtr& ev, const TActorContext& ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -302,6 +306,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvCompleted, HandleActorCompletion)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
                 HFunc(TEvListChunks, Handle)
+                HFunc(TEvSyncLogSpaceStat, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
                 hFunc(TEvLocalSyncData, Handle);
             )

@@ -224,6 +224,16 @@ namespace NKikimr {
         NHuge::THeapStat Stat;
     };
 
+    // Compact allocator-only statistics for monitoring. The result never
+    // contains chunk or slot identifiers.
+    struct TEvHugeSpaceStat : TEventLocal<TEvHugeSpaceStat, TEvBlobStorage::EvHugeSpaceStat> {};
+
+    struct TEvHugeSpaceStatResult
+        : TEventLocal<TEvHugeSpaceStatResult, TEvBlobStorage::EvHugeSpaceStatResult>
+    {
+        NHuge::THeapSpaceStat Stat;
+    };
+
     struct TEvHugePreCompact : TEventLocal<TEvHugePreCompact, TEvBlobStorage::EvHugePreCompact> {};
 
     struct TEvHugePreCompactResult : TEventLocal<TEvHugePreCompactResult, TEvBlobStorage::EvHugePreCompactResult> {

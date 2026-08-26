@@ -1024,6 +1024,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(ev->Sender, res.release());
         }
 
+        void Handle(TEvHugeSpaceStat::TPtr &ev, const TActorContext &ctx) {
+            auto res = std::make_unique<TEvHugeSpaceStatResult>();
+            res->Stat = State.Pers->Heap->GetSpaceStat();
+            ctx.Send(ev->Sender, res.release(), 0, ev->Cookie);
+        }
+
         void Handle(TEvHugeShredNotify::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
             std::ranges::sort(msg->ChunksToShred);
@@ -1206,6 +1212,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 HFunc(TEvHugePreCompact, Handle)
                 HFunc(TEvHugeLockChunks, Handle)
                 HFunc(TEvHugeStat, Handle)
+                HFunc(TEvHugeSpaceStat, Handle)
                 HFunc(TEvHugeShredNotify, Handle)
                 HFunc(TEvListChunks, Handle)
                 FFunc(TEvBlobStorage::EvHugeQueryForbiddenChunks, HandleQueryForbiddenChunks)

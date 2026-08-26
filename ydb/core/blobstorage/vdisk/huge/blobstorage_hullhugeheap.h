@@ -144,6 +144,7 @@ namespace NKikimr {
             TFreeSpace LockedChunks;
             ui32 AllocatedSlots = 0;
             ui32 FreeSlotsInFreeSpace = 0;
+            ui32 FreeSlotsInLockedChunks = 0;
 
         public:
             ui32 SlotsInChunk;
@@ -184,6 +185,7 @@ namespace NKikimr {
             TFreeRes Free(const NPrivate::TChunkSlot &id);
             bool LockChunkForAllocation(TChunkID chunkId);
             THeapStat GetStat() const;
+            TSizeClassSpaceStat GetSpaceStat() const;
             // returns true is allocated, false otherwise
             bool RecoveryModeAllocate(const NPrivate::TChunkSlot &id);
             void RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId, bool inLockedChunks);
@@ -240,6 +242,7 @@ namespace NKikimr {
             TChain *GetChain(ui32 size);
             const TChain *GetChain(ui32 size) const;
             THeapStat GetStat() const;
+            std::vector<TSizeClassSpaceStat> GetSpaceStat() const;
 
             void Save(IOutputStream *s) const;
             void Load(IInputStream *s);
@@ -346,6 +349,7 @@ namespace NKikimr {
             // make chunk not available for allocations, it is used for heap defragmentation
             bool LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
             THeapStat GetStat() const;
+            THeapSpaceStat GetSpaceStat() const;
             void ShredNotify(const std::vector<ui32>& chunksToShred);
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
             THashSet<TChunkIdx> GetForbiddenChunks() const { return ForbiddenChunks; }

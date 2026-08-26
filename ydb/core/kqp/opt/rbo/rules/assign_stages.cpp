@@ -62,6 +62,32 @@ enum class EWindowDistribution {
     Global,
 };
 
+const TExprNode* ExtractDirectWindowColumnName(const TExprNode& lambda) {
+    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument())
+    {
+        return nullptr;
+    }
+
+    const auto* argument = lambda.Child(0)->Child(0);
+    const auto* body = lambda.Child(1);
+    if (body->IsCallable("YqlGroupRef") &&
+        body->ChildrenSize() == 4 && body->Child(0) == argument &&
+        body->Child(3)->IsAtom() && !body->Child(3)->Content().empty())
+    {
+        return body->Child(3);
+    }
+    if (body->IsCallable("Member") && body->ChildrenSize() == 2 &&
+        body->Child(0) == argument && body->Child(1)->IsAtom() &&
+        !body->Child(1)->Content().empty())
+    {
+        return body->Child(1);
+    }
+    return nullptr;
+}
+
 std::optional<EWindowDistribution> GetMatchingWindowDistribution(
     const TExpression& expression)
 {
@@ -85,26 +111,12 @@ std::optional<EWindowDistribution> GetMatchingWindowDistribution(
         {
             return std::nullopt;
         }
-        const auto* lambda = partition->Child(1);
-        if (!lambda->IsLambda() ||
-            lambda->ChildrenSize() != 2 ||
-            !lambda->Child(0)->IsArguments() ||
-            lambda->Child(0)->ChildrenSize() != 1 ||
-            !lambda->Child(0)->Child(0)->IsArgument())
-        {
+        const auto* name =
+            ExtractDirectWindowColumnName(*partition->Child(1));
+        if (!name) {
             return std::nullopt;
         }
-        const auto* groupRef = lambda->Child(1);
-        if (!groupRef->IsCallable("YqlGroupRef") ||
-            groupRef->ChildrenSize() != 4 ||
-            groupRef->Child(0) != lambda->Child(0)->Child(0) ||
-            !groupRef->Child(3)->IsAtom() ||
-            groupRef->Child(3)->Content().empty())
-        {
-            return std::nullopt;
-        }
-        sourcePartitionKeys.insert(
-            TInfoUnit(TString(groupRef->Child(3)->Content())));
+        sourcePartitionKeys.insert(TInfoUnit(TString(name->Content())));
     }
     size_t count = 0;
     const TExprNode* window = nullptr;

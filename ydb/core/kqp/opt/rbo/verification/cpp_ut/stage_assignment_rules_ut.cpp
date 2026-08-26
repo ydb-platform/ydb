@@ -288,6 +288,208 @@ TExpression MakeUntrackedRankExpression(
         &ctx.PlanProps);
 }
 
+TExprNode::TPtr MakeStageDataType(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TStringBuf name)
+{
+    return ctx.NewCallable(
+        pos,
+        "DataType",
+        {ctx.NewAtom(pos, name)});
+}
+
+TExprNode::TPtr MakeStageOptionalDataType(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TStringBuf name)
+{
+    return ctx.NewCallable(
+        pos,
+        "OptionalType",
+        {MakeStageDataType(ctx, pos, name)});
+}
+
+TExprNode::TPtr MakeQ51WindowKeyReference(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    const TExprNode::TPtr& row,
+    const TExprNode::TPtr& type,
+    const TInfoUnit& column,
+    TStringBuf index,
+    bool groupRef)
+{
+    if (groupRef) {
+        return ctx.NewCallable(
+            pos,
+            "YqlGroupRef",
+            {
+                row,
+                type,
+                ctx.NewAtom(pos, index),
+                ctx.NewAtom(pos, column.GetFullName()),
+            });
+    }
+    return ctx.NewCallable(
+        pos,
+        "Member",
+        {row, ctx.NewAtom(pos, column.GetFullName())});
+}
+
+TExprNode::TPtr MakeQ51WindowDefinition(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TStringBuf name,
+    const TInfoUnit& partitionBy,
+    const TInfoUnit& orderBy,
+    bool groupRefs)
+{
+    auto partitionType = groupRefs
+        ? MakeStageDataType(ctx, pos, "Int64")
+        : MakeStageOptionalDataType(ctx, pos, "Int64");
+    auto partitionRow = ctx.NewArgument(pos, "partition_row");
+    auto partition = ctx.NewCallable(
+        pos,
+        "YqlGroup",
+        {
+            ctx.NewCallable(
+                pos,
+                "StructType",
+                {ctx.NewList(
+                    pos,
+                    {
+                        ctx.NewAtom(pos, partitionBy.GetFullName()),
+                        partitionType,
+                    })}),
+            ctx.NewLambda(
+                pos,
+                ctx.NewArguments(pos, {partitionRow}),
+                MakeQ51WindowKeyReference(
+                    ctx,
+                    pos,
+                    partitionRow,
+                    partitionType,
+                    partitionBy,
+                    "0",
+                    groupRefs)),
+        });
+
+    auto orderType = MakeStageOptionalDataType(ctx, pos, "Date");
+    auto orderRow = ctx.NewArgument(pos, "order_row");
+    auto sort = ctx.NewCallable(
+        pos,
+        "YqlSort",
+        {
+            ctx.NewCallable(
+                pos,
+                "StructType",
+                {ctx.NewList(
+                    pos,
+                    {
+                        ctx.NewAtom(pos, orderBy.GetFullName()),
+                        orderType,
+                    })}),
+            ctx.NewLambda(
+                pos,
+                ctx.NewArguments(pos, {orderRow}),
+                MakeQ51WindowKeyReference(
+                    ctx,
+                    pos,
+                    orderRow,
+                    orderType,
+                    orderBy,
+                    "1",
+                    groupRefs)),
+            ctx.NewAtom(pos, "asc"),
+            ctx.NewAtom(pos, "first"),
+        });
+    return ctx.NewCallable(
+        pos,
+        "YqlWindow",
+        {
+            ctx.NewAtom(pos, name),
+            ctx.NewAtom(pos, ""),
+            ctx.NewList(pos, {std::move(partition)}),
+            ctx.NewList(pos, {std::move(sort)}),
+            ctx.NewList(
+                pos,
+                {
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "type"), ctx.NewAtom(pos, "rows")}),
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "from"), ctx.NewAtom(pos, "up")}),
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "to"), ctx.NewAtom(pos, "f")}),
+                    ctx.NewList(
+                        pos,
+                        {
+                            ctx.NewAtom(pos, "to_value"),
+                            ctx.NewCallable(
+                                pos,
+                                "Int32",
+                                {ctx.NewAtom(pos, "0")}),
+                        }),
+                }),
+        });
+}
+
+TExpression MakeQ51WindowExpression(
+    TRuleTestContext& ctx,
+    const TInfoUnit& input,
+    const TInfoUnit& partitionBy,
+    const TInfoUnit& orderBy,
+    TStringBuf name,
+    bool groupRefs)
+{
+    const auto pos = TPositionHandle();
+    auto row = ctx.ExprCtx.NewArgument(pos, "window_row");
+    auto decimalType = ctx.ExprCtx.NewCallable(
+        pos,
+        "OptionalType",
+        {ctx.ExprCtx.NewCallable(
+            pos,
+            "DataType",
+            {
+                ctx.ExprCtx.NewAtom(pos, "Decimal"),
+                ctx.ExprCtx.NewAtom(pos, "35"),
+                ctx.ExprCtx.NewAtom(pos, "2"),
+            })});
+    return TExpression(
+        ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {row}),
+            ctx.ExprCtx.NewCallable(
+                pos,
+                "YqlAggWin",
+                {
+                    ctx.ExprCtx.NewCallable(
+                        pos,
+                        "YqlWinFactory",
+                        {ctx.ExprCtx.NewAtom(
+                            pos,
+                            groupRefs ? TStringBuf("sum") : TStringBuf("max"))}),
+                    ctx.ExprCtx.NewAtom(pos, name),
+                    ctx.ExprCtx.NewList(pos, {}),
+                    decimalType,
+                    ctx.ExprCtx.NewCallable(
+                        pos,
+                        "Member",
+                        {row, ctx.ExprCtx.NewAtom(pos, input.GetFullName())}),
+                })),
+        &ctx.ExprCtx,
+        &ctx.PlanProps,
+        MakeQ51WindowDefinition(
+            ctx.ExprCtx,
+            pos,
+            name,
+            partitionBy,
+            orderBy,
+            groupRefs));
+}
+
 int AssignSourceStage(
     TRuleTestContext& ctx,
     const TIntrusivePtr<TOpRead>& read)
@@ -481,6 +683,109 @@ Y_UNIT_TEST_SUITE(KqpRboStageAssignmentRules) {
         UNIT_ASSERT(expression.GetWindowOrderBy().front() == finalRatio);
         UNIT_ASSERT_VALUES_EQUAL(expression.GetInputIUs().size(), 1);
         UNIT_ASSERT(expression.GetInputIUs().front() == finalRatio);
+    }
+
+    Y_UNIT_TEST(Q51InnerSumKeepsOrderLiveAndHashesOnlyPartition) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit item("item_sk");
+        const TInfoUnit date("d_date");
+        const TInfoUnit sum("sum_sales");
+        const TInfoUnit cumulative("cume_sales");
+        auto read = MakeRead(pos, {item, date, sum});
+        const auto sourceStage = AssignSourceStage(ctx, read);
+        auto expression = MakeQ51WindowExpression(
+            ctx,
+            sum,
+            item,
+            date,
+            "_yql_anonymous_window0",
+            true);
+
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetWindowPartitionBy().size(), 1);
+        UNIT_ASSERT(expression.GetWindowPartitionBy().front() == item);
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetWindowOrderBy().size(), 1);
+        UNIT_ASSERT(expression.GetWindowOrderBy().front() == date);
+        const auto& dependencies = expression.GetInputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(dependencies.size(), 3);
+        UNIT_ASSERT(std::find(dependencies.begin(), dependencies.end(), sum) != dependencies.end());
+        UNIT_ASSERT(std::find(dependencies.begin(), dependencies.end(), item) != dependencies.end());
+        UNIT_ASSERT(std::find(dependencies.begin(), dependencies.end(), date) != dependencies.end());
+
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(cumulative, expression)});
+        TOpRoot root(map, pos, {cumulative.GetFullName()});
+        root.RecomputeOutputIUsSubtree();
+        root.ComputeParents();
+        ComputePlanLiveness(root);
+        const auto& live = GetLiveOut(read.Get());
+        UNIT_ASSERT_VALUES_EQUAL(live.size(), 3);
+        UNIT_ASSERT(live.contains(sum));
+        UNIT_ASSERT(live.contains(item));
+        UNIT_ASSERT(live.contains(date));
+
+        AssignStage(ctx, map);
+        const auto* shuffle = dynamic_cast<const TShuffleConnection*>(
+            GetOnlyConnection(
+                ctx.PlanProps,
+                sourceStage,
+                *map->Props.StageId));
+        UNIT_ASSERT(shuffle);
+        UNIT_ASSERT_VALUES_EQUAL(shuffle->Keys.size(), 1);
+        UNIT_ASSERT(shuffle->Keys.front() == item);
+    }
+
+    Y_UNIT_TEST(Q51OuterMaxWindowsSharePartitionOnlyHash) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit item("item_sk");
+        const TInfoUnit date("d_date");
+        const TInfoUnit webSales("web_sales");
+        const TInfoUnit storeSales("store_sales");
+        auto read = MakeRead(pos, {item, date, webSales, storeSales});
+        const auto sourceStage = AssignSourceStage(ctx, read);
+        auto web = MakeQ51WindowExpression(
+            ctx,
+            webSales,
+            item,
+            date,
+            "_yql_anonymous_window2",
+            false);
+        auto store = MakeQ51WindowExpression(
+            ctx,
+            storeSales,
+            item,
+            date,
+            "_yql_anonymous_window3",
+            false);
+
+        for (const auto* expression : {&web, &store}) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression->GetWindowPartitionBy().size(),
+                1);
+            UNIT_ASSERT(expression->GetWindowPartitionBy().front() == item);
+            UNIT_ASSERT_VALUES_EQUAL(expression->GetWindowOrderBy().size(), 1);
+            UNIT_ASSERT(expression->GetWindowOrderBy().front() == date);
+        }
+
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(TInfoUnit("web_cumulative"), web),
+                TMapElement(TInfoUnit("store_cumulative"), store),
+            });
+        AssignStage(ctx, map);
+        const auto* shuffle = dynamic_cast<const TShuffleConnection*>(
+            GetOnlyConnection(
+                ctx.PlanProps,
+                sourceStage,
+                *map->Props.StageId));
+        UNIT_ASSERT(shuffle);
+        UNIT_ASSERT_VALUES_EQUAL(shuffle->Keys.size(), 1);
+        UNIT_ASSERT(shuffle->Keys.front() == item);
     }
 
     Y_UNIT_TEST(UntrackedRawRankIsAConservativeSerialBarrier) {

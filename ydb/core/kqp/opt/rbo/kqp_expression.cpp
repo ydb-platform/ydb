@@ -245,6 +245,32 @@ TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, T
     }
 }
 
+const TExprNode* ExtractDirectWindowColumnName(const TExprNode& lambda) {
+    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument())
+    {
+        return nullptr;
+    }
+
+    const auto* argument = lambda.Child(0)->Child(0);
+    const auto* body = lambda.Child(1);
+    if (body->IsCallable("YqlGroupRef") &&
+        body->ChildrenSize() == 4 && body->Child(0) == argument &&
+        body->Child(3)->IsAtom() && !body->Child(3)->Content().empty())
+    {
+        return body->Child(3);
+    }
+    if (body->IsCallable("Member") && body->ChildrenSize() == 2 &&
+        body->Child(0) == argument && body->Child(1)->IsAtom() &&
+        !body->Child(1)->Content().empty())
+    {
+        return body->Child(1);
+    }
+    return nullptr;
+}
+
 TVector<TInfoUnit> ExtractWindowPartitionColumns(const TExprNode& definition) {
     TVector<TInfoUnit> result;
     if (!definition.IsCallable("YqlWindow") || definition.ChildrenSize() != 5) {
@@ -259,20 +285,11 @@ TVector<TInfoUnit> ExtractWindowPartitionColumns(const TExprNode& definition) {
         if (!partition->IsCallable("YqlGroup") || partition->ChildrenSize() != 2) {
             continue;
         }
-        const auto* lambda = partition->Child(1);
-        if (!lambda->IsLambda() || lambda->ChildrenSize() != 2) {
+        const auto* name = ExtractDirectWindowColumnName(*partition->Child(1));
+        if (!name) {
             continue;
         }
-        const auto* groupRef = lambda->Child(1);
-        if (!groupRef->IsCallable("YqlGroupRef") ||
-            groupRef->ChildrenSize() != 4 ||
-            !groupRef->Child(3)->IsAtom())
-        {
-            continue;
-        }
-        AddUniqueInfoUnit(
-            result,
-            TInfoUnit(TString(groupRef->Child(3)->Content())));
+        AddUniqueInfoUnit(result, TInfoUnit(TString(name->Content())));
     }
     return result;
 }
@@ -293,26 +310,11 @@ TVector<TInfoUnit> ExtractWindowOrderColumns(const TExprNode& definition) {
         {
             continue;
         }
-        const auto* lambda = orderItem->Child(1);
-        if (!lambda->IsLambda() ||
-            lambda->ChildrenSize() != 2 ||
-            !lambda->Child(0)->IsArguments() ||
-            lambda->Child(0)->ChildrenSize() != 1 ||
-            !lambda->Child(0)->Child(0)->IsArgument())
-        {
+        const auto* name = ExtractDirectWindowColumnName(*orderItem->Child(1));
+        if (!name) {
             continue;
         }
-        const auto* member = lambda->Child(1);
-        if (!member->IsCallable("Member") ||
-            member->ChildrenSize() != 2 ||
-            member->Child(0) != lambda->Child(0)->Child(0) ||
-            !member->Child(1)->IsAtom())
-        {
-            continue;
-        }
-        AddUniqueInfoUnit(
-            result,
-            TInfoUnit(TString(member->Child(1)->Content())));
+        AddUniqueInfoUnit(result, TInfoUnit(TString(name->Content())));
     }
     return result;
 }

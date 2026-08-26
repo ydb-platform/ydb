@@ -198,6 +198,289 @@ TExprNode::TPtr WindowSetting(
         });
 }
 
+enum class EQ51WindowFunction {
+    Sum,
+    Max,
+};
+
+enum class EQ51TransportMutation {
+    None,
+    WrongFunction,
+    NonemptyOptions,
+    WrongResultType,
+    NonMemberInput,
+    ForeignInputBinder,
+    Inherited,
+    MissingPartition,
+    WrongPartitionType,
+    WrongPartitionReference,
+    WrongPartitionIndex,
+    MismatchedPartitionName,
+    ForeignPartitionBinder,
+    MissingOrder,
+    WrongOrderType,
+    WrongOrderReference,
+    WrongOrderIndex,
+    MismatchedOrderName,
+    ForeignOrderBinder,
+    WrongDirection,
+    WrongNullOrder,
+    WrongFrameEnd,
+    WrongCurrentRow,
+};
+
+TExprNode::TPtr OptionalType(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    std::initializer_list<TStringBuf> parameters)
+{
+    return ctx.NewCallable(
+        pos,
+        "OptionalType",
+        {DataType(ctx, pos, parameters)});
+}
+
+TExprNode::TPtr Q51WindowReference(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    const TExprNode::TPtr& row,
+    const TExprNode::TPtr& type,
+    TStringBuf name,
+    TStringBuf index,
+    bool groupRef,
+    bool foreignBinder,
+    bool mismatchedName)
+{
+    auto referenceRow = foreignBinder
+        ? ctx.NewArgument(pos, "foreign_window_row")
+        : row;
+    const TStringBuf referenceName = mismatchedName
+        ? TStringBuf("other_column")
+        : name;
+    if (groupRef) {
+        return ctx.NewCallable(
+            pos,
+            "YqlGroupRef",
+            {
+                referenceRow,
+                type,
+                ctx.NewAtom(pos, index),
+                ctx.NewAtom(pos, referenceName),
+            });
+    }
+    return ctx.NewCallable(
+        pos,
+        "Member",
+        {
+            referenceRow,
+            ctx.NewAtom(pos, referenceName),
+        });
+}
+
+TExprNode::TPtr Q51OrderedAggregateWindowDefinition(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TStringBuf windowName,
+    TStringBuf partitionName,
+    TStringBuf orderName,
+    EQ51WindowFunction function,
+    EQ51TransportMutation mutation = EQ51TransportMutation::None)
+{
+    const bool sum = function == EQ51WindowFunction::Sum;
+    auto partitionType = mutation == EQ51TransportMutation::WrongPartitionType
+        ? OptionalType(ctx, pos, {"String"})
+        : sum
+            ? DataType(ctx, pos, {"Int64"})
+            : OptionalType(ctx, pos, {"Int64"});
+    auto partitionRow = ctx.NewArgument(pos, "partition_row");
+    const bool partitionGroupRef =
+        mutation == EQ51TransportMutation::WrongPartitionReference
+            ? !sum
+            : sum;
+    auto partition = ctx.NewCallable(
+        pos,
+        "YqlGroup",
+        {
+            ctx.NewCallable(
+                pos,
+                "StructType",
+                {ctx.NewList(
+                    pos,
+                    {ctx.NewAtom(pos, partitionName), partitionType})}),
+            ctx.NewLambda(
+                pos,
+                ctx.NewArguments(pos, {partitionRow}),
+                Q51WindowReference(
+                    ctx,
+                    pos,
+                    partitionRow,
+                    partitionType,
+                    partitionName,
+                    mutation == EQ51TransportMutation::WrongPartitionIndex
+                        ? TStringBuf("2")
+                        : TStringBuf("0"),
+                    partitionGroupRef,
+                    mutation == EQ51TransportMutation::ForeignPartitionBinder,
+                    mutation == EQ51TransportMutation::MismatchedPartitionName)),
+        });
+
+    auto orderType = mutation == EQ51TransportMutation::WrongOrderType
+        ? OptionalType(ctx, pos, {"Datetime"})
+        : OptionalType(ctx, pos, {"Date"});
+    auto orderRow = ctx.NewArgument(pos, "order_row");
+    const bool orderGroupRef =
+        mutation == EQ51TransportMutation::WrongOrderReference
+            ? !sum
+            : sum;
+    auto order = ctx.NewCallable(
+        pos,
+        "YqlSort",
+        {
+            ctx.NewCallable(
+                pos,
+                "StructType",
+                {ctx.NewList(
+                    pos,
+                    {ctx.NewAtom(pos, orderName), orderType})}),
+            ctx.NewLambda(
+                pos,
+                ctx.NewArguments(pos, {orderRow}),
+                Q51WindowReference(
+                    ctx,
+                    pos,
+                    orderRow,
+                    orderType,
+                    orderName,
+                    mutation == EQ51TransportMutation::WrongOrderIndex
+                        ? TStringBuf("2")
+                        : TStringBuf("1"),
+                    orderGroupRef,
+                    mutation == EQ51TransportMutation::ForeignOrderBinder,
+                    mutation == EQ51TransportMutation::MismatchedOrderName)),
+            ctx.NewAtom(
+                pos,
+                mutation == EQ51TransportMutation::WrongDirection
+                    ? TStringBuf("desc")
+                    : TStringBuf("asc")),
+            ctx.NewAtom(
+                pos,
+                mutation == EQ51TransportMutation::WrongNullOrder
+                    ? TStringBuf("last")
+                    : TStringBuf("first")),
+        });
+
+    TExprNode::TListType partitions;
+    if (mutation != EQ51TransportMutation::MissingPartition) {
+        partitions.push_back(std::move(partition));
+    }
+    TExprNode::TListType orderBy;
+    if (mutation != EQ51TransportMutation::MissingOrder) {
+        orderBy.push_back(std::move(order));
+    }
+    return ctx.NewCallable(
+        pos,
+        "YqlWindow",
+        {
+            ctx.NewAtom(pos, windowName),
+            ctx.NewAtom(
+                pos,
+                mutation == EQ51TransportMutation::Inherited
+                    ? TStringBuf("base_window")
+                    : TStringBuf("")),
+            ctx.NewList(pos, std::move(partitions)),
+            ctx.NewList(pos, std::move(orderBy)),
+            ctx.NewList(
+                pos,
+                {
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "type"), ctx.NewAtom(pos, "rows")}),
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "from"), ctx.NewAtom(pos, "up")}),
+                    ctx.NewList(
+                        pos,
+                        {
+                            ctx.NewAtom(pos, "to"),
+                            ctx.NewAtom(
+                                pos,
+                                mutation == EQ51TransportMutation::WrongFrameEnd
+                                    ? TStringBuf("uf")
+                                    : TStringBuf("f")),
+                        }),
+                    ctx.NewList(
+                        pos,
+                        {
+                            ctx.NewAtom(pos, "to_value"),
+                            ctx.NewCallable(
+                                pos,
+                                "Int32",
+                                {ctx.NewAtom(
+                                    pos,
+                                    mutation == EQ51TransportMutation::WrongCurrentRow
+                                        ? TStringBuf("1")
+                                        : TStringBuf("0"))}),
+                        }),
+                }),
+        });
+}
+
+TExprNode::TPtr Q51OrderedAggregateWindowCall(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TStringBuf windowName,
+    TStringBuf inputName,
+    EQ51WindowFunction function,
+    EQ51TransportMutation mutation = EQ51TransportMutation::None)
+{
+    auto row = ctx.NewArgument(pos, "window_input_row");
+    auto inputRow = mutation == EQ51TransportMutation::ForeignInputBinder
+        ? ctx.NewArgument(pos, "foreign_window_input_row")
+        : row;
+    TExprNode::TListType options;
+    if (mutation == EQ51TransportMutation::NonemptyOptions) {
+        options.push_back(ctx.NewAtom(pos, "distinct"));
+    }
+    auto input = mutation == EQ51TransportMutation::NonMemberInput
+        ? ctx.NewAtom(pos, inputName)
+        : ctx.NewCallable(
+            pos,
+            "Member",
+            {inputRow, ctx.NewAtom(pos, inputName)});
+    auto call = ctx.NewCallable(
+        pos,
+        "YqlAggWin",
+        {
+            ctx.NewCallable(
+                pos,
+                "YqlWinFactory",
+                {ctx.NewAtom(
+                    pos,
+                    mutation == EQ51TransportMutation::WrongFunction
+                        ? TStringBuf("avg")
+                        : function == EQ51WindowFunction::Sum
+                            ? TStringBuf("sum")
+                            : TStringBuf("max"))}),
+            ctx.NewAtom(pos, windowName),
+            ctx.NewList(pos, std::move(options)),
+            OptionalType(
+                ctx,
+                pos,
+                {
+                    "Decimal",
+                    mutation == EQ51TransportMutation::WrongResultType
+                        ? TStringBuf("34")
+                        : TStringBuf("35"),
+                    "2",
+                }),
+            std::move(input),
+        });
+    return ctx.NewLambda(
+        pos,
+        ctx.NewArguments(pos, {row}),
+        std::move(call));
+}
+
 TExprNode::TPtr OrderedAggregateWindowDefinition(
     TExprContext& ctx,
     TPositionHandle pos)
@@ -397,6 +680,136 @@ Y_UNIT_TEST_SUITE(KqpRboWindowTransport) {
             UNIT_ASSERT_C(
                 !NWindowTransport::FindTransportSafeWindowDefinition(
                     expression,
+                    setting),
+                TStringBuilder()
+                    << "near miss unexpectedly transported: " << test.Name);
+        }
+    }
+
+    Y_UNIT_TEST(TransportsExactTpcdsQuery51OrderedAggregateDefinitions) {
+        struct TCase {
+            TStringBuf WindowName;
+            TStringBuf Partition;
+            TStringBuf Order;
+            TStringBuf Input;
+            EQ51WindowFunction Function;
+        };
+        const TCase cases[] = {
+            {
+                "_yql_anonymous_window0",
+                "_alias_/Root/test/ds/web_sales.ws_item_sk",
+                "_alias_/Root/test/ds/date_dim.d_date",
+                "__kqp_agg_result_agg_col_0",
+                EQ51WindowFunction::Sum,
+            },
+            {
+                "_yql_anonymous_window1",
+                "_alias_/Root/test/ds/store_sales.ss_item_sk",
+                "_alias_/Root/test/ds/date_dim.d_date",
+                "__kqp_agg_result_agg_col_0",
+                EQ51WindowFunction::Sum,
+            },
+            {
+                "_yql_anonymous_window2",
+                "_alias_x.item_sk",
+                "_alias_x.d_date",
+                "x.web_sales",
+                EQ51WindowFunction::Max,
+            },
+            {
+                "_yql_anonymous_window3",
+                "_alias_x.item_sk",
+                "_alias_x.d_date",
+                "x.store_sales",
+                EQ51WindowFunction::Max,
+            },
+        };
+
+        for (const auto& test : cases) {
+            TExprContext ctx;
+            const auto pos = TPositionHandle();
+            auto definition = Q51OrderedAggregateWindowDefinition(
+                ctx,
+                pos,
+                test.WindowName,
+                test.Partition,
+                test.Order,
+                test.Function);
+            auto setting = WindowSetting(ctx, pos, {definition});
+            const auto transported =
+                NWindowTransport::FindTransportSafeWindowDefinition(
+                    Q51OrderedAggregateWindowCall(
+                        ctx,
+                        pos,
+                        test.WindowName,
+                        test.Input,
+                        test.Function),
+                    setting);
+            UNIT_ASSERT_VALUES_EQUAL(transported.Get(), definition.Get());
+        }
+    }
+
+    Y_UNIT_TEST(Q51OrderedAggregateTransportFailsClosedForNearMisses) {
+        struct TCase {
+            EQ51WindowFunction Function;
+            EQ51TransportMutation Mutation;
+            TStringBuf Name;
+        };
+        const TCase cases[] = {
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongFunction, "wrong function"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::NonemptyOptions, "nonempty options"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongResultType, "wrong result type"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::NonMemberInput, "non-Member input"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::ForeignInputBinder, "foreign input binder"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::Inherited, "inherited window"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::MissingPartition, "missing partition"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongPartitionType, "wrong SUM partition type"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongPartitionReference, "SUM Member partition"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongPartitionIndex, "wrong partition index"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::MismatchedPartitionName, "mismatched partition name"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::ForeignPartitionBinder, "foreign partition binder"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::WrongPartitionType, "wrong MAX partition type"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::WrongPartitionReference, "MAX GroupRef partition"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::MismatchedPartitionName, "mismatched MAX partition name"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::ForeignPartitionBinder, "foreign MAX partition binder"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::MissingOrder, "missing order"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongOrderType, "wrong order type"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongOrderReference, "SUM Member order"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::WrongOrderIndex, "wrong order index"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::MismatchedOrderName, "mismatched order name"},
+            {EQ51WindowFunction::Sum, EQ51TransportMutation::ForeignOrderBinder, "foreign order binder"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::WrongOrderReference, "MAX GroupRef order"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::MismatchedOrderName, "mismatched MAX order name"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::ForeignOrderBinder, "foreign MAX order binder"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::WrongDirection, "wrong direction"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::WrongNullOrder, "wrong NULL order"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::WrongFrameEnd, "wrong frame end"},
+            {EQ51WindowFunction::Max, EQ51TransportMutation::WrongCurrentRow, "wrong current row"},
+        };
+
+        for (const auto& test : cases) {
+            TExprContext ctx;
+            const auto pos = TPositionHandle();
+            const TStringBuf windowName = "_window";
+            auto definition = Q51OrderedAggregateWindowDefinition(
+                ctx,
+                pos,
+                windowName,
+                "item_sk",
+                "d_date",
+                test.Function,
+                test.Mutation);
+            auto setting = WindowSetting(ctx, pos, {definition});
+            auto call = Q51OrderedAggregateWindowCall(
+                ctx,
+                pos,
+                windowName,
+                "sales",
+                test.Function,
+                test.Mutation);
+            UNIT_ASSERT_C(
+                !NWindowTransport::FindTransportSafeWindowDefinition(
+                    call,
                     setting),
                 TStringBuilder()
                     << "near miss unexpectedly transported: " << test.Name);

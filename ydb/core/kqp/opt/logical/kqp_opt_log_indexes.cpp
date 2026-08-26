@@ -1348,17 +1348,38 @@ TExprBase KqpRewriteTopSortOverFlatMap(const TExprBase& node, TExprContext& ctx)
 
 namespace {
 
-bool StringOrAtomOrParameter(const TExprBase& exprBase) {
-    auto expr = exprBase.Maybe<TCoJust>() ? exprBase.Maybe<TCoJust>().Cast().Input() : exprBase;
-    return expr.Maybe<TCoString>() || expr.Maybe<TCoAtom>() || expr.Maybe<TCoParameter>();
+const TDataExprType* ParameterDataType(const TExprBase& exprBase) {
+    const auto parameter = exprBase.Maybe<TCoParameter>();
+    if (!parameter) {
+        return nullptr;
+    }
+
+    const auto type = parameter.Cast().Ref().GetTypeAnn();
+    if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
+        return nullptr;
+    }
+
+    return type->Cast<TDataExprType>();
 }
 
-bool DoubleOrParameter(const TExprBase& exprBase) {
-    auto unwrapped = exprBase.Maybe<TCoJust>() ? exprBase.Maybe<TCoJust>().Cast().Input() : exprBase;
-    if (!unwrapped.Maybe<TCoDouble>() && !unwrapped.Maybe<TCoParameter>() && !unwrapped.Maybe<TCoFloat>()) {
-        return false;
+bool StringOrAtomOrParameter(const TExprBase& exprBase) {
+    auto expr = exprBase.Maybe<TCoJust>() ? exprBase.Maybe<TCoJust>().Cast().Input() : exprBase;
+    if (expr.Maybe<TCoString>() || expr.Maybe<TCoUtf8>() || expr.Maybe<TCoAtom>()) {
+        return true;
     }
-    return true;
+
+    const auto* type = ParameterDataType(expr);
+    return type && (type->GetSlot() == EDataSlot::String || type->GetSlot() == EDataSlot::Utf8);
+}
+
+bool FloatingPointOrParameter(const TExprBase& exprBase) {
+    auto unwrapped = exprBase.Maybe<TCoJust>() ? exprBase.Maybe<TCoJust>().Cast().Input() : exprBase;
+    if (unwrapped.Maybe<TCoDouble>() || unwrapped.Maybe<TCoFloat>()) {
+        return true;
+    }
+
+    const auto* type = ParameterDataType(unwrapped);
+    return type && (type->GetSlot() == EDataSlot::Double || type->GetSlot() == EDataSlot::Float);
 }
 
 } // anonymous namespace
@@ -1464,11 +1485,11 @@ struct TFulltextQuery {
             auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
             TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
             TString name = nameValueTuple.Name().StringValue();
-            if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName && !DoubleOrParameter(value)) {
+            if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName && !FloatingPointOrParameter(value)) {
                 return false;
             }
 
-            if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName  && !DoubleOrParameter(value)) {
+            if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName  && !FloatingPointOrParameter(value)) {
                 return false;
             }
 
@@ -1592,6 +1613,27 @@ struct TFulltextQuery {
     }
 };
 
+TVector<TCoNameValueTuple> BuildFulltextNamedSettings(const TExprNode::TPtr& namedOptions, TExprContext& ctx, TPositionHandle pos) {
+    TVector<TCoNameValueTuple> settings;
+    if (!namedOptions) {
+        return settings;
+    }
+
+    settings.reserve(namedOptions->ChildrenSize());
+    for (const auto& arg : namedOptions->Children()) {
+        const auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
+        const TExprBase value = nameValueTuple.Value().Cast();
+        settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name<TCoAtom>()
+                .Value(nameValueTuple.Name().StringValue())
+                .Build()
+            .Value(value)
+            .Done());
+    }
+
+    return settings;
+}
+
 struct TFullTextApplyParseResult {
     TExprNode::TPtr BFactor;
     TExprNode::TPtr K1Factor;
@@ -1614,21 +1656,7 @@ struct TFullTextApplyParseResult {
     {}
 
     TVector<TCoNameValueTuple> Settings(TExprContext& ctx, TPositionHandle pos) {
-        TVector<TCoNameValueTuple> settings;
-        auto& query = Queries[0];
-        if (query.NamedOptions) {
-            for(auto& arg : query.NamedOptions->Children()) {
-                auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
-                TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
-                TString name = nameValueTuple.Name().StringValue();
-                settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
-                    .Name<TCoAtom>()
-                        .Value(nameValueTuple.Name().StringValue())
-                        .Build()
-                    .Value(value)
-                    .Done());
-            }
-        }
+        auto settings = BuildFulltextNamedSettings(Queries[0].NamedOptions, ctx, pos);
 
         for (const auto& [colName, value] : PrefixColumns) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -2572,6 +2600,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         EBranchKind Kind;
         TExprNode::TPtr ScoreExpr;     // the raw scoring expression node
         TString ScoredColumn;          // the FullTextScore / Knn column it references
+        TExprNode::TPtr FulltextQuery; // normalized positional query expression for a fulltext branch
+        TExprNode::TPtr FulltextNamedOptions;
         TString IndexName;             // resolved (override or auto-detected)
         double Weight;
         TMaybe<ui64> LimitOverride;
@@ -2602,11 +2632,47 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             // ---- Fulltext relevance branch ----
             b.Kind = EBranchKind::Fulltext;
             b.IsSimilarity = true;
-            auto ftColumnMember = TExprBase(ftScore->ChildPtr(0)).Maybe<TCoMember>();
+
+            auto parsedFulltext = TFulltextQuery::Match(ftScore, ctx);
+            if (parsedFulltext.NamedOptions) {
+                for (const auto& arg : parsedFulltext.NamedOptions->Children()) {
+                    const auto option = TExprBase(arg).Cast<TCoNameValueTuple>();
+                    const TString name = option.Name().StringValue();
+                    const TExprBase value = option.Value().Cast();
+
+                    if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName
+                        || name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName)
+                    {
+                        if (!FloatingPointOrParameter(value)) {
+                            return addError(TStringBuilder() << "FullTextScore named argument '" << name << "' (" << branchId
+                                << ") must be a Float or Double literal or parameter");
+                        }
+                    } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName
+                        || name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName)
+                    {
+                        if (!StringOrAtomOrParameter(value)) {
+                            return addError(TStringBuilder() << "FullTextScore named argument '" << name << "' (" << branchId
+                                << ") must be a string literal or parameter");
+                        }
+                    } else {
+                        return addError(TStringBuilder() << "unsupported FullTextScore named argument '" << name << "' (" << branchId
+                            << "); supported arguments are DefaultOperator, MinimumShouldMatch, K1, and B");
+                    }
+                }
+            }
+
+            if (!parsedFulltext.IsValid()) {
+                return addError(TStringBuilder() << "the first argument of FullTextScore (" << branchId << ") must reference a table column");
+            }
+
+            auto ftColumnMember = TExprBase(parsedFulltext.Column).Maybe<TCoMember>();
             if (!ftColumnMember) {
                 return addError(TStringBuilder() << "the first argument of FullTextScore (" << branchId << ") must reference a table column");
             }
+
             b.ScoredColumn = ftColumnMember.Cast().Name().StringValue();
+            b.FulltextQuery = parsedFulltext.Query;
+            b.FulltextNamedOptions = parsedFulltext.NamedOptions;
 
             if (indexOverride) {
                 const TIndexDescription* idx = nullptr;
@@ -2818,16 +2884,18 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             // (as KqpSelectJsonIndex does for JSON) as a TKqlReadTableFullTextIndex returning
             // {pk, __ydb_full_text_relevance} ranked by relevance, capped at branchN via ItemsLimit.
             b.ScoreCol = relevanceCol;
-            const auto ftQuery = findFulltextScore(b.ScoreExpr)->ChildPtr(1);
-            TKqpReadTableFullTextIndexSettings ftSettings;
-            ftSettings.SetItemsLimit(branchN);
+            auto ftSettings = BuildFulltextNamedSettings(b.FulltextNamedOptions, ctx, pos);
+            ftSettings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(TKqpReadTableFullTextIndexSettings::ItemsLimitSettingName)
+                .Value(branchN)
+                .Done());
             b.List = Build<TKqlReadTableFullTextIndex>(ctx, pos)
                 .Table(mainTableMeta)
                 .Index().Build(b.IndexName)
                 .Columns(BuildKeyColumnsList(pos, ctx, TVector<TString>{pkCol, relevanceCol}))
-                .Query<TExprList>().Add(TExprBase(ftQuery)).Build()
+                .Query<TExprList>().Add(TExprBase(b.FulltextQuery)).Build()
                 .QueryColumns(BuildKeyColumnsList(pos, ctx, TVector<TString>{b.ScoredColumn}))
-                .Settings(ftSettings.BuildNode(ctx, pos))
+                .Settings<TCoNameValueTupleList>().Add(ftSettings).Build()
                 .Done().Ptr();
             // Raw ordered branch. RRF streams it through KqpStreamEnumerate (pushed into the branch's
             // single-partition stage by the PushStreamEnumerateToStage physical rule), so no TDqPrecompute

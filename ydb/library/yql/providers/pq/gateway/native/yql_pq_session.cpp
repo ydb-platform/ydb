@@ -168,6 +168,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
         path = requestedPath.substr(pos + 1);
     }
 
+    YQL_ENSURE(CredentialsFactory, "CredentialsFactory is not set for `" << cluster << "`.`" << path << "`");
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
         NYdb::NTopic::TDescribeTopicSettings settings;

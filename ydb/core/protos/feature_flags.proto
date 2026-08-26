@@ -349,4 +349,5 @@ message TFeatureFlags {
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
     optional bool DisableOldSecrets = 306 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
 }

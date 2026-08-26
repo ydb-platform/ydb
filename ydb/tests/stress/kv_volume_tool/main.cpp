@@ -6,10 +6,10 @@
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
+#include <util/string/printf.h>
 #include <util/system/env.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
-#include <util/system/fstat.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -17,7 +17,12 @@
 #include <grpcpp/client_context.h>
 #include <grpcpp/security/credentials.h>
 
+#include <grpcpp/support/channel_arguments.h>
+#include <grpc/impl/channel_arg_names.h>
+
 #include <chrono>
+#include <cinttypes>
+#include <csignal>
 #include <memory>
 #include <thread>
 #include <atomic>
@@ -25,6 +30,7 @@
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <tuple>
 
 
 using namespace std::chrono_literals;
@@ -35,22 +41,40 @@ static TString AuthToken;
 namespace {
 
 constexpr auto GrpcDeadline = 30s;
-constexpr ui64 GrpcMaxMessageSize = 64000000;
-constexpr ui64 FileTransferChunkSize = 32 * 1024 * 1024;
 constexpr const char* YdbAuthHeader = "x-ydb-auth-ticket";
 constexpr const char* YdbDatabaseHeader = "x-ydb-database";
+// W3C trace context, https://w3c.github.io/trace-context/#header-name
+constexpr const char* OtelTraceHeader = "traceparent";
 
 TString GetAuthToken() {
     return AuthToken;
 }
 
-void AdjustContext(grpc::ClientContext& ctx, const TString& database) {
+// Generates a traceparent header value: "00-<16 byte trace id>-<8 byte span id>-01".
+// The server picks the tracing level from the matching external_throttling rule in
+// tracing_config, so the sampled flag here is informational only.
+TString MakeTraceparent(TString* traceIdOut) {
+    static thread_local std::mt19937_64 rng(std::random_device{}());
+    const ui64 hi = rng() | 1;
+    const ui64 lo = rng();
+    const ui64 spanId = rng() | 1;
+    const TString traceId = Sprintf("%016" PRIx64 "%016" PRIx64, hi, lo);
+    if (traceIdOut) {
+        *traceIdOut = traceId;
+    }
+    return Sprintf("00-%s-%016" PRIx64 "-01", traceId.c_str(), spanId);
+}
+
+void AdjustContext(grpc::ClientContext& ctx, const TString& database, const TString& traceparent = {}) {
     auto token = GetAuthToken();
     if (!token.empty()) {
         ctx.AddMetadata(YdbAuthHeader, token);
     }
     if (!database.empty()) {
         ctx.AddMetadata(YdbDatabaseHeader, database);
+    }
+    if (!traceparent.empty()) {
+        ctx.AddMetadata(OtelTraceHeader, traceparent);
     }
     ctx.set_deadline(std::chrono::system_clock::now() + GrpcDeadline);
 }
@@ -80,25 +104,73 @@ std::shared_ptr<grpc::ChannelCredentials> MakeChannelCredentials(bool useTls) {
     return grpc::InsecureChannelCredentials();
 }
 
-std::shared_ptr<grpc::Channel> CreateGrpcChannel(const TString& endpoint, bool useTls) {
+std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TString& endpoint, bool useTls, ui32 channelId = 0) {
     grpc::ChannelArguments args;
-    args.SetMaxSendMessageSize(GrpcMaxMessageSize);
-    args.SetMaxReceiveMessageSize(GrpcMaxMessageSize);
+    args.SetMaxReceiveMessageSize(64 * 1024 * 1024);
+    args.SetMaxSendMessageSize(64 * 1024 * 1024);
+    // Default gRPC shares one TCP connection across all Channel objects to the same
+    // target. Each load worker must get its own connection.
+    args.SetInt(GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL, 1);
+    args.SetInt(GRPC_ARG_CHANNEL_ID, static_cast<int>(channelId));
     return grpc::CreateCustomChannel(endpoint, MakeChannelCredentials(useTls), args);
 }
 
-TString MakeVolumePath(const TString& database, const TString& path) {
-    if (database.empty() || path.StartsWith(database)) {
-        return path;
+std::atomic<bool>* LoadStopFlag = nullptr;
+
+void HandleLoadSignal(int) {
+    if (LoadStopFlag) {
+        LoadStopFlag->store(true, std::memory_order_relaxed);
     }
-    if (database.back() == '/') {
-        return database + path;
+}
+
+class TByteRateLimiter {
+public:
+    explicit TByteRateLimiter(ui64 bytesPerSec)
+        : BytesPerSec(bytesPerSec)
+        , Start(std::chrono::steady_clock::now())
+    {
     }
-    return database + "/" + path;
+
+    void Acquire(ui64 bytes) {
+        if (BytesPerSec == 0) {
+            return;
+        }
+        while (true) {
+            ui64 already = Consumed.load(std::memory_order_relaxed);
+            const double elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - Start).count();
+            const ui64 budget = static_cast<ui64>(elapsed * BytesPerSec);
+            if (already <= budget) {
+                if (Consumed.compare_exchange_weak(already, already + bytes, std::memory_order_relaxed)) {
+                    return;
+                }
+                continue;
+            }
+            const double waitSec = static_cast<double>(already - budget) / BytesPerSec;
+            auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::duration<double>(waitSec));
+            if (wait < 1ms) {
+                wait = 1ms;
+            }
+            std::this_thread::sleep_for(wait);
+        }
+    }
+
+private:
+    const ui64 BytesPerSec;
+    const std::chrono::steady_clock::time_point Start;
+    std::atomic<ui64> Consumed{0};
+};
+
+double ToMiBps(ui64 bytes, double seconds) {
+    if (seconds <= 0) {
+        return 0;
+    }
+    return static_cast<double>(bytes) / (1024.0 * 1024.0) / seconds;
 }
 
 int DescribeVolume(const TString& endpoint, const TString& database, const TString& path, bool useTls) {
-    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::DescribeVolumeRequest request;
@@ -148,7 +220,7 @@ int DescribeVolume(const TString& endpoint, const TString& database, const TStri
 
     Cout << "Volume path: " << result.path() << Endl;
     Cout << "Partition count: " << result.partition_count() << Endl;
-
+    
     if (result.has_storage_config() && result.storage_config().channel_size() > 0) {
         Cout << "Storage channels: " << result.storage_config().channel_size() << Endl;
         for (int i = 0; i < result.storage_config().channel_size(); ++i) {
@@ -170,7 +242,7 @@ int DescribeVolume(const TString& endpoint, const TString& database, const TStri
 }
 
 int CreateVolume(const TString& endpoint, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia, bool useTls) {
-    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::CreateVolumeRequest request;
@@ -225,7 +297,7 @@ int CreateVolume(const TString& endpoint, const TString& database, const TString
 }
 
 int RemoveVolume(const TString& endpoint, const TString& database, const TString& path, bool useTls) {
-    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::DropVolumeRequest request;
@@ -272,12 +344,12 @@ int RemoveVolume(const TString& endpoint, const TString& database, const TString
 }
 
 int AlterVolume(const TString& endpoint, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia, bool useTls) {
-    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::AlterVolumeRequest request;
     request.set_path(path);
-
+    
     if (partitionCount > 0) {
         request.set_alter_partition_count(partitionCount);
     }
@@ -330,7 +402,7 @@ int AlterVolume(const TString& endpoint, const TString& database, const TString&
 }
 
 int ReadValue(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, ui64 offset, ui64 size, bool useTls) {
-    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::ReadRequest request;
@@ -395,7 +467,7 @@ int ReadValue(const TString& endpoint, const TString& database, const TString& p
 }
 
 int WriteValue(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, bool useTls) {
-    auto channel = CreateGrpcChannel(endpoint, useTls);
+    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
     auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     Ydb::KeyValue::ExecuteTransactionRequest request;
@@ -481,281 +553,19 @@ int WriteValue(const TString& endpoint, const TString& database, const TString& 
     return 0;
 }
 
-TString MakePartKey(const TString& key, ui64 partIndex) {
-    return TStringBuilder() << key << "_part_" << partIndex;
+
+TString FormatOperationIssues(const Ydb::Operations::Operation& operation) {
+    TStringBuilder issues;
+    for (int i = 0; i < operation.issues_size(); ++i) {
+        if (i > 0) {
+            issues << "; ";
+        }
+        issues << operation.issues(i).message();
+    }
+    return issues;
 }
 
-int ExecuteTransaction(
-    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
-    const TString& database,
-    Ydb::KeyValue::ExecuteTransactionRequest request,
-    const char* operationName)
-{
-    if (VerboseMode) {
-        TString requestText;
-        google::protobuf::TextFormat::PrintToString(request, &requestText);
-        Cerr << "=== Request ===" << Endl;
-        Cerr << requestText << Endl;
-    }
-
-    Ydb::KeyValue::ExecuteTransactionResponse response;
-    grpc::ClientContext context;
-    AdjustContext(context, database);
-
-    grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
-
-    if (VerboseMode) {
-        TString responseText;
-        google::protobuf::TextFormat::PrintToString(response, &responseText);
-        Cerr << "=== Response ===" << Endl;
-        Cerr << responseText << Endl;
-    }
-
-    if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return 1;
-    }
-
-    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << operationName << " failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
-    }
-
-    Ydb::KeyValue::ExecuteTransactionResult result;
-    if (!response.operation().result().UnpackTo(&result)) {
-        Cerr << "Failed to unpack ExecuteTransactionResult" << Endl;
-        return 1;
-    }
-
-    return 0;
-}
-
-bool ReadValueChunk(
-    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
-    const TString& database,
-    const TString& path,
-    ui64 partitionId,
-    const TString& key,
-    ui64 offset,
-    ui64 limitBytes,
-    Ydb::KeyValue::ReadResult& result)
-{
-    Ydb::KeyValue::ReadRequest request;
-    request.set_path(path);
-    request.set_partition_id(partitionId);
-    request.set_key(key);
-    request.set_offset(offset);
-    request.set_size(0);
-    request.set_limit_bytes(limitBytes);
-
-    if (VerboseMode) {
-        TString requestText;
-        google::protobuf::TextFormat::PrintToString(request, &requestText);
-        Cerr << "=== Request ===" << Endl;
-        Cerr << requestText << Endl;
-    }
-
-    Ydb::KeyValue::ReadResponse response;
-    grpc::ClientContext context;
-    AdjustContext(context, database);
-
-    grpc::Status status = stub.Read(&context, request, &response);
-
-    if (VerboseMode) {
-        TString responseText;
-        google::protobuf::TextFormat::PrintToString(response, &responseText);
-        Cerr << "=== Response ===" << Endl;
-        Cerr << responseText << Endl;
-    }
-
-    if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return false;
-    }
-
-    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "Read failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return false;
-    }
-
-    if (!response.operation().result().UnpackTo(&result)) {
-        Cerr << "Failed to unpack ReadResult" << Endl;
-        return false;
-    }
-
-    return true;
-}
-
-void CleanupPartKeys(
-    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
-    const TString& database,
-    const TString& path,
-    ui64 partitionId,
-    const TVector<TString>& partKeys)
-{
-    for (const auto& partKey : partKeys) {
-        Ydb::KeyValue::ExecuteTransactionRequest request;
-        request.set_path(path);
-        request.set_partition_id(partitionId);
-
-        auto* deleteRange = request.add_commands()->mutable_delete_range();
-        auto* range = deleteRange->mutable_range();
-        range->set_from_key_inclusive(partKey);
-        range->set_to_key_inclusive(partKey);
-
-        if (ExecuteTransaction(stub, database, std::move(request), "DeletePart") != 0) {
-            Cerr << "Failed to cleanup part key: " << partKey << Endl;
-        }
-    }
-}
-
-int UploadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel, bool useTls) {
-    const i64 fileSize = GetFileLength(filePath);
-    if (fileSize < 0) {
-        Cerr << "Failed to get file size: " << filePath << Endl;
-        return 1;
-    }
-
-    Cout << "Uploading file: " << filePath << " (" << fileSize << " bytes)" << Endl;
-
-    auto channel = CreateGrpcChannel(endpoint, useTls);
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
-
-    if (static_cast<ui64>(fileSize) <= FileTransferChunkSize) {
-        TFileInput fileInput(filePath);
-        const TString value = fileInput.ReadAll();
-
-        Ydb::KeyValue::ExecuteTransactionRequest request;
-        request.set_path(path);
-        request.set_partition_id(partitionId);
-
-        auto* write = request.add_commands()->mutable_write();
-        write->set_key(key);
-        write->set_value(value);
-        if (storageChannel > 0) {
-            write->set_storage_channel(storageChannel);
-        }
-
-        if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
-            return 1;
-        }
-    } else {
-        TVector<TString> partKeys;
-        partKeys.reserve((fileSize + FileTransferChunkSize - 1) / FileTransferChunkSize);
-
-        TFileInput fileInput(filePath);
-        TVector<char> buffer(FileTransferChunkSize);
-        ui64 partIndex = 0;
-
-        while (true) {
-            const size_t readBytes = fileInput.Read(buffer.data(), buffer.size());
-            if (readBytes == 0) {
-                break;
-            }
-
-            const TString partKey = MakePartKey(key, partIndex);
-            partKeys.push_back(partKey);
-
-            Ydb::KeyValue::ExecuteTransactionRequest request;
-            request.set_path(path);
-            request.set_partition_id(partitionId);
-
-            auto* write = request.add_commands()->mutable_write();
-            write->set_key(partKey);
-            write->set_value(TStringBuf(buffer.data(), readBytes));
-            if (storageChannel > 0) {
-                write->set_storage_channel(storageChannel);
-            }
-
-            Cout << "Uploading part " << partIndex << ": key=" << partKey << " (" << readBytes << " bytes)" << Endl;
-            if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
-                CleanupPartKeys(*stub, database, path, partitionId, partKeys);
-                return 1;
-            }
-
-            ++partIndex;
-        }
-
-        Ydb::KeyValue::ExecuteTransactionRequest request;
-        request.set_path(path);
-        request.set_partition_id(partitionId);
-
-        auto* concat = request.add_commands()->mutable_concat();
-        for (const auto& partKey : partKeys) {
-            concat->add_input_keys(partKey);
-        }
-        concat->set_output_key(key);
-        concat->set_keep_inputs(false);
-
-        Cout << "Concatenating " << partKeys.size() << " part(s) into key=" << key << Endl;
-        if (ExecuteTransaction(*stub, database, std::move(request), "Concat") != 0) {
-            CleanupPartKeys(*stub, database, path, partitionId, partKeys);
-            return 1;
-        }
-    }
-
-    Cout << "File uploaded successfully: " << filePath << " -> key=" << key << " (" << fileSize << " bytes)" << Endl;
-    return 0;
-}
-
-int DownloadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, bool useTls) {
-    auto channel = CreateGrpcChannel(endpoint, useTls);
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
-
-    ui64 offset = 0;
-    ui64 totalBytes = 0;
-    std::unique_ptr<TFileOutput> out;
-
-    while (true) {
-        Ydb::KeyValue::ReadResult result;
-        if (!ReadValueChunk(*stub, database, path, partitionId, key, offset, FileTransferChunkSize, result)) {
-            return 1;
-        }
-
-        if (result.value().empty()) {
-            if (offset == 0) {
-                TFileOutput emptyOut(filePath);
-                emptyOut.Finish();
-                Cout << "File downloaded successfully: key=" << key << " -> " << filePath << " (0 bytes)" << Endl;
-                return 0;
-            }
-            break;
-        }
-
-        if (!out) {
-            out = std::make_unique<TFileOutput>(filePath);
-        }
-
-        out->Write(result.value().data(), result.value().size());
-        totalBytes += result.value().size();
-        offset += result.value().size();
-
-        if (!result.is_overrun()) {
-            break;
-        }
-    }
-
-    if (out) {
-        out->Finish();
-    }
-
-    Cout << "File downloaded successfully: key=" << key << " -> " << filePath << " (" << totalBytes << " bytes)" << Endl;
-    return 0;
-}
-
-bool DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel) {
+bool DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ExecuteTransactionRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -770,13 +580,64 @@ bool DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString&
 
     Ydb::KeyValue::ExecuteTransactionResponse response;
     grpc::ClientContext context;
-    AdjustContext(context, database);
+    AdjustContext(context, database, traceparent);
 
     grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
-    return status.ok() && response.operation().status() == Ydb::StatusIds::SUCCESS;
+    if (!status.ok()) {
+        if (errorOut) {
+            *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
+                << " (code=" << static_cast<int>(status.error_code()) << ")";
+        }
+        return false;
+    }
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        if (errorOut) {
+            *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
+                << " issues=[" << FormatOperationIssues(response.operation()) << "]";
+        }
+        return false;
+    }
+    return true;
 }
 
-bool DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key) {
+bool DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TVector<TString>& keys, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
+    Ydb::KeyValue::ExecuteTransactionRequest request;
+    request.set_path(path);
+    request.set_partition_id(partitionId);
+
+    for (const auto& key : keys) {
+        auto* command = request.add_commands();
+        auto* write = command->mutable_write();
+        write->set_key(key);
+        write->set_value(value);
+        if (storageChannel > 0) {
+            write->set_storage_channel(storageChannel);
+        }
+    }
+
+    Ydb::KeyValue::ExecuteTransactionResponse response;
+    grpc::ClientContext context;
+    AdjustContext(context, database, traceparent);
+
+    grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
+    if (!status.ok()) {
+        if (errorOut) {
+            *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
+                << " (code=" << static_cast<int>(status.error_code()) << ")";
+        }
+        return false;
+    }
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        if (errorOut) {
+            *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
+                << " issues=[" << FormatOperationIssues(response.operation()) << "]";
+        }
+        return false;
+    }
+    return true;
+}
+
+bool DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ReadRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -786,29 +647,24 @@ bool DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& 
 
     Ydb::KeyValue::ReadResponse response;
     grpc::ClientContext context;
-    AdjustContext(context, database);
+    AdjustContext(context, database, traceparent);
 
     grpc::Status status = stub.Read(&context, request, &response);
-    return status.ok() && response.operation().status() == Ydb::StatusIds::SUCCESS;
-}
-
-bool DoDeleteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key) {
-    Ydb::KeyValue::ExecuteTransactionRequest request;
-    request.set_path(path);
-    request.set_partition_id(partitionId);
-
-    auto* command = request.add_commands();
-    auto* deleteRange = command->mutable_delete_range();
-    auto* range = deleteRange->mutable_range();
-    range->set_from_key_inclusive(key);
-    range->set_to_key_inclusive(key);
-
-    Ydb::KeyValue::ExecuteTransactionResponse response;
-    grpc::ClientContext context;
-    AdjustContext(context, database);
-
-    grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
-    return status.ok() && response.operation().status() == Ydb::StatusIds::SUCCESS;
+    if (!status.ok()) {
+        if (errorOut) {
+            *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
+                << " (code=" << static_cast<int>(status.error_code()) << ")";
+        }
+        return false;
+    }
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        if (errorOut) {
+            *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
+                << " issues=[" << FormatOperationIssues(response.operation()) << "]";
+        }
+        return false;
+    }
+    return true;
 }
 
 ui64 Percentile(TVector<ui64>& values, double q) {
@@ -821,17 +677,21 @@ ui64 Percentile(TVector<ui64>& values, double q) {
 }
 
 int LoadVolume(
-    const TString& endpoint,
+    const TVector<TString>& endpoints,
     const TString& database,
     const TString& path,
     ui32 partitionCount,
     ui32 storageChannel,
     ui32 seconds,
     ui32 threads,
+    ui32 readThreads,
     ui32 valueSize,
     ui32 readPercent,
-    ui32 deletePercent,
     ui32 reportPeriod,
+    ui64 writeRateMibps,
+    ui64 keyCount,
+    ui32 batchSize,
+    ui32 traceEveryN,
     bool useTls)
 {
     if (partitionCount == 0) {
@@ -840,6 +700,397 @@ int LoadVolume(
     }
     if (threads == 0) {
         Cerr << "--threads must be greater than zero" << Endl;
+        return 1;
+    }
+    if (reportPeriod == 0) {
+        reportPeriod = 1;
+    }
+    if (readPercent > 100) {
+        Cerr << "--read-percent must be in range [0, 100]" << Endl;
+        return 1;
+    }
+
+    const bool dedicatedReaders = readThreads > 0;
+    const ui32 inlineReadPercent = dedicatedReaders ? 0 : readPercent;
+    const ui64 targetWriteBytesPerSec = writeRateMibps * 1024ull * 1024ull;
+
+    if (writeRateMibps > 0 && valueSize < 65536) {
+        Cerr << "WARNING: --value-size is small for a high write rate; "
+             << "consider --value-size 1048576 (1 MiB) to reach 4 GiB/s" << Endl;
+    }
+
+    std::atomic<bool> stop{false};
+    std::atomic<ui64> totalWriteOps{0};
+    std::atomic<ui64> totalWriteBytes{0};
+    std::atomic<ui64> totalReadOps{0};
+    std::atomic<ui64> totalReadBytes{0};
+    std::atomic<ui64> totalErrors{0};
+    std::atomic<ui64> windowWriteOps{0};
+    std::atomic<ui64> windowWriteBytes{0};
+    std::atomic<ui64> windowReadOps{0};
+    std::atomic<ui64> windowReadBytes{0};
+    std::atomic<ui64> windowErrors{0};
+    std::atomic<ui64> windowWriteErrors{0};
+    std::atomic<ui64> windowReadErrors{0};
+
+    std::mutex latencyMutex;
+    TVector<ui64> windowWriteLatenciesMs;
+    TVector<ui64> windowReadLatenciesMs;
+
+    std::mutex errorMutex;
+    std::atomic<ui64> loggedErrors{0};
+    constexpr ui64 MaxLoggedErrors = 50;
+
+    // every traceEveryN-th RPC carries a traceparent header, so the server samples
+    // exactly that request; the trace id is logged together with the observed latency
+    std::atomic<ui64> writeTraceCounter{0};
+    std::atomic<ui64> readTraceCounter{0};
+
+    std::unique_ptr<std::atomic<ui64>[]> writtenPerThread(new std::atomic<ui64>[threads]);
+    for (ui32 i = 0; i < threads; ++i) {
+        writtenPerThread[i].store(0, std::memory_order_relaxed);
+    }
+
+    const auto started = std::chrono::steady_clock::now();
+    const auto deadline = seconds == 0
+        ? std::chrono::steady_clock::time_point::max()
+        : started + std::chrono::seconds(seconds);
+    const TString value(valueSize, 'x');
+    const ui64 runId = static_cast<ui64>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+    TByteRateLimiter writeLimiter(targetWriteBytesPerSec);
+
+    LoadStopFlag = &stop;
+    const auto prevInt = std::signal(SIGINT, HandleLoadSignal);
+    const auto prevTerm = std::signal(SIGTERM, HandleLoadSignal);
+
+    auto stillRunning = [&] {
+        return !stop.load(std::memory_order_relaxed) && std::chrono::steady_clock::now() < deadline;
+    };
+
+    auto logError = [&](const char* op, ui64 partitionId, const TString& key, ui64 latencyMs, const TString& error) {
+        const ui64 n = loggedErrors.fetch_add(1, std::memory_order_relaxed);
+        if (n >= MaxLoggedErrors) {
+            return;
+        }
+        std::lock_guard<std::mutex> guard(errorMutex);
+        Cerr << "ERROR\t" << op
+             << "\tchannel=" << storageChannel
+             << "\tpartition=" << partitionId
+             << "\tkey=" << key
+             << "\tlatency_ms=" << latencyMs
+             << "\t" << error
+             << Endl;
+        Cerr.Flush();
+    };
+
+    auto makeTraceparent = [&](std::atomic<ui64>& counter, TString* traceIdOut) -> TString {
+        if (traceEveryN == 0) {
+            return {};
+        }
+        if (counter.fetch_add(1, std::memory_order_relaxed) % traceEveryN != 0) {
+            return {};
+        }
+        return MakeTraceparent(traceIdOut);
+    };
+
+    auto logTrace = [&](const char* op, ui64 partitionId, ui64 latencyMs, bool ok, const TString& traceId) {
+        std::lock_guard<std::mutex> guard(errorMutex);
+        Cerr << "TRACE\t" << op
+             << "\tchannel=" << storageChannel
+             << "\tpartition=" << partitionId
+             << "\tlatency_ms=" << latencyMs
+             << "\tok=" << (ok ? 1 : 0)
+             << "\ttrace_id=" << traceId
+             << Endl;
+        Cerr.Flush();
+    };
+
+    auto record = [&](bool ok, ui64 latencyMs, bool isWrite) {
+        if (isWrite) {
+            totalWriteOps.fetch_add(1, std::memory_order_relaxed);
+            windowWriteOps.fetch_add(1, std::memory_order_relaxed);
+            if (ok) {
+                totalWriteBytes.fetch_add(valueSize, std::memory_order_relaxed);
+                windowWriteBytes.fetch_add(valueSize, std::memory_order_relaxed);
+            } else {
+                windowWriteErrors.fetch_add(1, std::memory_order_relaxed);
+            }
+        } else {
+            totalReadOps.fetch_add(1, std::memory_order_relaxed);
+            windowReadOps.fetch_add(1, std::memory_order_relaxed);
+            if (ok) {
+                totalReadBytes.fetch_add(valueSize, std::memory_order_relaxed);
+                windowReadBytes.fetch_add(valueSize, std::memory_order_relaxed);
+            } else {
+                windowReadErrors.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        if (!ok) {
+            totalErrors.fetch_add(1, std::memory_order_relaxed);
+            windowErrors.fetch_add(1, std::memory_order_relaxed);
+        }
+        {
+            std::lock_guard<std::mutex> guard(latencyMutex);
+            if (isWrite) {
+                windowWriteLatenciesMs.push_back(latencyMs);
+            } else {
+                windowReadLatenciesMs.push_back(latencyMs);
+            }
+        }
+    };
+
+    Cout << "Load started:" << Endl;
+    Cout << "  endpoints: " << endpoints.size() << Endl;
+    for (const auto& ep : endpoints) {
+        Cout << "    " << ep << Endl;
+    }
+    Cout << "  storage channel: " << storageChannel << Endl;
+    Cout << "  write threads: " << threads << Endl;
+    Cout << "  read threads: " << readThreads
+         << (dedicatedReaders ? " (dedicated)" : " (inline via --read-percent)") << Endl;
+    if (!dedicatedReaders) {
+        Cout << "  read-percent: " << inlineReadPercent << Endl;
+    }
+    Cout << "  batch-size: " << batchSize << " keys per RPC" << Endl;
+    Cout << "  value-size: " << valueSize << " bytes" << Endl;
+    Cout << "  tracing: ";
+    if (traceEveryN == 0) {
+        Cout << "off";
+    } else {
+        Cout << "every " << traceEveryN << "-th RPC (traceparent header, see TRACE lines in stderr)";
+    }
+    Cout << Endl;
+    Cout << "  write-rate: ";
+    if (writeRateMibps == 0) {
+        Cout << "unlimited";
+    } else {
+        Cout << writeRateMibps << " MiB/s";
+    }
+    Cout << Endl;
+    Cout << "  key-count per write thread: ";
+    if (keyCount == 0) {
+        Cout << "unique (no overwrite)";
+    } else {
+        Cout << keyCount << " (overwrite working set)";
+    }
+    Cout << Endl;
+    Cout << "  duration: ";
+    if (seconds == 0) {
+        Cout << "until SIGINT/SIGTERM";
+    } else {
+        Cout << seconds << " seconds";
+    }
+    Cout << Endl;
+    Cout << Endl;
+
+    TVector<std::thread> workers;
+    workers.reserve(threads + readThreads);
+
+    for (ui32 t = 0; t < threads; ++t) {
+        workers.emplace_back([&, t] {
+            const auto& ep = endpoints[t % endpoints.size()];
+            auto channel = MakeGrpcChannel(ep, useTls, t + 1);
+            auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+            std::mt19937 rng(static_cast<unsigned>(runId + t));
+            std::uniform_int_distribution<int> percent(1, 100);
+
+            while (stillRunning()) {
+                const ui64 batchBytes = static_cast<ui64>(valueSize) * batchSize;
+                writeLimiter.Acquire(batchBytes);
+
+                const ui64 written = writtenPerThread[t].load(std::memory_order_relaxed);
+                const ui64 baseKeyIndex = (keyCount > 0) ? (written % keyCount) : written;
+                const ui64 partitionId = (t + baseKeyIndex) % partitionCount;
+
+                TVector<TString> keys;
+                keys.reserve(batchSize);
+                for (ui32 b = 0; b < batchSize; ++b) {
+                    const ui64 ki = (keyCount > 0) ? ((written + b) % keyCount) : (written + b);
+                    keys.push_back(TStringBuilder() << "load_" << runId << "_" << t << "_" << ki);
+                }
+
+                TString error;
+                TString traceId;
+                const TString traceparent = makeTraceparent(writeTraceCounter, &traceId);
+                auto begin = std::chrono::steady_clock::now();
+                bool ok = (batchSize == 1)
+                    ? DoWriteValue(*stub, database, path, partitionId, keys[0], value, storageChannel, &error, traceparent)
+                    : DoWriteBatch(*stub, database, path, partitionId, keys, value, storageChannel, &error, traceparent);
+                auto end = std::chrono::steady_clock::now();
+                const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+                for (ui32 b = 0; b < batchSize; ++b) {
+                    record(ok, latencyMs, true);
+                }
+                if (ok) {
+                    writtenPerThread[t].fetch_add(batchSize, std::memory_order_relaxed);
+                } else {
+                    logError("write", partitionId, keys[0], latencyMs, error);
+                }
+                if (!traceId.empty()) {
+                    logTrace("write", partitionId, latencyMs, ok, traceId);
+                }
+
+                if (ok && inlineReadPercent > 0 && static_cast<ui32>(percent(rng)) <= inlineReadPercent) {
+                    begin = std::chrono::steady_clock::now();
+                    ok = DoReadValue(*stub, database, path, partitionId, keys[0]);
+                    end = std::chrono::steady_clock::now();
+                    record(ok, std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count(), false);
+                }
+            }
+        });
+    }
+
+    for (ui32 t = 0; t < readThreads; ++t) {
+        workers.emplace_back([&, t] {
+            const auto& ep = endpoints[(threads + t) % endpoints.size()];
+            auto channel = MakeGrpcChannel(ep, useTls, threads + t + 1);
+            auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+            std::mt19937 rng(static_cast<unsigned>(runId + 100000 + t));
+            std::uniform_int_distribution<ui32> threadDist(0, threads - 1);
+
+            while (stillRunning()) {
+                const ui32 writer = threadDist(rng);
+                const ui64 written = writtenPerThread[writer].load(std::memory_order_relaxed);
+                if (written == 0) {
+                    std::this_thread::sleep_for(1ms);
+                    continue;
+                }
+                const ui64 usable = (keyCount > 0) ? Min(written, keyCount) : written;
+                std::uniform_int_distribution<ui64> keyDist(0, usable - 1);
+                const ui64 keyIndex = keyDist(rng);
+                const ui64 partitionId = (writer + keyIndex) % partitionCount;
+                const TString key = TStringBuilder() << "load_" << runId << "_" << writer << "_" << keyIndex;
+
+                TString error;
+                TString traceId;
+                const TString traceparent = makeTraceparent(readTraceCounter, &traceId);
+                auto begin = std::chrono::steady_clock::now();
+                const bool ok = DoReadValue(*stub, database, path, partitionId, key, &error, traceparent);
+                auto end = std::chrono::steady_clock::now();
+                const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+                record(ok, latencyMs, false);
+                if (!ok) {
+                    logError("read", partitionId, key, latencyMs, error);
+                }
+                if (!traceId.empty()) {
+                    logTrace("read", partitionId, latencyMs, ok, traceId);
+                }
+            }
+        });
+    }
+
+    Cout << "Window\tWOps\tWMiB/s\tWErr\tROps\tRMiB/s\tRErr\tWp50\tWp95\tWp99\tRp50\tRp95\tRp99" << Endl;
+
+    ui32 window = 0;
+    while (stillRunning()) {
+        std::this_thread::sleep_for(std::chrono::seconds(reportPeriod));
+        if (!stillRunning()) {
+            break;
+        }
+        ++window;
+
+        const ui64 writeOps = windowWriteOps.exchange(0, std::memory_order_relaxed);
+        const ui64 writeBytes = windowWriteBytes.exchange(0, std::memory_order_relaxed);
+        const ui64 writeErrors = windowWriteErrors.exchange(0, std::memory_order_relaxed);
+        const ui64 readOps = windowReadOps.exchange(0, std::memory_order_relaxed);
+        const ui64 readBytes = windowReadBytes.exchange(0, std::memory_order_relaxed);
+        const ui64 readErrors = windowReadErrors.exchange(0, std::memory_order_relaxed);
+        windowErrors.exchange(0, std::memory_order_relaxed);
+
+        TVector<ui64> writeLatencies;
+        TVector<ui64> readLatencies;
+        {
+            std::lock_guard<std::mutex> guard(latencyMutex);
+            writeLatencies.swap(windowWriteLatenciesMs);
+            readLatencies.swap(windowReadLatenciesMs);
+        }
+
+        auto stats = [](TVector<ui64>& latencies) {
+            ui64 p50 = 0;
+            ui64 p95 = 0;
+            ui64 p99 = 0;
+            if (!latencies.empty()) {
+                p50 = Percentile(latencies, 0.50);
+                p95 = Percentile(latencies, 0.95);
+                p99 = Percentile(latencies, 0.99);
+            }
+            return std::tuple<ui64, ui64, ui64>{p50, p95, p99};
+        };
+        const auto [wp50, wp95, wp99] = stats(writeLatencies);
+        const auto [rp50, rp95, rp99] = stats(readLatencies);
+
+        Cout << window
+             << "\t" << writeOps
+             << "\t" << ToMiBps(writeBytes, reportPeriod)
+             << "\t" << writeErrors
+             << "\t" << readOps
+             << "\t" << ToMiBps(readBytes, reportPeriod)
+             << "\t" << readErrors
+             << "\t" << wp50
+             << "\t" << wp95
+             << "\t" << wp99
+             << "\t" << rp50
+             << "\t" << rp95
+             << "\t" << rp99
+             << Endl;
+        Cout.Flush();
+    }
+
+    stop.store(true, std::memory_order_relaxed);
+    for (auto& worker : workers) {
+        worker.join();
+    }
+
+    std::signal(SIGINT, prevInt);
+    std::signal(SIGTERM, prevTerm);
+    LoadStopFlag = nullptr;
+
+    const auto finished = std::chrono::steady_clock::now();
+    const double elapsed = std::chrono::duration<double>(finished - started).count();
+
+    Cout << Endl;
+    Cout << "Total\tSec\tWOps\tWMiB/s\tROps\tRMiB/s\tErrors" << Endl;
+    Cout << static_cast<ui64>(elapsed)
+         << "\t" << elapsed
+         << "\t" << totalWriteOps.load(std::memory_order_relaxed)
+         << "\t" << ToMiBps(totalWriteBytes.load(std::memory_order_relaxed), elapsed)
+         << "\t" << totalReadOps.load(std::memory_order_relaxed)
+         << "\t" << ToMiBps(totalReadBytes.load(std::memory_order_relaxed), elapsed)
+         << "\t" << totalErrors.load(std::memory_order_relaxed)
+         << Endl;
+    Cout.Flush();
+
+    return totalErrors.load(std::memory_order_relaxed) == 0 ? 0 : 2;
+}
+
+int LoadVolumeChannels(
+    const TString& endpoint,
+    const TString& database,
+    const TString& path,
+    ui32 partitionCount,
+    const TVector<ui32>& s3Channels,
+    ui32 localChannel,
+    ui32 s3Threads,
+    ui32 localThreads,
+    ui32 seconds,
+    ui32 valueSize,
+    ui32 readPercent,
+    ui32 reportPeriod,
+    const TString& s3ErrorFile,
+    bool useTls)
+{
+    if (partitionCount == 0) {
+        Cerr << "--partition-count must be specified for load-channels command" << Endl;
+        return 1;
+    }
+    if (s3Threads == 0 && localThreads == 0) {
+        Cerr << "at least one of --s3-threads or --local-threads must be greater than zero" << Endl;
+        return 1;
+    }
+    if (s3Threads > 0 && s3Channels.empty()) {
+        Cerr << "--s3-channel must be specified when --s3-threads > 0" << Endl;
         return 1;
     }
     if (seconds == 0) {
@@ -853,19 +1104,44 @@ int LoadVolume(
         Cerr << "--read-percent must be in range [0, 100]" << Endl;
         return 1;
     }
-    if (deletePercent > 100) {
-        Cerr << "--delete-percent must be in range [0, 100]" << Endl;
-        return 1;
+
+    const ui32 totalThreads = s3Threads + localThreads;
+
+    Cout << "Multi-channel load started:" << Endl;
+    Cout << "  S3 channels:";
+    if (s3Channels.empty()) {
+        Cout << " <none>";
+    } else {
+        for (ui32 channel : s3Channels) {
+            Cout << " " << channel;
+        }
     }
+    Cout << ", threads: " << s3Threads << Endl;
+    Cout << "  Local channel: " << localChannel << ", threads: " << localThreads << Endl;
+    Cout << "  Total threads: " << totalThreads << Endl;
+    Cout << "  S3 error file: " << s3ErrorFile << Endl;
+    Cout << Endl;
 
     std::atomic<bool> stop{false};
     std::atomic<ui64> totalOps{0};
     std::atomic<ui64> totalErrors{0};
+    std::atomic<ui64> s3Ops{0};
+    std::atomic<ui64> s3Errors{0};
+    std::atomic<ui64> localOps{0};
+    std::atomic<ui64> localErrors{0};
     std::atomic<ui64> windowOps{0};
     std::atomic<ui64> windowErrors{0};
+    std::atomic<ui64> windowS3Ops{0};
+    std::atomic<ui64> windowS3Errors{0};
+    std::atomic<ui64> windowLocalOps{0};
+    std::atomic<ui64> windowLocalErrors{0};
 
     std::mutex latencyMutex;
     TVector<ui64> windowLatenciesMs;
+
+    std::mutex s3ErrorMutex;
+    TFileOutput s3ErrorOut(s3ErrorFile);
+    s3ErrorOut << "ts_ms\top\tchannel\tpartition\tkey\tlatency_ms\terror" << Endl;
 
     const auto started = std::chrono::steady_clock::now();
     const auto deadline = started + std::chrono::seconds(seconds);
@@ -873,9 +1149,39 @@ int LoadVolume(
     const ui64 runId = static_cast<ui64>(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
 
-    auto record = [&](bool ok, ui64 latencyMs) {
+    auto logS3Error = [&](const char* op, ui32 channel, ui64 partitionId, const TString& key, ui64 latencyMs, const TString& error) {
+        const ui64 tsMs = static_cast<ui64>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        std::lock_guard<std::mutex> guard(s3ErrorMutex);
+        s3ErrorOut << tsMs
+                   << "\t" << op
+                   << "\t" << channel
+                   << "\t" << partitionId
+                   << "\t" << key
+                   << "\t" << latencyMs
+                   << "\t" << error
+                   << Endl;
+        s3ErrorOut.Flush();
+    };
+
+    auto record = [&](bool ok, ui64 latencyMs, bool isS3) {
         totalOps.fetch_add(1, std::memory_order_relaxed);
         windowOps.fetch_add(1, std::memory_order_relaxed);
+        if (isS3) {
+            s3Ops.fetch_add(1, std::memory_order_relaxed);
+            windowS3Ops.fetch_add(1, std::memory_order_relaxed);
+            if (!ok) {
+                s3Errors.fetch_add(1, std::memory_order_relaxed);
+                windowS3Errors.fetch_add(1, std::memory_order_relaxed);
+            }
+        } else {
+            localOps.fetch_add(1, std::memory_order_relaxed);
+            windowLocalOps.fetch_add(1, std::memory_order_relaxed);
+            if (!ok) {
+                localErrors.fetch_add(1, std::memory_order_relaxed);
+                windowLocalErrors.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
         if (!ok) {
             totalErrors.fetch_add(1, std::memory_order_relaxed);
             windowErrors.fetch_add(1, std::memory_order_relaxed);
@@ -886,38 +1192,69 @@ int LoadVolume(
         }
     };
 
-    TVector<std::thread> workers;
-    workers.reserve(threads);
+    struct TWorkerConfig {
+        ui32 ThreadIndex = 0;
+        ui32 StorageChannel = 0;
+        TString KeyPrefix;
+        bool IsS3 = false;
+    };
 
-    for (ui32 t = 0; t < threads; ++t) {
-        workers.emplace_back([&, t] {
-            auto channel = CreateGrpcChannel(endpoint, useTls);
+    TVector<TWorkerConfig> workerConfigs;
+    workerConfigs.reserve(totalThreads);
+
+    for (ui32 t = 0; t < s3Threads; ++t) {
+        TWorkerConfig config;
+        config.ThreadIndex = t;
+        config.StorageChannel = s3Channels[t % s3Channels.size()];
+        config.KeyPrefix = TStringBuilder() << "s3_load_" << runId << "_" << t;
+        config.IsS3 = true;
+        workerConfigs.push_back(std::move(config));
+    }
+
+    for (ui32 t = 0; t < localThreads; ++t) {
+        TWorkerConfig config;
+        config.ThreadIndex = s3Threads + t;
+        config.StorageChannel = localChannel;
+        config.KeyPrefix = TStringBuilder() << "local_load_" << runId << "_" << t;
+        config.IsS3 = false;
+        workerConfigs.push_back(std::move(config));
+    }
+
+    TVector<std::thread> workers;
+    workers.reserve(totalThreads);
+
+    for (const auto& config : workerConfigs) {
+        workers.emplace_back([&, config] {
+            auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
             auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
-            std::mt19937 rng(static_cast<unsigned>(runId + t));
+            std::mt19937 rng(static_cast<unsigned>(runId + config.ThreadIndex));
             std::uniform_int_distribution<int> percent(1, 100);
 
             ui64 i = 0;
             while (!stop.load(std::memory_order_relaxed) && std::chrono::steady_clock::now() < deadline) {
-                const ui64 partitionId = (t + i) % partitionCount;
-                const TString key = TStringBuilder() << "load_" << runId << "_" << t << "_" << i;
+                const ui64 partitionId = (config.ThreadIndex + i) % partitionCount;
+                const TString key = TStringBuilder() << config.KeyPrefix << "_" << i;
 
+                TString error;
                 auto begin = std::chrono::steady_clock::now();
-                bool ok = DoWriteValue(*stub, database, path, partitionId, key, value, storageChannel);
+                bool ok = DoWriteValue(*stub, database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
                 auto end = std::chrono::steady_clock::now();
-                record(ok, std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());
-
-                if (ok && readPercent > 0 && static_cast<ui32>(percent(rng)) <= readPercent) {
-                    begin = std::chrono::steady_clock::now();
-                    ok = DoReadValue(*stub, database, path, partitionId, key);
-                    end = std::chrono::steady_clock::now();
-                    record(ok, std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());
+                const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+                record(ok, latencyMs, config.IsS3);
+                if (!ok && config.IsS3) {
+                    logS3Error("write", config.StorageChannel, partitionId, key, latencyMs, error);
                 }
 
-                if (ok && deletePercent > 0 && static_cast<ui32>(percent(rng)) <= deletePercent) {
+                if (ok && readPercent > 0 && static_cast<ui32>(percent(rng)) <= readPercent) {
+                    error.clear();
                     begin = std::chrono::steady_clock::now();
-                    ok = DoDeleteValue(*stub, database, path, partitionId, key);
+                    ok = DoReadValue(*stub, database, path, partitionId, key, config.IsS3 ? &error : nullptr);
                     end = std::chrono::steady_clock::now();
-                    record(ok, std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());
+                    const ui64 readLatencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+                    record(ok, readLatencyMs, config.IsS3);
+                    if (!ok && config.IsS3) {
+                        logS3Error("read", config.StorageChannel, partitionId, key, readLatencyMs, error);
+                    }
                 }
 
                 ++i;
@@ -925,7 +1262,7 @@ int LoadVolume(
         });
     }
 
-    Cout << "Window\tOps\tOps/Sec\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)" << Endl;
+    Cout << "Window\tOps\tOps/Sec\tErrors\tS3Ops\tS3Err\tLocalOps\tLocalErr\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)" << Endl;
 
     ui32 window = 0;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -934,6 +1271,10 @@ int LoadVolume(
 
         const ui64 ops = windowOps.exchange(0, std::memory_order_relaxed);
         const ui64 errors = windowErrors.exchange(0, std::memory_order_relaxed);
+        const ui64 s3WindowOps = windowS3Ops.exchange(0, std::memory_order_relaxed);
+        const ui64 s3WindowErrors = windowS3Errors.exchange(0, std::memory_order_relaxed);
+        const ui64 localWindowOps = windowLocalOps.exchange(0, std::memory_order_relaxed);
+        const ui64 localWindowErrors = windowLocalErrors.exchange(0, std::memory_order_relaxed);
 
         TVector<ui64> latencies;
         {
@@ -956,6 +1297,10 @@ int LoadVolume(
              << "\t" << ops
              << "\t" << (static_cast<double>(ops) / reportPeriod)
              << "\t" << errors
+             << "\t" << s3WindowOps
+             << "\t" << s3WindowErrors
+             << "\t" << localWindowOps
+             << "\t" << localWindowErrors
              << "\t" << p50
              << "\t" << p95
              << "\t" << p99
@@ -972,12 +1317,20 @@ int LoadVolume(
     const double elapsed = std::chrono::duration<double>(finished - started).count();
 
     Cout << Endl;
-    Cout << "Total\tOps\tOps/Sec\tErrors" << Endl;
+    Cout << "Total\tOps\tOps/Sec\tErrors\tS3Ops\tS3Err\tLocalOps\tLocalErr" << Endl;
     Cout << static_cast<ui64>(elapsed)
          << "\t" << totalOps.load(std::memory_order_relaxed)
          << "\t" << (static_cast<double>(totalOps.load(std::memory_order_relaxed)) / elapsed)
          << "\t" << totalErrors.load(std::memory_order_relaxed)
+         << "\t" << s3Ops.load(std::memory_order_relaxed)
+         << "\t" << s3Errors.load(std::memory_order_relaxed)
+         << "\t" << localOps.load(std::memory_order_relaxed)
+         << "\t" << localErrors.load(std::memory_order_relaxed)
          << Endl;
+
+    if (s3Errors.load(std::memory_order_relaxed) > 0) {
+        Cout << "S3 errors written to: " << s3ErrorFile << Endl;
+    }
 
     return totalErrors.load(std::memory_order_relaxed) == 0 ? 0 : 2;
 }
@@ -994,16 +1347,24 @@ struct TOptions {
     TVector<TString> ChannelMedia;
     TString Key;
     TString Value;
-    TString FilePath;
     ui64 ReadOffset = 0;
     ui64 ReadSize = 0;
     ui32 StorageChannel = 0;
+    TVector<ui32> S3Channels;
+    ui32 LocalChannel = 0;
+    ui32 S3Threads = 3;
+    ui32 LocalThreads = 1;
+    TString S3ErrorFile = "s3_errors.log";
     ui32 Seconds = 10;
     ui32 Threads = 1;
+    ui32 ReadThreads = 0;
     ui32 ValueSize = 1024;
     ui32 ReadPercent = 100;
-    ui32 DeletePercent = 0;
     ui32 ReportPeriod = 1;
+    ui64 WriteRateMibps = 0;
+    ui64 KeyCount = 0;
+    ui32 BatchSize = 1;
+    ui32 TraceEveryN = 0;
     bool Verbose = false;
 };
 
@@ -1013,15 +1374,15 @@ TOptions ParseOptions(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.SetTitle("KeyValue volume management tool");
     opts.SetFreeArgsNum(1);
-    opts.SetFreeArgTitle(0, "COMMAND", "Command to execute: create, describe, alter, remove, read, write, upload, download or load");
+    opts.SetFreeArgTitle(0, "COMMAND", "Command to execute: create, describe, alter, remove, read, write, load or load-channels");
 
     opts.AddLongOption('e', "endpoint", "YDB endpoint (e.g., grpc://localhost:2135)")
         .Required()
         .StoreResult(&options.Endpoint);
 
     opts.AddLongOption('d', "database", "Database path")
-        .Required()
-        .StoreResult(&options.Database);
+        .StoreResult(&options.Database)
+        .DefaultValue("");
 
     opts.AddLongOption('p', "path", "Volume path (relative to database)")
         .Required()
@@ -1045,9 +1406,6 @@ TOptions ParseOptions(int argc, char** argv) {
     opts.AddLongOption("value", "Value to write")
         .StoreResult(&options.Value);
 
-    opts.AddLongOption("file", "Path to local file (source for upload, destination for download)")
-        .StoreResult(&options.FilePath);
-
     opts.AddLongOption("read-offset", "Offset in bytes for read operation (default: 0)")
         .StoreResult(&options.ReadOffset)
         .DefaultValue("0");
@@ -1060,27 +1418,62 @@ TOptions ParseOptions(int argc, char** argv) {
         .StoreResult(&options.StorageChannel)
         .DefaultValue("0");
 
-    opts.AddLongOption("seconds", "Load duration in seconds (for load command)")
+    opts.AddLongOption("s3-channel", "S3 storage channel ID (for load-channels command, can be specified multiple times)")
+        .AppendTo(&options.S3Channels);
+
+    opts.AddLongOption("local-channel", "Local storage channel ID (for load-channels command, default: 0)")
+        .StoreResult(&options.LocalChannel)
+        .DefaultValue("0");
+
+    opts.AddLongOption("s3-threads", "Number of worker threads writing to S3 channels (for load-channels command, default: 3)")
+        .StoreResult(&options.S3Threads)
+        .DefaultValue("3");
+
+    opts.AddLongOption("local-threads", "Number of worker threads writing to local channel (for load-channels command, default: 1)")
+        .StoreResult(&options.LocalThreads)
+        .DefaultValue("1");
+
+    opts.AddLongOption("s3-error-file", "File to write S3 channel errors (for load-channels command, default: s3_errors.log)")
+        .StoreResult(&options.S3ErrorFile)
+        .DefaultValue("s3_errors.log");
+
+    opts.AddLongOption("seconds", "Load duration in seconds (for load/load-channels commands, 0 = until SIGINT/SIGTERM)")
         .StoreResult(&options.Seconds)
         .DefaultValue("10");
 
-    opts.AddLongOption("threads", "Number of worker threads (for load command)")
+    opts.AddLongOption("threads", "Number of write worker threads (for load command)")
         .StoreResult(&options.Threads)
         .DefaultValue("1");
 
-    opts.AddLongOption("value-size", "Value size in bytes (for load command)")
+    opts.AddLongOption("read-threads", "Number of dedicated reader threads (for load command, default: 0). When > 0, writers only write")
+        .StoreResult(&options.ReadThreads)
+        .DefaultValue("0");
+
+    opts.AddLongOption("write-rate-mibps", "Target write rate in MiB/s (for load command, 0 = unlimited). Use 4096 for 4 GiB/s")
+        .StoreResult(&options.WriteRateMibps)
+        .DefaultValue("0");
+
+    opts.AddLongOption("key-count", "Distinct keys per write thread (for load command, 0 = unique keys). Reuse/overwrite when > 0")
+        .StoreResult(&options.KeyCount)
+        .DefaultValue("0");
+
+    opts.AddLongOption("batch-size", "Number of keys to write per single ExecuteTransaction RPC (for load command, default: 1)")
+        .StoreResult(&options.BatchSize)
+        .DefaultValue("1");
+
+    opts.AddLongOption("value-size", "Value size in bytes (for load/load-channels commands)")
         .StoreResult(&options.ValueSize)
         .DefaultValue("1024");
 
-    opts.AddLongOption("read-percent", "Percent of successful writes followed by read, 0..100 (for load command)")
+    opts.AddLongOption("read-percent", "Percent of successful writes followed by read, 0..100 (for load/load-channels; ignored if --read-threads > 0)")
         .StoreResult(&options.ReadPercent)
         .DefaultValue("100");
 
-    opts.AddLongOption("delete-percent", "Percent of successful write/read cycles followed by delete, 0..100 (for load command)")
-        .StoreResult(&options.DeletePercent)
+    opts.AddLongOption("trace-every-n", "Send a traceparent header on every N-th RPC and log its trace id with the measured latency (for load command, 0 = off). Requires an external_throttling rule for KeyValue.ExecuteTransaction / KeyValue.Read in the cluster tracing_config")
+        .StoreResult(&options.TraceEveryN)
         .DefaultValue("0");
 
-    opts.AddLongOption("report-period", "Report period in seconds (for load command)")
+    opts.AddLongOption("report-period", "Report period in seconds (for load/load-channels commands)")
         .StoreResult(&options.ReportPeriod)
         .DefaultValue("1");
 
@@ -1094,7 +1487,7 @@ TOptions ParseOptions(int argc, char** argv) {
     opts.SetFreeArgsMax(1);
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
-
+    
     if (parseResult.GetFreeArgs().size() != 1) {
         throw std::runtime_error("exactly one command must be specified");
     }
@@ -1103,8 +1496,8 @@ TOptions ParseOptions(int argc, char** argv) {
 
     if (options.Command != "create" && options.Command != "describe" && options.Command != "alter" &&
         options.Command != "remove" && options.Command != "read" && options.Command != "write" &&
-        options.Command != "upload" && options.Command != "download" && options.Command != "load") {
-        throw std::runtime_error("command must be 'create', 'describe', 'alter', 'remove', 'read', 'write', 'upload', 'download' or 'load'");
+        options.Command != "load" && options.Command != "load-channels") {
+        throw std::runtime_error("command must be 'create', 'describe', 'alter', 'remove', 'read', 'write', 'load' or 'load-channels'");
     }
 
     if (options.Command == "create" && options.PartitionCount == 0) {
@@ -1135,33 +1528,20 @@ TOptions ParseOptions(int argc, char** argv) {
         throw std::runtime_error("for write command, --value must be specified");
     }
 
-    
-    if (options.Command == "upload" && !options.PartitionIdSpecified) {
-        throw std::runtime_error("for upload command, --partition-id must be specified");
-    }
-
-    if (options.Command == "upload" && options.Key.empty()) {
-        throw std::runtime_error("for upload command, --key must be specified");
-    }
-
-    if (options.Command == "upload" && options.FilePath.empty()) {
-        throw std::runtime_error("for upload command, --file must be specified");
-    }
-
-    if (options.Command == "download" && !options.PartitionIdSpecified) {
-        throw std::runtime_error("for download command, --partition-id must be specified");
-    }
-
-    if (options.Command == "download" && options.Key.empty()) {
-        throw std::runtime_error("for download command, --key must be specified");
-    }
-
-    if (options.Command == "download" && options.FilePath.empty()) {
-        throw std::runtime_error("for download command, --file must be specified");
-    }
-
     if (options.Command == "load" && options.PartitionCount == 0) {
         throw std::runtime_error("for load command, --partition-count must be specified");
+    }
+
+    if (options.Command == "load-channels" && options.PartitionCount == 0) {
+        throw std::runtime_error("for load-channels command, --partition-count must be specified");
+    }
+
+    if (options.Command == "load-channels" && options.S3Threads > 0 && options.S3Channels.empty()) {
+        throw std::runtime_error("for load-channels command, --s3-channel must be specified when --s3-threads > 0");
+    }
+
+    if (options.Command == "load-channels" && options.S3Threads == 0 && options.LocalThreads == 0) {
+        throw std::runtime_error("for load-channels command, at least one of --s3-threads or --local-threads must be greater than zero");
     }
 
     return options;
@@ -1173,6 +1553,7 @@ int main(int argc, char** argv) {
     try {
         TOptions options = ParseOptions(argc, argv);
 
+        // Load auth token from file or environment variable
         if (options.TokenFile) {
             TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(options.TokenFile));
             AuthToken = Strip(fileInput->ReadAll());
@@ -1184,7 +1565,29 @@ int main(int argc, char** argv) {
 
         const bool useTls = IsSecureEndpoint(options.Endpoint);
         const TString hostPort = ParseHostPort(options.Endpoint);
-        const TString volumePath = MakeVolumePath(options.Database, options.Path);
+
+        TVector<TString> loadEndpoints;
+        {
+            TString epStr = options.Endpoint;
+            size_t start = 0;
+            while (start < epStr.size()) {
+                size_t comma = epStr.find(',', start);
+                TString part;
+                if (comma == TString::npos) {
+                    part = epStr.substr(start);
+                    start = epStr.size();
+                } else {
+                    part = epStr.substr(start, comma - start);
+                    start = comma + 1;
+                }
+                if (!part.empty()) {
+                    loadEndpoints.push_back(ParseHostPort(part));
+                }
+            }
+            if (loadEndpoints.empty()) {
+                loadEndpoints.push_back(hostPort);
+            }
+        }
 
         if (VerboseMode) {
             Cerr << "Endpoint: " << options.Endpoint << Endl;
@@ -1192,28 +1595,45 @@ int main(int argc, char** argv) {
             Cerr << "TLS: " << (useTls ? "enabled" : "disabled") << Endl;
             Cerr << "Database: " << options.Database << Endl;
             Cerr << "Path: " << options.Path << Endl;
-            Cerr << "Volume path: " << volumePath << Endl;
+            if (!options.Database.empty() && options.Path.StartsWith(options.Database)) {
+                Cerr << "WARNING: Path already contains database prefix" << Endl;
+                Cerr << "Consider using -p " << options.Path.substr(options.Database.size()) << " instead" << Endl;
+            }
             Cerr << Endl;
         }
 
         if (options.Command == "create") {
-            return CreateVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.ChannelMedia, useTls);
+            return CreateVolume(hostPort, options.Database, options.Path, options.PartitionCount, options.ChannelMedia, useTls);
         } else if (options.Command == "describe") {
-            return DescribeVolume(hostPort, options.Database, volumePath, useTls);
+            return DescribeVolume(hostPort, options.Database, options.Path, useTls);
         } else if (options.Command == "alter") {
-            return AlterVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.ChannelMedia, useTls);
+            return AlterVolume(hostPort, options.Database, options.Path, options.PartitionCount, options.ChannelMedia, useTls);
         } else if (options.Command == "remove") {
-            return RemoveVolume(hostPort, options.Database, volumePath, useTls);
+            return RemoveVolume(hostPort, options.Database, options.Path, useTls);
         } else if (options.Command == "read") {
-            return ReadValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.ReadOffset, options.ReadSize, useTls);
+            return ReadValue(hostPort, options.Database, options.Path, options.PartitionId, options.Key, options.ReadOffset, options.ReadSize, useTls);
         } else if (options.Command == "write") {
-            return WriteValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.Value, options.StorageChannel, useTls);
-        } else if (options.Command == "upload") {
-            return UploadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, options.StorageChannel, useTls);
-        } else if (options.Command == "download") {
-            return DownloadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, useTls);
+            return WriteValue(hostPort, options.Database, options.Path, options.PartitionId, options.Key, options.Value, options.StorageChannel, useTls);
         } else if (options.Command == "load") {
-            return LoadVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.StorageChannel, options.Seconds, options.Threads, options.ValueSize, options.ReadPercent, options.DeletePercent, options.ReportPeriod, useTls);
+            return LoadVolume(
+                loadEndpoints,
+                options.Database,
+                options.Path,
+                options.PartitionCount,
+                options.StorageChannel,
+                options.Seconds,
+                options.Threads,
+                options.ReadThreads,
+                options.ValueSize,
+                options.ReadPercent,
+                options.ReportPeriod,
+                options.WriteRateMibps,
+                options.KeyCount,
+                options.BatchSize,
+                options.TraceEveryN,
+                useTls);
+        } else if (options.Command == "load-channels") {
+            return LoadVolumeChannels(hostPort, options.Database, options.Path, options.PartitionCount, options.S3Channels, options.LocalChannel, options.S3Threads, options.LocalThreads, options.Seconds, options.ValueSize, options.ReadPercent, options.ReportPeriod, options.S3ErrorFile, useTls);
         }
 
         Cerr << "Unknown command: " << options.Command << Endl;

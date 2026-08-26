@@ -32,7 +32,7 @@ using namespace NKikimr::NFulltext;
  *    (FulltextCompact/FulltextCompactRelevance/JsonCompact).
  *
  * For simple index formats:
- * - This scan takes the indexImplTable and writes output to indexImplDictTable.
+ * - This scan takes the indexImplTable and writes output to indexImplDictTable (optionally).
  * - Source columns: __ydb_token, <PK columns>, __ydb_freq
  * For compact index formats:
  * - This scan takes the indexImplTable0build and writes output to indexImplTable and indexImplDictTable.
@@ -146,8 +146,9 @@ public:
             uploadTypes->emplace_back(column, type);
         };
 
-        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
-            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance)
+        if ((request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) &&
+            request.GetDictTableName())
         {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
             addType(uploadTypes, TokenColumn);
@@ -566,8 +567,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             }
         }
 
-        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
-            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
+        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             if (!request.GetDictTableName()) {
                 badRequest(TStringBuilder() << "Empty output dictionary table name");
             }

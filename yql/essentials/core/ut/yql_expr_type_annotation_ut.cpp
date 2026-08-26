@@ -1,5 +1,6 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -73,7 +74,7 @@ void CheckCommonTypeBothCastable(TCommonTypeFn commonTypeFn, const TString& pipe
 
     TExprContext ctx;
     TTypeAnnotationContext typesCtx;
-    typesCtx.DecimalConversionMode = EDecimalConversionMode::WithCommonTypeFixup;
+    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithCommonTypeFixup);
 
     for (int i = minDecimalTypePart; i <= maxDecimalTypePart; ++i) {
         for (int j = minDecimalTypePart; j <= maxDecimalTypePart; ++j) {
@@ -122,7 +123,7 @@ Y_UNIT_TEST(CommonTypeBothCastable) {
 Y_UNIT_TEST(CommonTypeExpectedResults) {
     TExprContext ctx;
     TTypeAnnotationContext typesCtx;
-    typesCtx.DecimalConversionMode = EDecimalConversionMode::WithCommonTypeFixup;
+    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithCommonTypeFixup);
 
     auto dec = [&](int precision, int scale) {
         return MakeDecimalNode(precision, scale, ctx, typesCtx);
@@ -166,5 +167,39 @@ Y_UNIT_TEST(CommonTypeExpectedResults) {
 }
 
 } // Y_UNIT_TEST_SUITE(TYqlTryConvertToDecimal)
+
+Y_UNIT_TEST_SUITE(TDecimalConversionMode) {
+
+Y_UNIT_TEST(BeforeCutoffUsesConfiguredMode) {
+    TTypeAnnotationContext typesCtx;
+    typesCtx.LangVer = NFeature::AlwaysWithFixDecimalConversionMode.MinLangVer - 1;
+    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithoutCommonTypeFixup);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        typesCtx.GetDecimalConversionMode(),
+        EDecimalConversionMode::WithoutCommonTypeFixup);
+}
+
+Y_UNIT_TEST(AtCutoffAlwaysUsesFixup) {
+    TTypeAnnotationContext typesCtx;
+    typesCtx.LangVer = NFeature::AlwaysWithFixDecimalConversionMode.MinLangVer;
+    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithoutCommonTypeFixup);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        typesCtx.GetDecimalConversionMode(),
+        EDecimalConversionMode::WithCommonTypeFixup);
+}
+
+Y_UNIT_TEST(AfterCutoffAlwaysUsesFixup) {
+    TTypeAnnotationContext typesCtx;
+    typesCtx.LangVer = NFeature::AlwaysWithFixDecimalConversionMode.MinLangVer + 1;
+    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithoutCommonTypeFixup);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        typesCtx.GetDecimalConversionMode(),
+        EDecimalConversionMode::WithCommonTypeFixup);
+}
+
+} // Y_UNIT_TEST_SUITE(TDecimalConversionMode)
 
 } // namespace NYql

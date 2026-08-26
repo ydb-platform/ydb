@@ -15,7 +15,7 @@ public:
     #define UNIMPLEMENTED_METHOD(returnType, method, signature) \
         returnType method signature override \
         { \
-            throw TErrorException() <<= TError("Not implemented method: %v", #method); \
+            THROW_ERROR_EXCEPTION("Not implemented method %v", #method); \
         }
 
     // IClientBase methods

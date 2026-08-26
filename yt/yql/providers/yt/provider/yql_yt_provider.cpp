@@ -10,6 +10,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/activation/yql_activation.h>
+#include <yql/essentials/providers/common/config/yql_activation_policy.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yt/yql/providers/yt/gateway/qplayer/yql_yt_qplayer_gateway.h>
 
@@ -377,7 +378,10 @@ std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway
             return RecordActivationStat(attrName, *ytState);
         };
 
-        ytState->Configuration->Init(*ytGatewayConfig, NConfig::MakeActivationFilter<TAttr>(userName, typeCtx->Credentials, onActivated), *typeCtx);
+        auto activationPolicy = NCommon::TActivationSelectionPolicy(
+            NConfig::MakeActivationFilter<TAttr>(userName, typeCtx->Credentials),
+            std::move(onActivated));
+        ytState->Configuration->Init(*ytGatewayConfig, activationPolicy, *typeCtx);
     }
 
     TYtState::TWeakPtr weakState = ytState;

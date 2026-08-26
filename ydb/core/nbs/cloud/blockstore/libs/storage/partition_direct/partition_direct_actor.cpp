@@ -148,9 +148,46 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
+    // It is assumed that the transaction to the local database is always
+    // successful. If the Tablet finishes its work, then it is necessary to
+    // respond to all pending requests so that there are no leakage resources.
+    // We will do this after the initiator of the request is stopped.
+    auto failUpdateRequests =
+        [executingConfigPromises =
+             std::move(ExecutingUpdateVChunkConfigPromises),
+         pendingConfigRequests = std::move(PendingUpdateVChunkConfigRequests),
+         executingDirtyMapPromises =
+             std::move(ExecutingUpdateDirtyMapStatePromises),
+         pendingDirtyMapRequests =
+             std::move(PendingUpdateDirtyMapStateRequests)]() mutable
+    {
+        for (auto& promise: executingConfigPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingConfigRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+
+        for (auto& promise: executingDirtyMapPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingDirtyMapRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+    };
+
     if (FastPathService) {
-        FastPathService->Stop();
+        auto onStop = FastPathService->Stop();
+        onStop.Subscribe(
+            [failUpdateRequests = std::move(failUpdateRequests)](
+                const NThreading::TFuture<void>& stopFuture) mutable
+            {
+                Y_UNUSED(stopFuture);
+                failUpdateRequests();
+            });
         FastPathService.reset();
+    } else {
+        failUpdateRequests();
     }
 }
 
@@ -293,15 +330,21 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         // groups of this tablet share the same counters chain, so per-group
         // increments naturally sum up into disk-level counters.
         std::unique_ptr<NTransport::IStorageTransport> transport;
+        const bool enableChecksums =
+            nbsService->StorageConfig->GetEnableChecksums();
         if (nbsService->StorageConfig->GetUseDirectSessionTransport()) {
             transport = NTransport::CreateDirectStorageTransport(
                 TActivationContext::ActorSystem(),
                 DiskDescription,
-                dbgIndex);
+                dbgIndex,
+                enableChecksums);
         } else {
             transport = std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(DiskDescription, dbgIndex));
+                NTransport::CreateTransportActor(
+                    DiskDescription,
+                    dbgIndex,
+                    enableChecksums));
         }
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
@@ -698,15 +741,26 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVChunkConfig %s",
+        "%s Handle UpdateVChunkConfig %s %s",
         LogTitle.GetWithTime().c_str(),
-        msg->VChunkConfig.DebugPrint().c_str());
+        msg->VChunkConfig.DebugPrint().c_str(),
+        ExecutingUpdateVChunkConfig ? "later" : "now");
 
-    ExecuteTx(
-        ctx,
-        CreateTx<TUpdateVChunkConfig>(
-            std::move(msg->VChunkConfig),
-            std::move(msg->UpdateCompleted)));
+    if (ExecutingUpdateVChunkConfig) {
+        PendingUpdateVChunkConfigRequests.push_back(
+            {.VChunkConfig = std::move(msg->VChunkConfig),
+             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    } else {
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateVChunkConfigRequests.empty());
+
+        ExecutingUpdateVChunkConfig = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateVChunkConfig>(
+                TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests{
+                    {.VChunkConfig = std::move(msg->VChunkConfig),
+                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+    }
 }
 
 void TPartitionActor::HandleUpdateDirtyMapState(
@@ -718,16 +772,28 @@ void TPartitionActor::HandleUpdateDirtyMapState(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateDirtyMapState vchunk %u",
+        "%s Handle UpdateDirtyMapState vchunk %u %s",
         LogTitle.GetWithTime().c_str(),
-        msg->VChunkIndex);
+        msg->VChunkIndex,
+        ExecutingUpdateDirtyMapState ? "later" : "now");
 
-    ExecuteTx(
-        ctx,
-        CreateTx<TUpdateDirtyMapState>(
-            msg->VChunkIndex,
-            std::move(msg->State),
-            std::move(msg->UpdateCompleted)));
+    if (ExecutingUpdateDirtyMapState) {
+        PendingUpdateDirtyMapStateRequests.push_back(
+            {.VChunkIndex = msg->VChunkIndex,
+             .State = std::move(msg->State),
+             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    } else {
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateDirtyMapStateRequests.empty());
+
+        ExecutingUpdateDirtyMapState = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateDirtyMapState>(
+                TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests{
+                    {.VChunkIndex = msg->VChunkIndex,
+                     .State = std::move(msg->State),
+                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

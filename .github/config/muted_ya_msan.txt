@@ -19,7 +19,6 @@ ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialRd
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripFallback
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripSharedShardManyPeers
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithBackpressure
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithPayload
 ydb/library/actors/interconnect/ut OutgoingStream.PacketBuilderUsesPreallocatedRdmaMemoryForInternalStream
 ydb/library/actors/interconnect/ut OutgoingStream.PublicMethodsLatencyBenchmark
@@ -28,8 +27,8 @@ ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemoryPreallocateNoAlloc
 ydb/library/nmslib/test/run_bunit exectest.run[bunit]
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
-ydb/services/config/ut ConfigGRPCService.ReplaceConfig
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
+ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
@@ -1404,10 +1403,11 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v1]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[36]
+ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
-ydb/tests/stress/simple_queue/tests py3test.sole chunk
-ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test

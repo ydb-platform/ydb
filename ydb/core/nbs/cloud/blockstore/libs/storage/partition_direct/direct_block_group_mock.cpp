@@ -199,6 +199,10 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     {
         Y_ABORT_UNLESS(false, "Should set OnAddHostResultHandler");
     };
+    TakeCopyRangeBudgetHandler = [](ui64)
+    {
+        return TDuration::Zero();
+    };
 }
 
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
@@ -390,6 +394,11 @@ void TDirectBlockGroupMock::OnAddHostResult(
         newHostIndex,
         std::move(ddiskId),
         std::move(pbufferId));
+}
+
+TDuration TDirectBlockGroupMock::TakeCopyRangeBudget(ui64 byteCount)
+{
+    return TakeCopyRangeBudgetHandler(byteCount);
 }
 
 ui32 TDirectBlockGroupMock::GetNodeId(THostIndex host) const

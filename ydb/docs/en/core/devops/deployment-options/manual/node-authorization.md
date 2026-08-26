@@ -1,6 +1,6 @@
 # Database node authentication and authorization
 
-Node authentication in the {{ ydb-short-name }} cluster ensures that database nodes are authenticated when making service requests to other nodes via the gRPC protocol. Node authorization ensures that the privileges required by the service requests are checked and granted during request processing. These service calls include database node registration within the cluster and access to [dynamic configuration](../../../maintenance/manual/dynamic-config.md) information. The use of node authorization is recommended for all {{ ydb-short-name }} clusters, as it helps prevent unauthorized access to data by adding nodes to the cluster.
+Node authentication in the {{ ydb-short-name }} cluster ensures that database nodes are authenticated when making service requests to other nodes via the gRPC protocol. Node authorization ensures that the privileges required by the service requests are checked and granted during request processing. These service calls include database node registration within the cluster and access to [dynamic configuration](../../../devops/configuration-management/configuration-v1/dynamic-config.md) information. The use of node authorization is recommended for all {{ ydb-short-name }} clusters, as it helps prevent unauthorized access to data by adding nodes to the cluster.
 
 Database node authentication and authorization are performed in the following order:
 

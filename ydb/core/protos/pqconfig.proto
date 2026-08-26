@@ -370,6 +370,17 @@ message TOffloadConfig {
 }
 
 message TPQTabletConfig {
+    message TTopicId {
+        // Id is the schemeshard PathId for FirstClass topics, or CM-provided OwnerId for federation topics.
+        optional uint64 Id = 1;
+        // OwnerId is the schemeshard TabletId for FirstClass topics, or CM-provided OwnerId for federation topics.
+        optional uint64 OwnerId = 2;
+        // Wall-clock ms timestamp (coordinator plan step) at which Id was stamped.
+        // 0 = Id filled at create (no legacy name-keyed fallback); non-zero = Id back-filled by an alter.
+        optional uint64 TxStep = 3;
+    }
+    optional TTopicId Id = 49;
+
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
     repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)

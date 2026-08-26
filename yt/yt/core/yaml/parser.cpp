@@ -328,11 +328,11 @@ private:
             .With("problem_value", Parser_.problem_value)
             .With("problem_mark", Parser_.problem_mark);
         if (Parser_.context) {
-            error <<= TErrorAttribute("context", Parser_.context);
-            error <<= TErrorAttribute("context_mark", Parser_.context_mark);
+            error.Add("context", Parser_.context);
+            error.Add("context_mark", Parser_.context_mark);
         }
         if (!ReadError_.IsOK()) {
-            error <<= ReadError_;
+            error.Add(ReadError_);
         }
 
         THROW_ERROR error;

@@ -12,7 +12,6 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
-#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/request_info.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_label.h>
@@ -20,6 +19,9 @@
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+
+#include <util/string/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
 
@@ -44,28 +46,58 @@ using namespace NYdb::NBS::NStorage;
 
 namespace {
 
-Ydb::StatusIds::StatusCode StatusFromNbsError(const NYdb::NBS::NProto::TError& error)
+Ydb::StatusIds::StatusCode NbsErrorToYdbStatus(
+    const NYdb::NBS::NProto::TError& error)
 {
-    // ModifyScheme maps StatusMultipleModifications / StatusNotAvailable to
-    // E_REJECTED (retriable). The tablet uses the same code for wipe/deallocate
-    // failures that the client may retry.
-    if (error.GetCode() == NYdb::NBS::E_REJECTED) {
-        return Ydb::StatusIds::UNAVAILABLE;
-    }
-    if (error.GetCode() == NYdb::NBS::E_TIMEOUT) {
-        return Ydb::StatusIds::TIMEOUT;
-    }
-    if (FACILITY_FROM_CODE(error.GetCode()) == NYdb::NBS::FACILITY_SCHEMESHARD) {
-        const auto schemeStatus = static_cast<NKikimrScheme::EStatus>(
-            STATUS_FROM_CODE(error.GetCode()));
-        if (schemeStatus == NKikimrScheme::StatusPathDoesNotExist) {
+    switch (error.GetCode()) {
+        case NYdb::NBS::S_ALREADY:
+            return Ydb::StatusIds::ALREADY_EXISTS;
+        case NYdb::NBS::E_ARGUMENT:
+            return Ydb::StatusIds::BAD_REQUEST;
+        case NYdb::NBS::E_NOT_FOUND:
             return Ydb::StatusIds::NOT_FOUND;
+        case NYdb::NBS::E_UNAUTHORIZED:
+            return Ydb::StatusIds::UNAUTHORIZED;
+        case NYdb::NBS::E_NOT_IMPLEMENTED:
+            return Ydb::StatusIds::UNSUPPORTED;
+        case NYdb::NBS::E_ABORTED:
+            return Ydb::StatusIds::ABORTED;
+        case NYdb::NBS::E_REJECTED:
+        case NYdb::NBS::E_TRY_AGAIN:
+            return Ydb::StatusIds::UNAVAILABLE;
+        case NYdb::NBS::E_TIMEOUT:
+        case NYdb::NBS::E_RETRY_TIMEOUT:
+            return Ydb::StatusIds::TIMEOUT;
+        case NYdb::NBS::E_CANCELLED:
+            return Ydb::StatusIds::CANCELLED;
+        case NYdb::NBS::E_PRECONDITION_FAILED:
+            return Ydb::StatusIds::PRECONDITION_FAILED;
+        default:
+            break;
+    }
+
+    if (FACILITY_FROM_CODE(error.GetCode()) == NYdb::NBS::FACILITY_SCHEMESHARD) {
+        switch (static_cast<NKikimrScheme::EStatus>(
+            STATUS_FROM_CODE(error.GetCode())))
+        {
+            case NKikimrScheme::StatusPathDoesNotExist:
+                return Ydb::StatusIds::NOT_FOUND;
+            case NKikimrScheme::StatusAlreadyExists:
+            case NKikimrScheme::StatusNameConflict:
+                return Ydb::StatusIds::ALREADY_EXISTS;
+            default:
+                break;
         }
     }
+
+    if (!NYdb::NBS::HasError(error)) {
+        return Ydb::StatusIds::SUCCESS;
+    }
+
     return Ydb::StatusIds::GENERIC_ERROR;
 }
 
-} // namespace
+}   // namespace
 
 class TCreatePartitionRequest
     : public TRpcOperationRequestActor<TCreatePartitionRequest, TEvCreatePartitionRequest> {
@@ -86,14 +118,6 @@ public:
         const ui32 blockSize = request->GetBlockSize() ? request->GetBlockSize() : 4096;
         const ui64 blocksCount = request->GetBlocksCount() ? request->GetBlocksCount() : 32768;
         const ui32 storageMedia = request->GetStorageMedia();
-        const ui32 syncRequestsBatchSize = request->GetSyncRequestsBatchSize();
-
-        NYdb::NBS::NProto::TStorageServiceConfig storageConfig;
-        storageConfig.SetDDiskPoolName(storagePoolName);
-        storageConfig.SetPersistentBufferDDiskPoolName(storagePoolName);
-        // One trace per 1s should be sufficient for observability.
-        storageConfig.SetTraceSamplePeriod(1000);
-        storageConfig.SetSyncRequestsBatchSize(syncRequestsBatchSize);
 
         NKikimrBlockStore::TVolumeConfig volumeConfig;
         volumeConfig.SetBlockSize(blockSize);
@@ -135,6 +159,7 @@ private:
     TString DiskId;
     ui32 DescribeAttempts = 0;
     static constexpr ui32 MaxDescribeAttempts = 10;
+    Ydb::StatusIds::StatusCode CreateStatus = Ydb::StatusIds::SUCCESS;
 
     STFUNC(StateCreate) {
         switch (ev->GetTypeRewrite()) {
@@ -165,22 +190,32 @@ private:
     void HandleCreateVolume(TEvSSProxy::TEvCreateVolumeResponse::TPtr& ev) {
         const auto& ctx = TActivationContext::AsActorContext();
         const auto& response = *ev->Get();
+        const auto& error = response.GetError();
 
         YDB_LOG_DEBUG_CTX(ctx, "Grpc service: received TEvCreateVolumeResponse from ss proxy",
             {"sender", ev->Sender},
+            {"error", NYdb::NBS::FormatError(error)},
             {"status", static_cast<int>(response.Status)},
-            {"reason", response.Reason});
+            {"reason", response.Reason},
+            {"tabletId", response.TabletId});
 
-        if (response.Status != NKikimrScheme::StatusSuccess) {
-            if (!response.Reason.empty()) {
-                auto issue = NYql::TIssue(response.Reason);
-                Request_->RaiseIssue(issue);
-            }
-            Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
+        const auto status = NbsErrorToYdbStatus(error);
+        if (status != Ydb::StatusIds::SUCCESS &&
+            status != Ydb::StatusIds::ALREADY_EXISTS)
+        {
+            Request_->RaiseIssue(NYql::TIssue(NYdb::NBS::FormatError(error)));
+            Reply(status, ctx);
             return;
         }
 
-        // Resolve the partition tablet id for CreatePartitionResult.TabletId.
+        Ydb::Nbs::CreatePartitionResult result;
+        if (response.TabletId != 0) {
+            result.SetTabletId(ToString(response.TabletId));
+            ReplyWithResult(status, result, ctx);
+            return;
+        }
+
+        CreateStatus = status;
         Become(&TThis::StateDescribe);
         SendDescribeScheme(ctx);
     }
@@ -195,11 +230,7 @@ private:
         if (NYdb::NBS::HasError(error)) {
             YDB_LOG_ERROR_CTX(ctx, "CreatePartition: DescribeScheme failed after create",
                 {"error", NYdb::NBS::FormatError(error)});
-            auto issue = NYql::TIssue(
-                error.GetMessage().empty()
-                    ? NYdb::NBS::FormatError(error)
-                    : error.GetMessage());
-            Request_->RaiseIssue(issue);
+            Request_->RaiseIssue(NYql::TIssue(NYdb::NBS::FormatError(error)));
             Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
             return;
         }
@@ -227,7 +258,7 @@ private:
             .GetPartitions(0)
             .GetTabletId();
         result.SetTabletId(ToString(tabletId));
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        ReplyWithResult(CreateStatus, result, ctx);
     }
 };
 
@@ -309,7 +340,7 @@ private:
                     ? NYdb::NBS::FormatError(error)
                     : error.GetMessage());
             Request_->RaiseIssue(issue);
-            Reply(StatusFromNbsError(error), ActorContext());
+            Reply(NbsErrorToYdbStatus(error), ActorContext());
             return;
         }
 
@@ -393,7 +424,7 @@ private:
         if (ev->Get()->GetError().GetCode() != 0) {
             auto issue = NYql::TIssue(ev->Get()->GetErrorReason());
             Request_->RaiseIssue(issue);
-            Reply(StatusFromNbsError(ev->Get()->GetError()), ActorContext());
+            Reply(NbsErrorToYdbStatus(ev->Get()->GetError()), ActorContext());
             return;
         }
 
@@ -420,7 +451,7 @@ private:
                     ? NYdb::NBS::FormatError(error)
                     : error.GetMessage());
             Request_->RaiseIssue(issue);
-            Reply(StatusFromNbsError(error), ActorContext());
+            Reply(NbsErrorToYdbStatus(error), ActorContext());
             return;
         }
 

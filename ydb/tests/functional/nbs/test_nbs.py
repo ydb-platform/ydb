@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from common import NbsTestBase
+from common import DEFAULT_DISK_BLOCKS_COUNT, NbsTestBase
 from vhost_user_blk_client import (
     VIRTIO_BLK_S_OK,
     VhostUserBlkClient,
@@ -28,6 +28,42 @@ class TestNbs(NbsTestBase):
 
         # Verify the data matches (trimmed to the original length)
         assert read_data[: len(test_data)] == test_data
+
+    def test_nbs_disk_creation_idempotent(self):
+        """
+        Repeating CreatePartition for the same disk is ALREADY_EXISTS.
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+
+        first = self.create_partition(disk_id)
+        assert first.get('status') == 'SUCCESS', first
+        assert first.get('tabletId'), first
+
+        second = self.create_partition(disk_id)
+        assert second.get('status') == 'ALREADY_EXISTS', second
+        assert second.get('tabletId'), second
+        assert second['tabletId'] == first['tabletId'], (first, second)
+
+    def test_nbs_disk_creation_conflict(self):
+        """
+        CreatePartition with a conflicting config for the same disk id is not success.
+        """
+
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+
+        first = self.create_partition(disk_id)
+        assert first.get('status') == 'SUCCESS', first
+        assert first.get('tabletId'), first
+
+        conflict = self.create_partition(
+            disk_id,
+            blocks_count=DEFAULT_DISK_BLOCKS_COUNT * 2,
+        )
+        assert conflict.get('status') not in ('SUCCESS', 'ALREADY_EXISTS'), conflict
+        assert conflict.get('status') == 'GENERIC_ERROR', conflict
 
     def test_nbs_disk_deletion(self):
         """

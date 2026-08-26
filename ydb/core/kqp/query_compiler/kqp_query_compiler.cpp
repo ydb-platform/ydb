@@ -2161,18 +2161,22 @@ private:
             *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
             // Get dict, docs, stats tables
             auto dictTable = tableMeta->ImplTables[index];
-            YQL_ENSURE(dictTable->Name.EndsWith(NTableIndex::NFulltext::DictTable));
-            auto docsTable = dictTable->Next;
+            if (!dictTable->Name.EndsWith(NTableIndex::NFulltext::DictTable)) {
+                dictTable = nullptr;
+            }
+            auto docsTable = dictTable ? dictTable->Next : tableMeta->ImplTables[index];
             YQL_ENSURE(docsTable->Name.EndsWith(NTableIndex::NFulltext::DocsTable));
             auto statsTable = docsTable->Next;
             YQL_ENSURE(statsTable->Name.EndsWith(NTableIndex::NFulltext::StatsTable));
             // And pass their metadata
-            FillTableId(*dictTable, *indexSettings->MutableDictTable());
-            FillTablesMap(dictTable->Name, tablesMap);
-            for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::FreqColumn}) {
-                const auto& columnMeta = dictTable->Columns.at(columnName);
-                FillColumnProto(columnName, &columnMeta, indexSettings->AddDictColumns());
-                tablesMap[dictTable->Name].emplace(columnName);
+            if (dictTable) {
+                FillTableId(*dictTable, *indexSettings->MutableDictTable());
+                FillTablesMap(dictTable->Name, tablesMap);
+                for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::FreqColumn}) {
+                    const auto& columnMeta = dictTable->Columns.at(columnName);
+                    FillColumnProto(columnName, &columnMeta, indexSettings->AddDictColumns());
+                    tablesMap[dictTable->Name].emplace(columnName);
+                }
             }
             FillTableId(*statsTable, *indexSettings->MutableStatsTable());
             FillTablesMap(statsTable->Name, tablesMap);
@@ -2314,9 +2318,9 @@ private:
                 indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact);
             auto implTable = tableMeta->ImplTables[index];
             if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
-                // Alphabetically impl (posting) is the last table, after Dict, Docs and Stats
-                YQL_ENSURE(implTable->Next && implTable->Next->Next && implTable->Next->Next->Next);
-                implTable = implTable->Next->Next->Next;
+                // Alphabetically impl (posting) is the last table, after Docs and Stats
+                YQL_ENSURE(implTable->Next && implTable->Next->Next);
+                implTable = implTable->Next->Next;
                 YQL_ENSURE(implTable->Name.EndsWith(NTableIndex::ImplTable));
             }
 

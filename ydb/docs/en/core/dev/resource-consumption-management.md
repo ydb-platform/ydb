@@ -232,7 +232,7 @@ A weight of 80 for `the_ceo` effectively means that when competing for resources
 
 If necessary, the user can explicitly specify in which pool a given query should be executed. Currently, this can be done as follows:
 
-- **Embedded UI** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
+- **{{ ydb-ui-name }}** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
 - **YDB CLI** — in the [`ydb sql`](../reference/ydb-cli/sql.md) command with the `--resource-pool` parameter, for example, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — using the [command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
 - **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
@@ -319,7 +319,7 @@ Information about resource pool metrics can be found in the [metrics reference](
 
 ### System views
 
-Information about system views related to resource pools and resource pool classifiers can be found on the [{#T}](system-views.md#resource_pools) page.
+Information about system views related to resource pools and resource pool classifiers can be found on the [Resource pool information](system-views.md#resource_pools) page.
 
 ## See also
 

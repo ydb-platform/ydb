@@ -57,7 +57,7 @@ public:
         std::unique_ptr<NTransport::IStorageTransport> storageTransport,
         NMonitoring::TDynamicCounterPtr counters);
 
-    ~TDirectBlockGroup() override = default;
+    ~TDirectBlockGroup() override;
 
     // IDirectBlockGroup implementation
 
@@ -147,6 +147,8 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
+
     ui32 GetNodeId(THostIndex host) const override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
@@ -158,7 +160,7 @@ public:
         THostIndex hostIndex,
         EHostState oldState,
         EHostState newState) override;
-    ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+    TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const override;
     void QueryAddHost(THostIndex newHostIndex) override;
 
 private:

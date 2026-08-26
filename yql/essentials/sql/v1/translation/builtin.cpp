@@ -4219,6 +4219,10 @@ TNodeResult BuildBuiltinFunc(
             }
 
             auto name = multi ? "MultiAggregateBy" : "AggregateBy";
+            if (isYqlSelect) {
+                return UnsupportedYqlSelect(ctx, TStringBuilder() << "Aggregation '" << name << "'");
+            }
+
             auto aggr = BuildFactoryAggregation(pos, name, "", aggMode, multi);
             return TNonNull(TNodePtr(new TBasicAggrFunc(pos, name, aggr, args)));
         }

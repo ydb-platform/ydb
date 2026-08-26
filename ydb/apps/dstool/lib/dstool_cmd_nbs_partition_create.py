@@ -38,9 +38,12 @@ def do(args):
     output = {
         'status': StatusIds.StatusCode.Name(response.operation.status),
     }
-    if common.get_status(response):
+    if response.operation.ready and response.operation.status in (
+        StatusIds.SUCCESS,
+        StatusIds.ALREADY_EXISTS,
+    ):
         result = nbs.CreatePartitionResult()
         response.operation.result.Unpack(result)
-        output['tabletId'] = result.TabletId or ''
+        output['tabletId'] = result.TabletId
 
     print(json.dumps(output))

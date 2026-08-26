@@ -117,8 +117,7 @@ public:
     public:
         using TRaw = std::conditional_t<std::is_const<T>::value, const void*, void*>;
 
-        TListIterator() {
-        }
+        TListIterator() = default;
 
         explicit TListIterator(T* list) {
             if (LARGE_MARK == GetMark(list)) {
@@ -895,17 +894,10 @@ public:
         }
 
         // Empty iterator
-        TIteratorImpl() {
-        }
+        TIteratorImpl() = default;
 
     public:
-        TIteratorImpl& operator=(const TIteratorImpl& rhs) {
-            Hash_ = rhs.Hash_;
-            Bucket_ = rhs.Bucket_;
-            EndBucket_ = rhs.EndBucket_;
-            Pos_ = rhs.Pos_;
-            return *this;
-        }
+        TIteratorImpl& operator=(const TIteratorImpl& rhs) = default;
 
         bool Ok() const {
             return Bucket_ < EndBucket_ && Pos_.Ok();
@@ -981,8 +973,7 @@ public:
         }
 
         // Empty iterator
-        TIteratorImpl() {
-        }
+        TIteratorImpl() = default;
 
     public:
         bool Ok() const {

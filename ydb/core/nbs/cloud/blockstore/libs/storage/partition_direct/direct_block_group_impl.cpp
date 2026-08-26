@@ -95,19 +95,6 @@ TDBGWriteBlocksToManyPBuffersResponse MakeWriteToManyPBuffersResponse(
     return result;
 }
 
-THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
-{
-    return {
-        .Index = stat.Index,
-        .State = stat.State,
-        .Health = stat.Health,
-        .InflightByOperation = stat.InflightByOperation,
-        .Errors = stat.Errors,
-        .PBufferUsedSize = stat.PBufferUsedSize,
-        .LatencyByOperation = stat.LatencyByOperation,
-    };
-}
-
 // help function for TDirectBlockGroup::SyncWithPBuffer
 std::function<void(const TFuture<NProto::TError>&)>
 CreateWaitSessionCbForSyncWithPBuffer(
@@ -240,6 +227,15 @@ TDirectBlockGroup::TDirectBlockGroup(
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
         AddDDiskAndPBufferConnection(host, ddisksIds[host], pbufferIds[host]);
     }
+}
+
+TDirectBlockGroup::~TDirectBlockGroup()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s ~TDirectBlockGroup",
+        LogTitle.GetWithTime().c_str());
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
@@ -828,8 +824,8 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
             LOG_ERROR(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "TDBGWriteBlocksToManyPBuffersResponse: unexpected "
-                "pbufferDiskId: %s",
+                "%s unexpected PBufferDiskId: %s",
+                LogTitle.GetWithTime().c_str(),
                 singlePBufferResponse.GetPersistentBufferId()
                     .ShortUtf8DebugString()
                     .c_str());
@@ -1336,6 +1332,13 @@ void TDirectBlockGroup::OnAddHostResult(
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
 }
 
+TDuration TDirectBlockGroup::TakeCopyRangeBudget(ui64 byteCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return Service->TakeVolumeCopyRangeBudget(byteCount);
+}
+
 ui32 TDirectBlockGroup::GetNodeId(THostIndex host) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1426,12 +1429,12 @@ void TDirectBlockGroup::QueryAddHost(THostIndex newHostIndex)
     Service->QueryAddHost(DirectBlockGroupIndex, newHostIndex);
 }
 
-ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
+TCountAndSize TDirectBlockGroup::GetPBuffersUsage(THostIndex hostIndex) const
 {
-    ui64 result = 0;
+    TCountAndSize result;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
-            result += vChunk->GetPBufferUsedSize(hostIndex);
+            result += vChunk->GetPBuffersUsage(hostIndex);
         }
     }
     return result;
@@ -2001,23 +2004,25 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    const auto hostStats = Oracle.BuildHostStats(TInstant::Now());
-    TVector<THostSnapshot> hosts;
-    hosts.reserve(hostStats.size());
-    for (const auto& stat: hostStats) {
-        hosts.push_back(MakeHostSnapshot(stat));
-    }
-
     TVector<TConnectionSnapshot> connections;
     connections.reserve(DDiskConnections.size());
     for (size_t host = 0; host < DDiskConnections.size(); ++host) {
         connections.push_back(MakeConnectionSnapshot(host));
     }
 
+    auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            for (THostIndex host = 0; host < GetHostCount(); ++host) {
+                hostsStat[host].AheadBlocks += vChunk->GetAheadBlocks(host);
+                hostsStat[host].BehindBlocks += vChunk->GetBehindBlocks(host);
+            }
+        }
+    }
     return {
         .Index = DirectBlockGroupIndex,
         .VChunkCount = VChunks.size(),
-        .Hosts = std::move(hosts),
+        .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };

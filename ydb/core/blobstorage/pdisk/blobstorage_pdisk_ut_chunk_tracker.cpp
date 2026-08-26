@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(101), 28);
     }
 
-    Y_UNIT_TEST(StaticGroupOwnerUsesReserveWhenSharedQuotaIsExhausted) {
+    Y_UNIT_TEST(StaticGroupOwnerKeepsReserveWhenSharedQuotaIsExhausted) {
         using namespace NPDisk;
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
@@ -277,31 +277,35 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         chunkTracker.AddOwner(staticOwner, StaticVDiskId());
         chunkTracker.AddOwner(dynamicOwner, DynamicVDiskId());
 
-        // The reserve is the personal quota of the static group owner, carved out of the shared quota. The personal
-        // quota of the neighbours is not affected.
+        // The reserve is the personal quota of the static group owner. Nothing is taken out of the shared quota for
+        // it, and the personal quota of the neighbours is not affected either.
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(dynamicOwner), 0);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(dynamicOwner), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 100);
 
-        // Let the neighbour from the dynamic group eat the whole shared quota
+        // Let the neighbour from the dynamic group eat everything it is allowed to
         while (chunkTracker.TryAllocate(dynamicOwner, 1, errorReason)) {
         }
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(dynamicOwner), 72);
 
-        // The static group owner keeps working and does not report the shared quota exhaustion
+        // What is left of the shared quota is the reserve, and only the static group owner sees it
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(dynamicOwner, false), 3);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(staticOwner, false), 28);
         double occupancy;
+        UNIT_ASSERT(chunkTracker.GetSpaceColor(dynamicOwner, &occupancy) >= TColor::ORANGE);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetSpaceColor(staticOwner, &occupancy), TColor::GREEN);
         UNIT_ASSERT_C(chunkTracker.TryAllocate(staticOwner, 20, errorReason), errorReason);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(staticOwner), 20);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveUsed(staticOwner), 20);
 
         // Once the reserve is used up the static group owner is stopped as well
         while (chunkTracker.TryAllocate(staticOwner, 1, errorReason)) {
         }
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(staticOwner), 25);
         UNIT_ASSERT(chunkTracker.GetSpaceColor(staticOwner, &occupancy) >= TColor::ORANGE);
     }
 
-    Y_UNIT_TEST(StaticGroupReserveIsRefilledBeforeSharedQuota) {
+    Y_UNIT_TEST(StaticGroupReserveIsHeldBackWhileItIsNotUsed) {
         using namespace NPDisk;
 
         TChunkTracker chunkTracker;
@@ -317,19 +321,23 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         TOwner dynamicOwner = 102;
         chunkTracker.AddOwner(staticOwner, StaticVDiskId());
         chunkTracker.AddOwner(dynamicOwner, DynamicVDiskId());
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(staticOwner), 25);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(dynamicOwner, false), 75);
 
-        // Allocate a chunk from the shared quota, then exhaust it and take one more chunk from the reserve
-        UNIT_ASSERT_C(chunkTracker.TryAllocate(staticOwner, 1, errorReason), errorReason);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveUsed(staticOwner), 0);
-        while (chunkTracker.TryAllocate(dynamicOwner, 1, errorReason)) {
-        }
-        UNIT_ASSERT_C(chunkTracker.TryAllocate(staticOwner, 1, errorReason), errorReason);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveUsed(staticOwner), 1);
+        // Only the part of the reserve the owner does not use yet is held back from its neighbours
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(staticOwner, 10, errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(staticOwner), 15);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(dynamicOwner, false), 75);
 
-        // The reserve must be restored first, so that the protection is available for the next allocation
-        chunkTracker.Release(staticOwner, 2);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveUsed(staticOwner), 0);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(staticOwner), 0);
+        // The reserve is held back again as soon as the chunks are released
+        chunkTracker.Release(staticOwner, 10);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(staticOwner), 25);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(dynamicOwner, false), 75);
+
+        // An owner that uses more than its reserve holds nothing back
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(staticOwner, 30, errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(staticOwner), 0);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(dynamicOwner, false), 70);
     }
 
     Y_UNIT_TEST(StaticGroupReserveFollowsPersonalQuota) {
@@ -358,14 +366,14 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         chunkTracker.SetExpectedOwnerSettings(4, 10);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 10);
 
-        // The whole reserve is returned to the shared quota when the owner is gone
+        // Nothing is held back for the owner when it is gone
         chunkTracker.RemoveOwner(staticOwner);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 0);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 100);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(staticOwner, false), 100);
     }
 
-    Y_UNIT_TEST(StaticGroupReserveGrowsAsChunksAreReleased) {
+    Y_UNIT_TEST(StaticGroupReserveSurvivesOverusedDisk) {
         using namespace NPDisk;
 
         TChunkTracker chunkTracker;
@@ -380,15 +388,21 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             .Weight = 1,
         };
 
-        // An overused disk must start up, the reserve is just smaller than the personal quota
+        // An overused disk must start up. The reserve is the personal quota as usual, and nothing is held back for
+        // an owner that is over it anyway.
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 5);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 25);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(staticOwner), 0);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 100);
 
         chunkTracker.Release(staticOwner, 20);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 25);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 100);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(staticOwner), 0);
+
+        // The protection is back as soon as the owner drops below its reserve
+        chunkTracker.Release(staticOwner, 60);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(staticOwner), 15);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(staticOwner), 10);
     }
 
     Y_UNIT_TEST(StaticGroupReservesAreRebalancedWhenSharedQuotaIsFull) {
@@ -412,13 +426,12 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(firstStatic), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(secondStatic), 25);
 
-        // Leave the shared quota with no free space at all
+        // Leave the dynamic owner no free space at all
         while (chunkTracker.TryAllocate(dynamicOwner, 1, errorReason)) {
         }
 
-        // The first owner needs a bigger reserve while the second one has a surplus. The surplus must reach the
-        // reserve of the first owner instead of being left in the shared quota for the dynamic owner to grab,
-        // no matter which of the two comes first in the list
+        // The first owner needs a bigger reserve while the second one has a surplus. The new reserves must take
+        // effect right away, not as the chunks of the shared quota happen to be released.
         chunkTracker.SetOwnerWeight(firstStatic, 3);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(firstStatic), 60);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(secondStatic), 20);
@@ -426,45 +439,78 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(secondStatic), 12);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 100);
 
-        // The rebalanced reserve is usable right away, while the dynamic owner is still holding the shared quota
+        // Both reserves are usable while the dynamic owner is still holding the rest of the shared quota
         UNIT_ASSERT_C(chunkTracker.TryAllocate(firstStatic, 30, errorReason), errorReason);
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(secondStatic, 12, errorReason), errorReason);
+
+        // What is left of the reserve of the first owner is still held back from the dynamic one
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserveFree(firstStatic), 7);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(firstStatic, false), 11);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerFree(dynamicOwner, false), 4);
     }
 
-    Y_UNIT_TEST(StaticGroupReserveDeficitIsSplitBetweenOwners) {
+    Y_UNIT_TEST(StaticGroupReserveIsSplitBetweenOwners) {
         using namespace NPDisk;
 
         TChunkTracker chunkTracker;
-        TOwner firstStatic = 101;
-        TOwner secondStatic = 102;
         TKeeperParams params {
             .TotalChunks = 205 /*system*/ + 100,
-            .ExpectedOwnerCount = 4,
-        };
-        params.OwnersInfo[firstStatic] = {
-            .ChunksOwned = 45,
-            .VDiskId = StaticVDiskId(1),
-            .Weight = 1,
-        };
-        params.OwnersInfo[secondStatic] = {
-            .ChunksOwned = 45,
-            .VDiskId = StaticVDiskId(2),
-            .Weight = 1,
+            .ExpectedOwnerCount = 0,
         };
 
         TString errorReason;
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
 
-        // Both owners are 25 chunks short while only 10 chunks of the pool are free, the free space is split
-        // between them instead of being given away to the first owner of the list
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(firstStatic), 5);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(secondStatic), 5);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 100);
+        TOwner firstStatic = 101;
+        TOwner secondStatic = 102;
+        chunkTracker.AddOwner(firstStatic, StaticVDiskId(1), 3);
+        chunkTracker.AddOwner(secondStatic, StaticVDiskId(2), 1);
 
-        // The reserves keep growing evenly as the chunks are released
-        chunkTracker.Release(firstStatic, 20);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(firstStatic), 15);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(secondStatic), 15);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 100);
+        // The two personal quotas do not fit into the cap, both reserves are scaled down proportionally
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(firstStatic), 75);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(secondStatic), 25);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(firstStatic), 37);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(secondStatic), 12);
+
+        // Neither of the two can eat the reserve of the other one
+        while (chunkTracker.TryAllocate(firstStatic, 1, errorReason)) {
+        }
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(firstStatic), 85);
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(secondStatic, 12, errorReason), errorReason);
+    }
+
+    Y_UNIT_TEST(SharedCommonLogIgnoresStaticGroupReserve) {
+        using namespace NPDisk;
+
+        TOwner staticOwner = 101;
+        TOwner dynamicOwner = 102;
+        TKeeperParams params {
+            .TotalChunks = 1 /*syslog*/ + 5 /*system reserve*/ + 200,
+            .ExpectedOwnerCount = 4,
+            .SysLogSize = 1,
+            .MaxCommonLogChunks = 40,
+        };
+        // The common log of such a disk has no pool of its own, it allocates from the very same shared quota
+        params.SeparateCommonLog = false;
+
+        TString errorReason;
+        TChunkTracker chunkTracker;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+        chunkTracker.AddOwner(staticOwner, StaticVDiskId());
+        chunkTracker.AddOwner(dynamicOwner, DynamicVDiskId());
+
+        // Nothing is taken out of the chunk pool for the reserve, so the log budget is not affected by it
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 50);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 200);
+
+        while (chunkTracker.TryAllocate(dynamicOwner, 1, errorReason)) {
+        }
+        UNIT_ASSERT(!chunkTracker.TryAllocate(dynamicOwner, 1, errorReason));
+
+        // The reserve stops the neighbours of the static group owner but not the common log: a PDisk that can not
+        // write its log is way worse than a static group that has to share its reserve
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(OwnerSystem, 40, errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 50);
     }
 
     Y_UNIT_TEST(StaticGroupReserveIsCappedAndCanBeDisabled) {

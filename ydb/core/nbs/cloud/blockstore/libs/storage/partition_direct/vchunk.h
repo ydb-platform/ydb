@@ -153,6 +153,8 @@ private:
         THostIndex hostIndex,
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+    void DemoteUnavailbleHostsIfNeeded();
+    [[nodiscard]] THostMask GetDDisksForDemote() const;
 
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();

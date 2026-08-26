@@ -136,6 +136,15 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     }
 
     // Must be invoked on the vchunk's executor thread.
+    static void InvokeOnCopyComplete(
+        TVChunk& vchunk,
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result)
+    {
+        vchunk.OnCopyComplete(hostIndex, result);
+    }
+
+    // Must be invoked on the vchunk's executor thread.
     static void InvokeUpdateDirtyMap(
         TVChunk& vchunk,
         const TDBGRestoreResponse& response)

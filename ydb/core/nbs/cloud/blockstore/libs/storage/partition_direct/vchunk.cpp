@@ -1040,6 +1040,7 @@ void TVChunk::OnConfigPersisted()
 
     ApplyConfig(std::move(persisted.Config), persisted.Message);
     PersistNextPendingConfig();
+    DemoteUnavailbleHostsIfNeeded();
 }
 
 void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
@@ -1176,13 +1177,20 @@ void TVChunk::OnCopyComplete(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LOG_INFO(
+    LOG_LOG(
         *ActorSystem,
+        result == TDDiskDataCopier::EResult::Ok ? NActors::NLog::PRI_INFO
+                                                : NActors::NLog::PRI_WARN,
         NKikimrServices::NBS_PARTITION,
         "%s CopyDDisk %s finished: %s",
         LogTitle.GetWithTime().c_str(),
         PrintHostAndNode(hostIndex).c_str(),
         ToString(result).c_str());
+
+    if (result != TDDiskDataCopier::EResult::Ok) {
+        // TODO (drbasic). Decide what to do in case of a coping error.
+        return;
+    }
 
     auto prepare = [weakSelf = weak_from_this(), hostIndex]()
     {
@@ -1196,6 +1204,44 @@ void TVChunk::OnCopyComplete(
     UpdateConfig(
         std::move(prepare),
         TStringBuilder() << PrintHostAndNode(hostIndex) << " copy finished");
+}
+
+void TVChunk::DemoteUnavailbleHostsIfNeeded()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (GetDDisksForDemote().Empty()) {
+        return;
+    }
+
+    auto prepare = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            auto newConfig = self->VChunkConfig;
+            for (auto hostIndex: self->GetDDisksForDemote()) {
+                newConfig.DemoteHost(hostIndex);
+            }
+
+            return newConfig;
+        }
+        return TVChunkConfig{};
+    };
+
+    UpdateConfig(std::move(prepare), "Demote unavailable hosts");
+}
+
+THostMask TVChunk::GetDDisksForDemote() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    auto healthyDDisks = VChunkConfig.GetHealthyDDisks();
+    if (healthyDDisks.Count() < QuorumDirectBlockGroupHostCount) {
+        return THostMask::MakeEmpty();
+    }
+
+    auto ddiskToDemote = VChunkConfig.GetDDisks()
+                             .Exclude(VChunkConfig.GetEnabledDDisks())
+                             .Exclude(healthyDDisks);
+    return ddiskToDemote;
 }
 
 void TVChunk::WaitForDirtyMapReady()

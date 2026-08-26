@@ -569,7 +569,7 @@ private:
         }
 
         if (const auto& currentOwner = state.GetOperationActorId(); currentOwner != StreamingQueryOperationId) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId << "' was lost, current operation id: '" << currentOwner << "'");
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId << "' was lost, current operation id: '" << currentOwner << "'");
             return;
         }
 
@@ -4301,18 +4301,10 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        if (!OperationStatus) {
-            OperationStatus = status;
-        }
-
-        if (issues) {
-            OperationIssues.AddIssues(AddRootIssue(TStringBuilder() << "Update final status failed " << status, issues));
-        }
-
-        Send(Owner, new TEvScriptExecutionFinished(*OperationStatus, {
+        Send(Owner, new TEvScriptExecutionFinished(status, {
             .ExecutionEntryExists = ExecutionEntryExists,
             .AlreadyStopped = AlreadyFinalized,
-        }, std::move(OperationIssues)));
+        }, std::move(issues)));
     }
 
     std::optional<Ydb::StatusIds::StatusCode> OperationStatus;

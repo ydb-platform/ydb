@@ -1531,6 +1531,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
     }
 
+    if (runConfig.AppConfig.HasHttpProxyConfig()) {
+        AppData->HttpProxyConfig.CopyFrom(runConfig.AppConfig.GetHttpProxyConfig());
+    }
+
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
     }

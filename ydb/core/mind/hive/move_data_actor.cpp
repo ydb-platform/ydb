@@ -6,8 +6,8 @@
 
 namespace NKikimr::NHive {
 
-class TCompactActor
-    : public TActorBootstrapped<TCompactActor>
+class TMoveDataActor
+    : public TActorBootstrapped<TMoveDataActor>
     , public ISubActor
 {
 public:
@@ -21,10 +21,10 @@ public:
     std::vector<TStorageGroupId> Groups;
     TString PoolName;
     std::vector<TPipeClient> PipeClients;
-    i64 CompactsInFlight = 0;
+    i64 MoveDataInFlight = 0;
     THive* Hive;
 
-    TCompactActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName, ui64 maxInFlight, THive* hive)
+    TMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName, ui64 maxInFlight, THive* hive)
         : Tablets(std::move(tablets))
         , NextTablet(Tablets.begin())
         , Groups(groups)
@@ -48,21 +48,21 @@ public:
     }
 
     TString GetDescription() const override {
-        return TStringBuilder() << "Compact(" << PoolName << ")";
+        return TStringBuilder() << "MoveData(" << PoolName << ")";
     }
 
-    void SendCompact(size_t index, TTabletId tablet) {
+    void SendMoveData(size_t index, TTabletId tablet) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
         pipeConfig.CheckAliveness = true;
         PipeClients[index] = {Register(NTabletPipe::CreateClient(SelfId(), tablet, pipeConfig)), tablet};
         NTabletPipe::SendData(SelfId(), PipeClients[index].Client, new TEvTablet::TEvMoveData(Groups));
-        ++CompactsInFlight;
+        ++MoveDataInFlight;
     }
 
     void CheckCompletion() {
-        if (CompactsInFlight == 0 && NextTablet == Tablets.end()) {
-            Send(Hive->SelfId(), new TEvPrivate::TEvCompactComplete(PoolName, true));
+        if (MoveDataInFlight == 0 && NextTablet == Tablets.end()) {
+            Send(Hive->SelfId(), new TEvPrivate::TEvMoveDataComplete(PoolName, true));
             return PassAway();
         }
     }
@@ -70,7 +70,7 @@ public:
     void Bootstrap() {
         Become(&TThis::StateWork);
         for (size_t i = 0; i < PipeClients.size() && NextTablet != Tablets.end(); ++i, ++NextTablet) {
-            SendCompact(i, *NextTablet);
+            SendMoveData(i, *NextTablet);
         }
         return CheckCompletion();
     }
@@ -80,9 +80,10 @@ public:
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
-                --CompactsInFlight;
+                --MoveDataInFlight;
+                Hive->Execute(Hive->CreateRestartTablet(ToFullTabletId(tablet)));
                 if (NextTablet != Tablets.end()) {
-                    SendCompact(i, *(NextTablet++));
+                    SendMoveData(i, *(NextTablet++));
                     break;
                 }
             }
@@ -93,7 +94,7 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             if (ev->Get()->Dead) {
-                Send(Hive->SelfId(), new TEvPrivate::TEvCompactComplete(PoolName, false));
+                Send(Hive->SelfId(), new TEvPrivate::TEvMoveDataComplete(PoolName, false));
                 return PassAway();
             } else {
                 Retry(ev->Get()->TabletId);
@@ -109,8 +110,8 @@ public:
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
-                --CompactsInFlight;
-                SendCompact(i, tablet);
+                --MoveDataInFlight;
+                SendMoveData(i, tablet);
                 break;
             }
         }
@@ -126,8 +127,8 @@ public:
     }
 };
 
-void THive::StartCompactActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName) {
-    auto* actor = new TCompactActor(std::move(tablets), groups, poolName, 1, this);
+void THive::StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName) {
+    auto* actor = new TMoveDataActor(std::move(tablets), groups, poolName, 1, this);
     SubActors.emplace_back(actor);
     RegisterWithSameMailbox(actor);
 }

@@ -263,7 +263,7 @@ private:
             const auto& issues = ev->Get()->Issues;
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher fail",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
             Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));

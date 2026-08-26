@@ -245,8 +245,14 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpo
         return;
     }
 
+    YDB_LOG_DEBUG("Got new checkpoint coordinator ack",
+        {"coordinatorId", CoordinatorId});
+
     if (PendingInit) {
         PendingInit->OnNewCheckpointCoordinatorAck();
+        YDB_LOG_DEBUG("Got new checkpoint coordinator ack",
+            {"coordinatorId", CoordinatorId},
+            {"allAcksProcessed", PendingInit->AllNewCheckpointCoordinatorAcksProcessed()});
 
         if (PendingInit->CanInjectCheckpoint()) {
             auto checkpointId = *PendingInit->CheckpointId;
@@ -534,6 +540,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     }
 
     if (PendingInit) {
+        YDB_LOG_DEBUG("Defer checkpoint inject until pending init finished",
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
         PendingInit->CheckpointId = checkpointId;
         if (PendingInit->CanInjectCheckpoint()) {
             PendingInit = nullptr;
@@ -720,7 +729,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvState::TPt
         {"coordinatorId", CoordinatorId},
         {"sender", ev->Sender},
         {"taskId", taskId},
-        {"state", state.GetState()});
+        {"state", NYql::NDqProto::EComputeState_Name(state.GetState())});
 
     if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
         FinishedTasks.insert(taskId);

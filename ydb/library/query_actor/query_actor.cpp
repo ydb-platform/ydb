@@ -194,7 +194,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDeleteSessionResponse::TPtr& ev)
     if (ev->Get()->Status != StatusIds::SUCCESS) {
         YDB_LOG_WARN("Failed to delete session",
             {"logPrefix", LogPrefix()},
-            {"session", ev->Get()->Status},
+            {"status", ev->Get()->Status},
             {"issues", ev->Get()->Issues.ToOneLineString()});
     }
     PassAway();
@@ -343,7 +343,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     NumberRequests++;
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
-    YDB_LOG_DEBUG("Streamin query finished",
+    YDB_LOG_DEBUG("Streaming query finished",
         {"logPrefix", LogPrefix()},
         {"streamQueryResultPart", NumberRequests},
         {"status", ev->Get()->Status},
@@ -477,7 +477,7 @@ void TQueryBase::CommitTransaction() {
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Transaction commited",
+    YDB_LOG_DEBUG("Transaction committed",
         {"logPrefix", LogPrefix()},
         {"status", ev->Get()->Status},
         {"issues", ev->Get()->Issues.ToOneLineString()});

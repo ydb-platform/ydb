@@ -608,7 +608,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
         {"evCoordinatorActorId", ev->Get()->CoordinatorActorId},
         {"generation", ev->Get()->Generation});
     if (ev->Get()->Generation < CoordinatorGeneration) {
-        YDB_LOG_ERROR("New generation is less then previous, ignore updates",
+        YDB_LOG_ERROR("New generation is less than previous, ignore updates",
             {"logPrefix", LogPrefix},
             {"generation", ev->Get()->Generation},
             {"coordinatorGeneration", CoordinatorGeneration});

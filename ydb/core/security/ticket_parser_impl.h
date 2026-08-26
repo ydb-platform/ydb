@@ -520,7 +520,8 @@ private:
         };
 
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
-            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization" << (useV2 ? "V2" : "V1") << "(" << permissionName << ")");
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                << " asking for AccessServiceAuthorization" << (useV2 ? "V2" : "V1") << "(" << permissionName << ")");
             record.ResponsesLeft++;
 
             if (useV2) {
@@ -593,7 +594,7 @@ private:
     template <typename TTokenRecord>
     void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         const bool useV2 = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication" << (useV2 ? "V2" : "V1") << ")");
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication" << (useV2 ? "V2" : "V1"));
 
         if (useV2) {
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequestV2>(key, record);
@@ -619,7 +620,8 @@ private:
         const bool useNebius = static_cast<bool>(NebiusAccessServiceValidator);
         const bool useV2 = !useNebius && AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
 
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication" << (useNebius ? "V1(Nebius)" : (useV2 ? "V2" : "V1")) << ")");
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+            << " asking for AccessServiceAuthentication" << (useNebius ? "V1(Nebius)" : (useV2 ? "V2" : "V1")));
         record.ResponsesLeft++;
 
         if (useNebius) {
@@ -945,14 +947,16 @@ private:
                         } else {
                             SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
                             CounterTicketsLogin->Inc();
-                            BLOG_TRACE("CanInitLoginToken, database " << database << ", login state is not available yet, cannot deffer token (" << MaskTicket(record.Ticket) << ")");
+                            BLOG_TRACE("CanInitLoginToken, database " << database
+                                << ", login state is not available yet, cannot defer token (" << MaskTicket(record.Ticket) << ")");
                             return true;
                         }
                     } else {
                         static const ui64 NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE = std::max(RefreshPeriod.Seconds(), static_cast<TDuration::TValue>(2));
                         DeferredLoginTokens.insert(std::make_pair(database, std::make_pair(TlsActivationContext->Now() + TDuration::Seconds(NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE), std::unordered_set<TString>({key}))));
                     }
-                    BLOG_TRACE("CanInitLoginToken, database " << database << ", login state is not available yet, deffer token (" << MaskTicket(record.Ticket) << ")");
+                    BLOG_TRACE("CanInitLoginToken, database " << database
+                        << ", login state is not available yet, defer token (" << MaskTicket(record.Ticket) << ")");
                     return true;
                 }
                 BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
@@ -1040,9 +1044,8 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
             CounterWrongPeernameFormat->Inc();
-            BLOG_W("Ticket " << MaskTicket(ev->Get()->Ticket) <<
-                   ": invalid peer name format: " << ev->Get()->PeerName.Quote() <<
-                   " for DB: " << ev->Get()->Database.Quote());
+            BLOG_W("Ticket " << MaskTicket(ev->Get()->Ticket) << ": invalid peer name format: " << ev->Get()->PeerName.Quote()
+                << " for DB: " << ev->Get()->Database.Quote());
 
             if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
                 TEvTicketParser::TError error;
@@ -1168,8 +1171,7 @@ private:
         switch (record.SubjectType) {
         case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
             if (UserAccountService) {
-                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                            << " asking for UserAccount(" << record.Subject << ")");
+                BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for UserAccount(" << record.Subject << ")");
                 THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
                 request->Token = record.Ticket;
                 request->Request.set_user_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
@@ -1180,8 +1182,7 @@ private:
             break;
         case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
             if (ServiceAccountService) {
-                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                            << " asking for ServiceAccount(" << record.Subject << ")");
+                BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for ServiceAccount(" << record.Subject << ")");
                 THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
                 request->Token = record.Ticket;
                 request->Request.set_service_account_id(TString(TStringBuf(record.Subject).NextTok('@')));
@@ -1354,10 +1355,9 @@ private:
         for (auto& [permissionName, permissionRecord] : record.Permissions) {
             permissionRecord.Subject.clear();
             permissionRecord.Error = {.Message = errorMessage, .Retryable = isRetryableError};
-            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                << " permission " << permissionName
-                                << " now has a " << (isRetryableError ? "retryable" : "permanent")  << " error \"" << errorMessage << "\""
-                                << " retryable: " << isRetryableError);
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permissionName
+                << " now has a " << (isRetryableError ? "retryable" : "permanent")  << " error \"" << errorMessage << "\""
+                << " retryable: " << isRetryableError);
         }
         SetError(key, record, {.Message = errorMessage, .Retryable = isRetryableError});
     }
@@ -1382,9 +1382,7 @@ private:
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
         if (itToken == userTokens.end()) {
-            BLOG_ERROR("Ticket(key) "
-                        << MaskTicket(key)
-                        << " has expired during permission check");
+            BLOG_ERROR("Ticket(key) " << MaskTicket(key) << " has expired during permission check");
         } else {
             auto& record = itToken->second;
             --record.ResponsesLeft;
@@ -1439,7 +1437,8 @@ private:
                             if (result.resultcode() != nebius::iam::v1::AuthorizeResult::OK) {
                                 permissionDeniedCount++;
                                 permissionRecord.Subject.clear();
-                                BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permissionName << " access denied for subject \"" << (record.Subject ? record.Subject : "<not resolved>") << "\"");
+                                BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permissionName
+                                    << " access denied for subject \"" << (record.Subject ? record.Subject : "<not resolved>") << "\"");
                                 TStringBuilder errorMessage;
                                 if (permissionRecord.IsRequired()) {
                                     hasRequiredPermissionFailed = true;
@@ -1510,9 +1509,7 @@ private:
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
         if (itToken == userTokens.end()) {
-            BLOG_ERROR("Ticket(key) "
-                        << MaskTicket(key)
-                        << " has expired during permission check");
+            BLOG_ERROR("Ticket(key) " << MaskTicket(key) << " has expired during permission check");
         } else {
             auto& record = itToken->second;
             --record.ResponsesLeft;
@@ -1543,7 +1540,8 @@ private:
                             permissionDeniedCount++;
                             auto& permissionDeniedRecord = permissionDeniedIt->second;
                             permissionDeniedRecord.Subject.clear();
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission() << " access denied for subject \"" << record.Subject << "\"");
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission()
+                                << " access denied for subject \"" << record.Subject << "\"");
                             TStringBuilder errorMessage;
                             if (permissionDeniedRecord.IsRequired()) {
                                 hasRequiredPermissionFailed = true;
@@ -1590,9 +1588,7 @@ private:
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
         if (itToken == userTokens.end()) {
-            BLOG_ERROR("Ticket(key) "
-                        << MaskTicket(key)
-                        << " has expired during permission check");
+            BLOG_ERROR("Ticket(key) " << MaskTicket(key) << " has expired during permission check");
         } else {
             auto& record = itToken->second;
             TString permission = request->Request.permission();
@@ -1607,36 +1603,19 @@ private:
                             record.Subject = itPermission->second.Subject;
                             record.SubjectType = itPermission->second.SubjectType;
                         }
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a valid subject \""
-                                    << record.Subject
-                                    << "\"");
+                        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permission
+                            << " now has a valid subject \"" << record.Subject << "\"");
                     }
                 } else {
                     bool retryable = IsRetryableGrpcError(response->Status);
                     itPermission->second.Error = {.Message = TString{response->Status.Msg}, .Retryable = retryable};
                     if (itPermission->second.Subject.empty() || !retryable) {
                         itPermission->second.Subject.clear();
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a permanent error \""
-                                    << itPermission->second.Error
-                                    << "\" "
-                                    << " retryable:"
-                                    << retryable);
+                        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permission
+                            << " now has a permanent error \"" << itPermission->second.Error << "\" " << " retryable:" << retryable);
                     } else if (retryable) {
-                        BLOG_TRACE("Ticket "
-                                    << record.GetMaskedTicket()
-                                    << " permission "
-                                    << permission
-                                    << " now has a retryable error \""
-                                    << response->Status.Msg
-                                    << "\"");
+                        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << permission
+                            << " now has a retryable error \"" << response->Status.Msg << "\"");
                     }
                 }
             } else {
@@ -2048,8 +2027,8 @@ protected:
         } else {
             CounterTicketsHighPriorityBuildTime->Collect(ticketBuildTime);
         }
-        BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
-                    << record.PeerName << ") has now valid token of " << record.Subject);
+        BLOG_D("Ticket " << record.GetMaskedTicket()
+            << " (" << record.PeerName << ") has now valid token of " << record.Subject);
         record.IsLowRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
@@ -2066,8 +2045,8 @@ protected:
             record.ExpireTime = GetDerived()->GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
-            BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
-                        << record.PeerName << ") has now retryable error message '" << error.Message << errorLogMessage << "'");
+            BLOG_W("Failed to process ticket " << record.GetMaskedTicket()
+                << " (" << record.PeerName << "): retryable error '" << error.Message << errorLogMessage << "'");
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
                 GetDerived()->CanRefreshTicket(key, record);
@@ -2079,8 +2058,8 @@ protected:
             record.UnsetToken();
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
-            BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
-                        << record.PeerName << ") has now permanent error message '" << error.Message << errorLogMessage << "'");
+            BLOG_W("Failed to process ticket " << record.GetMaskedTicket()
+                << " (" << record.PeerName << "): non-retryable error '" << error.Message << errorLogMessage << "'");
         }
         CounterTicketsErrors->Inc();
         record.IsLowRequestPriority = true;
@@ -2604,6 +2583,11 @@ void TTicketParserImpl<TDerived>::Handle(TEvTokenManager::TEvUpdateToken::TPtr& 
         << ", Token# " << MaskTicket(ev->Get()->Token));
     if (ev->Get()->Status.Code == TEvTokenManager::TStatus::ECode::SUCCESS) {
         ServiceTokens[ev->Get()->Id] = ev->Get()->Token;
+    } else {
+        BLOG_ERROR("Failed to update service token: id# " << ev->Get()->Id
+            << ", Status.code# " << convertStatusCode(ev->Get()->Status.Code)
+            << ", Status.Msg# " << ev->Get()->Status.Message
+            << ", Token# " << MaskTicket(ev->Get()->Token));
     }
 }
 

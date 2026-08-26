@@ -438,6 +438,7 @@ public:
             Y_UNUSED(lsn);
             inspectChunkMap(record);
         }
+        const bool hasDataChunks = !restoredDataChunks.empty();
         const bool hasDataChunksWithoutExtents = std::any_of(
             restoredDataChunks.begin(),
             restoredDataChunks.end(),
@@ -445,7 +446,9 @@ public:
                 return !restoredDataChunksWithExtents.contains(key);
             });
         if ((!disk.EnableChecksums && hasIntegrityChunks)
-                || (disk.EnableChecksums && hasDataChunksWithoutExtents)) {
+                || (disk.EnableChecksums
+                    && (hasDataChunksWithoutExtents
+                        || (hasDataChunks && !hasIntegrityChunks)))) {
             // The actor has entered Broken and does not perform normal reserve/PB bootstrap.
             return;
         }
@@ -7232,6 +7235,46 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             new NDDisk::TEvRead(
                 creds,
                 {4, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "data chunks without integrity chunks while EnableChecksums=true");
+    }
+
+    Y_UNIT_TEST(ChecksumsEnabledRejectsMissingIntegrityChunks) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord snapshotWithDanglingExtent;
+        auto* snapshot = snapshotWithDanglingExtent.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(506);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(6);
+        chunk->SetChunkIdx(706);
+        chunk->MutableExtentRef()->SetIntegrityChunkIdx(707);
+        chunk->MutableExtentRef()->SetExtentSlot(0);
+        chunk->MutableExtentRef()->SetVChunkGeneration(1);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(86, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &snapshotWithDanglingExtent,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 506;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {6, 0, BlockSize},
                 NDDisk::TReadInstruction(true)));
         AssertStatus(readResult, TReplyStatus::ERROR);
         UNIT_ASSERT_STRING_CONTAINS(

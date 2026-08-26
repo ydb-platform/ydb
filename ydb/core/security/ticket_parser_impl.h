@@ -2046,7 +2046,7 @@ protected:
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
             BLOG_W("Failed to process ticket " << record.GetMaskedTicket()
-                << " (" << record.PeerName << "): retryable error '" << error.Message  << ' ' << errorLogMessage << "'");
+                << " (" << record.PeerName << "): retryable error '" << error.Message << errorLogMessage << "'");
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
                 GetDerived()->CanRefreshTicket(key, record);
@@ -2059,7 +2059,7 @@ protected:
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
             BLOG_W("Failed to process ticket " << record.GetMaskedTicket()
-                << " (" << record.PeerName << "): non-retryable error '" << error.Message << ' ' << errorLogMessage << "'");
+                << " (" << record.PeerName << "): non-retryable error '" << error.Message << errorLogMessage << "'");
         }
         CounterTicketsErrors->Inc();
         record.IsLowRequestPriority = true;

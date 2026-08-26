@@ -51,7 +51,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
-    is_compatibility_tests = param.get("is_compatibility_tests", False)
 
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
@@ -99,17 +98,15 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
 
-    replication_config = {}
-    if not is_compatibility_tests:
-        replication_config = {
-            "iam_service_control": {
-                "endpoint": iam_emulator_endpoint,
-                "service_id": "ydb",
-                "microservice_id": "data-plane",
-                "resource_type": "resource-manager.cloud",
-                "enable_ssl": False,
-            },
-        }
+    replication_config = {
+        "iam_service_control": {
+            "endpoint": iam_emulator_endpoint,
+            "service_id": "ydb",
+            "microservice_id": "data-plane",
+            "resource_type": "resource-manager.cloud",
+            "enable_ssl": False,
+        },
+    }
 
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
@@ -135,7 +132,6 @@ def get_ydb_config(request, enable_fq_connector=None):
         replication_config=replication_config,
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
-        log_prefix="logfile_main_",
     )
 
     if enable_fq_connector:
@@ -153,11 +149,10 @@ def get_ydb_config(request, enable_fq_connector=None):
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
 
-    if not is_compatibility_tests:
-        config.yaml_config["auth_config"]["local_metadata_service"] = {
-            "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
-            "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
-        }
+    config.yaml_config["auth_config"]["local_metadata_service"] = {
+        "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
+        "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
+    }
 
     config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
     config.yaml_config["auth_config"]["use_access_service_tls"] = False

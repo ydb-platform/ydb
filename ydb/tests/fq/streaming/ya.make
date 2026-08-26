@@ -5,7 +5,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recip
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
 
 TEST_SRCS(
-    test_compatibility.py
     test_iam.py
     test_scalar_topic_write.py
     test_streaming.py
@@ -44,14 +43,12 @@ PEERDIR(
     ydb/tests/olap/common
     ydb/tests/tools/datastreams_helpers
     ydb/tests/fq/streaming_common
-    ydb/tests/library/compatibility
 )
 
 DEPENDS(
     ydb/apps/ydb
     ydb/tests/tools/pq_read
     yql/essentials/udfs/common/python/python3_small
-    ydb/tests/library/compatibility/binaries
 )
 
 END()

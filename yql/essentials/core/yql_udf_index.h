@@ -95,7 +95,7 @@ class TUdfIndex : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUdfIndex>;
 
-public:
+
     // todo: trusted resources should not be replaceble regardless of specified mode
     enum class EOverrideMode {
         PreserveExisting,
@@ -109,7 +109,7 @@ public:
         Ambigious
     };
 
-public:
+
     TUdfIndex();
     void SetCaseSentiveSearch(bool caseSensitive);
     bool CanonizeModule(TString& moduleName) const;
@@ -136,7 +136,7 @@ private:
     TSet<TResourceInfo::TPtr> FindResourcesByModules(const TSet<TString>& modules) const;
     void UnregisterResource(TResourceInfo::TPtr resource);
 
-private:
+
     // module => Resource
     TMap<TString, TResourceInfo::TPtr> Resources_;
     bool CaseSensitive_ = true;

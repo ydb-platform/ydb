@@ -443,6 +443,20 @@
             "uri": "file://test.test_expr-between-default.txt-Results_/extracted"
         }
     ],
+    "test.test[expr-decimal_arithmetic_common_type--Debug]": [
+        {
+            "checksum": "8af3ab61cf828f88c29c972aa4e6a28e",
+            "size": 1265,
+            "uri": "https://{canondata_backend}/1900335/d4bc60156cb053fed60a55548cae4cc59c4ad67a/resource.tar.gz#test.test_expr-decimal_arithmetic_common_type--Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-decimal_arithmetic_common_type--Results]": [
+        {
+            "checksum": "59d8dd012fb40c90132baee8ea2e1c8c",
+            "size": 4957,
+            "uri": "https://{canondata_backend}/1900335/d4bc60156cb053fed60a55548cae4cc59c4ad67a/resource.tar.gz#test.test_expr-decimal_arithmetic_common_type--Results_/results.txt"
+        }
+    ],
     "test.test[expr-decimal_bytes-default.txt-Debug]": [
         {
             "checksum": "a31344a1c607b7b3ab19ce3258f1251b",

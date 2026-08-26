@@ -2109,7 +2109,6 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
         TComputationContext& CompCtx_;
         TTestStreamParams& Params_;
         ui64 TotalFetches_ = 0;

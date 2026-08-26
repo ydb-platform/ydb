@@ -345,6 +345,17 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
     return propose;
 }
 
+// Index impl tables inherit their base table's detailed metrics level. Gated on the feature
+// flag: the base table's setting may have been persisted while the flag was on, and an
+// unguarded copy would make the impl table's TCreateTable reject the whole build.
+static void InheritDetailedMetricsSettings(
+    const TTableInfo::TPtr& tableInfo, NKikimrSchemeOp::TTableDescription& implTableDesc)
+{
+    if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
+        *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
+    }
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -363,6 +374,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
 
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        InheritDetailedMetricsSettings(tableInfo, implTableDesc);
+
         implTableDesc.MutablePartitionConfig()->SetShadowData(true);
         implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
 
@@ -461,6 +474,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMinPartitionsCount(maxShardsInPath);
         policy.SetMaxPartitionsCount(0);
 
+        InheritDetailedMetricsSettings(tableInfo, op);
+
         LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
             "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
@@ -488,6 +503,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
                 op.AddSplitBoundary()->SetSerializedKeyPrefix(x->EndOfRange);
             }
         }
+        InheritDetailedMetricsSettings(tableInfo, op);
         LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
             "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
         return propose;
@@ -513,6 +529,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMinPartitionsCount(maxShardsInPath);
         policy.SetMaxPartitionsCount(0);
     }
+
+    InheritDetailedMetricsSettings(tableInfo, op);
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -580,6 +598,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
+    InheritDetailedMetricsSettings(tableInfo, op);
+
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
@@ -614,6 +634,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+
+    InheritDetailedMetricsSettings(tableInfo, op);
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildFulltextRowIdSrcPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -1551,7 +1573,7 @@ private:
             ev->Record.SetReadShadowData(true);
         }
 
-        if (buildInfo.IsBuildFulltextRelevance()) {
+        if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance) {
             path.Rise().Dive(NTableIndex::NFulltext::DictTable);
             ev->Record.SetDictTableName(path.PathString());
         }
@@ -2471,7 +2493,7 @@ private:
             if (done) {
                 LOG_D("FillFulltextIndex Dictionary Done");
                 NIceDb::TNiceDb db{txc.DB};
-                if (buildInfo.IsBuildFulltextRelevance()) {
+                if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance) {
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexBorders;
                     done = false;

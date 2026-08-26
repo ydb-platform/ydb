@@ -39,7 +39,6 @@ public:
     static const size_t MAX_SMALL_LIST_SIZE = 16;
     static const size_t MAX_MEDIUM_LIST_INDEX = 10;
 
-public:
     struct TPageListItem: public TIntrusiveListItem<TPageListItem> {
         template <class T>
         T* As() {
@@ -190,7 +189,6 @@ public:
         THeader* EndPage_ = nullptr;
     };
 
-public:
     static inline TListHeader* GetListHeader(void* addr) {
         TListHeader* header = reinterpret_cast<TListHeader*>(TAlignedPagePool::GetPageStart(addr));
         Y_ASSERT(SMALL_MARK == header->Mark || MEDIUM_MARK == header->Mark);
@@ -1045,7 +1043,6 @@ public:
             return *this;
         }
 
-    private:
         const TCompactHashBase* Hash_ = nullptr;
         size_t Bucket_ = 0;
         size_t EndBucket_ = 0;
@@ -1053,7 +1050,6 @@ public:
         TValueIter SubPos_;
     };
 
-public:
     using TIterator = TIteratorImpl<TItemType>;
     using TBucketIterator = TListPoolBase::TListIterator<TItemType, TListPoolBase::TLargeListHeader>;
     using TConstBucketIterator = TListPoolBase::TListIterator<const TItemType, const TListPoolBase::TLargeListHeader>;
@@ -1452,7 +1448,6 @@ protected:
         }
     }
 
-protected:
     size_t Size_ = 0;
     size_t UniqSize_ = 0;
     float MaxLoadFactor_ = 1.F;

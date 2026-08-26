@@ -160,6 +160,10 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
             readQuota->SetSpeedInMessagesPerSecond(u.ReadSpeedInMessagesPerSecond.value_or(0));
             readQuota->SetBurstSizeInMessages(u.ReadSpeedInMessagesPerSecond.value_or(0));
         }
+        if (u.Type.has_value()) {
+            consumer->SetType(*u.Type);
+        }
+        consumer->SetKeepMessageOrder(u.KeepMessageOrder);
     }
 
     return tabletConfig;

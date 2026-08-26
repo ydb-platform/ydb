@@ -95,7 +95,6 @@ private:
         return sizeof...(TFields);
     }
 
-private:
     TSmallString<N> Name_;
     std::tuple<TFields...> Fields_;
 };

@@ -2,6 +2,7 @@
 
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -626,21 +627,21 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
     const TString& cmdPrefix)
 {
     auto cluster = execCtx.Cluster_;
-    auto mrJobBin = execCtx.Config_->GetMrJobBin();
+    auto mrJobBin = execCtx.StaticConfig_->GetMrJobBin();
     TMaybe<TString> mrJobBinMd5;
     if (!mrJobBin.empty()) {
-        if (execCtx.Config_->HasMrJobBinMd5()) {
-            mrJobBinMd5 = execCtx.Config_->GetMrJobBinMd5();
+        if (execCtx.StaticConfig_->HasMrJobBinMd5()) {
+            mrJobBinMd5 = execCtx.StaticConfig_->GetMrJobBinMd5();
         } else {
             YQL_CLOG(WARN, ProviderYt) << "MrJobBin without MD5";
         }
     }
 
     TVector<std::pair<TString, TString>> mrJobSystemLibs;
-    if (execCtx.Config_->MrJobSystemLibsWithMd5Size() > 0) {
-        mrJobSystemLibs.reserve(execCtx.Config_->MrJobSystemLibsWithMd5Size());
+    if (execCtx.StaticConfig_->MrJobSystemLibsWithMd5Size() > 0) {
+        mrJobSystemLibs.reserve(execCtx.StaticConfig_->MrJobSystemLibsWithMd5Size());
 
-        for (const auto& systemLib : execCtx.Config_->GetMrJobSystemLibsWithMd5()) {
+        for (const auto& systemLib : execCtx.StaticConfig_->GetMrJobSystemLibsWithMd5()) {
             mrJobSystemLibs.push_back({systemLib.GetFile(), systemLib.GetMd5()});
 
             const auto libSize = TFileStat(systemLib.GetFile()).Size;

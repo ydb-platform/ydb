@@ -48,6 +48,11 @@ public:
         return NodeId;
     }
 
+    [[nodiscard]] NActors::TActorId GetTransportActorId() const
+    {
+        return TransportActorId;
+    }
+
     // Inject a TFakeDirectSession for NodeId so datapath uses IDirectSession.
     void EnableFakeDirectSession();
 

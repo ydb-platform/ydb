@@ -567,7 +567,6 @@ private:
         node.SetCookie((ui64)computationNode.Get());
     }
 
-private:
     const TTypeEnvironment& Env_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
     NUdf::ICountersProvider* CountersProvider_;

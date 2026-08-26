@@ -1,0 +1,73 @@
+# Codecov config for ydb-platform/ydb (C++ SDK + CLI + workload).
+# Separate from per-language SDK repos (java/go/js) and their native-sdk component.
+
+coverage:
+  status:
+    project:
+      default: off
+      cpp_sdk:
+        flags:
+          - cpp_sdk
+        target: auto
+        threshold: 0.1%
+      cli:
+        flags:
+          - cli
+        target: auto
+        threshold: 5%
+      cli_workload:
+        flags:
+          - cli_workload
+        target: auto
+        threshold: 5%
+    patch:
+      default: off
+      cpp_sdk:
+        flags:
+          - cpp_sdk
+        target: 80%
+        informational: true
+      cli:
+        flags:
+          - cli
+        target: 80%
+        informational: true
+      cli_workload:
+        flags:
+          - cli_workload
+        target: 80%
+        informational: true
+
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: cpp_sdk
+      paths:
+        - ydb/public/sdk/cpp/**
+      carryforward: true
+    - name: cli
+      paths:
+        - ydb/apps/ydb/**
+        - ydb/public/lib/ydb_cli/**
+      carryforward: true
+    - name: cli_workload
+      paths:
+        - ydb/library/workload/**
+      carryforward: true
+
+component_management:
+  individual_components:
+    - component_id: cli_app
+      name: apps/ydb
+      paths:
+        - ydb/apps/ydb/**
+    - component_id: cli_core
+      name: ydb_cli lib
+      paths:
+        - ydb/public/lib/ydb_cli/**
+
+comment:
+  layout: "diff, flags, components, files"
+  behavior: default
+  require_changes: false

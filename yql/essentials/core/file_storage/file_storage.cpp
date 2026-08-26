@@ -351,7 +351,6 @@ private:
         return urlChecksum + ".url";
     }
 
-private:
     TStorage Storage_;
     const TFileStorageConfig Config_;
     std::vector<NFS::IDownloaderPtr> Downloaders_;
@@ -406,7 +405,6 @@ private:
         }, *MtpQueue_);
     }
 
-private:
     TAtomic QueueStarted_;
     THolder<IThreadPool> MtpQueue_;
 };

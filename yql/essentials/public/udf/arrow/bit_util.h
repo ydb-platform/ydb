@@ -80,11 +80,11 @@ inline void CompressSparseImpl(ui8* dst, const ui8* srcSparse, size_t len) {
 }
 
 inline void CompressSparseBitmap(ui8* dst, const ui8* srcSparse, size_t len) {
-    return CompressSparseImpl<false>(dst, srcSparse, len);
+    CompressSparseImpl<false>(dst, srcSparse, len);
 }
 
 inline void CompressSparseBitmapNegate(ui8* dst, const ui8* srcSparse, size_t len) {
-    return CompressSparseImpl<true>(dst, srcSparse, len);
+    CompressSparseImpl<true>(dst, srcSparse, len);
 }
 
 template <typename T>

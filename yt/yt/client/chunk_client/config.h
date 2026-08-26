@@ -101,10 +101,9 @@ DEFINE_REFCOUNTED_TYPE(TEncodingWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteReaderConfigBase
+struct TRemoteReaderConfigBase
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Factors to calculate peer load as linear combination of disk queue and net queue.
     double NetQueueSizeFactor;
     double DiskQueueSizeFactor;

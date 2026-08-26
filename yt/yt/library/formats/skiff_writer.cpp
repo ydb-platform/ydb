@@ -994,7 +994,7 @@ private:
                             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::FormatCannotRepresentRow, "Column %Qv is not described by Skiff schema and there is no %Qv column",
                                 NameTable_->GetName(columnId),
                                 OtherColumnsName)
-                                << GetRowPositionErrorAttributes();
+                                .With(GetRowPositionErrorAttributes());
                         }
                         OtherValueIndexes_.emplace_back(valueIndex);
                         break;

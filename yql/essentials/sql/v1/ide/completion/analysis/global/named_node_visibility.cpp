@@ -1,6 +1,6 @@
 #include "named_node_visibility.h"
 
-#include "parse_tree.h"
+#include <yql/essentials/sql/v1/ide/analysis/parse_tree.h>
 
 #include <yql/essentials/sql/v1/ide/pure_ast/narrowing_visitor.h>
 

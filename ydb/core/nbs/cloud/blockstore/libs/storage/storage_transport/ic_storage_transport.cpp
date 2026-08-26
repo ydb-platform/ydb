@@ -16,6 +16,13 @@ TICStorageTransport::TICStorageTransport(
     , ICStorageTransportActorId(icStorageTransportActorId)
 {}
 
+TICStorageTransport::~TICStorageTransport()
+{
+    ActorSystem->Send(
+        ICStorageTransportActorId,
+        std::make_unique<NActors::TEvents::TEvPoisonPill>().release());
+}
+
 IStorageTransport::TConnectResultFutures TICStorageTransport::Connect(
     const THostConnection& connection)
 {

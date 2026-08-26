@@ -1,0 +1,84 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": "DECLARE ,"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/diagnostic",
+    "params": {
+      "identifier": "YQL",
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      },
+      "previousResultId": "0"
+    }
+  },
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "items": [
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "mismatched input ',' expecting '$'",
+          "range": {
+            "end": {
+              "character": 8,
+              "line": 0
+            },
+            "start": {
+              "character": 7,
+              "line": 0
+            }
+          },
+          "severity": 1,
+          "source": "parser"
+        },
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "mismatched input ',' expecting '$'",
+          "range": {
+            "end": {
+              "character": 8,
+              "line": 0
+            },
+            "start": {
+              "character": 7,
+              "line": 0
+            }
+          },
+          "severity": 1,
+          "source": "translator"
+        },
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "mismatched input ',' expecting '$'",
+          "range": {
+            "end": {
+              "character": 8,
+              "line": 0
+            },
+            "start": {
+              "character": 7,
+              "line": 0
+            }
+          },
+          "severity": 1,
+          "source": "typecheck"
+        }
+      ],
+      "kind": "full",
+      "resultId": "1"
+    }
+  }
+]

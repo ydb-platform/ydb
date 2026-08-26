@@ -132,10 +132,87 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
 
 using namespace NKikimr::NMiniKQL;
 
-NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory() {
+static const TString MockSinkType = "MockSink";
+
+struct TMockSinkState: public TThrRefBase {
+    using TPtr = TIntrusivePtr<TMockSinkState>;
+
+    std::atomic<ui64> SendDataCalls = 0;
+    std::atomic<ui64> Rows = 0;
+    std::atomic<bool> Finished = false;
+};
+
+class TMockSinkActor: public IDqComputeActorAsyncOutput, public NActors::TActor<TMockSinkActor> {
+public:
+    TMockSinkActor(ui64 outputIndex, IDqComputeActorAsyncOutput::ICallbacks* callbacks, TMockSinkState::TPtr state)
+        : NActors::TActor<TMockSinkActor>(&TMockSinkActor::StateFunc)
+        , OutputIndex(outputIndex)
+        , Callbacks(callbacks)
+        , State(std::move(state))
+    {}
+
+private:
+    STRICT_STFUNC(StateFunc,
+                  hFunc(NActors::TEvents::TEvPoison, Handle);)
+
+    void Handle(NActors::TEvents::TEvPoison::TPtr) {
+        PassAway();
+    }
+
+private:
+    ui64 GetOutputIndex() const override {
+        return OutputIndex;
+    }
+
+    i64 GetFreeSpace() const override {
+        return 1_MB;
+    }
+
+    const TDqAsyncStats& GetEgressStats() const override {
+        return EgressStats;
+    }
+
+    void SendData(
+        TUnboxedValueBatch&& batch,
+        i64 /* dataSize */,
+        const TMaybe<NDqProto::TCheckpoint>& /* checkpoint */,
+        bool finished
+    ) override {
+        ++State->SendDataCalls;
+        State->Rows += batch.RowCount();
+        batch.clear();
+        if (finished) {
+            State->Finished = true;
+            Callbacks->OnAsyncOutputFinished(OutputIndex);
+        }
+    }
+
+    void CommitState(const NDqProto::TCheckpoint&) override {
+    }
+
+    void LoadState(const TSinkState&) override {
+    }
+
+    void PassAway() override {
+        NActors::TActor<TMockSinkActor>::PassAway();
+    }
+
+private:
+    const ui64 OutputIndex;
+    IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
+    const TMockSinkState::TPtr State;
+    TDqAsyncStats EgressStats;
+};
+
+NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(TMockSinkState::TPtr sinkState = nullptr) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterMockProviderFactories(*factory);
     RegisterDqInputTransformLookupActorFactory(*factory);
+    factory->RegisterSink(MockSinkType, [sinkState = std::move(sinkState)](IDqAsyncIoFactory::TSinkArguments&& args) {
+        Y_ENSURE(sinkState, "MockSink is used by the task, but no sink state was provided");
+        auto* actor = new TMockSinkActor(args.OutputIndex, args.Callback, sinkState);
+        return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> { actor, actor };
+    });
     return factory;
 }
 
@@ -168,6 +245,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TStructType* RowTransformedType = nullptr;
     TMultiType* WideRowTransformedType = nullptr;
     TString LogPrefix;
+    TMockSinkState::TPtr SinkState = MakeIntrusive<TMockSinkState>();
 
     TSyncComputeActorTestFixture(
             NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0,
@@ -488,6 +566,11 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         return CreateDqInputChannel(settings, TypeEnv);
     }
 
+    void AddMockSinkOutput(NDqProto::TDqTask& task) {
+        auto& output = *task.AddOutputs();
+        output.MutableSink()->SetType(MockSinkType);
+    }
+
     auto CreateTaskRunnerActorFactory() {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
             NYql::GetCommonDqFactory(),
@@ -516,7 +599,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 EdgeActor,
                 LogPrefix,
                 &task,
-                CreateAsyncIoFactory(),
+                CreateAsyncIoFactory(SinkState),
                 FunctionRegistry.Get(),
                 runtimeSettings,
                 memoryLimits,
@@ -726,6 +809,28 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             if ((dqOutputChannel->IsFinished() || waitIntermediateAcks) && !noAck) {
                 WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
             }
+        }
+    }
+
+    void SendWatermark(NActors::TActorId syncCA, ui64 channelId, TInstant watermark, bool finish, ui32* seqNo) {
+        auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+        evInputChannelData->Record.SetSeqNo(++*seqNo);
+        auto& chData = *evInputChannelData->Record.MutableChannelData();
+        chData.SetChannelId(channelId);
+        chData.MutableWatermark()->SetTimestampUs(watermark.MicroSeconds());
+        chData.SetFinished(finish);
+        evInputChannelData->Record.SetNoAck(false);
+        LOG_D("Sending WATERMARK " << chData);
+        ActorSystem.Send(syncCA, SrcEdgeActor[channelId], evInputChannelData.Release());
+        WaitForChannelDataAck(channelId, *seqNo);
+    }
+
+    void WaitForSinkFinished(TDuration timeout = TDuration::Seconds(10)) {
+        const auto deadline = TInstant::Now() + timeout;
+        while (!SinkState->Finished.load()) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline,
+                "Compute actor has not finished sink in " << timeout << ": it is stuck");
+            Sleep(TDuration::MilliSeconds(10));
         }
     }
 
@@ -1116,6 +1221,70 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
                 }
             }
         }
+    }
+
+    // Reproduces hang of compute actor after sending a watermark into a sink (async output).
+    //
+    // Watermark with no rows behind it is the only thing in the sink buffer, so
+    // SendDataChunkToAsyncOutput() pops it, finds neither data nor checkpoint and bails out early.
+    // Task runner has returned PendingOutput for that run (it emits a watermark and asks CA to
+    // send it before continuing with the input), and CheckRunStatus() only reschedules execution
+    // on PendingOutput when ProcessOutputsState.DataWasSent is set. When the popped watermark is
+    // not accounted as sent data, nothing reschedules the run: input is already fully buffered in
+    // the CA, so no external event is expected either.
+    //
+    // Before the fix: CA never runs again, so it never finishes and the test times out.
+    // After the fix: watermark counts as sent data, CA resumes, sees finished input and finishes.
+    Y_UNIT_TEST_F(WatermarkToSinkResumesExecution, TSyncComputeActorTestFixture) {
+        LogPrefix = "Watermark to sink test: ";
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](TExprContext& ctx) {
+            return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        AddDummyInputChannel(task, InputChannelId);
+        AddMockSinkOutput(task);
+
+        auto syncCA = CreateTestSyncComputeActor(task);
+        ActorSystem.EnableScheduleForActor(syncCA, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor); // SayHelloOnBootstrap
+
+        ui32 seqNo = 0;
+        SendWatermark(syncCA, InputChannelId, TInstant::Seconds(1), /* finish */ true, &seqNo);
+
+        WaitForSinkFinished();
+        UNIT_ASSERT_EQUAL_C(SinkState->Rows.load(), 0, "no rows were sent to the task, got " << SinkState->Rows.load());
+        // the only expected send is the finishing one: watermark itself is not passed to the sink
+        UNIT_ASSERT_EQUAL_C(SinkState->SendDataCalls.load(), 1, "unexpected number of sends: " << SinkState->SendDataCalls.load());
+    }
+
+    Y_UNIT_TEST_F(DataWithWatermarkToSink, TSyncComputeActorTestFixture) {
+        LogPrefix = "Data with watermark to sink test: ";
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](TExprContext& ctx) {
+            return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
+        AddMockSinkOutput(task);
+
+        auto syncCA = CreateTestSyncComputeActor(task);
+        ActorSystem.EnableScheduleForActor(syncCA, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor); // SayHelloOnBootstrap
+
+        constexpr ui32 rows = 3;
+        ui32 seqNo = 0;
+        SendData([&](ui32 packet, bool /* isFinal */) {
+            for (ui32 row = 1; row <= rows; ++row) {
+                PushRow(CreateRow(row, packet), dqOutputChannel);
+            }
+            NDqProto::TWatermark watermark;
+            watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
+            dqOutputChannel->Push(std::move(watermark));
+            return std::pair { dqOutputChannel, &seqNo };
+        },
+        syncCA, /* packets */ 1, /* waitIntermediateAcks */ true);
+
+        WaitForSinkFinished();
+        UNIT_ASSERT_EQUAL_C(SinkState->Rows.load(), rows, "expected " << rows << " rows, got " << SinkState->Rows.load());
     }
 
     Y_UNIT_TEST_F(StreamingQuerySendStatsWithCreateSuspended, TSyncComputeActorTestFixture) {

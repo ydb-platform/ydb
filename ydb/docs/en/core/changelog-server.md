@@ -692,13 +692,25 @@ Release date: October 12, 2023.
 * Fixed a `SIGSEGV` error in the dinnode during `CSV` import via `YDB CLI`.
 * Fixed an error that caused a crash when processing `NGRpcService::TRefreshTokenImpl`.
 * Implemented a `gossip protocol` for exchanging cluster resource information.
-* Fixed an error in `DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed`.
+* Fixed an error:
+
+  ```text
+  DeserializeValuePickleV1(): requirement data.GetTransportVersion() ==
+  (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed
+  ```
+
 * Implemented `auto-increment` columns.
 * Use `UNAVAILABLE` status instead of `GENERIC_ERROR` when shard identification fails.
 * Added support for rope payload in `TEvVGet`.
 * Added ignoring of deprecated events.
 * Fixed a crash of write sessions on an invalid topic name.
-* Fixed an error in `CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap`.
+* Fixed an error:
+
+  ```text
+  CheckExpected(): requirement newConstr failed, message: Rewrite error,
+  missing Distinct((id)) constraint in node FlatMap
+  ```
+
 * Enabled `self-heal` by default.
 
 ## Version 23.2 {#23-2}

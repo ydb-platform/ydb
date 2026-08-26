@@ -124,10 +124,20 @@ public:
         HasChunkKey = true;
     }
 
+    void SetIntegrityOperationId(ui64 operationId) {
+        IntegrityOperationId = operationId;
+    }
+
+    void SetReadChecksums(std::vector<ui64> checksums) {
+        Checksums = std::move(checksums);
+    }
+
 private:
     ui64 TabletId = 0;
     ui64 VChunkIndex = 0;
     bool HasChunkKey = false;
+    ui64 IntegrityOperationId = 0;
+    std::vector<ui64> Checksums;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,20 +201,24 @@ public:
         SyncId = syncId;
     }
 
+    void SetIntegrityOperationId(ui64 operationId) {
+        IntegrityOperationId = operationId;
+    }
+
 private:
     ui64 SyncId = 0;
     ui64 RequestId = 0;
     ui64 SegmentBegin = 0;
     ui64 SegmentEnd = 0;
+    ui64 IntegrityOperationId = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDDiskActor::TIntegrityIoOp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Executes one TIntegrityManager::TWriteIo (chunk header replica / extent format write) and posts
-// TEvPrivate::TEvIntegrityIoResult{IoId, Status} back to the actor. Integrity I/O only happens at
-// chunk allocation time, so these ops are not pooled: SelfRecycle simply deletes.
+// Executes one TIntegrityManager TWriteIo / TReadIo and posts TEvPrivate::TEvIntegrityIoResult
+// back to the actor.
 class TDDiskActor::TIntegrityIoOp final : public TDDiskActor::TDirectIoOpBase {
 public:
     explicit TIntegrityIoOp(TDDiskActor& actor)
@@ -215,6 +229,9 @@ public:
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept override;
     bool IsIntegrityIo() const noexcept override { return true; }
+
+    void ClearForRecycle() noexcept override;
+    void SelfRecycle() noexcept override;
 
     void SetIoId(ui64 ioId) {
         IoId = ioId;

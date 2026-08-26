@@ -1,9 +1,11 @@
 #include "query_statdb.h"
 #include "query_statalgo.h"
+#include "query_statdb_stream.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap_events.h>
 #include <ydb/core/util/format.h>
 
+#include <algorithm>
 #include <concepts>
 
 using namespace NKikimrServices;
@@ -412,6 +414,239 @@ namespace NKikimr {
         std::optional<TYieldedState> YieldedState;
     };
 
+    class TLogoBlobIndexStatStreamActor
+        : public TActorBootstrapped<TLogoBlobIndexStatStreamActor>
+    {
+        using TThis = TLogoBlobIndexStatStreamActor;
+        using TBase = TActorBootstrapped<TThis>;
+        using TLevelIndexSnapshot = ::NKikimr::TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TYieldedState = TDbStatYieldedState<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TResponse = TEvGetLogoBlobIndexStatResponse;
+        using TAck = TEvGetLogoBlobIndexStatResponseAck;
+
+        enum EEv {
+            EvAckTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvEnd,
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE));
+
+        struct TEvAckTimeout : TEventLocal<TEvAckTimeout, EvAckTimeout> {};
+
+        static constexpr ui64 DefaultBatchBytes = 1 << 20;
+        static constexpr ui64 MinBatchBytes = 64 << 10;
+        static constexpr TDuration AckTimeout = TDuration::Seconds(30);
+
+        friend class TActorBootstrapped<TThis>;
+
+        static ui64 CalculateBatchBytes(
+                const NKikimrVDisk::GetLogoBlobIndexStatRequest& request,
+                const TIntrusivePtr<THullCtx>& hullCtx)
+        {
+            const ui64 configuredMax = hullCtx->VCfg
+                ? Max<ui64>(hullCtx->VCfg->MaxResponseSize, 1)
+                : DefaultBatchBytes;
+            const ui64 configuredMin = Min(MinBatchBytes, configuredMax);
+            const ui64 requested = request.max_batch_bytes()
+                ? request.max_batch_bytes()
+                : Min(DefaultBatchBytes, configuredMax);
+            return std::clamp(requested, configuredMin, configuredMax);
+        }
+
+        void Bootstrap() {
+            TThis::Become(&TThis::StateTraverse);
+            TThis::Schedule(AckTimeout, new TEvAckTimeout);
+            ContinueTraversal();
+        }
+
+        void ContinueTraversal() {
+            Y_ABORT_UNLESS(Snapshot);
+            YieldedState = TraverseDbWithoutMergeUntil(
+                HullCtx,
+                &Accumulator,
+                *Snapshot,
+                std::move(YieldedState),
+                YieldPolicy,
+                [this] { return Accumulator.IsBatchReady(); });
+            ReleaseSnapshot();
+
+            if (!YieldedState) {
+                ReplyAndDie();
+            } else if (Accumulator.IsBatchReady()) {
+                ReplyAndWaitForAck();
+            } else {
+                TThis::Schedule(YieldPolicy.DelayBetweenQuanta, new TEvents::TEvWakeup);
+            }
+        }
+
+        void ReleaseSnapshot() {
+            if (Snapshot) {
+                Snapshot->Destroy();
+                Snapshot.reset();
+            }
+        }
+
+        void RequestSnapshot() {
+            TThis::Send(ParentId, new TEvTakeHullSnapshot(true));
+        }
+
+        void HandleWakeup() {
+            RequestSnapshot();
+        }
+
+        void Handle(TEvTakeHullSnapshotResult::TPtr& ev) {
+            EmplaceSnapshot<TKeyLogoBlob, TMemRecLogoBlob>(Snapshot, std::move(ev->Get()->Snap));
+            ContinueTraversal();
+        }
+
+        std::unique_ptr<TResponse> MakeResponse() {
+            if (InitialResult) {
+                return std::move(InitialResult);
+            }
+            return std::make_unique<TResponse>(
+                NKikimrProto::OK,
+                TVDiskID(),
+                TActivationContext::Now(),
+                nullptr,
+                nullptr);
+        }
+
+        void SendBatch(bool hasMore, ui64 sequenceId) {
+            auto response = MakeResponse();
+            Accumulator.ExtractBatch(response->Record.mutable_stat());
+            response->Record.set_has_more(hasMore);
+            response->Record.set_sequence_id(sequenceId);
+            SendVDiskResponse(
+                TActivationContext::AsActorContext(),
+                Recipient,
+                response.release(),
+                Cookie,
+                HullCtx->VCtx,
+                {});
+        }
+
+        void ReplyAndWaitForAck() {
+            OutstandingSequence = ++LastSentSequence;
+            AckDeadline = TActivationContext::Monotonic() + AckTimeout;
+            TThis::Become(&TThis::StateWaitAck);
+            SendBatch(true, OutstandingSequence);
+        }
+
+        void ReplyAndDie() {
+            SendBatch(false, ++LastSentSequence);
+            return TThis::PassAway();
+        }
+
+        bool ValidateControlMessage(const TAck::TPtr& ev) const {
+            return ev->Sender == Recipient && ev->Cookie == Cookie;
+        }
+
+        void HandleAckWhileTraversing(TAck::TPtr& ev) {
+            if (!ValidateControlMessage(ev)) {
+                return;
+            }
+
+            const auto& record = ev->Get()->Record;
+            if (record.has_cancel() && record.cancel()) {
+                return TThis::PassAway();
+            } else if (record.has_sequence_id() && record.sequence_id() > LastSentSequence) {
+                return TThis::PassAway();
+            }
+        }
+
+        void HandleAckWhileWaiting(TAck::TPtr& ev) {
+            if (!ValidateControlMessage(ev)) {
+                return;
+            }
+
+            const auto& record = ev->Get()->Record;
+            if (record.has_cancel() && record.cancel()) {
+                return TThis::PassAway();
+            }
+            if (!record.has_sequence_id()) {
+                return;
+            }
+
+            const ui64 sequenceId = record.sequence_id();
+            if (sequenceId < OutstandingSequence) {
+                return;
+            }
+            if (sequenceId > OutstandingSequence) {
+                return TThis::PassAway();
+            }
+
+            OutstandingSequence = 0;
+            AckDeadline = TMonotonic::Max();
+            TThis::Become(&TThis::StateTraverse);
+            RequestSnapshot();
+        }
+
+        void HandleAckTimeout(TEvAckTimeout::TPtr& ev) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            if (OutstandingSequence && AckDeadline <= now) {
+                return TThis::PassAway();
+            }
+
+            TThis::Schedule(
+                OutstandingSequence ? AckDeadline : now + AckTimeout,
+                ev->Release().Release());
+        }
+
+        STRICT_STFUNC(StateTraverse, {
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            hFunc(TEvTakeHullSnapshotResult, Handle);
+            hFunc(TAck, HandleAckWhileTraversing);
+            hFunc(TEvAckTimeout, HandleAckTimeout);
+        })
+
+        STRICT_STFUNC(StateWaitAck, {
+            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            hFunc(TAck, HandleAckWhileWaiting);
+            hFunc(TEvAckTimeout, HandleAckTimeout);
+        })
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_LEVEL_INDEX_STAT_STREAM_QUERY;
+        }
+
+        TLogoBlobIndexStatStreamActor(
+                const TIntrusivePtr<THullCtx>& hullCtx,
+                const TActorId& parentId,
+                TLogoBlobsSnapshot&& snapshot,
+                TEvGetLogoBlobIndexStatRequest::TPtr& ev,
+                std::unique_ptr<TResponse> result)
+            : HullCtx(hullCtx)
+            , ParentId(parentId)
+            , Snapshot(std::in_place, std::move(snapshot))
+            , Recipient(ev->Sender)
+            , Cookie(ev->Cookie)
+            , InitialResult(std::move(result))
+            , Accumulator(CalculateBatchBytes(ev->Get()->Record, hullCtx))
+        {}
+
+        void PassAway() override {
+            ReleaseSnapshot();
+            TThis::Send(ParentId, new TEvents::TEvGone);
+            return TBase::PassAway();
+        }
+
+    private:
+        TIntrusivePtr<THullCtx> HullCtx;
+        const TActorId ParentId;
+        std::optional<TLevelIndexSnapshot> Snapshot;
+        const TActorId Recipient;
+        const ui64 Cookie;
+        std::unique_ptr<TResponse> InitialResult;
+        TLogoBlobIndexStatStreamAccumulator Accumulator;
+        const TDbStatYieldPolicy YieldPolicy;
+        std::optional<TYieldedState> YieldedState;
+        ui64 LastSentSequence = 0;
+        ui64 OutstandingSequence = 0;
+        TMonotonic AckDeadline = TMonotonic::Max();
+    };
+
     template <>
     void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob>::PrepareStat(IOutputStream& str,
                                                                           bool pretty) {
@@ -746,6 +981,10 @@ namespace NKikimr {
             TEvGetLogoBlobIndexStatRequest::TPtr& ev,
             std::unique_ptr<TEvGetLogoBlobIndexStatResponse> result)
     {
+        if (ev->Get()->Record.stream()) {
+            return new TLogoBlobIndexStatStreamActor(
+                hullCtx, parentId, std::move(snapshot), ev, std::move(result));
+        }
         return CreateLevelIndexStatActorImpl<
             TKeyLogoBlob,
             TMemRecLogoBlob,

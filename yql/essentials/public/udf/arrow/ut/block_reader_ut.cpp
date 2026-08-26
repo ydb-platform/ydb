@@ -24,7 +24,6 @@ class TBlockReaderFixture: public NUnitTest::TBaseFixture {
         {
         }
 
-    public:
         const std::unique_ptr<IArrayBuilder> Builder;
         const std::unique_ptr<IBlockReader> Reader;
     };
@@ -61,7 +60,6 @@ public:
         return MakeIntrusive<TArrayHelpers>(type, ArrowPool);
     }
 
-public:
     TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
     NMiniKQL::TScopedAlloc Alloc;
     NMiniKQL::TTypeEnvironment Env;

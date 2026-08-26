@@ -1,5 +1,7 @@
 #include "ddisk_state.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -13,9 +15,7 @@ constexpr ui64 Mask = 0xffff;
 constexpr ui64 Offset = 16;
 
 ////////////////////////////////////////////////////////////////////////////////
-void SaveField(
-    const TBlockRangeField& field,
-    PartitionDirect::NProto::TBlockField* proto)
+void SaveField(const TBlockRangeField& field, TBlockFieldProto* proto)
 {
     field.Enumerate(
         [&](TBlockRange64 item)
@@ -32,9 +32,7 @@ void SaveField(
     // TODO save as bitmap when segment count exceed N
 }
 
-void LoadField(
-    const PartitionDirect::NProto::TBlockField& proto,
-    TBlockRangeField* field)
+void LoadField(const TBlockFieldProto& proto, TBlockRangeField* field)
 {
     for (const ui32 startAndLength: proto.GetStartAndLength()) {
         const ui64 start = startAndLength >> Offset;
@@ -59,14 +57,16 @@ void TDDiskState::Init(
     UpdateState(true);
 }
 
-void TDDiskState::Save(PartitionDirect::NProto::TDDiskState* proto) const
+void TDDiskState::Save(TDDiskStateProto* proto) const
 {
     SaveField(AheadField, proto->MutableAhead());
     SaveField(BehindField, proto->MutableBehind());
 }
 
-void TDDiskState::Load(const PartitionDirect::NProto::TDDiskState& proto)
+void TDDiskState::Load(const TDDiskStateProto& proto)
 {
+    AheadField.Clear();
+    BehindField.Clear();
     LoadField(proto.GetAhead(), &AheadField);
     LoadField(proto.GetBehind(), &BehindField);
 }
@@ -192,6 +192,20 @@ void TDDiskState::RangeSynced(TBlockRange64 range)
         OperationalBlockCount = newWatermark;
     }
     UpdateState(false);
+}
+
+TCountAndSize TDDiskState::GetAheadSegmentsStat() const
+{
+    return TCountAndSize{
+        .Count = AheadField.GetSegmentCount(),
+        .Size = AheadField.GetBlockCount()};
+}
+
+TCountAndSize TDDiskState::GetBehindSegmentsStat() const
+{
+    return TCountAndSize{
+        .Count = BehindField.GetSegmentCount(),
+        .Size = BehindField.GetBlockCount()};
 }
 
 void TDDiskState::UpdateWatermarkDebugOnly(ui64 blockCount)

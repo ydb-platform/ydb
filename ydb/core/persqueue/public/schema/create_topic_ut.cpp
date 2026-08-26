@@ -59,6 +59,9 @@ Y_UNIT_TEST(CreateSharedConsumer) {
     auto setup = CreateSetup("CoreCreateShared");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_shared";
+    const TString dlqPath = "/Root/dlq";
+
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(dlqPath)), Ydb::StatusIds::SUCCESS);
 
     auto request = MakeCreateTopicRequest(path);
     request.clear_consumers();
@@ -83,6 +86,22 @@ Y_UNIT_TEST(CreateSharedConsumer) {
     UNIT_ASSERT_VALUES_EQUAL(c->GetDefaultProcessingTimeoutSeconds(), 3);
     UNIT_ASSERT_VALUES_EQUAL(c->GetMaxProcessingAttempts(), 11);
     UNIT_ASSERT_VALUES_EQUAL(c->GetDeadLetterQueue(), "dlq");
+}
+
+Y_UNIT_TEST(CreateSharedConsumerEmptyDlqRejected) {
+    auto setup = CreateSetup("CoreCreateSharedEmptyDlq");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_shared_empty_dlq";
+
+    auto request = MakeCreateTopicRequest(path);
+    request.clear_consumers();
+    auto* consumer = request.add_consumers();
+    consumer->set_name("shared_c1");
+    auto* type = consumer->mutable_shared_consumer_type();
+    type->mutable_dead_letter_policy()->set_enabled(true);
+    type->mutable_dead_letter_policy()->mutable_move_action();
+
+    AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty");
 }
 
 Y_UNIT_TEST(SharedConsumersDisabledRejected) {
@@ -134,6 +153,79 @@ Y_UNIT_TEST(CreateMessagesPerSecond) {
             DoCreate(runtime, request),
             Ydb::StatusIds::BAD_REQUEST,
             "partition_write_speed_messages_per_second");
+    }
+}
+
+Y_UNIT_TEST(CreateTopicWithIdAttribute) {
+    auto setup = CreateSetup("CoreCreateIdAttr");
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+
+    // FirstClass: the _id attribute is silently ignored, the Id is the topic's
+    // LocalPathId set by schemeshard, never taken from the request.
+    {
+        const TString path = "/Root/topic_id_attr_first_class";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "1234567";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        auto config = DescribeTabletConfig(runtime, path);
+        // The stored Id is the LocalPathId, not the supplied _id value.
+        UNIT_ASSERT_VALUES_UNEQUAL(config.GetId().GetId(), 1234567u);
+    }
+
+    // Flag off: the attribute is ignored as well.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(false);
+        const TString path = "/Root/topic_id_attr_flag_off";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "1234567";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT(!config.HasId());
+    }
+
+    // Federation + flag on: the _id attribute is accepted as the topic Id.
+    // IdTxStep is stamped 0 (sentinel = "filled at create") so writers never
+    // enable the name-keyed fallback for a brand-new federation topic.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        const TString path = "/Root/rt3.dc1--test_account--topic_id_attr_federation";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "1234567";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 1234567u);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetOwnerId(), 0u);
+        UNIT_ASSERT(config.GetId().HasTxStep());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), 0u); // sentinel: filled at create
+        // Restore FirstClass mode for subsequent sub-cases if any.
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    }
+
+    // Non-numeric _id must be rejected with BAD_REQUEST when flag is on and federation mode.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        const TString path = "/Root/rt3.dc1--test_account--topic_bad_id";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "not-a-number";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "not a valid positive integer");
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    }
+
+    // _id = "0" must be rejected with BAD_REQUEST when flag is on and federation mode.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        const TString path = "/Root/rt3.dc1--test_account--topic_zero_id";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "0";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "must be greater than 0");
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     }
 }
 

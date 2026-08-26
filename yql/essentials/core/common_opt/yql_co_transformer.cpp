@@ -42,7 +42,7 @@ private:
 
     bool ScanErrors(const TExprNode& node, TExprContext& ctx);
 
-private:
+
     std::array<TProcessedNodesSet, TCoCallableRules::SIMPLE_STEPS> SimpleProcessedNodes_;
     std::array<TProcessedNodesSet, TCoCallableRules::FLOW_STEPS> FlowProcessedNodes_;
     TProcessedNodesSet FinalProcessedNodes_;

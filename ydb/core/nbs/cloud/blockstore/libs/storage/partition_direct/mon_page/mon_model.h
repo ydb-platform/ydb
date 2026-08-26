@@ -3,7 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/mind/bscontroller/types.h>
@@ -53,17 +53,6 @@ struct TFastPathServiceInfo
     size_t DbgCount = 0;
 };
 
-struct THostSnapshot
-{
-    THostIndex Index = InvalidHostIndex;
-    EHostState State = EHostState::Online;
-    EHostHealth Health = EHostHealth::Online;
-    TInflightByOperation InflightByOperation{};
-    THostStat::TErrorsInfo Errors;
-    ui64 PBufferUsedSize = 0;
-    TLatencyByOperation LatencyByOperation{};
-};
-
 struct TConnectionSnapshot
 {
     THostIndex HostIndex = InvalidHostIndex;
@@ -98,7 +87,7 @@ struct TLocalDbContents
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
     // Persisted per-vchunk overrides.
-    TVector<TVChunkConfig> VChunkConfigs;
+    TVChunkConfigs VChunkConfigs;
 };
 
 struct TMonPageData

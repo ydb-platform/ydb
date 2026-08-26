@@ -1881,6 +1881,13 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                         EscapeValue(settings.GetEnableNativeColumns(), paramsStr);
                         del = ", ";
                     }
+                    if (settings.HasDenseEncodingVersion()) {
+                        paramsStr << del;
+                        EscapeName("DENSE_ENCODING_VERSION", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetDenseEncodingVersion(), paramsStr);
+                        del = ", ";
+                    }
                     if (settings.HasDataExtractor()) {
                         const auto& dataExtractor = settings.GetDataExtractor();
                         if (dataExtractor.HasClassName() && !dataExtractor.GetClassName().empty()) {

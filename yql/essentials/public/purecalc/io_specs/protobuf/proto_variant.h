@@ -47,7 +47,6 @@ public:
     {
     }
 
-public:
     TProtoMultiOutput<T...> Fetch() override {
         auto&& oldItem = OldStream_->Fetch();
         return this->InitFuncs_[oldItem.first](oldItem.second);
@@ -65,7 +64,6 @@ public:
     {
     }
 
-public:
     void OnObject(TProtoRawMultiOutput oldItem) override {
         OldConsumer_->OnObject(this->InitFuncs_[oldItem.first](oldItem.second));
     }

@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
@@ -510,6 +511,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     } else if (!GatewaysConfig) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
+
+    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
 
     {
         TGatewaySQLFlags gatewaySqlFlags;

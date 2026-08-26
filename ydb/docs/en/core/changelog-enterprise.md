@@ -1,5 +1,23 @@
 # Yandex Enterprise Database changelog
 
+## Version 26.1 {#26-1}
+
+### Version 26.1.1.ent.3 {#26-1-1-ent-3}
+
+Release date: August 3, 2026.
+
+This version includes all improvements from {{ ydb-short-name }} 26.1.1.22; see the [changelog](./changelog-server.md#26-1-1-22). It also includes the [enterprise-specific improvements](#26-1-1-ent-3-extras) listed below.
+
+#### Enterprise-specific Improvements {#26-1-1-ent-3-extras}
+
+The following changes are available in Yandex Enterprise Database in addition to the corresponding {{ ydb-short-name }} build:
+
+* Added an optimization that allows filtering rows by index columns before querying the main table, reducing the number of accesses to the main table when executing certain types of queries.
+* Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare situations where executed queries could hang, and reduces RAM consumption during query execution.
+* Invalid views can now be restored from a backup. This allows restoring backups created from databases containing such views without additional actions from the administrator.
+* Added support for mutual certificate-based authentication (mTLS) in the [Kafka API](./reference/kafka-api/index.md).
+* Added the `TraceId` column with the query trace identifier to the `.sys/top_queries_*` and `.sys/query_sessions` system views.
+
 ## Version 25.4 {#25-4}
 
 ### Version 25.4.1.ent.2 {#25-4-1-ent-2}
@@ -587,11 +605,23 @@ Release date: October 12, 2023.
 * Fixed a `SIGSEGV` error in the dinnode during `CSV` import via `YDB CLI`.
 * Fixed an error that caused a crash when processing `NGRpcService::TRefreshTokenImpl`.
 * Implemented a `gossip protocol` for exchanging cluster resource information.
-* Fixed an error in `DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed`.
+* Fixed an error:
+
+  ```text
+  DeserializeValuePickleV1(): requirement data.GetTransportVersion() ==
+  (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed
+  ```
+
 * Implemented `auto-increment` columns.
 * Use `UNAVAILABLE` status instead of `GENERIC_ERROR` when shard identification fails.
 * Added support for rope payload in `TEvVGet`.
 * Added ignoring of deprecated events.
 * Fixed a crash of write sessions on an invalid topic name.
-* Fixed an error in `CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap`.
+* Fixed an error:
+
+  ```text
+  CheckExpected(): requirement newConstr failed, message: Rewrite error,
+  missing Distinct((id)) constraint in node FlatMap
+  ```
+
 * Enabled `self-heal` by default.

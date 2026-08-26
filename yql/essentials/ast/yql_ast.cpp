@@ -444,7 +444,6 @@ private:
         return true;
     }
 
-private:
     TAstParserContext Ctx_;
     TIssues Issues_;
 };

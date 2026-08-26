@@ -5,6 +5,7 @@
 #include <library/cpp/yt/string/format.h>
 
 #include <util/generic/strbuf.h>
+#include <util/generic/typetraits.h>
 
 #include <string>
 
@@ -55,7 +56,15 @@ private:
 
     template <class TValue>
     void DoAdd(TLoggingTagKey key, const TValue& value, TStringBuf spec);
-    void DoAdd(TLoggingTagKey key, TStringBuf value);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Marks a type as carrying a well-known tag under #Key.
+template <class T>
+struct TWellKnownLoggingTagTraits
+{
+    static_assert(TDependentFalse<T>, "Type does not carry a well-known logging tag; pass an explicit key");
 };
 
 ////////////////////////////////////////////////////////////////////////////////

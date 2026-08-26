@@ -2700,7 +2700,7 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
                                   .GetRule_select_subexpr_intersect1()
                                   .GetRule_select_or_expr1());
     } else {
-        result = Wrap(TSqlSelect(*this).BuildSubSelect(node));
+        result = ToNode(Wrap(TSqlSelect(*this).BuildSubSelect(node)));
     }
 
     if (!result) {
@@ -2722,7 +2722,7 @@ TNodeResult TSqlExpression::SelectOrExpr(const TRule_select_or_expr& node) {
     switch (node.Alt_case()) {
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr1: {
             const auto& select_kind = node.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
-            return Wrap(TSqlSelect(*this).BuildSubSelect(select_kind));
+            return ToNode(Wrap(TSqlSelect(*this).BuildSubSelect(select_kind)));
         }
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2:
             return TupleOrExpr(node.GetAlt_select_or_expr2().GetRule_tuple_or_expr1());

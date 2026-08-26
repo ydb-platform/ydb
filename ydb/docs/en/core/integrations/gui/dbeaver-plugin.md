@@ -139,7 +139,7 @@ To create a connection to {{ ydb-name }}, follow these steps:
    | **Host** | Host of the {{ ydb-name }} cluster [endpoint](../../concepts/connect.md#endpoint) | `ydb.example.com` |
    | **Port** | Port (default `2135`) | `2135` |
    | **Database** | Path to the [database](../../concepts/glossary.md#database) | `/Root/database` |
-   | **Monitoring URL** | URL of the [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md) with the database path, used for the dashboard (optional) | `http://ydb.example.com:8765/monitoring/tenant?name=%2FRoot%2Fdatabase` |
+   | **Monitoring URL** | URL of the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) with the database path, used for the dashboard (optional) | `http://ydb.example.com:8765/monitoring/tenant?name=%2FRoot%2Fdatabase` |
    | **Use secure connection** | Use a secure connection (`grpcs://`) | ☑ |
    | **Enable autocomplete API** | Autocomplete via {{ ydb-short-name }} API | ☑ |
 4. Select the authentication method from the **Auth type** drop-down list (see [Authentication methods](#auth-methods)).
@@ -239,7 +239,7 @@ Open the **Dashboard** tab in the connection editor (requires the **Monitoring U
 
 {% note warning %}
 
-The dashboard is only available when working with self-hosted {{ ydb-short-name }} installations that have access to [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md). In Yandex Cloud Managed Service for {{ ydb-short-name }}, the Embedded UI is not published, so dashboard data is unavailable — use [cloud platform tools](https://yandex.cloud/en/docs/ydb/operations/monitoring) for monitoring.
+The dashboard is only available when working with self-hosted {{ ydb-short-name }} installations that have access to [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md). In Yandex Cloud Managed Service for {{ ydb-short-name }}, the {{ ydb-ui-name }} is not published, so dashboard data is unavailable — use [cloud platform tools](https://yandex.cloud/en/docs/ydb/operations/monitoring) for monitoring.
 
 {% endnote %}
 

@@ -48,7 +48,8 @@ void ValidatePredicate(NYdb::NQuery::TQueryClient& db, const std::string& predic
     NYdb::TParams params = NYdb::TParamsBuilder().Build(), const std::string& suffix = "ORDER BY Key");
 
 void ValidateError(NYdb::NQuery::TQueryClient& db, const std::string& predicate,
-    const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate");
+    const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate",
+    const std::string& unexpectedErrorMessage = {});
 
 void ValidateError(NYdb::NQuery::TQueryClient& db, const std::string& predicate, NYdb::TParams params,
     const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate");

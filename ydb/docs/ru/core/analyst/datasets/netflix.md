@@ -16,9 +16,9 @@
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
-  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
 
   ```sql
   CREATE TABLE `netflix` (
@@ -79,7 +79,7 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
   ```sql
   SELECT

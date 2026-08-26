@@ -876,7 +876,7 @@ void WrapIOErrors(std::function<void()> func)
 #endif
                 THROW_ERROR_EXCEPTION(NFS::EErrorCode::IOError, "I/O error")
                     .With("status", status)
-                    .With(TError(ex));
+                    .With(ex);
 
             default: {
                 TError error(ex);

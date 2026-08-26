@@ -6,8 +6,9 @@
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/count_size.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -24,27 +25,22 @@ class TVChunkConfig;
 
 struct TPBufferCounters
 {
-    // The current count of records stored in PBuffer
-    size_t CurrentRecordsCount = 0;
-    // The current count of bytes stored in PBuffer
-    size_t CurrentBytesCount = 0;
-    // Total count of records written to PBuffer and possibly already deleted
-    size_t TotalRecordsCount = 0;
-    // Total count of bytes written to PBuffer and possibly already deleted
-    size_t TotalBytesCount = 0;
+    // The current PBuffer usage.
+    TCountAndSize Current;
 
-    // The current number of records prohibited for deletion from PBuffer
-    size_t CurrentLockedRecordsCount = 0;
-    // The current number of bytes prohibited for deletion from PBuffer
-    size_t CurrentLockedBytesCount = 0;
+    // Overall count and size written PBuffers and possibly already deleted.
+    TCountAndSize Total;
+
+    // The current prohibited for deletion PBuffers.
+    TCountAndSize CurrentLocked;
 
     // The total number of records ever prohibited for deletion from PBuffer
-    size_t TotalLockedRecordsCount = 0;
-    // The total number of bytes ever prohibited for deletion from PBuffer
-    size_t TotalLockedBytesCount = 0;
+    TCountAndSize TotalLocked;
 
     [[nodiscard]] TString DebugPrint() const;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TBlocksDirtyMap
     : public ILockableRanges
@@ -65,6 +61,8 @@ public:
         ui32 blockSize,
         ui64 blockCount);
     ~TBlocksDirtyMap() override;
+
+    void Load(const TDirtyMapStateProto& proto);
 
     // Note. Fresh watermarks are not applying for exists DDisks.
     void UpdateConfig(const TVChunkConfig& vChunkConfig);
@@ -123,7 +121,9 @@ public:
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
-    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex host) const;
+    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex host) const;
+    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex host) const;
+    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex host) const;
 
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;
@@ -154,10 +154,9 @@ public:
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
-    [[nodiscard]] PartitionDirect::NProto::TDirtyMapState
-    GetStateForPersist() const;
+    [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
     void StatePersisted(ui32 persistGeneration);
-    [[nodiscard]] ui64 GetCurrentGeneration() const;
+    [[nodiscard]] ui32 GetCurrentGeneration() const;
 
     // Debug purposes
     [[nodiscard]] TString DebugPrintPBuffers();

@@ -40,7 +40,16 @@
         "description": "MATERIALIZE",
         "min_langver": "2026.02"
     },
+    "DecimalArithmeticWithCommonType": {
+        "description": "Arithmetic operations on Decimal values with different types",
+        "min_langver": "max",
+        "is_backport_allowed": true
+    },
     "TypeErasure": {
+        "min_langver": "2026.02"
+    },
+    "DecimalListFromRange": {
+        "description": "ListFromRange over Decimal",
         "min_langver": "2026.02"
     },
     "HybridRankFunction": {

@@ -38,9 +38,9 @@ constinit const auto Logger = BacktraceIntrospectorLogger;
 
 std::vector<TFiberIntrospectionInfo> IntrospectFibers()
 {
-    YT_LOG_INFO("Fiber introspection started");
+    YT_TLOG_INFO("Fiber introspection started");
 
-    YT_LOG_INFO("Collecting waiting fibers backtraces");
+    YT_TLOG_INFO("Collecting waiting fibers backtraces");
 
     std::vector<TFiberIntrospectionInfo> infos;
     THashSet<TFiberId> waitingFiberIds;
@@ -60,8 +60,8 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
             EFiberState state;
 
             auto onIntrospectionLockAcquired = [&] {
-                YT_LOG_DEBUG("Waiting fiber is successfully locked for introspection (FiberId: %x)",
-                    fiberId);
+                YT_TLOG_DEBUG("Waiting fiber is successfully locked for introspection")
+                    .WithFormat("FiberId", "%x", fiberId);
 
                 const auto* propagatingStorage = NConcurrency::TryGetPropagatingStorage(*fiber->GetFls());
                 const auto* traceContext = propagatingStorage ? TryGetTraceContextFromPropagatingStorage(*propagatingStorage) : nullptr;
@@ -78,8 +78,8 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
 
                 auto optionalContext = TrySynthesizeLibunwindContextFromMachineContext(*fiber->GetMachineContext());
                 if (!optionalContext) {
-                    YT_LOG_WARNING("Failed to synthesize libunwind context (FiberId: %x)",
-                        fiberId);
+                    YT_TLOG_WARNING("Failed to synthesize libunwind context")
+                        .WithFormat("FiberId", "%x", fiberId);
                     return;
                 }
 
@@ -92,13 +92,13 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
                 infos.push_back(std::move(info));
                 InsertOrCrash(waitingFiberIds, fiberId);
 
-                YT_LOG_DEBUG("Fiber introspection completed (FiberId: %x)",
-                    fiberId);
+                YT_TLOG_DEBUG("Fiber introspection completed")
+                    .WithFormat("FiberId", "%x", fiberId);
             };
             if (!fiber->TryLockForIntrospection(&state, onIntrospectionLockAcquired)) {
-                YT_LOG_DEBUG("Failed to lock fiber for introspection (FiberId: %x, State: %v)",
-                    fiberId,
-                    state);
+                YT_TLOG_DEBUG("Failed to lock fiber for introspection")
+                    .WithFormat("FiberId", "%x", fiberId)
+                    .With("State", state);
                 fiberStates[fiberId] = state;
             }
         }
@@ -106,7 +106,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
 
     TFiber::ReadFibers(introspectionAction);
 
-    YT_LOG_INFO("Collecting running fibers backtraces");
+    YT_TLOG_INFO("Collecting running fibers backtraces");
 
     THashSet<TFiberId> runningFiberIds;
     for (auto& info : IntrospectThreads()) {
@@ -150,7 +150,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
         });
     }
 
-    YT_LOG_INFO("Fiber introspection completed");
+    YT_TLOG_INFO("Fiber introspection completed");
 
     return infos;
 }

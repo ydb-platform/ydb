@@ -244,7 +244,6 @@ private:
         return PyObject_CallObject(function.Get(), args);
     }
 
-private:
     TMemoryUsageInfo MemInfo_;
     TScopedAlloc Alloc_;
     TTypeEnvironment Env_;

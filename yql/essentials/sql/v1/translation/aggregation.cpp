@@ -1423,7 +1423,6 @@ private:
         apply = L(apply, Limit_);
     }
 
-private:
     TNodePtr ItemFromState(TNodePtr x, bool isMany) {
         x = isMany ? Y("Unwrap", x) : x;
         return Y(
@@ -1520,7 +1519,6 @@ private:
         apply = L(apply, Y("Uint32", Q(ToString(Precision_))));
     }
 
-private:
     ui32 Precision_ = 0;
 };
 
@@ -1600,7 +1598,6 @@ private:
         }
     }
 
-private:
     TSourcePtr FakeSource_;
     TNodePtr Limit_;
 };
@@ -1765,7 +1762,6 @@ TAggregationPtr BuildPGFactoryAggregation(TPosition pos, const TString& name, EA
 
 class TNthValueFactoryAggregation final: public TAggregationFactory {
 public:
-public:
     TNthValueFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
         , FakeSource_(BuildFakeSource(pos))
@@ -1826,7 +1822,6 @@ private:
         apply = L(apply, Index_);
     }
 
-private:
     TSourcePtr FakeSource_;
     TNodePtr Index_;
 };

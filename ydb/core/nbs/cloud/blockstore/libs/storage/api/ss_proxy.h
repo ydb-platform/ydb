@@ -46,12 +46,15 @@ struct TEvSSProxy
     {
         const NKikimrScheme::EStatus Status;
         const TString Reason;
+        const ui64 TabletId;
 
         TCreateVolumeResponse(
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess,
-            TString reason = {})
+            TString reason = {},
+            ui64 tabletId = 0)
             : Status(status)
             , Reason(std::move(reason))
+            , TabletId(tabletId)
         {}
     };
 

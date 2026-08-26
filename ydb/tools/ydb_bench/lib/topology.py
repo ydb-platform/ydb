@@ -1,8 +1,10 @@
 import os
+import plistlib
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-
 
 AFFINITY_MODES = (
     "none",
@@ -29,6 +31,7 @@ class CpuTopology:
     physical_cores: tuple = ()
     smt_siblings: tuple = ()
     hierarchy_reasons: tuple = ()
+    chiplet_labels: tuple = ()
     # A non-empty value means the discovered L3 groups cannot safely drive a
     # chiplet-aware placement.  The raw hierarchy remains useful for display,
     # while plan_affinity() rejects only modes which rely on this level.
@@ -93,10 +96,86 @@ def _allowed_cpus():
     return tuple(range(os.cpu_count() or 1))
 
 
+def _device_tree_integer(value):
+    if isinstance(value, int):
+        return value
+    if isinstance(value, bytes) and value:
+        return int.from_bytes(value, byteorder="little")
+    return None
+
+
+def _parse_darwin_topology(data, allowed):
+    try:
+        roots = plistlib.loads(data)
+        entries = roots[0]["IORegistryEntryChildren"]
+    except (IndexError, KeyError, TypeError, ValueError, plistlib.InvalidFileException):
+        return None
+
+    allowed_set = set(allowed)
+    cpus = {}
+    for entry in entries:
+        cpu = _device_tree_integer(entry.get("logical-cpu-id"))
+        cluster = _device_tree_integer(entry.get("cluster-id"))
+        cluster_type = entry.get("cluster-type")
+        if isinstance(cluster_type, bytes):
+            cluster_type = cluster_type.rstrip(b"\0").decode("ascii", errors="replace")
+        if cpu in allowed_set and cluster is not None and cluster_type in ("E", "P"):
+            placement = (cluster, cluster_type)
+            if cpu in cpus and cpus[cpu] != placement:
+                return None
+            cpus[cpu] = placement
+    if set(cpus) != allowed_set:
+        return None
+
+    groups = {}
+    for cpu, (cluster, cluster_type) in cpus.items():
+        groups.setdefault((cluster, cluster_type), []).append(cpu)
+    ordered_groups = sorted(groups.items())
+    type_counts = {kind: sum(1 for (_, current), _ in ordered_groups if current == kind) for kind in ("E", "P")}
+    type_indexes = {"E": 0, "P": 0}
+    labels = []
+    chiplets = []
+    for (_, kind), group_cpus in ordered_groups:
+        type_indexes[kind] += 1
+        name = "Efficiency" if kind == "E" else "Performance"
+        suffix = " {}".format(type_indexes[kind]) if type_counts[kind] > 1 else ""
+        group = tuple(sorted(group_cpus))
+        chiplets.append((0, group))
+        labels.append((group, "{} cluster{}".format(name, suffix)))
+    cores = tuple((cpu,) for cpu in allowed)
+    return CpuTopology(
+        allowed_cpus=allowed,
+        numa_nodes=((0, allowed),),
+        chiplets=tuple(chiplets),
+        physical_cores=cores,
+        smt_siblings=cores,
+        hierarchy_reasons=(("numa", "macOS does not expose NUMA placement; using package 0"),),
+        chiplet_labels=tuple(labels),
+    )
+
+
+def _discover_darwin_topology(allowed):
+    try:
+        result = subprocess.run(
+            ("ioreg", "-a", "-l", "-p", "IODeviceTree", "-r", "-n", "cpus"),
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    return _parse_darwin_topology(result.stdout, allowed)
+
+
 def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
     sys_root = Path(sys_root)
     allowed = tuple(sorted(set(_allowed_cpus() if allowed_cpus is None else allowed_cpus)))
     allowed_set = set(allowed)
+
+    if sys.platform == "darwin" and sys_root == Path("/sys/devices/system"):
+        darwin_topology = _discover_darwin_topology(allowed)
+        if darwin_topology is not None:
+            return darwin_topology
 
     reasons = []
     nodes = []
@@ -163,18 +242,14 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
 
     chiplets = []
     for cpus in sorted(chiplet_sets):
-        node_ids = tuple(
-            node_id for node_id, node_cpus in nodes if set(cpus).issubset(node_cpus)
-        )
+        node_ids = tuple(node_id for node_id, node_cpus in nodes if set(cpus).issubset(node_cpus))
         if len(node_ids) != 1:
             # The chiplet record has a NUMA-node identifier, so assigning this
             # group to the node of its first CPU would fabricate a hierarchy.
             # Keep chiplet-based modes unavailable until this topology is
             # understood; NUMA-only modes do not rely on the L3 grouping.
             chiplet_topology_reasons.append(
-                "L3 cache group {} does not belong to exactly one NUMA node".format(
-                    ", ".join(str(cpu) for cpu in cpus)
-                )
+                "L3 cache group {} does not belong to exactly one NUMA node".format(", ".join(str(cpu) for cpu in cpus))
             )
             continue
         node_id = node_ids[0]
@@ -190,8 +265,11 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
         topology_root = sys_root / "cpu" / "cpu{}".format(cpu) / "topology"
         package_id = _read_int(topology_root / "physical_package_id")
         core_id = _read_int(topology_root / "core_id")
-        siblings = tuple(candidate for candidate in _read_cpu_list(topology_root / "thread_siblings_list")
-                         if candidate in allowed_set)
+        siblings = tuple(
+            candidate
+            for candidate in _read_cpu_list(topology_root / "thread_siblings_list")
+            if candidate in allowed_set
+        )
         if not siblings or cpu not in siblings:
             incomplete_smt_data = True
             siblings = (cpu,)
@@ -218,7 +296,9 @@ def discover_topology(sys_root=Path("/sys/devices/system"), allowed_cpus=None):
         # conservative and can never merge two distinct physical cores.
         core_groups.setdefault(key if key is not None else ("cpu", cpu), []).append(cpu)
     if incomplete_core_data:
-        reasons.append(("physical_core", "physical_package_id or core_id is unavailable; affected CPUs are singleton cores"))
+        reasons.append(
+            ("physical_core", "physical_package_id or core_id is unavailable; affected CPUs are singleton cores")
+        )
     if incomplete_smt_data:
         reasons.append(("smt", "thread_siblings_list is incomplete; affected CPUs are singleton SMT groups"))
 
@@ -332,9 +412,7 @@ def plan_affinity(mode, topology, required_cpus):
     if policy.get("chiplet") and topology.chiplet_topology_reason:
         return _unsupported(
             mode,
-            "chiplet-based affinity is unavailable: {}".format(
-                topology.chiplet_topology_reason
-            ),
+            "chiplet-based affinity is unavailable: {}".format(topology.chiplet_topology_reason),
         )
     numa_nodes = [cpus for _, cpus in topology.numa_nodes if cpus]
     if policy.get("numa") == "spread" and len(numa_nodes) < 2:
@@ -389,14 +467,8 @@ def plan_background_load(mode, topology, foreground_cpus, foreground_threads):
         groups = tuple((cpu,) for cpu in representatives)
         return BackgroundPlacement(mode=mode, cpus=tuple(representatives), groups=groups, workers=len(groups))
 
-    cpu_to_node = {
-        cpu: node_id for node_id, cpus in topology.numa_nodes for cpu in cpus
-    }
-    cpu_to_chiplet = {
-        cpu: (node_id, index)
-        for index, (node_id, cpus) in enumerate(topology.chiplets)
-        for cpu in cpus
-    }
+    cpu_to_node = {cpu: node_id for node_id, cpus in topology.numa_nodes for cpu in cpus}
+    cpu_to_chiplet = {cpu: (node_id, index) for index, (node_id, cpus) in enumerate(topology.chiplets) for cpu in cpus}
     groups = []
     if mode == "coherence-chiplet":
         by_chiplet = {}
@@ -435,18 +507,20 @@ def plan_background_load(mode, topology, foreground_cpus, foreground_threads):
 
 
 def topology_record(topology):
+    chiplet_labels = dict(topology.chiplet_labels)
     return {
         "version": topology.version,
         "allowed_cpus": list(topology.allowed_cpus),
-        "numa_nodes": [
-            {"id": node_id, "cpus": list(cpus)} for node_id, cpus in topology.numa_nodes
-        ],
+        "numa_nodes": [{"id": node_id, "cpus": list(cpus)} for node_id, cpus in topology.numa_nodes],
         "chiplets": [
-            {"numa_node": node_id, "cpus": list(cpus)} for node_id, cpus in topology.chiplets
+            {
+                "numa_node": node_id,
+                "cpus": list(cpus),
+                **({"label": chiplet_labels[cpus]} if cpus in chiplet_labels else {}),
+            }
+            for node_id, cpus in topology.chiplets
         ],
         "physical_cores": [list(cpus) for cpus in topology.physical_cores],
         "smt_siblings": [list(cpus) for cpus in topology.smt_siblings],
-        "hierarchy_reasons": [
-            {"level": level, "reason": reason} for level, reason in topology.hierarchy_reasons
-        ],
+        "hierarchy_reasons": [{"level": level, "reason": reason} for level, reason in topology.hierarchy_reasons],
     }

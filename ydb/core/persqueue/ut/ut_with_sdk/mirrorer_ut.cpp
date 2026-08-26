@@ -8,9 +8,13 @@
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
+#include <ydb/core/persqueue/pqtablet/partition/mirrorer/mirrorer.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>
+
+#include <deque>
 
 namespace NKikimr::NPersQueueTests {
 
@@ -395,6 +399,63 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
             expectedOffset += messageCount;
         }
+    }
+
+    Y_UNIT_TEST(StopsPackingOnOffsetGap) {
+        using TCompressedMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage;
+        using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation;
+
+        auto makeMessage = [](ui64 offset, ui64 seqNo) {
+            auto meta = MakeIntrusive<NYdb::NTopic::TWriteSessionMeta>();
+            auto messageMeta = MakeIntrusive<NYdb::NTopic::TMessageMeta>();
+            const TString data = "payload";
+            TMessageInformation info(
+                offset,
+                "producer",
+                seqNo,
+                TInstant::MilliSeconds(1000),
+                TInstant::MilliSeconds(2000),
+                meta,
+                messageMeta,
+                data.size(),
+                "producer"
+            );
+            return TCompressedMessage(NYdb::NTopic::ECodec::RAW, data, std::move(info), nullptr);
+        };
+
+        auto fillWriteRequest = [](NKikimrClient::TPersQueuePartitionRequest& request, std::deque<TCompressedMessage>& queue) {
+            bool incorrectRequest = false;
+            ui64 nextOffset = 0;
+            size_t packed = 0;
+            while (!queue.empty() && NPQ::AppendToWriteRequest(request, queue.front(), incorrectRequest, nextOffset)) {
+                queue.pop_front();
+                ++packed;
+            }
+            UNIT_ASSERT(!incorrectRequest);
+            return packed;
+        };
+
+        std::deque<TCompressedMessage> queue;
+        queue.push_back(makeMessage(0, 1));
+        queue.push_back(makeMessage(1, 2));
+        queue.push_back(makeMessage(3, 3));
+
+        NKikimrClient::TPersQueuePartitionRequest prefix;
+        UNIT_ASSERT_VALUES_EQUAL(fillWriteRequest(prefix, queue), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.GetCmdWriteOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.CmdWriteSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.GetCmdWrite(0).GetSeqNo(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.GetCmdWrite(1).GetSeqNo(), 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(queue.front().GetOffset(), 3u);
+
+        NKikimrClient::TPersQueuePartitionRequest rest;
+        UNIT_ASSERT_VALUES_EQUAL(fillWriteRequest(rest, queue), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(rest.GetCmdWriteOffset(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rest.CmdWriteSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rest.GetCmdWrite(0).GetSeqNo(), 3);
+        UNIT_ASSERT(queue.empty());
     }
 
     Y_UNIT_TEST(ValidStartStream) {

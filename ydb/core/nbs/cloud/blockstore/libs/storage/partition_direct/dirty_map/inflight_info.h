@@ -182,7 +182,7 @@ public:
     // assigned, it means that erasing can only be started after saving of data
     // from that or higher generation in the partition local database.
     void SetPersistGeneration(ui32 persistGeneration);
-    ui64 GetPersistGeneration() const;
+    [[nodiscard]] ui32 GetPersistGeneration() const;
 
     TString DebugPrint(TInstant now) const;
 

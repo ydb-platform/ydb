@@ -660,8 +660,9 @@ class TCodegeneratorRootNode: public TDerived, public ICodegeneratorRootNode,
 using TBase = TDerived;
 public:
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
-        if (compCtx.ExecuteLLVM && GetFunction_)
+        if (compCtx.ExecuteLLVM && GetFunction_) {
             return GetFunction_(&compCtx);
+        }
 
         return TBase::GetValue(compCtx);
     }
@@ -690,8 +691,9 @@ private:
         auto& module = codegen.GetModule();
 
         if constexpr (PreventReGeneration) {
-            if (const auto& name = TDerived::MakeName(); module.getFunction(name.c_str()))
+            if (const auto& name = TDerived::MakeName(); module.getFunction(name.c_str())) {
                 return nullptr;
+            }
         }
 
         const auto& name = MakeName();
@@ -699,13 +701,15 @@ private:
     }
 protected:
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) override {
-        if (GetFunc_)
+        if (GetFunc_) {
             GetFunction_ = reinterpret_cast<TGetPtr>(codegen.GetPointerToFunction(GetFunc_));
+        }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) override {
-        if (GetFunc_ = GenerateGetValue(codegen))
+        if (GetFunc_ = GenerateGetValue(codegen)) {
             codegen.ExportSymbol(GetFunc_);
+        }
     }
 private:
     using TGetPtr = NUdf::TUnboxedValuePod (*)(TComputationContext* ctx);
@@ -1198,15 +1202,17 @@ template<typename T> Type* GetTypeFor(LLVMContext &context);
 
 template<typename T> inline Value* GetterFor(Value* value, LLVMContext &context, BasicBlock* block) {
     const auto trunc = CastInst::Create(Instruction::Trunc, value, std::is_same<T, bool>() ? Type::getInt1Ty(context) : IntegerType::get(context, sizeof(T) << 3U), "trunc", block);
-    if  (std::is_integral<T>::value)
+    if  (std::is_integral<T>::value) {
         return trunc;
+    }
     return CastInst::Create(Instruction::BitCast, trunc, GetTypeFor<T>(context), "bitcast", block);
 }
 
 template<typename T> inline
 Value* SetterFor(Value* value, LLVMContext &context, BasicBlock* block) {
-    if  (value->getType()->isFloatingPointTy())
+    if  (value->getType()->isFloatingPointTy()) {
         value = CastInst::Create(Instruction::BitCast, value, IntegerType::get(context, sizeof(T) << 3U), "bitcast", block);
+    }
 
     const auto type = Type::getInt128Ty(context);
     const auto zext = CastInst::Create(Instruction::ZExt, value, type, "zext", block);
@@ -1223,8 +1229,9 @@ Value* GetterForTimezone(LLVMContext& context, Value* value, BasicBlock* block);
 
 template<typename TSrc, typename TDst> inline
 Value* StaticCast(Value* value, LLVMContext &context, BasicBlock* block) {
-    if (std::is_same<TSrc, TDst>())
+    if (std::is_same<TSrc, TDst>()) {
         return value;
+    }
 
     if (std::is_integral<TSrc>() == std::is_integral<TDst>()) {
         if (std::is_integral<TSrc>()) {

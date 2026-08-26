@@ -443,11 +443,11 @@ TExprNode::TPtr OptimizeXor(const TExprNode::TPtr& node, TExprContext& ctx) {
     TNodeSet set(children.size());
     TNodeMap<TExprNode::TListType::const_iterator> map(children.size());
     for (auto it = children.cbegin(); children.cend() != it;) {
-        if (set.emplace(it->Get()).second)
+        if (set.emplace(it->Get()).second) {
             ++it;
-        else if (const auto ins = map.emplace(it->Get(), it); ins.second)
+        } else if (const auto ins = map.emplace(it->Get(), it); ins.second) {
             ++it;
-        else {
+        } else {
             children.erase(it);
             children.erase(ins.first->second);
             set.clear();
@@ -996,10 +996,11 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             YQL_CLOG(DEBUG, Core) << node->Content() << " with identical predicates.";
             auto children = node->ChildrenList();
             for (auto i = 0U; i < children.size() - 1U;) {
-                if (predicates.erase(children[i].Get()))
+                if (predicates.erase(children[i].Get())) {
                     i += 2U;
-                else
+                } else {
                     children.erase(children.cbegin() + i, children.cbegin() + i + 2U);
+                }
             }
             return ctx.ChangeChildren(*node, std::move(children));
         }
@@ -1014,8 +1015,9 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
                         auto many = prev->ChildrenList();
                         many.emplace_back(std::move(next));
                         prev = ctx.ChangeChildren(*prev, std::move(many));
-                    } else
+                    } else {
                         prev = ctx.NewCallable(node->Pos(), "Or", {std::move(prev), std::move(next)});
+                    }
                     children.erase(children.cbegin() + i + 1U, children.cbegin() + i + 3U);
                     auto res = ctx.ChangeChildren(*node, std::move(children));
                     res = KeepWorld(res, *node, ctx, *optCtx.Types);

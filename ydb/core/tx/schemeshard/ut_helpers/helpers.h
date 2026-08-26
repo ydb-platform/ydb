@@ -19,6 +19,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/library/login/login.h>
 
 #include <yql/essentials/minikql/mkql_alloc.h>

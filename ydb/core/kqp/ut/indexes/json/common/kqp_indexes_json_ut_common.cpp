@@ -99,13 +99,6 @@ void TestAddJsonIndex(const std::string& type, bool nullable) {
     }
 
     CompareYson(R"([
-        [[10u];""];
-        [[11u];""];
-        [[12u];""];
-        [[13u];""];
-        [[14u];""];
-        [[15u];""];
-        [[16u];""];
         [[13u];"\0\0"];
         [[15u];"\0\0"];
         [[12u];"\0\1"];
@@ -212,7 +205,9 @@ void ValidatePredicate(TQueryClient& db, const std::string& predicate, TParams p
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
-void ValidateError(TQueryClient& db, const std::string& predicate, const std::string& errorMessage) {
+void ValidateError(TQueryClient& db, const std::string& predicate, const std::string& errorMessage,
+    const std::string& unexpectedErrorMessage)
+{
     static constexpr const char* table = "TestTable";
     static constexpr const char* indexTable = "json_idx";
 
@@ -225,6 +220,10 @@ void ValidateError(TQueryClient& db, const std::string& predicate, const std::st
     auto result = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(!result.IsSuccess(), "Predicate: " + predicate + ", issues: " + result.GetIssues().ToString());
     UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), errorMessage, "for predicate = " << predicate);
+    if (!unexpectedErrorMessage.empty()) {
+        UNIT_ASSERT_C(!result.GetIssues().ToString().contains(unexpectedErrorMessage),
+            "Unexpected error message for predicate = " << predicate << ": " << unexpectedErrorMessage);
+    }
 }
 
 void ValidateError(TQueryClient& db, const std::string& predicate, TParams params, const std::string& errorMessage) {
@@ -556,7 +555,14 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
         auto idxResult = execQ(sqlIndex, p.Params);
         auto mainResult = execQ(sqlMain, p.Params);
 
-        if (p.ExpectExtractError) {
+        if (!idxResult.IsSuccess() && idxResult.GetIssues().ToString().contains(
+            "JSON index cannot be used: full-range search cannot be performed using full-text search"))
+        {
+            UNIT_ASSERT_C(mainResult.IsSuccess(), "Main query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
+            ++errCount;
+
+            Cerr << p.Sql << ", full-range err" << Endl;
+        } else if (p.ExpectExtractError) {
             UNIT_ASSERT_C(!idxResult.IsSuccess(), "Expected extract error for predicate: " << p.Sql);
             UNIT_ASSERT_STRING_CONTAINS_C(idxResult.GetIssues().ToString(), p.ExpectedErrorSubstr, "for predicate: " << p.Sql);
             UNIT_ASSERT_C(mainResult.IsSuccess(), "Main query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());

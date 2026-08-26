@@ -11,6 +11,7 @@
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
@@ -164,7 +165,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
 
-    ColumnShardConfig = AppData(ctx)->ColumnShardConfig;
+    *ColumnShardConfig = AppData(ctx)->ColumnShardConfig;
     SubscribeToColumnShardConfig();
 
     Execute(CreateTxInitSchema(), ctx);
@@ -202,18 +203,18 @@ void TColumnShard::ApplyColumnShardConfig() {
     if (!HasIndex()) {
         return;
     }
-    MutableIndexAs<NOlap::TColumnEngineForLogs>().GetOptimizerRuntimeSettings()->ApplyFromConfig(ColumnShardConfig);
+    MutableIndexAs<NOlap::TColumnEngineForLogs>().GetOptimizerRuntimeSettings()->ApplyFromConfig(*ColumnShardConfig);
 }
 
 void TColumnShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     auto& event = ev->Get()->Record;
 
-    ColumnShardConfig.Swap(event.MutableConfig()->MutableColumnShardConfig());
+    ColumnShardConfig->Swap(event.MutableConfig()->MutableColumnShardConfig());
     ApplyColumnShardConfig();
     YDB_LOG_INFO("",
         {"event", "columnshard_config_updated"},
-        {"has_node_portions_count_limit", ColumnShardConfig.HasNodePortionsCountLimit()},
-        {"node_portions_count_limit", ColumnShardConfig.HasNodePortionsCountLimit() ? ColumnShardConfig.GetNodePortionsCountLimit() : 0});
+        {"has_node_portions_count_limit", ColumnShardConfig->HasNodePortionsCountLimit()},
+        {"node_portions_count_limit", ColumnShardConfig->HasNodePortionsCountLimit() ? ColumnShardConfig->GetNodePortionsCountLimit() : 0});
 
     auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
     Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);

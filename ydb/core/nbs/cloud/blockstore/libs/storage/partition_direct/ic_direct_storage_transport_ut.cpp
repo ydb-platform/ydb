@@ -79,6 +79,73 @@ TGuardedSgList MakeSgList(TString& buffer)
     return result;
 }
 
+void CheckDirectWriteChecksums(TDBGFixture& fixture, bool directSession)
+{
+    auto executor = fixture.MakeExecutor();
+    auto transport =
+        std::make_unique<TICStorageTransportTestAdapter>(fixture.Runtime.get());
+    if (directSession) {
+        transport->EnableFakeDirectSession();
+    }
+
+    const auto& ddiskId = transport->GetDDiskIds()[0];
+    auto connect = transport->Connect(MakeDDiskConnection(ddiskId));
+    fixture.WaitFuture(executor, connect.ConnectFuture, WaitTimeout);
+    UNIT_ASSERT(
+        connect.ConnectFuture.GetValueSync().GetStatus() ==
+        NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+    auto connection = MakeDDiskConnection(
+        ddiskId,
+        connect.ConnectFuture.GetValueSync().GetDDiskInstanceGuid());
+
+    TString writeBuf =
+        TString(DefaultBlockSize, 'A') + TString(DefaultBlockSize, 'B');
+    const auto expectedChecksums =
+        NDDisk::CalculatePayloadChecksums(TRope(writeBuf));
+
+    ui32 writeRequests = 0;
+    TString observedPayload;
+    TVector<ui64> observedChecksums;
+    fixture.Runtime->SetObserverFunc(
+        [&](TAutoPtr<NActors::IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() == NDDisk::TEvWrite::EventType) {
+                ++writeRequests;
+                auto* msg = ev->Get<NDDisk::TEvWrite>();
+                UNIT_ASSERT_VALUES_EQUAL(msg->GetPayloadCount(), 1u);
+                observedPayload = msg->GetPayload(0).ConvertToString();
+                observedChecksums.assign(
+                    msg->Record.GetChecksums().begin(),
+                    msg->Record.GetChecksums().end());
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+    auto future = transport->WriteToDDisk(
+        connection,
+        NDDisk::TBlockSelector{0, 0, DefaultBlockSize * 2},
+        NDDisk::TWriteInstruction(0),
+        MakeSgList(writeBuf),
+        nullptr);
+    fixture.WaitFuture(executor, future, WaitTimeout);
+
+    UNIT_ASSERT(
+        future.GetValueSync().GetStatus() ==
+        NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+    UNIT_ASSERT_VALUES_EQUAL(writeRequests, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(observedPayload, writeBuf);
+    UNIT_ASSERT_VALUES_EQUAL(
+        observedChecksums.size(),
+        expectedChecksums.size());
+    for (size_t i = 0; i < expectedChecksums.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(observedChecksums[i], expectedChecksums[i]);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(
+        transport->GetFakeDirectSessionSentEventCount(),
+        directSession ? 1u : 0u);
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,6 +182,16 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         UNIT_ASSERT(
             future.GetValueSync().GetStatus() ==
             NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST_F(ActorPathDirectWriteCarriesPerBlockChecksums, TDBGFixture)
+    {
+        CheckDirectWriteChecksums(*this, /*directSession=*/false);
+    }
+
+    Y_UNIT_TEST_F(DirectSessionWriteCarriesPerBlockChecksums, TDBGFixture)
+    {
+        CheckDirectWriteChecksums(*this, /*directSession=*/true);
     }
 
     // With a fake IDirectSession injected, WriteToDDisk / ReadFromDDisk go
@@ -596,6 +673,33 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             nullptr);
         WaitFuture(executor, readB2Future, WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(writeB, readB2);
+    }
+
+    Y_UNIT_TEST_F(DestroysOwnedActorAndRejectsPendingConnect, TDBGFixture)
+    {
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        const TActorId transportActorId = transport->GetTransportActorId();
+        const auto& ddiskId = transport->GetDDiskIds()[0];
+
+        transport->SetPendingConnect(EConnectionType::DDisk, ddiskId);
+        auto connect = transport->Connect(MakeDDiskConnection(ddiskId));
+        DrainRuntime();
+
+        UNIT_ASSERT(Runtime->FindActor(transportActorId));
+        UNIT_ASSERT(!connect.ConnectFuture.HasValue());
+
+        transport.reset();
+        DrainRuntime();
+
+        UNIT_ASSERT(!Runtime->FindActor(transportActorId));
+        UNIT_ASSERT(connect.ConnectFuture.HasValue());
+        UNIT_ASSERT(
+            connect.ConnectFuture.GetValueSync().GetStatus() ==
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            DestroyErrorMessage,
+            connect.ConnectFuture.GetValueSync().GetErrorReason());
     }
 }
 

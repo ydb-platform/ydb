@@ -13,8 +13,6 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/checked_deref_ptr.h>
 
-#define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
-
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
@@ -1082,7 +1080,6 @@ private:
     ui32 GetFlags(ui32 typeId);
     ui64 GetPgExtensionsMask(ui32 typeId);
 
-private:
     ui32 TypeId_;
 };
 
@@ -1405,7 +1402,6 @@ private:
         return flags;
     }
 
-private:
     const TTypeAnnotationNode* ReturnType_;
     TVector<TArgumentInfo> Arguments_;
     const size_t OptionalArgumentsCount_;
@@ -1690,65 +1686,95 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
 inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
     switch (Kind_) {
         case ETypeAnnotationKind::Unit:
-            return visitor.Visit(static_cast<const TUnitExprType&>(*this));
+            visitor.Visit(static_cast<const TUnitExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Universal:
-            return visitor.Visit(static_cast<const TUniversalExprType&>(*this));
+            visitor.Visit(static_cast<const TUniversalExprType&>(*this));
+            return;
         case ETypeAnnotationKind::UniversalStruct:
-            return visitor.Visit(static_cast<const TUniversalStructExprType&>(*this));
+            visitor.Visit(static_cast<const TUniversalStructExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Tuple:
-            return visitor.Visit(static_cast<const TTupleExprType&>(*this));
+            visitor.Visit(static_cast<const TTupleExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Struct:
-            return visitor.Visit(static_cast<const TStructExprType&>(*this));
+            visitor.Visit(static_cast<const TStructExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Item:
-            return visitor.Visit(static_cast<const TItemExprType&>(*this));
+            visitor.Visit(static_cast<const TItemExprType&>(*this));
+            return;
         case ETypeAnnotationKind::List:
-            return visitor.Visit(static_cast<const TListExprType&>(*this));
+            visitor.Visit(static_cast<const TListExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Data:
-            return visitor.Visit(static_cast<const TDataExprType&>(*this));
+            visitor.Visit(static_cast<const TDataExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Pg:
-            return visitor.Visit(static_cast<const TPgExprType&>(*this));
+            visitor.Visit(static_cast<const TPgExprType&>(*this));
+            return;
         case ETypeAnnotationKind::World:
-            return visitor.Visit(static_cast<const TWorldExprType&>(*this));
+            visitor.Visit(static_cast<const TWorldExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Optional:
-            return visitor.Visit(static_cast<const TOptionalExprType&>(*this));
+            visitor.Visit(static_cast<const TOptionalExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Type:
-            return visitor.Visit(static_cast<const TTypeExprType&>(*this));
+            visitor.Visit(static_cast<const TTypeExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Dict:
-            return visitor.Visit(static_cast<const TDictExprType&>(*this));
+            visitor.Visit(static_cast<const TDictExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Void:
-            return visitor.Visit(static_cast<const TVoidExprType&>(*this));
+            visitor.Visit(static_cast<const TVoidExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Null:
-            return visitor.Visit(static_cast<const TNullExprType&>(*this));
+            visitor.Visit(static_cast<const TNullExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Callable:
-            return visitor.Visit(static_cast<const TCallableExprType&>(*this));
+            visitor.Visit(static_cast<const TCallableExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Generic:
-            return visitor.Visit(static_cast<const TGenericExprType&>(*this));
+            visitor.Visit(static_cast<const TGenericExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Resource:
-            return visitor.Visit(static_cast<const TResourceExprType&>(*this));
+            visitor.Visit(static_cast<const TResourceExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Tagged:
-            return visitor.Visit(static_cast<const TTaggedExprType&>(*this));
+            visitor.Visit(static_cast<const TTaggedExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Error:
-            return visitor.Visit(static_cast<const TErrorExprType&>(*this));
+            visitor.Visit(static_cast<const TErrorExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Variant:
-            return visitor.Visit(static_cast<const TVariantExprType&>(*this));
+            visitor.Visit(static_cast<const TVariantExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Stream:
-            return visitor.Visit(static_cast<const TStreamExprType&>(*this));
+            visitor.Visit(static_cast<const TStreamExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Flow:
-            return visitor.Visit(static_cast<const TFlowExprType&>(*this));
+            visitor.Visit(static_cast<const TFlowExprType&>(*this));
+            return;
         case ETypeAnnotationKind::EmptyList:
-            return visitor.Visit(static_cast<const TEmptyListExprType&>(*this));
+            visitor.Visit(static_cast<const TEmptyListExprType&>(*this));
+            return;
         case ETypeAnnotationKind::EmptyDict:
-            return visitor.Visit(static_cast<const TEmptyDictExprType&>(*this));
+            visitor.Visit(static_cast<const TEmptyDictExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Multi:
-            return visitor.Visit(static_cast<const TMultiExprType&>(*this));
+            visitor.Visit(static_cast<const TMultiExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Block:
-            return visitor.Visit(static_cast<const TBlockExprType&>(*this));
+            visitor.Visit(static_cast<const TBlockExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Scalar:
-            return visitor.Visit(static_cast<const TScalarExprType&>(*this));
+            visitor.Visit(static_cast<const TScalarExprType&>(*this));
+            return;
         case ETypeAnnotationKind::Linear:
-            return visitor.Visit(static_cast<const TLinearExprType&>(*this));
+            visitor.Visit(static_cast<const TLinearExprType&>(*this));
+            return;
         case ETypeAnnotationKind::DynamicLinear:
-            return visitor.Visit(static_cast<const TDynamicLinearExprType&>(*this));
+            visitor.Visit(static_cast<const TDynamicLinearExprType&>(*this));
+            return;
         case ETypeAnnotationKind::LastType:
             YQL_ENSURE(false, "Incorrect type");
     }
@@ -2292,8 +2318,8 @@ public:
         State_ = TypeAnnotation_ ? EState::TypeComplete : EState::Initial;
     }
 
-    YQL_TYPE_ANN_PTR GetTypeAnn() const {
-        return static_cast<YQL_TYPE_ANN_PTR>(TypeAnnotation_);
+    NYql::TCheckedDerefPtr<const TTypeAnnotationNode> GetTypeAnn() const {
+        return static_cast<NYql::TCheckedDerefPtr<const TTypeAnnotationNode>>(TypeAnnotation_);
     }
 
     EState GetState() const {

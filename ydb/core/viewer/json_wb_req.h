@@ -36,16 +36,27 @@ public:
         : TBase(viewer, ev)
     {}
 
-    void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
-            return;
-        }
+    std::vector<TNodeId> GetNodeIdsFromParams() const {
         std::vector<TNodeId> nodeIds;
         SplitIds(TBase::Params.Get("node_id"), ',', nodeIds);
         std::replace(nodeIds.begin(),
                      nodeIds.end(),
                      (TNodeId)0,
                      TlsActivationContext->ActorSystem()->NodeId);
+        return nodeIds;
+    }
+
+    void Bootstrap() override {
+        if (TBase::NeedToRedirect()) {
+            return;
+        }
+        std::vector<TNodeId> nodeIds = GetNodeIdsFromParams();
+        if (TBase::IsStrictDatabaseOnlyRequest()) {
+            if (TBase::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId>(nodeIds.data(), nodeIds.size()))) {
+                return;
+            }
+        }
+
         if (!nodeIds.empty()) {
             if (TBase::RequestSettings.FilterNodeIds.empty()) {
                 TBase::RequestSettings.FilterNodeIds = nodeIds;
@@ -74,6 +85,15 @@ public:
                 if (TBase::RequestSettings.FilterNodeIds.empty()) {
                     return ReplyAndPassAway();
                 }
+            }
+            if (TBase::RequestSettings.FilterNodeIds.empty() && TBase::IsStrictDatabaseOnlyRequest()) {
+                // If a database has no registered nodes, a strict database-only user gets
+                // 200 with an empty response, not the nodes of the whole cluster.
+                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to ask",
+                    {"logPrefix", TBase::GetLogPrefix()},
+                    {"user", TBase::GetUserSID()},
+                    {"database", TBase::Database});
+                return ReplyAndPassAway();
             }
         }
         {

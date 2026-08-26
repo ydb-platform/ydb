@@ -116,7 +116,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(traceId);
             Y_UNUSED(guardedSglist);
 
-            UNIT_ASSERT_VALUES_EQUAL(UserPBufferKey, pBufferKey);
+            UNIT_ASSERT_VALUES_EQUAL(
+                UserPBufferKey.Print(),
+                pBufferKey.Print());
             UNIT_ASSERT_VALUES_EQUAL(
                 VChunkConfig.GetVChunkIndex(),
                 vChunkIndex);
@@ -179,7 +181,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(traceId);
             Y_UNUSED(guardedSglist);
 
-            UNIT_ASSERT_VALUES_EQUAL(UserPBufferKey, pBufferKey);
+            UNIT_ASSERT_VALUES_EQUAL(
+                UserPBufferKey.Print(),
+                pBufferKey.Print());
             UNIT_ASSERT_VALUES_EQUAL(
                 VChunkConfig.GetVChunkIndex(),
                 vChunkIndex);

@@ -151,7 +151,7 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
     {
         Y_UNUSED(coordinatorHostIndex, replyTimeout, guardedSglist, traceId);
 
-        UNIT_ASSERT_VALUES_EQUAL(UserPBufferKey, pBufferKey);
+        UNIT_ASSERT_VALUES_EQUAL(UserPBufferKey.Print(), pBufferKey.Print());
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 

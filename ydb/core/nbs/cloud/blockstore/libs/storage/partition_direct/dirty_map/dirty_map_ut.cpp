@@ -673,32 +673,32 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // (pending), before any PBuffer acknowledges it.
         dirtyMap->RegisterInflightWrite(MakeKey(123), range1);
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // The barrier tracks the minimum inflight lsn.
         dirtyMap->RegisterInflightWrite(MakeKey(124), range2);
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // The lsn stays inflight through the written and flushed states, so the
         // barrier does not advance past a not-yet-erased write.
         dirtyMap->WriteFinished(MakeKey(123), range1, requested, confirmed);
         dirtyMap->WriteFinished(MakeKey(124), range2, requested, confirmed);
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         auto flushHint = dirtyMap->MakeFlushHint(2);
         UNIT_ASSERT(!flushHint.Empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
         FlushAll(flushHint, *dirtyMap);
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // Erasing lsn 123 from only a sub-quorum of hosts keeps it inflight, so
         // the barrier is still held at 123.
@@ -707,15 +707,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap->EraseFinished(THostIndex{0}, {MakeKey(123)}, {});
         dirtyMap->EraseFinished(THostIndex{1}, {MakeKey(123)}, {});
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // Once 123 is erased everywhere it leaves the inflight map and the
         // barrier advances to 124.
         dirtyMap->EraseFinished(THostIndex{2}, {MakeKey(123)}, {});
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(124),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(124).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // Erasing 124 everywhere drains the map -> no barrier.
         dirtyMap->EraseFinished(THostIndex{0}, {MakeKey(124)}, {});
@@ -738,8 +738,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // A registered (pending) write holds the barrier.
         dirtyMap->RegisterInflightWrite(MakeKey(123), range);
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // A write that fails to reach a quorum of PBuffers drops its pending
         // entry and stops holding the barrier.
@@ -2070,16 +2070,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(100),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(100).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // Second pending write — barrier stays at 100.
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
             TBlockRange64::WithLength(20, 10));
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(100),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(100).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // Completing write 100 with sub-quorum drops it.
         dirtyMap->WriteFinished(
@@ -2088,8 +2088,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePrimaryHosts(),
             MakeHostMask(true, true, false, false, false));
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(200),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(200).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
 
         // Completing write 200 with quorum keeps it until erased.
         dirtyMap->WriteFinished(
@@ -2098,8 +2098,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePrimaryHosts(),
             MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(200),
-            *dirtyMap->GetSafeBarrierForErase());
+            MakeKey(200).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
     }
 
     Y_UNIT_TEST(ShouldCleanupInflightWhenHostEvacuatedDuringFlush)

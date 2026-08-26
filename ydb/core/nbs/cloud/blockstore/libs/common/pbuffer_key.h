@@ -2,7 +2,6 @@
 
 #include <util/digest/multi.h>
 #include <util/generic/string.h>
-#include <util/stream/fwd.h>
 #include <util/system/types.h>
 
 #include <compare>
@@ -30,8 +29,6 @@ struct TPBufferKey
 
     [[nodiscard]] TString Print() const;
 };
-
-IOutputStream& operator<<(IOutputStream& out, const TPBufferKey& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

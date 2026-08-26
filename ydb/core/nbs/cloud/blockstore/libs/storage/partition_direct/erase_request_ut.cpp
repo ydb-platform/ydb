@@ -42,8 +42,12 @@ Y_UNIT_TEST_SUITE(TEraseRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(2, response.EraseOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(42), response.EraseOk[0]);
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(43), response.EraseOk[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.EraseOk[0].Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.EraseOk[1].Print());
         UNIT_ASSERT_VALUES_EQUAL(0, response.EraseFailed.size());
     }
 }

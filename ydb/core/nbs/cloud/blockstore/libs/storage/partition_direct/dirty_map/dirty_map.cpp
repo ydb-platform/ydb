@@ -151,19 +151,10 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    struct TOverlappingRecord
-    {
-        TPBufferKey PBufferKey;
-        TBlockRange64 Range;
-        TReadSource ReadSource;
-    };
-
     bool shouldWaitQuorum = false;
-    // The split helper uses plain ui64 keys: the bigger key wins the overlap,
-    // 0 marks a hole. Collect the readable overlapping records, order them by
-    // record id (lexicographic order matches real time across generations),
-    // and use dense 1-based record indexes as those keys.
-    TStackVec<TOverlappingRecord> overlapping;
+    // Greatest TPBufferKey wins an overlap (lexicographic order matches real
+    // time). A default key is a hole and is read from DDisk.
+    TStackVec<TWeightedRange> ranges;
     Inflight.EnumerateOverlapping(
         range,
         [&](TInflightMap::TFindItem& item)
@@ -177,26 +168,12 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             }
 
             if (!readSource.OnlyDDisk()) {
-                overlapping.push_back(
-                    {.PBufferKey = item.Key,
-                     .Range = item.Range,
-                     .ReadSource = readSource});
+                ranges.push_back({.Key = item.Key, .Range = item.Range});
             }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
     if (shouldWaitQuorum) {
         return result;
-    }
-
-    Sort(
-        overlapping,
-        [](const auto& lhs, const auto& rhs)
-        { return lhs.PBufferKey < rhs.PBufferKey; });
-
-    TStackVec<TWeightedRange> ranges;
-    ranges.reserve(overlapping.size());
-    for (size_t i = 0; i < overlapping.size(); ++i) {
-        ranges.push_back({.Key = i + 1, .Range = overlapping[i].Range});
     }
 
     auto nonOverlappingRanges =
@@ -205,9 +182,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
 
     ui64 offsetBlocks{};
     for (auto& nonOverlappingRange: nonOverlappingRanges) {
-        const ui64 recordIndex = nonOverlappingRange.Key;
-
-        if (recordIndex == 0) {
+        if (nonOverlappingRange.Key == TPBufferKey{}) {
             auto hint = MakeReadRangeHint(
                 {},
                 {},
@@ -215,10 +190,14 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
                 offsetBlocks);
             result.RangeHints.push_back(std::move(hint));
         } else {
-            const auto& record = overlapping[recordIndex - 1];
+            auto item = Inflight.GetValue(nonOverlappingRange.Key);
+            Y_ABORT_UNLESS(item);
+            const auto readMask = item->Value.ReadMask();
+            Y_DEBUG_ABORT_UNLESS(!readMask.Empty());
+
             auto hint = MakeReadRangeHint(
-                record.ReadSource.Mask,
-                record.PBufferKey,
+                readMask.Mask,
+                nonOverlappingRange.Key,
                 nonOverlappingRange.Range,
                 offsetBlocks);
             result.RangeHints.push_back(std::move(hint));
@@ -811,7 +790,7 @@ TString TBlocksDirtyMap::DebugPrintPBuffers()
     Inflight.Enumerate(
         [&](TInflightMap::TFindItem& item)
         {
-            result << "  " << item.Key << item.Range.Print()
+            result << "  " << item.Key.Print() << item.Range.Print()
                    << item.Value.DebugPrint(now) << "\n";
             return TInflightMap::EEnumerateContinuation::Continue;
         });
@@ -865,7 +844,7 @@ TString TBlocksDirtyMap::DebugPrintReadyToClone() const
 {
     TStringBuilder result;
     for (auto pBufferKey: ReadyToClone) {
-        result << ToString(pBufferKey) << ";";
+        result << pBufferKey.Print() << ";";
     }
     return result;
 }
@@ -874,7 +853,7 @@ TString TBlocksDirtyMap::DebugPrintReadyToFlush() const
 {
     TStringBuilder result;
     for (auto pBufferKey: ReadyToFlush) {
-        result << ToString(pBufferKey) << ";";
+        result << pBufferKey.Print() << ";";
     }
     return result;
 }
@@ -883,7 +862,7 @@ TString TBlocksDirtyMap::DebugPrintReadyToErase() const
 {
     TStringBuilder result;
     for (auto pBufferKey: ReadyToErase) {
-        result << ToString(pBufferKey) << ";";
+        result << pBufferKey.Print() << ";";
     }
     return result;
 }

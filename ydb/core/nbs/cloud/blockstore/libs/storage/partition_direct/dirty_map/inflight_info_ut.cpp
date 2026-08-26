@@ -562,7 +562,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         readSource = inflightInfo.ReadMask();
         UNIT_ASSERT_VALUES_EQUAL(false, readSource.OnlyDDisk());
         UNIT_ASSERT_VALUES_EQUAL(false, readSource.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(123), readSource.PBufferKey);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(123).Print(),
+            readSource.PBufferKey.Print());
     }
 
     Y_UNIT_TEST(ShouldReturnEmptyReadMaskForIncompleteWrite)
@@ -595,7 +597,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         readSource = inflightInfo.ReadMask();
         UNIT_ASSERT_VALUES_EQUAL(false, readSource.Empty());
         UNIT_ASSERT_VALUES_EQUAL(false, readSource.OnlyDDisk());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(123), readSource.PBufferKey);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(123).Print(),
+            readSource.PBufferKey.Print());
     }
 
     Y_UNIT_TEST(ShouldReadFromDDiskAfterFlushed)

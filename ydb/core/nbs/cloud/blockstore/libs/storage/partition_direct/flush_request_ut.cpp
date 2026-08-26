@@ -48,8 +48,12 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(2, response.FlushOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(42), response.FlushOk[0]);
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(43), response.FlushOk[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushOk[0].Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushOk[1].Print());
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushFailed.size());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
@@ -89,9 +93,13 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(1, response.FlushOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(42), response.FlushOk[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushOk[0].Print());
         UNIT_ASSERT_VALUES_EQUAL(1, response.FlushFailed.size());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(43), response.FlushFailed[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushFailed[0].Print());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
 
@@ -131,8 +139,12 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushOk.size());
         UNIT_ASSERT_VALUES_EQUAL(2, response.FlushFailed.size());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(42), response.FlushFailed[0]);
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(43), response.FlushFailed[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushFailed[0].Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushFailed[1].Print());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
 
@@ -176,8 +188,12 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushOk.size());
         UNIT_ASSERT_VALUES_EQUAL(2, response.FlushFailed.size());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(42), response.FlushFailed[0]);
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(43), response.FlushFailed[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushFailed[0].Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushFailed[1].Print());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
 
@@ -231,7 +247,9 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(1, response.FlushOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(MakeKey(42), response.FlushOk[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushOk[0].Print());
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushFailed.size());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }

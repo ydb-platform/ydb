@@ -203,10 +203,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             true,
             WaitWriteRequests(3, TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *GetSafeBarrierOnExecutor(
-                DirectBlockGroup->GetExecutor(),
-                *vchunk));
+            MakeKey(123).Print(),
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                ->Print());
 
         // Acknowledging the PBuffer writes does not release the barrier: the
         // entry stays inflight until it is flushed and erased.
@@ -217,10 +216,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             result.Error.GetCode(),
             FormatError(result.Error));
         UNIT_ASSERT_VALUES_EQUAL(
-            MakeKey(123),
-            *GetSafeBarrierOnExecutor(
-                DirectBlockGroup->GetExecutor(),
-                *vchunk));
+            MakeKey(123).Print(),
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                ->Print());
 
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
@@ -287,7 +285,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             barrierWhileRestoring.has_value(),
             "vchunk with a pending restore reported 'no constraint' to the "
             "cleanup barrier gather");
-        UNIT_ASSERT_VALUES_EQUAL(TPBufferKey{}, *barrierWhileRestoring);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TPBufferKey{}.Print(),
+            barrierWhileRestoring->Print());
         UNIT_ASSERT(!barrierAfterRestore.has_value());
     }
 

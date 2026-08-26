@@ -11,12 +11,6 @@ TString TPBufferKey::Print() const
     return TStringBuilder() << Generation << ":" << Lsn;
 }
 
-IOutputStream& operator<<(IOutputStream& out, const TPBufferKey& rhs)
-{
-    out << rhs.Print();
-    return out;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

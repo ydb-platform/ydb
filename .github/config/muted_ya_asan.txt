@@ -46,9 +46,11 @@ ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin+UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin-UseBlockHashJoin
+ydb/core/kqp/ut/rbo KqpRboYql.BlockHashCrossJoin
 ydb/core/kqp/ut/rbo KqpRboYql.ClickBench_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.ClickBench_YQL_Single
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
+ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.FallbackToYqlDisabled
 ydb/core/kqp/ut/rbo KqpRboYql.FilterPushdownThroughJoin
 ydb/core/kqp/ut/rbo KqpRboYql.Having
@@ -139,6 +141,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashI
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithEmptyDatabaseAbsolutePath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootIgnoredForFirstClassCitizen
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
+ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootNotFound
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootSingleComponentPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.UnauthorizedWithDescribe
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
@@ -164,6 +167,8 @@ ydb/core/persqueue/public/schema/ut DescribeOperationActor.RetriesOnEmptyStatusR
 ydb/core/persqueue/public/schema/ut DescribeOperationActor.RetriesOnLocationDeliveryProblem
 ydb/core/persqueue/public/schema/ut DescribeOperationActor.TimesOutWhenLocationStuck
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic
+ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
+ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/persqueue/public/schema/ut SchemaOps.CreateAlterDropSmoke

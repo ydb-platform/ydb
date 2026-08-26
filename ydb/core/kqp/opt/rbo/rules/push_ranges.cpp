@@ -14,6 +14,24 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 
 bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
+    // Presence cannot narrow a required Data key.  In particular, extracting
+    // `required_key IS NOT NULL` on the first column of a composite key would
+    // manufacture a full prefix range and hide the original predicate behind
+    // a semantically useless RangeInfo.  Keep both the positive and negated
+    // forms residual; the latter forgoes an empty-range optimization but stays
+    // exact.  Optional and Pg presence checks remain eligible for extraction.
+    if (node->IsCallable("Exists") &&
+        node->ChildrenSize() == 1 &&
+        node->Head().IsCallable("Member"))
+    {
+        const auto memberType = node->Head().GetTypeAnn();
+        if (memberType &&
+            memberType->GetKind() == ETypeAnnotationKind::Data)
+        {
+            return false;
+        }
+    }
+
     TExprBase expr(node);
     if (auto sqlin = expr.Maybe<TCoSqlIn>()) {
         auto collection = sqlin.Cast().Collection().Ptr();

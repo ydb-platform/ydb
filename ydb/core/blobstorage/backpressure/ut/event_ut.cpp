@@ -34,7 +34,13 @@ TEvBlobStorage::TEvVGet::TPtr MakeEvent(const TActorId& recipient, const TActorI
 }
 
 TTestActorRuntime::TEgg MakeRuntimeEgg() {
-    return {new TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {}, {}};
+    return {
+        .App0 = new TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr),
+        .Opaque = nullptr,
+        .KeyConfigGenerator = nullptr,
+        .Icb = {},
+        .Dcb = {},
+    };
 }
 
 struct TSendState {

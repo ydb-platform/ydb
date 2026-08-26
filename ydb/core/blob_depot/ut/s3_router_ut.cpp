@@ -64,20 +64,27 @@ public:
     }
 };
 
-// Sends nothing on its own, just counts failed S3 responses addressed to it.
+// Receives S3 error replies that the router sends back to the original requester.
 class TErrorResponseCounter : public TActor<TErrorResponseCounter> {
     size_t& ErrorResponses;
+    TString& LastExceptionName;
+    TString& LastMessage;
 
 public:
-    explicit TErrorResponseCounter(size_t& errorResponses)
+    TErrorResponseCounter(size_t& errorResponses, TString& lastExceptionName, TString& lastMessage)
         : TActor(&TThis::StateWork)
         , ErrorResponses(errorResponses)
+        , LastExceptionName(lastExceptionName)
+        , LastMessage(lastMessage)
     {}
 
     STATEFN(StateWork) {
         using TEvPutObjectResponse = NWrappers::NExternalStorage::TEvPutObjectResponse;
         if (ev->GetTypeRewrite() == TEvPutObjectResponse::EventType &&
                 !ev->Get<TEvPutObjectResponse>()->IsSuccess()) {
+            const auto& error = ev->Get<TEvPutObjectResponse>()->GetError();
+            LastExceptionName = TString(error.GetExceptionName());
+            LastMessage = TString(error.GetMessage());
             ++ErrorResponses;
         }
     }
@@ -180,6 +187,8 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
 
     Y_UNIT_TEST(RejectedRequestGetsErrorResponse) {
         size_t errorResponses = 0;
+        TString lastExceptionName;
+        TString lastMessage;
 
         TTestActorRuntime runtime;
         runtime.SetUseRealInterconnect();
@@ -195,7 +204,8 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.SetBalancerRefreshSecMin(60);
         settings.SetBalancerRefreshSecMax(60);
 
-        TActorId senderId = runtime.Register(new TErrorResponseCounter(errorResponses));
+        TActorId senderId = runtime.Register(new TErrorResponseCounter(
+            errorResponses, lastExceptionName, lastMessage));
         TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
 
         static constexpr size_t maxPendingRequests = 256;
@@ -210,11 +220,14 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         // the pending queue holds maxPendingRequests requests, the one above that is answered right away
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(errorResponses, 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastExceptionName, "ServiceUnavailable");
+        UNIT_ASSERT(lastMessage.Contains("S3 endpoint is not resolved yet"));
 
         // the queued ones are answered when the router goes away without ever resolving the endpoint
         runtime.Send(new IEventHandle(routerId, senderId, new TEvents::TEvPoison()), 0, true);
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(errorResponses, maxPendingRequests + 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastExceptionName, "ServiceUnavailable");
     }
 }
 

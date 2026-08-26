@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/unavailable_storage.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -155,41 +156,17 @@ namespace NKikimr::NBlobDepot {
         }
 
 #define IMPL_REBUILD(NAME) \
-        std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::NAME>&& ev) const override { \
+        std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::TEv##NAME##Response>&& ev) const override { \
             return Inspect(std::move(ev)); \
         }
 
-        IMPL_REBUILD(TEvListObjectsResponse)
-        IMPL_REBUILD(TEvGetObjectResponse)
-        IMPL_REBUILD(TEvHeadObjectResponse)
-        IMPL_REBUILD(TEvPutObjectResponse)
-        IMPL_REBUILD(TEvDeleteObjectResponse)
-        IMPL_REBUILD(TEvDeleteObjectsResponse)
-        IMPL_REBUILD(TEvCreateMultipartUploadResponse)
-        IMPL_REBUILD(TEvUploadPartResponse)
-        IMPL_REBUILD(TEvCompleteMultipartUploadResponse)
-        IMPL_REBUILD(TEvAbortMultipartUploadResponse)
-        IMPL_REBUILD(TEvCheckObjectExistsResponse)
-        IMPL_REBUILD(TEvUploadPartCopyResponse)
+        Y_FOR_EACH_S3_WRAPPER_OP(IMPL_REBUILD)
 #undef IMPL_REBUILD
     };
 
     static ui64 ExchangeAtomic(std::atomic<ui64>& value) {
         return value.exchange(0);
     }
-
-    // Answers requests the router cannot serve yet with a regular S3 error response. The base class
-    // delays such replies through its backoff policy, which makes no sense here -- the caller has to
-    // learn about the missing endpoint right away.
-    class TNoEndpointStorageOperator : public NWrappers::NExternalStorage::TUnavailableExternalStorageOperator {
-    public:
-        TNoEndpointStorageOperator(const TString& exceptionName, const TString& reason)
-            : TUnavailableExternalStorageOperator(exceptionName, reason)
-        {
-            BackoffPolicy = std::make_shared<NWrappers::NExternalStorage::TThreadSafeBackoff>(
-                0, TDuration::Zero(), TDuration::Zero());
-        }
-    };
 
     class TBlobDepotS3Router : public TActorBootstrapped<TBlobDepotS3Router> {
         struct TEvPrivate {
@@ -206,7 +183,6 @@ namespace NKikimr::NBlobDepot {
         TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
-        TActorId UnavailableWrapperId;
         TActorId HttpProxyId;
         TActorId PipeId;
         bool PipeConnected = false;
@@ -271,18 +247,6 @@ namespace NKikimr::NBlobDepot {
             FlushPendingRequests();
         }
 
-        TActorId GetUnavailableWrapperId() {
-            if (!UnavailableWrapperId) {
-                auto storageOperator = std::make_shared<TNoEndpointStorageOperator>(
-                    "ServiceUnavailable", TStringBuilder() << "S3 endpoint is not resolved yet, id# " << LogId);
-                storageOperator->InitReplyAdapter(std::make_shared<TRouterReplyAdapter>(
-                    TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow, nullptr));
-                UnavailableWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
-            }
-
-            return UnavailableWrapperId;
-        }
-
         void RejectRequest(std::unique_ptr<IEventHandle> ev) {
             YDB_LOG_DEBUG("S3Router has no endpoint yet, rejecting request",
                 {"marker", "BDTS32"},
@@ -291,7 +255,14 @@ namespace NKikimr::NBlobDepot {
                 {"pending", PendingRequests.size()});
 
             ++Stats.PendingRejects;
-            TActivationContext::Send(IEventHandle::Forward(std::move(ev), GetUnavailableWrapperId()));
+
+            auto response = NWrappers::NExternalStorage::MakeErrorResponse(
+                *ev,
+                NWrappers::NExternalStorage::MakeServiceUnavailableError(
+                    "ServiceUnavailable",
+                    TStringBuilder() << "S3 endpoint is not resolved yet, id# " << LogId));
+            Y_ABORT_UNLESS(response);
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
         }
 
         void RejectPendingRequest(TPendingRequest&& pending) {
@@ -602,10 +573,6 @@ namespace NKikimr::NBlobDepot {
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
-            }
-            if (UnavailableWrapperId) {
-                Send(UnavailableWrapperId, new TEvents::TEvPoison());
-                UnavailableWrapperId = {};
             }
             if (HttpProxyId) {
                 Send(HttpProxyId, new TEvents::TEvPoison());

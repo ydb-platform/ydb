@@ -302,6 +302,103 @@ auth_config:
 ||
 |#
 
+## Конфигурация аутентификации с использованием внешнего IdP {#external-idp-auth-config}
+
+{{ ydb-short-name }} поддерживает [аутентификацию по JWT-токенам внешнего провайдера идентификации с использованием OpenID Connect](../../security/authentication.md#external-idp). Для включения аутентификации необходимо добавить секцию `external_idp_config` в `auth_config`.
+
+Пример конфигурации:
+
+```yaml
+auth_config:
+  use_access_service: false
+  external_idp_authentication_domain: "sso"
+  external_idp_config:
+    issuer: "https://idp.example.com"
+    audience: "ydb-cluster"
+    allowed_clock_skew: "30s"
+    subject_claim_name: "username"
+    groups_claim_name: "groups"
+    discovery_periodic_settings:
+      success_refresh_period: "1h"
+      min_error_refresh_period: "1s"
+      max_error_refresh_period: "5m"
+      request_timeout: "15s"
+    jwks_periodic_settings:
+      success_refresh_period: "30m"
+      min_error_refresh_period: "1s"
+      max_error_refresh_period: "10s"
+      request_timeout: "15s"
+    jwks_cache_settings:
+      timeout: "2h"
+```
+
+#|
+|| Параметр | Описание | Значение по умолчанию ||
+|| `external_idp_authentication_domain`
+| Суффикс [SID](../../concepts/glossary.md#access-sid) пользователей и групп, полученных от внешнего IdP.
+| `sso` ||
+|| `external_idp_config`
+| Настройки аутентификации через внешний IdP. Наличие секции включает этот способ аутентификации. Одновременно можно настроить один провайдер.
+| Не задано ||
+|| `external_idp_config.issuer`
+| Ожидаемое значение поля `iss` JWT-токена и базовый URL для OIDC Discovery. Обязательный параметр; должен начинаться с `https://` и не должен заканчиваться символом `/`. Значения `issuer` в Discovery-документе и `iss` в JWT должны в точности совпадать с указанным значением.
+| — ||
+|| `external_idp_config.audience`
+| Ожидаемое значение поля `aud` JWT-токена. Если параметр не задан, audience токена не проверяется.
+| Не задано ||
+|| `external_idp_config.allowed_clock_skew`
+| Допустимое расхождение часов при проверке временных полей JWT `exp`, `nbf` и `iat`.
+| `30s` ||
+|| `external_idp_config.subject_claim_name`
+| Имя строкового поля JWT, из которого формируется SID пользователя. Если поле отсутствует или имеет другой тип, используется поле `sub`.
+| `sub` ||
+|| `external_idp_config.groups_claim_name`
+| Имя поля JWT с массивом групп пользователя. Из массива извлекаются только строковые элементы.
+| `groups` ||
+|| `external_idp_config.discovery_periodic_settings`
+| Настройки периодического получения OIDC Discovery-документа.
+| Значения вложенных параметров по умолчанию ||
+|| `external_idp_config.discovery_periodic_settings.success_refresh_period`
+| Период обновления Discovery-документа после успешного запроса.
+| `1h` ||
+|| `external_idp_config.discovery_periodic_settings.min_error_refresh_period`
+| Минимальный интервал перед повторным запросом Discovery-документа после ошибки.
+| `1s` ||
+|| `external_idp_config.discovery_periodic_settings.max_error_refresh_period`
+| Максимальный интервал перед повторным запросом Discovery-документа после ошибки.
+| `5m` ||
+|| `external_idp_config.discovery_periodic_settings.request_timeout`
+| Тайм-аут запроса Discovery-документа.
+| `15s` ||
+|| `external_idp_config.jwks_periodic_settings`
+| Настройки периодического получения JWKS.
+| Значения вложенных параметров по умолчанию ||
+|| `external_idp_config.jwks_periodic_settings.success_refresh_period`
+| Период обновления JWKS после успешного запроса.
+| `1h` ||
+|| `external_idp_config.jwks_periodic_settings.min_error_refresh_period`
+| Минимальный интервал перед повторным запросом JWKS после ошибки.
+| `1s` ||
+|| `external_idp_config.jwks_periodic_settings.max_error_refresh_period`
+| Максимальный интервал перед повторным запросом JWKS после ошибки.
+| `5m` ||
+|| `external_idp_config.jwks_periodic_settings.request_timeout`
+| Тайм-аут запроса JWKS.
+| `15s` ||
+|| `external_idp_config.jwks_cache_settings`
+| Настройки кеша открытых ключей JWKS.
+| Значения вложенных параметров по умолчанию ||
+|| `external_idp_config.jwks_cache_settings.timeout`
+| Максимальный возраст кеша JWKS. Если обновить JWKS не удалось, после истечения этого периода ключи удаляются.
+| `2h` ||
+|#
+
+{% note warning %}
+
+IAM Access Service и внешний OIDC IdP используют токены типа `Bearer`. Если параметр `use_access_service` включён, Access Service имеет приоритет и перехватывает все такие токены. Поэтому одновременное использование IAM Access Service и `external_idp_config` не поддерживается.
+
+{% endnote %}
+
 ## Конфигурация аутентификации с использованием стороннего IAM-провайдера {#iam-auth-config}
 
 {{ ydb-short-name }} поддерживает аутентификацию пользователей с использованием сервиса [Yandex Identity and Access Management (IAM)](https://yandex.cloud/en/services/iam), который используется в Yandex Cloud, или другого сервиса, совместимого с ним по API. Для конфигурирования IAM-аутентификации необходимо определить следующие параметры:

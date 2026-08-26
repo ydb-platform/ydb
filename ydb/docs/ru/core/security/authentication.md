@@ -264,72 +264,7 @@ JWT-токен должен иметь корректный компактный
 
 ### Настройка сервера
 
-Аутентификация через внешний IdP включается при наличии секции `external_idp_config` в [`auth_config`](../reference/configuration/auth_config.md). Одновременно можно настроить один `issuer`.
-
-Пример конфигурации:
-
-```yaml
-auth_config:
-  use_access_service: false
-  external_idp_authentication_domain: "sso"
-  external_idp_config:
-    issuer: "https://idp.example.com"
-    audience: "ydb-cluster"
-    allowed_clock_skew: "30s"
-    subject_claim_name: "username"
-    groups_claim_name: "groups"
-    discovery_periodic_settings:
-      success_refresh_period: "1h"
-      min_error_refresh_period: "1s"
-      max_error_refresh_period: "5m"
-      request_timeout: "15s"
-    jwks_periodic_settings:
-      success_refresh_period: "30m"
-      min_error_refresh_period: "1s"
-      max_error_refresh_period: "10s"
-      request_timeout: "15s"
-    jwks_cache_settings:
-      timeout: "2h"
-```
-
-Основные параметры:
-
-#|
-|| Параметр | Описание | Значение по умолчанию ||
-|| `external_idp_authentication_domain`
-| Суффикс SID пользователей и групп, полученных от внешнего IdP.
-| `sso` ||
-|| `external_idp_config.issuer`
-| Ожидаемое значение claim `iss` и базовый URL для OIDC Discovery. Обязательный параметр; должен начинаться с `https://`.
-| — ||
-|| `external_idp_config.audience`
-| Ожидаемое значение claim `aud`. Если параметр не задан, audience токена не проверяется.
-| Не задано ||
-|| `external_idp_config.allowed_clock_skew`
-| Допустимое расхождение часов при проверке временных claims JWT.
-| `30s` ||
-|| `external_idp_config.subject_claim_name`
-| Имя строкового claim, из которого формируется SID пользователя.
-| `sub` ||
-|| `external_idp_config.groups_claim_name`
-| Имя claim с массивом групп пользователя.
-| `groups` ||
-|| `external_idp_config.discovery_periodic_settings`
-| Периоды обновления OIDC Discovery-документа и повторов после ошибок.
-| Успешное обновление — `1h`, минимальный интервал после ошибки — `1s`, максимальный — `5m`, тайм-аут запроса — `15s` ||
-|| `external_idp_config.jwks_periodic_settings`
-| Периоды обновления JWKS и повторов после ошибок.
-| Успешное обновление — `1h`, минимальный интервал после ошибки — `1s`, максимальный — `5m`, тайм-аут запроса — `15s` ||
-|| `external_idp_config.jwks_cache_settings.timeout`
-| Максимальный возраст кеша JWKS. После истечения периода ключи удаляются, если их не удалось обновить.
-| `2h` ||
-|#
-
-{% note warning %}
-
-IAM Access Service и внешний OIDC IdP используют токены типа `Bearer`. Если параметр `use_access_service` включён, Access Service имеет приоритет и перехватывает все такие токены. Поэтому одновременное использование IAM Access Service и `external_idp_config` не поддерживается.
-
-{% endnote %}
+Аутентификация через внешний IdP включается при наличии секции `external_idp_config` в [`auth_config`](../reference/configuration/auth_config.md#external-idp-auth-config).
 
 ## Аутентификация клиентов по сертификату {#client-certificate}
 

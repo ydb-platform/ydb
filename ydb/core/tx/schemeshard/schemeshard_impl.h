@@ -426,6 +426,7 @@ public:
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
+    bool EnableExternalDataSourceAuthMethodIamForSolomon = false;
     bool EnableMoveColumnTable = false;
 
     TShardDeleter ShardDeleter;

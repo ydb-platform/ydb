@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <deque>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
@@ -108,6 +110,23 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    class TWrapperInFlight : public TThrRefBase {
+        std::atomic<i64> Count{0};
+
+    public:
+        void Inc() {
+            Count.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        void Dec() {
+            Count.fetch_sub(1, std::memory_order_relaxed);
+        }
+
+        i64 Get() const {
+            return Count.load(std::memory_order_relaxed);
+        }
+    };
+
     // Adapter installed on the inner storage wrapper. It does NOT redirect the response
     // (recipient stays at the original sender of the request), but it observes every
     // finished request: it reports its latency/traffic to the route sensors and notifies
@@ -121,6 +140,7 @@ namespace NKikimr::NBlobDepot {
         const TActorId RouterId;
         const ui32 NotifyEventType;
         const TIntrusivePtr<TRouteCounters> Counters;
+        const TIntrusivePtr<TWrapperInFlight> InFlight;
 
     private:
         template <typename T>
@@ -137,16 +157,21 @@ namespace NKikimr::NBlobDepot {
 
     public:
         TRouterReplyAdapter(TActorSystem* actorSystem, TActorId routerId, ui32 notifyEventType,
-                TIntrusivePtr<TRouteCounters> counters)
+                TIntrusivePtr<TRouteCounters> counters, TIntrusivePtr<TWrapperInFlight> inFlight)
             : ActorSystem(actorSystem)
             , RouterId(routerId)
             , NotifyEventType(notifyEventType)
             , Counters(std::move(counters))
+            , InFlight(std::move(inFlight))
         {}
 
         void CollectStats(const TRequestStats& stats) const override {
             if (Counters) {
                 Counters->Collect(stats);
+            }
+
+            if (InFlight) {
+                InFlight->Dec();
             }
         }
 
@@ -189,6 +214,20 @@ namespace NKikimr::NBlobDepot {
         TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
+        TIntrusivePtr<TWrapperInFlight> InnerWrapperInFlight;
+
+        struct TRetiringWrapper {
+            TActorId ActorId;
+            TIntrusivePtr<TWrapperInFlight> InFlight;
+            TMonotonic Deadline;
+            TString Endpoint;
+        };
+
+        std::deque<TRetiringWrapper> RetiringWrappers;
+
+        static constexpr size_t MaxRetiringWrappers = 8;
+        static constexpr TDuration MinRetireGracePeriod = TDuration::Seconds(60);
+
         TActorId HttpProxyId;
         TActorId PipeId;
         bool PipeConnected = false;
@@ -230,18 +269,86 @@ namespace NKikimr::NBlobDepot {
             return Settings.GetBalancerProxyPort();
         }
 
-        void RegisterInnerWrapper(NWrappers::IExternalStorageConfig::TPtr externalStorageConfig,
-                TIntrusivePtr<TRouteCounters> routeCounters) {
-            if (InnerWrapperId) {
-                Send(InnerWrapperId, new TEvents::TEvPoison());
-                InnerWrapperId = {};
+        void RetireInnerWrapper() {
+            if (!InnerWrapperId) {
+                return;
             }
 
+            const i64 inFlight = InnerWrapperInFlight ? InnerWrapperInFlight->Get() : 0;
+            if (inFlight <= 0) {
+                Send(InnerWrapperId, new TEvents::TEvPoison());
+            } else {
+                YDB_LOG_DEBUG("S3Router retiring inner wrapper",
+                    {"marker", "BDTS32"},
+                    {"id", LogId},
+                    {"endpoint", CurrentEndpoint},
+                    {"inFlight", inFlight},
+                    {"retiringCount", RetiringWrappers.size() + 1});
+
+                RetiringWrappers.push_back(TRetiringWrapper{
+                    .ActorId = InnerWrapperId,
+                    .InFlight = InnerWrapperInFlight,
+                    .Deadline = TActivationContext::Monotonic() + RetireGracePeriod(),
+                    .Endpoint = CurrentEndpoint,
+                });
+            }
+
+            InnerWrapperId = {};
+            InnerWrapperInFlight.Reset();
+
+            while (RetiringWrappers.size() > MaxRetiringWrappers) {
+                PoisonRetiringWrapper(RetiringWrappers.front(), "too many retiring wrappers");
+                RetiringWrappers.pop_front();
+            }
+        }
+
+        TDuration RetireGracePeriod() const {
+            const auto& config = AppData()->AwsClientConfig;
+            const ui32 timeoutMs = Max(
+                config.HasRequestTimeoutMs() ? config.GetRequestTimeoutMs() : 0u,
+                config.HasHttpRequestTimeoutMs() ? config.GetHttpRequestTimeoutMs() : 0u);
+            return Max(TDuration::MilliSeconds(timeoutMs) * 2, MinRetireGracePeriod);
+        }
+
+        void PoisonRetiringWrapper(const TRetiringWrapper& wrapper, const char *reason) {
+            if (const i64 inFlight = wrapper.InFlight->Get(); inFlight > 0) {
+                YDB_LOG_WARN("S3Router aborting requests of retiring inner wrapper",
+                    {"marker", "BDTS33"},
+                    {"id", LogId},
+                    {"endpoint", wrapper.Endpoint},
+                    {"inFlight", inFlight},
+                    {"reason", reason});
+            }
+
+            Send(wrapper.ActorId, new TEvents::TEvPoison());
+        }
+
+        void SweepRetiringWrappers() {
+            const TMonotonic now = TActivationContext::Monotonic();
+            for (auto it = RetiringWrappers.begin(); it != RetiringWrappers.end(); ) {
+                if (it->InFlight->Get() <= 0) {
+                    Send(it->ActorId, new TEvents::TEvPoison());
+                    it = RetiringWrappers.erase(it);
+                } else if (now >= it->Deadline) {
+                    PoisonRetiringWrapper(*it, "grace period expired");
+                    it = RetiringWrappers.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        void RegisterInnerWrapper(NWrappers::IExternalStorageConfig::TPtr externalStorageConfig,
+                TIntrusivePtr<TRouteCounters> routeCounters) {
+            RetireInnerWrapper();
+
+            auto inFlight = MakeIntrusive<TWrapperInFlight>();
             auto storageOperator = externalStorageConfig->ConstructStorageOperator();
             storageOperator->InitReplyAdapter(std::make_shared<TRouterReplyAdapter>(
                 TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow,
-                std::move(routeCounters)));
+                std::move(routeCounters), inFlight));
             InnerWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
+            InnerWrapperInFlight = std::move(inFlight);
         }
 
         void BuildInnerWrapper(const TString& endpoint) {
@@ -325,6 +432,8 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandlePushMetrics() {
+            SweepRetiringWrappers();
+
             if (PipeConnected) {
                 auto event = std::make_unique<TEvBlobDepot::TEvPushS3RouterMetrics>();
                 auto& record = event->Record;
@@ -449,9 +558,19 @@ namespace NKikimr::NBlobDepot {
             ScheduleNextRefresh();
         }
 
+        static bool IsRequestEvent(ui32 type) {
+            using namespace NWrappers::NExternalStorage;
+            static_assert(EvGetObjectRequest == EvBegin + 1);
+            static_assert(EvGetObjectResponse == EvBegin + 2);
+            return (type - EvBegin) % 2 == 1;
+        }
+
         void Forward(STATEFN_SIG) {
             if (!InnerWrapperId) {
                 return;
+            }
+            if (InnerWrapperInFlight && IsRequestEvent(ev->GetTypeRewrite())) {
+                InnerWrapperInFlight->Inc();
             }
             TActivationContext::Send(ev->Forward(InnerWrapperId));
         }
@@ -492,12 +611,20 @@ namespace NKikimr::NBlobDepot {
             YDB_LOG_INFO("S3Router shutting down",
                 {"marker", "BDTS31"},
                 {"id", LogId},
-                {"currentEndpoint", CurrentEndpoint});
+                {"currentEndpoint", CurrentEndpoint},
+                {"retiringCount", RetiringWrappers.size()});
 
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
+                InnerWrapperInFlight.Reset();
             }
+
+            for (auto&& wrapper : RetiringWrappers) {
+                Send(wrapper.ActorId, new TEvents::TEvPoison());
+            }
+
+            RetiringWrappers.clear();
             if (HttpProxyId) {
                 Send(HttpProxyId, new TEvents::TEvPoison());
                 HttpProxyId = {};

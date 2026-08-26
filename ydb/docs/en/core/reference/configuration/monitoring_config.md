@@ -50,7 +50,7 @@ monitoring_config:
 
 ## TLS on monitoring pages {#tls}
 
-{{ ydb-short-name }} exposes a separate HTTP network port for running the [Embedded UI](../../reference/ydb-ui/index.md), exposing [metrics](../../devops/observability/monitoring.md), and other miscellaneous endpoints.
+{{ ydb-short-name }} exposes a separate HTTP network port for running the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), exposing [metrics](../../devops/observability/monitoring.md), and other miscellaneous endpoints.
 
 You can enable [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) on the HTTP port so that it accepts only HTTPS connections. Plain HTTP requests are rejected at the TLS handshake without a response and without redirect to HTTPS. Simultaneous HTTP and HTTPS on different ports is not supported: monitoring uses a single port that works either as HTTP or as HTTPS.
 

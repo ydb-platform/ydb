@@ -2003,7 +2003,7 @@ private:
         auto joinAlgo = "(Grace)";
         for (size_t i=0; i<join.Flags().Size(); i++) {
             if (join.Flags().Item(i).StringValue() == "Broadcast") {
-                joinAlgo = "(Map)";
+                joinAlgo = "(MapGrace)";
             }
         }
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
@@ -2025,7 +2025,7 @@ private:
         auto joinAlgo = "(Grace)";
         for (size_t i=0; i<join.Flags().Size(); i++) {
             if (join.Flags().Item(i).StringValue() == "Broadcast") {
-                joinAlgo = "(Map)";
+                joinAlgo = "(MapGrace)";
             }
         }
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;

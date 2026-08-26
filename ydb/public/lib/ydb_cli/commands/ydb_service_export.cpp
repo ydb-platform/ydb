@@ -475,7 +475,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
 
 /// S3
 TCommandExportToS3::TCommandExportToS3()
-    : TCommandExportBase("s3", "Create export to S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3")
+    : TCommandExportBase("s3", TStringBuilder() << "Create export to S3.\nFor more info go to: " << HttpsLink("ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3", Cout))
 {
     TItemS3::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},

@@ -294,7 +294,7 @@ void TCommandImportBase::FillItemsFromIncludeParam(TSettings& settings) const {
 
 /// S3
 TCommandImportFromS3::TCommandImportFromS3()
-    : TCommandImportBase("s3", "Create import from S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/import-s3")
+    : TCommandImportBase("s3", TStringBuilder() << "Create import from S3.\nFor more info go to: " << HttpsLink("ydb.tech/docs/en/reference/ydb-cli/export-import/import-s3", Cout))
 {
     TItemS3::DefineFields({
         {"Source", {{"source", "src", "s"}, "S3 object key prefix", true}},

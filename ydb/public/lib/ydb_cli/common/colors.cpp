@@ -3,6 +3,7 @@
 
 #include <util/generic/maybe.h>
 #include <util/stream/output.h>
+#include <util/string/builder.h>
 #include <util/system/env.h>
 
 #include <optional>
@@ -78,4 +79,9 @@ NColorizer::TColors& AutoColors(IOutputStream& out) {
     }
 }
 
+TString HttpsLink(const TString& fqdnAndUri, IOutputStream& colorsOut) {
+    const auto& colors = NConsoleClient::AutoColors(colorsOut);
+    return TStringBuilder() << colors.Cyan() << "https://" << fqdnAndUri << colors.OldColor();
 }
+
+} // namespace NYdb::NConsoleClient

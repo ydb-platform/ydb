@@ -43,7 +43,7 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
         descr << Endl << "Use -hh option to see usage examples and all other options to work with parameters.";
     }
     descr << Endl << "More information and examples in the documentation:" << Endl
-        << "  https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
+        << "  " << HttpsLink("ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli", Cout);
     config.Opts->AddLongOption('p', "param", descr.Str())
         .RequiredArgument("STRING").AppendTo(&ParameterOptions);
 

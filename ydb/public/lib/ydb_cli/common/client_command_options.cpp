@@ -357,7 +357,7 @@ void TClientCommandOption::RebuildHelpMessage() {
     TString indent = ClientOptions->HelpCommandVerbosityLevel >= 2 ? "  " : "";
     if (Documentation) {
         makeMultiline();
-        helpMessage << indent << "For more info go to: " << Documentation << Endl;
+        helpMessage << indent << "For more info go to: " << HttpsLink(Documentation, Cout) << Endl;
     }
     if (needDefinitionsPriority) {
         makeMultiline();

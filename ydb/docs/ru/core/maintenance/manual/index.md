@@ -17,6 +17,8 @@
   * [{#T}](../../devops/deployment-options/manual/decommissioning.md).
   * [{#T}](virtual_storage_groups_decommit.md).
   * [{#T}](moving_vdisks.md).
+  * [{#T}](blobdepot.md).
+  * [{#T}](blobdepot_decommit.md).
 
 * Решение проблем:
 

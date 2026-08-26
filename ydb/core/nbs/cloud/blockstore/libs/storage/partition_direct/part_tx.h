@@ -23,15 +23,15 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_PARTITION_TRANSACTIONS(xxx, ...) \
-    xxx(InitSchema, __VA_ARGS__)                    \
-    xxx(LoadState, __VA_ARGS__)                     \
-    xxx(StoreVolumeConfig, __VA_ARGS__)             \
-    xxx(StorePartitionIds, __VA_ARGS__)             \
-    xxx(UpdateVChunkConfig, __VA_ARGS__)            \
-    xxx(UpdateDirtyMapState, __VA_ARGS__)           \
-    xxx(StartAddHost, __VA_ARGS__)                  \
-    xxx(AddHostToDBG, __VA_ARGS__)                  \
+#define BLOCKSTORE_PARTITION_TRANSACTIONS(xxx, ...)                            \
+    xxx(InitSchema, __VA_ARGS__)                                               \
+    xxx(LoadState, __VA_ARGS__)                                                \
+    xxx(StoreVolumeConfig, __VA_ARGS__)                                        \
+    xxx(StorePartitionIds, __VA_ARGS__)                                        \
+    xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
+    xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(StartAddHost, __VA_ARGS__)                                             \
+    xxx(AddHostToDBG, __VA_ARGS__)                                             \
     xxx(Monitoring, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS

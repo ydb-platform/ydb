@@ -275,8 +275,10 @@ def main():
     relevant_lines: List[Tuple[float, str]] = []
 
     try:
+        print("Lookup victim_id=", victim_id)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
+                print("LINE:", line, end="")
                 # Quick filter to skip irrelevant lines
                 if not (
                     (victim_id in line) or
@@ -300,6 +302,7 @@ def main():
         print(style(err_msg, color=ANSI_RED, bold=True, enable=use_color), file=sys.stderr)
         sys.exit(1)
 
+    print("HEY 1")
     if anchor_t is None:
         print(f"Error: VictimQuerySpanId {victim_id} not found in log file.", file=sys.stderr)
         sys.exit(1)
@@ -307,8 +310,11 @@ def main():
     w_start = anchor_t - W
     w_end = anchor_t + W
 
+    print("HEY 2 w_start=", w_start, " w_end=", w_end)
+
     # Process all relevant lines within the time window
     for t, line in relevant_lines:
+        print("RELEVANT_LINE:", line, end="")
         if not in_window(t, w_start, w_end):
             continue
 

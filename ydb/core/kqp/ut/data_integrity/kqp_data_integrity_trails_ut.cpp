@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
 
             // we need to find row with info about broken locks and extract lock id
             if (row.Contains("component=DataShard") && row.Contains("type=Locks")) {
-                std::regex lockIdRegex(R"(brokenLocks=(\d+) )");
+                std::regex lockIdRegex(R"(brokenLock=(\d+) )");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();

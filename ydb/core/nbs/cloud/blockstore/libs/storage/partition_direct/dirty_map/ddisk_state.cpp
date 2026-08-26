@@ -28,8 +28,6 @@ void TDDiskState::Save(TDDiskStateProto* proto) const
 
 void TDDiskState::Load(const TDDiskStateProto& proto)
 {
-    AheadField.Clear();
-    BehindField.Clear();
     LoadBlockField(proto.GetAhead(), &AheadField);
     LoadBlockField(proto.GetBehind(), &BehindField);
 }

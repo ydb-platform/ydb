@@ -59,7 +59,9 @@ ui64 ReadRunLength(TStringBuf input, size_t* offset)
 TString MakeRunLengthEncoding(const TBlockRangeField& field, ui64 blockCount)
 {
     TString result;
-    result.reserve(field.GetSegmentCount() * 2);
+    result.reserve(
+        field.GetSegmentCount() * 2 +
+        field.GetBlockCount() / RunLengthContinuation);
 
     ui64 position = 0;
     field.Enumerate(
@@ -177,6 +179,7 @@ void SaveBlockField(
 
 void LoadBlockField(const TBlockFieldProto& proto, TBlockRangeField* field)
 {
+    field->Clear();
     switch (proto.GetEncodingCase()) {
         case TBlockFieldProto::kRunLengthEncoding:
             LoadRunLengthEncoding(proto.GetRunLengthEncoding(), field);

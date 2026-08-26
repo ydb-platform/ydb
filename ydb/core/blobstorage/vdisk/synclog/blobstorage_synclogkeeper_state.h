@@ -5,6 +5,7 @@
 #include "blobstorage_synclogdata.h"
 #include "blobstorage_synclogrecovery.h"
 #include "blobstorage_synclogkeeper_committer.h"
+#include "blobstorage_synclog_private_events.h"
 
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_state.h>
@@ -56,6 +57,8 @@ namespace NKikimr {
             void FillInSyncLogEssence(TLogEssence *e) const {
                 SyncLogPtr->FillInLogEssence(e);
             }
+
+            void FillInSpaceStat(TEvSyncLogSpaceStatResult *result) const;
 
             // Calculate first lsn in recovery log we must to keep
             ui64 CalculateFirstLsnToKeep() const;
@@ -191,4 +194,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

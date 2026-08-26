@@ -370,7 +370,7 @@ class TExpandCBOTreeRule : public ISimplifiedRule {
 */
 class TPullUpMapOverCBORule : public ISimplifiedRule {
   public:
-    TPullUpMapOverCBORule() : ISimplifiedRule("Pull up map over CBO", ERuleProperties::RequireParents) {}
+    TPullUpMapOverCBORule() : ISimplifiedRule("Pull up map over CBO", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

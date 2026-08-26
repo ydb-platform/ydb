@@ -1413,6 +1413,18 @@ namespace NKikimr {
             return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
         }
 
+        NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVPatchStart& ev) const {
+            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+        }
+
+        NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVPatchDiff& ev) const {
+            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+        }
+
+        NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVPatchXorDiff& ev) const {
+            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+        }
+
         bool Compatible(NKikimrBlobStorage::EVDiskQueueId extId, NKikimrBlobStorage::EVDiskInternalQueueId intId) {
             // Abbreviations
             // IU = IntUnknown

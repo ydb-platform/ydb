@@ -25,6 +25,10 @@ void TFragmentedBuffer::Write(ui32 begin, const char* buffer, ui32 size) {
 }
 
 void TFragmentedBuffer::Write(ui32 begin, TRope&& data) {
+    if (!data) {
+        return;
+    }
+
     // index of the fragment that is going to hold the written data; iterators do not survive the
     // insertion below, so everything here is index-based
     size_t idx = UpperBound(begin);

@@ -121,6 +121,20 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(fb.Read(0, 26).ConvertToString(), "ABCDefghijklmnopqrstuvWXYZ");
     }
 
+    Y_UNIT_TEST(TestEmptyWriteIsNoOp) {
+        TFragmentedBuffer fb;
+
+        fb.Write(10, nullptr, 0);
+        UNIT_ASSERT(!fb);
+
+        fb.Write(10, "ABC", 3);
+        TRope empty;
+        fb.Write(20, std::move(empty));
+
+        UNIT_ASSERT_VALUES_EQUAL(fb.Print(), "{[10, 13)}");
+        UNIT_ASSERT_VALUES_EQUAL(fb.Read(10, 3).ConvertToString(), "ABC");
+    }
+
     Y_UNIT_TEST(TestIsNotMonolith) {
         const char *data2 = "234";
         const char *data3v2 = "5";

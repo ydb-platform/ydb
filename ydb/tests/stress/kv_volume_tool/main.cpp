@@ -1,15 +1,19 @@
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_keyvalue.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 
+#include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
+#include <util/string/split.h>
 #include <util/system/env.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
+#include <util/system/fstat.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -41,6 +45,7 @@ static TString AuthToken;
 namespace {
 
 constexpr auto GrpcDeadline = 30s;
+constexpr ui64 FileTransferChunkSize = 32 * 1024 * 1024;
 constexpr const char* YdbAuthHeader = "x-ydb-auth-ticket";
 constexpr const char* YdbDatabaseHeader = "x-ydb-database";
 // W3C trace context, https://w3c.github.io/trace-context/#header-name
@@ -50,19 +55,34 @@ TString GetAuthToken() {
     return AuthToken;
 }
 
-// Generates a traceparent header value: "00-<16 byte trace id>-<8 byte span id>-01".
+TString MakeVolumePath(const TString& database, const TString& path) {
+    if (database.empty() || path.StartsWith(database)) {
+        return path;
+    }
+    if (database.back() == '/') {
+        return database + path;
+    }
+    return database + "/" + path;
+}
+
+struct TTraceContext {
+    TString Traceparent;
+    TString TraceId;
+};
+
+// Generates a traceparent header: "00-<32 hex trace id>-<16 hex span id>-01".
+// Only the id fields are random; the version and sampled flag are fixed.
 // The server picks the tracing level from the matching external_throttling rule in
 // tracing_config, so the sampled flag here is informational only.
-TString MakeTraceparent(TString* traceIdOut) {
+TTraceContext MakeTraceparent() {
     static thread_local std::mt19937_64 rng(std::random_device{}());
     const ui64 hi = rng() | 1;
     const ui64 lo = rng();
     const ui64 spanId = rng() | 1;
-    const TString traceId = Sprintf("%016" PRIx64 "%016" PRIx64, hi, lo);
-    if (traceIdOut) {
-        *traceIdOut = traceId;
-    }
-    return Sprintf("00-%s-%016" PRIx64 "-01", traceId.c_str(), spanId);
+    TTraceContext ctx;
+    ctx.TraceId = Sprintf("%016" PRIx64 "%016" PRIx64, hi, lo);
+    ctx.Traceparent = Sprintf("00-%s-%016" PRIx64 "-01", ctx.TraceId.c_str(), spanId);
+    return ctx;
 }
 
 void AdjustContext(grpc::ClientContext& ctx, const TString& database, const TString& traceparent = {}) {
@@ -166,7 +186,7 @@ double ToMiBps(ui64 bytes, double seconds) {
     if (seconds <= 0) {
         return 0;
     }
-    return static_cast<double>(bytes) / (1024.0 * 1024.0) / seconds;
+    return static_cast<double>(bytes) / (1.0 * 1_MB) / seconds;
 }
 
 int DescribeVolume(const TString& endpoint, const TString& database, const TString& path, bool useTls) {
@@ -220,7 +240,7 @@ int DescribeVolume(const TString& endpoint, const TString& database, const TStri
 
     Cout << "Volume path: " << result.path() << Endl;
     Cout << "Partition count: " << result.partition_count() << Endl;
-    
+
     if (result.has_storage_config() && result.storage_config().channel_size() > 0) {
         Cout << "Storage channels: " << result.storage_config().channel_size() << Endl;
         for (int i = 0; i < result.storage_config().channel_size(); ++i) {
@@ -553,14 +573,296 @@ int WriteValue(const TString& endpoint, const TString& database, const TString& 
     return 0;
 }
 
+TString MakePartKey(const TString& key, ui64 partIndex) {
+    return TStringBuilder() << key << "_part_" << partIndex;
+}
+
+int ExecuteTransaction(
+    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
+    const TString& database,
+    Ydb::KeyValue::ExecuteTransactionRequest request,
+    const char* operationName)
+{
+    if (VerboseMode) {
+        TString requestText;
+        google::protobuf::TextFormat::PrintToString(request, &requestText);
+        Cerr << "=== Request ===" << Endl;
+        Cerr << requestText << Endl;
+    }
+
+    Ydb::KeyValue::ExecuteTransactionResponse response;
+    grpc::ClientContext context;
+    AdjustContext(context, database);
+
+    grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
+
+    if (VerboseMode) {
+        TString responseText;
+        google::protobuf::TextFormat::PrintToString(response, &responseText);
+        Cerr << "=== Response ===" << Endl;
+        Cerr << responseText << Endl;
+    }
+
+    if (!status.ok()) {
+        Cerr << "gRPC call failed: " << status.error_message() << Endl;
+        return 1;
+    }
+
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        Cerr << operationName << " failed with status: " << StatusToString(response.operation().status()) << Endl;
+        if (response.operation().issues_size() > 0) {
+            Cerr << "Issues:" << Endl;
+            for (const auto& issue : response.operation().issues()) {
+                Cerr << "  " << issue.message() << Endl;
+            }
+        }
+        return 1;
+    }
+
+    Ydb::KeyValue::ExecuteTransactionResult result;
+    if (!response.operation().result().UnpackTo(&result)) {
+        Cerr << "Failed to unpack ExecuteTransactionResult" << Endl;
+        return 1;
+    }
+
+    return 0;
+}
+
+bool ReadValueChunk(
+    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
+    const TString& database,
+    const TString& path,
+    ui64 partitionId,
+    const TString& key,
+    ui64 offset,
+    ui64 limitBytes,
+    Ydb::KeyValue::ReadResult& result)
+{
+    Ydb::KeyValue::ReadRequest request;
+    request.set_path(path);
+    request.set_partition_id(partitionId);
+    request.set_key(key);
+    request.set_offset(offset);
+    request.set_size(0);
+    request.set_limit_bytes(limitBytes);
+
+    if (VerboseMode) {
+        TString requestText;
+        google::protobuf::TextFormat::PrintToString(request, &requestText);
+        Cerr << "=== Request ===" << Endl;
+        Cerr << requestText << Endl;
+    }
+
+    Ydb::KeyValue::ReadResponse response;
+    grpc::ClientContext context;
+    AdjustContext(context, database);
+
+    grpc::Status status = stub.Read(&context, request, &response);
+
+    if (VerboseMode) {
+        TString responseText;
+        google::protobuf::TextFormat::PrintToString(response, &responseText);
+        Cerr << "=== Response ===" << Endl;
+        Cerr << responseText << Endl;
+    }
+
+    if (!status.ok()) {
+        Cerr << "gRPC call failed: " << status.error_message() << Endl;
+        return false;
+    }
+
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        Cerr << "Read failed with status: " << StatusToString(response.operation().status()) << Endl;
+        if (response.operation().issues_size() > 0) {
+            Cerr << "Issues:" << Endl;
+            for (const auto& issue : response.operation().issues()) {
+                Cerr << "  " << issue.message() << Endl;
+            }
+        }
+        return false;
+    }
+
+    if (!response.operation().result().UnpackTo(&result)) {
+        Cerr << "Failed to unpack ReadResult" << Endl;
+        return false;
+    }
+
+    return true;
+}
+
+void CleanupPartKeys(
+    Ydb::KeyValue::V1::KeyValueService::Stub& stub,
+    const TString& database,
+    const TString& path,
+    ui64 partitionId,
+    const TVector<TString>& partKeys)
+{
+    for (const auto& partKey : partKeys) {
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+
+        auto* deleteRange = request.add_commands()->mutable_delete_range();
+        auto* range = deleteRange->mutable_range();
+        range->set_from_key_inclusive(partKey);
+        range->set_to_key_inclusive(partKey);
+
+        if (ExecuteTransaction(stub, database, std::move(request), "DeletePart") != 0) {
+            Cerr << "Failed to cleanup part key: " << partKey << Endl;
+        }
+    }
+}
+
+int UploadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel, bool useTls) {
+    const i64 fileSize = GetFileLength(filePath);
+    if (fileSize < 0) {
+        Cerr << "Failed to get file size: " << filePath << Endl;
+        return 1;
+    }
+
+    Cout << "Uploading file: " << filePath << " (" << fileSize << " bytes)" << Endl;
+
+    auto channel = MakeGrpcChannel(endpoint, useTls);
+    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+
+    if (static_cast<ui64>(fileSize) <= FileTransferChunkSize) {
+        TFileInput fileInput(filePath);
+        const TString value = fileInput.ReadAll();
+
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+
+        auto* write = request.add_commands()->mutable_write();
+        write->set_key(key);
+        write->set_value(value);
+        if (storageChannel > 0) {
+            write->set_storage_channel(storageChannel);
+        }
+
+        if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
+            return 1;
+        }
+    } else {
+        TVector<TString> partKeys;
+        partKeys.reserve((fileSize + FileTransferChunkSize - 1) / FileTransferChunkSize);
+
+        TFileInput fileInput(filePath);
+        TVector<char> buffer(FileTransferChunkSize);
+        ui64 partIndex = 0;
+
+        while (true) {
+            const size_t readBytes = fileInput.Read(buffer.data(), buffer.size());
+            if (readBytes == 0) {
+                break;
+            }
+
+            const TString partKey = MakePartKey(key, partIndex);
+            partKeys.push_back(partKey);
+
+            Ydb::KeyValue::ExecuteTransactionRequest request;
+            request.set_path(path);
+            request.set_partition_id(partitionId);
+
+            auto* write = request.add_commands()->mutable_write();
+            write->set_key(partKey);
+            write->set_value(TStringBuf(buffer.data(), readBytes));
+            if (storageChannel > 0) {
+                write->set_storage_channel(storageChannel);
+            }
+
+            Cout << "Uploading part " << partIndex << ": key=" << partKey << " (" << readBytes << " bytes)" << Endl;
+            if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
+                CleanupPartKeys(*stub, database, path, partitionId, partKeys);
+                return 1;
+            }
+
+            ++partIndex;
+        }
+
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+
+        auto* concat = request.add_commands()->mutable_concat();
+        for (const auto& partKey : partKeys) {
+            concat->add_input_keys(partKey);
+        }
+        concat->set_output_key(key);
+        concat->set_keep_inputs(false);
+
+        Cout << "Concatenating " << partKeys.size() << " part(s) into key=" << key << Endl;
+        if (ExecuteTransaction(*stub, database, std::move(request), "Concat") != 0) {
+            CleanupPartKeys(*stub, database, path, partitionId, partKeys);
+            return 1;
+        }
+    }
+
+    Cout << "File uploaded successfully: " << filePath << " -> key=" << key << " (" << fileSize << " bytes)" << Endl;
+    return 0;
+}
+
+int DownloadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, bool useTls) {
+    auto channel = MakeGrpcChannel(endpoint, useTls);
+    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+
+    ui64 offset = 0;
+    ui64 totalBytes = 0;
+    std::unique_ptr<TFileOutput> out;
+
+    while (true) {
+        Ydb::KeyValue::ReadResult result;
+        if (!ReadValueChunk(*stub, database, path, partitionId, key, offset, FileTransferChunkSize, result)) {
+            return 1;
+        }
+
+        if (result.value().empty()) {
+            if (offset == 0) {
+                TFileOutput emptyOut(filePath);
+                emptyOut.Finish();
+                Cout << "File downloaded successfully: key=" << key << " -> " << filePath << " (0 bytes)" << Endl;
+                return 0;
+            }
+            break;
+        }
+
+        if (!out) {
+            out = std::make_unique<TFileOutput>(filePath);
+        }
+
+        out->Write(result.value().data(), result.value().size());
+        totalBytes += result.value().size();
+        offset += result.value().size();
+
+        if (!result.is_overrun()) {
+            break;
+        }
+    }
+
+    if (out) {
+        out->Finish();
+    }
+
+    Cout << "File downloaded successfully: key=" << key << " -> " << filePath << " (" << totalBytes << " bytes)" << Endl;
+    return 0;
+}
+
+void AppendIssue(TStringBuilder& out, const Ydb::Issue::IssueMessage& issue, bool& first) {
+    if (!first) {
+        out << "; ";
+    }
+    first = false;
+    out << issue.message();
+    for (const auto& nested : issue.issues()) {
+        AppendIssue(out, nested, first);
+    }
+}
 
 TString FormatOperationIssues(const Ydb::Operations::Operation& operation) {
     TStringBuilder issues;
-    for (int i = 0; i < operation.issues_size(); ++i) {
-        if (i > 0) {
-            issues << "; ";
-        }
-        issues << operation.issues(i).message();
+    bool first = true;
+    for (const auto& issue : operation.issues()) {
+        AppendIssue(issues, issue, first);
     }
     return issues;
 }
@@ -676,24 +978,56 @@ ui64 Percentile(TVector<ui64>& values, double q) {
     return values[index];
 }
 
-int LoadVolume(
-    const TVector<TString>& endpoints,
-    const TString& database,
-    const TString& path,
-    ui32 partitionCount,
-    ui32 storageChannel,
-    ui32 seconds,
-    ui32 threads,
-    ui32 readThreads,
-    ui32 valueSize,
-    ui32 readPercent,
-    ui32 reportPeriod,
-    ui64 writeRateMibps,
-    ui64 keyCount,
-    ui32 batchSize,
-    ui32 traceEveryN,
-    bool useTls)
-{
+struct TOptions {
+    TString Command;
+    TString Endpoint;
+    TString Database;
+    TString Path;
+    TString TokenFile;
+    ui32 PartitionCount = 0;
+    ui64 PartitionId = 0;
+    bool PartitionIdSpecified = false;
+    TVector<TString> ChannelMedia;
+    TString Key;
+    TString Value;
+    TString FilePath;
+    ui64 ReadOffset = 0;
+    ui64 ReadSize = 0;
+    ui32 StorageChannel = 0;
+    TVector<ui32> S3Channels;
+    ui32 LocalChannel = 0;
+    ui32 S3Threads = 3;
+    ui32 LocalThreads = 1;
+    TString S3ErrorFile = "s3_errors.log";
+    ui32 Seconds = 10;
+    ui32 Threads = 1;
+    ui32 ReadThreads = 0;
+    ui32 ValueSize = 1024;
+    ui32 ReadPercent = 100;
+    ui32 DeletePercent = 0;
+    ui32 ReportPeriod = 1;
+    ui64 WriteRateMibps = 0;
+    ui64 KeyCount = 0;
+    ui32 BatchSize = 1;
+    ui32 TraceEveryN = 0;
+    bool Verbose = false;
+};
+
+int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const TString& path, bool useTls) {
+    const TString& database = options.Database;
+    const ui32 partitionCount = options.PartitionCount;
+    const ui32 storageChannel = options.StorageChannel;
+    const ui32 seconds = options.Seconds;
+    const ui32 threads = options.Threads;
+    const ui32 readThreads = options.ReadThreads;
+    const ui32 valueSize = options.ValueSize;
+    const ui32 readPercent = options.ReadPercent;
+    ui32 reportPeriod = options.ReportPeriod;
+    const ui64 writeRateMibps = options.WriteRateMibps;
+    const ui64 keyCount = options.KeyCount;
+    const ui32 batchSize = options.BatchSize;
+    const ui32 traceEveryN = options.TraceEveryN;
+
     if (partitionCount == 0) {
         Cerr << "--partition-count must be specified for load command" << Endl;
         return 1;
@@ -712,7 +1046,7 @@ int LoadVolume(
 
     const bool dedicatedReaders = readThreads > 0;
     const ui32 inlineReadPercent = dedicatedReaders ? 0 : readPercent;
-    const ui64 targetWriteBytesPerSec = writeRateMibps * 1024ull * 1024ull;
+    const ui64 targetWriteBytesPerSec = writeRateMibps * 1_MB;
 
     if (writeRateMibps > 0 && valueSize < 65536) {
         Cerr << "WARNING: --value-size is small for a high write rate; "
@@ -784,14 +1118,14 @@ int LoadVolume(
         Cerr.Flush();
     };
 
-    auto makeTraceparent = [&](std::atomic<ui64>& counter, TString* traceIdOut) -> TString {
+    auto makeTraceparent = [&](std::atomic<ui64>& counter) -> TTraceContext {
         if (traceEveryN == 0) {
             return {};
         }
         if (counter.fetch_add(1, std::memory_order_relaxed) % traceEveryN != 0) {
             return {};
         }
-        return MakeTraceparent(traceIdOut);
+        return MakeTraceparent();
     };
 
     auto logTrace = [&](const char* op, ui64 partitionId, ui64 latencyMs, bool ok, const TString& traceId) {
@@ -911,12 +1245,11 @@ int LoadVolume(
                 }
 
                 TString error;
-                TString traceId;
-                const TString traceparent = makeTraceparent(writeTraceCounter, &traceId);
+                const TTraceContext trace = makeTraceparent(writeTraceCounter);
                 auto begin = std::chrono::steady_clock::now();
                 bool ok = (batchSize == 1)
-                    ? DoWriteValue(*stub, database, path, partitionId, keys[0], value, storageChannel, &error, traceparent)
-                    : DoWriteBatch(*stub, database, path, partitionId, keys, value, storageChannel, &error, traceparent);
+                    ? DoWriteValue(*stub, database, path, partitionId, keys[0], value, storageChannel, &error, trace.Traceparent)
+                    : DoWriteBatch(*stub, database, path, partitionId, keys, value, storageChannel, &error, trace.Traceparent);
                 auto end = std::chrono::steady_clock::now();
                 const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
@@ -928,8 +1261,8 @@ int LoadVolume(
                 } else {
                     logError("write", partitionId, keys[0], latencyMs, error);
                 }
-                if (!traceId.empty()) {
-                    logTrace("write", partitionId, latencyMs, ok, traceId);
+                if (!trace.TraceId.empty()) {
+                    logTrace("write", partitionId, latencyMs, ok, trace.TraceId);
                 }
 
                 if (ok && inlineReadPercent > 0 && static_cast<ui32>(percent(rng)) <= inlineReadPercent) {
@@ -964,18 +1297,17 @@ int LoadVolume(
                 const TString key = TStringBuilder() << "load_" << runId << "_" << writer << "_" << keyIndex;
 
                 TString error;
-                TString traceId;
-                const TString traceparent = makeTraceparent(readTraceCounter, &traceId);
+                const TTraceContext trace = makeTraceparent(readTraceCounter);
                 auto begin = std::chrono::steady_clock::now();
-                const bool ok = DoReadValue(*stub, database, path, partitionId, key, &error, traceparent);
+                const bool ok = DoReadValue(*stub, database, path, partitionId, key, &error, trace.Traceparent);
                 auto end = std::chrono::steady_clock::now();
                 const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
                 record(ok, latencyMs, false);
                 if (!ok) {
                     logError("read", partitionId, key, latencyMs, error);
                 }
-                if (!traceId.empty()) {
-                    logTrace("read", partitionId, latencyMs, ok, traceId);
+                if (!trace.TraceId.empty()) {
+                    logTrace("read", partitionId, latencyMs, ok, trace.TraceId);
                 }
             }
         });
@@ -1065,22 +1397,18 @@ int LoadVolume(
     return totalErrors.load(std::memory_order_relaxed) == 0 ? 0 : 2;
 }
 
-int LoadVolumeChannels(
-    const TString& endpoint,
-    const TString& database,
-    const TString& path,
-    ui32 partitionCount,
-    const TVector<ui32>& s3Channels,
-    ui32 localChannel,
-    ui32 s3Threads,
-    ui32 localThreads,
-    ui32 seconds,
-    ui32 valueSize,
-    ui32 readPercent,
-    ui32 reportPeriod,
-    const TString& s3ErrorFile,
-    bool useTls)
-{
+int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const TString& path, bool useTls) {
+    const TString& database = options.Database;
+    const ui32 partitionCount = options.PartitionCount;
+    const TVector<ui32>& s3Channels = options.S3Channels;
+    const ui32 localChannel = options.LocalChannel;
+    const ui32 s3Threads = options.S3Threads;
+    const ui32 localThreads = options.LocalThreads;
+    const ui32 seconds = options.Seconds;
+    const ui32 valueSize = options.ValueSize;
+    const ui32 readPercent = options.ReadPercent;
+    ui32 reportPeriod = options.ReportPeriod;
+    const TString& s3ErrorFile = options.S3ErrorFile;
     if (partitionCount == 0) {
         Cerr << "--partition-count must be specified for load-channels command" << Endl;
         return 1;
@@ -1167,22 +1495,17 @@ int LoadVolumeChannels(
     auto record = [&](bool ok, ui64 latencyMs, bool isS3) {
         totalOps.fetch_add(1, std::memory_order_relaxed);
         windowOps.fetch_add(1, std::memory_order_relaxed);
-        if (isS3) {
-            s3Ops.fetch_add(1, std::memory_order_relaxed);
-            windowS3Ops.fetch_add(1, std::memory_order_relaxed);
-            if (!ok) {
-                s3Errors.fetch_add(1, std::memory_order_relaxed);
-                windowS3Errors.fetch_add(1, std::memory_order_relaxed);
-            }
-        } else {
-            localOps.fetch_add(1, std::memory_order_relaxed);
-            windowLocalOps.fetch_add(1, std::memory_order_relaxed);
-            if (!ok) {
-                localErrors.fetch_add(1, std::memory_order_relaxed);
-                windowLocalErrors.fetch_add(1, std::memory_order_relaxed);
-            }
-        }
+
+        auto& typeOps = isS3 ? s3Ops : localOps;
+        auto& typeWindowOps = isS3 ? windowS3Ops : windowLocalOps;
+        std::atomic<ui64>& typeErrors = isS3 ? s3Errors : localErrors;
+        std::atomic<ui64>& typeWindowErrors = isS3 ? windowS3Errors : windowLocalErrors;
+
+        typeOps.fetch_add(1, std::memory_order_relaxed);
+        typeWindowOps.fetch_add(1, std::memory_order_relaxed);
         if (!ok) {
+            typeErrors.fetch_add(1, std::memory_order_relaxed);
+            typeWindowErrors.fetch_add(1, std::memory_order_relaxed);
             totalErrors.fetch_add(1, std::memory_order_relaxed);
             windowErrors.fetch_add(1, std::memory_order_relaxed);
         }
@@ -1335,46 +1658,13 @@ int LoadVolumeChannels(
     return totalErrors.load(std::memory_order_relaxed) == 0 ? 0 : 2;
 }
 
-struct TOptions {
-    TString Command;
-    TString Endpoint;
-    TString Database;
-    TString Path;
-    TString TokenFile;
-    ui32 PartitionCount = 0;
-    ui64 PartitionId = 0;
-    bool PartitionIdSpecified = false;
-    TVector<TString> ChannelMedia;
-    TString Key;
-    TString Value;
-    ui64 ReadOffset = 0;
-    ui64 ReadSize = 0;
-    ui32 StorageChannel = 0;
-    TVector<ui32> S3Channels;
-    ui32 LocalChannel = 0;
-    ui32 S3Threads = 3;
-    ui32 LocalThreads = 1;
-    TString S3ErrorFile = "s3_errors.log";
-    ui32 Seconds = 10;
-    ui32 Threads = 1;
-    ui32 ReadThreads = 0;
-    ui32 ValueSize = 1024;
-    ui32 ReadPercent = 100;
-    ui32 ReportPeriod = 1;
-    ui64 WriteRateMibps = 0;
-    ui64 KeyCount = 0;
-    ui32 BatchSize = 1;
-    ui32 TraceEveryN = 0;
-    bool Verbose = false;
-};
-
 TOptions ParseOptions(int argc, char** argv) {
     TOptions options;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.SetTitle("KeyValue volume management tool");
     opts.SetFreeArgsNum(1);
-    opts.SetFreeArgTitle(0, "COMMAND", "Command to execute: create, describe, alter, remove, read, write, load or load-channels");
+    opts.SetFreeArgTitle(0, "COMMAND", "Command to execute: create, describe, alter, remove, read, write, upload, download, load or load-channels");
 
     opts.AddLongOption('e', "endpoint", "YDB endpoint (e.g., grpc://localhost:2135)")
         .Required()
@@ -1405,6 +1695,9 @@ TOptions ParseOptions(int argc, char** argv) {
 
     opts.AddLongOption("value", "Value to write")
         .StoreResult(&options.Value);
+
+    opts.AddLongOption("file", "Path to local file (source for upload, destination for download)")
+        .StoreResult(&options.FilePath);
 
     opts.AddLongOption("read-offset", "Offset in bytes for read operation (default: 0)")
         .StoreResult(&options.ReadOffset)
@@ -1469,6 +1762,10 @@ TOptions ParseOptions(int argc, char** argv) {
         .StoreResult(&options.ReadPercent)
         .DefaultValue("100");
 
+    opts.AddLongOption("delete-percent", "Percent of successful write/read cycles followed by delete, 0..100 (for load command)")
+        .StoreResult(&options.DeletePercent)
+        .DefaultValue("0");
+
     opts.AddLongOption("trace-every-n", "Send a traceparent header on every N-th RPC and log its trace id with the measured latency (for load command, 0 = off). Requires an external_throttling rule for KeyValue.ExecuteTransaction / KeyValue.Read in the cluster tracing_config")
         .StoreResult(&options.TraceEveryN)
         .DefaultValue("0");
@@ -1487,7 +1784,7 @@ TOptions ParseOptions(int argc, char** argv) {
     opts.SetFreeArgsMax(1);
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
-    
+
     if (parseResult.GetFreeArgs().size() != 1) {
         throw std::runtime_error("exactly one command must be specified");
     }
@@ -1496,8 +1793,9 @@ TOptions ParseOptions(int argc, char** argv) {
 
     if (options.Command != "create" && options.Command != "describe" && options.Command != "alter" &&
         options.Command != "remove" && options.Command != "read" && options.Command != "write" &&
+        options.Command != "upload" && options.Command != "download" &&
         options.Command != "load" && options.Command != "load-channels") {
-        throw std::runtime_error("command must be 'create', 'describe', 'alter', 'remove', 'read', 'write', 'load' or 'load-channels'");
+        throw std::runtime_error("command must be 'create', 'describe', 'alter', 'remove', 'read', 'write', 'upload', 'download', 'load' or 'load-channels'");
     }
 
     if (options.Command == "create" && options.PartitionCount == 0) {
@@ -1528,8 +1826,36 @@ TOptions ParseOptions(int argc, char** argv) {
         throw std::runtime_error("for write command, --value must be specified");
     }
 
+    if (options.Command == "upload" && !options.PartitionIdSpecified) {
+        throw std::runtime_error("for upload command, --partition-id must be specified");
+    }
+
+    if (options.Command == "upload" && options.Key.empty()) {
+        throw std::runtime_error("for upload command, --key must be specified");
+    }
+
+    if (options.Command == "upload" && options.FilePath.empty()) {
+        throw std::runtime_error("for upload command, --file must be specified");
+    }
+
+    if (options.Command == "download" && !options.PartitionIdSpecified) {
+        throw std::runtime_error("for download command, --partition-id must be specified");
+    }
+
+    if (options.Command == "download" && options.Key.empty()) {
+        throw std::runtime_error("for download command, --key must be specified");
+    }
+
+    if (options.Command == "download" && options.FilePath.empty()) {
+        throw std::runtime_error("for download command, --file must be specified");
+    }
+
     if (options.Command == "load" && options.PartitionCount == 0) {
         throw std::runtime_error("for load command, --partition-count must be specified");
+    }
+
+    if (options.Command == "load" && options.DeletePercent > 100) {
+        throw std::runtime_error("for load command, --delete-percent must be in range [0, 100]");
     }
 
     if (options.Command == "load-channels" && options.PartitionCount == 0) {
@@ -1565,28 +1891,13 @@ int main(int argc, char** argv) {
 
         const bool useTls = IsSecureEndpoint(options.Endpoint);
         const TString hostPort = ParseHostPort(options.Endpoint);
+        const TString volumePath = MakeVolumePath(options.Database, options.Path);
 
         TVector<TString> loadEndpoints;
-        {
-            TString epStr = options.Endpoint;
-            size_t start = 0;
-            while (start < epStr.size()) {
-                size_t comma = epStr.find(',', start);
-                TString part;
-                if (comma == TString::npos) {
-                    part = epStr.substr(start);
-                    start = epStr.size();
-                } else {
-                    part = epStr.substr(start, comma - start);
-                    start = comma + 1;
-                }
-                if (!part.empty()) {
-                    loadEndpoints.push_back(ParseHostPort(part));
-                }
-            }
-            if (loadEndpoints.empty()) {
-                loadEndpoints.push_back(hostPort);
-            }
+        StringSplitter(options.Endpoint).Split(',').SkipEmpty().Collect(&loadEndpoints);
+        std::transform(loadEndpoints.begin(), loadEndpoints.end(), loadEndpoints.begin(), ParseHostPort);
+        if (loadEndpoints.empty()) {
+            loadEndpoints.push_back(hostPort);
         }
 
         if (VerboseMode) {
@@ -1595,45 +1906,30 @@ int main(int argc, char** argv) {
             Cerr << "TLS: " << (useTls ? "enabled" : "disabled") << Endl;
             Cerr << "Database: " << options.Database << Endl;
             Cerr << "Path: " << options.Path << Endl;
-            if (!options.Database.empty() && options.Path.StartsWith(options.Database)) {
-                Cerr << "WARNING: Path already contains database prefix" << Endl;
-                Cerr << "Consider using -p " << options.Path.substr(options.Database.size()) << " instead" << Endl;
-            }
+            Cerr << "Volume path: " << volumePath << Endl;
             Cerr << Endl;
         }
 
         if (options.Command == "create") {
-            return CreateVolume(hostPort, options.Database, options.Path, options.PartitionCount, options.ChannelMedia, useTls);
+            return CreateVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.ChannelMedia, useTls);
         } else if (options.Command == "describe") {
-            return DescribeVolume(hostPort, options.Database, options.Path, useTls);
+            return DescribeVolume(hostPort, options.Database, volumePath, useTls);
         } else if (options.Command == "alter") {
-            return AlterVolume(hostPort, options.Database, options.Path, options.PartitionCount, options.ChannelMedia, useTls);
+            return AlterVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.ChannelMedia, useTls);
         } else if (options.Command == "remove") {
-            return RemoveVolume(hostPort, options.Database, options.Path, useTls);
+            return RemoveVolume(hostPort, options.Database, volumePath, useTls);
         } else if (options.Command == "read") {
-            return ReadValue(hostPort, options.Database, options.Path, options.PartitionId, options.Key, options.ReadOffset, options.ReadSize, useTls);
+            return ReadValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.ReadOffset, options.ReadSize, useTls);
         } else if (options.Command == "write") {
-            return WriteValue(hostPort, options.Database, options.Path, options.PartitionId, options.Key, options.Value, options.StorageChannel, useTls);
+            return WriteValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.Value, options.StorageChannel, useTls);
+        } else if (options.Command == "upload") {
+            return UploadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, options.StorageChannel, useTls);
+        } else if (options.Command == "download") {
+            return DownloadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, useTls);
         } else if (options.Command == "load") {
-            return LoadVolume(
-                loadEndpoints,
-                options.Database,
-                options.Path,
-                options.PartitionCount,
-                options.StorageChannel,
-                options.Seconds,
-                options.Threads,
-                options.ReadThreads,
-                options.ValueSize,
-                options.ReadPercent,
-                options.ReportPeriod,
-                options.WriteRateMibps,
-                options.KeyCount,
-                options.BatchSize,
-                options.TraceEveryN,
-                useTls);
+            return LoadVolume(options, loadEndpoints, volumePath, useTls);
         } else if (options.Command == "load-channels") {
-            return LoadVolumeChannels(hostPort, options.Database, options.Path, options.PartitionCount, options.S3Channels, options.LocalChannel, options.S3Threads, options.LocalThreads, options.Seconds, options.ValueSize, options.ReadPercent, options.ReportPeriod, options.S3ErrorFile, useTls);
+            return LoadVolumeChannels(options, hostPort, volumePath, useTls);
         }
 
         Cerr << "Unknown command: " << options.Command << Endl;

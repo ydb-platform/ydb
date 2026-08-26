@@ -21,7 +21,6 @@ Main topics:
 * [{#T}](cluster_expansion.md)
 * [{#T}](cms.md)
 * [{#T}](config-overview.md)
-* [{#T}](dynamic-config-selectors.md)
 * [{#T}](dynamic-config-volatile-config.md)
 * [{#T}](replacing_nodes.md)
 * [{#T}](blobdepot.md)

@@ -82,6 +82,27 @@ NWilson::TTraceId CreateTraceId()
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldDelegateCopyRangeBudgetToService, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>());
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        Service->CopyRangeBudgetDelay = TDuration::MilliSeconds(250);
+        const auto delay = RunOnExecutor(
+                               executor,
+                               [dbg] { return dbg->TakeCopyRangeBudget(2_MB); })
+                               .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(250), delay);
+        UNIT_ASSERT_VALUES_EQUAL(1u, Service->CopyRangeBudgetRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(2_MB, Service->LastCopyRangeBudgetByteCount);
+    }
+
     // The initial-ready signal fires exactly once, only after the locked
     // quorum (3 of 5 DDisk sessions and PBuffers) is reached.
     Y_UNIT_TEST_F(ShouldSignalInitialReadyOnceLockedQuorumReached, TDBGFixture)

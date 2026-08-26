@@ -46,6 +46,7 @@ TStorageConfig::TStorageConfig(
     xxx(VhostQueuesCount,                   ui32,     4                       )\
     xxx(PBufferCleanupLsnStep,              ui64,     3000                    )\
     xxx(UseDirectSessionTransport,          bool,     false                   )\
+    xxx(CopyRangeBandwidthMbs,              ui32,     200                     )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

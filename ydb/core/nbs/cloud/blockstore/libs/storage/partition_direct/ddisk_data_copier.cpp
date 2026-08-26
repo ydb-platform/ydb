@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -184,21 +185,51 @@ void TDDiskDataCopier::StartCopyRange()
             break;
     }
 
+    auto timeWaitBeforeExecution = DirectBlockGroup->TakeCopyRangeBudget(
+        freshRange->Size() * VolumeConfig->BlockSize);
     auto hint = DirtyMap->BeginRangeSync(Destination, *freshRange);
     hint.ReadyToStart.Subscribe(
-        [weakSelf = weak_from_this(), syncId = hint.SyncId, range = hint.Range](
-            const TFuture<void>& f)
+        [weakSelf = weak_from_this(),
+         syncId = hint.SyncId,
+         range = hint.Range,
+         willStartAt = TInstant::Now() + timeWaitBeforeExecution]   //
+        (const TFuture<void>& f) mutable
         {
             Y_UNUSED(f);
 
             if (auto self = weakSelf.lock()) {
-                self->CopyRange(syncId, range);
+                self->CopyRange(willStartAt - TInstant::Now(), syncId, range);
             }
         });
 }
 
-void TDDiskDataCopier::CopyRange(ui64 syncId, TBlockRange64 range)
+void TDDiskDataCopier::CopyRange(
+    TDuration timeWaitBeforeExecution,
+    ui64 syncId,
+    TBlockRange64 range)
 {
+    if (timeWaitBeforeExecution) {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s %lu %s Schedule copy range %s",
+            LogTitle.GetWithTime().c_str(),
+            syncId,
+            range.Print().c_str(),
+            FormatDuration(timeWaitBeforeExecution).c_str());
+
+        DirectBlockGroup->Schedule(
+            timeWaitBeforeExecution,
+            [weakSelf = weak_from_this(), syncId, range]()
+            {
+                if (auto self = weakSelf.lock()) {
+                    self->CopyRange({}, syncId, range);
+                }
+            });
+
+        return;
+    }
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

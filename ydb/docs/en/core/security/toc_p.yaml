@@ -1,9 +1,6 @@
 items:
 - name: Authentication
   href: authentication.md
-  items:
-  - name: Caching authentication results
-    href: caching-authentication-results.md
 - name: Authorization
   href: authorization.md
 - name: Initial security configuration

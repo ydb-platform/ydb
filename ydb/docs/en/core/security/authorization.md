@@ -7,7 +7,7 @@ Authorization in {{ ydb-short-name }} is based on the concepts of:
 * [Access object](../concepts/glossary.md#access-object)
 * [Access subject](../concepts/glossary.md#access-subject)
 * [Access right](../concepts/glossary.md#access-right)
-* [Access control list](../concepts/glossary.md#access-control-list)
+* [Access control list](../concepts/glossary.md#access-acl)
 * [Owner](../concepts/glossary.md#access-owner)
 * [User](../concepts/glossary.md#access-user)
 * [Group](../concepts/glossary.md#access-group)
@@ -66,7 +66,7 @@ To create, alter, and delete [groups](../concepts/glossary.md#access-group), the
 
 [Rights](../concepts/glossary.md#access-right) in {{ ydb-short-name }} are tied not to the [subject](../concepts/glossary.md#access-subject), but to the [access object](../concepts/glossary.md#access-object).
 
-Each access object has a list of permissions — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — it stores all the rights provided to [access subjects](../concepts/glossary.md#subject) (users and groups) for the object.
+Each access object has a list of permissions — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — it stores all the rights provided to [access subjects](../concepts/glossary.md#subject) (users and groups) for the object.
 
 By default, rights are inherited from parents to descendants in the access objects tree.
 

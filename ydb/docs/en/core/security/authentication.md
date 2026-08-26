@@ -136,9 +136,9 @@ A service account can be authenticated in two main ways:
 * Using mTLS (mutual TLS) via the SASL EXTERNAL mechanism.
   In this option, certificates are used for authentication instead of a login and password. This allows you not to store the service account password in the configuration — you just need to specify the certificate file (`use_tls.cert_file`) and private key file (`use_tls.key_file`), and also enable a special flag (`extended_settings.enable_sasl_external_bind`). For detailed configuration information, see the [ldap_authentication](../reference/configuration/auth_config.md#ldap-auth-config) section.
 
-### Token verification {#token-validation}
+### Token verification
 
-After a user is authenticated, an [authentication token](../concepts/glossary.md#auth-token) is generated and sent with requests to {{ ydb-short-name }}. When checking the token, the node determines the user on whose behalf the request is made and the groups to which the user belongs. Depending on the authentication method, the node may cryptographically verify the token locally or contact an external authentication system. For example, a token for a user from an LDAP directory does not contain group information, so the node sends another request to the LDAP server to obtain the user's group list. Network calls increase authentication-token validation and request-processing latency, as well as load on the external system. Therefore, {{ ydb-short-name }} nodes [cache validation results](./caching-authentication-results.md).
+After user authentication in the system, a token is generated, which is verified before executing the requested operation. During token verification, it is determined on behalf of which user the action is requested in the system and in which groups they are members. For users from the LDAP directory, the token does not contain information about groups, so after token verification, another request is made to the LDAP server to obtain the list of groups the user belongs to.
 
 Groups, like the user themselves, are subjects for performing operations on database schema objects. To control access to various database resources, subjects can be assigned access rights. And according to the list of assigned rights, subjects will be authorized to perform certain operations.
 
@@ -163,7 +163,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 {% note info %}
 
-The update frequency for user and group information is configured with [`auth_config.refresh_time`](../reference/configuration/auth_config.md#caching-auth-results). For details, see [Caching authentication results](./caching-authentication-results.md#refreshing-user-tokens).
+In the configuration file section that describes authentication information, you can configure the update frequency for user and group information. This parameter is controlled by the `refresh_time` setting. For more details about configuration files, see the [cluster configuration](../reference/configuration/auth_config.md#auth-config) section.
 
 {% endnote %}
 

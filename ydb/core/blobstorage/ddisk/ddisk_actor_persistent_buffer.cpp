@@ -1772,7 +1772,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, TFastErase& fastErase) {
+    void TDDiskActor::FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, const TFastErase& fastErase) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.FastErasePersistentBuffer",
@@ -1806,7 +1806,6 @@ namespace NKikimr::NDDisk {
         // position (LEB128/raw entries scanned from the start, terminated by a zero entry), so
         // only the trailing padding after sizeof(TPersistentBufferFastErases) - left over from the
         // sector's remaining bytes - can be excluded from the checksum.
-        fastErase.Header.Header.HeaderDataSize = sizeof(TPersistentBufferFastErases);
         memcpy(fastEraseData.GetDataMut(), &fastErase.Header, sizeof(TPersistentBufferFastErases));
         memset(fastEraseData.GetDataMut() + sizeof(TPersistentBufferFastErases), 0, SectorSize - sizeof(TPersistentBufferFastErases));
         TRope headerRope(std::move(fastEraseData));

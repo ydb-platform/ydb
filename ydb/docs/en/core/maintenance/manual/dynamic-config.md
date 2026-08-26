@@ -19,7 +19,7 @@ The following tasks should be performed before using the dynamic configuration i
 
 1. Enable [database node authentication and authorization](../../devops/deployment-options/manual/node-authorization.md).
 
-2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
+2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](../../devops/configuration-management/configuration-v1/cms.md) has been used in the cluster:
 
     ```bash
     ./ydbd -s grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file ydbd-token \

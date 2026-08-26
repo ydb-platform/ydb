@@ -1,6 +1,7 @@
 #include "direct_block_group_test_fixture.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/fake_direct_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
@@ -225,7 +226,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto readFuture = transport->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{1, 0, DefaultBlockSize},
-            /*lsn=*/42,
+            MakeKey(42),
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -433,7 +434,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto future = transportPtr->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
-            /*lsn=*/1,
+            MakeKey(1),
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -477,7 +478,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
         auto batch = transport->BatchEraseFromPBuffer(
             pbConnection,
-            TVector<ui64>{1, 2, 3},
+            TVector<TPBufferKey>{MakeKey(1), MakeKey(2), MakeKey(3)},
             nullptr);
         WaitFuture(executor, batch, WaitTimeout);
         UNIT_ASSERT(
@@ -497,7 +498,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             pbConnection,
             ddConnection,
             TVector{NDDisk::TBlockSelector{0, 0, DefaultBlockSize}},
-            TVector<ui64>{1},
+            TVector<TPBufferKey>{MakeKey(1)},
             nullptr);
         WaitFuture(executor, sync, WaitTimeout);
         UNIT_ASSERT(

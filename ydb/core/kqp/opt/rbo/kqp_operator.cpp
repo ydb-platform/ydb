@@ -403,9 +403,7 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
             continue;
         }
         const auto& expression = mapElement.GetExpression();
-        if (expression.HasWindowSemantics() &&
-            !expression.GetWindowMetadata())
-        {
+        if (expression.HasUntrackedWindowSemantics()) {
             for (const auto& inputIU : inputIUs) {
                 if (!ContainsInfoUnit(result, inputIU)) {
                     result.push_back(inputIU);

@@ -786,6 +786,10 @@ bool TExpression::HasWindowSemantics() const {
         }));
 }
 
+bool TExpression::HasUntrackedWindowSemantics() const {
+    return !WindowMetadata && HasWindowSemantics();
+}
+
 TVector<TInfoUnit> TExpression::GetWindowPartitionBy() const {
     if (!WindowMetadata) {
         return {};

@@ -92,6 +92,12 @@ class TExpression {
     // verifier admits only expressions with exact source metadata.
     bool HasWindowSemantics() const;
 
+    // True when a relation-dependent window call is present but no complete
+    // source definition was transported.  Optimizer rules must treat this as
+    // a fail-closed barrier because hidden partition/order dependencies cannot
+    // be renamed or moved independently of the scalar lambda.
+    bool HasUntrackedWindowSemantics() const;
+
     // Resolve source partition names through exactly one lookup in each
     // optimizer rename batch.  This mirrors RenameMembers: chains within one
     // batch are not followed transitively, while successive batches compose.

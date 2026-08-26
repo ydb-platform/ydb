@@ -205,9 +205,7 @@ bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOpe
         const auto& map = static_cast<const TOpMap&>(*input);
         for (const auto& mapElement : map.MapElements) {
             const auto& expression = mapElement.GetExpression();
-            if (expression.HasWindowSemantics() &&
-                !expression.GetWindowMetadata())
-            {
+            if (expression.HasUntrackedWindowSemantics()) {
                 // The dependency set of an untracked window is deliberately
                 // incomplete.  Its Map is therefore an alias-rewrite barrier:
                 // renaming visible members cannot prove that hidden window

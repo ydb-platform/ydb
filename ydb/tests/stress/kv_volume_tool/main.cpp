@@ -45,7 +45,9 @@ static TString AuthToken;
 namespace {
 
 constexpr auto GrpcDeadline = 30s;
-constexpr ui64 FileTransferChunkSize = 32 * 1024 * 1024;
+constexpr ui64 GrpcMaxMessageSize = 64_MB;
+constexpr ui64 FileTransferChunkSize = 32_MB;
+constexpr ui64 MinValueSizeForRateLimit = 64_KB;
 constexpr const char* YdbAuthHeader = "x-ydb-auth-ticket";
 constexpr const char* YdbDatabaseHeader = "x-ydb-database";
 // W3C trace context, https://w3c.github.io/trace-context/#header-name
@@ -126,8 +128,8 @@ std::shared_ptr<grpc::ChannelCredentials> MakeChannelCredentials(bool useTls) {
 
 std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TString& endpoint, bool useTls, ui32 channelId = 0) {
     grpc::ChannelArguments args;
-    args.SetMaxReceiveMessageSize(64 * 1024 * 1024);
-    args.SetMaxSendMessageSize(64 * 1024 * 1024);
+    args.SetMaxReceiveMessageSize(GrpcMaxMessageSize);
+    args.SetMaxSendMessageSize(GrpcMaxMessageSize);
     // Default gRPC shares one TCP connection across all Channel objects to the same
     // target. Each load worker must get its own connection.
     args.SetInt(GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL, 1);
@@ -1014,43 +1016,27 @@ struct TOptions {
 };
 
 int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const TString& path, bool useTls) {
-    const TString& database = options.Database;
-    const ui32 partitionCount = options.PartitionCount;
-    const ui32 storageChannel = options.StorageChannel;
-    const ui32 seconds = options.Seconds;
-    const ui32 threads = options.Threads;
-    const ui32 readThreads = options.ReadThreads;
-    const ui32 valueSize = options.ValueSize;
-    const ui32 readPercent = options.ReadPercent;
-    ui32 reportPeriod = options.ReportPeriod;
-    const ui64 writeRateMibps = options.WriteRateMibps;
-    const ui64 keyCount = options.KeyCount;
-    const ui32 batchSize = options.BatchSize;
-    const ui32 traceEveryN = options.TraceEveryN;
-
-    if (partitionCount == 0) {
+    if (options.PartitionCount == 0) {
         Cerr << "--partition-count must be specified for load command" << Endl;
         return 1;
     }
-    if (threads == 0) {
+    if (options.Threads == 0) {
         Cerr << "--threads must be greater than zero" << Endl;
         return 1;
     }
-    if (reportPeriod == 0) {
-        reportPeriod = 1;
-    }
-    if (readPercent > 100) {
+    const ui32 reportPeriod = options.ReportPeriod == 0 ? 1 : options.ReportPeriod;
+    if (options.ReadPercent > 100) {
         Cerr << "--read-percent must be in range [0, 100]" << Endl;
         return 1;
     }
 
-    const bool dedicatedReaders = readThreads > 0;
-    const ui32 inlineReadPercent = dedicatedReaders ? 0 : readPercent;
-    const ui64 targetWriteBytesPerSec = writeRateMibps * 1_MB;
+    const bool dedicatedReaders = options.ReadThreads > 0;
+    const ui32 inlineReadPercent = dedicatedReaders ? 0 : options.ReadPercent;
+    const ui64 targetWriteBytesPerSec = options.WriteRateMibps * 1_MB;
 
-    if (writeRateMibps > 0 && valueSize < 65536) {
+    if (options.WriteRateMibps > 0 && options.ValueSize < MinValueSizeForRateLimit) {
         Cerr << "WARNING: --value-size is small for a high write rate; "
-             << "consider --value-size 1048576 (1 MiB) to reach 4 GiB/s" << Endl;
+             << "consider --value-size " << 1_MB << " (1 MiB) to reach 4 GiB/s" << Endl;
     }
 
     std::atomic<bool> stop{false};
@@ -1075,21 +1061,21 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     std::atomic<ui64> loggedErrors{0};
     constexpr ui64 MaxLoggedErrors = 50;
 
-    // every traceEveryN-th RPC carries a traceparent header, so the server samples
+    // every N-th RPC carries a traceparent header, so the server samples
     // exactly that request; the trace id is logged together with the observed latency
     std::atomic<ui64> writeTraceCounter{0};
     std::atomic<ui64> readTraceCounter{0};
 
-    std::unique_ptr<std::atomic<ui64>[]> writtenPerThread(new std::atomic<ui64>[threads]);
-    for (ui32 i = 0; i < threads; ++i) {
+    std::unique_ptr<std::atomic<ui64>[]> writtenPerThread(new std::atomic<ui64>[options.Threads]);
+    for (ui32 i = 0; i < options.Threads; ++i) {
         writtenPerThread[i].store(0, std::memory_order_relaxed);
     }
 
     const auto started = std::chrono::steady_clock::now();
-    const auto deadline = seconds == 0
+    const auto deadline = options.Seconds == 0
         ? std::chrono::steady_clock::time_point::max()
-        : started + std::chrono::seconds(seconds);
-    const TString value(valueSize, 'x');
+        : started + std::chrono::seconds(options.Seconds);
+    const TString value(options.ValueSize, 'x');
     const ui64 runId = static_cast<ui64>(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
     TByteRateLimiter writeLimiter(targetWriteBytesPerSec);
@@ -1109,7 +1095,7 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
         }
         std::lock_guard<std::mutex> guard(errorMutex);
         Cerr << "ERROR\t" << op
-             << "\tchannel=" << storageChannel
+             << "\tchannel=" << options.StorageChannel
              << "\tpartition=" << partitionId
              << "\tkey=" << key
              << "\tlatency_ms=" << latencyMs
@@ -1119,10 +1105,10 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     };
 
     auto makeTraceparent = [&](std::atomic<ui64>& counter) -> TTraceContext {
-        if (traceEveryN == 0) {
+        if (options.TraceEveryN == 0) {
             return {};
         }
-        if (counter.fetch_add(1, std::memory_order_relaxed) % traceEveryN != 0) {
+        if (counter.fetch_add(1, std::memory_order_relaxed) % options.TraceEveryN != 0) {
             return {};
         }
         return MakeTraceparent();
@@ -1131,7 +1117,7 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     auto logTrace = [&](const char* op, ui64 partitionId, ui64 latencyMs, bool ok, const TString& traceId) {
         std::lock_guard<std::mutex> guard(errorMutex);
         Cerr << "TRACE\t" << op
-             << "\tchannel=" << storageChannel
+             << "\tchannel=" << options.StorageChannel
              << "\tpartition=" << partitionId
              << "\tlatency_ms=" << latencyMs
              << "\tok=" << (ok ? 1 : 0)
@@ -1145,8 +1131,8 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
             totalWriteOps.fetch_add(1, std::memory_order_relaxed);
             windowWriteOps.fetch_add(1, std::memory_order_relaxed);
             if (ok) {
-                totalWriteBytes.fetch_add(valueSize, std::memory_order_relaxed);
-                windowWriteBytes.fetch_add(valueSize, std::memory_order_relaxed);
+                totalWriteBytes.fetch_add(options.ValueSize, std::memory_order_relaxed);
+                windowWriteBytes.fetch_add(options.ValueSize, std::memory_order_relaxed);
             } else {
                 windowWriteErrors.fetch_add(1, std::memory_order_relaxed);
             }
@@ -1154,8 +1140,8 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
             totalReadOps.fetch_add(1, std::memory_order_relaxed);
             windowReadOps.fetch_add(1, std::memory_order_relaxed);
             if (ok) {
-                totalReadBytes.fetch_add(valueSize, std::memory_order_relaxed);
-                windowReadBytes.fetch_add(valueSize, std::memory_order_relaxed);
+                totalReadBytes.fetch_add(options.ValueSize, std::memory_order_relaxed);
+                windowReadBytes.fetch_add(options.ValueSize, std::memory_order_relaxed);
             } else {
                 windowReadErrors.fetch_add(1, std::memory_order_relaxed);
             }
@@ -1179,49 +1165,49 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     for (const auto& ep : endpoints) {
         Cout << "    " << ep << Endl;
     }
-    Cout << "  storage channel: " << storageChannel << Endl;
-    Cout << "  write threads: " << threads << Endl;
-    Cout << "  read threads: " << readThreads
+    Cout << "  storage channel: " << options.StorageChannel << Endl;
+    Cout << "  write threads: " << options.Threads << Endl;
+    Cout << "  read threads: " << options.ReadThreads
          << (dedicatedReaders ? " (dedicated)" : " (inline via --read-percent)") << Endl;
     if (!dedicatedReaders) {
         Cout << "  read-percent: " << inlineReadPercent << Endl;
     }
-    Cout << "  batch-size: " << batchSize << " keys per RPC" << Endl;
-    Cout << "  value-size: " << valueSize << " bytes" << Endl;
+    Cout << "  batch-size: " << options.BatchSize << " keys per RPC" << Endl;
+    Cout << "  value-size: " << options.ValueSize << " bytes" << Endl;
     Cout << "  tracing: ";
-    if (traceEveryN == 0) {
+    if (options.TraceEveryN == 0) {
         Cout << "off";
     } else {
-        Cout << "every " << traceEveryN << "-th RPC (traceparent header, see TRACE lines in stderr)";
+        Cout << "every " << options.TraceEveryN << "-th RPC (traceparent header, see TRACE lines in stderr)";
     }
     Cout << Endl;
     Cout << "  write-rate: ";
-    if (writeRateMibps == 0) {
+    if (options.WriteRateMibps == 0) {
         Cout << "unlimited";
     } else {
-        Cout << writeRateMibps << " MiB/s";
+        Cout << options.WriteRateMibps << " MiB/s";
     }
     Cout << Endl;
     Cout << "  key-count per write thread: ";
-    if (keyCount == 0) {
+    if (options.KeyCount == 0) {
         Cout << "unique (no overwrite)";
     } else {
-        Cout << keyCount << " (overwrite working set)";
+        Cout << options.KeyCount << " (overwrite working set)";
     }
     Cout << Endl;
     Cout << "  duration: ";
-    if (seconds == 0) {
+    if (options.Seconds == 0) {
         Cout << "until SIGINT/SIGTERM";
     } else {
-        Cout << seconds << " seconds";
+        Cout << options.Seconds << " seconds";
     }
     Cout << Endl;
     Cout << Endl;
 
     TVector<std::thread> workers;
-    workers.reserve(threads + readThreads);
+    workers.reserve(options.Threads + options.ReadThreads);
 
-    for (ui32 t = 0; t < threads; ++t) {
+    for (ui32 t = 0; t < options.Threads; ++t) {
         workers.emplace_back([&, t] {
             const auto& ep = endpoints[t % endpoints.size()];
             auto channel = MakeGrpcChannel(ep, useTls, t + 1);
@@ -1230,34 +1216,34 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
             std::uniform_int_distribution<int> percent(1, 100);
 
             while (stillRunning()) {
-                const ui64 batchBytes = static_cast<ui64>(valueSize) * batchSize;
+                const ui64 batchBytes = static_cast<ui64>(options.ValueSize) * options.BatchSize;
                 writeLimiter.Acquire(batchBytes);
 
                 const ui64 written = writtenPerThread[t].load(std::memory_order_relaxed);
-                const ui64 baseKeyIndex = (keyCount > 0) ? (written % keyCount) : written;
-                const ui64 partitionId = (t + baseKeyIndex) % partitionCount;
+                const ui64 baseKeyIndex = (options.KeyCount > 0) ? (written % options.KeyCount) : written;
+                const ui64 partitionId = (t + baseKeyIndex) % options.PartitionCount;
 
                 TVector<TString> keys;
-                keys.reserve(batchSize);
-                for (ui32 b = 0; b < batchSize; ++b) {
-                    const ui64 ki = (keyCount > 0) ? ((written + b) % keyCount) : (written + b);
+                keys.reserve(options.BatchSize);
+                for (ui32 b = 0; b < options.BatchSize; ++b) {
+                    const ui64 ki = (options.KeyCount > 0) ? ((written + b) % options.KeyCount) : (written + b);
                     keys.push_back(TStringBuilder() << "load_" << runId << "_" << t << "_" << ki);
                 }
 
                 TString error;
                 const TTraceContext trace = makeTraceparent(writeTraceCounter);
                 auto begin = std::chrono::steady_clock::now();
-                bool ok = (batchSize == 1)
-                    ? DoWriteValue(*stub, database, path, partitionId, keys[0], value, storageChannel, &error, trace.Traceparent)
-                    : DoWriteBatch(*stub, database, path, partitionId, keys, value, storageChannel, &error, trace.Traceparent);
+                bool ok = (options.BatchSize == 1)
+                    ? DoWriteValue(*stub, options.Database, path, partitionId, keys[0], value, options.StorageChannel, &error, trace.Traceparent)
+                    : DoWriteBatch(*stub, options.Database, path, partitionId, keys, value, options.StorageChannel, &error, trace.Traceparent);
                 auto end = std::chrono::steady_clock::now();
                 const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
-                for (ui32 b = 0; b < batchSize; ++b) {
+                for (ui32 b = 0; b < options.BatchSize; ++b) {
                     record(ok, latencyMs, true);
                 }
                 if (ok) {
-                    writtenPerThread[t].fetch_add(batchSize, std::memory_order_relaxed);
+                    writtenPerThread[t].fetch_add(options.BatchSize, std::memory_order_relaxed);
                 } else {
                     logError("write", partitionId, keys[0], latencyMs, error);
                 }
@@ -1267,7 +1253,7 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
 
                 if (ok && inlineReadPercent > 0 && static_cast<ui32>(percent(rng)) <= inlineReadPercent) {
                     begin = std::chrono::steady_clock::now();
-                    ok = DoReadValue(*stub, database, path, partitionId, keys[0]);
+                    ok = DoReadValue(*stub, options.Database, path, partitionId, keys[0]);
                     end = std::chrono::steady_clock::now();
                     record(ok, std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count(), false);
                 }
@@ -1275,13 +1261,13 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
         });
     }
 
-    for (ui32 t = 0; t < readThreads; ++t) {
+    for (ui32 t = 0; t < options.ReadThreads; ++t) {
         workers.emplace_back([&, t] {
-            const auto& ep = endpoints[(threads + t) % endpoints.size()];
-            auto channel = MakeGrpcChannel(ep, useTls, threads + t + 1);
+            const auto& ep = endpoints[(options.Threads + t) % endpoints.size()];
+            auto channel = MakeGrpcChannel(ep, useTls, options.Threads + t + 1);
             auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
             std::mt19937 rng(static_cast<unsigned>(runId + 100000 + t));
-            std::uniform_int_distribution<ui32> threadDist(0, threads - 1);
+            std::uniform_int_distribution<ui32> threadDist(0, options.Threads - 1);
 
             while (stillRunning()) {
                 const ui32 writer = threadDist(rng);
@@ -1290,16 +1276,16 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
                     std::this_thread::sleep_for(1ms);
                     continue;
                 }
-                const ui64 usable = (keyCount > 0) ? Min(written, keyCount) : written;
+                const ui64 usable = (options.KeyCount > 0) ? Min(written, options.KeyCount) : written;
                 std::uniform_int_distribution<ui64> keyDist(0, usable - 1);
                 const ui64 keyIndex = keyDist(rng);
-                const ui64 partitionId = (writer + keyIndex) % partitionCount;
+                const ui64 partitionId = (writer + keyIndex) % options.PartitionCount;
                 const TString key = TStringBuilder() << "load_" << runId << "_" << writer << "_" << keyIndex;
 
                 TString error;
                 const TTraceContext trace = makeTraceparent(readTraceCounter);
                 auto begin = std::chrono::steady_clock::now();
-                const bool ok = DoReadValue(*stub, database, path, partitionId, key, &error, trace.Traceparent);
+                const bool ok = DoReadValue(*stub, options.Database, path, partitionId, key, &error, trace.Traceparent);
                 auto end = std::chrono::steady_clock::now();
                 const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
                 record(ok, latencyMs, false);
@@ -1398,56 +1384,43 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
 }
 
 int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const TString& path, bool useTls) {
-    const TString& database = options.Database;
-    const ui32 partitionCount = options.PartitionCount;
-    const TVector<ui32>& s3Channels = options.S3Channels;
-    const ui32 localChannel = options.LocalChannel;
-    const ui32 s3Threads = options.S3Threads;
-    const ui32 localThreads = options.LocalThreads;
-    const ui32 seconds = options.Seconds;
-    const ui32 valueSize = options.ValueSize;
-    const ui32 readPercent = options.ReadPercent;
-    ui32 reportPeriod = options.ReportPeriod;
-    const TString& s3ErrorFile = options.S3ErrorFile;
-    if (partitionCount == 0) {
+    if (options.PartitionCount == 0) {
         Cerr << "--partition-count must be specified for load-channels command" << Endl;
         return 1;
     }
-    if (s3Threads == 0 && localThreads == 0) {
+    if (options.S3Threads == 0 && options.LocalThreads == 0) {
         Cerr << "at least one of --s3-threads or --local-threads must be greater than zero" << Endl;
         return 1;
     }
-    if (s3Threads > 0 && s3Channels.empty()) {
+    if (options.S3Threads > 0 && options.S3Channels.empty()) {
         Cerr << "--s3-channel must be specified when --s3-threads > 0" << Endl;
         return 1;
     }
-    if (seconds == 0) {
+    if (options.Seconds == 0) {
         Cerr << "--seconds must be greater than zero" << Endl;
         return 1;
     }
-    if (reportPeriod == 0) {
-        reportPeriod = 1;
-    }
-    if (readPercent > 100) {
+    const ui32 reportPeriod = options.ReportPeriod == 0 ? 1 : options.ReportPeriod;
+    if (options.ReadPercent > 100) {
         Cerr << "--read-percent must be in range [0, 100]" << Endl;
         return 1;
     }
 
-    const ui32 totalThreads = s3Threads + localThreads;
+    const ui32 totalThreads = options.S3Threads + options.LocalThreads;
 
     Cout << "Multi-channel load started:" << Endl;
     Cout << "  S3 channels:";
-    if (s3Channels.empty()) {
+    if (options.S3Channels.empty()) {
         Cout << " <none>";
     } else {
-        for (ui32 channel : s3Channels) {
+        for (ui32 channel : options.S3Channels) {
             Cout << " " << channel;
         }
     }
-    Cout << ", threads: " << s3Threads << Endl;
-    Cout << "  Local channel: " << localChannel << ", threads: " << localThreads << Endl;
+    Cout << ", threads: " << options.S3Threads << Endl;
+    Cout << "  Local channel: " << options.LocalChannel << ", threads: " << options.LocalThreads << Endl;
     Cout << "  Total threads: " << totalThreads << Endl;
-    Cout << "  S3 error file: " << s3ErrorFile << Endl;
+    Cout << "  S3 error file: " << options.S3ErrorFile << Endl;
     Cout << Endl;
 
     std::atomic<bool> stop{false};
@@ -1468,12 +1441,12 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
     TVector<ui64> windowLatenciesMs;
 
     std::mutex s3ErrorMutex;
-    TFileOutput s3ErrorOut(s3ErrorFile);
+    TFileOutput s3ErrorOut(options.S3ErrorFile);
     s3ErrorOut << "ts_ms\top\tchannel\tpartition\tkey\tlatency_ms\terror" << Endl;
 
     const auto started = std::chrono::steady_clock::now();
-    const auto deadline = started + std::chrono::seconds(seconds);
-    const TString value(valueSize, 'x');
+    const auto deadline = started + std::chrono::seconds(options.Seconds);
+    const TString value(options.ValueSize, 'x');
     const ui64 runId = static_cast<ui64>(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
 
@@ -1525,19 +1498,19 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
     TVector<TWorkerConfig> workerConfigs;
     workerConfigs.reserve(totalThreads);
 
-    for (ui32 t = 0; t < s3Threads; ++t) {
+    for (ui32 t = 0; t < options.S3Threads; ++t) {
         TWorkerConfig config;
         config.ThreadIndex = t;
-        config.StorageChannel = s3Channels[t % s3Channels.size()];
+        config.StorageChannel = options.S3Channels[t % options.S3Channels.size()];
         config.KeyPrefix = TStringBuilder() << "s3_load_" << runId << "_" << t;
         config.IsS3 = true;
         workerConfigs.push_back(std::move(config));
     }
 
-    for (ui32 t = 0; t < localThreads; ++t) {
+    for (ui32 t = 0; t < options.LocalThreads; ++t) {
         TWorkerConfig config;
-        config.ThreadIndex = s3Threads + t;
-        config.StorageChannel = localChannel;
+        config.ThreadIndex = options.S3Threads + t;
+        config.StorageChannel = options.LocalChannel;
         config.KeyPrefix = TStringBuilder() << "local_load_" << runId << "_" << t;
         config.IsS3 = false;
         workerConfigs.push_back(std::move(config));
@@ -1555,12 +1528,12 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
 
             ui64 i = 0;
             while (!stop.load(std::memory_order_relaxed) && std::chrono::steady_clock::now() < deadline) {
-                const ui64 partitionId = (config.ThreadIndex + i) % partitionCount;
+                const ui64 partitionId = (config.ThreadIndex + i) % options.PartitionCount;
                 const TString key = TStringBuilder() << config.KeyPrefix << "_" << i;
 
                 TString error;
                 auto begin = std::chrono::steady_clock::now();
-                bool ok = DoWriteValue(*stub, database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
+                bool ok = DoWriteValue(*stub, options.Database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
                 auto end = std::chrono::steady_clock::now();
                 const ui64 latencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
                 record(ok, latencyMs, config.IsS3);
@@ -1568,10 +1541,10 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
                     logS3Error("write", config.StorageChannel, partitionId, key, latencyMs, error);
                 }
 
-                if (ok && readPercent > 0 && static_cast<ui32>(percent(rng)) <= readPercent) {
+                if (ok && options.ReadPercent > 0 && static_cast<ui32>(percent(rng)) <= options.ReadPercent) {
                     error.clear();
                     begin = std::chrono::steady_clock::now();
-                    ok = DoReadValue(*stub, database, path, partitionId, key, config.IsS3 ? &error : nullptr);
+                    ok = DoReadValue(*stub, options.Database, path, partitionId, key, config.IsS3 ? &error : nullptr);
                     end = std::chrono::steady_clock::now();
                     const ui64 readLatencyMs = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
                     record(ok, readLatencyMs, config.IsS3);
@@ -1652,7 +1625,7 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
          << Endl;
 
     if (s3Errors.load(std::memory_order_relaxed) > 0) {
-        Cout << "S3 errors written to: " << s3ErrorFile << Endl;
+        Cout << "S3 errors written to: " << options.S3ErrorFile << Endl;
     }
 
     return totalErrors.load(std::memory_order_relaxed) == 0 ? 0 : 2;

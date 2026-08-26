@@ -198,11 +198,14 @@ protected:
             const auto& cmd = baseRecord.GetDDiskLoad();
             if (cmd.GetIsReadLoad()) {
                 for (const auto& area : cmd.GetAreas()) {
-                    if (area.GetInitType() == TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
-                        Cerr << "Error: read load requires area initialization"
-                             << " (InitType != INIT_NONE) to allocate chunks before reading" << Endl;
+                    if (area.HasInitType() &&
+                            area.GetInitType() != TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FULL) {
+                        Cerr << "Error: read load requires InitType INIT_ZEROES_FULL"
+                             << " (omit InitType to use it automatically);"
+                             << " INIT_NONE and INIT_ZEROES_FIRST_BLOCK skip device I/O for unread blocks"
+                             << Endl;
                         ASSERT_YTHROW(false,
-                            "Invalid configuration: read load requires area initialization (InitType != INIT_NONE)");
+                            "Invalid configuration: read load requires InitType INIT_ZEROES_FULL");
                     }
                 }
             }

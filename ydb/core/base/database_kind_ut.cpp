@@ -189,6 +189,13 @@ Y_UNIT_TEST_SUITE(DatabaseKind) {
         NKikimrSchemeOp::TPathDescription noDomainExtSubDomain;
         SetSelf(noDomainExtSubDomain, GlobalSchemeShard, ServerlessPathId, NKikimrSchemeOp::EPathTypeExtSubDomain);
         UNIT_ASSERT_VALUES_EQUAL(GetDatabaseKind(noDomainExtSubDomain), EDatabaseKind::Dedicated);
+
+        // No DomainDescription: the subdomain path type on its own means the path is a database,
+        // but a database with a schemeshard of its own cannot be told from a subdomain without one.
+        NKikimrSchemeOp::TPathDescription noDomainSubDomain;
+        SetSelf(noDomainSubDomain, DedicatedSchemeShard, RootPathId, NKikimrSchemeOp::EPathTypeSubDomain);
+        UNIT_ASSERT_VALUES_EQUAL(GetDatabaseKind(noDomainSubDomain), EDatabaseKind::SubDomain);
+        UNIT_ASSERT(IsDatabase(noDomainSubDomain));
     }
 
     Y_UNIT_TEST(DescribeSchemeResult) {

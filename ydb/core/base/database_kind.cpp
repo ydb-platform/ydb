@@ -54,6 +54,12 @@ EDatabaseKind GetDatabaseKind(const NKikimrSchemeOp::TPathDescription& pathDescr
                 // (that is how databases were created before ext subdomains).
                 return isServerless ? EDatabaseKind::Serverless : EDatabaseKind::Dedicated;
             }
+            // A subdomain that has no schemeshard of its own, so it is served by the very
+            // schemeshard that has described it.
+            //
+            // The same answer is given when there is no DomainDescription in the result at all:
+            // then both checks above fail (their data is missing) and there is nothing left to
+            // distinguish the kinds by, while the path type alone already means it is a database.
             return EDatabaseKind::SubDomain;
 
         case NKikimrSchemeOp::EPathTypeExtSubDomain:
@@ -65,6 +71,8 @@ EDatabaseKind GetDatabaseKind(const NKikimrSchemeOp::TPathDescription& pathDescr
 }
 
 EDatabaseKind GetDatabaseKind(const NKikimrScheme::TEvDescribeSchemeResult& describeResult) {
+    // Status is intentionally not checked here: on failure PathDescription.Self is not filled in,
+    // so an unsuccessful result yields NotDatabase anyway.
     return GetDatabaseKind(describeResult.GetPathDescription());
 }
 

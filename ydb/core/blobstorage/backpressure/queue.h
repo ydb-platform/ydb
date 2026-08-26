@@ -50,14 +50,12 @@ class TBlobStorageQueue {
 
         template<typename TEvent>
         TItem(TAutoPtr<TEventHandle<TEvent>>& event, TInstant deadline,
-                const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
-                const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
                 const TBSProxyContextPtr& bspctx, ui32 interconnectChannel,
                 bool local, bool useActorSystemTime)
             : Queue(EItemQueue::NotSet)
             , CostEssence(*event->Get())
             , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight")
-            , Event(event, serItems, serBytes, bspctx, interconnectChannel, local)
+            , Event(event, bspctx, interconnectChannel, local)
             , MsgId(Max<ui64>())
             , SequenceId(0)
             , Deadline(deadline)
@@ -207,9 +205,8 @@ public:
 
         TItemList::iterator newIt;
         if (Queues.Unused.empty()) {
-            newIt = Queues.Waiting.emplace(Queues.Waiting.end(), event, deadline,
-                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local,
-                UseActorSystemTime);
+            newIt = Queues.Waiting.emplace(Queues.Waiting.end(), event, deadline, BSProxyCtx, InterconnectChannel,
+                local, UseActorSystemTime);
             ++*QueueSize;
         } else {
             newIt = Queues.Unused.begin();
@@ -217,8 +214,7 @@ public:
             // reuse list item
             TItem& item = *newIt;
             item.~TItem();
-            new(&item) TItem(event, deadline, QueueSerializedItems, QueueSerializedBytes, BSProxyCtx,
-                InterconnectChannel, local, UseActorSystemTime);
+            new(&item) TItem(event, deadline, BSProxyCtx, InterconnectChannel, local, UseActorSystemTime);
         }
 
         newIt->Iterator = newIt;

@@ -20,6 +20,16 @@ namespace NKikimr::NDDisk {
         };
 
         ui8 Signature[16];
+        // Number of bytes at the start of this sector (starting from Signature) that are actually
+        // meaningful and therefore covered by Checksum. Header sectors typically use only a small
+        // prefix of the sector (the fixed TPersistentBufferHeader, one or more
+        // TPersistentBufferLsnRecordHeader + location arrays, optional payload checksums, or a
+        // barriers/fast-erase table) - the remaining bytes are unused padding that is never read
+        // back, so hashing them would waste CPU with no integrity benefit. Restore reads this
+        // field first (with Checksum zeroed out) to learn how many bytes to feed into the
+        // checksum before verifying it. Placed right after Signature (before Checksum) so it can
+        // be read without computing any offset beyond the signature.
+        ui32 HeaderDataSize;
         ui64 Checksum;
         ui64 Version;
         ui64 Flags;
@@ -32,7 +42,7 @@ namespace NKikimr::NDDisk {
         ui32 SlotId;
         ui32 BatchSize;
 
-        ui32 Reserved[13];
+        ui32 Reserved[12];
     };
 
     static_assert(sizeof(TPersistentBufferHeader) == 128);

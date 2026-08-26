@@ -1130,8 +1130,11 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
                 NDDisk::TPersistentBufferLsnRecordHeader::NONE;
             header->Version = 0;
             header->Checksum = 0;
+            // Dropping HAS_PAYLOAD_CHECKSUMS also drops the trailing per-sector payload checksum
+            // (one ui64) that used to be part of the checksummed prefix.
+            header->HeaderDataSize -= sizeof(ui64);
 
-            TString checksumInput(sector, BlockSize);
+            TString checksumInput(sector, header->HeaderDataSize);
             checksumInput.append(
                 reinterpret_cast<const char*>(
                     &header->PersistentBufferUniqueId),

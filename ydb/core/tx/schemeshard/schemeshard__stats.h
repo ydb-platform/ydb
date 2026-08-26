@@ -20,7 +20,7 @@ struct TStatsId {
     }
 
     bool operator==(const TStatsId& rhs) const {
-        return PathId == rhs.PathId && Datashard == rhs.Datashard & FollowerId == rhs.FollowerId;
+        return PathId == rhs.PathId && Datashard == rhs.Datashard && FollowerId == rhs.FollowerId;
     }
 
     struct THash {

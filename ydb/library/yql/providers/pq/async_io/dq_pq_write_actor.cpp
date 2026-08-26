@@ -292,7 +292,7 @@ public:
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
-        Y_UNUSED(checkpoint);
+        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
     }
 
     i64 GetFreeSpace() const override {

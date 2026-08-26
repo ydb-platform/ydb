@@ -394,14 +394,11 @@ class TRcBuf {
                 return *this;
             }
 
+            TBackendHolder newOwner = other.Owner ? Clone(other.Owner) : TBackend::Empty;
             if (Owner) {
                 Destroy(Owner);
             }
-            if (other.Owner) {
-                Owner = Clone(other.Owner);
-            } else {
-                Owner = TBackend::Empty;
-            }
+            Owner = std::move(newOwner);
             return *this;
         }
 

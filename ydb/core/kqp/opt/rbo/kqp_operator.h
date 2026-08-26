@@ -479,9 +479,9 @@ private:
 
 class TOpMap: public IUnaryOperator {
 public:
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered = false, bool needsToBePushed = false);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered = false);
     TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements,
-           bool ordered = false, bool needsToBePushed = false);
+           bool ordered = false);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -516,7 +516,6 @@ public:
 
     TVector<TMapElement> MapElements;
     bool Ordered = false;
-    bool NeedsToBePushed = false;
 
 protected:
     void ComputeOutputIUs() override;

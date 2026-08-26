@@ -101,7 +101,7 @@ bool CanPushAppendToChild(
 } // anonymous namespace
 
 bool TPushMapElementsThroughInputRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Map && CastOperator<TOpMap>(input)->NeedsToBePushed;
+    return input->Kind == EOperator::Map;
 }
 
 TIntrusivePtr<IOperator>
@@ -111,10 +111,7 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    if (!topMap->NeedsToBePushed) {
-        return input;
-    }
-    
+        
     auto op = topMap->GetInput();
     if (!CanPushThroughInputOperator(*op) || !op->IsSingleConsumer()) {
         return input;

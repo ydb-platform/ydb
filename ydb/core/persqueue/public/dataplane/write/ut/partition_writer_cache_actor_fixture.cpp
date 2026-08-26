@@ -167,6 +167,17 @@ void TPartitionWriterCacheActorFixture::EnsureWriteSessionClosed(EErrorCode erro
     }
 }
 
+void TPartitionWriterCacheActorFixture::EnsureNoDisconnected()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvDisconnected>(TDuration::Seconds(1));
+    UNIT_ASSERT(!event);
+}
+
+void TPartitionWriterCacheActorFixture::CompleteDelayedGetOwnership()
+{
+    Ctx->Runtime->Send(PQTablet->SelfId(), Ctx->Edge, new TPQTabletMock::TEvCompleteDelayedGetOwnership(), 0, true);
+}
+
 void TPartitionWriterCacheActorFixture::WaitForPartitionWriterOps(const TWaitForPartitionWriterOpsParams& params)
 {
     CreatePartitionWriterCount = 0;

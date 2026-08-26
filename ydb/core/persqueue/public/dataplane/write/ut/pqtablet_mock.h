@@ -8,6 +8,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <memory>
 
@@ -19,6 +21,11 @@ public:
 
     void AppendWriteReply(ui64 cookie);
     void FailGetOwnership();
+    void DelayGetOwnership();
+
+    struct TEvCompleteDelayedGetOwnership : public NActors::TEventLocal<
+        TEvCompleteDelayedGetOwnership,
+        EventSpaceBegin(NActors::TEvents::ES_PRIVATE)> {};
 
 private:
     using TEvRequestPtr = std::unique_ptr<TEvPersQueue::TEvRequest>;
@@ -46,6 +53,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCompleteDelayedGetOwnership::TPtr& ev, const TActorContext& ctx);
 
     TMaybe<ui64> GetPartitionRequestCookie() const;
 
@@ -65,6 +73,9 @@ private:
     TString OwnerCookie = "owner-cookie";
     ui64 MaxSeqNo = 0;
     bool OwnershipFailed = false;
+    bool OwnershipDelayed = false;
+    TActorId DelayedOwnershipSender;
+    TEvRequestPtr DelayedOwnershipRequest;
 
     TCommandReplies CmdReserve;
     TCommandReplies CmdWrite;

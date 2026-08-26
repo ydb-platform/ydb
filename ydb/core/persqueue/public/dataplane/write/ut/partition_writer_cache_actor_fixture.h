@@ -57,6 +57,8 @@ protected:
     void EnsurePartitionWriterExist(const TEnsurePartitionWriterExistParams& params);
     void EnsurePartitionWriterNotExist(const TEnsurePartitionWriterExistParams& params);
     void EnsureWriteSessionClosed(EErrorCode errorCode);
+    void EnsureNoDisconnected();
+    void CompleteDelayedGetOwnership();
 
     void WaitForPartitionWriterOps(const TWaitForPartitionWriterOpsParams& params);
 

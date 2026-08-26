@@ -21,6 +21,23 @@ void TPQTabletMock::FailGetOwnership()
     OwnershipFailed = true;
 }
 
+void TPQTabletMock::DelayGetOwnership()
+{
+    OwnershipDelayed = true;
+}
+
+void TPQTabletMock::Handle(TEvCompleteDelayedGetOwnership::TPtr& ev, const TActorContext& ctx)
+{
+    Y_UNUSED(ev);
+    Y_ABORT_UNLESS(DelayedOwnershipRequest);
+
+    OwnershipDelayed = false;
+    Request = std::move(DelayedOwnershipRequest);
+    PrepareGetOwnershipResponse();
+    UNIT_ASSERT(Response.get());
+    ctx.Send(DelayedOwnershipSender, std::move(Response));
+}
+
 void TPQTabletMock::PrepareGetOwnershipResponse()
 {
     Response = std::make_unique<TEvPersQueue::TEvResponse>();
@@ -184,6 +201,7 @@ STFUNC(TPQTabletMock::StateWork)
         HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
         HFunc(TEvPersQueue::TEvRequest, Handle);
+        HFunc(TEvCompleteDelayedGetOwnership, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
     }
@@ -209,6 +227,12 @@ void TPQTabletMock::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorConte
     auto& partition = Request->Record.GetPartitionRequest();
 
     if (partition.HasCmdGetOwnership()) {
+        if (OwnershipDelayed) {
+            Y_ABORT_UNLESS(!DelayedOwnershipRequest);
+            DelayedOwnershipSender = ev->Sender;
+            DelayedOwnershipRequest = std::move(Request);
+            return;
+        }
         PrepareGetOwnershipResponse();
         UNIT_ASSERT(Response.get());
         ctx.Send(ev->Sender, std::move(Response));

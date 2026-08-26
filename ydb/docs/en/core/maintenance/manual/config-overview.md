@@ -22,7 +22,7 @@ Static configuration is a YAML file stored on the cluster nodes. This file lists
 
 ## Dynamic configuration {#dynamic-config}
 
-Dynamic configuration is a YAML document securely stored in the cluster in a Console [tablet](../../concepts/glossary.md#tablet). Unlike static configuration, uploading it to the cluster is sufficient, as {{ ydb-short-name }} will handle its distribution and maintenance in a consistent state. Dynamic configuration, using selectors, allows handling complex scenarios while remaining within a single configuration file. A description of the dynamic configuration is provided in the section [{#T}](./dynamic-config.md).
+Dynamic configuration is a YAML document securely stored in the cluster in a Console [tablet](../../concepts/glossary.md#tablet). Unlike static configuration, uploading it to the cluster is sufficient, as {{ ydb-short-name }} will handle its distribution and maintenance in a consistent state. Dynamic configuration, using selectors, allows handling complex scenarios while remaining within a single configuration file. A description of the dynamic configuration is provided in the section [{#T}](../../devops/configuration-management/configuration-v1/dynamic-config.md).
 
 ![data tab](_assets/config-chart-2.png "static and dynamic configs")
 
@@ -32,5 +32,5 @@ Dynamic configuration is a YAML document securely stored in the cluster in a Con
 2. Modify the configuration according to your requirements.
 3. Place identical configuration files on all static cluster nodes.
 4. Start all static cluster nodes, explicitly specifying the path to the configuration file using the `--yaml-config` command-line argument.
-5. Extend the configuration file to the [dynamic configuration format](./dynamic-config.md#example).
+5. Extend the configuration file to the [dynamic configuration format](../../devops/configuration-management/configuration-v1/dynamic-config.md#example).
 6. Upload the resulting configuration to the cluster using `{{ ydb-cli }} admin config replace -f dynconfig.yaml`.

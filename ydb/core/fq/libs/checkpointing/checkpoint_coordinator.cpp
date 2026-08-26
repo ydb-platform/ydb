@@ -250,7 +250,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpo
 
     if (PendingInit) {
         PendingInit->OnNewCheckpointCoordinatorAck();
-        YDB_LOG_DEBUG("Got new checkpoint coordinator ack",
+        YDB_LOG_DEBUG("Processed new checkpoint coordinator ack under pending init",
             {"coordinatorId", CoordinatorId},
             {"allAcksProcessed", PendingInit->AllNewCheckpointCoordinatorAcksProcessed()});
 

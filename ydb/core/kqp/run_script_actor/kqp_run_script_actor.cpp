@@ -311,7 +311,7 @@ private:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got result handler fail",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {

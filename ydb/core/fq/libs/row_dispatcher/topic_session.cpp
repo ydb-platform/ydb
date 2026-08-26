@@ -333,6 +333,8 @@ private:
     bool EnableStreamingQueriesCounters = false;
     bool CreateSessionScheduled = false;
 
+    TMaybe<TStatus> ErrorStatus;
+
 public:
     TTopicSession(
         const TString& readGroup,
@@ -383,6 +385,7 @@ private:
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void HandleException(const std::exception& err);
 
     void SendStatistics();
@@ -414,7 +417,7 @@ private:
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
-        IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSession, HandleError);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
         IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);
@@ -954,6 +957,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     SendStatistics();
 }
 
+void TTopicSession::HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+    Y_ENSURE(ErrorStatus, "ErrorStatus should be set in ErrorState");
+    SendSessionError(ev->Sender, ErrorStatus.GetRef(), true);
+}
+
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     YDB_LOG_DEBUG("TEvStopSession from topicPath clients count",
         {"logPrefix", LogPrefix},
@@ -1037,6 +1045,7 @@ void TTopicSession::FatalError(const TStatus& status) {
         SendSessionError(readActorId, status, true);
     }
     StopReadSession();
+    ErrorStatus = status;
     Become(&TTopicSession::ErrorState);
 }
 

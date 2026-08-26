@@ -167,6 +167,17 @@
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.1"
         }
     ],
+    "test_canonical_requests.Test.test_pdisk_populate": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/pdisk-populate-snapshot.json"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt.0"
+        }
+    ],
     "test_canonical_requests.Test.test_pdisk_set_status_inactive": [
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt"

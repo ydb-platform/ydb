@@ -129,6 +129,39 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL("", loaded.DebugPrintAhead());
     }
 
+    Y_UNIT_TEST(ShouldClearAheadAndBehindWhenSwitchedOffline)
+    {
+        TTestBlockFieldMonitor monitor;
+        TDDiskState ddisk;
+        ddisk.Init(
+            &monitor,
+            /*totalBlockCount=*/100,
+            /*operationalBlockCount=*/5);
+
+        ddisk.StartLagging();
+        ddisk.OnRangeFlushed(
+            TBlockRange64::WithLength(10, 10),
+            TDDiskState::EFlushCompletion::Missed);
+        ddisk.StopLagging();
+        ddisk.OnRangeFlushed(
+            TBlockRange64::WithLength(30, 5),
+            TDDiskState::EFlushCompletion::Completed);
+
+        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("[30..34]", ddisk.DebugPrintAhead());
+
+        ddisk.SwitchOffline();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDDiskState::EState::Disabled,
+            ddisk.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(false, ddisk.IsTrackingEnabled());
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetBehindSegmentsStat().Count);
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetAheadSegmentsStat().Count);
+    }
+
     // HasBehindOverlapping: false when empty, true when the query overlaps
     // Behind, false when the query is disjoint from Behind.
     Y_UNIT_TEST(HasBehindOverlapping)

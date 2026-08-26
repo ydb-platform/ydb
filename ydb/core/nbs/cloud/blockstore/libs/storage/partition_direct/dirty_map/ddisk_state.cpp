@@ -36,6 +36,8 @@ void TDDiskState::SwitchOffline()
 {
     State = EState::Disabled;
     OperationalBlockCount = 0;
+    AheadField.Clear();
+    BehindField.Clear();
 }
 
 bool TDDiskState::IsLagging() const

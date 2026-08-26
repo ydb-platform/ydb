@@ -186,6 +186,28 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT(!html.Contains("action=addhost"));
     }
 
+    Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
+    {
+        auto dbg = MakeDbg(0);
+        auto config = TVChunkConfig::MakeDefault(
+            /*vChunkIndex*/ 17,
+            /*hostCount*/ 5,
+            /*primaryCount*/ 3);
+        config.PromoteHost(3);
+        config.SetWatermark(3, 42);
+        dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
+
+        const TMonPageData data{
+            .Page = EMonPage::Dbg,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs = {std::move(dbg)},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Fresh");
+        UNIT_ASSERT_STRING_CONTAINS(html, "17[H3:42]");
+    }
+
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
     {
         const TMonPageData data{
@@ -279,7 +301,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .VChunk =
                 TVChunkSnapshot{
                     .VChunkConfig = config,
-                    .SafeBarrier = 100,
+                    .SafeBarrier = TPBufferKey{.Generation = 1, .Lsn = 100},
                     .DirtyMapDump = "DDiskStates: dump-text",
                 },
         };

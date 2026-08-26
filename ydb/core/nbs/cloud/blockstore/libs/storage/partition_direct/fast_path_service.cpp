@@ -615,8 +615,8 @@ void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 
 void TFastPathService::PBufferCleanup()
 {
-    // Pull the smallest inflight lsn from every DirectBlockGroup. Each group
-    // writes its own result slot; the last responder computes the global
+    // Pull the smallest inflight record id from every DirectBlockGroup. Each
+    // group writes its own result slot; the last responder computes the global
     // minimum (see FinishPBufferCleanup).
     const size_t dbgCount = DirectBlockGroups.size();
     CleanupGather.SafeBarriers.assign(dbgCount, std::nullopt);
@@ -625,7 +625,7 @@ void TFastPathService::PBufferCleanup()
     for (size_t i = 0; i < dbgCount; ++i) {
         DirectBlockGroups[i]->GatherSafeBarrierForErase().Subscribe(
             [weakSelf = weak_from_this(), i]   //
-            (const NThreading::TFuture<std::optional<ui64>>& f)
+            (const NThreading::TFuture<std::optional<TPBufferKey>>& f)
             {
                 if (auto self = weakSelf.lock()) {
                     self->OnGatherSafeBarrierForErase(i, f.GetValue());
@@ -636,7 +636,7 @@ void TFastPathService::PBufferCleanup()
 
 void TFastPathService::OnGatherSafeBarrierForErase(
     size_t dbgIndex,
-    std::optional<ui64> safeBarrier)
+    std::optional<TPBufferKey> safeBarrier)
 {
     CleanupGather.SafeBarriers[dbgIndex] = safeBarrier;
     if (CleanupGather.PendingResponses.fetch_sub(1) == 1) {
@@ -646,7 +646,7 @@ void TFastPathService::OnGatherSafeBarrierForErase(
 
 void TFastPathService::FinishPBufferCleanup()
 {
-    std::optional<ui64> globalMin;
+    std::optional<TPBufferKey> globalMin;
     for (const auto& safeBarrier: CleanupGather.SafeBarriers) {
         if (safeBarrier && (!globalMin || *safeBarrier < *globalMin)) {
             globalMin = safeBarrier;
@@ -655,15 +655,15 @@ void TFastPathService::FinishPBufferCleanup()
 
     CleanupGather.Active.store(false);
 
-    if (!globalMin || *globalMin == 0) {
-        // 0 is the blocking bound: some vchunk has not finished restoring its
-        // dirty map, so its records are not accounted for yet. Skip the tick.
+    // Lsn 0 is the blocking bound: some vchunk has not finished restoring its
+    // dirty map, so its records are not accounted for yet. Skip the tick.
+    if (!globalMin || globalMin->Lsn == 0) {
         return;
     }
 
-    LastSafeBarrier.store(*globalMin);
+    LastSafeBarrier.store(globalMin->Lsn);
 
-    const ui64 cleanupBound = *globalMin - 1;
+    const ui64 cleanupBound = globalMin->Lsn - 1;
     for (const auto& dbg: DirectBlockGroups) {
         dbg->BarrierEraseFromPBuffer(cleanupBound);
     }

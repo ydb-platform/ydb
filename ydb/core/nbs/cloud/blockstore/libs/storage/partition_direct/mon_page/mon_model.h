@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
@@ -79,6 +80,7 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    TVChunkConfigs VChunkConfigs;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };
@@ -86,7 +88,7 @@ struct TDbgSnapshot
 struct TVChunkSnapshot
 {
     TVChunkConfig VChunkConfig;
-    std::optional<ui64> SafeBarrier;
+    std::optional<TPBufferKey> SafeBarrier;
     TString DirtyMapDump;
 };
 

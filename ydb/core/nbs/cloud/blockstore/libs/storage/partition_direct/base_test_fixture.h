@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -131,6 +132,15 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)
     {
         return vchunk.DirtyMapReady;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeOnCopyComplete(
+        TVChunk& vchunk,
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result)
+    {
+        vchunk.OnCopyComplete(hostIndex, result);
     }
 
     // Must be invoked on the vchunk's executor thread.

@@ -101,7 +101,7 @@ const TErasureParameters& GetErasureParameters(TErasureType::EErasureSpecies spe
             return ErasureParameters[5];
     }
 
-    ythrow TWithBackTrace<yexception>() << "Unknown erasure species = " << static_cast<int>(species);
+    Y_ABORT("Unknown erasure species = %d", static_cast<int>(species));
 }
 
 void PadAndCrcAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {

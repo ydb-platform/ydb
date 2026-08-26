@@ -99,7 +99,6 @@ def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external
         YdbMvpExtension(mvp_external_ydb_endpoint),
         StatsModeExtension(kikimr_settings.get("stats_mode", "")),
         BindingsModeExtension(kikimr_settings.get("bindings_mode", ""), yq_version),
-        SynchronizationServiceExtension(),
     ]
 
 

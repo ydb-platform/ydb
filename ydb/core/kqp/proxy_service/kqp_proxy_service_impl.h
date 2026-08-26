@@ -95,7 +95,7 @@ public:
         State.store(state, std::memory_order_release);
     }
 
-    void SetPoolId(TString poolId, TString classifiedBy) override {
+    void SetPoolContext(TString poolId, TString classifiedBy) override {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         PoolId = std::move(poolId);
         ClassifiedBy = std::move(classifiedBy);

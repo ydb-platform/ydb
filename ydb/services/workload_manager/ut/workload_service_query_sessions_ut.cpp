@@ -33,8 +33,8 @@ public:
         Inner->SetRequestState(state, timestamp);
     }
 
-    void SetPoolId(TString poolId, TString classifiedBy) override {
-        Inner->SetPoolId(std::move(poolId), std::move(classifiedBy));
+    void SetPoolContext(TString poolId, TString classifiedBy) override {
+        Inner->SetPoolContext(std::move(poolId), std::move(classifiedBy));
     }
 
 private:
@@ -377,6 +377,10 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, "USER");
         UNIT_ASSERT(reader[0].StateChangeAt);
         UNIT_ASSERT(!reader[0].QueryStartAt);
+        // Deprecated columns must stay NULL even while the request is DELAYED.
+        UNIT_ASSERT(!reader[0].WmState);
+        UNIT_ASSERT(!reader[0].WmEnterTime);
+        UNIT_ASSERT(!reader[0].WmExitTime);
 
         runtime.Send(new IEventHandle(evHanging->Sender, edgeHanging, evHanging->Release().Release()));
         auto evDelayed = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edgeDelayed);
@@ -456,7 +460,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
 
     ///
     /// RFC C4: with ResourcePools disabled the classifier is never invoked, so
-    /// SetPoolId is never called — WmPoolId / WmClassifiedBy stay NULL for the
+    /// SetPoolContext is never called — WmPoolId / WmClassifiedBy stay NULL for the
     /// whole session lifecycle. State can still be IDLE or EXECUTING.
     ///
     Y_UNIT_TEST(TestStateWmDisabled) {

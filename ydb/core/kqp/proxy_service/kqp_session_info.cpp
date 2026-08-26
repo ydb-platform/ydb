@@ -2,6 +2,8 @@
 
 #include <ydb/core/sys_view/common/registry.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NKqp {
 
 using VSessions = NKikimr::NSysView::Schema::QuerySessions;
@@ -13,7 +15,7 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
     // internally consistent even if a WM callback races with serialization.
     using EWmState = NWorkloadManager::ISessionUpdater::EState;
     const auto wmState = WmState->GetState();
-    const bool isInWmQueue = (wmState == EWmState::PENDING || wmState == EWmState::DELAYED);
+    const bool isInWmQueue = EqualToOneOf(wmState, EWmState::PENDING, EWmState::DELAYED);
     const bool wmExited = (wmState == EWmState::EXITED);
 
     if (fieldsMap.NeedField(VSessions::SessionId::ColumnId)) {  // 1
@@ -25,8 +27,12 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
             proto->SetState("QUEUED");
         } else {
             switch(State) {
-                case TKqpSessionInfo::ESessionState::IDLE:      proto->SetState("IDLE"); break;
-                case TKqpSessionInfo::ESessionState::EXECUTING: proto->SetState("EXECUTING"); break;
+                case TKqpSessionInfo::ESessionState::IDLE:
+                    proto->SetState("IDLE"); 
+                    break;
+                case TKqpSessionInfo::ESessionState::EXECUTING:
+                    proto->SetState("EXECUTING");
+                    break;
             }
         }
     }
@@ -69,14 +75,12 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
         proto->SetSessionStartAt(SessionStartedAt.MicroSeconds());
     }
 
-    // QueryStartAt is left unset (NULL) while the session is IDLE or queued.
-    if (fieldsMap.NeedField(VSessions::QueryStartAt::ColumnId)
-        && State == ESessionState::EXECUTING
-        && !isInWmQueue) { // 12
-        if (wmExited) {
-            proto->SetQueryStartAt(WmState->GetExitTime().MicroSeconds());
-        } else {
-            proto->SetQueryStartAt(QueryStartAt.MicroSeconds());
+    if (fieldsMap.NeedField(VSessions::QueryStartAt::ColumnId)) { // 12
+        // QueryStartAt is left unset (NULL) while the session is IDLE or queued.
+        if (State == ESessionState::EXECUTING && !isInWmQueue) {
+            proto->SetQueryStartAt(wmExited
+                ? WmState->GetExitTime().MicroSeconds()
+                : QueryStartAt.MicroSeconds());
         }
     }
 

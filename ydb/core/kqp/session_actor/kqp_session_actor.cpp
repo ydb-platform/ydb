@@ -597,7 +597,7 @@ public:
     void NotifyWmClassification(const TString& poolId,
                                 const NWorkloadManager::TResolver& resolver = NWorkloadManager::TResolver::Default()) {
         if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
-            updater->SetPoolId(poolId, resolver.ToSysViewString());
+            updater->SetPoolContext(poolId, resolver.ToSysViewString());
         }
     }
 

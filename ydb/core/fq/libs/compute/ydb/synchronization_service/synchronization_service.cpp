@@ -288,7 +288,7 @@ public:
                  "Error updating ACL for .sys directory at the synchronization stage");
             return;
         }
-        LOG_I("[ydb] [SynchronizationService]: ACL inheritance removed for .sys directory for the scope " << "scope", Scope);
+        LOG_I("[ydb] [SynchronizationService]: ACL inheritance removed for .sys directory for the scope " << "scope" << Scope);
         if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
             Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
             LOG_I("[ydb] [SynchronizationService]: Start creating resource pools for the scope " << Scope << "after UpdateAcl");

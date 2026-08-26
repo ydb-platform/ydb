@@ -1,4 +1,5 @@
 #include "http.h"
+#include "peer_source_address.h"
 #include "xml.h"
 
 #include <ydb/library/services/services.pb.h>
@@ -991,18 +992,7 @@ void THttpRequest::SetupUntagQueue(TUntagQueueRequest* const req) {
 }
 
 void THttpRequest::ExtractSourceAddressFromSocket() {
-    struct sockaddr_in6 addr;
-    socklen_t addrSize = sizeof(struct sockaddr_in6);
-    if (getpeername(Socket(), (struct sockaddr*)&addr, &addrSize) != 0) {
-        SourceAddress_ = "unknown";
-    } else {
-        char address[INET6_ADDRSTRLEN];
-        if (inet_ntop(AF_INET6, &(addr.sin6_addr), address, INET6_ADDRSTRLEN) != nullptr) {
-            SourceAddress_ = address;
-        } else {
-            SourceAddress_ = "unknown";
-        }
-    }
+    SourceAddress_ = PeerSourceAddressFromSocket(Socket());
 }
 
 void THttpRequest::GenerateRequestId(const TString& sourceReqId) {

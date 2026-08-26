@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     http.cpp
+    peer_source_address.cpp
     types.cpp
     xml.cpp
 )
@@ -25,4 +26,8 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)
 

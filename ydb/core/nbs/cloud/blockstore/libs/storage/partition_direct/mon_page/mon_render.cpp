@@ -674,7 +674,7 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                     }
                     TABLED () {
                         if (vchunk.SafeBarrier) {
-                            str << *vchunk.SafeBarrier;
+                            str << vchunk.SafeBarrier->Print();
                         } else {
                             str << "-";
                         }

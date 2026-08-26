@@ -20,8 +20,12 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/persqueue/public/schema/ut SchemaOps.CannotChangeConsumerType
 ydb/core/persqueue/public/schema/ut SchemaOps.CreateAlterDropSmoke
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
+ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_set_column_constraint_reboots unittest.[*/*] chunk
+ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdleSessions
+ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
@@ -40,7 +44,14 @@ ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_
 ydb/tests/fq/s3 test_s3_0.py.TestS3.test_checkpoints_on_join_s3_with_yds[v1-mvp_external_ydb_endpoint0-client0]
 ydb/tests/fq/s3 test_s3_0.py.TestS3.test_csv[v1-false-client0]
 ydb/tests/fq/streaming py3test.[*/*] chunk
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[mr-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[multi_output-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[hop-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/yds py3test.[*/*] chunk

@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 

@@ -7,6 +7,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/net/source_address.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
@@ -75,12 +76,8 @@ namespace NKikimr::NHttpProxy {
         , Sender(sender)
         , Driver(driver)
         , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider) {
-        char address[INET6_ADDRSTRLEN];
-        if (inet_ntop(AF_INET6, &(Request->Address), address, INET6_ADDRSTRLEN) == nullptr) {
-            SourceAddress = "unknown";
-        } else {
-            SourceAddress = address;
-        }
+        SourceAddress = NKikimr::NNet::FormatSourceAddress(
+            Request->Address ? Request->Address->SockAddr() : nullptr);
 
         DatabasePath = Request->URL.Before('?');
         if (DatabasePath == "/") {

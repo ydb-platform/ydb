@@ -559,6 +559,9 @@ private:
 
     TMoveDataState MoveDataState;
 
+    // Number of metadata-accessor requests this tablet has in flight; gates SetupMetadata.
+    std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
+
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
     // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
@@ -622,6 +625,9 @@ private:
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
+    // Re-arms only the move's accessor requests, ungated: they must not queue behind tiering's.
+    void SetupMoveDataMetadata();
+    void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests);
     bool SetupTtl();
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);

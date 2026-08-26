@@ -177,6 +177,10 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests() {
+        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions);
+    }
+
     TInsertWriteId BuildNextInsertWriteId() {
         return (TInsertWriteId)AtomicIncrement(LastInsertWriteId);
     }

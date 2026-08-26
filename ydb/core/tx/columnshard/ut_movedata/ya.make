@@ -21,6 +21,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_move_data.cpp
+    ut_move_data_e2e.cpp
 )
 
 END()

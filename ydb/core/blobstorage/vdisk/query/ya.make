@@ -29,6 +29,7 @@ SRCS(
     query_stat_yield.h
     query_statdb.cpp
     query_statdb.h
+    query_statdb_stream.cpp
     query_statdb_stream.h
     query_stathuge.cpp
     query_stathuge.h

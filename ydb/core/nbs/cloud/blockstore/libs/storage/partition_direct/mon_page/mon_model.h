@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
@@ -24,7 +25,17 @@ enum class EMonPage
     Dbg,
     LocalDb,
     VChunk,
+    VChunkCounters,
     Latency,
+};
+
+// How much per-vchunk detail GatherVChunkStats should collect.
+enum class EVChunkStatsDetail
+{
+    // Periodic Solomon publish: only the sum, no allocation per vchunk.
+    TotalOnly,
+    // Mon page: one row per vchunk.
+    PerVChunk,
 };
 
 enum class ELatencyPercentile
@@ -79,6 +90,30 @@ struct TVChunkSnapshot
     TString DirtyMapDump;
 };
 
+// One vchunk's stats as collected on its DBG executor.
+struct TVChunkStatsSnapshot
+{
+    ui32 VChunkIndex = 0;
+    size_t DbgIndex = 0;
+    TVChunkStats Stats;
+};
+
+// One DBG's aggregated vchunk stats.
+struct TVChunkDbgStats
+{
+    size_t DbgIndex = 0;
+    TVChunkStats Stats;
+};
+
+// Result of a disk-wide or per-DBG vchunk stats gather.
+struct TVChunkStatsGatherResult
+{
+    size_t DbgIndex = 0;
+    TVChunkStats Total;
+    TVector<TVChunkDbgStats> PerDbg;
+    TVector<TVChunkStatsSnapshot> PerVChunk;
+};
+
 // Persisted tablet state (local DB). Protos are pre-dumped to text; an absent
 // value means the row was never persisted.
 struct TLocalDbContents
@@ -107,6 +142,13 @@ struct TMonPageData
     // snapshot (absent => no such vchunk).
     std::optional<ui32> SelectedVChunk;
     std::optional<TVChunkSnapshot> VChunk;
+    // VChunk counters tab: disk / per-DBG totals, and optional per-vchunk
+    // rows for SelectedVChunkDbg when ShowVChunks is set. VChunkStatsLimit
+    // is the per-vchunk row cap (0 = dump everything).
+    std::optional<TVChunkStatsGatherResult> VChunkStats;
+    size_t VChunkStatsLimit = 200;
+    std::optional<ui32> SelectedVChunkDbg;
+    bool ShowVChunks = false;
     // Latency tab: which percentile colors the heatmap / slot grid, and
     // which operation filters the slot grid (absent => worst across ops).
     ELatencyPercentile SelectedPercentile = ELatencyPercentile::P99;

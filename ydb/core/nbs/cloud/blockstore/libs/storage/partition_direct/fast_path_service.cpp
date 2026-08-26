@@ -92,15 +92,11 @@ TVector<TRegionPtr> CreateRegions(
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
-    const TStorageConfig& storageConfig,
-    NMonitoring::TDynamicCounterPtr counters)
+    const TStorageConfig& storageConfig)
 {
     const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
-        NMonitoring::TDynamicCounterPtr regionCounters =
-            counters->GetSubgroup("region", ToString(i));
-
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
             traceService,
@@ -111,8 +107,7 @@ TVector<TRegionPtr> CreateRegions(
             vChunkConfigs,
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
-            storageConfig.GetVChunkSize(),
-            regionCounters);
+            storageConfig.GetVChunkSize());
     }
 
     return regions;
@@ -151,11 +146,7 @@ TFastPathService::TFastPathService(
           DirectBlockGroups,
           vChunkConfigs,
           dirtyMapStates,
-          *StorageConfig,
-          MakeCountersChain(
-              counters,
-              StorageConfig->GetDDiskPoolName(),
-              DiskDescription)))
+          *StorageConfig))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TFastPathService{
@@ -164,9 +155,14 @@ TFastPathService::TFastPathService(
               .Generation = DiskDescription.Generation})
     , TraceSamplePeriod(StorageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
-          std::move(counters),
+          counters,
           StorageConfig->GetDDiskPoolName(),
           DiskDescription))
+    , VChunkCounters(MakeCountersChain(
+          std::move(counters),
+          StorageConfig->GetDDiskPoolName(),
+          DiskDescription,
+          "vchunk"))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
           .DiskId = DiskDescription.DiskId,
           .BlockSize = blockSize,
@@ -217,6 +213,7 @@ NThreading::TFuture<void> TFastPathService::Run()
         region->Run();
     }
     ScheduleDirtyMapDebugPrint();
+    ScheduleVChunkCountersUpdate();
 
     return NThreading::WaitAll(initialReadyFutures);
 }
@@ -546,6 +543,42 @@ TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
     return future;
 }
 
+NThreading::TFuture<TVChunkStatsGatherResult>
+TFastPathService::GatherVChunkStats(
+    EVChunkStatsDetail detail,
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TVChunkStatsGatherResult>> futures;
+    futures.reserve(DirectBlockGroups.size());
+    for (size_t i = 0; i < DirectBlockGroups.size(); ++i) {
+        const auto dbgDetail = (detail == EVChunkStatsDetail::PerVChunk &&
+                                (!dbgIndex || *dbgIndex == i))
+                                   ? EVChunkStatsDetail::PerVChunk
+                                   : EVChunkStatsDetail::TotalOnly;
+        futures.push_back(DirectBlockGroups[i]->GatherVChunkStats(dbgDetail));
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVChunkStatsGatherResult result;
+            result.PerDbg.reserve(futures.size());
+            for (const auto& future: futures) {
+                const auto& part = future.GetValue();
+                result.Total.Accumulate(part.Total);
+                result.PerDbg.push_back(TVChunkDbgStats{
+                    .DbgIndex = part.DbgIndex,
+                    .Stats = part.Total,
+                });
+                result.PerVChunk.insert(
+                    result.PerVChunk.end(),
+                    part.PerVChunk.begin(),
+                    part.PerVChunk.end());
+            }
+            return result;
+        });
+}
+
 void TFastPathService::OnRegionStopped(size_t regionIndex)
 {
     LOG_INFO(
@@ -697,6 +730,42 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
 
     ScheduleDirtyMapDebugPrint();
     ++DumpCount;
+}
+
+void TFastPathService::ScheduleVChunkCountersUpdate()
+{
+    auto delay = StorageConfig->GetVChunkCountersUpdateInterval();
+    if (!delay || !Scheduler) {
+        return;
+    }
+
+    ScheduleAfterDelay(
+        nullptr,
+        delay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->QueryVChunkStats();
+            }
+        });
+}
+
+void TFastPathService::QueryVChunkStats()
+{
+    GatherVChunkStats(EVChunkStatsDetail::TotalOnly)
+        .Subscribe(
+            [weakSelf = weak_from_this()](const auto& future)
+            {
+                if (auto self = weakSelf.lock()) {
+                    self->OnVChunkStats(future.GetValue());
+                }
+            });
+}
+
+void TFastPathService::OnVChunkStats(TVChunkStatsGatherResult result)
+{
+    VChunkCounters.Publish(result.Total);
+    ScheduleVChunkCountersUpdate();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

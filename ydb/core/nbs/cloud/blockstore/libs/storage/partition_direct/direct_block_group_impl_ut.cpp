@@ -1309,8 +1309,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         WaitReady(executor, initialReady);
 
         // A vchunk that still only knows the pre-add host count.
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters(
-            new ::NMonitoring::TDynamicCounters());
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
             TraceService.get(),
@@ -1323,8 +1321,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             TDirtyMapStateProto(),
             dbg,
             3,
-            vChunkSize,
-            counters);
+            vChunkSize);
 
         TString oracleDump;
         TString configBefore;

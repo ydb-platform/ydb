@@ -54,8 +54,7 @@ TVChunk::TVChunk(
     const TDirtyMapStateProto& dirtyMapState,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
-    ui64 vChunkSize,
-    NMonitoring::TDynamicCounterPtr counters)
+    ui64 vChunkSize)
     : ActorSystem(actorSystem)
     , TraceService(traceService)
     , PartitionDirectService(partitionDirectService)
@@ -74,7 +73,6 @@ TVChunk::TVChunk(
      }}
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(VChunkConfig, BlockSize, BlocksCount))
-    , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
     // ActorSystem thread
@@ -367,6 +365,12 @@ TVChunkSnapshot TVChunk::BuildMonSnapshot()
     };
 }
 
+const TVChunkStats& TVChunk::GetStats() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    return Stats;
+}
+
 void TVChunk::OnWriteBlocksResponse(
     std::shared_ptr<TWriteRequestBundle> bundle,
     const TWriteRequestResponse& response)
@@ -397,7 +401,7 @@ void TVChunk::OnWriteBlocksResponse(
     }
 
     bool ok = !HasError(response.Error);
-    Counters.RequestFinished(EVChunkOperation::Write, ok);
+    Stats.RequestFinished(EVChunkOperation::Write, ok);
 
     bundle->SendFinalReply(TWriteBlocksLocalResponse{.Error = response.Error});
 
@@ -617,7 +621,7 @@ void TVChunk::OnReadBlocksResponse(
     const IReadRequestExecutor::TResponse& response)
 {
     bool ok = !HasError(response.Error);
-    Counters.RequestFinished(EVChunkOperation::Read, ok);
+    Stats.RequestFinished(EVChunkOperation::Read, ok);
     ScheduleCleaningUp();
 }
 
@@ -722,10 +726,10 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
         response.FlushFailed);
 
     for (size_t i = 0; i < response.FlushOk.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::Flush, true);
+        Stats.RequestFinished(EVChunkOperation::Flush, true);
     }
     for (size_t i = 0; i < response.FlushFailed.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::Flush, false);
+        Stats.RequestFinished(EVChunkOperation::Flush, false);
     }
 
     UpdatePendingCounters();
@@ -811,10 +815,10 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
         response.EraseFailed);
 
     for (size_t i = 0; i < response.EraseOk.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::Erase, true);
+        Stats.RequestFinished(EVChunkOperation::Erase, true);
     }
     for (size_t i = 0; i < response.EraseFailed.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::Erase, false);
+        Stats.RequestFinished(EVChunkOperation::Erase, false);
     }
 
     UpdatePendingCounters();
@@ -827,10 +831,10 @@ void TVChunk::OnEraseBelatedResponse(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (size_t i = 0; i < response.EraseOk.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::EraseBelated, true);
+        Stats.RequestFinished(EVChunkOperation::EraseBelated, true);
     }
     for (size_t i = 0; i < response.EraseFailed.size(); ++i) {
-        Counters.RequestFinished(EVChunkOperation::EraseBelated, false);
+        Stats.RequestFinished(EVChunkOperation::EraseBelated, false);
     }
 
     UpdatePendingCounters();
@@ -954,19 +958,19 @@ void TVChunk::UpdatePendingCounters()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    Counters.UpdatePending(
+    Stats.UpdatePending(
         EVChunkOperation::Flush,
         BlocksDirtyMap->GetFlushPendingCount());
-    Counters.UpdatePending(
+    Stats.UpdatePending(
         EVChunkOperation::Erase,
         BlocksDirtyMap->GetErasePendingCount());
-    Counters.UpdatePending(
+    Stats.UpdatePending(
         EVChunkOperation::EraseBelated,
         BlocksDirtyMap->GetEraseBelatedCount());
-    Counters.UpdateMinLsn(
+    Stats.UpdateMinLsn(
         EVChunkOperation::Flush,
         BlocksDirtyMap->GetMinFlushPendingLsn());
-    Counters.UpdateMinLsn(
+    Stats.UpdateMinLsn(
         EVChunkOperation::Erase,
         BlocksDirtyMap->GetMinErasePendingLsn());
 }

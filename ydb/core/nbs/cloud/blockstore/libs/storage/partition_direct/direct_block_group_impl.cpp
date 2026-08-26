@@ -1389,6 +1389,27 @@ NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
     return future;
 }
 
+NThreading::TFuture<TVChunkStatsGatherResult>
+TDirectBlockGroup::GatherVChunkStats(EVChunkStatsDetail detail) const
+{
+    auto promise = NewPromise<TVChunkStatsGatherResult>();
+    auto future = promise.GetFuture();
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(),
+         detail,
+         promise = std::move(promise)]   //
+        () mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                promise.SetValue(self->DoGatherVChunkStats(detail));
+            } else {
+                promise.SetValue({});
+            }
+        });
+
+    return future;
+}
+
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,
@@ -2026,6 +2047,34 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .Connections = std::move(connections),
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
+}
+
+TVChunkStatsGatherResult TDirectBlockGroup::DoGatherVChunkStats(
+    EVChunkStatsDetail detail) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    TVChunkStatsGatherResult result;
+    result.DbgIndex = DirectBlockGroupIndex;
+    if (detail == EVChunkStatsDetail::PerVChunk) {
+        result.PerVChunk.reserve(VChunks.size());
+    }
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
+        }
+        const TVChunkStats& stats = vChunk->GetStats();
+        result.Total.Accumulate(stats);
+        if (detail == EVChunkStatsDetail::PerVChunk) {
+            result.PerVChunk.push_back(TVChunkStatsSnapshot{
+                .VChunkIndex = vChunk->GetConfig().GetVChunkIndex(),
+                .DbgIndex = DirectBlockGroupIndex,
+                .Stats = stats,
+            });
+        }
+    }
+    return result;
 }
 
 TConnectionSnapshot TDirectBlockGroup::MakeConnectionSnapshot(

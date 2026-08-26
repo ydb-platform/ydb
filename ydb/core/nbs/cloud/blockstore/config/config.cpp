@@ -48,6 +48,7 @@ TStorageConfig::TStorageConfig(
     xxx(UseDirectSessionTransport,          bool,     false                   )\
     xxx(EnableChecksums,                    bool,     true                    )\
     xxx(CopyRangeBandwidthMbs,              ui32,     200                     )\
+    xxx(VChunkCountersUpdateInterval,       TDuration, TDuration::Seconds(15) )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

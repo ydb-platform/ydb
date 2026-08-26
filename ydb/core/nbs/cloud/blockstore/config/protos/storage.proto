@@ -160,4 +160,8 @@ message TStorageServiceConfig
     // Maximum aggregate bandwidth in megabytes per second for copying ranges
     // within a DirectBlockGroup. 0 disables throttling.
     optional uint32 CopyRangeBandwidthMbs = 33;
+
+    // Interval (in milliseconds) for publishing disk-level vchunk counters
+    // to Solomon. 0 disables publishing.
+    optional uint32 VChunkCountersUpdateInterval = 34;
 }

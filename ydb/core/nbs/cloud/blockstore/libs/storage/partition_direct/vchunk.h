@@ -10,7 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
@@ -24,8 +24,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
-
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -45,8 +43,7 @@ public:
         const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
-        ui64 vChunkSize,
-        NMonitoring::TDynamicCounterPtr counters);
+        ui64 vChunkSize);
 
     ~TVChunk() override;
 
@@ -86,6 +83,9 @@ public:
 
     // Snapshot for the mon page. Must run on the executor thread.
     [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();
+
+    // Current request stats of this vchunk. Must run on the executor thread.
+    [[nodiscard]] const TVChunkStats& GetStats() const;
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(
@@ -187,7 +187,7 @@ private:
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 
-    TVChunkCounters Counters;
+    TVChunkStats Stats;
 
     NThreading::TPromise<void> StopPromise = NThreading::NewPromise();
 };

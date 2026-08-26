@@ -16,9 +16,10 @@ TTestActorRuntime::TEgg MakeTestRuntimeEgg() {
 
 class TVirtualTimerActor : public TActor<TVirtualTimerActor> {
 public:
-    explicit TVirtualTimerActor(TActorId replyTo)
+    TVirtualTimerActor(TActorId replyTo, double& passed)
         : TActor(&TVirtualTimerActor::StateFunc)
         , ReplyTo(replyTo)
+        , Passed(passed)
     {}
 
 private:
@@ -30,13 +31,15 @@ private:
                 break;
 
             case TEvents::TSystem::Wakeup:
-                Send(ReplyTo, new TEvents::TEvWakeup(TDuration::Seconds(Timer->Passed()).MicroSeconds()));
+                Passed = Timer->Passed();
+                Send(ReplyTo, new TEvents::TEvWakeup);
                 PassAway();
                 break;
         }
     }
 
     const TActorId ReplyTo;
+    double& Passed;
     TMaybe<TBSQueueTimer> Timer;
 };
 
@@ -61,12 +64,13 @@ Y_UNIT_TEST_SUITE(TBSQueueTimerTest) {
         runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector);
 
         const TActorId edge = runtime.AllocateEdgeActor();
-        const TActorId actor = runtime.Register(new TVirtualTimerActor(edge));
+        double passed = 0;
+        const TActorId actor = runtime.Register(new TVirtualTimerActor(edge, passed));
         runtime.EnableScheduleForActor(actor);
         runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPing));
 
-        const auto result = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Tag, TDuration::Seconds(5).MicroSeconds());
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_DOUBLES_EQUAL(passed, 5.0, 1e-5);
     }
 }
 

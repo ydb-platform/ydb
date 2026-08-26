@@ -546,6 +546,32 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockHeartbeat(PartitionId0, ReadActorId1, generation);
         ExpectNoSession(ReadActorId1, generation);
     }
+
+    Y_UNIT_TEST_F(TwoSessionsFatalError, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto session1 = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(session1);
+
+        MockAddSession(Source1, {PartitionId0}, ReadActorId2);
+        ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(session1);   // ReadActorId2 goes to the existing session1
+
+        // 1 topic session / 2 consumers for one partition
+
+        MockSessionError(session1, ReadActorId1, PartitionId0, true);       // fatal error, consumer (ReadActorId1) deleted
+        ExpectSessionError(ReadActorId1);
+        ExpectPoisonPill(session1);
+
+        // ReadActorId1 restarts the session, TEvStartSession is forwarded to a new topic session
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto newSession1 = ExpectRegisterTopicSession();
+        ExpectStartSession(newSession1);
+
+        MockSessionError(session1, ReadActorId2, PartitionId0, true);       // fatal error, consumer (ReadActorId2) deleted
+        ExpectSessionError(ReadActorId2);
+        ExpectPoisonPill(session1);
+    }
 }
 
 }

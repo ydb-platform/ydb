@@ -3,6 +3,9 @@ name: Publish docker image
 on:
   schedule:
     - cron: "0 3 * * *"  # At 03:00 every day
+  push:
+    tags:
+      - '[0-9]**'
   workflow_dispatch:
     inputs:
       ydbd_git_ref:
@@ -38,11 +41,13 @@ permissions:
 jobs:
   build:
     runs-on: [self-hosted, auto-provisioned]
+    env:
+      IMAGE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.image_tag || 'trunk' }}
     steps:
       - name: Checkout .github
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.dockerfile_branch || 'main' }}
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.dockerfile_branch || 'main' }}
           path: main
           persist-credentials: false
           sparse-checkout: |
@@ -51,7 +56,7 @@ jobs:
       - name: Checkout repository for build ydbd
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ydbd_git_ref || 'main' }}
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ydbd_git_ref || 'main' }}
           path: ydbd
           persist-credentials: false
 
@@ -65,14 +70,14 @@ jobs:
       - name: Checkout repository for build CLI
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.cli_git_ref || 'main' }}
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.cli_git_ref || 'main' }}
           path: cli
           persist-credentials: false
 
       - name: Checkout repository for build local_ydb binary
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.local_ydb_git_ref || 'main' }}
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.local_ydb_git_ref || 'main' }}
           path: local_ydb
           persist-credentials: false
 
@@ -104,7 +109,7 @@ jobs:
             org.opencontainers.image.revision=${{ steps.get-sha.outputs.SHA }}
           tags: |
             type=schedule,pattern=nightly
-            type=raw,value=${{ inputs.image_tag || 'trunk' }}
+            type=raw,value=${{ env.IMAGE_TAG }}
 
       - name: Build docker image
         uses: docker/build-push-action@v7
@@ -122,7 +127,7 @@ jobs:
       - name: Test docker image
         continue-on-error: false
         run: |
-          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
+          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:${{ env.IMAGE_TAG }}
           sleep 61  # Wait for the health check to run (--start-period=60s --interval=1s)
           if [ "$(docker inspect --format='{{json .State.Health.Status}}' local-ydb-test)" != "\"healthy\"" ]; then
             echo "Container is not healthy"

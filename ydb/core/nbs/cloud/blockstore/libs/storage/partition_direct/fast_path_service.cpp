@@ -174,6 +174,15 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
+    const ui64 copyRangeBandwidth =
+        StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
+    if (copyRangeBandwidth) {
+        CopyRangeBucket.emplace(
+            ActorSystem->Timestamp(),
+            copyRangeBandwidth,
+            copyRangeBandwidth);
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -461,6 +470,16 @@ bool TFastPathService::TryAdvancePBufferBarrier(
         return true;
     }
     return false;
+}
+
+TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
+{
+    if (!CopyRangeBucket) {
+        return {};
+    }
+
+    auto guard = Guard(CopyRangeBucketLock);
+    return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
 }
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const

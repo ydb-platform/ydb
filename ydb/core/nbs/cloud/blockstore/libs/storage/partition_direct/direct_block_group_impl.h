@@ -147,6 +147,8 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
+
     ui32 GetNodeId(THostIndex host) const override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;

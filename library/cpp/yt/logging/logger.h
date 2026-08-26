@@ -384,7 +384,7 @@ void LogStructuredEvent(
         THROW_ERROR_EXCEPTION(                                                                                       \
             ::NYT::EErrorCode::Fatal,                                                                                \
             "Malformed request or incorrect state detected")                                                         \
-            .With("message", std::move(messageStr__));                                           \
+            .With("message", std::move(messageStr__));                                                               \
         /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */                                 \
     } while (false)
 
@@ -602,7 +602,7 @@ void LogStructuredEvent(
         THROW_ERROR_EXCEPTION(                                                 \
             ::NYT::EErrorCode::Fatal,                                          \
             "Malformed request or incorrect state detected")                   \
-            .With("message", loggingGuard__.Commit()))     \
+            .With("message", loggingGuard__.Commit()))                         \
         loggingGuard__.Self()
 #define YT_TLOG_ALERT_AND_THROW_IF(condition, message)     if (condition) [[unlikely]]    YT_TLOG_ALERT_AND_THROW(message)
 #define YT_TLOG_ALERT_AND_THROW_UNLESS(condition, message) if (!(condition)) [[unlikely]] YT_TLOG_ALERT_AND_THROW(message)

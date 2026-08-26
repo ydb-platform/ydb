@@ -404,7 +404,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternTerm(TPosition pos, const TRule_r
 }
 
 TNodePtr TSqlMatchRecognizeClause::BuildPattern(TPosition pos, std::vector<TNodePtr> pattern) {
-    const auto result = BuildList(pos, {BuildAtom(pos, "MatchRecognizePattern")});
+    auto result = BuildList(pos, {BuildAtom(pos, "MatchRecognizePattern")});
     for (auto& term : pattern) {
         if (!term) {
             return {};

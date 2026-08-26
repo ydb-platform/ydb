@@ -27,7 +27,6 @@ ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemoryPreallocateNoAlloc
 ydb/library/nmslib/test/run_bunit exectest.run[bunit]
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
-ydb/services/config/ut ConfigGRPCService.ReplaceConfig
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk

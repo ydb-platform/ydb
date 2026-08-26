@@ -720,6 +720,25 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
     }
+
+    Y_UNIT_TEST_F(SendSessionErrorAfterFatalError, TRealTopicFixture) {
+        const TString topicName = "fatal_error";
+        Init(topicName);
+        auto source = BuildSource();
+        StartSession(ReadActorId1, source);
+        ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "no path");
+        
+        auto event = new NFq::TEvRowDispatcher::TEvStartSession(
+            source,
+            {PartitionId},
+            "Token",
+            {},
+            0,
+            "QueryId");
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, event));
+
+        ExpectSessionError(ReadActorId2, EStatusId::SCHEME_ERROR, "no path");
+    }
 }
 
 }  // namespace NFq::NRowDispatcher::NTests

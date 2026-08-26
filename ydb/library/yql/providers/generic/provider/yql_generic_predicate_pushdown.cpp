@@ -695,7 +695,7 @@ namespace NYql {
     }
 
     TString FormatStructMember(const TExpression::TStructMember& structMember) {
-        return TStringBuilder() << '(' << FormatExpression(structMember.operand()) << ')' << "." << NFq::EncloseAndEscapeString(structMember.field(), '`');
+        return TStringBuilder() << '(' << FormatExpression(structMember.operand()) << ')' << '.' << FormatColumn(structMember.field());
     }
 
     TString FormatTupleNth(const TExpression::TTupleNth& tupleNth) {
@@ -703,7 +703,7 @@ namespace NYql {
     }
 
     TString FormatVariantGuess(const TExpression::TVariantGuess& variantGuess) {
-        return TStringBuilder() << '(' << FormatExpression(variantGuess.operand()) << ')' << ".`" << variantGuess.field() << "`";
+        return TStringBuilder() << '(' << FormatExpression(variantGuess.operand()) << ')' << '.' << FormatColumn(variantGuess.field());
     }
 
     TString FormatValue(const Ydb::Value& value) {

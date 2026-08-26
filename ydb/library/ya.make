@@ -17,6 +17,7 @@ RECURSE(
     fyamlcpp
     global_plugins
     grpc
+    http
     http_proxy
     intersection_tree
     json_index

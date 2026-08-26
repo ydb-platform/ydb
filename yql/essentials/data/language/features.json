@@ -20,7 +20,7 @@
     },
     "Combine": {
         "description": "COMBINE",
-        "min_langver": "max",
+        "min_langver": "2026.02",
         "is_backport_allowed": true
     },
     "AggPhases": {
@@ -38,6 +38,10 @@
     },
     "Materialize": {
         "description": "MATERIALIZE",
+        "min_langver": "2026.02"
+    },
+    "AlwaysWithFixDecimalConversionMode": {
+        "description": "Always use Decimal common type conversion fixup",
         "min_langver": "2026.02"
     },
     "DecimalArithmeticWithCommonType": {

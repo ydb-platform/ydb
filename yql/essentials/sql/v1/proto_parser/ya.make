@@ -19,6 +19,7 @@ END()
 RECURSE(
     antlr4
     antlr4_ansi
+    benchmark
 )
 
 RECURSE_FOR_TESTS(ut)

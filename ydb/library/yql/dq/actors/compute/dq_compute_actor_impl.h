@@ -54,12 +54,17 @@ struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
         OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        OnSinkStateCommitted(outputIndex, checkpoint);
+    }
+
     void OnAsyncOutputFinished(ui64 outputIndex) override final {
         OnSinkFinished(outputIndex);
     }
 
     virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
     virtual void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnSinkFinished(ui64 outputIndex) = 0;
 };
 
@@ -72,12 +77,17 @@ struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks
         OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        OnTransformStateCommitted(outputIndex, checkpoint);
+    }
+
     void OnAsyncOutputFinished(ui64 outputIndex) override final {
         OnTransformFinished(outputIndex);
     }
 
     virtual void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
     virtual void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnTransformStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnTransformFinished(ui64 outputIndex) = 0;
 };
 
@@ -818,9 +828,19 @@ protected:
         Checkpoints->OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
+        Checkpoints->OnSinkStateCommitted(outputIndex, checkpoint);
+    }
+
     void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
         Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
+    }
+
+    void OnTransformStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
+        Checkpoints->OnTransformStateCommitted(outputIndex, checkpoint);
     }
 
     void OnSinkFinished(ui64 outputIndex) override final {
@@ -836,11 +856,17 @@ protected:
 protected: //TDqComputeActorCheckpoints::ICallbacks
     //bool ReadyToCheckpoint() is pure and must be overriden in a derived class
 
-    void CommitState(const NDqProto::TCheckpoint& checkpoint) override final{
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) override final {
         CA_LOG_D("Commit state");
-        for (auto& [inputIndex, source] : SourcesMap) {
+
+        for (auto& [_, source] : SourcesMap) {
             Y_ABORT_UNLESS(source.AsyncInput);
             source.AsyncInput->CommitState(checkpoint);
+        }
+
+        for (auto& [_, sink] : SinksMap) {
+            Y_ABORT_UNLESS(sink.AsyncOutput);
+            sink.AsyncOutput->CommitState(checkpoint);
         }
     }
 

@@ -7,8 +7,7 @@ namespace {
 
 class TGcNodeTransformer : public TSyncTransformerBase {
 public:
-    TGcNodeTransformer()
-    {}
+    TGcNodeTransformer() = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;

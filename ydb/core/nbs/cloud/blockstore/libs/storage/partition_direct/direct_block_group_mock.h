@@ -145,6 +145,8 @@ public:
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
+    using TTakeCopyRangeBudgetHandler =
+        std::function<TDuration(ui64 byteCount)>;
 
     TExecutorPtr Executor;
     TOracleMock Oracle;
@@ -160,6 +162,7 @@ public:
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
     TOnAddHostResultHandler OnAddHostResultHandler;
+    TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
 
@@ -249,6 +252,8 @@ public:
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 
     ui32 GetNodeId(THostIndex host) const override;
 

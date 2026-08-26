@@ -1,50 +1,13 @@
 #include "ddisk_state.h"
 
+#include "block_field_serializer.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr ui64 Mask = 0xffff;
-constexpr ui64 Offset = 16;
-
-////////////////////////////////////////////////////////////////////////////////
-void SaveField(const TBlockRangeField& field, TBlockFieldProto* proto)
-{
-    field.Enumerate(
-        [&](TBlockRange64 item)
-        {
-            Y_ABORT_UNLESS((item.Start & Mask) == item.Start);
-            Y_ABORT_UNLESS((item.Size() & Mask) == item.Size());
-
-            const ui32 startAndLength =
-                ((item.Start & Mask) << Offset) | (item.Size() & Mask);
-            proto->AddStartAndLength(startAndLength);
-            return TBlockRangeField::EEnumerateContinuation::Continue;
-        });
-
-    // TODO save as bitmap when segment count exceed N
-}
-
-void LoadField(const TBlockFieldProto& proto, TBlockRangeField* field)
-{
-    for (const ui32 startAndLength: proto.GetStartAndLength()) {
-        const ui64 start = startAndLength >> Offset;
-        const ui64 size = startAndLength & Mask;
-        Y_ABORT_UNLESS(size > 0);
-        field->Add(TBlockRange64::WithLength(start, size));
-    }
-}
-
-}   // namespace
-
-////////////////////////////////////////////////////////////////////////////////
 
 void TDDiskState::Init(
     IBehindAheadMonitor* behindAheadMonitor,
@@ -59,16 +22,14 @@ void TDDiskState::Init(
 
 void TDDiskState::Save(TDDiskStateProto* proto) const
 {
-    SaveField(AheadField, proto->MutableAhead());
-    SaveField(BehindField, proto->MutableBehind());
+    SaveBlockField(AheadField, TotalBlockCount, proto->MutableAhead());
+    SaveBlockField(BehindField, TotalBlockCount, proto->MutableBehind());
 }
 
 void TDDiskState::Load(const TDDiskStateProto& proto)
 {
-    AheadField.Clear();
-    BehindField.Clear();
-    LoadField(proto.GetAhead(), &AheadField);
-    LoadField(proto.GetBehind(), &BehindField);
+    LoadBlockField(proto.GetAhead(), &AheadField);
+    LoadBlockField(proto.GetBehind(), &BehindField);
 }
 
 void TDDiskState::SwitchOffline()

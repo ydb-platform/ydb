@@ -5,6 +5,8 @@
 #include <yql/essentials/parser/common/antlr4/depth_limiting_listener.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
+#include <yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
 
 #include <util/system/yassert.h>
 #include <util/charset/utf8.h>
@@ -116,6 +118,24 @@ IParser::TPtr MakeParser(bool isAnsiLexer) {
         return MakeHolder<TParser<true>>();
     }
     return MakeHolder<TParser<false>>();
+}
+
+void ClearParserCache() {
+    NALADefaultAntlr4::SQLv1Antlr4Lexer(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
+
+    NALAAnsiAntlr4::SQLv1Antlr4Lexer(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
+
+    NALADefaultAntlr4::SQLv1Antlr4Parser(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
+
+    NALAAnsiAntlr4::SQLv1Antlr4Parser(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
 }
 
 } // namespace NSQLPureAST

@@ -97,6 +97,16 @@ void RejectRequestsForNode(
     }
 }
 
+template <typename TRequest>
+void AttachPayload(TRequest& request, TRope rope, bool enableChecksums)
+{
+    if (enableChecksums) {
+        request.AddPayloadThenChecksum(std::move(rope));
+    } else {
+        request.AddPayload(std::move(rope));
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -104,11 +114,13 @@ void RejectRequestsForNode(
 TActorId CreateTransportActor(
     const TDiskDescription& diskDescription,
     ui32 dbgIndex,
+    bool enableChecksums,
     std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
 {
     auto actor = std::make_unique<TICStorageTransportActor>(
         diskDescription,
         dbgIndex,
+        enableChecksums,
         std::move(directSessionRegistry));
 
     return TActivationContext::Register(
@@ -123,6 +135,7 @@ TActorId CreateTransportActor(
 TICStorageTransportActor::TICStorageTransportActor(
     const TDiskDescription& diskDescription,
     ui32 dbgIndex,
+    bool enableChecksums,
     std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
     : LogTitle(
           GetCycleCount(),
@@ -132,6 +145,7 @@ TICStorageTransportActor::TICStorageTransportActor(
               .Generation = diskDescription.Generation,
               .DBGIndex = dbgIndex})
     , DirectSessionRegistry(std::move(directSessionRegistry))
+    , EnableChecksums(enableChecksums)
 {}
 
 TICStorageTransportActor::~TICStorageTransportActor()
@@ -284,7 +298,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayloadThenChecksum(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
         // TODO(RFC 006): checksums should be computed by the Partition and
         // carried down to here rather than recomputed post-copy; computing it
         // after SgListCopy only covers corruption from this point on and bakes
@@ -426,7 +440,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayloadThenChecksum(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
         // TODO(RFC 006): checksums should be computed by the Partition and
         // carried down to here rather than recomputed post-copy; computing it
         // after SgListCopy only covers corruption from this point on and bakes
@@ -568,7 +582,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayloadThenChecksum(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
 
         SendWithUndeliveryTracking(
             ctx,

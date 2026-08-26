@@ -2,15 +2,20 @@
 sequenceDiagram
     actor user as Пользователь
     participant node as Узел YDB
+    participant cache as Кеш узла
     participant auth as Подсистема аутентификации
 
-    user->>node: Запрос с аутентификационным токеном
+    user->>node: Первый запрос с аутентификационным токеном
+    node->>cache: Найти запись по ключу
+    cache-->>node: Запись отсутствует
     node->>auth: Проверить аутентификационный токен
-    auth->>node: Результат проверки
+    auth-->>node: Результат проверки
+    node->>node: Создать токен пользователя
+    node->>cache: Сохранить токен пользователя
+    node-->>user: Обработать запрос
 
-    activate node
-    node->>node: Создать и сохранить токен пользователя
-    user->>node: Запрос с тем же аутентификационным токеном
-    node->>node: Получить токен пользователя из кеша
-    deactivate node
+    user->>node: Следующий запрос с тем же ключом
+    node->>cache: Найти запись по ключу
+    cache-->>node: Токен пользователя
+    node-->>user: Обработать запрос
 ```

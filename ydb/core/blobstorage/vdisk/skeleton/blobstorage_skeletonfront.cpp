@@ -289,10 +289,29 @@ namespace NKikimr {
 
             template<typename TFront>
             void DropWithError(const TActorContext& ctx, TFront& front) {
+                DropInFlightOnError();
                 ProcessNext(ctx, front, true);
             }
 
         private:
+            void DropInFlightOnError() {
+                for (const auto& [internalMessageId, msgInfo] : Msgs) {
+                    if (msgInfo.LatencyHistogram) {
+                        msgInfo.LatencyHistogram->RemoveInFlightRequest(internalMessageId);
+                    }
+                }
+                Msgs.clear();
+
+                InFlightCount = 0;
+                InFlightCost = 0;
+                InFlightBytes = 0;
+                IdleLight.Set(true, ++IdleLightSeqNo);
+                *SkeletonFrontInFlightCount = 0;
+                *SkeletonFrontInFlightCost = 0;
+                *SkeletonFrontInFlightBytes = 0;
+                UpdateState();
+            }
+
             template <class TFront>
             void ProcessNext(const TActorContext &ctx, TFront &front, bool forceError) {
                 // we can send next element to Skeleton if any
@@ -1802,7 +1821,6 @@ namespace NKikimr {
                     << " Marker# BSVSF03");
 
             // switch skeleton state to PDiskError
-            SkeletonFrontGroup->ResetCounters();
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::PDiskError);
             // send poison pill to Skeleton to shutdown it
             ctx.Send(SkeletonId, new TEvents::TEvPoisonPill());
@@ -1819,6 +1837,7 @@ namespace NKikimr {
                     &IntQueueHugePutsForeground, &IntQueueHugePutsBackground}) {
                 (*q)->DropWithError(ctx, *this);
             }
+            SkeletonFrontGroup->ResetCounters();
             // drop external queues
             DisconnectClients(ctx);
         }

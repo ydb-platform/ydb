@@ -1,6 +1,7 @@
 """Local YDB cluster lifecycle and adaptive capacity benchmark executor."""
 
 import csv
+import errno
 import io
 import itertools
 import os
@@ -15,8 +16,8 @@ import grpc
 import yaml
 
 from ydb.core.protos import grpc_pb2_grpc, msgbus_pb2
-from ydb.public.api.grpc import ydb_config_v1_pb2_grpc
-from ydb.public.api.protos import ydb_config_pb2
+from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc, ydb_config_v1_pb2_grpc
+from ydb.public.api.protos import ydb_cms_pb2, ydb_config_pb2, ydb_operation_pb2, ydb_status_codes_pb2
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
@@ -127,21 +128,87 @@ def _split_mask(mask, count):
     return tuple(tuple(group) for group in groups)
 
 
-def _database_status_ready(output):
-    return "State: RUNNING" in output
+def _validate_role_affinity(geometry, affinities):
+    _split_mask(affinities["static_nodes"], geometry["static_nodes"])
+    _split_mask(affinities["dynamic_nodes"], geometry["max_dynamic_nodes"])
+
+
+def _set_process_affinity(pid, mask, proc_root=Path("/proc")):
+    """Apply a process mask to every current thread, not only its leader."""
+    task_directory = proc_root / str(pid) / "task"
+    updated = set()
+    for _ in range(16):
+        try:
+            thread_ids = {int(path.name) for path in task_directory.iterdir() if path.name.isdigit()}
+        except OSError as error:
+            raise BenchmarkError("cannot list threads of dynamic node {}: {}".format(pid, error)) from error
+        if not thread_ids:
+            raise BenchmarkError("cannot update dynamic node CPU affinity: process {} has no threads".format(pid))
+        pending = thread_ids - updated
+        if not pending:
+            return
+        for thread_id in pending:
+            try:
+                os.sched_setaffinity(thread_id, mask)
+            except OSError as error:
+                if error.errno != errno.ESRCH:
+                    raise BenchmarkError("cannot update dynamic node CPU affinity: {}".format(error)) from error
+            updated.add(thread_id)
+    raise BenchmarkError("cannot update dynamic node CPU affinity: thread list did not stabilize")
+
+
+def _registered_database_units(output):
+    units = set()
+    in_registered_units = False
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped == "Registered units:":
+            in_registered_units = True
+            continue
+        if not in_registered_units:
+            continue
+        if line.startswith("    ") and " - " in stripped:
+            units.add(stripped.split(" - ", 1)[0])
+            continue
+        if stripped:
+            break
+    return units
+
+
+def _database_status_ready(output, expected_units=()):
+    return "State: RUNNING" in output and set(expected_units).issubset(_registered_database_units(output))
+
+
+def _operation_ready(response):
+    return response.operation.ready
+
+
+def _require_successful_operation(description, operation):
+    if not operation.ready:
+        raise BenchmarkError("{} returned an unfinished operation".format(description))
+    if operation.status == ydb_status_codes_pb2.StatusIds.SUCCESS:
+        return
+    try:
+        status = ydb_status_codes_pb2.StatusIds.StatusCode.Name(operation.status)
+    except ValueError:
+        status = str(operation.status)
+    issues = "; ".join(issue.message or str(issue).strip() for issue in operation.issues)
+    raise BenchmarkError("{} failed with {}{}".format(description, status, ": " + issues if issues else ""))
 
 
 def _bootstrap_cluster_request():
     request = ydb_config_pb2.BootstrapClusterRequest()
+    request.operation_params.operation_mode = ydb_operation_pb2.OperationParams.SYNC
     request.self_assembly_uuid = "multinode_cluster"
     return request
 
 
 def _create_tenant_request(database, storage_kind, storage_groups):
-    request = msgbus_pb2.TConsoleRequest()
-    create = request.CreateTenantRequest.Request
-    create.path = database
-    pool = create.resources.storage_units.add()
+    request = ydb_cms_pb2.CreateDatabaseRequest()
+    request.operation_params.operation_mode = ydb_operation_pb2.OperationParams.SYNC
+    request.path = database
+    request.idempotency_key = "ydb-bench-local-ydb"
+    pool = request.resources.storage_units.add()
     pool.unit_kind = storage_kind
     pool.count = storage_groups
     return request
@@ -364,7 +431,9 @@ class LocalYdbCluster:
                 "cluster bootstrap",
                 lambda timeout: stub.BootstrapCluster(_bootstrap_cluster_request(), timeout=timeout),
                 min(self.timeout, 300),
+                ready=_operation_ready,
             )
+            _require_successful_operation("cluster bootstrap", response.operation)
         finally:
             channel.close()
         atomic_write_json(self.directory / "cluster-bootstrap-attempts.json", attempts)
@@ -373,40 +442,54 @@ class LocalYdbCluster:
     def _create_tenant(self):
         channel = grpc.insecure_channel("{}:{}".format(self.hostname, self.static_nodes[0]["grpc_port"]))
         try:
-            stub = grpc_pb2_grpc.TGRpcServerStub(channel)
+            stub = ydb_cms_v1_pb2_grpc.CmsServiceStub(channel)
             response, attempts = self._grpc_eventually(
                 "tenant creation",
-                lambda timeout: stub.ConsoleRequest(
+                lambda timeout: stub.CreateDatabase(
                     _create_tenant_request(self.database, "ssd", self.geometry["storage_groups"]),
                     timeout=timeout,
                 ),
                 min(self.timeout, 300),
+                ready=_operation_ready,
             )
+            _require_successful_operation("tenant creation", response.operation)
         finally:
             channel.close()
         atomic_write_json(self.directory / "database-create-attempts.json", attempts)
         atomic_write_text(self.directory / "database-create.response.txt", str(response))
 
     def _wait_tenant_ready(self, timeout):
-        channel = grpc.insecure_channel("{}:{}".format(self.hostname, self.dynamic_nodes[0]["grpc_port"]))
-        try:
-            stub = grpc_pb2_grpc.TGRpcServerStub(channel)
+        deadline = time.monotonic() + timeout
+        all_attempts = []
+        responses = []
+        for index, node in enumerate(self.dynamic_nodes, 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise BenchmarkError("tenant readiness did not complete in {} seconds".format(timeout))
+            channel = grpc.insecure_channel("{}:{}".format(self.hostname, node["grpc_port"]))
+            try:
+                stub = grpc_pb2_grpc.TGRpcServerStub(channel)
 
-            def describe(deadline):
-                request = msgbus_pb2.TSchemeDescribe()
-                request.Path = self.database
-                return stub.SchemeDescribe(request, timeout=deadline)
+                def describe(rpc_timeout):
+                    request = msgbus_pb2.TSchemeDescribe()
+                    request.Path = self.database
+                    return stub.SchemeDescribe(request, timeout=rpc_timeout)
 
-            response, attempts = self._grpc_eventually(
-                "tenant SchemeShard",
-                describe,
-                timeout,
-                ready=lambda value: value.Status == 1,
+                description = "tenant SchemeShard on dynamic node {}".format(index)
+                response, attempts = self._grpc_eventually(
+                    description,
+                    describe,
+                    remaining,
+                    ready=lambda value: value.Status == 1,
+                )
+            finally:
+                channel.close()
+            all_attempts.extend(
+                {"dynamic_node": index, "grpc_port": node["grpc_port"], **attempt} for attempt in attempts
             )
-        finally:
-            channel.close()
-        atomic_write_json(self.directory / "tenant-ready-attempts.json", attempts)
-        atomic_write_text(self.directory / "tenant-ready.response.txt", str(response))
+            responses.append("dynamic node {}:\n{}".format(index, response))
+        atomic_write_json(self.directory / "tenant-ready-attempts.json", all_attempts)
+        atomic_write_text(self.directory / "tenant-ready.response.txt", "\n\n".join(responses))
 
     def init_workload(self, command, timeout=120):
         self._check_cancelled()
@@ -507,7 +590,7 @@ class LocalYdbCluster:
             time.sleep(0.2)
         raise BenchmarkError("{} did not become ready in {} seconds".format(description, timeout))
 
-    def _wait_database_ready(self, timeout=120):
+    def _wait_database_ready(self, expected_units, timeout=120):
         command = [
             self.ydbd,
             "-s",
@@ -522,7 +605,11 @@ class LocalYdbCluster:
         while time.monotonic() < deadline:
             self._check_cancelled()
             last_result = run_command(command, {}, 10, work_dir_hint=self.directory, cancel_event=self.cancel_event)
-            if not last_result.exit_code and not last_result.timed_out and _database_status_ready(last_result.stdout):
+            if (
+                not last_result.exit_code
+                and not last_result.timed_out
+                and _database_status_ready(last_result.stdout, expected_units)
+            ):
                 atomic_write_text(self.directory / "database-status.txt", last_result.stdout)
                 return
             if any(process.poll() is not None for process in self.static_processes + self.dynamic_processes):
@@ -542,10 +629,7 @@ class LocalYdbCluster:
         masks = _split_mask(self.affinities["dynamic_nodes"], final_count)
         if self.affinities["dynamic_nodes"] is not None:
             for process, mask in zip(self.dynamic_processes, masks):
-                try:
-                    os.sched_setaffinity(process.pid, mask)
-                except OSError as error:
-                    raise BenchmarkError("cannot update dynamic node CPU affinity: {}".format(error)) from error
+                _set_process_affinity(process.pid, mask)
         for index in range(start_index, final_count):
             node = self._node_ports()
             self.dynamic_nodes.append(node)
@@ -580,8 +664,10 @@ class LocalYdbCluster:
                 )
             )
         self._progress("waiting-for-database", dynamic_nodes=final_count)
-        self._wait_for_port(self.dynamic_nodes[-1]["grpc_port"], "dynamic node")
-        self._wait_database_ready()
+        for index, node in enumerate(self.dynamic_nodes[start_index:], start_index + 1):
+            self._wait_for_port(node["grpc_port"], "dynamic node {}".format(index))
+        expected_units = {"{}:{}".format(self.hostname, node["ic_port"]) for node in self.dynamic_nodes}
+        self._wait_database_ready(expected_units)
         self._wait_tenant_ready(min(self.timeout, 600))
         self._progress("cluster-ready", dynamic_nodes=final_count)
 
@@ -792,6 +878,7 @@ def run_local_ydb(
     profile = configuration.parameters["local_ydb"]
     topology = discover_topology()
     affinities = plan_role_affinity(profile["affinity"], topology)
+    _validate_role_affinity(profile["geometry"], affinities)
     step = {
         "affinity": "roles",
         "background_load": "none",
@@ -814,6 +901,7 @@ def run_local_ydb(
         "platform": collect_system_info(),
         "cpu_topology": topology_record(topology),
         "parameters": profile,
+        "timeout_seconds": configuration.timeout_seconds,
         "role_affinity": {role: None if mask is None else list(mask) for role, mask in affinities.items()},
         "attempts": [],
         "searches": [],

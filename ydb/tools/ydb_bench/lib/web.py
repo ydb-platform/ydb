@@ -133,24 +133,33 @@ _CSS = (
     'order:1px solid #d0d5dd;border-bottom-color:#fff;margin-bottom:-1px}.profile-overview td:first-child{font-weight:650}.run'
     '-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap}.downloads{display'
     ':inline-block}.downloads summary{cursor:pointer}.downloads .actions{margin-top:.5rem}\n'
-    '.local-live{display:grid;grid-template-columns:minmax(16rem,1.4fr) repeat(3,minmax(9rem,1fr));gap:.8rem;align-items:stre'
-    'tch}.local-live>div,.local-kpis>div{padding:.8rem;border:1px solid #d0d5dd;border-radius:7px;background:var(--panel)}.lo'
-    'cal-live strong,.local-kpis strong{display:block;font-size:1.18rem;margin-top:.2rem}.local-phase{font-size:1.25rem;font-'
-    'weight:700}.local-phase-progress{width:100%;margin-top:.65rem}.local-kpis{display:grid;grid-template-columns:repeat(auto-'
-    'fit,minmax(10rem,1fr));gap:.7rem;margin:.8rem 0}.local-kpis .primary-result{border-color:#84adff;background:#eff6ff}.lo'
-    'cal-stages{display:flex;gap:.55rem;overflow-x:auto;padding:.25rem 0 .7rem}.local-stage{min-width:13rem;padding:.65rem;bo'
-    'rder:1px solid #d0d5dd;border-radius:7px;background:#fff}.local-stage.current{border-color:#84adff;background:#eff6ff'
-    '}.local-stage .stage-arrow{color:var(--muted);margin-top:.35rem}.local-charts{display:grid;grid-template-columns:repeat('
-    '2,minmax(0,1fr));gap:.9rem}.local-charts .chart-panel{margin:0;padding:.8rem;border:1px solid #d0d5dd;border-radius:7p'
-    'x}.local-charts .chart-panel h3{margin-top:0}.local-attempts{display:block;max-width:100%;overflow-x:auto}.local-attempt'
-    's td,.local-attempts th{white-space:nowrap}.local-current-command{margin:.8rem 0;padding:.8rem;border:1px solid #d0d5dd'
-    ';border-radius:7px;background:#101828;color:#fff}.local-current-command .muted{color:#d0d5dd}.local-command-code{margin:'
-    '.45rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}.local-co'
-    'mmand-cell{min-width:20rem;white-space:normal!important}.local-command-history summary{cursor:pointer}.local-command-e'
-    'ntry{margin:.55rem 0;padding:.55rem;border:1px solid #e4e7ec;border-radius:5px;background:var(--panel)}.attempt-pass{co'
-    'lor:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}@media(max-width:900px){.local-live{grid-'
-    'template-columns:1fr 1fr}.local-charts{grid-template-colu'
-    'mns:1fr}}\n'
+    """
+.local-live{display:grid;grid-template-columns:minmax(16rem,1.4fr) repeat(3,minmax(9rem,1fr));gap:.8rem;align-items:stretch}
+.local-live>div,.local-kpis>div{padding:.8rem;border:1px solid #d0d5dd;border-radius:7px;background:var(--panel)}
+.local-live strong,.local-kpis strong{display:block;font-size:1.18rem;margin-top:.2rem}
+.local-phase{font-size:1.25rem;font-weight:700}.local-phase-progress{width:100%;margin-top:.65rem}
+.local-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.7rem;margin:.8rem 0}
+.local-kpis .primary-result{border-color:#84adff;background:#eff6ff}
+.local-stages{display:flex;gap:.55rem;overflow-x:auto;padding:.25rem 0 .7rem}
+.local-stage{min-width:13rem;padding:.65rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
+.local-stage.current{border-color:#84adff;background:#eff6ff}.local-stage .stage-arrow{color:var(--muted);margin-top:.35rem}
+.local-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
+.local-charts .chart-panel{margin:0;padding:.8rem;border:1px solid #d0d5dd;border-radius:7px}
+.local-charts .chart-panel h3{margin-top:0}
+.local-attempts-scroll{max-width:100%;overflow-x:auto}
+.local-attempts{width:max-content;min-width:100%}.local-attempts td,.local-attempts th{white-space:nowrap}
+.local-current-command{margin:.8rem 0;padding:.8rem;border:1px solid #d0d5dd;border-radius:7px;background:#101828;color:#fff}
+.local-current-command .muted{color:#d0d5dd}
+.local-command-code{margin:.45rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.local-command-cell{width:22rem;min-width:22rem;max-width:22rem;white-space:normal!important}
+.local-command-history{width:22rem}.local-command-history[open]{max-height:24rem;overflow:auto}
+.local-command-history summary,.local-profile-config summary{cursor:pointer}
+.local-command-entry{margin:.55rem 0;padding:.55rem;border:1px solid #e4e7ec;border-radius:5px;background:var(--panel)}
+.local-profile-config{margin:.8rem 0;padding:.7rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
+.local-profile-config pre{max-height:24rem;overflow:auto;white-space:pre;margin:.7rem 0 0}
+.attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
+@media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
+"""
     '.status.queued{color:var(--warn)}\n'
 )
 _JS = (
@@ -227,7 +236,9 @@ _JS = (
     "ig.geometry.preset);for(const [key,yamlKey] of Object.entries(localYdbGeometryKeys))lines.push('      '+yamlKey+': '+c"
     "onfig.geometry[key]);lines.push('    client:','      threads: '+config.client.threads,'    load:','      parameter: '"
     "+config.load.parameter,'      allow-errors: '+Boolean(config.load.allow_errors));if(config.load.values)lines.push('      values: '+yamlArray(config.load.values));else{lines."
-    "push('      search:','        start: '+config.load.search.start,'        maximum: '+config.load.search.maximum);if(config.load.objective.type==='latency-slo')lines.push('        multiplier: '+config.load.search.multiplier);for(const [key,yamlKey] of Object.entries(localYdbSearchKeys))lines."
+    "push('      search:','        start: '+config.load.search.start,'        maximum: '+config.load.search.maximum);if("
+    "config.load.objective.type==='latency-slo')lines.push('        multiplier: '+config.load.search.multiplier);for("
+    "const [key,yamlKey] of Object.entries(localYdbSearchKeys))lines."
     "push('        '+yamlKey+': '+config.load.search[key]);lines.push('      objective:','        type: '+config.load.object"
     "ive.type);if(config.load.objective.type==='maximize-throughput')for(const [key,yamlKey] of Object.entries(localYdbOb"
     "jectiveKeys))lines.push('        '+yamlKey+': '+config.load.objective[key]);else{lines.push('        percentile: '+config.load.o"
@@ -306,7 +317,9 @@ function localField(id,label,value,help='',attributes=''){
   return '<div class=field><label for="'+id+'">'+esc(label)+'</label><input id="'+id+'" value="'+esc(value)+'" '+attributes+'><small class=muted>'+esc(help)+'</small></div>'
 }
 function localSelect(id,label,value,choices,help=''){
-  return '<div class=field><label for="'+id+'">'+esc(label)+'</label><select id="'+id+'">'+choices.map(choice=>'<option value="'+esc(choice)+'" '+(choice===value?'selected':'')+'>'+esc(choice)+'</option>').join('')+'</select><small class=muted>'+esc(help)+'</small></div>'
+  return '<div class=field><label for="'+id+'">'+esc(label)+'</label><select id="'+id+'">'+
+    choices.map(choice=>'<option value="'+esc(choice)+'" '+(choice===value?'selected':'')+'>'+esc(choice)+'</option>').join('')+
+    '</select><small class=muted>'+esc(help)+'</small></div>'
 }
 function localCheck(id,label,checked,help=''){
   return '<div class=field><label><input id="'+id+'" type=checkbox '+(checked?'checked':'')+'> '+esc(label)+'</label><small class=muted>'+esc(help)+'</small></div>'
@@ -315,39 +328,221 @@ function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
   const loadMode=load.values?'points':load.objective.type;
   const options=Object.entries(workload.options).map(([key,value])=>localField('local-option-'+key,key,value)).join('');
-  const geometryFields=Object.entries(localYdbGeometryKeys).map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
-  const loadCommon=localSelect('local-load-mode','Objective',loadMode,['points','maximize-throughput','latency-slo'])+localSelect('local-load-parameter','Parameter',load.parameter,['rate','threads'])+localCheck('local-load-allow-errors','Allow failed workload requests',Boolean(load.allow_errors),'Failed requests remain visible in results but do not limit load search.');
-  const searchFields=loadMode==='points'?'':localField('local-load-start','Start',load.search.start,'','type=number min=1')+localField('local-load-maximum','Maximum',load.search.maximum,'','type=number min=1')+(loadMode==='latency-slo'?localField('local-load-multiplier','Growth multiplier',load.search.multiplier,'Used to find the first failing latency point.','type=number min=1 step=any'):'')+localField('local-load-search-resolution-percent',loadMode==='maximize-throughput'?'Ternary resolution (%)':'Boundary resolution (%)',load.search.resolution_percent,'','type=number min=0 max=100 step=any');
-  const loadFields=loadMode==='points'?localField('local-load-values','Values',(load.values||[]).join(', '),'Comma-separated values and ranges'):searchFields+(loadMode==='maximize-throughput'?localSelect('local-load-target-role','Target role',load.objective.target_role,['static','dynamic','total'])+localField('local-load-plateau-gain-percent','Plateau gain (%)',load.objective.plateau_gain_percent,'','type=number min=0 step=any')+localField('local-load-plateau-points','Plateau comparisons',load.objective.plateau_points,'','type=number min=1')+localField('local-load-cpu-saturation-percent','CPU saturation (%)',load.objective.cpu_saturation_percent,'','type=number min=0 max=100 step=any'):'');
-  const slo=loadMode==='latency-slo'?'<h3>Latency SLO</h3><div class=form-grid>'+localSelect('local-slo-percentile','Percentile',load.objective.percentile,['p50','p95','p99','pmax'])+localField('local-slo-max-ms','Maximum latency (ms)',load.objective.max_ms,'','type=number min=0 step=any')+localField('local-slo-max-errors','Maximum errors',load.objective.max_errors,load.allow_errors?'Ignored while failed requests are allowed.':'','type=number min=0 '+(load.allow_errors?'disabled':''))+localField('local-slo-min-achieved-rate-ratio','Minimum achieved rate ratio',load.objective.min_achieved_rate_ratio,'','type=number min=0 max=1 step=any')+'</div>':'';
-  const affinity=Object.entries(localYdbAffinityKeys).map(([key,label])=>{const role=config.affinity[key],disabled=role.mode==='none'?'disabled':'';return '<div class=card><strong>'+esc(label)+'</strong><div class=form-grid>'+localSelect('local-affinity-'+key+'-mode','Mode',role.mode,editor.model.affinity_modes)+localField('local-affinity-'+key+'-cpus','CPUs',role.cpus??'','integer, one-chiplet, or remaining',disabled)+'</div></div>'}).join('');
-  return '<div id=local-editor><h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2><div class=form-grid>'+localSelect('benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name))+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div><h3>Workload</h3><div class=form-grid>'+localSelect('local-workload-type','Type',workload.type,['kv','stock'])+localSelect('local-workload-operation','Operation',workload.operation,localYdbOperations[workload.type])+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+'</div><h3>Client and load</h3><div class=form-grid>'+localField('local-client-threads','YDB CLI threads',config.client.threads,'','type=number min=1')+loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,'','type=number min=0')+localField('local-measurement-duration','Duration (seconds)',measurement.duration,'','type=number min=1')+localField('local-measurement-repetitions','Repetitions',measurement.repetitions,'','type=number min=1')+localField('local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1')+'</div><h3>Role affinity</h3>'+affinity+'<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
+  const geometryFields=Object.entries(localYdbGeometryKeys)
+    .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
+  const loadCommon=
+    localSelect('local-load-mode','Objective',loadMode,['points','maximize-throughput','latency-slo'])+
+    localSelect('local-load-parameter','Parameter',load.parameter,['rate','threads'])+
+    localCheck(
+      'local-load-allow-errors','Allow failed workload requests',Boolean(load.allow_errors),
+      'Failed requests remain visible in results but do not limit load search.'
+    );
+  const searchFields=loadMode==='points'?'':
+    localField('local-load-start','Start',load.search.start,'','type=number min=1')+
+    localField('local-load-maximum','Maximum',load.search.maximum,'','type=number min=1')+
+    (loadMode==='latency-slo'?
+      localField(
+        'local-load-multiplier','Growth multiplier',load.search.multiplier,
+        'Used to find the first failing latency point.','type=number min=1 step=any'
+      ):'')+
+    localField(
+      'local-load-search-resolution-percent',
+      loadMode==='maximize-throughput'?'Ternary resolution (%)':'Boundary resolution (%)',
+      load.search.resolution_percent,'','type=number min=0 max=100 step=any'
+    );
+  const loadFields=loadMode==='points'?
+    localField('local-load-values','Values',(load.values||[]).join(', '),'Comma-separated values and ranges'):
+    searchFields+(loadMode==='maximize-throughput'?
+      localSelect('local-load-target-role','Target role',load.objective.target_role,['static','dynamic','total'])+
+      localField(
+        'local-load-plateau-gain-percent','Plateau gain (%)',load.objective.plateau_gain_percent,
+        '','type=number min=0 step=any'
+      )+
+      localField('local-load-plateau-points','Plateau comparisons',load.objective.plateau_points,'','type=number min=1')+
+      localField(
+        'local-load-cpu-saturation-percent','CPU saturation (%)',load.objective.cpu_saturation_percent,
+        '','type=number min=0 max=100 step=any'
+      ):'');
+  const slo=loadMode==='latency-slo'?'<h3>Latency SLO</h3><div class=form-grid>'+
+    localSelect('local-slo-percentile','Percentile',load.objective.percentile,['p50','p95','p99','pmax'])+
+    localField('local-slo-max-ms','Maximum latency (ms)',load.objective.max_ms,'','type=number min=0 step=any')+
+    localField(
+      'local-slo-max-errors','Maximum errors',load.objective.max_errors,
+      load.allow_errors?'Ignored while failed requests are allowed.':'',
+      'type=number min=0 '+(load.allow_errors?'disabled':'')
+    )+
+    localField(
+      'local-slo-min-achieved-rate-ratio','Minimum achieved rate ratio',load.objective.min_achieved_rate_ratio,
+      '','type=number min=0 max=1 step=any'
+    )+'</div>':'';
+  const affinity=Object.entries(localYdbAffinityKeys).map(([key,label])=>{
+    const role=config.affinity[key],disabled=role.mode==='none'?'disabled':'';
+    return '<div class=card><strong>'+esc(label)+'</strong><div class=form-grid>'+
+      localSelect('local-affinity-'+key+'-mode','Mode',role.mode,editor.model.affinity_modes)+
+      localField(
+        'local-affinity-'+key+'-cpus','CPUs',role.cpus??'','integer, one-chiplet, or remaining',disabled
+      )+'</div></div>'
+  }).join('');
+  return '<div id=local-editor><h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+
+    '<div class=form-grid>'+localSelect(
+      'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
+    )+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div>'+
+    '<h3>Workload</h3><div class=form-grid>'+localSelect(
+      'local-workload-type','Type',workload.type,['kv','stock']
+    )+localSelect(
+      'local-workload-operation','Operation',workload.operation,localYdbOperations[workload.type]
+    )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
+    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
+    '</div><h3>Client and load</h3><div class=form-grid>'+
+    localField('local-client-threads','YDB CLI threads',config.client.threads,'','type=number min=1')+
+    loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
+    localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,'','type=number min=0')+
+    localField('local-measurement-duration','Duration (seconds)',measurement.duration,'','type=number min=1')+
+    localField('local-measurement-repetitions','Repetitions',measurement.repetitions,'','type=number min=1')+
+    localField(
+      'local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1'
+    )+'</div><h3>Role affinity</h3>'+affinity+
+    '<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
 }
-function localNumber(id,minimum=1){const value=Number(document.querySelector('#'+id).value);if(!Number.isFinite(value)||value<minimum)throw Error(id+' must be a number not below '+minimum+'.');return value}
+function localNumber(id,minimum=1){
+  const value=Number(document.querySelector('#'+id).value);
+  if(!Number.isFinite(value)||value<minimum)throw Error(id+' must be a number not below '+minimum+'.');
+  return value
+}
 function localInteger(id,minimum=1){const value=localNumber(id,minimum);if(!Number.isSafeInteger(value))throw Error(id+' must be an integer.');return value}
-function localCpu(id,mode){if(mode==='none')return null;const raw=document.querySelector('#'+id).value.trim();if(raw==='one-chiplet'||raw==='remaining')return raw;const value=Number(raw);if(!Number.isSafeInteger(value)||value<1)throw Error(id+' must be a positive integer, one-chiplet, or remaining.');return value}
+function localCpu(id,mode){
+  if(mode==='none')return null;
+  const raw=document.querySelector('#'+id).value.trim();
+  if(raw==='one-chiplet'||raw==='remaining')return raw;
+  const value=Number(raw);
+  if(!Number.isSafeInteger(value)||value<1){
+    throw Error(id+' must be a positive integer, one-chiplet, or remaining.')
+  }
+  return value
+}
 function bindLocalYdbEditor(profile){
   const message=()=>document.querySelector('#editor-message');
   const update=event=>{try{
     const benchmarkName=document.querySelector('#benchmark').value,name=document.querySelector('#profile-name').value.trim();
     if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw Error('Profile name is unsafe.');
-    if(editor.model.profiles.some(item=>item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name))throw Error('A profile with this benchmark and name already exists.');
-    if(benchmarkName!==profile.benchmark){const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);profile.benchmark=benchmarkName;profile.name=name;profile.key=benchmarkName+'/'+name;delete profile.local_ydb;profile.parameters=Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default]));profile.threads=[1];profile.duration=3;profile.repetitions=1;profile.affinity=['none'];profile.background_load=['none'];editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return}
+    if(editor.model.profiles.some(item=>
+      item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name
+    ))throw Error('A profile with this benchmark and name already exists.');
+    if(benchmarkName!==profile.benchmark){
+      const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);
+      profile.benchmark=benchmarkName;profile.name=name;profile.key=benchmarkName+'/'+name;
+      delete profile.local_ydb;
+      profile.parameters=Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default]));
+      profile.threads=[1];profile.duration=3;profile.repetitions=1;profile.affinity=['none'];
+      profile.background_load=['none'];editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);
+      saveDraft();renderNew();return
+    }
     profile.name=name;profile.key=benchmarkName+'/'+name;const config=profile.local_ydb;
-    if(event.target.id==='local-workload-type'){config.workload=defaultLocalYdbWorkload(event.target.value);editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return}
-    if(event.target.id==='local-geometry-preset'){const preset=event.target.value;config.geometry.preset=preset;if(preset==='single'){config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1}else if(preset==='storage')config.geometry.max_dynamic_nodes=Math.max(8,config.geometry.dynamic_nodes,config.geometry.max_dynamic_nodes);editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return}
-    if(event.target.id==='local-load-mode'){const mode=event.target.value,allow_errors=Boolean(config.load.allow_errors);if(mode==='points')config.load={parameter:config.load.parameter,allow_errors,values:config.load.values||[1000]};else{const search=config.load.search||{start:1000,maximum:100000,multiplier:2,resolution_percent:2},old=config.load.objective||{},objective={type:mode,target_role:old.target_role||'dynamic',plateau_gain_percent:old.plateau_gain_percent??2,plateau_points:old.plateau_points||2,cpu_saturation_percent:old.cpu_saturation_percent||95};if(mode==='latency-slo')Object.assign(objective,{percentile:old.percentile||'p99',max_ms:old.max_ms??10,max_errors:old.max_errors??0,min_achieved_rate_ratio:old.min_achieved_rate_ratio??.98});config.load={parameter:config.load.parameter,allow_errors,search,objective}}editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return}
-    if(event.target.id.startsWith('local-affinity-')&&event.target.id.endsWith('-mode')){const key=event.target.id.slice('local-affinity-'.length,-'-mode'.length),mode=event.target.value,old=config.affinity[key].cpus;config.affinity[key]={mode,cpus:mode==='none'?null:(old??(key==='ydb_cli'?'one-chiplet':1))};editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return}
+    if(event.target.id==='local-workload-type'){
+      config.workload=defaultLocalYdbWorkload(event.target.value);editor.selected=profile.key;
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    if(event.target.id==='local-geometry-preset'){
+      const preset=event.target.value;config.geometry.preset=preset;
+      if(preset==='single'){
+        config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1
+      }else if(preset==='storage'){
+        config.geometry.max_dynamic_nodes=Math.max(
+          8,config.geometry.dynamic_nodes,config.geometry.max_dynamic_nodes
+        )
+      }
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    if(event.target.id==='local-load-mode'){
+      const mode=event.target.value,allow_errors=Boolean(config.load.allow_errors);
+      if(mode==='points'){
+        config.load={parameter:config.load.parameter,allow_errors,values:config.load.values||[1000]}
+      }else{
+        const search=config.load.search||{start:1000,maximum:100000,multiplier:2,resolution_percent:2};
+        const old=config.load.objective||{};
+        const objective={
+          type:mode,target_role:old.target_role||'dynamic',plateau_gain_percent:old.plateau_gain_percent??2,
+          plateau_points:old.plateau_points||2,cpu_saturation_percent:old.cpu_saturation_percent||95
+        };
+        if(mode==='latency-slo')Object.assign(objective,{
+          percentile:old.percentile||'p99',max_ms:old.max_ms??10,max_errors:old.max_errors??0,
+          min_achieved_rate_ratio:old.min_achieved_rate_ratio??.98
+        });
+        config.load={parameter:config.load.parameter,allow_errors,search,objective}
+      }
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    if(event.target.id.startsWith('local-affinity-')&&event.target.id.endsWith('-mode')){
+      const key=event.target.id.slice('local-affinity-'.length,-'-mode'.length);
+      const mode=event.target.value,old=config.affinity[key].cpus;
+      config.affinity[key]={mode,cpus:mode==='none'?null:(old??(key==='ydb_cli'?'one-chiplet':1))};
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
     config.workload.operation=document.querySelector('#local-workload-operation').value;
-    for(const input of document.querySelectorAll('[id^=local-option-]')){const key=input.id.slice('local-option-'.length),minimum=['init-upserts','orders','auto-partition'].includes(key)?0:1;config.workload.options[key]=localInteger(input.id,minimum)}
-    config.geometry.preset=document.querySelector('#local-geometry-preset').value;for(const key of Object.keys(localYdbGeometryKeys))config.geometry[key]=localInteger('local-geometry-'+key);if(config.geometry.preset==='single'){config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1}
-    config.client.threads=localInteger('local-client-threads');const loadMode=document.querySelector('#local-load-mode').value,parameter=document.querySelector('#local-load-parameter').value;
-    const allow_errors=document.querySelector('#local-load-allow-errors').checked;if(loadMode==='points')config.load={parameter,allow_errors,values:arrayField(document.querySelector('#local-load-values').value)};else{const objective={type:loadMode},multiplier=loadMode==='latency-slo'?localNumber('local-load-multiplier',1):(config.load.search?.multiplier??2);config.load={parameter,allow_errors,search:{start:localInteger('local-load-start'),maximum:localInteger('local-load-maximum'),multiplier,resolution_percent:localNumber('local-load-search-resolution-percent',0)},objective};if(loadMode==='maximize-throughput')Object.assign(objective,{target_role:document.querySelector('#local-load-target-role').value,plateau_gain_percent:localNumber('local-load-plateau-gain-percent',0),plateau_points:localInteger('local-load-plateau-points'),cpu_saturation_percent:localNumber('local-load-cpu-saturation-percent',0)});else Object.assign(objective,{percentile:document.querySelector('#local-slo-percentile').value,max_ms:localNumber('local-slo-max-ms',0),max_errors:localInteger('local-slo-max-errors',0),min_achieved_rate_ratio:localNumber('local-slo-min-achieved-rate-ratio',0)})}
-    config.measurement={warmup:localInteger('local-measurement-warmup',0),duration:localInteger('local-measurement-duration'),repetitions:localInteger('local-measurement-repetitions')};
-    for(const key of Object.keys(localYdbAffinityKeys)){const mode=document.querySelector('#local-affinity-'+key+'-mode').value;config.affinity[key]={mode,cpus:localCpu('local-affinity-'+key+'-cpus',mode)}}
-    const timeout=document.querySelector('#local-timeout').value.trim();profile.timeout=timeout===''?null:localInteger('local-timeout');profile.threads=[config.client.threads];profile.duration=config.measurement.duration;profile.repetitions=1;profile.affinity=['roles'];profile.background_load=['none'];editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();if(['profile-name','local-geometry-preset','local-load-allow-errors'].includes(event.target.id))renderNew()
+    for(const input of document.querySelectorAll('[id^=local-option-]')){
+      const key=input.id.slice('local-option-'.length);
+      const minimum=['init-upserts','orders','auto-partition'].includes(key)?0:1;
+      config.workload.options[key]=localInteger(input.id,minimum)
+    }
+    config.geometry.preset=document.querySelector('#local-geometry-preset').value;
+    for(const key of Object.keys(localYdbGeometryKeys)){
+      config.geometry[key]=localInteger('local-geometry-'+key)
+    }
+    if(config.geometry.preset==='single'){
+      config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1
+    }
+    config.client.threads=localInteger('local-client-threads');
+    const loadMode=document.querySelector('#local-load-mode').value;
+    const parameter=document.querySelector('#local-load-parameter').value;
+    const allow_errors=document.querySelector('#local-load-allow-errors').checked;
+    if(loadMode==='points'){
+      config.load={parameter,allow_errors,values:arrayField(document.querySelector('#local-load-values').value)}
+    }else{
+      const objective={type:loadMode};
+      const multiplier=loadMode==='latency-slo'?
+        localNumber('local-load-multiplier',1):(config.load.search?.multiplier??2);
+      config.load={
+        parameter,allow_errors,
+        search:{
+          start:localInteger('local-load-start'),maximum:localInteger('local-load-maximum'),multiplier,
+          resolution_percent:localNumber('local-load-search-resolution-percent',0)
+        },
+        objective
+      };
+      if(loadMode==='maximize-throughput')Object.assign(objective,{
+        target_role:document.querySelector('#local-load-target-role').value,
+        plateau_gain_percent:localNumber('local-load-plateau-gain-percent',0),
+        plateau_points:localInteger('local-load-plateau-points'),
+        cpu_saturation_percent:localNumber('local-load-cpu-saturation-percent',0)
+      });
+      else Object.assign(objective,{
+        percentile:document.querySelector('#local-slo-percentile').value,
+        max_ms:localNumber('local-slo-max-ms',0),max_errors:localInteger('local-slo-max-errors',0),
+        min_achieved_rate_ratio:localNumber('local-slo-min-achieved-rate-ratio',0)
+      })
+    }
+    config.measurement={
+      warmup:localInteger('local-measurement-warmup',0),
+      duration:localInteger('local-measurement-duration'),
+      repetitions:localInteger('local-measurement-repetitions')
+    };
+    for(const key of Object.keys(localYdbAffinityKeys)){
+      const mode=document.querySelector('#local-affinity-'+key+'-mode').value;
+      config.affinity[key]={mode,cpus:localCpu('local-affinity-'+key+'-cpus',mode)}
+    }
+    const timeout=document.querySelector('#local-timeout').value.trim();
+    profile.timeout=timeout===''?null:localInteger('local-timeout');
+    profile.threads=[config.client.threads];profile.duration=config.measurement.duration;
+    profile.repetitions=1;profile.affinity=['roles'];profile.background_load=['none'];
+    editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();
+    if(['profile-name','local-geometry-preset','local-load-allow-errors'].includes(event.target.id))renderNew()
   }catch(error){message().innerHTML=displayError(error)}};
-  for(const input of document.querySelectorAll('#local-editor input,#local-editor select'))input.onchange=update;document.querySelector('#delete-profile').onclick=()=>{editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}
+  for(const input of document.querySelectorAll('#local-editor input,#local-editor select'))input.onchange=update;
+  document.querySelector('#delete-profile').onclick=()=>{
+    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
+    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
+    saveDraft();renderNew()
+  }
 }
 """
     'function profileEditor(profile){\n'
@@ -401,27 +596,68 @@ function bindLocalYdbEditor(profile){
     """
 function bindProfileEditor(profile){
   const update=event=>{try{
-    const name=document.querySelector('#profile-name').value.trim(),benchmarkName=document.querySelector('#benchmark').value,benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName),benchmarkChanged=event?.target?.id==='benchmark';
+    const name=document.querySelector('#profile-name').value.trim();
+    const benchmarkName=document.querySelector('#benchmark').value;
+    const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);
+    const benchmarkChanged=event?.target?.id==='benchmark';
     if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw Error('Profile name is unsafe.');
-    if(editor.model.profiles.some(item=>item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name))throw Error('A profile with this benchmark and name already exists.');
+    if(editor.model.profiles.some(item=>
+      item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name
+    ))throw Error('A profile with this benchmark and name already exists.');
     updateProfile(profile.key,item=>{
       item.benchmark=benchmarkName;item.name=name;item.key=benchmarkName+'/'+name;
-      if(benchmarkChanged&&benchmark.profile_kind==='local-ydb'){item.local_ydb=defaultLocalYdb();item.parameters={};item.threads=[64];item.duration=30;item.repetitions=1;item.affinity=['roles'];item.background_load=['none'];return}
+      if(benchmarkChanged&&benchmark.profile_kind==='local-ydb'){
+        item.local_ydb=defaultLocalYdb();item.parameters={};item.threads=[64];item.duration=30;
+        item.repetitions=1;item.affinity=['roles'];item.background_load=['none'];return
+      }
       delete item.local_ydb;item.threads=arrayField(document.querySelector('#threads').value);item.parameters={};
-      benchmark.parameters.forEach((parameter,index)=>{if(benchmarkChanged){item.parameters[parameter.name]=[...parameter.default];return}if(parameter.choices.length){const selected=[...document.querySelectorAll('.parameter-choice[data-parameter-index="'+index+'"]:checked')].map(input=>input.value);if(!selected.length)throw Error('Select at least one value for '+parameter.name+'.');item.parameters[parameter.name]=selected;return}const raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');item.parameters[parameter.name]=parameter.type==='integer'?arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)});
-      item.duration=Number(document.querySelector('#duration').value);item.repetitions=Number(document.querySelector('#repetitions').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value);item.background_load=[...document.querySelectorAll('.background-load:checked')].map(input=>input.value);if(!item.background_load.length)throw Error('Select at least one background load mode.')
+      benchmark.parameters.forEach((parameter,index)=>{
+        if(benchmarkChanged){item.parameters[parameter.name]=[...parameter.default];return}
+        if(parameter.choices.length){
+          const selector='.parameter-choice[data-parameter-index="'+index+'"]:checked';
+          const selected=[...document.querySelectorAll(selector)].map(input=>input.value);
+          if(!selected.length)throw Error('Select at least one value for '+parameter.name+'.');
+          item.parameters[parameter.name]=selected;return
+        }
+        const raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');
+        item.parameters[parameter.name]=parameter.type==='integer'?
+          arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)
+      });
+      item.duration=Number(document.querySelector('#duration').value);
+      item.repetitions=Number(document.querySelector('#repetitions').value);
+      item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value);
+      item.background_load=[...document.querySelectorAll('.background-load:checked')].map(input=>input.value);
+      if(!item.background_load.length)throw Error('Select at least one background load mode.')
     });
-    editor.selected=benchmarkName+'/'+name;if(benchmarkChanged||(!event?.target?.classList.contains('affinity')&&!event?.target?.classList.contains('background-load')&&!event?.target?.classList.contains('parameter-choice')))renderNew()
+    editor.selected=benchmarkName+'/'+name;
+    if(benchmarkChanged||(
+      !event?.target?.classList.contains('affinity')&&
+      !event?.target?.classList.contains('background-load')&&
+      !event?.target?.classList.contains('parameter-choice')
+    ))renderNew()
   }catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}};
-  for(const input of document.querySelectorAll('#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,#duration,#repetitions,.affinity,.background-load'))input.onchange=update;
-  document.querySelector('#delete-profile').onclick=()=>{editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}
+  const selector=
+    '#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,'+
+    '#duration,#repetitions,.affinity,.background-load';
+  for(const input of document.querySelectorAll(selector))input.onchange=update;
+  document.querySelector('#delete-profile').onclick=()=>{
+    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
+    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
+    saveDraft();renderNew()
+  }
 }
 """
     """
 function addProfile(){
-  const selectedBenchmark=document.querySelector('#add-benchmark')?.value,benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];let suffix=1,name='profile';
+  const selectedBenchmark=document.querySelector('#add-benchmark')?.value;
+  const benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];
+  let suffix=1,name='profile';
   while((editor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;
-  const profile={key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],parameters:Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default])),duration:3,repetitions:1,timeout:null,affinity:['none'],background_load:['none']};
+  const profile={
+    key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],
+    parameters:Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default])),
+    duration:3,repetitions:1,timeout:null,affinity:['none'],background_load:['none']
+  };
   if(benchmark.profile_kind==='local-ydb'){profile.local_ydb=defaultLocalYdb();profile.threads=[64];profile.duration=30;profile.repetitions=1;profile.affinity=['roles']}
   editor.model.profiles.push(profile);editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()
 }
@@ -527,7 +763,9 @@ function addProfile(){
     '}\n'
     """
 function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,synchronize=false){
-  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number),xMin=Math.min(...numericX),xMax=Math.max(...numericX),xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
+  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number);
+  const xMin=Math.min(...numericX),xMax=Math.max(...numericX);
+  const xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
   const seriesFor=metric=>Array.isArray(seriesRows)?seriesRows:(seriesRows[metric]||[]);
   const panels=[...container.querySelectorAll('.chart-panel')].map(panel=>({
     panel,
@@ -537,22 +775,41 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     tooltip:panel.querySelector('.chart-tooltip'),
     cursor:panel.querySelector('.chart-cursor'),
   })).filter(item=>item.svg&&item.surface&&item.tooltip&&item.cursor&&metrics.includes(item.metric));
-  const hideAll=()=>{for(const item of panels){item.tooltip.hidden=true;item.cursor.setAttribute('visibility','hidden');item.cursor.removeAttribute('data-selected-x')}};
+  const hideAll=()=>{for(const item of panels){
+    item.tooltip.hidden=true;item.cursor.setAttribute('visibility','hidden');
+    item.cursor.removeAttribute('data-selected-x')
+  }};
   const syncBoundary=synchronize?panels[0]?.panel.closest('.local-charts'):null;
   if(syncBoundary)syncBoundary.onmouseleave=hideAll;
   for(const active of panels){
     if(!syncBoundary)active.svg.onmouseleave=hideAll;
     active.svg.onmousemove=event=>{
       const bounds=active.svg.getBoundingClientRect(),viewX=(event.clientX-bounds.left)*width/bounds.width;
-      const selected=xValues.reduce((best,value)=>Math.abs(xPos(value)-viewX)<Math.abs(xPos(best)-viewX)?value:best,xValues[0]),cursorX=xPos(selected),targets=synchronize?panels:[active];
+      const selected=xValues.reduce(
+        (best,value)=>Math.abs(xPos(value)-viewX)<Math.abs(xPos(best)-viewX)?value:best,xValues[0]
+      );
+      const cursorX=xPos(selected),targets=synchronize?panels:[active];
       for(const item of panels)item.tooltip.hidden=true;
-      for(const item of targets){item.cursor.setAttribute('x1',cursorX);item.cursor.setAttribute('x2',cursorX);item.cursor.setAttribute('visibility','visible');item.cursor.setAttribute('data-selected-x',selected)}
-      const values=seriesFor(active.metric).map((item,index)=>({label:item.label,colorClass:(item.colorIndex??index)%chartColors.length,value:chartNumber(item.rows.get(String(selected))?.[item.metric||active.metric])})).filter(item=>Number.isFinite(item.value)).sort((leftItem,rightItem)=>rightItem.value-leftItem.value||leftItem.label.localeCompare(rightItem.label));
+      for(const item of targets){
+        item.cursor.setAttribute('x1',cursorX);item.cursor.setAttribute('x2',cursorX);
+        item.cursor.setAttribute('visibility','visible');item.cursor.setAttribute('data-selected-x',selected)
+      }
+      const values=seriesFor(active.metric).map((item,index)=>({
+        label:item.label,colorClass:(item.colorIndex??index)%chartColors.length,
+        value:chartNumber(item.rows.get(String(selected))?.[item.metric||active.metric])
+      })).filter(item=>Number.isFinite(item.value)).sort((leftItem,rightItem)=>
+        rightItem.value-leftItem.value||leftItem.label.localeCompare(rightItem.label)
+      );
       if(!values.length)return;
-      active.tooltip.innerHTML='<strong>'+esc(xName)+' = '+esc(metricLabel(selected))+'</strong>'+values.map(item=>'<div class=tooltip-row><i class="tooltip-dot chart-bg-'+item.colorClass+'"></i><span class="chart-color-'+item.colorClass+'">'+esc(item.label)+'</span><span class=tooltip-value>'+esc(metricLabel(item.value))+'</span></div>').join('');
+      active.tooltip.innerHTML='<strong>'+esc(xName)+' = '+esc(metricLabel(selected))+'</strong>'+
+        values.map(item=>'<div class=tooltip-row><i class="tooltip-dot chart-bg-'+item.colorClass+
+          '"></i><span class="chart-color-'+item.colorClass+'">'+esc(item.label)+
+          '</span><span class=tooltip-value>'+esc(metricLabel(item.value))+'</span></div>').join('');
       active.tooltip.hidden=false;
-      const surfaceBounds=active.surface.getBoundingClientRect(),tooltipWidth=active.tooltip.offsetWidth,rawLeft=event.clientX-surfaceBounds.left+12;
-      active.tooltip.style.left=Math.max(4,Math.min(rawLeft,surfaceBounds.width-tooltipWidth-4))+'px';active.tooltip.style.top=Math.max(4,event.clientY-surfaceBounds.top-active.tooltip.offsetHeight-10)+'px'
+      const surfaceBounds=active.surface.getBoundingClientRect(),tooltipWidth=active.tooltip.offsetWidth;
+      const rawLeft=event.clientX-surfaceBounds.left+12;
+      active.tooltip.style.left=Math.max(4,Math.min(rawLeft,surfaceBounds.width-tooltipWidth-4))+'px';
+      active.tooltip.style.top=Math.max(4,event.clientY-surfaceBounds.top-active.tooltip.offsetHeight-10)+'px'
     }
   }
 }
@@ -749,14 +1006,57 @@ const localPhaseLabels={
 };
 function localPhaseLabel(phase){return localPhaseLabels[phase]||String(phase||'Preparing').replaceAll('-',' ')}
 function localShellArg(value){value=String(value);return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value)?value:"'"+value.replaceAll("'","'\\\"'\\\"'")+"'"}
-function localCommandText(record){const argv=Array.isArray(record?.argv)?record.argv:[],command=argv.map(localShellArg).join(' '),cpus=Array.isArray(record?.cpu_affinity)?record.cpu_affinity:[];return cpus.length?'taskset --cpu-list '+localShellArg(cpus.join(','))+' '+command:command}
-function localCommandDetails(item,open){const commands=Array.isArray(item.commands)?item.commands:[];if(!commands.length)return '—';return '<details class=local-command-history data-command-attempt="'+esc(item.attempt)+'"'+(open?' open':'')+'><summary>'+commands.length+' commands</summary>'+commands.map(command=>'<div class=local-command-entry><strong>Repetition '+esc(command.repetition)+' · '+esc(localPhaseLabel(command.phase))+'</strong><pre class=local-command-code><code>'+esc(localCommandText(command))+'</code></pre></div>').join('')+'</details>'}
-function localElapsed(started,finished=null){const value=Date.parse(started),end=finished?Date.parse(finished):Date.now();return Number.isFinite(value)&&Number.isFinite(end)?Math.max(0,(end-value)/1000):0}
-function localKpi(label,value,help='',primary=false){return '<div class="'+(primary?'primary-result':'')+'"><span class=muted>'+esc(label)+'</span><strong>'+esc(value??'—')+'</strong>'+(help?'<small class=muted>'+esc(help)+'</small>':'')+'</div>'}
-function localOutcomeLabel(outcome){return ({'boundary-found':'SLO boundary found','plateau-found':'Throughput plateau found','lower-bound':'Capacity lower bound','best-observed':'Best observed point','no-feasible-point':'No feasible point','bounded-by-errors':'Bounded by workload errors','search-limit-reached':'Search limit reached'})[outcome]||outcome||'Search in progress'}
-function localSearchAxisLabel(parameter,workload){if(parameter==='threads')return 'YDB CLI threads';if(parameter==='rate')return workload==='stock'?'Offered rate (transactions/s)':'Offered rate (requests/s)';return parameter||'Search value'}
+function localCommandText(record){
+  const argv=Array.isArray(record?.argv)?record.argv:[];
+  const command=argv.map(localShellArg).join(' ');
+  const cpus=Array.isArray(record?.cpu_affinity)?record.cpu_affinity:[];
+  return cpus.length?'taskset --cpu-list '+localShellArg(cpus.join(','))+' '+command:command
+}
+function localCommandDetails(item,open){
+  const commands=Array.isArray(item.commands)?item.commands:[];
+  if(!commands.length)return '—';
+  return '<details class=local-command-history data-command-attempt="'+esc(item.attempt)+'"'+
+    (open?' open':'')+'><summary>'+commands.length+' commands</summary>'+commands.map(command=>
+      '<div class=local-command-entry><strong>Repetition '+esc(command.repetition)+' · '+
+      esc(localPhaseLabel(command.phase))+'</strong><pre class=local-command-code><code>'+esc(localCommandText(command))+
+      '</code></pre></div>'
+    ).join('')+'</details>'
+}
+function localProfileDetails(data,open){
+  const configuration={
+    parameters:data.parameters||{},timeout_seconds:data.timeout_seconds??null,role_affinity:data.role_affinity||{}
+  };
+  return '<details class=local-profile-config data-local-profile-config'+(open?' open':'')+
+    '><summary><strong>Launch parameters</strong> <span class=muted>Normalized profile and effective CPU affinity; '+
+    'exact commands are listed per attempt.</span></summary><pre><code>'+esc(JSON.stringify(configuration,null,2))+
+    '</code></pre></details>'
+}
+function localElapsed(started,finished=null){
+  const value=Date.parse(started),end=finished?Date.parse(finished):Date.now();
+  return Number.isFinite(value)&&Number.isFinite(end)?Math.max(0,(end-value)/1000):0
+}
+function localKpi(label,value,help='',primary=false){
+  return '<div class="'+(primary?'primary-result':'')+'"><span class=muted>'+esc(label)+'</span><strong>'+esc(value??'—')+
+    '</strong>'+(help?'<small class=muted>'+esc(help)+'</small>':'')+'</div>'
+}
+function localOutcomeLabel(outcome){
+  return ({
+    'boundary-found':'SLO boundary found','plateau-found':'Throughput plateau found',
+    'lower-bound':'Capacity lower bound','best-observed':'Best observed point',
+    'no-feasible-point':'No feasible point','bounded-by-errors':'Bounded by workload errors',
+    'search-limit-reached':'Search limit reached'
+  })[outcome]||outcome||'Search in progress'
+}
+function localSearchAxisLabel(parameter,workload){
+  if(parameter==='threads')return 'YDB CLI threads';
+  if(parameter==='rate')return workload==='stock'?'Offered rate (transactions/s)':'Offered rate (requests/s)';
+  return parameter||'Search value'
+}
 function localAttemptRows(attempts,xField='attempt'){return new Map(attempts.map(item=>[String(item[xField]),item]))}
-function localChart(title,metric,xName,xValues,series){return '<section class=chart-panel data-metric="'+esc(metric)+'"><h3>'+esc(title)+'</h3>'+svgChart(metric,xName,xValues,series,chartColors)+'</section>'}
+function localChart(title,metric,xName,xValues,series){
+  return '<section class=chart-panel data-metric="'+esc(metric)+'"><h3>'+esc(title)+'</h3>'+
+    svgChart(metric,xName,xValues,series,chartColors)+'</section>'
+}
 function localBestRows(attempts,objective,xField='attempt'){
   let bestLoad=null,bestThroughput=-Infinity,currentStage=null;const rows=new Map;
   for(const item of attempts){
@@ -770,41 +1070,197 @@ function localBestRows(attempts,objective,xField='attempt'){
   return rows
 }
 function renderLocalYdbProfile(container,data){
-  if(data.state==='preparing'){container.innerHTML='<div class=notice>Preparing local YDB profile and extracting binaries…</div>';return}
-  const openCommandAttempts=new Set([...container.querySelectorAll('[data-command-attempt][open]')].map(details=>details.dataset.commandAttempt));
-  const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[],result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{},objective=loadConfig.objective?.type||'points';
-  const phaseElapsed=localElapsed(progress.phase_started_at),phaseDuration=Number(progress.phase_duration_seconds),profileElapsed=localElapsed(data.started_at,data.finished_at),remaining=Number.isFinite(phaseDuration)?Math.max(0,phaseDuration-phaseElapsed):null;
-  const phaseHelp=[progress.attempt?'attempt #'+progress.attempt:null,progress.repetition?'repetition '+progress.repetition+'/'+progress.repetitions:null,Number.isFinite(remaining)?elapsedLabel(remaining)+' remaining':null].filter(Boolean).join(' · ');
-  const phaseProgress=Number.isFinite(phaseDuration)?'<progress class=local-phase-progress max="'+phaseDuration+'" value="'+Math.min(phaseDuration,phaseElapsed)+'"></progress>':'';
-  let html=loadConfig.allow_errors?'<div class=notice>Failed workload requests are allowed for this profile and remain visible in metrics.</div>':'';html+='<div class=local-live><div><span class=muted>Current phase</span><div class=local-phase>'+esc(localPhaseLabel(progress.phase||data.state))+'</div><div class=muted>'+esc(phaseHelp||'Waiting for the next milestone')+'</div>'+phaseProgress+'</div>';
-  html+=localKpi('Profile elapsed',elapsedLabel(profileElapsed))+localKpi('Geometry',(parameters.geometry?.static_nodes??'—')+' static · '+(progress.dynamic_nodes??result?.dynamic_nodes??parameters.geometry?.dynamic_nodes??'—')+' dynamic')+localKpi('Candidate',progress.load===undefined?'—':(progress.parameter||loadConfig.parameter||'load')+' '+metricLabel(progress.load))+'</div>';
-  if(progress.current_command?.argv?.length)html+='<section class=local-current-command><span class=muted>Running command</span><pre class=local-command-code><code>'+esc(localCommandText(progress.current_command))+'</code></pre></section>';
-  if(result){const selected=result.selected_metrics||{},latencyMetric=(loadConfig.objective?.percentile||'p99')+'_ms',selectedLabel=result.selected_load===null||result.selected_load===undefined?'—':metricLabel(result.selected_load);html+='<div class=local-kpis>'+localKpi(localOutcomeLabel(result.outcome),selectedLabel,result.parameter||loadConfig.parameter,true)+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),'transactions/s')+localKpi(loadConfig.objective?.percentile||'p99',metricLabel(selected[latencyMetric]??'—'),'ms')+localKpi('Dynamic nodes',result.dynamic_nodes,result.stop_reason||'')+'</div>'}
-  else html+='<div class=local-kpis>'+localKpi('Completed attempts',attempts.length,'search stage '+(progress.search_stage||1),true)+localKpi('Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—','transactions/s')+localKpi('Latest p99',attempts.length?metricLabel(attempts.at(-1).p99_ms):'—','ms')+'</div>';
-  const currentStage=Number(progress.search_stage||0),lastStored=searches.length?Math.max(...searches.map(item=>Number(item.stage)||0)):0,xAxis=container.dataset.localYdbXAxis==='parameter'?'parameter':'attempt',searchParameter=loadConfig.parameter||result?.parameter||'load',searchAxisLabel=localSearchAxisLabel(searchParameter,parameters.workload?.type);let chartBinding=null;
-  html+='<h3>Geometry stages</h3><div class=local-stages>'+searches.map(item=>'<div class=local-stage><strong>Stage '+esc(item.stage)+' · '+esc(item.dynamic_nodes)+' dynamic</strong><div>'+esc(localOutcomeLabel(item.outcome))+'</div><div class=muted>selected '+esc(metricLabel(item.selected_load))+' · '+esc(elapsedLabel(item.duration_seconds))+'</div><div class=stage-arrow>'+esc(item.next_action==='scale-dynamic-nodes'?'Scale → '+item.next_dynamic_nodes+' dynamic nodes':item.stop_reason||'Finish')+'</div></div>').join('')+(currentStage>lastStored&&data.state==='running'?'<div class="local-stage current"><strong>Stage '+esc(currentStage)+' · '+esc(progress.dynamic_nodes??'—')+' dynamic</strong><div>In progress</div><div class=muted>'+esc(attempts.filter(item=>Number(item.search_stage)===currentStage).length)+' completed attempts</div></div>':'')+'</div>';
+  if(data.state==='preparing'){
+    container.innerHTML='<div class=notice>Preparing local YDB profile and extracting binaries…</div>';return
+  }
+  const openCommandAttempts=new Set(
+    [...container.querySelectorAll('[data-command-attempt][open]')].map(details=>details.dataset.commandAttempt)
+  );
+  const profileConfigOpen=container.querySelector('[data-local-profile-config][open]')!==null;
+  const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[];
+  const result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{};
+  const objective=loadConfig.objective?.type||'points';
+  const phaseElapsed=localElapsed(progress.phase_started_at);
+  const phaseDuration=Number(progress.phase_duration_seconds);
+  const profileElapsed=localElapsed(data.started_at,data.finished_at);
+  const remaining=Number.isFinite(phaseDuration)?Math.max(0,phaseDuration-phaseElapsed):null;
+  const phaseHelp=[
+    progress.attempt?'attempt #'+progress.attempt:null,
+    progress.repetition?'repetition '+progress.repetition+'/'+progress.repetitions:null,
+    Number.isFinite(remaining)?elapsedLabel(remaining)+' remaining':null
+  ].filter(Boolean).join(' · ');
+  const phaseProgress=Number.isFinite(phaseDuration)?
+    '<progress class=local-phase-progress max="'+phaseDuration+'" value="'+
+      Math.min(phaseDuration,phaseElapsed)+'"></progress>':'';
+  let html=loadConfig.allow_errors?
+    '<div class=notice>Failed workload requests are allowed for this profile and remain visible in metrics.</div>':'';
+  html+='<div class=local-live><div><span class=muted>Current phase</span><div class=local-phase>'+
+    esc(localPhaseLabel(progress.phase||data.state))+'</div><div class=muted>'+
+    esc(phaseHelp||'Waiting for the next milestone')+'</div>'+phaseProgress+'</div>';
+  const dynamicNodes=
+    progress.dynamic_nodes??result?.dynamic_nodes??parameters.geometry?.dynamic_nodes??'—';
+  const candidate=progress.load===undefined?
+    '—':(progress.parameter||loadConfig.parameter||'load')+' '+metricLabel(progress.load);
+  html+=localKpi('Profile elapsed',elapsedLabel(profileElapsed))+
+    localKpi('Geometry',(parameters.geometry?.static_nodes??'—')+' static · '+dynamicNodes+' dynamic')+
+    localKpi('Candidate',candidate)+'</div>';
+  html+=localProfileDetails(data,profileConfigOpen);
+  if(progress.current_command?.argv?.length){
+    html+='<section class=local-current-command><span class=muted>Running command</span>'+
+      '<pre class=local-command-code><code>'+esc(localCommandText(progress.current_command))+
+      '</code></pre></section>'
+  }
+  if(result){
+    const selected=result.selected_metrics||{};
+    const latencyMetric=(loadConfig.objective?.percentile||'p99')+'_ms';
+    const selectedLabel=result.selected_load===null||result.selected_load===undefined?
+      '—':metricLabel(result.selected_load);
+    html+='<div class=local-kpis>'+localKpi(
+      localOutcomeLabel(result.outcome),selectedLabel,result.parameter||loadConfig.parameter,true
+    )+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),'transactions/s')+
+      localKpi(
+        loadConfig.objective?.percentile||'p99',metricLabel(selected[latencyMetric]??'—'),'ms'
+      )+localKpi('Dynamic nodes',result.dynamic_nodes,result.stop_reason||'')+'</div>'
+  }else{
+    html+='<div class=local-kpis>'+localKpi(
+      'Completed attempts',attempts.length,'search stage '+(progress.search_stage||1),true
+    )+localKpi(
+      'Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—','transactions/s'
+    )+localKpi(
+      'Latest p99',attempts.length?metricLabel(attempts.at(-1).p99_ms):'—','ms'
+    )+'</div>'
+  }
+  const currentStage=Number(progress.search_stage||0);
+  const lastStored=searches.length?Math.max(...searches.map(item=>Number(item.stage)||0)):0;
+  const xAxis=container.dataset.localYdbXAxis==='parameter'?'parameter':'attempt';
+  const searchParameter=loadConfig.parameter||result?.parameter||'load';
+  const searchAxisLabel=localSearchAxisLabel(searchParameter,parameters.workload?.type);
+  let chartBinding=null;
+  const stageCards=searches.map(item=>
+    '<div class=local-stage><strong>Stage '+esc(item.stage)+' · '+esc(item.dynamic_nodes)+
+    ' dynamic</strong><div>'+esc(localOutcomeLabel(item.outcome))+'</div><div class=muted>selected '+
+    esc(metricLabel(item.selected_load))+' · '+esc(elapsedLabel(item.duration_seconds))+
+    '</div><div class=stage-arrow>'+esc(
+      item.next_action==='scale-dynamic-nodes'?
+        'Scale → '+item.next_dynamic_nodes+' dynamic nodes':item.stop_reason||'Finish'
+    )+'</div></div>'
+  ).join('');
+  const currentStageCard=currentStage>lastStored&&data.state==='running'?
+    '<div class="local-stage current"><strong>Stage '+esc(currentStage)+' · '+
+    esc(progress.dynamic_nodes??'—')+' dynamic</strong><div>In progress</div><div class=muted>'+
+    esc(attempts.filter(item=>Number(item.search_stage)===currentStage).length)+
+    ' completed attempts</div></div>':'';
+  html+='<h3>Geometry stages</h3><div class=local-stages>'+stageCards+currentStageCard+'</div>';
   if(attempts.length){
-    const xField=xAxis==='parameter'?'load':'attempt',xName=xAxis==='parameter'?searchAxisLabel:'Attempt',xValues=xAxis==='parameter'?[...new Set(attempts.map(item=>Number(item.load)))].sort((left,right)=>left-right):attempts.map(item=>item.attempt),stages=[];
-    for(const item of attempts){let stage=stages.find(value=>value.search_stage===item.search_stage);if(!stage){stage={search_stage:item.search_stage,dynamic_nodes:item.dynamic_nodes,attempts:[]};stages.push(stage)}stage.attempts.push(item)}
-    const groups=(xAxis==='parameter'?stages:[{attempts}]).map(item=>({rows:localAttemptRows(item.attempts,xField),bestRows:localBestRows(item.attempts,objective,xField),suffix:xAxis==='parameter'&&stages.length>1?' · stage '+item.search_stage+' · '+item.dynamic_nodes+' dynamic':''}));
-    const candidateSeries=groups.flatMap(group=>[{rows:group.bestRows,metric:'load',label:'Candidate'+group.suffix,colorIndex:7},{rows:group.bestRows,metric:'current_best',label:'Current best'+group.suffix,colorIndex:0},{rows:group.bestRows,metric:'passed_load',label:'Passed'+group.suffix,colorIndex:10},{rows:group.bestRows,metric:'failed_load',label:'Failed'+group.suffix,colorIndex:8}]);
-    const throughputSeries=groups.flatMap(group=>{const result=[{rows:group.rows,metric:'throughput',label:'Achieved throughput'+group.suffix,colorIndex:0}];if(loadConfig.parameter==='rate')result.push({rows:group.rows,metric:'load',label:'Offered rate'+group.suffix,colorIndex:7});return result});
-    const latencySeries=groups.flatMap(group=>['p50_ms','p95_ms','p99_ms','pmax_ms'].map((metric,index)=>({rows:group.rows,metric,label:metric.replace('_ms','')+group.suffix,colorIndex:index})));if(loadConfig.objective?.type==='latency-slo'){const sloRows=new Map(xValues.map(value=>[String(value),{slo_ms:loadConfig.objective.max_ms}]));latencySeries.push({rows:sloRows,metric:'slo_ms',label:'SLO',colorIndex:8})}
-    const cpuSeries=groups.flatMap(group=>[['static_cpu_mean','Static'],['dynamic_cpu_mean','Dynamic'],['cli_cpu_mean','YDB CLI'],['host_cpu_mean','Host']].map(([metric,label],index)=>({rows:group.rows,metric,label:label+group.suffix,colorIndex:index})));
-    const errorSeries=groups.flatMap(group=>[{rows:group.rows,metric:'errors',label:'Errors'+group.suffix,colorIndex:8},{rows:group.rows,metric:'retries',label:'Retries'+group.suffix,colorIndex:1}]);
-    chartBinding={xName,xValues,series:{load:candidateSeries,throughput:throughputSeries,latency_ms:latencySeries,cpu_percent:cpuSeries,errors:errorSeries}};
-    const axisHelp=xAxis==='parameter'?'Points are ordered by the searched parameter; geometry stages remain separate.':'Execution order shows how the controller moved through candidate values.';
-    html+='<div class=run-section-title><h3>Search process</h3><div class=actions><span class=muted>X axis</span><button type=button data-local-chart-x=attempt class="'+(xAxis==='attempt'?'primary':'')+'" aria-pressed="'+(xAxis==='attempt')+'">Attempts (search order)</button><button type=button data-local-chart-x=parameter class="'+(xAxis==='parameter'?'primary':'')+'" aria-pressed="'+(xAxis==='parameter')+'">'+esc(searchAxisLabel)+'</button></div></div><p class=muted>'+esc(axisHelp)+'</p><div class=local-charts>'+localChart('Candidate and current best','load',xName,xValues,candidateSeries)+localChart('Offered and achieved throughput','throughput',xName,xValues,throughputSeries)+localChart('Latency','latency_ms',xName,xValues,latencySeries)+localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+localChart('Errors and retries','errors',xName,xValues,errorSeries)+'</div>';
-    html+='<h3>Attempts</h3><table class=local-attempts><thead><tr><th>#</th><th>Stage</th><th>Dynamic</th><th>Candidate</th><th>Throughput</th><th>p99</th><th>Errors</th><th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Verdict</th><th>Decision</th><th>Duration</th><th>Commands</th></tr></thead><tbody>'+attempts.map(item=>'<tr><td>'+esc(item.attempt)+'</td><td>'+esc(item.search_stage)+'</td><td>'+esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td><td>'+esc(metricLabel(item.throughput))+'</td><td>'+esc(metricLabel(item.p99_ms))+' ms</td><td>'+esc(item.errors)+'</td><td>'+esc(metricLabel(item.static_cpu_mean))+'%</td><td>'+esc(metricLabel(item.dynamic_cpu_mean))+'%</td><td>'+esc(metricLabel(item.cli_cpu_mean))+'%</td><td class="'+(item.passed?'attempt-pass':'attempt-fail')+'">'+(item.passed?'PASS':'FAIL')+'</td><td>'+esc(item.decision)+'</td><td>'+esc(elapsedLabel(item.duration_seconds))+'</td><td class=local-command-cell>'+localCommandDetails(item,openCommandAttempts.has(String(item.attempt)))+'</td></tr>').join('')+'</tbody></table>';
+    const xField=xAxis==='parameter'?'load':'attempt';
+    const xName=xAxis==='parameter'?searchAxisLabel:'Attempt';
+    const xValues=xAxis==='parameter'?
+      [...new Set(attempts.map(item=>Number(item.load)))].sort((left,right)=>left-right):
+      attempts.map(item=>item.attempt);
+    const stages=[];
+    for(const item of attempts){
+      let stage=stages.find(value=>value.search_stage===item.search_stage);
+      if(!stage){
+        stage={search_stage:item.search_stage,dynamic_nodes:item.dynamic_nodes,attempts:[]};stages.push(stage)
+      }
+      stage.attempts.push(item)
+    }
+    const groups=(xAxis==='parameter'?stages:[{attempts}]).map(item=>({
+      rows:localAttemptRows(item.attempts,xField),bestRows:localBestRows(item.attempts,objective,xField),
+      suffix:xAxis==='parameter'&&stages.length>1?
+        ' · stage '+item.search_stage+' · '+item.dynamic_nodes+' dynamic':''
+    }));
+    const candidateSeries=groups.flatMap(group=>[
+      {rows:group.bestRows,metric:'load',label:'Candidate'+group.suffix,colorIndex:7},
+      {rows:group.bestRows,metric:'current_best',label:'Current best'+group.suffix,colorIndex:0},
+      {rows:group.bestRows,metric:'passed_load',label:'Passed'+group.suffix,colorIndex:10},
+      {rows:group.bestRows,metric:'failed_load',label:'Failed'+group.suffix,colorIndex:8}
+    ]);
+    const throughputSeries=groups.flatMap(group=>{
+      const values=[{
+        rows:group.rows,metric:'throughput',label:'Achieved throughput'+group.suffix,colorIndex:0
+      }];
+      if(loadConfig.parameter==='rate')values.push({
+        rows:group.rows,metric:'load',label:'Offered rate'+group.suffix,colorIndex:7
+      });
+      return values
+    });
+    const latencySeries=groups.flatMap(group=>
+      ['p50_ms','p95_ms','p99_ms','pmax_ms'].map((metric,index)=>({
+        rows:group.rows,metric,label:metric.replace('_ms','')+group.suffix,colorIndex:index
+      }))
+    );
+    if(loadConfig.objective?.type==='latency-slo'){
+      const sloRows=new Map(xValues.map(value=>[String(value),{slo_ms:loadConfig.objective.max_ms}]));
+      latencySeries.push({rows:sloRows,metric:'slo_ms',label:'SLO',colorIndex:8})
+    }
+    const cpuMetrics=[
+      ['static_cpu_mean','Static'],['dynamic_cpu_mean','Dynamic'],
+      ['cli_cpu_mean','YDB CLI'],['host_cpu_mean','Host']
+    ];
+    const cpuSeries=groups.flatMap(group=>cpuMetrics.map(([metric,label],index)=>({
+      rows:group.rows,metric,label:label+group.suffix,colorIndex:index
+    })));
+    const errorSeries=groups.flatMap(group=>[
+      {rows:group.rows,metric:'errors',label:'Errors'+group.suffix,colorIndex:8},
+      {rows:group.rows,metric:'retries',label:'Retries'+group.suffix,colorIndex:1}
+    ]);
+    chartBinding={
+      xName,xValues,
+      series:{
+        load:candidateSeries,throughput:throughputSeries,latency_ms:latencySeries,
+        cpu_percent:cpuSeries,errors:errorSeries
+      }
+    };
+    const axisHelp=xAxis==='parameter'?
+      'Points are ordered by the searched parameter; geometry stages remain separate.':
+      'Execution order shows how the controller moved through candidate values.';
+    html+='<div class=run-section-title><h3>Search process</h3><div class=actions><span class=muted>X axis</span>'+
+      '<button type=button data-local-chart-x=attempt class="'+(xAxis==='attempt'?'primary':'')+
+      '" aria-pressed="'+(xAxis==='attempt')+'">Attempts (search order)</button>'+
+      '<button type=button data-local-chart-x=parameter class="'+(xAxis==='parameter'?'primary':'')+
+      '" aria-pressed="'+(xAxis==='parameter')+'">'+esc(searchAxisLabel)+'</button></div></div>'+
+      '<p class=muted>'+esc(axisHelp)+'</p><div class=local-charts>'+
+      localChart('Candidate and current best','load',xName,xValues,candidateSeries)+
+      localChart('Offered and achieved throughput','throughput',xName,xValues,throughputSeries)+
+      localChart('Latency','latency_ms',xName,xValues,latencySeries)+
+      localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
+      localChart('Errors and retries','errors',xName,xValues,errorSeries)+'</div>';
+    html+='<h3>Attempts</h3><div class=local-attempts-scroll tabindex=0 role=region aria-label="Search attempts">'+
+      '<table class=local-attempts><thead><tr><th>#</th><th>Stage</th><th>Dynamic</th><th>Candidate</th>'+
+      '<th>Throughput</th><th>p99</th><th>Errors</th><th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th>'+
+      '<th>Verdict</th><th>Decision</th><th>Duration</th><th>Commands</th></tr></thead><tbody>'+
+      attempts.map(item=>'<tr><td>'+esc(item.attempt)+'</td><td>'+esc(item.search_stage)+'</td><td>'+
+        esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td><td>'+esc(metricLabel(item.throughput))+
+        '</td><td>'+esc(metricLabel(item.p99_ms))+' ms</td><td>'+esc(item.errors)+'</td><td>'+
+        esc(metricLabel(item.static_cpu_mean))+'%</td><td>'+esc(metricLabel(item.dynamic_cpu_mean))+
+        '%</td><td>'+esc(metricLabel(item.cli_cpu_mean))+'%</td><td class="'+
+        (item.passed?'attempt-pass':'attempt-fail')+'">'+(item.passed?'PASS':'FAIL')+'</td><td>'+esc(item.decision)+
+        '</td><td>'+esc(elapsedLabel(item.duration_seconds))+'</td><td class=local-command-cell>'+
+        localCommandDetails(item,openCommandAttempts.has(String(item.attempt)))+'</td></tr>'
+      ).join('')+'</tbody></table></div>';
   }else html+='<div class=empty>No completed search attempts yet. The timeline will appear after the first measurement.</div>';
   container.innerHTML=html;
-  for(const axisButton of container.querySelectorAll('[data-local-chart-x]'))axisButton.onclick=()=>{container.dataset.localYdbXAxis=axisButton.dataset.localChartX;renderLocalYdbProfile(container,data)};
-  if(chartBinding)bindChartTooltips(container,chartBinding.xName,chartBinding.xValues,chartBinding.series,Object.keys(chartBinding.series),chartColors,true)
+  for(const axisButton of container.querySelectorAll('[data-local-chart-x]'))axisButton.onclick=()=>{
+    container.dataset.localYdbXAxis=axisButton.dataset.localChartX;renderLocalYdbProfile(container,data)
+  };
+  if(chartBinding)bindChartTooltips(
+    container,chartBinding.xName,chartBinding.xValues,chartBinding.series,
+    Object.keys(chartBinding.series),chartColors,true
+  )
 }
 async function mountLocalYdbProfile(container,runId,profile,runState){
   let loading=false,terminal=false;
   const scheduleRunRefresh=()=>{if(['running','queued'].includes(runState)&&!refreshTimer)refreshTimer=setTimeout(()=>renderRun(runId,'local-ydb/'+profile),700)};
-  const refresh=async()=>{if(loading)return;loading=true;try{const data=await api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile));renderLocalYdbProfile(container,data);terminal=!['running','preparing'].includes(data.state);if(terminal&&refreshTimer){clearInterval(refreshTimer);refreshTimer=null}if(terminal)scheduleRunRefresh()}catch(error){container.innerHTML=displayError(error)}finally{loading=false}};
+  const refresh=async()=>{
+    if(loading)return;loading=true;
+    try{
+      const data=await api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile));
+      renderLocalYdbProfile(container,data);terminal=!['running','preparing'].includes(data.state);
+      if(terminal&&refreshTimer){clearInterval(refreshTimer);refreshTimer=null}
+      if(terminal)scheduleRunRefresh()
+    }catch(error){container.innerHTML=displayError(error)}finally{loading=false}
+  };
   await refresh();if(!terminal&&['running','queued','recovery_required'].includes(runState)&&!refreshTimer)refreshTimer=setInterval(refresh,1000)
 }
     """
@@ -858,7 +1314,11 @@ async function mountLocalYdbProfile(container,runId,profile,runState){
     "ter(step=>!['pending','running'].includes(step.state)).length,affinities=new Set(steps.map(step=>step.affinity)).size;re"
     "turn '<tr><td><a href=\"#run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a></td><td>'+done+' / '+steps.length+'</td"
     "><td>'+status(aggregateState(steps))+'</td><td>'+affinities+'</td></tr>'}).join('')+'</table></section>';\n"
-    "    if(activeProfile)content+=activeBenchmark==='local-ydb'?'<section class=card><div class=run-section-title><h2>YDB load search</h2><strong>'+esc(activeProfile)+'</strong></div><div id=local-ydb-result>Loading live search data…</div></section>':'<section class=card><div class=run-section-title><h2>Results</h2><strong>'+esc(activeProfile)+'</strong></div><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';\n"
+    "    if(activeProfile)content+=activeBenchmark==='local-ydb'?'<section class=card><div class=run-section-title><h2>YDB "
+    "load search</h2><strong>'+esc(activeProfile)+'</strong></div><div id=local-ydb-result>Loading live search data…</div>"
+    "</section>':'<section class=card><div class=run-section-title><h2>Results</h2><strong>'+esc(activeProfile)+'</strong>"
+    "</div><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for "
+    "the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';\n"
     "    if(activeProfile){const steps=groups[activeProfile],open=run.state==='running'?' open':'';content+='<section class=\""
     "card run-tree\"><details'+open+'><summary><strong>Execution details</strong> — affinity, cases and artifacts</summary><"
     "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
@@ -875,7 +1335,10 @@ async function mountLocalYdbProfile(container,runId,profile,runState){
     "    const cancel=document.querySelector('#cancel-run');\n"
     "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,acti"
     'veProfile)}catch(error){alert(error.message)}};\n'
-    "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if(benchmark==='local-ydb')await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),id,profile,run.state);else try{mountChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,singleProfile:true})}catch(error){document.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
+    "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
+    "benchmark==='local-ydb')await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),id,profile,run.state);"
+    "else try{mountChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,"
+    "singleProfile:true})}catch(error){document.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
     "  }catch(error){app.innerHTML=shell('runs',breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+di"
     'splayError(error))}\n'
     '}\n'
@@ -1889,6 +2352,7 @@ class RunService:
             "started_at",
             "finished_at",
             "parameters",
+            "timeout_seconds",
             "role_affinity",
             "progress",
             "attempts",

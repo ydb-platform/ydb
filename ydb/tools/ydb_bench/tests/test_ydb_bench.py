@@ -495,6 +495,7 @@ class YdbBenchTest(unittest.TestCase):
             )
 
         commands = manifest["attempts"][0]["commands"]
+        self.assertEqual(manifest["timeout_seconds"], configuration.timeout_seconds)
         self.assertEqual(
             [command["phase"] for command in commands],
             ["initializing-workload", "warming-up", "measuring", "cleaning-workload"],
@@ -742,6 +743,28 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(masks, ((0, 3), (1, 4), (2, 5)))
         self.assertEqual(set.intersection(*(set(mask) for mask in masks)), set())
 
+    def test_local_ydb_role_affinity_is_validated_for_largest_geometry(self):
+        geometry = {"static_nodes": 2, "max_dynamic_nodes": 4}
+        affinities = {"static_nodes": (0, 1), "dynamic_nodes": (2, 3, 4)}
+        with self.assertRaisesRegex(BenchmarkError, "3 explicitly assigned CPUs cannot host 4 nodes"):
+            local_ydb._validate_role_affinity(geometry, affinities)
+
+        local_ydb._validate_role_affinity(
+            geometry,
+            {"static_nodes": (0, 1), "dynamic_nodes": None},
+        )
+
+    def test_local_ydb_updates_affinity_for_every_process_thread(self):
+        task_directory = self.root / "proc" / "101" / "task"
+        for thread_id in (101, 102, 103):
+            (task_directory / str(thread_id)).mkdir(parents=True)
+        with mock.patch.object(local_ydb.os, "sched_setaffinity", create=True) as set_affinity:
+            local_ydb._set_process_affinity(101, (4, 6), self.root / "proc")
+        self.assertEqual(
+            {call.args for call in set_affinity.call_args_list},
+            {(101, (4, 6)), (102, (4, 6)), (103, (4, 6))},
+        )
+
     def test_local_ydb_uses_mnc_port_ranges(self):
         candidates = local_ydb._mnc_port_candidates()
         with mock.patch.object(local_ydb, "_port_available", return_value=True):
@@ -759,10 +782,19 @@ class YdbBenchTest(unittest.TestCase):
         status = """Database /Root/bench status:
   State: RUNNING
   Registered units:
-    host:1234 -
+    host:1234 - dynamic
+    host:5678 - dynamic
+  Data size hard quota: 0
 """
-        self.assertTrue(local_ydb._database_status_ready(status))
-        self.assertFalse(local_ydb._database_status_ready(status.replace("RUNNING", "PENDING_RESOURCES")))
+        self.assertEqual(local_ydb._registered_database_units(status), {"host:1234", "host:5678"})
+        self.assertTrue(local_ydb._database_status_ready(status, {"host:1234", "host:5678"}))
+        self.assertFalse(local_ydb._database_status_ready(status, {"host:1234", "host:9999"}))
+        self.assertFalse(
+            local_ydb._database_status_ready(
+                status.replace("RUNNING", "PENDING_RESOURCES"),
+                {"host:1234"},
+            )
+        )
 
     def test_local_ydb_static_nodes_use_self_management(self):
         config = local_ydb._cluster_config(
@@ -812,6 +844,82 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(config["config"]["host_configs"][0]["ssd"], ["SectorMap:map_0:64:NONE"])
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
 
+    def test_local_ydb_scaling_waits_for_every_new_registered_node(self):
+        cluster_directory = self.root / "scaling-cluster"
+        cluster_directory.mkdir()
+        cluster = local_ydb.LocalYdbCluster(
+            self.root / "ydbd",
+            self.root / "ydb",
+            self.root / "process_guard",
+            cluster_directory,
+            {
+                "static_nodes": 1,
+                "dynamic_nodes": 1,
+                "max_dynamic_nodes": 2,
+                "storage_groups": 1,
+                "disk_size_gb": 64,
+            },
+            {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+            30,
+        )
+        cluster.hostname = "benchmark-host"
+        cluster.static_nodes = [{"grpc_port": 2135}]
+        nodes = (
+            {"grpc_port": 2136, "ic_port": 19002, "mon_port": 8766},
+            {"grpc_port": 2137, "ic_port": 19003, "mon_port": 8767},
+        )
+        with mock.patch.object(cluster, "_node_ports", side_effect=nodes), mock.patch.object(
+            cluster, "_wait_for_port"
+        ) as wait_for_port, mock.patch.object(cluster, "_wait_database_ready") as wait_database, mock.patch.object(
+            cluster, "_wait_tenant_ready"
+        ), mock.patch.object(
+            local_ydb, "start_managed_process", side_effect=(mock.Mock(pid=101), mock.Mock(pid=102))
+        ):
+            cluster.add_dynamic_nodes(2)
+
+        self.assertEqual(
+            wait_for_port.call_args_list,
+            [mock.call(2136, "dynamic node 1"), mock.call(2137, "dynamic node 2")],
+        )
+        wait_database.assert_called_once_with({"benchmark-host:19002", "benchmark-host:19003"})
+
+    def test_local_ydb_tenant_readiness_checks_every_dynamic_node(self):
+        cluster_directory = self.root / "tenant-ready-cluster"
+        cluster_directory.mkdir()
+        cluster = local_ydb.LocalYdbCluster(
+            self.root / "ydbd",
+            self.root / "ydb",
+            self.root / "process_guard",
+            cluster_directory,
+            {"static_nodes": 1, "dynamic_nodes": 1, "max_dynamic_nodes": 2, "disk_size_gb": 64},
+            {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+            30,
+        )
+        cluster.hostname = "benchmark-host"
+        cluster.dynamic_nodes = [{"grpc_port": 2136}, {"grpc_port": 2137}]
+        channels = (mock.Mock(), mock.Mock())
+        responses = (mock.Mock(Status=1), mock.Mock(Status=1))
+        with mock.patch.object(
+            local_ydb.grpc, "insecure_channel", side_effect=channels
+        ) as open_channel, mock.patch.object(local_ydb.grpc_pb2_grpc, "TGRpcServerStub"), mock.patch.object(
+            cluster,
+            "_grpc_eventually",
+            side_effect=((responses[0], [{"response": "first"}]), (responses[1], [{"response": "second"}])),
+        ) as eventually:
+            cluster._wait_tenant_ready(30)
+
+        self.assertEqual(
+            open_channel.call_args_list,
+            [mock.call("benchmark-host:2136"), mock.call("benchmark-host:2137")],
+        )
+        self.assertEqual(
+            [call.args[0] for call in eventually.call_args_list],
+            ["tenant SchemeShard on dynamic node 1", "tenant SchemeShard on dynamic node 2"],
+        )
+        attempts = json.loads((cluster_directory / "tenant-ready-attempts.json").read_text(encoding="utf-8"))
+        self.assertEqual([attempt["dynamic_node"] for attempt in attempts], [1, 2])
+        self.assertTrue(all(channel.close.called for channel in channels))
+
     def test_local_ydb_init_rejects_partial_schema_after_cli_failure(self):
         cluster = local_ydb.LocalYdbCluster(
             self.root / "ydbd",
@@ -857,13 +965,25 @@ class YdbBenchTest(unittest.TestCase):
     def test_local_ydb_uses_mnc_bootstrap_and_tenant_requests(self):
         bootstrap = local_ydb._bootstrap_cluster_request()
         self.assertEqual(bootstrap.self_assembly_uuid, "multinode_cluster")
+        self.assertEqual(bootstrap.operation_params.operation_mode, local_ydb.ydb_operation_pb2.OperationParams.SYNC)
 
         request = local_ydb._create_tenant_request("/Root/bench", "ssd", 3)
-        create = request.CreateTenantRequest.Request
-        self.assertEqual(create.path, "/Root/bench")
-        self.assertEqual(len(create.resources.storage_units), 1)
-        self.assertEqual(create.resources.storage_units[0].unit_kind, "ssd")
-        self.assertEqual(create.resources.storage_units[0].count, 3)
+        self.assertEqual(request.path, "/Root/bench")
+        self.assertEqual(request.idempotency_key, "ydb-bench-local-ydb")
+        self.assertEqual(request.operation_params.operation_mode, local_ydb.ydb_operation_pb2.OperationParams.SYNC)
+        self.assertEqual(len(request.resources.storage_units), 1)
+        self.assertEqual(request.resources.storage_units[0].unit_kind, "ssd")
+        self.assertEqual(request.resources.storage_units[0].count, 3)
+
+        response = local_ydb.ydb_config_pb2.BootstrapClusterResponse()
+        response.operation.ready = True
+        response.operation.status = local_ydb.ydb_status_codes_pb2.StatusIds.SUCCESS
+        self.assertTrue(local_ydb._operation_ready(response))
+        local_ydb._require_successful_operation("bootstrap", response.operation)
+        response.operation.status = local_ydb.ydb_status_codes_pb2.StatusIds.GENERIC_ERROR
+        response.operation.issues.add(message="configuration rejected")
+        with self.assertRaisesRegex(BenchmarkError, "GENERIC_ERROR: configuration rejected"):
+            local_ydb._require_successful_operation("bootstrap", response.operation)
 
         with mock.patch.object(local_ydb.socket, "getfqdn", return_value="benchmark-host.example.net"):
             default_config = local_ydb._cluster_config(
@@ -2644,6 +2764,8 @@ class WebTest(unittest.TestCase):
                 "state": "running",
                 "started_at": "2025-01-01T00:00:00+00:00",
                 "parameters": {"load": {"parameter": "rate", "values": [10]}},
+                "timeout_seconds": 300,
+                "role_affinity": {"ydb_cli": [0, 128], "static_nodes": None, "dynamic_nodes": [1, 2]},
                 "progress": {
                     "phase": "measuring",
                     "attempt": 1,
@@ -2676,6 +2798,8 @@ class WebTest(unittest.TestCase):
             self.assertEqual(projected["progress"]["current_command"]["argv"][3], "run")
             self.assertEqual(projected["attempts"][0]["load"], 10)
             self.assertEqual(projected["attempts"][0]["commands"][0]["argv"][-1], "add-rand-order")
+            self.assertEqual(projected["timeout_seconds"], 300)
+            self.assertEqual(projected["role_affinity"]["dynamic_nodes"], [1, 2])
         finally:
             service.shutdown()
 
@@ -2913,6 +3037,11 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"function localCommandDetails", script)
                 self.assertIn(b"progress.current_command", script)
                 self.assertIn(b"<th>Commands</th>", script)
+                self.assertIn(b"class=local-attempts-scroll", script)
+                self.assertIn(b"data-local-profile-config", script)
+                self.assertIn(b"profileConfigOpen", script)
+                self.assertIn(b"role_affinity", script)
+                self.assertIn(b"Launch parameters", script)
                 self.assertIn(b"local-ydb-profile?profile=", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)
@@ -2955,6 +3084,11 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b'chart-color-', script)
                 self.assertNotIn(b'<span style="color:', script)
                 self.assertIn(b'CPUs: not recorded', script)
+            with urllib.request.urlopen(base + "/app.css") as response:
+                stylesheet = response.read()
+                self.assertIn(b".local-attempts-scroll{max-width:100%;overflow-x:auto}", stylesheet)
+                self.assertIn(b".local-attempts{width:max-content;min-width:100%}", stylesheet)
+                self.assertNotIn(b".local-attempts{display:block", stylesheet)
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")
             request = urllib.request.Request(base + "/api/import", data=self._portable_archive(), method="POST")

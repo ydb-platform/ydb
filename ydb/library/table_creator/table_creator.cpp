@@ -385,7 +385,7 @@ public:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        YDB_LOG_DEBUG("Transaction completed Doublechecking...",
+        YDB_LOG_DEBUG("Transaction completed double-checking...",
             {"logPrefix", LogPrefix},
             {"request", GetOperationType()},
             {"completedTransactionId", ev->Get()->Record.GetTxId()});

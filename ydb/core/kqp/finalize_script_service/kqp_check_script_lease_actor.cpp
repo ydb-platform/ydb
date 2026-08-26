@@ -149,7 +149,7 @@ private:
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 
         if (!HasNodesInfo) {
-            YDB_LOG_DEBUG("Skip ScheduleRefreshScriptExecutions, nodes info is not arrived",
+            YDB_LOG_DEBUG("Skip ScheduleRefreshScriptExecutions, nodes info hasn't arrived yet",
                 {"logPrefix", LogPrefix()});
             return;
         }

@@ -1,6 +1,6 @@
 # Dynamic Cluster Configuration
 
-Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/common_scheme_ydb#nodes) by configuring them centrally without manually distributing files across the nodes. {{ ydb-short-name }} acts as a configuration management system, providing tools for reliable storage, versioning, and delivery of configurations, as well as a [DSL (Domain Specific Language)](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md) for overriding parts of the configuration for specific groups of nodes. The configuration is a YAML document and is an extended version of the static configuration:
+Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/common_scheme_ydb#nodes) by configuring them centrally without manually distributing files across the nodes. {{ ydb-short-name }} acts as a configuration management system, providing tools for reliable storage, versioning, and delivery of configurations, as well as a [DSL (Domain Specific Language)](./dynamic-config-selectors.md) for overriding parts of the configuration for specific groups of nodes. The configuration is a YAML document and is an extended version of the static configuration:
 
 * The configuration description is moved to the `config` field
 * The `metadata` field is added for validation and versioning
@@ -16,9 +16,9 @@ This configuration is uploaded to the cluster, where it is reliably stored and d
 
 The following tasks should be performed before using the dynamic configuration in the cluster:
 
-1. Enable [database node authentication and authorization](../../devops/deployment-options/manual/node-authorization.md).
+1. Enable [database node authentication and authorization](../../devops/concepts/node-authorization.md).
 
-2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](../../devops/configuration-management/configuration-v1/cms.md) has been used in the cluster:
+2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
 
     ```bash
     ./ydbd -s grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file ydbd-token \
@@ -163,7 +163,7 @@ vim dynconfig.yaml
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
 ```
 
-Additional configuration options are described on the [selectors](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md) and [temporary configuration](./dynamic-config-volatile-config.md) pages.
+Additional configuration options are described on the [selectors](./dynamic-config-selectors.md) and [temporary configuration](./dynamic-config-volatile-config.md) pages.
 All commands for working with configuration are described in the [{#T}](../../reference/ydb-cli/configs.md) section.
 
 ## Operation Mechanism
@@ -179,7 +179,7 @@ All commands for working with configuration are described in the [{#T}](../../re
 ### Configuration Update from the Cluster Node's perspective
 
 1. Each node requests the entire configuration at startup.
-2. Upon receiving the configuration, the node [generates the final configuration](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md#selectors-resolve) for its set of [labels](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md#selectors-intro).
+2. Upon receiving the configuration, the node [generates the final configuration](./dynamic-config-selectors.md#selectors-resolve) for its set of [labels](./dynamic-config-selectors.md#selectors-intro).
 3. The node subscribes to configuration updates by registering with the Console tablet.
 4. In case of configuration updates, the local service receives it and transforms it for the node's labels.
 5. All local services subscribed to updates receive the updated configuration.
@@ -208,5 +208,5 @@ The list may be expanded in the future.
 
 ## Limitations
 
-* Using more than 30 different [labels](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md) in [selectors](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md) can lead to validation delays of several seconds, as {{ ydb-short-name }} needs to check the validity of each possible final configuration. The number of values for a single label has much less impact.
+* Using more than 30 different [labels](./dynamic-config-selectors.md) in [selectors](./dynamic-config-selectors.md) can lead to validation delays of several seconds, as {{ ydb-short-name }} needs to check the validity of each possible final configuration. The number of values for a single label has much less impact.
 * Using large files (more than 500KiB for a cluster with 1000 nodes) can lead to increased network traffic in the cluster when updating the configuration. The traffic volume is directly proportional to the number of nodes and the configuration size.

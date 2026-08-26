@@ -1,16 +1,23 @@
 #include "partition_writer_cache_actor.h"
 #include "deferred_destination_upsert_actor.h"
-#include <ydb/core/persqueue/deferred_publish/constants.h>
+
+#include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <util/system/backtrace.h>
+#include <util/system/type_name.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
 
-namespace NKikimr::NGRpcProxy::V1 {
+namespace NKikimr::NPQ {
+
+using namespace NActors;
 
 TPartitionWriterCacheActor::TPartitionWriterCacheActor(const TActorId& owner,
                                                        ui32 partition,
                                                        ui64 tabletId,
-                                                       const NPQ::TPartitionWriterOpts& opts) :
+                                                       const TPartitionWriterOpts& opts) :
     Owner(owner),
     Partition(partition),
     TabletId(tabletId),
@@ -44,12 +51,12 @@ bool TPartitionWriterCacheActor::OnUnhandledException(const std::exception& exc)
 void TPartitionWriterCacheActor::RegisterPartitionWriter(
     const TString& sessionId,
     const TString& txId,
-    const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
+    const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
     const TActorContext& ctx)
 {
     std::pair<TString, TString> key(sessionId, txId);
 
-    auto writer = std::make_unique<TPartitionWriter>();
+    auto writer = std::make_unique<TCachedPartitionWriter>();
     writer->Actor = CreatePartitionWriter(sessionId, txId, deferredPublish, ctx);
     writer->LastActivity = ctx.Now();
 
@@ -64,12 +71,12 @@ void TPartitionWriterCacheActor::RegisterDefaultPartitionWriter(const TActorCont
 STFUNC(TPartitionWriterCacheActor::StateWork)
 {
     switch (ev->GetTypeRewrite()) {
-        HFunc(NPQ::TEvPartitionWriter::TEvTxWriteRequest, Handle);
-        HFunc(NPQ::TEvPartitionWriter::TEvRequestDeferredDestinationUpsert, HandleDeferredDestinationUpsertRequest);
-        HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
-        HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle);
-        HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
-        HFunc(NPQ::TEvPartitionWriter::TEvDisconnected, Handle);
+        HFunc(TEvPartitionWriter::TEvTxWriteRequest, Handle);
+        HFunc(TEvPartitionWriter::TEvRequestDeferredDestinationUpsert, HandleDeferredDestinationUpsertRequest);
+        HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+        HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
+        HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+        HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         HFunc(TEvents::TEvPoison, Handle);
     }
 }
@@ -82,12 +89,12 @@ void TPartitionWriterCacheActor::ReplyError(const TString& sessionId, const TStr
     NKikimrClient::TResponse response;
     response.MutablePartitionResponse()->SetCookie(cookie);
 
-    ctx.Send(Owner, new NPQ::TEvPartitionWriter::TEvWriteResponse(sessionId, txId,
-                                                                  code, reason,
-                                                                  std::move(response)));
+    ctx.Send(Owner, new TEvPartitionWriter::TEvWriteResponse(sessionId, txId,
+                                                             code, reason,
+                                                             std::move(response)));
 }
 
-void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx)
+void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& event = *ev->Get();
 
@@ -110,7 +117,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteReque
     }
 }
 
-void TPartitionWriterCacheActor::HandleOnBroken(NPQ::TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx)
+void TPartitionWriterCacheActor::HandleOnBroken(TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& event = *ev->Get();
 
@@ -121,7 +128,7 @@ void TPartitionWriterCacheActor::HandleOnBroken(NPQ::TEvPartitionWriter::TEvTxWr
 }
 
 void TPartitionWriterCacheActor::HandleDeferredDestinationUpsertRequest(
-    NPQ::TEvPartitionWriter::TEvRequestDeferredDestinationUpsert::TPtr& ev,
+    TEvPartitionWriter::TEvRequestDeferredDestinationUpsert::TPtr& ev,
     const TActorContext& ctx)
 {
     const auto& request = *ev->Get();
@@ -134,7 +141,7 @@ void TPartitionWriterCacheActor::HandleDeferredDestinationUpsertRequest(
     }));
 }
 
-void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx)
+void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx)
 {
     auto& result = *ev->Get();
 
@@ -146,9 +153,9 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::
         p->second->OnEvInitResult(ev);
     } else {
         auto response = result.GetError().Response;
-        ctx.Send(Owner, new NPQ::TEvPartitionWriter::TEvWriteResponse(result.SessionId, result.TxId,
-                                                                      EErrorCode::InternalError, result.GetError().Reason,
-                                                                      std::move(response)));
+        ctx.Send(Owner, new TEvPartitionWriter::TEvWriteResponse(result.SessionId, result.TxId,
+                                                                 EErrorCode::InternalError, result.GetError().Reason,
+                                                                 std::move(response)));
     }
 
     if (!result.SessionId && !result.TxId) {
@@ -179,7 +186,7 @@ void TPartitionWriterCacheActor::TryForwardToOwner(TEvent* event, TEventQueue<TE
     }
 }
 
-void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx)
+void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx)
 {
     const auto& result = *ev->Get();
 
@@ -202,7 +209,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
     }
 }
 
-void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx)
+void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx)
 {
     auto& result = *ev->Get();
 
@@ -230,7 +237,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
     }
 }
 
-void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx)
+void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx)
 {
     ctx.Send(Owner, ev->Release().Release());
 }
@@ -249,8 +256,8 @@ void TPartitionWriterCacheActor::Handle(TEvents::TEvPoisonPill::TPtr& ev, const 
 auto TPartitionWriterCacheActor::GetPartitionWriter(
     const TString& sessionId,
     const TString& txId,
-    const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
-    const TActorContext& ctx) -> TPartitionWriter*
+    const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+    const TActorContext& ctx) -> TCachedPartitionWriter*
 {
     auto key = std::make_pair(sessionId, txId);
 
@@ -307,10 +314,10 @@ bool TPartitionWriterCacheActor::TryDeleteOldestWriter(const TActorContext& ctx)
 TActorId TPartitionWriterCacheActor::CreatePartitionWriter(
     const TString& sessionId,
     const TString& txId,
-    const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
+    const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
     const TActorContext& ctx)
 {
-    NPQ::TPartitionWriterOpts opts = Opts;
+    TPartitionWriterOpts opts = Opts;
     if (deferredPublish) {
         opts.WithDeferredPublish(deferredPublish->IntPublicationId, deferredPublish->ExtPublicationId);
         opts.WithTxId(txId);
@@ -319,7 +326,7 @@ TActorId TPartitionWriterCacheActor::CreatePartitionWriter(
         opts.WithTxId(txId);
     }
 
-    return ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(
+    return ctx.RegisterWithSameMailbox(::NKikimr::NPQ::CreatePartitionWriter(
         ctx.SelfID, TabletId, Partition, opts
     ));
 }
@@ -327,13 +334,22 @@ TActorId TPartitionWriterCacheActor::CreatePartitionWriter(
 STFUNC(TPartitionWriterCacheActor::StateBroken)
 {
     switch (ev->GetTypeRewrite()) {
-        HFunc(NPQ::TEvPartitionWriter::TEvTxWriteRequest, HandleOnBroken);
-        HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
-        HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle);
-        HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
-        HFunc(NPQ::TEvPartitionWriter::TEvDisconnected, Handle);
+        HFunc(TEvPartitionWriter::TEvTxWriteRequest, HandleOnBroken);
+        HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+        HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
+        HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+        HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         HFunc(TEvents::TEvPoison, Handle);
     }
 }
 
+NActors::IActor* CreatePartitionWriterCacheActor(
+    const NActors::TActorId& owner,
+    ui32 partition,
+    ui64 tabletId,
+    const TPartitionWriterOpts& opts)
+{
+    return new TPartitionWriterCacheActor(owner, partition, tabletId, opts);
 }
+
+} // namespace NKikimr::NPQ

@@ -1,11 +1,10 @@
 #pragma once
 
-#include "events.h"
 #include "partition_writer.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-namespace NKikimr::NGRpcProxy::V1 {
+namespace NKikimr::NPQ {
 
 class TPartitionWriterCacheActor : public NActors::TActorBootstrapped<TPartitionWriterCacheActor>
                                  , public NActors::IActorExceptionHandler {
@@ -13,14 +12,14 @@ public:
     TPartitionWriterCacheActor(const TActorId& owner,
                                ui32 partition,
                                ui64 tabletId,
-                               const NPQ::TPartitionWriterOpts& opts);
+                               const TPartitionWriterOpts& opts);
 
     void Bootstrap(const TActorContext& ctx);
     bool OnUnhandledException(const std::exception& exc) override;
 
 private:
-    using TPartitionWriterPtr = std::unique_ptr<TPartitionWriter>;
-    using EErrorCode = NPQ::TEvPartitionWriter::TEvWriteResponse::EErrorCode;
+    using TPartitionWriterPtr = std::unique_ptr<TCachedPartitionWriter>;
+    using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     template <class TEvent>
     struct TEventQueue {
@@ -38,13 +37,13 @@ private:
     STFUNC(StateWork);
     STFUNC(StateBroken);
 
-    void Handle(NPQ::TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleDeferredDestinationUpsertRequest(NPQ::TEvPartitionWriter::TEvRequestDeferredDestinationUpsert::TPtr& ev, const TActorContext& ctx);
-    void HandleOnBroken(NPQ::TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleDeferredDestinationUpsertRequest(TEvPartitionWriter::TEvRequestDeferredDestinationUpsert::TPtr& ev, const TActorContext& ctx);
+    void HandleOnBroken(TEvPartitionWriter::TEvTxWriteRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
 
     void ReplyError(const TString& sessionId, const TString& txId,
@@ -52,16 +51,16 @@ private:
                     ui64 cookie,
                     const TActorContext& ctx);
 
-    TPartitionWriter* GetPartitionWriter(const TString& sessionId, const TString& txId,
-                                         const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
-                                         const TActorContext& ctx);
+    TCachedPartitionWriter* GetPartitionWriter(const TString& sessionId, const TString& txId,
+                                               const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+                                               const TActorContext& ctx);
     bool TryDeleteOldestWriter(const TActorContext& ctx);
     void RegisterPartitionWriter(const TString& sessionId, const TString& txId,
-                                 const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
+                                 const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
                                  const TActorContext& ctx);
     void RegisterDefaultPartitionWriter(const TActorContext& ctx);
     TActorId CreatePartitionWriter(const TString& sessionId, const TString& txId,
-                                   const TMaybe<NPQ::TDeferredPublishWriterOpts>& deferredPublish,
+                                   const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
                                    const TActorContext& ctx);
 
     template <class TEvent>
@@ -69,15 +68,15 @@ private:
                            ui64 cookie,
                            const TActorContext& ctx);
 
-    TActorId Owner; // WriteSessionActor
+    TActorId Owner;
     ui32 Partition;
     ui64 TabletId;
-    NPQ::TPartitionWriterOpts Opts;
+    TPartitionWriterOpts Opts;
 
     THashMap<std::pair<TString, TString>, TPartitionWriterPtr> Writers;
 
-    TEventQueue<NPQ::TEvPartitionWriter::TEvWriteAccepted> PendingWriteAccepted;
-    TEventQueue<NPQ::TEvPartitionWriter::TEvWriteResponse> PendingWriteResponse;
+    TEventQueue<TEvPartitionWriter::TEvWriteAccepted> PendingWriteAccepted;
+    TEventQueue<TEvPartitionWriter::TEvWriteResponse> PendingWriteResponse;
 };
 
-}
+} // namespace NKikimr::NPQ

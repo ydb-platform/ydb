@@ -1,10 +1,10 @@
 #include "partition_writer.h"
 
-namespace NKikimr::NGRpcProxy::V1 {
+namespace NKikimr::NPQ {
 
 const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
-void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev)
+void TCachedPartitionWriter::OnEvInitResult(const TEvPartitionWriter::TEvInitResult::TPtr& ev)
 {
     const auto& result = *ev->Get();
     AFL_ENSURE(result.IsSuccess());
@@ -13,8 +13,8 @@ void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResu
     MaxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
 }
 
-void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
-                                      const TActorContext& ctx)
+void TCachedPartitionWriter::OnWriteRequest(THolder<TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
+                                            const TActorContext& ctx)
 {
     AFL_ENSURE(ev->Record.HasPartitionRequest());
 
@@ -27,7 +27,7 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
     }
 }
 
-void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
+void TCachedPartitionWriter::OnWriteAccepted(const TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
     AFL_ENSURE(!SentRequests.empty());
     AFL_ENSURE(ev.Cookie == SentRequests.front().Cookie);
@@ -51,7 +51,7 @@ void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAc
     }
 }
 
-void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev)
+void TCachedPartitionWriter::OnWriteResponse(const TEvPartitionWriter::TEvWriteResponse& ev)
 {
     AFL_ENSURE(ev.IsSuccess());
 
@@ -61,9 +61,9 @@ void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteRe
     AcceptedRequests.pop_front();
 }
 
-bool TPartitionWriter::HasPendingRequests() const
+bool TCachedPartitionWriter::HasPendingRequests() const
 {
     return !QuotedRequests.empty() || !SentRequests.empty() || !AcceptedRequests.empty();
 }
 
-}
+} // namespace NKikimr::NPQ

@@ -2,7 +2,7 @@
 #include "kqp_mock.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/services/persqueue_v1/actors/partition_writer_cache_actor.h>
+#include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/public/write_id.h>
 
 namespace NKikimr::NPersQueueTests {
@@ -62,19 +62,17 @@ void TPartitionWriterCacheActorFixture::CleanupContext()
 
 TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(const TCreatePartitionWriterCacheActorParams& params)
 {
-    using TPartitionWriterCacheActor = NKikimr::NGRpcProxy::V1::TPartitionWriterCacheActor;
-
     NPQ::TPartitionWriterOpts options;
     options.WithDeduplication(params.WithDeduplication);
     options.WithDatabase(params.Database);
     options.WithExpectedGeneration(params.Generation);
     options.WithSourceId(params.SourceId);
 
-    auto actor = std::make_unique<TPartitionWriterCacheActor>(Ctx->Edge,
-                                                              params.Partition,
-                                                              PQTabletId,
-                                                              options);
-    TActorId actorId = Ctx->Runtime->Register(actor.release());
+    TActorId actorId = Ctx->Runtime->Register(NPQ::CreatePartitionWriterCacheActor(
+        Ctx->Edge,
+        params.Partition,
+        PQTabletId,
+        options));
 
     auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>();
     UNIT_ASSERT(event != nullptr);

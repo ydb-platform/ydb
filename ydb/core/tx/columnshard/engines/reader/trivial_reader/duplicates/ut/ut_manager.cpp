@@ -277,6 +277,9 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
 
     TReadDescription readDesc(0, requestSnapshot, sorting);
     readDesc.SetScanCursor(nullptr);
+    readDesc.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
+    readDesc.TableMetadataAccessor = std::make_shared<TUserTableAccessor>("test",
+        NColumnShard::TUnifiedPathId::BuildValid(TInternalPathId::FromRawValue(1), NColumnShard::TSchemeShardLocalPathId::FromRawValue(1)));
 
     auto readMetadata = std::make_shared<NTrivial::TReadMetadata>(versionedIndex, readDesc);
     readMetadata->SetPKRangesFilter(readDesc.PKRangesFilter);

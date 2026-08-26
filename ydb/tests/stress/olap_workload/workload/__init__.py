@@ -42,7 +42,9 @@ class WorkloadRunner:
             except (ydb.issues.Unavailable, ydb.issues.BadSession, ydb.issues.ConnectionError) as e:
                 if time.time() >= deadline:
                     raise
-                print(f"Cleaning up {self.tables_prefix}: transient {type(e).__name__}, retrying...")
+                # e.__class__, not type(e): importing workload.type.* binds `type` as an
+                # attribute of this package, shadowing the builtin inside __init__.py.
+                print(f"Cleaning up {self.tables_prefix}: transient {e.__class__.__name__}, retrying...")
                 time.sleep(3)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 

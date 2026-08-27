@@ -238,6 +238,22 @@ namespace NKikimr {
             }, "[ { <main>: Error: Empty index table name } { <main>: Error: Unknown data column: some } ]");
         }
 
+        Y_UNIT_TEST(BuildWithSuperLemmerReportsUnavailableInOpenSource) {
+            TPortManager pm;
+            TServerSettings serverSettings(pm.GetPort(2134));
+            serverSettings.SetDomainName("Root");
+
+            Tests::TServer::TPtr server = new TServer(serverSettings);
+            auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+            Setup(server, sender);
+
+            DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+                request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->set_use_filter_superlemmer(true);
+            }, "{ <main>: Error: Scan failed Superlemmer can't be enabled in opensource ydb build }", false,
+                NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        }
+
         Y_UNIT_TEST(Build) {
             TPortManager pm;
             TServerSettings serverSettings(pm.GetPort(2134));

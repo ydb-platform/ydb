@@ -526,12 +526,22 @@ namespace {
                 error = "cannot set use_filter_superlemmer with use_filter_ngram or use_filter_edge_ngram at the same time";
                 return false;
             }
+
+            if (!settings.has_language()) {
+                error = "language required when use_filter_superlemmer is set";
+                return false;
+            }
+
+            if (!IsSuperLemmerSupportedLanguage(settings.language())) {
+                error = "language is not supported by superlemmer";
+                return false;
+            }
         }
 
-        if (settings.has_language() && !settings.use_filter_snowball()) {
+        if (settings.has_language() && !settings.use_filter_snowball() && !settings.use_filter_superlemmer()) {
             // Currently, language is only used for stemming (use_filter_snowball).
             // In the future, it may be used for other language-sensitive operations (e.g., stopword filtering).
-            error = "language setting is only supported with use_filter_snowball at present; other uses may be supported in the future";
+            error = "language setting is only supported with use_filter_snowball or use_filter_superlemmer at present; other uses may be supported in the future";
             return false;
         }
 

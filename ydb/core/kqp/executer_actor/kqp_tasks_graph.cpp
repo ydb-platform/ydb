@@ -2149,8 +2149,9 @@ void PatchQueryPhysicalGraphForRescaling(
                 ci.InputIndex = conn.GetInputIndex();
                 connectionsToRebuild.push_back(ci);
 
-                // Cascade rescaling through Map connections (1-to-1)
-                if (conn.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap) {
+                // Cascade rescaling through 1-to-1 connections.
+                if (conn.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap ||
+                    conn.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                     if (rescaleMap.find(dstKey) == rescaleMap.end()) {
                         rescaleMap[dstKey] = rescaleMap.at(srcKey);
                         bfsQueue.push(dstKey);
@@ -2167,6 +2168,68 @@ void PatchQueryPhysicalGraphForRescaling(
         return;
     }
 
+    // Rebuild every connection incident to a rescaled stage. In particular, this
+    // includes inputs coming from branches that were not visited by the downstream
+    // BFS. Connections unrelated to rescaled stages must remain untouched.
+    connectionsToRebuild.clear();
+    seenConnections.clear();
+    const auto getFinalTaskCount = [&](const TStageKey& stageKey) -> ui32 {
+        if (const auto it = rescaleMap.find(stageKey); it != rescaleMap.end()) {
+            return it->second;
+        }
+        if (const auto it = stageToTaskIndices.find(stageKey); it != stageToTaskIndices.end()) {
+            return static_cast<ui32>(it->second.size());
+        }
+        return 0;
+    };
+    for (size_t txIdx = 0; txIdx < physQuery.TransactionsSize(); ++txIdx) {
+        const auto& tx = physQuery.GetTransactions(txIdx);
+        for (size_t dstStageIdx = 0; dstStageIdx < tx.StagesSize(); ++dstStageIdx) {
+            const auto& dstStage = tx.GetStages(dstStageIdx);
+            for (size_t inputIdx = 0; inputIdx < dstStage.InputsSize(); ++inputIdx) {
+                const auto& conn = dstStage.GetInputs(inputIdx);
+                const TStageKey srcKey{txIdx, conn.GetStageIndex()};
+                const TStageKey dstKey{txIdx, dstStageIdx};
+                if (!rescaleMap.contains(srcKey) && !rescaleMap.contains(dstKey)) {
+                    continue;
+                }
+
+                const TString ck = connKey(srcKey, dstKey, inputIdx);
+                if (!seenConnections.insert(ck).second) {
+                    continue;
+                }
+
+                const auto connType = conn.GetTypeCase();
+                YQL_ENSURE(
+                    connType == NKqpProto::TKqpPhyConnection::kUnionAll ||
+                    connType == NKqpProto::TKqpPhyConnection::kMerge ||
+                    connType == NKqpProto::TKqpPhyConnection::kMap ||
+                    connType == NKqpProto::TKqpPhyConnection::kStreamLookup ||
+                    connType == NKqpProto::TKqpPhyConnection::kHashShuffle ||
+                    connType == NKqpProto::TKqpPhyConnection::kParallelUnionAll,
+                    "Unsupported connection type while rescaling PQ source: " << static_cast<ui32>(connType));
+
+                if (connType == NKqpProto::TKqpPhyConnection::kMap ||
+                    connType == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                    const ui32 srcTaskCount = getFinalTaskCount(srcKey);
+                    const ui32 dstTaskCount = getFinalTaskCount(dstKey);
+                    YQL_ENSURE(srcTaskCount == dstTaskCount,
+                        "Task count mismatch on one-to-one connection while rescaling PQ source: "
+                        << stageKeyToStr(srcKey) << " (" << srcTaskCount << ") -> "
+                        << stageKeyToStr(dstKey) << " (" << dstTaskCount << ")");
+                }
+
+                connectionsToRebuild.push_back(TConnectionInfo{
+                    .SrcStage = srcKey,
+                    .DstStage = dstKey,
+                    .ConnType = connType,
+                    .OutputIndex = conn.GetOutputIndex(),
+                    .InputIndex = conn.GetInputIndex(),
+                });
+            }
+        }
+    }
+
     // Phase 4: Collect channel metadata (InMemory, checkpointing, watermarks) from existing connections.
     // Note: ReadRanges are no longer collected here — they are regenerated from scratch in Phase 9
     // using stagePartitionCounts, which gives the correct per-task partitioning parameters.
@@ -2175,23 +2238,27 @@ void PatchQueryPhysicalGraphForRescaling(
         NYql::NDqProto::ECheckpointingMode CheckpointingMode = NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
         NYql::NDqProto::EWatermarksMode WatermarksMode = NYql::NDqProto::WATERMARKS_MODE_DISABLED;
     };
-    THashMap<TString, TChannelMeta> connMeta; // key: "src->dst"
+    THashMap<TString, TChannelMeta> connMeta; // key: "src->dst:inputIdx"
 
     for (const auto& ci : connectionsToRebuild) {
-        TString mk = stageKeyToStr(ci.SrcStage) + "->" + stageKeyToStr(ci.DstStage);
+        const TString mk = connKey(ci.SrcStage, ci.DstStage, ci.InputIndex);
         if (connMeta.count(mk)) continue;
         auto srcIt = stageToTaskIndices.find(ci.SrcStage);
         if (srcIt == stageToTaskIndices.end() || srcIt->second.empty()) continue;
         const auto& dqTask = graph.GetTasks(srcIt->second[0]).GetDqTask();
         if (ci.OutputIndex < (ui32)dqTask.OutputsSize()) {
             const auto& output = dqTask.GetOutputs(ci.OutputIndex);
-            if (!output.GetChannels().empty()) {
-                const auto& ch = output.GetChannels(0);
-                TChannelMeta meta;
-                meta.InMemory = ch.GetInMemory();
-                meta.CheckpointingMode = ch.GetCheckpointingMode();
-                meta.WatermarksMode = ch.GetWatermarksMode();
-                connMeta[mk] = meta;
+            for (const auto& ch : output.GetChannels()) {
+                if (ch.GetSrcStageId() != ci.SrcStage.StageId ||
+                    ch.GetDstStageId() != ci.DstStage.StageId) {
+                    continue;
+                }
+                connMeta[mk] = TChannelMeta{
+                    .InMemory = ch.GetInMemory(),
+                    .CheckpointingMode = ch.GetCheckpointingMode(),
+                    .WatermarksMode = ch.GetWatermarksMode(),
+                };
+                break;
             }
         }
     }
@@ -2234,15 +2301,18 @@ void PatchQueryPhysicalGraphForRescaling(
     Cerr << "[Rescaling] Phase 5: taskIndicesToRemove.size=" << taskIndicesToRemove.size()
          << ", newTasks.size=" << newTasks.size() << Endl;
 
-    // Stages whose channel links need rebuilding
-    THashSet<TStageKey> affectedStages;
-    for (const auto& ci : connectionsToRebuild) {
-        affectedStages.insert(ci.SrcStage);
-        affectedStages.insert(ci.DstStage);
-    }
+    auto removeConnectionChannels = [](auto* channels, const TConnectionInfo& ci) {
+        for (int i = channels->size() - 1; i >= 0; --i) {
+            const auto& channel = channels->Get(i);
+            if (channel.GetSrcStageId() == ci.SrcStage.StageId &&
+                channel.GetDstStageId() == ci.DstStage.StageId) {
+                channels->DeleteSubrange(i, 1);
+            }
+        }
+    };
 
-    // Phase 6: Rebuild task list (keep non-removed tasks, clear channels for affected stages,
-    // then append newly cloned tasks)
+    // Phase 6: Rebuild task list. Remove only channels belonging to connections
+    // incident to rescaled stages; preserve every unrelated input and output.
     TVector<NKikimrKqp::TQueryPhysicalGraph::TTask> finalTasks;
     finalTasks.reserve(graph.TasksSize() - (int)taskIndicesToRemove.size() + (int)newTasks.size());
 
@@ -2250,12 +2320,14 @@ void PatchQueryPhysicalGraphForRescaling(
         if (taskIndicesToRemove.count(i)) continue;
         auto taskCopy = graph.GetTasks(i);
         TStageKey sk{taskCopy.GetTxId(), taskCopy.GetDqTask().GetStageId()};
-        if (affectedStages.count(sk)) {
-            for (auto& input : *taskCopy.MutableDqTask()->MutableInputs()) {
-                input.ClearChannels();
+        for (const auto& ci : connectionsToRebuild) {
+            if (sk == ci.SrcStage && ci.OutputIndex < (ui32)taskCopy.GetDqTask().OutputsSize()) {
+                removeConnectionChannels(
+                    taskCopy.MutableDqTask()->MutableOutputs(ci.OutputIndex)->MutableChannels(), ci);
             }
-            for (auto& output : *taskCopy.MutableDqTask()->MutableOutputs()) {
-                output.ClearChannels();
+            if (sk == ci.DstStage && ci.InputIndex < (ui32)taskCopy.GetDqTask().InputsSize()) {
+                removeConnectionChannels(
+                    taskCopy.MutableDqTask()->MutableInputs(ci.InputIndex)->MutableChannels(), ci);
             }
         }
         finalTasks.push_back(std::move(taskCopy));
@@ -2304,7 +2376,7 @@ void PatchQueryPhysicalGraphForRescaling(
         const auto& srcTaskIndices = newStageToTaskIndices[ci.SrcStage];
         const auto& dstTaskIndices = newStageToTaskIndices[ci.DstStage];
 
-        TString mk = stageKeyToStr(ci.SrcStage) + "->" + stageKeyToStr(ci.DstStage);
+        const TString mk = connKey(ci.SrcStage, ci.DstStage, ci.InputIndex);
         TChannelMeta meta;
         auto metaIt = connMeta.find(mk);
         if (metaIt != connMeta.end()) meta = metaIt->second;
@@ -2330,7 +2402,8 @@ void PatchQueryPhysicalGraphForRescaling(
                 }
                 break;
             }
-            case NKqpProto::TKqpPhyConnection::kMap: {
+            case NKqpProto::TKqpPhyConnection::kMap:
+            case NKqpProto::TKqpPhyConnection::kStreamLookup: {
                 // 1-to-1: equal counts guaranteed by BFS cascade
                 for (size_t i = 0; i < srcTaskIndices.size() && i < dstTaskIndices.size(); ++i) {
                     auto* srcDqTask = graph.MutableTasks(srcTaskIndices[i])->MutableDqTask();
@@ -2389,7 +2462,8 @@ void PatchQueryPhysicalGraphForRescaling(
                 break;
             }
             default:
-                break;
+                YQL_ENSURE(false,
+                    "Unsupported connection type while rescaling PQ source: " << static_cast<ui32>(ci.ConnType));
         }
     }
 

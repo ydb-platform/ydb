@@ -28,7 +28,7 @@ namespace NKikimr {
         }
 
         void TLtcHisto::Collect(TDuration d, ui64 size) {
-            const ui64 durationMs = d.MilliSeconds();
+            const auto durationMs = d.MillisecondsFloat();
             if (Histo) {
                 Histo->Collect(d.MillisecondsFloat());
             }

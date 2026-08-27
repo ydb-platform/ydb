@@ -3187,4 +3187,53 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "every acked row through order 7 must eventually be deleted; "
             << after.size() << " still present");
     }
+
+    Y_UNIT_TEST(OutboxCountersAreExported) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.EnableSchemeChangeRecords(true);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribers"), 0u,
+            "no subscriber registered yet");
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "w3:sub", regHandle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribers"), 1u,
+            "the registered subscriber must be visible to monitoring");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeOutboxDepth"), 0u,
+            "nothing emitted yet, so the backlog must read zero");
+
+        for (int i = 0; i < 3; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "t%d"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeOutboxDepth"), 3u,
+            "three unacked records must show as a backlog of three");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribersLost"), 0u,
+            "nobody has lost anything");
+        UNIT_ASSERT_C(
+            GetCumulativeCounter(runtime, "SchemeShard/SchemeChangeDescriptionBytes") > 0,
+            "the redo cost of captured descriptions must be attributed somewhere");
+
+        // Draining the backlog must bring the gauge back down.
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "w3:sub", 3, ackHandle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeOutboxDepth"), 0u,
+            "after acking everything the backlog must return to zero");
+    }
 }

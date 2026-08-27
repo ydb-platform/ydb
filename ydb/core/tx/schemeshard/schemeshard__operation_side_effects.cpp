@@ -1028,6 +1028,8 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep, aborted);
             ss->PersistRemoveSchemeChangePendingOrder(db, txId, slot.RequestIdx);
 
+            ss->UpdateSchemeChangeGauges();
+
 
             TVector<TString> targetPaths;
             for (const auto& t : slot.Targets) {

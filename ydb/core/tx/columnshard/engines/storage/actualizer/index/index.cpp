@@ -85,10 +85,6 @@ std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataReque
         auto requests = TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
         result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
     }
-    if (MoveDataActualizer) {
-        auto requests = MoveDataActualizer->BuildMoveDataMetadataRequests(portions, MoveDataActualizer);
-        result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
-    }
     return result;
 }
 

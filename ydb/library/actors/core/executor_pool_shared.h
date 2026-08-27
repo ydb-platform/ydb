@@ -80,15 +80,15 @@ namespace NActors {
         const ui64 DefaultSpinThresholdCycles;
         const TString PoolName;
         const ui64 SoftProcessingDurationTs;
-        const bool United = false;
+        const bool United;
 
         char Barrier[64];
 
         TArrayHolder<NThreading::TPadded<TSharedExecutorThreadCtx>> Threads;
         static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == PLATFORM_CACHE_LINE);
 
-        alignas(64) TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> ForeignThreadsAllowedByPool;
-        TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> ForeignThreadSlots;
+        alignas(64) TArrayHolder<NThreading::TPadded<std::atomic<i64>>> ForeignThreadsAllowedByPool;
+        TArrayHolder<NThreading::TPadded<std::atomic<i64>>> ForeignThreadSlots;
         TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> LocalThreads;
         TArrayHolder<NThreading::TPadded<std::atomic<ui64>>> LocalNotifications;
         alignas(64) std::atomic<ui64> SpinThresholdCycles;

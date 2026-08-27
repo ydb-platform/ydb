@@ -220,6 +220,34 @@ void TieBasicPoolsAndSharedPool(const std::vector<std::unique_ptr<TBasicExecutor
 
 Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
+    Y_UNIT_TEST(UnitedConfigurationAndForcedSlots) {
+        TSharedExecutorPool sharedPool(TSharedExecutorPoolConfig{
+            .United = true,
+        }, std::vector<TPoolShortInfo>{
+            TPoolShortInfo{
+                .PoolId = 0,
+                .SharedThreadCount = 2,
+                .ForeignSlots = 2,
+                .InPriorityOrder = true,
+                .ForcedForeignSlots = true,
+            }
+        });
+
+        UNIT_ASSERT(sharedPool.IsUnited());
+        UNIT_ASSERT_VALUES_EQUAL(sharedPool.GetSharedThreadCount(), 2);
+
+        std::vector<i16> ownedThreads;
+        sharedPool.FillOwnedThreads(ownedThreads);
+        UNIT_ASSERT_VALUES_EQUAL(ownedThreads.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ownedThreads[0], 2);
+
+        sharedPool.SetForeignThreadSlots(0, 0);
+        std::vector<i16> foreignThreadsAllowed;
+        sharedPool.FillForeignThreadsAllowed(foreignThreadsAllowed);
+        UNIT_ASSERT_VALUES_EQUAL(foreignThreadsAllowed.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(foreignThreadsAllowed[0], 2);
+    }
+
     Y_UNIT_TEST(ReceiveActivationForEachRevolvingCounter) {
         std::unique_ptr<IExecutorPool> pool = std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
             .Threads = 1
@@ -538,7 +566,103 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[1], 0), mailboxes[3]);
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), mailboxes[2]);
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), mailboxes[2]);
-        // worker 0 can't take task from pool 4, because it has only 1 foreign slot and it already acquired by worker 1
+        // worker 0 can't take a task from pool 3 because its only foreign slot is held by worker 1
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), mailboxes[4]);
+    }
+
+    Y_UNIT_TEST(ReducingForeignSlotsBelowActiveLeasesDoesNotWrap) {
+        std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
+            .Threads = 5,
+            .United = true,
+        }, std::vector<TPoolShortInfo>{
+            TPoolShortInfo{
+                .PoolId = 0,
+                .SharedThreadCount = 1,
+                .InPriorityOrder = true,
+                .PoolName = "WorkerPool0",
+            },
+            TPoolShortInfo{
+                .PoolId = 1,
+                .SharedThreadCount = 1,
+                .InPriorityOrder = true,
+                .PoolName = "WorkerPool1",
+            },
+            TPoolShortInfo{
+                .PoolId = 2,
+                .SharedThreadCount = 1,
+                .InPriorityOrder = true,
+                .PoolName = "WorkerPool2",
+            },
+            TPoolShortInfo{
+                .PoolId = 3,
+                .SharedThreadCount = 1,
+                .ForeignSlots = 2,
+                .InPriorityOrder = true,
+                .PoolName = "TargetPool",
+            },
+            TPoolShortInfo{
+                .PoolId = 4,
+                .SharedThreadCount = 1,
+                .ForeignSlots = 1,
+                .InPriorityOrder = true,
+                .PoolName = "FallbackPool",
+            },
+        });
+
+        std::vector<std::unique_ptr<TBasicExecutorPool>> pools;
+        for (ui32 i = 0; i < 5; ++i) {
+            pools.push_back(std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
+                .PoolId = i,
+                .PoolName = "Pool" + ToString(i),
+                .Threads = 1,
+                .HasSharedThread = true,
+            }, nullptr));
+        }
+
+        TieBasicPoolsAndSharedPool(pools, sharedPool.get());
+        PreparePools(pools);
+        PreparePool(sharedPool.get());
+
+        std::vector<IExecutorPool*> poolsForEmulator;
+        for (const auto& pool : pools) {
+            poolsForEmulator.push_back(pool.get());
+        }
+        TThreadEmulator emulator(poolsForEmulator, sharedPool.get());
+
+        std::vector<TWorkerIdentity> workers {
+            {sharedPool.get(), 0},
+            {sharedPool.get(), 1},
+            {sharedPool.get(), 2},
+            {sharedPool.get(), 3},
+            {sharedPool.get(), 4},
+        };
+
+        TMailbox* targetMailbox = pools[3]->GetMailboxTable()->Allocate();
+        TMailbox* fallbackMailbox = pools[4]->GetMailboxTable()->Allocate();
+        for (ui64 counter = 0; counter < 3; ++counter) {
+            emulator.ScheduleActivation(workers[3], pools[3].get(), targetMailbox, counter);
+        }
+        emulator.ScheduleActivation(workers[4], pools[4].get(), fallbackMailbox, 0);
+
+        UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), targetMailbox);
+        UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[1], 0), targetMailbox);
+
+        sharedPool->SetForeignThreadSlots(3, 1);
+
+        UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[2], 0), fallbackMailbox);
+
+        {
+            TThreadContextGuard guard(emulator.GetContext(workers[0]));
+            sharedPool->SwitchToPool(0, 0);
+        }
+        UNIT_ASSERT_EQUAL(
+            emulator.GetReadyActivation(workers[0], 0, TOverriddenThreadContext{.IsNeededToWaitNextActivation = false}),
+            nullptr);
+
+        {
+            TThreadContextGuard guard(emulator.GetContext(workers[1]));
+            sharedPool->SwitchToPool(1, 0);
+        }
+        UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), targetMailbox);
     }
 }

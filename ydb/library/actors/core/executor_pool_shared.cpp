@@ -102,9 +102,10 @@ namespace NActors {
         , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , PoolName("Shared")
         , SoftProcessingDurationTs(cfg.SoftProcessingDurationTs)
+        , United(cfg.United)
         , Threads(new NThreading::TPadded<TSharedExecutorThreadCtx>[PoolThreads])
-        , ForeignThreadsAllowedByPool(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
-        , ForeignThreadSlots(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
+        , ForeignThreadsAllowedByPool(new NThreading::TPadded<std::atomic<i64>>[poolInfos.size()])
+        , ForeignThreadSlots(new NThreading::TPadded<std::atomic<i64>>[poolInfos.size()])
         , LocalThreads(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
         , LocalNotifications(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
         , SpinThresholdCycles(DefaultSpinThresholdCycles)
@@ -123,8 +124,9 @@ namespace NActors {
         }
         for (ui64 i = 0; i < PoolManager.PoolInfos.size(); ++i) {
             auto &poolInfo = PoolManager.PoolInfos[i];
-            ForeignThreadsAllowedByPool[i].store(poolInfo.ForeignSlots, std::memory_order_release);
-            ForeignThreadSlots[i].store(poolInfo.ForeignSlots, std::memory_order_release);
+            const i16 foreignSlots = Max<i16>(0, poolInfo.ForeignSlots);
+            ForeignThreadsAllowedByPool[i].store(foreignSlots, std::memory_order_release);
+            ForeignThreadSlots[i].store(foreignSlots, std::memory_order_release);
             LocalThreads[i].store(poolInfo.SharedThreadCount, std::memory_order_release);
             LocalNotifications[i].store(0, std::memory_order_release);
         }
@@ -158,7 +160,7 @@ namespace NActors {
                 adj = true;
             }
 
-            if (ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire) == 0 && !adj) {
+            if (ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire) <= 0 && !adj) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "don't have leases; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
@@ -172,7 +174,7 @@ namespace NActors {
                 return i;
             }
 
-            ui64 slots = ForeignThreadSlots[i].load(std::memory_order_acquire);
+            i64 slots = ForeignThreadSlots[i].load(std::memory_order_acquire);
 
             while (true) {
                 if (slots <= 0) {
@@ -192,7 +194,7 @@ namespace NActors {
         TWorkerId workerId = TlsThreadContext->WorkerId();
         TlsThreadContext->ExecutionStats->UpdateThreadTime();
         if (Threads[workerId].CurrentPoolId != poolId && !CheckPoolAdjacency(PoolManager, Threads[workerId].OwnerPoolId, Threads[workerId].CurrentPoolId)) {
-            ui64 slots = ForeignThreadSlots[Threads[workerId].CurrentPoolId].fetch_add(1, std::memory_order_acq_rel);
+            i64 slots = ForeignThreadSlots[Threads[workerId].CurrentPoolId].fetch_add(1, std::memory_order_acq_rel);
             EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Lease, "return lease; ownerPoolId == ", Threads[workerId].OwnerPoolId, " currentPoolId == ", Threads[workerId].CurrentPoolId, " poolId = ", poolId, " slots == ", slots, " -> ", slots + 1);
         }
         Threads[workerId].CurrentPoolId = poolId;
@@ -496,11 +498,18 @@ namespace NActors {
     }
 
     bool TSharedExecutorPool::WakeUpGlobalThreads(i16 ownerPoolId) {
-        if (ForeignThreadsAllowedByPool[ownerPoolId].load(std::memory_order_acquire) == 0) {
-            return false;
+        const bool canUseForeignThreads =
+            ForeignThreadsAllowedByPool[ownerPoolId].load(std::memory_order_acquire) > 0 &&
+            ForeignThreadSlots[ownerPoolId].load(std::memory_order_acquire) > 0;
+        bool hasAdjacentThreads = false;
+        for (i16 poolId : PoolManager.PriorityOrder) {
+            const auto& range = PoolManager.PoolThreadRanges[poolId];
+            if (poolId != ownerPoolId && range.Begin != range.End && CheckPoolAdjacency(PoolManager, poolId, ownerPoolId)) {
+                hasAdjacentThreads = true;
+                break;
+            }
         }
-        ui64 slots = ForeignThreadSlots[ownerPoolId].load(std::memory_order_acquire);
-        if (slots <= 0) {
+        if (!canUseForeignThreads && !hasAdjacentThreads) {
             return false;
         }
 
@@ -530,13 +539,24 @@ namespace NActors {
             return false;
         }
 
-        for (i16 i = static_cast<i16>(PoolManager.PriorityOrder.size()) - 1; i >= 0; --i) {
-            i16 poolId = PoolManager.PriorityOrder[i];
-            for (i16 threadId = PoolManager.PoolThreadRanges[poolId].Begin; threadId < PoolManager.PoolThreadRanges[poolId].End; ++threadId) {
-                auto &thread = Threads[threadId];
-                if (thread.WakeUp()) {
-                    EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "wakeup from other pool; ownerPoolId == ", ownerPoolId, " poolId == ", poolId, " threadId == ", threadId);
-                    return true;
+        for (bool adjacentOnly : {true, false}) {
+            if (!adjacentOnly && !canUseForeignThreads) {
+                break;
+            }
+            for (i16 i = static_cast<i16>(PoolManager.PriorityOrder.size()) - 1; i >= 0; --i) {
+                i16 poolId = PoolManager.PriorityOrder[i];
+                if (poolId == ownerPoolId) {
+                    continue;
+                }
+                if (CheckPoolAdjacency(PoolManager, poolId, ownerPoolId) != adjacentOnly) {
+                    continue;
+                }
+                for (i16 threadId = PoolManager.PoolThreadRanges[poolId].Begin; threadId < PoolManager.PoolThreadRanges[poolId].End; ++threadId) {
+                    auto &thread = Threads[threadId];
+                    if (thread.WakeUp()) {
+                        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "wakeup from other pool; ownerPoolId == ", ownerPoolId, " poolId == ", poolId, " threadId == ", threadId);
+                        return true;
+                    }
                 }
             }
         }
@@ -547,7 +567,7 @@ namespace NActors {
     void TSharedExecutorPool::FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const {
         foreignThreadsAllowed.resize(PoolManager.PoolInfos.size());
         for (ui64 i = 0; i < foreignThreadsAllowed.size(); ++i) {
-            foreignThreadsAllowed[i] = ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire);
+            foreignThreadsAllowed[i] = static_cast<i16>(ForeignThreadsAllowedByPool[i].load(std::memory_order_acquire));
         }
     }
 
@@ -576,12 +596,15 @@ namespace NActors {
         if (auto forcedSlots = GetForcedForeignSlots(PoolManager, poolId)) {
             return;
         }
-        i16 current = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire);
+        slots = Max<i16>(0, slots);
+        i64 current = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire);
         if (current == slots) {
             return;
         }
+        // Availability is the admission gate. Update it before publishing the new
+        // limit so a concurrent decrease cannot grant leases above that limit.
+        ForeignThreadSlots[poolId].fetch_add(static_cast<i64>(slots) - current, std::memory_order_acq_rel);
         ForeignThreadsAllowedByPool[poolId].store(slots, std::memory_order_release);
-        ForeignThreadSlots[poolId].fetch_add(slots - current, std::memory_order_relaxed);
     }
 
     void TSharedExecutorPool::SetBasicPool(TBasicExecutorPool* pool) {

@@ -82,4 +82,37 @@ Y_UNIT_TEST_SUITE(CpuCountTest) {
         pool.SetFullThreadCount(0);
         UNIT_ASSERT_DOUBLES_EQUAL(pool.GetThreadCount(), 0.3, 1e-6);
     }
+
+    Y_UNIT_TEST(TestWithAllThreadsShared) {
+        TBasicExecutorPoolConfig config;
+        config.MinThreadCount = 1;
+        config.DefaultThreadCount = 2;
+        config.MaxThreadCount = 3;
+        config.Threads = 3;
+        config.AllThreadsAreShared = true;
+
+        TBasicExecutorPool pool(config, nullptr, nullptr);
+
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetFullThreadCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetDefaultFullThreadCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetMinFullThreadCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetMaxFullThreadCount(), 0);
+        UNIT_ASSERT_DOUBLES_EQUAL(pool.GetThreadCount(), 0, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(pool.GetDefaultThreadCount(), 2, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(pool.GetMinThreadCount(), 1, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(pool.GetMaxThreadCount(), 3, 1e-6);
+    }
+
+    Y_UNIT_TEST(TestWithAllThreadsSharedAndImplicitDefaultThreadCount) {
+        TBasicExecutorPoolConfig config;
+        config.Threads = 3;
+        config.AllThreadsAreShared = true;
+
+        TBasicExecutorPool pool(config, nullptr, nullptr);
+
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetFullThreadCount(), 0);
+        UNIT_ASSERT_DOUBLES_EQUAL(pool.GetDefaultThreadCount(), 3, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(pool.GetMinThreadCount(), 3, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(pool.GetMaxThreadCount(), 3, 1e-6);
+    }
 }

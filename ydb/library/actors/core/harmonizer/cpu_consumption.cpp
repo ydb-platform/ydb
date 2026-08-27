@@ -137,8 +137,8 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
             IsStarvedPresent = true;
         }
 
-        bool hasSharedThread = sharedInfo.OwnedThreads[poolIdx] != -1;
-        float expectedThreadCount = pool.GetFullThreadCount() + (hasSharedThread ? 1 : 0) + 0.5;
+        i16 ownedThreadCount = Max<i16>(0, sharedInfo.OwnedThreads[poolIdx]);
+        float expectedThreadCount = pool.GetFullThreadCount() + ownedThreadCount + 0.5;
         bool isMoreThanExpected = (PoolConsumption[poolIdx].NeedyWindowCpu >= expectedThreadCount) && (PoolFullThreadConsumption[poolIdx].NeedyWindowCpu >= currentFullThreadCount - 1);
         bool isMoreThanExpectedLastSecond = (PoolConsumption[poolIdx].LastSecondCpu >= expectedThreadCount) && (PoolFullThreadConsumption[poolIdx].LastSecondCpu >= currentFullThreadCount - 1);
         bool hasCurrentCpuDemand = (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount || isMoreThanExpectedLastSecond);
@@ -153,7 +153,7 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
             NeedyPools.push_back(poolIdx);
         }
 
-        bool isHoggish = !isNeedy && IsHoggish(PoolConsumption[poolIdx].Elapsed, currentFullThreadCount + hasSharedThread) && IsHoggish(PoolConsumption[poolIdx].LastSecondElapsed, currentFullThreadCount + hasSharedThread);
+        bool isHoggish = !isNeedy && IsHoggish(PoolConsumption[poolIdx].Elapsed, currentFullThreadCount + ownedThreadCount) && IsHoggish(PoolConsumption[poolIdx].LastSecondElapsed, currentFullThreadCount + ownedThreadCount);
         if (isHoggish) {
             float freeCpu = std::min(currentFullThreadCount - PoolFullThreadConsumption[poolIdx].Elapsed, currentFullThreadCount - PoolFullThreadConsumption[poolIdx].LastSecondElapsed);
             HoggishPools.push_back({poolIdx, freeCpu});

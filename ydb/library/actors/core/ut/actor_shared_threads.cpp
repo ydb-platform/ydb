@@ -13,6 +13,7 @@
 
 #include <util/generic/algorithm.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <util/system/event.h>
 #include <util/system/rwlock.h>
 #include <util/system/hp_timer.h>
 
@@ -24,6 +25,64 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
     using TActorBenchmark = ::NActors::NTests::TActorBenchmark<>;
     using TSettings = TActorBenchmark::TSettings;
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
+
+    class TSignalActor : public TActorBootstrapped<TSignalActor> {
+    public:
+        explicit TSignalActor(TManualEvent* done)
+            : Done(done)
+        {}
+
+        void Bootstrap() {
+            Done->Signal();
+            PassAway();
+        }
+
+    private:
+        TManualEvent* const Done;
+    };
+
+    class TDelayedSignalActor : public TActorBootstrapped<TDelayedSignalActor> {
+    public:
+        TDelayedSignalActor(TManualEvent* scheduled, TManualEvent* done)
+            : Scheduled(scheduled)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            Become(&TDelayedSignalActor::StateFunc);
+            Schedule(TDuration::MilliSeconds(500), new TEvents::TEvWakeup());
+            Scheduled->Signal();
+        }
+
+        STFUNC(StateFunc) {
+            Y_UNUSED(ev);
+            Done->Signal();
+            PassAway();
+        }
+
+    private:
+        TManualEvent* const Scheduled;
+        TManualEvent* const Done;
+    };
+
+    class TStartAdjacentActor : public TActorBootstrapped<TStartAdjacentActor> {
+    public:
+        TStartAdjacentActor(ui32 adjacentPoolId, TManualEvent* scheduled, TManualEvent* done)
+            : AdjacentPoolId(adjacentPoolId)
+            , Scheduled(scheduled)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            Register(new TDelayedSignalActor(Scheduled, Done), TMailboxType::HTSwap, AdjacentPoolId);
+            PassAway();
+        }
+
+    private:
+        const ui32 AdjacentPoolId;
+        TManualEvent* const Scheduled;
+        TManualEvent* const Done;
+    };
 
     class TAliveCounterDecorator : public TDecorator {
     public:
@@ -203,6 +262,62 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
 
         Cerr << "Completed " << 1e9 * elapsedTime << Endl;
         Cerr << "Elapsed " << Ts2Us(aggregated.ElapsedTicks) << "us" << Endl;
+    }
+
+    Y_UNIT_TEST(AllThreadsSharedRunWithoutLegacySharedFlag) {
+        THolder<TActorSystemSetup> setup = TActorBenchmark::GetActorSystemSetup();
+        setup->CpuManager.Shared.United = true;
+        setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
+            .PoolId = 0,
+            .PoolName = "UnitedPool",
+            .Threads = 2,
+            .SpinThreshold = 0,
+            .AllThreadsAreShared = true,
+        });
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TManualEvent done;
+        actorSystem.Register(new TSignalActor(&done), TMailboxType::HTSwap, 0);
+        bool completed = done.WaitT(TDuration::Seconds(5));
+
+        actorSystem.Stop();
+        UNIT_ASSERT_C(completed, "actor was not executed by the united pool");
+    }
+
+    Y_UNIT_TEST(AdjacentPoolWakesSleepingOwnerThreadWithoutForeignSlots) {
+        THolder<TActorSystemSetup> setup = TActorBenchmark::GetActorSystemSetup();
+        setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
+            .PoolId = 0,
+            .PoolName = "OwnerPool",
+            .Threads = 1,
+            .SpinThreshold = 0,
+            .MinThreadCount = 1,
+            .MaxThreadCount = 1,
+            .DefaultThreadCount = 1,
+            .HasSharedThread = true,
+            .AdjacentPools = {1},
+        });
+        setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
+            .PoolId = 1,
+            .PoolName = "AdjacentPool",
+            .Threads = 0,
+            .SpinThreshold = 0,
+        });
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TManualEvent scheduled;
+        TManualEvent adjacentDone;
+        actorSystem.Register(new TStartAdjacentActor(1, &scheduled, &adjacentDone), TMailboxType::HTSwap, 0);
+        bool wasScheduled = scheduled.WaitT(TDuration::Seconds(5));
+        bool adjacentCompleted = adjacentDone.WaitT(TDuration::Seconds(5));
+
+        actorSystem.Stop();
+        UNIT_ASSERT_C(wasScheduled, "delayed event was not scheduled from the adjacent pool");
+        UNIT_ASSERT_C(adjacentCompleted, "sleeping owner thread was not woken for its adjacent pool");
     }
 
     Y_UNIT_TEST(RegistrationAndPassingAwayActorsCommon) {

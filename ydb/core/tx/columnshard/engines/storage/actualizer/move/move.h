@@ -22,9 +22,12 @@ class TMoveDataActualizer: public IActualizer {
 private:
     const THashSet<ui32> TargetGroups;
     const TVersionedIndex& VersionedIndex;
-    // Snapshot of portionIds captured at Refresh(): prevents newly-written portions
-    // (which get fresh IDs) from re-entering the work queue infinitely.
+    // Portions the session owes work for. Seeded by Refresh() and extended by DoAddPortion
+    // until AdmissionDeadline: Hive rebinds our channels only after we answer, so portions
+    // created meanwhile still land in the doomed group. The deadline is what bounds it -
+    // without one a tablet under continuous write feeds itself and never converges.
     THashSet<ui64> InitialPortionIds;
+    TInstant AdmissionDeadline;
     // Portions waiting for accessor-load so we can check their DsGroup.
     THashSet<ui64> PendingPortionIds;
     // Portions confirmed to have blobs in TargetGroups; ready to be rewritten.
@@ -97,6 +100,8 @@ public:
     ui64 GetMoveDataPortionsCount() const {
         return GetMoveDataQueueSizes().GetTotal();
     }
+
+    static constexpr TDuration AdmissionWindow = TDuration::Minutes(10);
 
     void Refresh(const TAddExternalContext& externalContext);
 

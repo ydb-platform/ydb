@@ -75,6 +75,7 @@ enum ECumulativeCounters {
     COUNTER_S3_GETS_BYTES = 30 [(NKikimr.CounterOpts) = {Name: "S3/Gets/OkBytes"}];
     COUNTER_S3_GETS_SLOW_DOWN = 31 [(NKikimr.CounterOpts) = {Name: "S3/Gets/SlowDown"}];
     COUNTER_S3_GET_THROTTLE_ACTIVATIONS = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/ThrottleActivations"}];
+    COUNTER_S3_ROUTER_RETIRING_WRAPPERS_ABORTED = 33 [(NKikimr.CounterOpts) = {Name: "S3/Router/RetiringWrappersAborted"}];
 }
 
 enum EPercentileCounters {

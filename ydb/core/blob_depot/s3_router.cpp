@@ -84,6 +84,7 @@ namespace NKikimr::NBlobDepot {
         std::atomic<ui64> EndpointSwitches{0};
         std::atomic<ui64> FiveXxRefreshTriggers{0};
         std::atomic<ui64> PendingRejects{0};
+        std::atomic<ui64> RetiringWrappersAborted{0};
         std::atomic<bool> IsUsingProxy{false};
 
         TLatencyHistogram BalancerResolveLatency;
@@ -123,11 +124,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Dec() {
-            Count.fetch_sub(1, std::memory_order_relaxed);
+            Count.fetch_sub(1, std::memory_order_release);
         }
 
         i64 Get() const {
-            return Count.load(std::memory_order_relaxed);
+            return Count.load(std::memory_order_acquire);
         }
     };
 
@@ -218,9 +219,6 @@ namespace NKikimr::NBlobDepot {
 
         std::deque<TRetiringWrapper> RetiringWrappers;
 
-        static constexpr size_t MaxRetiringWrappers = 8;
-        static constexpr TDuration MinRetireGracePeriod = TDuration::Seconds(60);
-
         TActorId HttpProxyId;
         TActorId PipeId;
         bool PipeConnected = false;
@@ -254,8 +252,15 @@ namespace NKikimr::NBlobDepot {
             const ui32 hi = RefreshSecMax();
             const ui32 sec = lo == hi ? lo
                 : lo + TAppData::RandomProvider->GenRand() % (hi - lo + 1);
-            Y_UNUSED(sec);
-            return TDuration::Seconds(1);
+            return TDuration::Seconds(sec);
+        }
+
+        size_t MaxRetiringWrappers() const {
+            return Settings.GetMaxRetiringWrappers();
+        }
+
+        TDuration MinRetireGracePeriod() const {
+            return TDuration::Seconds(Settings.GetMinRetireGracePeriodSec());
         }
 
         TDuration MetricsPushInterval() const {
@@ -277,7 +282,8 @@ namespace NKikimr::NBlobDepot {
             }
 
             const i64 inFlight = InnerWrapperInFlight ? InnerWrapperInFlight->Get() : 0;
-            if (inFlight <= 0) {
+            Y_ABORT_UNLESS(inFlight >= 0);
+            if (inFlight == 0) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
             } else {
                 YDB_LOG_DEBUG("S3Router retiring inner wrapper",
@@ -298,7 +304,7 @@ namespace NKikimr::NBlobDepot {
             InnerWrapperId = {};
             InnerWrapperInFlight.Reset();
 
-            while (RetiringWrappers.size() > MaxRetiringWrappers) {
+            while (RetiringWrappers.size() > MaxRetiringWrappers()) {
                 PoisonRetiringWrapper(RetiringWrappers.front(), "too many retiring wrappers");
                 RetiringWrappers.pop_front();
             }
@@ -309,17 +315,20 @@ namespace NKikimr::NBlobDepot {
             const ui32 timeoutMs = Max(
                 config.HasRequestTimeoutMs() ? config.GetRequestTimeoutMs() : 0u,
                 config.HasHttpRequestTimeoutMs() ? config.GetHttpRequestTimeoutMs() : 0u);
-            return Max(TDuration::MilliSeconds(timeoutMs) * 2, MinRetireGracePeriod);
+            return Max(TDuration::MilliSeconds(timeoutMs) * 2, MinRetireGracePeriod());
         }
 
         void PoisonRetiringWrapper(const TRetiringWrapper& wrapper, const char *reason) {
-            if (const i64 inFlight = wrapper.InFlight->Get(); inFlight > 0) {
+            const i64 inFlight = wrapper.InFlight->Get();
+            Y_ABORT_UNLESS(inFlight >= 0);
+            if (inFlight > 0) {
                 YDB_LOG_WARN("S3Router aborting requests of retiring inner wrapper",
                     {"marker", "BDTS36"},
                     {"id", LogId},
                     {"endpoint", wrapper.Endpoint},
                     {"inFlight", inFlight},
                     {"reason", reason});
+                ++Stats.RetiringWrappersAborted;
             }
 
             Send(wrapper.ActorId, new TEvents::TEvPoison());
@@ -328,7 +337,9 @@ namespace NKikimr::NBlobDepot {
         void SweepRetiringWrappers() {
             const TMonotonic now = TActivationContext::Monotonic();
             for (auto it = RetiringWrappers.begin(); it != RetiringWrappers.end(); ) {
-                if (it->InFlight->Get() <= 0) {
+                const i64 inFlight = it->InFlight->Get();
+                Y_ABORT_UNLESS(inFlight >= 0);
+                if (inFlight == 0) {
                     Send(it->ActorId, new TEvents::TEvPoison());
                     it = RetiringWrappers.erase(it);
                 } else if (now >= it->Deadline) {
@@ -504,6 +515,7 @@ namespace NKikimr::NBlobDepot {
                 record.SetEndpointSwitches(ExchangeAtomic(Stats.EndpointSwitches));
                 record.SetFiveXxRefreshTriggers(ExchangeAtomic(Stats.FiveXxRefreshTriggers));
                 record.SetPendingRejects(ExchangeAtomic(Stats.PendingRejects));
+                record.SetRetiringWrappersAborted(ExchangeAtomic(Stats.RetiringWrappersAborted));
                 record.SetIsUsingProxy(Stats.IsUsingProxy.load());
 
                 Stats.BalancerRoute.Latency.Take(record.MutableBalancerLatencyHistogram());

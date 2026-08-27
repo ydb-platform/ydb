@@ -29,7 +29,7 @@ namespace NActors {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared");
         bool hasSharedThread = false;
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
-            if (cfg.HasSharedThread || cfg.AllThreadsAreShared) {
+            if (cfg.HasSharedThread) {
                 hasSharedThread = true;
                 break;
             }
@@ -53,11 +53,7 @@ namespace NActors {
 
         for (ui32 i = 0; i < Config.Basic.size(); ++i) {
             auto &cfg = Config.Basic[poolIds[i]];
-            i16 sharedThreadCount = cfg.AllThreadsAreShared
-                ? (cfg.DefaultThreadCount
-                    ? cfg.DefaultThreadCount
-                    : static_cast<i16>(Min<ui32>(cfg.Threads, Max<i16>())))
-                : cfg.MaxThreadCount ? 1 : 0;
+            i16 sharedThreadCount = cfg.AllThreadsAreShared ? cfg.DefaultThreadCount : cfg.MaxThreadCount ? 1 : 0;
             poolInfos.push_back(TPoolShortInfo{
                 .PoolId = static_cast<i16>(Config.Basic[poolIds[i]].PoolId),
                 .SharedThreadCount = sharedThreadCount,

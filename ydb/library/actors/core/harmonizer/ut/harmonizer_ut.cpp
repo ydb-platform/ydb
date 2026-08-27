@@ -195,41 +195,6 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         UNIT_ASSERT_VALUES_EQUAL(stats.DecreasingThreadsByStarvedState, 0);
     }
 
-    Y_UNIT_TEST(TestUnitedPoolUsesOwnedThreadCountForForeignSlots) {
-        ui64 currentTs = 1'000'000;
-        std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));
-        TSharedExecutorPool sharedPool(TSharedExecutorPoolConfig{
-            .United = true,
-        }, std::vector<TPoolShortInfo>{
-            TPoolShortInfo{
-                .PoolId = 0,
-                .SharedThreadCount = 4,
-                .InPriorityOrder = true,
-            },
-            TPoolShortInfo{
-                .PoolId = 1,
-                .SharedThreadCount = 2,
-                .InPriorityOrder = true,
-            },
-        });
-        harmonizer->SetSharedPool(&sharedPool);
-
-        TMockExecutorPoolParams params {
-            .DefaultFullThreadCount = 0,
-            .MinFullThreadCount = 0,
-            .MaxFullThreadCount = 0,
-            .DefaultThreadCount = 4,
-            .MinThreadCount = 4,
-            .MaxThreadCount = 8,
-        };
-        auto pool = std::make_unique<TMockExecutorPool>(params);
-        harmonizer->AddPool(pool.get());
-
-        std::vector<i16> foreignThreadsAllowed;
-        sharedPool.FillForeignThreadsAllowed(foreignThreadsAllowed);
-        UNIT_ASSERT_VALUES_EQUAL(foreignThreadsAllowed[0], 2);
-    }
-
     Y_UNIT_TEST(TestHarmonize) {
         ui64 currentTs = 1000000;
         std::unique_ptr<IHarmonizer> harmonizer(MakeHarmonizer(currentTs));

@@ -138,9 +138,34 @@ namespace NActors {
         Y_UNUSED(Jail, SoftProcessingDurationTs);
 
         if (cfg.AllThreadsAreShared) {
-            DefaultFullThreadCount = 0;
-            MinFullThreadCount = 0;
-            MaxFullThreadCount = 0;
+            ui32 sharedThreads = DefaultThreadCount;
+            ui32 threads = ThreadCount;
+            if (sharedThreads && threads) {
+                threads = threads - sharedThreads;
+            }
+            if (cfg.AllThreadsAreShared) {
+                threads = 0;
+            }
+
+            if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+                for (ui32 idx = 0; idx < threads; ++idx) {
+                    SpinThresholdCyclesPerThread[idx].store(0);
+                }
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
+            }
+
+            i16 limit = Min(threads, (ui32)Max<i16>());
+            DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - sharedThreads, limit);
+
+            MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - sharedThreads, DefaultFullThreadCount), limit);
+
+            if (MinFullThreadCount) {
+                MinFullThreadCount = Min<i16>(MinFullThreadCount - sharedThreads, DefaultFullThreadCount);
+            } else {
+                MinFullThreadCount = DefaultFullThreadCount;
+            }
         } else {
             ui32 threads = ThreadCount;
             if (HasOwnSharedThread && threads) {
@@ -178,26 +203,17 @@ namespace NActors {
         semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConvertToI64();
 
-        if (cfg.AllThreadsAreShared) {
-            const i16 defaultThreadCount = cfg.DefaultThreadCount
-                ? cfg.DefaultThreadCount
-                : static_cast<i16>(Min<ui32>(cfg.Threads, Max<i16>()));
-            DefaultThreadCount = defaultThreadCount;
-            MaxThreadCount = Max(cfg.MaxThreadCount, defaultThreadCount);
-            MinThreadCount = cfg.MinThreadCount ? Min(cfg.MinThreadCount, defaultThreadCount) : defaultThreadCount;
-        } else {
-            DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
-            MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
-            MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
-        }
+        DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
+        MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
+        MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
 
-        if (SharedOnly && !cfg.AllThreadsAreShared) {
+        if (SharedOnly) {
             MaxThreadCount = cfg.ForcedForeignSlotCount + 1;
         }
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if (EnableWaker) {
-            Y_ABORT_UNLESS(!HasOwnSharedThread && !SharedOnly && !cfg.AllThreadsAreShared,
+            Y_ABORT_UNLESS(!HasOwnSharedThread && !SharedOnly,
                 "EnableWaker is supported only for non-shared Basic executor pools");
             Waker = std::make_unique<TWaker>(this);
         }

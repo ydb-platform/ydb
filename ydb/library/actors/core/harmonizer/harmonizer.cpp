@@ -136,11 +136,11 @@ void THarmonizer::ProcessWaitingStats() {
 
 void THarmonizer::SetForeignThreadSlotsForCurrentFullThreadCount(ui16 poolIdx) {
     if (Shared) {
-        i16 ownedThreadCount = Max<i16>(0, SharedInfo.OwnedThreads[poolIdx]);
+        bool hasOwnSharedThread = SharedInfo.OwnedThreads[poolIdx] != -1;
         i16 currentFullThreadCount = Pools[poolIdx]->GetFullThreadCount();
-        i16 slots = Max<i16>(0, Pools[poolIdx]->MaxThreadCount - currentFullThreadCount - ownedThreadCount);
-        i16 maxSlots = Max<i16>(0, Shared->GetSharedThreadCount() - ownedThreadCount);
-        Shared->SetForeignThreadSlots(poolIdx, Min(slots, maxSlots));
+        i16 slots = Pools[poolIdx]->MaxThreadCount - currentFullThreadCount - hasOwnSharedThread;
+        i16 maxSlots = Shared->GetSharedThreadCount() - hasOwnSharedThread;
+        Shared->SetForeignThreadSlots(poolIdx, Min<i16>(slots, maxSlots));
     }
 }
 
@@ -157,7 +157,7 @@ void THarmonizer::ProcessStarvedState() {
         if (CpuConsumption.PoolConsumption[poolIdx].Elapsed > pool.GetThreadCount()) {
             continue;
         }
-        i16 maxSharedCpuQuota = Max<i16>(0, SharedInfo.OwnedThreads[poolIdx]) + SharedInfo.ForeignThreadsAllowed[poolIdx];
+        i16 maxSharedCpuQuota = i16(SharedInfo.OwnedThreads[poolIdx] != -1) + SharedInfo.ForeignThreadsAllowed[poolIdx];
         if (SharedInfo.CpuConsumption[poolIdx].CpuQuota > maxSharedCpuQuota) {
             continue;
         }
@@ -346,8 +346,8 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
 
         float possibleMaxSharedQuota = 0.0f;
         if (Shared) {
-            i16 ownedThreadCount = Max<i16>(0, SharedInfo.OwnedThreads[poolIdx]);
-            i16 sharedThreads = std::min<i16>(SharedInfo.ForeignThreadsAllowed[poolIdx] + ownedThreadCount, SharedInfo.ThreadCount);
+            bool hasOwnSharedThread = SharedInfo.OwnedThreads[poolIdx] != -1;
+            i16 sharedThreads = std::min<i16>(SharedInfo.ForeignThreadsAllowed[poolIdx] + hasOwnSharedThread, SharedInfo.ThreadCount);
             float poolSharedElapsedCpu = SharedInfo.CpuConsumption[poolIdx].Elapsed;
             possibleMaxSharedQuota = std::min<float>(poolSharedElapsedCpu + freeSharedCpu, sharedThreads);
         }
@@ -464,12 +464,10 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo, bool ign
     poolInfo.Priority = pool->GetPriority();
     pool->SetFullThreadCount(poolInfo.DefaultFullThreadCount);
     if (Shared) {
-        TVector<i16> ownedThreads;
+        TVector<i16> ownedThreads(Pools.size(), -1);
         Shared->FillOwnedThreads(ownedThreads);
-        i16 ownedThreadCount = Max<i16>(0, ownedThreads[pool->PoolId]);
-        i16 slotsByPoolLimit = Max<i16>(0, static_cast<i16>(poolInfo.MaxThreadCount) - ownedThreadCount);
-        i16 slotsBySharedLimit = Max<i16>(0, Shared->GetSharedThreadCount() - ownedThreadCount);
-        Shared->SetForeignThreadSlots(pool->PoolId, Min(slotsByPoolLimit, slotsBySharedLimit));
+        bool hasOwnSharedThread = ownedThreads[pool->PoolId] != -1;
+        Shared->SetForeignThreadSlots(pool->PoolId, Min<i16>(poolInfo.MaxThreadCount, Shared->GetSharedThreadCount()) - hasOwnSharedThread);
     }
     if (pingInfo) {
         poolInfo.AvgPingCounter = pingInfo->AvgPingCounter;

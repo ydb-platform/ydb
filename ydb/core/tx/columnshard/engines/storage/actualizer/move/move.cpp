@@ -128,6 +128,19 @@ void TMoveDataActualizer::DoExtractTasks(
     }
 }
 
+namespace {
+// The groups a portion's blobs actually resolve into, for the rejection log: knowing
+// that a portion was dropped is only useful next to what it was dropped for.
+std::vector<ui32> GetBlobGroupsForLog(const std::vector<TUnifiedBlobId>& blobIds) {
+    std::vector<ui32> result;
+    for (const auto& blobId : blobIds) {
+        result.emplace_back(blobId.GetDsGroup());
+    }
+    SortUnique(result);
+    return result;
+}
+}   // namespace
+
 bool TMoveDataActualizer::HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups) {
     return AnyOf(blobIds, [&groups](const TUnifiedBlobId& blobId) {
         return groups.contains(blobId.GetDsGroup());
@@ -140,6 +153,12 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
         return;
     }
     if (!HasBlobInGroups(accessor.GetBlobIds(), TargetGroups)) {
+        ++RejectedPortions;
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
+            {"event", "move_data_portion_rejected"},
+            {"portionId", portionId},
+            {"blobs", JoinSeq(",", GetBlobGroupsForLog(accessor.GetBlobIds()))},
+            {"targets", JoinSeq(",", TargetGroups)});
         return;
     }
     auto portionSchema = accessor.GetPortionInfo().GetSchema(VersionedIndex);
@@ -184,6 +203,7 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
     TMoveDataQueueSizes result;
     result.Pending = PendingPortionIds.size();
     result.InFlight = InFlightPortionIds.size();
+    result.Rejected = RejectedPortions;
     for (auto& [addr, portions] : PortionsToMove) {
         result.ConfirmedToMove += portions.size();
     }
@@ -196,6 +216,7 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
     PortionsToMove.clear();
     PortionAddress.clear();
     InFlightPortionIds.clear();
+    RejectedPortions = 0;
 
     for (auto& [portionId, portion] : externalContext.GetPortions()) {
         if (portion->GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {

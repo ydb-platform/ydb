@@ -12,6 +12,9 @@ struct TMoveDataQueueSizes {
     ui64 Pending = 0;
     ui64 ConfirmedToMove = 0;
     ui64 InFlight = 0;
+    // Portions whose accessor came back with no blob in a target group. Not a queue -
+    // deliberately outside GetTotal(), it only explains where a drained queue went.
+    ui64 Rejected = 0;
 
     ui64 GetTotal() const {
         return Pending + ConfirmedToMove + InFlight;
@@ -21,6 +24,7 @@ struct TMoveDataQueueSizes {
         Pending += item.Pending;
         ConfirmedToMove += item.ConfirmedToMove;
         InFlight += item.InFlight;
+        Rejected += item.Rejected;
         return *this;
     }
 };

@@ -110,8 +110,10 @@ private:
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByGCCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
@@ -227,6 +229,17 @@ public:
         MoveDataPortionsPending->SetValue(pending);
         MoveDataPortionsConfirmedToMove->SetValue(confirmedToMove);
         MoveDataPortionsInFlight->SetValue(inFlight);
+    }
+
+    void OnMoveDataGateBlockedByVacuum() const {
+        MoveDataGateBlockedByVacuumCount->Add(1);
+    }
+
+    // A portion left the queues because none of its blobs resolved into a target group.
+    // Silent before: a move that selected everything and confirmed nothing looked the
+    // same as a move that was never asked to do anything.
+    void OnMoveDataPortionsRejected(const ui64 count) const {
+        MoveDataPortionsRejectedCount->Add(count);
     }
 
     void OnMoveDataGateBlockedByPortions() const {

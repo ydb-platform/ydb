@@ -3,6 +3,7 @@
 #include "column_sort_schema.h"
 #include "comparator.h"
 #include "logical_type.h"
+#include "private.h"
 #include "unversioned_row.h"
 #include "versioned_io_options.h"
 
@@ -252,9 +253,11 @@ TColumnSchema& TColumnSchema::SetMaxInlineHunkSize(std::optional<i64> value)
 TColumnSchema& TColumnSchema::SetLogicalType(TLogicalTypePtr type)
 {
     LogicalType_ = std::move(type);
-    WireType_ = NTableClient::GetWireType(LogicalType_);
-    IsOfV1Type_ = IsV1Type(LogicalType_);
-    std::tie(V1Type_, Required_) = NTableClient::CastToV1Type(LogicalType_);
+    const auto typeInfo = GetTypeV3Info(LogicalType_);
+    WireType_ = typeInfo.WireType;
+    IsOfV1Type_ = typeInfo.IsPureV1Type;
+    V1Type_ = typeInfo.V1Type;
+    Required_ = typeInfo.Required;
     return *this;
 }
 

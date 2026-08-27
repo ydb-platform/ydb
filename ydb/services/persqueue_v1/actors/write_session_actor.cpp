@@ -591,30 +591,17 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
-<<<<<<< HEAD
     Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
-    Config = std::move(entry.PQGroupInfo->Description);
-    Chooser = entry.PQGroupInfo->PartitionChooser;
-    Y_ABORT_UNLESS(Chooser);
-    PartitionGraph = entry.PQGroupInfo->PartitionGraph;
-    Y_ABORT_UNLESS(PartitionGraph);
-
-    Y_ABORT_UNLESS(Config.PartitionsSize() > 0);
-    Y_ABORT_UNLESS(Config.HasPQTabletConfig());
-    InitialPQTabletConfig = Config.GetPQTabletConfig();
-=======
-    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     PQGroupInfo = entry.PQGroupInfo;
     const auto& config = PQGroupInfo->Description;
     Chooser = PQGroupInfo->PartitionChooser;
-    AFL_ENSURE(Chooser);
+    Y_ABORT_UNLESS(Chooser);
     PartitionGraph = PQGroupInfo->PartitionGraph;
-    AFL_ENSURE(PartitionGraph);
+    Y_ABORT_UNLESS(PartitionGraph);
 
-    AFL_ENSURE(config.PartitionsSize() > 0);
-    AFL_ENSURE(config.HasPQTabletConfig());
+    Y_ABORT_UNLESS(config.PartitionsSize() > 0);
+    Y_ABORT_UNLESS(config.HasPQTabletConfig());
     InitialPQTabletConfig = config.GetPQTabletConfig();
->>>>>>> 2d3ae783350 (KIKIMR-25902 Remove extra copy instead of move (#45642))
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
@@ -683,7 +670,7 @@ void TWriteSessionActor<UseMigrationProtocol>::DiscoverPartition(const NActors::
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    AFL_ENSURE(PQGroupInfo);
+    Y_ABORT_UNLESS(PQGroupInfo);
     const auto& config = PQGroupInfo->Description;
     PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID,
                                                                                     config,

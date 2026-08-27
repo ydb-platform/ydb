@@ -108,7 +108,6 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     THashMap<TString, TTokenState> TokenBuf;
     TSet<TTokenState*, TTokenStateLess> TokensBySize;
     ui64 BufferedBytes = 0;
-    ui64 EmptyTokenBytes = 0;
 
     ui64 MaxBatchBytes = 0;
     ui64 MaxSegmentDocuments = 0;
@@ -401,17 +400,17 @@ public:
                     continue;
                 }
                 TString bucketKey = MakeCompactBucketKey(prefixCells, tokens[i]);
-                auto& state = TokenBuf[bucketKey];
-                if (state.BucketKey.empty()) {
+                auto tokenIt = TokenBuf.find(bucketKey);
+                if (tokenIt == TokenBuf.end()) {
+                    tokenIt = TokenBuf.emplace(bucketKey, TTokenState{}).first;
+                    auto& state = tokenIt->second;
                     state.Token = tokens[i];
                     state.BucketKey = bucketKey;
                     state.Prefix = TOwnedCellVec(prefixCells);
                     state.Segment.Reset(WithRelevance, Signed);
                     BufferedBytes += bucketKey.size(); // count bucket-key sizes
-                } else if (!state.Segment.GetCount()) {
-                    EmptyTokenBytes -= bucketKey.size();
-                    state.Segment.Reset(WithRelevance, Signed);
                 }
+                auto& state = tokenIt->second;
                 TokensBySize.erase(&state);
                 BufferedBytes -= state.Segment.GetBuf().size();
                 state.Segment.Add(docId, freq);
@@ -420,6 +419,7 @@ public:
                 freq = 1;
                 if (state.Segment.GetCount() >= MaxSegmentDocuments) {
                     FlushToken(state);
+                    TokenBuf.erase(tokenIt);
                 }
             }
             if (BufferedBytes >= MaxBatchBytes) {
@@ -430,11 +430,11 @@ public:
                     if (!(*mostFreqIt)->Segment.GetCount()) {
                         break;
                     }
-                    FlushToken(TokenBuf.at((*mostFreqIt)->BucketKey));
+                    auto tokenIt = TokenBuf.find((*mostFreqIt)->BucketKey);
+                    Y_ENSURE(tokenIt != TokenBuf.end());
+                    FlushToken(tokenIt->second);
+                    TokenBuf.erase(tokenIt);
                 }
-            }
-            if (EmptyTokenBytes >= MaxBatchBytes/3) {
-                FlushAllTokens();
             }
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
                 UploadDocRow(key, row, tokens.size());
@@ -564,9 +564,7 @@ public:
         UploadBuf->AddRow(uploadKey, uploadValue);
         TokensBySize.erase(&state);
         BufferedBytes -= state.Segment.GetBuf().size();
-        EmptyTokenBytes += state.BucketKey.size();
-        state.Segment = TDeltaWriter();
-        TokensBySize.insert(&state);
+        BufferedBytes -= state.BucketKey.size();
     }
 
     void FlushAllTokens()
@@ -578,7 +576,6 @@ public:
             FlushToken(state);
         }
         BufferedBytes = 0;
-        EmptyTokenBytes = 0;
         TokenBuf.clear();
         TokensBySize.clear();
     }

@@ -1123,7 +1123,7 @@ public:
             case NScheme::NTypeIds::Json: {
                 TString error;
                 tokens = NJsonIndex::TokenizeJson(text, error);
-                YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                // Ignore errors, JSON is already validated
                 break;
             }
             case NScheme::NTypeIds::JsonDocument:

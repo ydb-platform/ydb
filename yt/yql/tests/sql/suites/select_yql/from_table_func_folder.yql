@@ -1,0 +1,3 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT * FROM plato.Folder(``, '');

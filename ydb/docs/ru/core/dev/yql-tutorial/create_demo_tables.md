@@ -46,6 +46,16 @@
         air_date Uint64,
         PRIMARY KEY (series_id, season_id, episode_id)
     );
+
+    CREATE TABLE games
+    (
+        id Serial,                         -- Столбец с типом Serial автоматически получает уникальное значение при каждой вставке строки.
+                                           -- Это аналог автоинкремента в других базах данных.
+                                           -- Такой столбец обязательно должен быть частью первичного ключа.
+        datetime_start Timestamp,
+        datetime_end Timestamp,
+        PRIMARY KEY (id)
+    );
     ```
 
 - Создание колоночных таблиц

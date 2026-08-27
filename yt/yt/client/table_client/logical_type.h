@@ -106,15 +106,15 @@ public:
     const TLogicalTypePtr& GetElement() const;
 
     //
-    // Return elements for Tuple,VariantTuple
+    // Return elements for Tuple, VariantTuple.
     const std::vector<TLogicalTypePtr>& GetElements() const;
 
     //
-    // Return fields for Struct,VariantStruct
+    // Return fields for Struct, VariantStruct.
     const std::vector<TStructField>& GetFields() const;
 
     //
-    // Return stable names of removed fields for Struct,VariantStruct
+    // Return stable names of removed fields for Struct, VariantStruct.
     const std::vector<std::string>& GetRemovedFieldStableNames() const;
 
 private:

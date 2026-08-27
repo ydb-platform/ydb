@@ -68,6 +68,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_streaming_queries_pq_sink_deduplication",
         "enable_external_data_source_auth_method_iam",
         "allow_ydb_requests_without_database",
+        "enable_updating_partitions_on_streaming_query_restart",
     }
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")

@@ -18,6 +18,9 @@ TArgs TArgs::Parse(int argc, char** argv) {
         .DefaultValue(1)
         .StoreResult(&args.Threads);
 
+    opts.AddLongOption("message-capture-path", "message capture file (overwrite) or directory (for a new file) path")
+        .StoreResult(&args.MessageCapturePath);
+
     opts.AddHelpOption();
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);

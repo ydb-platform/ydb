@@ -3246,6 +3246,20 @@ void TKqpTasksGraph::FillSecureParamsFromStage(THashMap<TString, TString>& secur
     }
 }
 
+void TKqpTasksGraph::FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const {
+    for (const auto& source : stage.GetSources()) {
+        if (!source.HasExternalSource()) {
+            continue;
+        }
+        const auto& externalSource = source.GetExternalSource();
+        const auto& sourceName = externalSource.GetSourceName();
+        if (!sourceName) {
+            continue;
+        }
+        secureParams.emplace(sourceName, ReplaceStructuredTokenReferences(externalSource.GetAuthInfo()));
+    }
+}
+
 bool TKqpTasksGraph::StageNeedsLocalPlacement(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo) const {
     for (const auto& transform : stage.GetOutputTransforms()) {
         if (transform.HasInternalSink()) {

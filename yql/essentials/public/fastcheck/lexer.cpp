@@ -45,7 +45,7 @@ private:
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
-        res.Success = state.CheckLexer(res.Issues);
+        res.Success = state.CheckLexer(&res.Issues);
         return res;
     }
 };

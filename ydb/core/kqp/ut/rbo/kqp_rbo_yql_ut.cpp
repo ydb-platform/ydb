@@ -4913,6 +4913,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
     }
 
+    Y_UNIT_TEST(TPCH_9) {
+        RunTPCH_YqlSingleQueryTest(9, true);
+    }
+
     void RunPerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);

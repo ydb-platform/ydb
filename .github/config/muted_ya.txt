@@ -1,7 +1,6 @@
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_PermutedWrite_PermutedRead_PDiskFallback
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_PermutedWrite_SeqRead_PDiskFallback
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_SeqWrite_PermutedRead_PDiskFallback
-ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_SeqWrite_SeqRead_PDiskFallback
 ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferWithRestarts
 ydb/core/blobstorage/ut_blobstorage/ut_race GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_race unittest.[*/*] chunk
@@ -38,8 +37,6 @@ ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-strict]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-False]
-ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_plain_and_batched_messages_survive_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
-ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_written_messages_are_read_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/fq/s3 test_s3_0.py.TestS3.test_checkpoints_on_join_s3_with_yds[v1-mvp_external_ydb_endpoint0-client0]
 ydb/tests/fq/s3 test_s3_0.py.TestS3.test_csv[v1-false-client0]
@@ -47,8 +44,10 @@ ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[mr-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[multi_output-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[multi_output-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[hop-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[join-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]

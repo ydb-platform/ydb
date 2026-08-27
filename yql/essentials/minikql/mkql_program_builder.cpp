@@ -4844,7 +4844,7 @@ TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<c
 
     for (ui32 i = 0; i < usedArgs; i++) {
         TType* argType = callableType->GetArgumentType(i);
-        TRuntimeNode arg = args[i];
+        const TRuntimeNode& arg = args[i];
         MKQL_ENSURE(arg.GetStaticType()->IsConvertableTo(*argType),
                     "Argument type mismatch for argument " << i << ": runtime " << argType->GetKindAsStr()
                                                            << " with static " << arg.GetStaticType()->GetKindAsStr());

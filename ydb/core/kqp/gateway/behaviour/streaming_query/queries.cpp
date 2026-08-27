@@ -408,7 +408,7 @@ protected:
             YDB_LOG_DEBUG("[StreamingQueries] Successfully finished",
                 {"logPrefix", LogPrefix()});
         } else {
-            YDB_LOG_WARN("[StreamingQueries] Operation failed with errors",
+            YDB_LOG_WARN("[StreamingQueries] Operation failed",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", Issues.ToOneLineString()});
@@ -885,8 +885,8 @@ private:
         YDB_LOG_DEBUG("[StreamingQueries] Subscribing to scheme transaction completion on scheme pipe",
             {"logPrefix", LogPrefix()},
             {"tx", TxId},
-            {"shard", SchemeShardTabletId},
-            {"id", SchemePipeActorId});
+            {"schemeShardTabletId", SchemeShardTabletId},
+            {"schemePipeActorId", SchemePipeActorId});
     }
 
     void ClosePipeClient() {
@@ -1570,7 +1570,7 @@ public:
             YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
                 {"logPrefix", LogPrefix()},
                 {"currentOwner", currentOwner},
-                {"owner", previousOwner});
+                {"previousOwner", previousOwner});
             Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
@@ -2668,9 +2668,9 @@ public:
         }
 
         TBase::SchemeInfo = ev->Get()->Info;
-        YDB_LOG_DEBUG("[StreamingQueries] Describe streaming query success, scheme",
+        YDB_LOG_DEBUG("[StreamingQueries] Describe streaming query success",
             {"logPrefix", LogPrefix()},
-            {"info", (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null")});
+            {"schemeInfo", (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null")});
 
         const auto& syncActorId = TBase::Register(new TSyncStreamingQueryTableActor(TBase::Context, TBase::QueryPath, {
             .InitialState = TBase::QueryState,
@@ -2773,7 +2773,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard after creation succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);
@@ -2926,7 +2926,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard after alter succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);

@@ -4148,6 +4148,28 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Successful_Commit,
     CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
 }
 
+Y_UNIT_TEST_F(Kafka_Transaction_Commit_Without_Writes_Should_Succeed, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Commit_With_Unwritten_Partition_Should_Succeed, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId, 0);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie, 0);
+    WaitForExactTxWritesCount(1);
+
+    CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Should_Be_Processed_After_Previous_Complete_Erasure, TPQTabletFixture) {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};
     const ui64 txId = 67890;

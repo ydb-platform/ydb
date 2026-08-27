@@ -1617,7 +1617,8 @@ const TDictExprType* CommonType(TPositionHandle pos, const TDictExprType* one, c
 template<bool Strict, bool Silent, bool Relaxed = false>
 const TStructExprType* CommonType(TPositionHandle pos, const TStructExprType* one, const TStructExprType* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx) {
     auto itemsOne = one->GetItems();
-    auto itemsTwo = two->GetItems();
+    // Some template instantiations mutate the collection.
+    auto itemsTwo = two->GetItems(); // NOLINT(performance-unnecessary-copy-initialization)
 
     if constexpr (Strict) {
         if constexpr (Relaxed) {
@@ -1673,7 +1674,8 @@ const TStructExprType* CommonType(TPositionHandle pos, const TStructExprType* on
 template<bool Strict, bool Silent, bool Relaxed = false>
 const TTupleExprType* CommonType(TPositionHandle pos, const TTupleExprType* one, const TTupleExprType* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx) {
     auto itemsOne = one->GetItems();
-    auto itemsTwo = two->GetItems();
+    // Some template instantiations mutate the collection.
+    auto itemsTwo = two->GetItems(); // NOLINT(performance-unnecessary-copy-initialization)
 
     if constexpr (Strict && !Relaxed) {
         if (itemsOne.size() != itemsTwo.size()) {

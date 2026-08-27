@@ -5,6 +5,7 @@
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
@@ -46,6 +47,7 @@ private:
     TDuration TraceSamplePeriod;
 
     TVolumeCounters Counters;
+    TVChunkCounters VChunkCounters;
     TVolumeConfigPtr VolumeConfig;
 
     TAdaptiveLock DumpLock;
@@ -155,6 +157,14 @@ public:
     [[nodiscard]] NThreading::TFuture<std::optional<TVChunkSnapshot>>
     GatherVChunkMonSnapshot(ui32 vchunkIndex) const;
 
+    // Disk-wide vchunk stats: each DBG hops onto its executor. TotalOnly
+    // returns the disk sum plus per-DBG totals. PerVChunk also fills rows;
+    // if dbgIndex is set, only that DBG lists its vchunks.
+    [[nodiscard]] NThreading::TFuture<TVChunkStatsGatherResult>
+    GatherVChunkStats(
+        EVChunkStatsDetail detail,
+        std::optional<size_t> dbgIndex = std::nullopt) const;
+
 private:
     void OnRegionStopped(size_t regionIndex);
     void OnAllRegionsStopped();
@@ -162,6 +172,10 @@ private:
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
+
+    void ScheduleVChunkCountersUpdate();
+    void QueryVChunkStats();
+    void OnVChunkStats(const TVChunkStatsGatherResult& result);
 
     void MaybeTriggerPBufferCleanup(ui64 lsn);
     void PBufferCleanup();

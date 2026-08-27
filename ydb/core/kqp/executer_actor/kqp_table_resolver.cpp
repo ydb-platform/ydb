@@ -124,6 +124,7 @@ private:
                         // This is needed for all OLAP sinks, not just EnableCsWriteAffinity.
                         const auto& desc = entry.ColumnTableInfo->Description;
                         if (desc.HasSharding() && desc.GetSharding().HasHashSharding()) {
+                            stageMeta.CsShardingColumns.clear();
                             for (const auto& col : desc.GetSharding().GetHashSharding().GetColumns()) {
                                 stageMeta.CsShardingColumns.emplace_back(col);
                             }
@@ -356,6 +357,7 @@ private:
                 if (entry.ColumnTableInfo && isOlapSink) {
                     const auto& desc = entry.ColumnTableInfo->Description;
                     if (desc.HasSharding() && desc.GetSharding().HasHashSharding()) {
+                        stageMeta.CsShardingColumns.clear();
                         for (const auto& col : desc.GetSharding().GetHashSharding().GetColumns()) {
                             stageMeta.CsShardingColumns.emplace_back(col);
                         }

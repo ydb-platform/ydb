@@ -453,7 +453,7 @@ public:
             , Columns(BuildColumns(inputColumns))
             , WriteColumnIds(BuildWriteColumnIds(inputColumns))
             , Alloc(std::move(alloc)) {
-//DO NOT REMOVE THESE CHECKS 
+//DO NOT REMOVE THESE CHECKS
 #ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
         AFL_VERIFY(TargetShardIds.has_value())
             ("targetShardIdsHasValue", TargetShardIds.has_value())
@@ -567,12 +567,24 @@ public:
     }
 
     void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
-        for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
-                                                    unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
+        auto splitResult = Sharding->SplitByShardsToArrowBatches(unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool());
+        for (auto [shardId, shardBatch] : splitResult) {
 
             if (TargetShardIds.has_value()) {
-                //DO NOT REMOVE THESE CHECKS 
-                AFL_VERIFY(TargetShardIds->contains(shardId))("shard_id", shardId)("target_shard_ids", GetTargetShardIdsDebugString());
+                //DO NOT REMOVE THESE CHECKS
+                AFL_VERIFY(TargetShardIds->contains(shardId))
+                    ("shard_id", shardId)
+                    ("target_shard_ids", GetTargetShardIdsDebugString())
+                    ("shards_count", Sharding->GetShardsCount())
+                    ("ordered_shard_ids", [&]() {
+                        TString s;
+                        const ui32 count = Sharding->GetShardsCount();
+                        for (ui32 i = 0; i < count; ++i) {
+                            s += ToString(i) + ":" + ToString(Sharding->GetShardIdByOrderIdx(i)) + ",";
+                        }
+                        return s;
+                    }())
+                    ("msg", "row routed to wrong task — shard not in TargetShardIds");
             }
 
             ActualShardIds.insert(shardId);

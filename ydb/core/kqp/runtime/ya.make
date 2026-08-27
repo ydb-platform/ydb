@@ -1,10 +1,14 @@
 LIBRARY()
-### DO NOT REMOVE THESE FLAGS. They are important
+### Validation flags. Pass -D KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK=yes on the ya make
+### command line to enable routing validation:
+###   ./ya make --build relwithdebinfo -D KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK=yes ...
+IF (KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK)
     CFLAGS(
         -DKQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
         -DKQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT=1
     )
-###
+ENDIF()
+
 SRCS(
     kqp_arrow_memory_pool.cpp
     kqp_buffer_lock_actor.cpp

@@ -235,14 +235,73 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Done());
 
     if (IsDqPureExpr(node.Input())) {
-        auto stageInput = RebuildPureStageWithSink(
-            node.Input(), table,
-            /* allowInconsistentWrites */ true, /* useStreamWrite */ true,
-            /* isBatch */ false, "fill_table", /* isIndexImplTable */ false,
-            Build<TCoAtomList>(ctx, node.Pos()).Done(), settings,
-            priority, ctx);
+        // For pure stage CTAS (e.g. "AS SELECT 1u As Col1, 1 As Col2"),
+        // split into Transform Stage (pure expr, no inputs) → HashShuffle(ColumnShardHashV1)
+        // → Sink Stage so that per-shard tasks can be created with proper routing.
+        // Without this split, the single stage has no input channels, so CountComputeTasks
+        // creates 1 task with all shards in TargetShardIds, breaking the per-shard invariant.
+        auto sink = Build<TDqSink>(ctx, node.Pos())
+            .DataSink<TKqpTableSink>()
+                .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                .Build()
+            .Index().Value("0").Build()
+            .Settings<TKqpTableSinkSettings>()
+                .Table(table)
+                .InconsistentWrite(ctx.NewAtom(node.Pos(), "true"))
+                .StreamWrite(ctx.NewAtom(node.Pos(), "true"))
+                .Mode(ctx.NewAtom(node.Pos(), "fill_table"))
+                .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
+                .IsBatch(ctx.NewAtom(node.Pos(), "false"))
+                .IsIndexImplTable(ctx.NewAtom(node.Pos(), "false"))
+                .DefaultColumns<TCoAtomList>().Build()
+                .ReturningColumns(ctx.NewList(node.Pos(), {}))
+                .Settings(Build<TCoNameValueTupleList>(ctx, node.Pos()).Add(settings).Done())
+                .Build()
+            .Done();
+
+        // Create Transform Stage from the pure expression (no inputs).
+        // The program outputs the pure expr as a flow of rows.
+        auto transformStage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Build()  // No inputs — pure stage
+            .Program()
+                .Args({})
+                .Body<TCoToFlow>()
+                    .Input(node.Input())
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        // Get key columns for HashShuffle. For pure stage CTAS, the table doesn't
+        // exist in metadata yet. Try to get the first column from the pure expression's
+        // type annotation. The pure expr type is typically List(Struct(...)) or Struct(...).
+        TVector<TCoAtom> keyColumnAtoms;
+        {
+            const auto pureType = node.Input().Ref().GetTypeAnn();
+            if (pureType) {
+                const TTypeAnnotationNode* structType = nullptr;
+                if (pureType->GetKind() == ETypeAnnotationKind::Struct) {
+                    structType = &(*pureType);
+                } else if (pureType->GetKind() == ETypeAnnotationKind::List) {
+                    structType = pureType->Cast<TListExprType>()->GetItemType();
+                }
+                if (structType && structType->GetKind() == ETypeAnnotationKind::Struct) {
+                    const auto& st = *structType->Cast<TStructExprType>();
+                    if (!st.GetItems().empty()) {
+                        keyColumnAtoms.emplace_back(
+                            Build<TCoAtom>(ctx, node.Pos()).Value(st.GetItems().front()->GetName()).Done());
+                    }
+                }
+            }
+            // Fallback: if type annotation is not available, use empty key columns.
+            // The HashShuffle will still work because real columns are resolved at runtime.
+        }
+
+        // BuildCsWriteAffinitySinkStage creates HashShuffle(ColumnShardHashV1) + Sink Stage.
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(stageInput.Ptr())
+            .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), keyColumnAtoms, sink.Ptr()))
             .SinkIndex().Build("0")
             .Done();
         return true;

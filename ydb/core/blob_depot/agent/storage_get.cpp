@@ -75,7 +75,7 @@ namespace NKikimr::NBlobDepot {
 
                     TString blobId = query.Id.AsBinaryString();
                     if (const TResolvedValue *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
-                            std::make_shared<TResolveKeyContext>(i), Request.MustRestoreFirst)) {
+                            std::make_shared<TResolveKeyContext>(i), Request.MustRestoreFirst, Request.DataKind)) {
                         if (!ProcessSingleResult(i, value)) {
                             return; // error occured
                         }
@@ -126,6 +126,7 @@ namespace NKikimr::NBlobDepot {
                         queryIdx,
                         Request.ReaderTabletData,
                         Request.Queries[queryIdx].Id.AsBinaryString(),
+                        Request.DataKind,
                     };
                     TString error;
                     const bool success = IssueRead(std::move(arg), error);

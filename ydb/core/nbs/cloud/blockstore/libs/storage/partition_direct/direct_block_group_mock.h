@@ -263,6 +263,9 @@ public:
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+
+    NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

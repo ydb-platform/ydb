@@ -1037,14 +1037,15 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
+    auto& txController = GetProgressTxController();
     const ui64 txId = ev->Get()->Record.GetTxId();
     const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
-    if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
+    auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
+    if (!op) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
         TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
         return;
     }
-    auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
@@ -1053,13 +1054,14 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
 }
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx) {
-    auto opPtr = GetProgressTxController().GetTxOperatorOptional(ev->Get()->Record.GetTxId());
-    if (!opPtr) {
+    auto& txController = GetProgressTxController();
+    const ui64 txId = ev->Get()->Record.GetTxId();
+    auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
+    if (!op) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "missed_read_set_ack")("proto", ev->Get()->Record.DebugString())(
             "tx_id", ev->Get()->Record.GetTxId());
         return;
     }
-    auto op = TValidator::CheckNotNull(dynamic_pointer_cast<TEvWriteCommitSyncTransactionOperator>(opPtr));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ack")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     auto tx = op->CreateReceiveResultAckTx(*this, ev->Get()->Record.GetTabletConsumer());
     Execute(tx.release(), ctx);

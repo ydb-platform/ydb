@@ -138,7 +138,7 @@ A defect in these files can turn inequivalent supported plans into
 | `read_range_predicate_impl.h` | Closed q9/q45 point and finite point-set `RangeInfo::ComputeNode` grammar, physical-key/catalog binding, extractor-cap and node-identity validation, and lowering to existing equality/static-`IN` predicate IR. Included exactly once inside `semantic_snapshot.cpp`'s anonymous namespace. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, independently checked nullable-String projection-error and checked-Concat source/result/demand topology, exact `window_sum`/`window_avg` partition types and private grouped Aggregate/Project dataflow, fixed q49 `window_rank` leaves/topology/types and rescale use confinement, fixed q51 `window_rows_sum`/`window_rows_max` names, order indices, normalized input/partition/order fields, frame, exact source/result and compatible partition/order types, SUM Aggregate provenance, distinct typed MAX inputs, and four-leaf/three-Project confinement, exact nullable Decimal Abs typing, tagged aggregate-state contracts including direct/staged Decimal AVG, its carrier topology/dataflow/routing checks, phase-linked integral AVG, and fixed-width/nullable-Decimal count-distinct, independently derived integral-AVG rank provenance, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
-| `rbo_verifier/smt.py` | Typed immutable SMT terms, identity-scoped concrete String-atom equality, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, stack-safe occurrence/level/output rendering, deterministic canonical bytes, exact marked-obligation substitution, and solver-output parsing primitives. |
+| `rbo_verifier/smt.py` | Typed immutable SMT terms, identity-scoped concrete String-atom equality, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, bounded exact structural common-subexpression sharing with byte-exact identity fallback, quantifier/definition-scope and owner-token isolation, stack-safe occurrence/level/output rendering, deterministic canonical bytes, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic including exact raw-code Abs, the fixed q49 scale-changing rescale and saturation, extrema, specials, rounding, proof bounds, and exact summarize/combine/finish algebra for private headroom-certified Decimal-SUM state. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates including exact early concrete String/Utf8 equality, exact nullable Decimal Abs and q49 rescale, exact scalar evaluation and relation-supplied `window_sum`/`window_avg`/`window_rank`/ordered-ROWS lookup, raw aggregate-code equality for Decimal count-distinct, conservative Decimal finite-coefficient propagation, tagged `AverageMetadata`, private `DecimalSumState` carriage and dependency terms, the shared cardinality-certified integral-AVG carrier, typed opaque functions, the checked-Concat failure function, and the domain-free passive carrier encoding. |
@@ -162,10 +162,20 @@ terms with deliberately colliding hashes.
 Canonical rendering likewise does not use Python recursion for ordinary term
 DAG depth. Occurrence discovery is an explicit preorder worklist, dependency
 levels use iterative postorder, and term output uses an explicit task stack.
-Quantifier bodies still define separate lexical scopes. Deep unshared and
-shared-under-quantifier regressions exceed 2,000 term levels, and an independent
-old/new differential matched exact bytes on 3,000 randomized shared and
-quantified DAGs.
+Within one lexical scope containing at most 16,384 distinct object identities,
+another iterative bottom-up pass interns the exact tuple of runtime class,
+sort, operation, atom, and ordered child IDs. Independently constructed equal
+compound terms therefore share one hygienic, dependency-ordered `let`.
+Script-owned declaration tokens remain identity atoms; no commutative,
+associative, constant-folding, or other algebraic rewrite occurs. Quantifiers
+are opaque to the containing scope, each body starts a new scope, and exact
+function bodies render in separate contexts. Above the identity ceiling the
+renderer uses its preceding identity-sharing path byte-for-byte, while nested
+scopes independently re-enter the bounded structural path. The earlier
+stack-safe rewrite matched its predecessor on 3,000 randomized DAGs; M87 tests
+instead establish exact structural coalescing and separation, the real
+16,384/16,385 boundary, old-renderer fallback equality, owner/binder hygiene,
+deep and colliding-hash behavior, determinism, and Z3 equivalence.
 
 The exact read-range audit seam is intentionally closed and C++-only.
 `RangeInfo::ComputeNode` is authoritative because it is the program consumed
@@ -1818,6 +1828,109 @@ Combined proof-floor work is 20,573/333,469 ms. M86 promotes nothing: the
 trusted theorem remains bounded by the unchanged 13/13 TPCH plus 23/23
 TPC-DS, 36/36 floor.
 
+M87 structural-CSE commit `0077c196ea8` changes only `smt.py` and
+`test_smt.py`. For a bounded render scope, it first discovers distinct object
+identities without descending through quantifier nodes. A bottom-up scalar key
+then consists exactly of the term's runtime class, sort, operation, atom, and
+ordered child structural IDs. Equal keys share one representative and one
+`let` alias; unequal class, sort, operation, atom, owner token, arity, child,
+or child order cannot share. References, dependency levels, and first
+discovery are subsequently computed over those exact IDs. Alias definitions
+remain nested by dependency level with parallel bindings at one level, and the
+reserved-name allocator remains global to the rendered script. The
+transformation changes serialization only and preserves the direct SMT term.
+
+Quantifier nodes have no structural children in their containing scope. When
+one is emitted, its body enters a fresh `_render_scope` under the same
+hygienic context; sibling and nested bodies cannot export aliases, and a
+shadowed binder cannot be captured by an outer alias. Closed `define-fun`
+bodies already render under separate contexts and retain their existing
+parameter/owner checks. `_OwnerToken` uses object identity, so equal spelling
+from two Scripts does not make declarations interchangeable. There is no
+algebraic normalization beyond complete exact syntax equality.
+
+The first prototype keyed an interning dictionary by `Term` directly. It was
+rejected before commit when a deliberately colliding-hash deep-DAG probe took
+about 26.5 seconds through repeated exact equality. The committed bottom-up
+scalar key avoids that path: recorded depth-2,500 independently rebuilt equal
+DAG probes take 0.047--0.058 seconds, and collision-heavy unequal probes take
+0.071--0.082 seconds. Regressions cover independently rebuilt equality,
+ordered near misses, owner separation, global/shadowed/nested/sibling
+quantifier scopes, definition parameters, deterministic alias order, reserved
+names, deep DAGs, adversarial hashes, and independent solver equivalence.
+
+The unbounded structural implementation passed its semantic tests and the
+ordinary TPCH policy, but the full run supplied a superseded performance
+diagnostic: 20 formula rows and two optimizer failures after 5,918/223,834 ms,
+with q2 at 764/178,922 ms rather than M86's 288/86,319 ms. The 17,342-byte
+report and 18,332-byte trace have SHA-256 values
+`d47711a72f437631466651ad87a4fcdf6d1e072fb45f01b56f8d9c687c706dec`
+and
+`511fe85603fc45a6a9e3c718a8d00bab95b977b5cee68c32bf3406fbca417d88`.
+Because the classifications are unchanged and timing-stripped report content
+matches M86, this run is evidence for the performance correction, not the
+authoritative M87 workload checkpoint.
+
+Cap commit `d9be39ad01b` makes `_bounded_identity_discovery` stop when a scope
+exceeds 16,384 identities and invoke the complete preceding identity renderer.
+That fallback retains every repeated-object alias and exact deterministic byte
+order. Quantifier bodies still re-enter capped discovery. Real-boundary tests,
+forced small-cap tests, and 1,000 generated-DAG differentials cover structural
+bytes at or below the ceiling and legacy bytes above it. The retained q2 scope
+census finds five oversized scopes of 1,236,701, 981,382, 929,609, 345,387,
+and 51,824 identities; q56/q60 stay structural with maximum scopes
+10,013/9,793. The solver-backed SMT suite passes 63/63, the full direct Python
+suite passes 779/779, and the registered package passes 801/801: 21 flake8,
+one import, and 779 Python checks.
+
+The exact q56 canonical/branch-7 serializations become 480,892/470,708 bytes,
+21.8509%/22.0561% below M86, with SHA-256 values
+`1fa866f6c87699acfc6ea05a9cf9a912d9d4d0f319229ef16f8863ee9be63b5b`
+and
+`87650e134222b1642a882894e5344c9b70b65749734f2b3ab1518fcbf894709b`.
+q60 becomes 478,281/468,829 bytes, 21.6300%/21.8239% below M86, with
+SHA-256 values
+`5a541e83dd92179bf057143593420953e9ef0c75bead71f393d60f4ba0f308c8`
+and
+`178b7c26361735196cf772b92589de23993ab351a1109fa023c21d69b96868a3`.
+Direct branch-7 Z3 checks remain `UNKNOWN` after 60.085/60.083 seconds. These
+are exact syntax reductions, not new bounded theorems.
+
+The capped authoritative dashboards are policy-valid with no violations.
+TPCH retains 20 formula rows and two optimizer failures after 3,325/107,979
+ms, with q2 at 285/86,749 ms. Its 17,333-byte report and 18,353-byte trace have
+SHA-256 values
+`98be7aca3d174cf03d6f09224d72f17364158a4503984e86a1c15a0a6870e0ac`
+and
+`fd50903ec7b21f6fb43a5a2dff8ef0d1e633757584eab47f4ae63c9b9a7d3d14`.
+TPC-DS retains 81 formula rows and 18 optimizer failures, with preparation
+73/26, after 78,615/842,344 ms. Its 342,055-byte report and 18,409-byte trace
+have SHA-256 values
+`c594ac967e6a98c3190c4eeb4c962816f2eb3d34e9cc51072bc195b38e1c9eb5`
+and
+`f26102544159a3b183afec264371238874250013cdbdfcb9fe10174dc0de7929`.
+All 101 captured pairs still enter the verifier and emit formulas.
+
+Fresh capped proof gates are policy-valid with zero violations. TPCH proves
+13/13 after 1,808/62,582 ms; its 10,171-byte report and 18,439-byte trace have
+SHA-256 values
+`9c878b942e75fc6d55983b876fdaff9c0a35600577782255cc056707894000fb`
+and
+`14f3d0d098b8b88df34e6e1e3599a05ddcb054a6bf15fd1572f9695d036ab4ad`.
+TPC-DS proves 23/23 after 19,215/265,971 ms; its 18,759-byte report and
+18,439-byte trace have SHA-256 values
+`b1f42045517c78146e15049acf95e00d35e357e586bed73880ef47fb1076eb05`
+and
+`00a90afc96ed67a99c3ad0604c8dc1f7d3ff9869043be007c8e01ad0fa326800`.
+Combined proof work is 21,023/328,553 ms. The trusted bounded theorem therefore
+retains the unchanged 13/13 plus 23/23, 36/36 floor.
+
+An attempted TPC-DS q18/q59/q78 discovery exhausted disk while Ya created its output
+root, before any test executed. It emitted no report, trace, status, or timing;
+the only accurate classification is `NO RESULT`. The failed materialization
+was removed and supported Ya cache garbage collection restored headroom. This
+operational event changes neither the TCB nor any query inventory.
+
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
 contains only the verifier's existing `Bool` and `Int` lane sorts, and can be
@@ -3050,6 +3163,30 @@ and mismatch theorem are unchanged. Physical size does not replace the
 composition lemma, fail-closed lineage/fallback review, full-subtree chronology,
 focused solver evidence, or complete gates above.
 
+The post-M87 physical-line audit compares completed M86 documentation commit
+`ac957ea3d5f` with structural-sharing commit `0077c196ea8`, scope-cap commit
+`d9be39ad01b`, and this four-file closeout. Counts use the same raw tracked
+`wc -l` sets as M86: the ten trusted Python modules, five C++ exporter files,
+every tracked file under `ut/`, `*_ut/`, and `prefix_capture/ut/`, the remaining
+diagnostic/orchestration source, and every tracked Markdown file under this
+directory.
+
+| Area | M86 physical lines | M87 physical lines | Delta |
+|---|---:|---:|---:|
+| Ten trusted Python semantic modules | 17,605 | 17,788 | +183 |
+| C++ exporter (including both private window headers) | 16,632 | 16,632 | 0 |
+| **Proof-producing code total** | **34,237** | **34,420** | **+183** |
+| Tests, outside the TCB | 85,165 | 85,634 | +469 |
+| Diagnostic/orchestration tools, outside the TCB | 5,432 | 5,432 | 0 |
+| Documentation, outside the TCB | 17,103 | 17,578 | +475 |
+
+The trusted increase is confined to `smt.py` (+183 net physical lines), about
+0.5345% of the M86 proof-producing core. Tests add 469 net lines in
+`test_smt.py`. The exporter, snapshot/IR, semantic evaluator, solver schedule,
+policy, bounds, and diagnostic tooling are unchanged. Physical size does not
+replace the exact-key/scope argument, cap/fallback differential, adversarial
+complexity probe, solver equivalence, package gate, or workload evidence above.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -3316,5 +3453,5 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Global Decimal Rank | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `stages.py`; `verify.py` | `ut/test_window_rank.py`; six-leaf q49 exact JSON and topology/type/name/order/frame mutations; finite/infinity/NaN peer, gap, NULL, unstable-ordinal, and no-published-order references; q49 exact formula and 60-second `UNKNOWN`; fixed-database q49 serial control, hash-routing counterexample, and concrete trace; committed synthetic universal serial proof and hash-routing counterexample; focused real-host capture with physical `YqlWin` failure |
 | Ordered Decimal ROWS windows | `semantic_snapshot.cpp`; `window_expression_export_impl.h`; `window_projection_audit_impl.h`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `stages.py`; `verify.py` | `ut/test_window_rows.py`; exact q51 four-leaf/three-Project JSON; C++ binder plus cross-language names, local orders, frame, types, SUM-Aggregate provenance, distinct MAX-input, topology, mixed-family, fanout, and subplan mutations; concrete required/nullable item partition, NULL input, peer-order, prefix-SUM/MAX, Decimal-special/headroom, task-local, and no-published-order references; item-only HashV2 and Date-liveness routing checks; focused formula and 60-second `UNKNOWN`; focused real-host exact Initial/Final capture with later physical `YqlAggWin` failure |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; synthetic window full-group-key `COUNTEREXAMPLE` and synthetic partition-only `VERIFIED_BOUNDED`, with production q12 post-fix `UNKNOWN`; nullable-key routing, global/disjoint/untracked/malformed gather, rename-history/current-input checks, and `cpp_ut/stage_assignment_rules_ut.cpp`; staged Decimal-AVG carrier payload transport plus HashShuffle-key/Merge-order rejection; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; same-occurrence/opposite-fact gating, ordinary eight-row threshold, forced eligible Broadcast compaction, HashShuffle eight-cell/ten-cell boundary, conditional hash-key ITE and opposite new routing facts, NULL/Decimal/integral-AVG state preservation, and overlapping Broadcast multiplicity; `P ⊆ K` global promotion, broken-certificate alternatives, Broadcast non-promotion, cross-task duplicate rejection, and choice-free Merge-network cap boundary; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; delayed Filter/Cross single, reversed, composite, residual, factor-local rejection/NULL/order/outcome/work-cap, deferred-factor scheduling, certified seed rebase and three-factor continuation, explicit reordered-inner equivalence, mutation, exact column-restoration, cap, override, shared-producer, subplan, choice, and StageGraph-gate tests; literal-false Join inputs across all kinds, poisoned payloads, symbolic-presence retention, sequence-metadata erasure, and exact cap accounting; C++ topology/task mutations; real-host integration |
-| SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations; preferred metadata/canonical-formula invariance, soundness-first protocol, canonical-skip versus ordinary canonical-first scheduling, all-branch proof, winning-branch replay, shared decreasing deadline, untried-branch rejection, first-UNKNOWN preservation, and empty-portfolio rejection |
-| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97/q88/q99/q21, the clean M80 20/20, M82 21/21, M83 22/22, and M85/M86 23/23 TPC-DS proof gates, the M83/M84/M85 q21/q56/q60 batches, M86 q56/q60 batch, q21 repeat, canonical-formula stability, Decimal-SUM formula-size reduction, q56/q60 preferred payload localization, all 101 formula rows, inspector, and replay for candidates |
+| SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; exact independently rebuilt structural sharing and class/sort/atom/operation/child-order near misses; Script-owner isolation; global, shadowed, nested, and sibling quantifier scopes; definition-parameter scopes; deterministic hygienic aliases; deep and colliding-hash DAGs; real and forced 16,384/16,385 cap boundaries; byte-exact identity fallback and nested structural re-entry; Z3 equivalence; identity and semantic-mutation obligations; preferred metadata/canonical-formula invariance, soundness-first protocol, canonical-skip versus ordinary canonical-first scheduling, all-branch proof, winning-branch replay, shared decreasing deadline, untried-branch rejection, first-UNKNOWN preservation, and empty-portfolio rejection |
+| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97/q88/q99/q21, the clean M80 20/20, M82 21/21, M83 22/22, and M85/M86/M87 23/23 TPC-DS proof gates, the M83/M84/M85 q21/q56/q60 batches, M86 q56/q60 batch, q21 repeat, canonical-formula stability, Decimal-SUM and M87 structural-CSE formula-size reductions, q56/q60 preferred payload localization, the superseded uncapped TPCH performance diagnostic, capped TPCH recovery, all 101 formula rows, inspector, and replay for candidates |

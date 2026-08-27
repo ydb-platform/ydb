@@ -1708,6 +1708,14 @@ private intermediate/final Decimal-SUM state. q56/q60's canonical and preferred
 payload obligations shrink by about 3%, but both remain `UNKNOWN` at branch
 7/8. No policy row moves, so the floor stays 36/36.
 
+Milestone 87 commits `0077c196ea8` and `d9be39ad01b` add exact structural SMT
+sharing inside each lexical scope of at most 16,384 distinct identities and
+the preceding identity renderer above that ceiling. q56/q60 canonical and
+branch-7 serializations shrink by about 22%, but the direct branch checks
+remain `UNKNOWN` at 60 seconds. The packaged target passes 801/801. The
+authoritative capped dashboards preserve all 101 formulas, and fresh complete
+gates prove the unchanged 13/13 TPCH plus 23/23 TPC-DS policy, 36/36.
+
 The complete post-M71 formula dashboards are TPCH 20 / 0 / 2 after
 3,020/93,251 ms (report SHA-256
 `ac7f146bdfc39359254ad062cb310bb2d142cc8b1cd5ad4b0cca055870f4360c`)
@@ -1948,6 +1956,10 @@ TPC-DS gates establish the current 36/36 floor. q56/q60 remain localized at the
 same preferred payload branch. M86 commit `374f8fb65df` implements its exact
 private Decimal-SUM summary reduction; both obligations shrink by about 3% but
 remain `UNKNOWN`, so the 36/36 floor and every weaker inventory remain fixed.
+M87 commits `0077c196ea8`/`d9be39ad01b` share exact SMT structure under a
+16,384-identity scope cap and retain identity sharing above it. q56/q60 shrink
+about 22% but remain `UNKNOWN`; capped dashboards and fresh 13/13 plus 23/23
+proof gates leave every inventory fixed.
 M4 remains the current milestone.
 
 The exact sorting-network slice adds TPCH q2 to the formula and preparation
@@ -3258,6 +3270,82 @@ contains thirty-six confirmed `VERIFIED_BOUNDED` obligations.
   36/121 workload queries (29.8%), 36/101 formula-covered pairs (35.6%), and
   within TPC-DS 23/99 workload rows (23.2%) and 23/81 formula rows (28.4%).
 
+  M87 changes SMT serialization without changing the exporter, snapshot/IR,
+  row/task bounds, solver schedule, policy, or formula denotation. Commit
+  `0077c196ea8` interns exact `(runtime class, sort, operation, atom, ordered
+  child IDs)` structure inside one lexical scope. Independently rebuilt equal
+  compounds share, while Script-owner identity and every structural near miss
+  remain separate. Quantifiers are opaque outside their bodies, each body
+  starts a fresh scope, and aliases remain hygienic and deterministic. A
+  direct-`Term` key prototype was rejected before commit after a colliding-hash
+  deep-DAG probe took about 26.5 seconds; bottom-up scalar keys remove that
+  comparison path.
+
+  Commit `d9be39ad01b` caps structural discovery at 16,384 distinct identities
+  per scope. An oversized scope uses the preceding identity-sharing renderer
+  byte-for-byte, while nested quantifier scopes retry independently. Real and
+  forced cap-boundary, old/new generated-DAG differential, deep/hash-collision,
+  owner/binder/hygiene, deterministic-alias, and Z3 tests are green. The final
+  solver-backed SMT suite passes 63/63, the direct Python suite passes 779/779,
+  and the registered package passes 801/801: 21 flake8, one import, and 779
+  Python checks.
+
+  The q56/q60 serialization measurement is:
+
+  | Query | Formula | M86 bytes | M87 bytes | Reduction | M87 SHA-256 |
+  |---:|---|---:|---:|---:|---|
+  | 56 | Canonical | 615,352 | 480,892 | 134,460 (21.8509%) | `1fa866f6c87699acfc6ea05a9cf9a912d9d4d0f319229ef16f8863ee9be63b5b` |
+  | 56 | Preferred branch 7 | 603,906 | 470,708 | 133,198 (22.0561%) | `87650e134222b1642a882894e5344c9b70b65749734f2b3ab1518fcbf894709b` |
+  | 60 | Canonical | 610,286 | 478,281 | 132,005 (21.6300%) | `5a541e83dd92179bf057143593420953e9ef0c75bead71f393d60f4ba0f308c8` |
+  | 60 | Preferred branch 7 | 599,709 | 468,829 | 130,880 (21.8239%) | `178b7c26361735196cf772b92589de23993ab351a1109fa023c21d69b96868a3` |
+
+  Direct 60-second Z3 checks of the preferred branches return `UNKNOWN` after
+  60.085/60.083 seconds. No policy promotion follows from serialization size.
+
+  The uncapped implementation's complete TPCH run is a diagnostic, not M87's
+  authoritative performance gate. It preserved 20 formula and two optimizer-
+  failure classifications but spent 5,918/223,834 ms, with q2 at
+  764/178,922 ms. Its report/trace are 17,342/18,332 bytes with SHA-256 values
+  `d47711a72f437631466651ad87a4fcdf6d1e072fb45f01b56f8d9c687c706dec`
+  and
+  `511fe85603fc45a6a9e3c718a8d00bab95b977b5cee68c32bf3406fbca417d88`.
+  The capped TPCH rerun recovers to 3,325/107,979 ms and q2 to 285/86,749 ms;
+  this before/after observation motivates and validates the operational cap
+  without assigning all solver-time variance to renderer preprocessing.
+
+  The authoritative capped formula dashboards are policy-valid with zero
+  violations:
+
+  | Suite | Selected/status counts | Preparation | Exact pair / entry / formula | Preparation / verifier ms | Report bytes / SHA-256 | Trace bytes / SHA-256 |
+  |---|---|---|---|---:|---|---|
+  | TPCH | 20 `FORMULA_EMITTED`, 2 `OPTIMIZER_FAILURE` | 20 succeeded, 2 failed | 20 / 20 / 20 | 3,325 / 107,979 | 17,333 / `98be7aca3d174cf03d6f09224d72f17364158a4503984e86a1c15a0a6870e0ac` | 18,353 / `fd50903ec7b21f6fb43a5a2dff8ef0d1e633757584eab47f4ae63c9b9a7d3d14` |
+  | TPC-DS | 81 `FORMULA_EMITTED`, 18 `OPTIMIZER_FAILURE` | 73 succeeded, 26 failed | 81 / 81 / 81 | 78,615 / 842,344 | 342,055 / `c594ac967e6a98c3190c4eeb4c962816f2eb3d34e9cc51072bc195b38e1c9eb5` | 18,409 / `f26102544159a3b183afec264371238874250013cdbdfcb9fe10174dc0de7929` |
+
+  Combined formula work is 81,940/950,323 ms. All 101 captured pairs still
+  enter and emit formulas; preparation remains 93 successful/28 failed.
+
+  Fresh proof reports are policy-valid with no violations and every selected
+  row is `VERIFIED_BOUNDED`:
+
+  | Suite | Required / verified | Preparation / verifier ms | Report bytes / SHA-256 | Trace bytes / SHA-256 | Subtest / metadata / outer seconds |
+  |---|---:|---:|---|---|---:|
+  | TPCH | 13 / 13 | 1,808 / 62,582 | 10,171 / `9c878b942e75fc6d55983b876fdaff9c0a35600577782255cc056707894000fb` | 18,439 / `14f3d0d098b8b88df34e6e1e3599a05ddcb054a6bf15fd1572f9695d036ab4ad` | 66.532420 / 67.447879 / 94.27 |
+  | TPC-DS | 23 / 23 | 19,215 / 265,971 | 18,759 / `b1f42045517c78146e15049acf95e00d35e357e586bed73880ef47fb1076eb05` | 18,439 / `00a90afc96ed67a99c3ad0604c8dc1f7d3ff9869043be007c8e01ad0fa326800` | 289.258978 / 290.234779 / 907.52 |
+
+  The TPC-DS outer command includes a cold build. Combined proof work is
+  21,023/328,553 ms. No obligation or weaker inventory changes: M87 retains
+  13/13 TPCH plus 23/23 TPC-DS, 36/36 overall, and promotes neither q56 nor
+  q60.
+
+  The attempted TPC-DS q18/q59/q78 discovery batch has no workload classification.
+  Ya encountered `ENOSPC` while creating the output root before the test ran,
+  so no report, trace, status, or timing exists. It is `NO RESULT`, not three
+  `UNKNOWN` rows. Supported Ya cache garbage collection restored headroom;
+  this operational failure changes no coverage or proof inventory.
+
+  Complete M87 evidence is preserved under
+  `.rbo-verification-artifacts/20260827-m87-structural-smt-cse/`.
+
   Focused q8 prepares in 695 ms and proves after 2,041 ms.
   The preceding 30-obligation complete reports had SHA-256 values
   `d641e3445696fce0f0a367a4f586aa20543d73cb6408a7cf0fefe49f42d64b47` and
@@ -4051,12 +4139,16 @@ thirty-six while every weaker inventory stays fixed. M86 semantic commit
 `374f8fb65df` then carries the exact private Decimal-SUM summary across the
 matching intermediate/final lineage. q56/q60's formulas and payload branches
 shrink about 3%, but both stay `UNKNOWN`; fresh dashboards and the unchanged
-13/13 plus 23/23 proof gates are green, so every inventory remains fixed.
+13/13 plus 23/23 proof gates are green, so every inventory remains fixed. M87
+commits `0077c196ea8` and `d9be39ad01b` add bounded exact structural SMT
+sharing with the old identity renderer above the 16,384-identity scope cap.
+q56/q60 syntax shrinks about 22%, but branch 7 stays `UNKNOWN`; capped
+dashboards and fresh proof gates remain green, so every inventory stays fixed.
 More than two dependencies, other correlation shapes, coercing dynamic `IN`,
 nullable String and non-positive nullable contexts, broader range grammars,
 and other OLAP pushdowns remain later work. Solver/formula-size work promotes
 supported queries only after reproducible `VERIFIED_BOUNDED` results. The
-required policy now contains thirty-six obligations. Fresh M86 gates confirm
+required policy now contains thirty-six obligations. Fresh M87 gates confirm
 13/13 TPCH and 23/23 TPC-DS. The earlier
 contended q9 `UNKNOWN` was a failed operational run, not a counterexample or a
 new optimizer finding.

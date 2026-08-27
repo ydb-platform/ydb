@@ -95,6 +95,42 @@ def extract_between(line: str, field: str, end_field: Optional[str]) -> Optional
             return s[:end_pos]
     return s
 
+def extract_field(line: str, field: str) -> Optional[str]:
+    key = field + "="
+    pos = line.find(key)
+    if pos < 0:
+        return None
+
+    pos += len(key)
+    if pos >= len(line):
+        return None
+
+    if line[pos]!='"':
+        found = line.find(' ', pos)
+        if found<0:
+            return line[pos:]
+        else:
+            return line[pos:found]
+
+    result = ""
+    pos = pos + 1
+    while pos < len(line):
+        if line[pos]=='"':
+            return result
+        if line[pos]=='\\':
+            pos = pos + 1
+            if line[pos]=='"':
+                result = result + '"'
+            elif line[pos]=='\\':
+                result = result + '\\'
+            else:
+                return None
+            pos = pos + 1
+        else:
+            result += line[pos]
+            pos = pos + 1
+
+    return None;
 
 # ==================== Regex Patterns ====================
 
@@ -148,10 +184,15 @@ def extract_breaker_id(line: str) -> Optional[str]:
 
 def victim_id_in_line(line: str, victim_id: str) -> bool:
     """Check if victim_id appears in VictimQuerySpanId or VictimQuerySpanIds."""
-    if re.search(rf"\bvictimQuerySpanId=\s*{re.escape(victim_id)}\b", line):
+
+    id = extract_field(line, "victimQuerySpanId")
+    if id and id.strip() == victim_id.strip():
         return True
-    if re.search(rf"\botherVictimQuerySpanId=\s*{re.escape(victim_id)}\b", line):
+
+    id = extract_field(line, "otherVictimQuerySpanId")
+    if id and id.strip() == victim_id.strip():
         return True
+
     return False
 
 
@@ -261,8 +302,8 @@ def main():
     tp = FastTimeParser()
 
     # Collected data
+    victim_query_text = ""
     anchor_t: Optional[float] = None
-    victim_log_sa: Optional[str] = None      # SessionActor "was a victim" line
     breaker_log_ds: Optional[str] = None     # DataShard "broke other locks" line
     breaker_id: Optional[str] = None
     breaker_sa_by_id: Dict[str, str] = {}
@@ -308,21 +349,31 @@ def main():
     w_end = anchor_t + W
 
     # Process all relevant lines within the time window
+
+    victim_tx_items: List[Tuple[str, str]] = []
+    breaker_tx_items: List[Tuple[str, str]] = []
+
     for t, line in relevant_lines:
         if not in_window(t, w_start, w_end):
             continue
 
-        print("CHECK_LINE:", line, end="")
+        line = line.rstrip("\n")
 
         # Victim SessionActor line: "was a victim of broken locks" + component=SessionActor
-        if victim_log_sa is None:
-            if ("was a victim of broken locks" in line) and \
-               ("component=SessionActor" in line) and \
-               victim_id_in_line(line, victim_id):
-                victim_log_sa = line.rstrip("\n")
-                print("CHECK_LINE:")
-                print("CHECK_LINE:     victim_log_sa =", victim_log_sa)
-                print("CHECK_LINE:")
+        if ("was a victim of broken locks" in line) and \
+            ("component=SessionActor" in line) and \
+            victim_id_in_line(line, victim_id):
+
+            line_victim_id = extract_field(line, "victimQuerySpanId")
+            line_victim_query_text = extract_field(line, "victimQueryText")
+            if line_victim_id and line_victim_query_text:
+                victim_query_text = line_victim_query_text
+                victim_tx_items.append((line_victim_id, line_victim_query_text))
+
+            other_victim_id = extract_field(line, "otherVictimQuerySpanId")
+            other_victim_query_text = extract_field(line, "otherVictimQueryText")
+            if other_victim_id and other_victim_query_text:
+                victim_tx_items.append((other_victim_id, other_victim_query_text))
 
         # Breaker DataShard line: "broke other locks" + Component: DataShard
         if breaker_log_ds is None:
@@ -331,46 +382,19 @@ def main():
                victim_id_in_line(line, victim_id):
                 breaker_log_ds = line.rstrip("\n")
                 breaker_id = extract_breaker_id(line)
-                print("CHECK_LINE:")
-                print("CHECK_LINE:     breaker_id =", breaker_id)
-                print("CHECK_LINE:")
 
         # Breaker SessionActor lines: "had broken other locks" + Component: SessionActor
         # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
         if ("had broken other locks" in line) and ("component=SessionActor" in line):
             bid = extract_breaker_id(line)
             if bid:
-                sline = line.rstrip("\n")
-                new_count = count_queries_in_list(sline, "BreakerQueryTexts")
-                # Update if this is the first line or has more queries
-                if bid not in breaker_sa_by_id:
-                    breaker_sa_by_id[bid] = sline
-                else:
-                    old_count = count_queries_in_list(breaker_sa_by_id[bid], "BreakerQueryTexts")
-                    if new_count > old_count:
-                        breaker_sa_by_id[bid] = sline
-                # Same logic for lines with BreakerQueryText field
-                if "BreakerQueryText:" in sline:
-                    if bid not in breaker_sa_with_text_by_id:
-                        breaker_sa_with_text_by_id[bid] = sline
-                    else:
-                        old_count = count_queries_in_list(breaker_sa_with_text_by_id[bid], "BreakerQueryTexts")
-                        if new_count > old_count:
-                            breaker_sa_with_text_by_id[bid] = sline
+                breaker_query_text = extract_field(line, "breakerQueryText"),
+                if breaker_query_text:
+                    breaker_sa_with_text_by_id[bid] = breaker_query_text
+                    breaker_tx_items.append((bid, breaker_query_text))
 
-    # Extract query texts
-    victim_query_text = ""
-    if victim_log_sa:
-        vqt = extract_between(victim_log_sa, "VictimQueryText", "VictimQueryTexts:")
-        victim_query_text = unescape_and_format_query_text(vqt or "")
-
-    breaker_log_sa: Optional[str] = None
-    breaker_query_text = ""
     if breaker_id:
-        breaker_log_sa = breaker_sa_with_text_by_id.get(breaker_id) or breaker_sa_by_id.get(breaker_id)
-        if breaker_log_sa:
-            bqt = extract_between(breaker_log_sa, "BreakerQueryText", "BreakerQueryTexts:")
-            breaker_query_text = unescape_and_format_query_text(bqt or "")
+        breaker_query_text = breaker_sa_with_text_by_id[breaker_id];
 
     # Output results
     print_section_header("TLI Chain", use_color)
@@ -390,16 +414,8 @@ def main():
     print_kv_header("BreakerQueryText", use_color)
     print(breaker_query_text if breaker_query_text else "(not found)")
 
-    # Parse and display transaction blocks
-    victim_tx_items: List[Tuple[str, str]] = []
-    if victim_log_sa:
-        victim_tx_items = parse_query_texts_list(victim_log_sa, "VictimQueryTexts")
-
-    breaker_tx_items: List[Tuple[str, str]] = []
-    if breaker_log_sa:
-        breaker_tx_items = parse_query_texts_list(breaker_log_sa, "BreakerQueryTexts")
-
     print_tx_block("VictimTx", victim_tx_items, victim_id, use_color)
+
     print_tx_block("BreakerTx", breaker_tx_items, breaker_id, use_color)
 
 

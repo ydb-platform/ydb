@@ -85,6 +85,9 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         };
 
         CheckRegexMatch(ss.Str(), regexToMatchCount);
+
+        Cerr << "LOG:" << Endl;
+        Cerr << ss.Str() << Endl;
     }
 
     Y_UNIT_TEST_TWIN(UpsertEvWriteQueryService, isOlap) {

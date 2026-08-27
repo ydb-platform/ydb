@@ -226,6 +226,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
                     {"victimQueryText", params.VictimQueryText},
+                    {"otherVictimQuerySpanId", allQueriesItem.Id},
                     {"otherVictimQueryText", allQueriesItem.Text});
             }
         }

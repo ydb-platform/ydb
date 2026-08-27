@@ -135,6 +135,7 @@
 /ydb/tools/stress_tool @ydb-platform/blobstorage
 
 /ydb/apps/ydb @ydb-platform/cli
+/ydb/ci/local-ydb/tests/ @ydb-platform/appteam
 /ydb/public/lib/ydb_cli @ydb-platform/cli
 /ydb/public/lib/ydb_cli/dump @ydb-platform/core
 /ydb/public/sdk/cpp @ydb-platform/cpp-sdk

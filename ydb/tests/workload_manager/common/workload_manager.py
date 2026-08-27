@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import allure
+import json
 import pytest
 import time
 import traceback
@@ -17,6 +18,7 @@ from threading import Thread, Event
 from datetime import datetime
 from matplotlib import pyplot, dates
 from os import getenv
+from typing import Optional
 
 
 class ResourcePool:
@@ -85,6 +87,25 @@ class WorkloadManagerBase(LoadSuiteBase):
         for r in cls.get_resource_pools():
             result.update(r.users)
         return list(result)
+
+    @staticmethod
+    @allure.step('Execute query and return the used resource pool')
+    def execute_query_in_pool(query: str, pool_id: Optional[str] = None) -> Optional[str]:
+        driver = YdbCluster.get_ydb_driver()
+        with ydb.QuerySessionPool(driver) as session_pool:
+            with session_pool.checkout() as session:
+                it = session.execute(
+                    query,
+                    stats_mode=ydb.QueryStatsMode.FULL,
+                    pool_id=pool_id,
+                )
+                # Drain the result stream so that ``last_query_stats`` is populated.
+                for _ in it:
+                    pass
+                stats = session.last_query_stats
+        plan = stats.query_plan if stats is not None else ''
+        allure.attach(plan, 'query plan', allure.attachment_type.JSON)
+        return json.loads(plan)['Plan']['Stats'].get('ResourcePoolId')
 
     @classmethod
     def do_setup_class(cls):

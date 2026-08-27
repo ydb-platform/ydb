@@ -83,7 +83,7 @@ message TActorSystemConfig {
         optional TAffinity Affinity = 4;
         // Index into runtime CPU topology placement groups. Supported for BASIC executors and mutually exclusive with Affinity.
         // Placement only resolves this executor's affinity; multiple executors may use the same placement group.
-        optional uint32 Placement = 27;
+        optional uint32 Placement = 28;
         optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore
         optional string Name = 6;
         optional uint32 TimePerMailboxMicroSecs = 7;

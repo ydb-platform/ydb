@@ -964,13 +964,21 @@ Implementation sequence:
     two-task, 60-second contract, and policy commit `ebb5c8806fc` adds it as
     TPC-DS obligation twenty. A clean full TPC-DS proof-floor rerun verifies
     all 20/20 obligations. Together with the unchanged 13-query TPCH floor,
-    the checked-in floor is now 33/33. M4 remains current.
+    the M80 checked-in floor became 33/33. M4 remains current.
 81. M4: record a focused bounded-solver checkpoint for already-supported
     TPC-DS q33. At unchanged code HEAD `3d1d99a953c`, the exact 2x2 obligation
     reaches the solver but returns `UNKNOWN` at the global deadline before
     branch 4/28. This is neither a proof nor a policy promotion; the floor
     remains 33. Further q33 work should reduce the exact semantic outcome
     structure, not merely tune the timeout. M4 remains current.
+82. M4: promote already-supported TPC-DS q88 into the checked bounded-proof
+    floor. Two focused runs on unchanged proof-producing code reproducibly return
+    `VERIFIED_BOUNDED` at the unchanged two-row, two-task, 60-second contract.
+    Policy commit `42a879e19f5` changes only the proof obligation and its
+    regression fixtures; no exporter, verifier, model, bound, formula,
+    exact-pair, verifier-entry, or preparation floor changes. Fresh complete
+    gates verify all 13/13 TPCH and 21/21 TPC-DS obligations, raising the
+    checked floor to 34/34. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -2010,7 +2018,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - TPC-DS q88 exposed why that concrete extension was needed: opaque source
   additions did not constrain optimizer-folded literals. Its regenerated
   obligation has no opaque scalar functions and no longer returns the spurious
-  counterexample; Z3 currently returns `UNKNOWN` at the 60-second bound.
+  counterexample; at that historical checkpoint Z3 returned `UNKNOWN` at the
+  60-second bound. M82's fresh focused and complete-gate proofs supersede only
+  q88's current proof status, without attributing the different solver result
+  to any particular intervening change.
 - Actual pushed column-store filters are decoded from `OlapFilterLambda`, not
   optimizer statistics metadata. The supported Boolean/comparison subset is
   evaluated before per-task pushed limits. Exact two-child
@@ -3432,6 +3443,37 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   33, and the next step is exact semantic branch reduction rather than timeout
   tuning.
 
+  Milestone 82 promotes the already formula-covered, preparation-successful
+  TPC-DS q88 without changing proof-producing code. Two focused non-gating
+  runs on that same code capture exactly Initial then Final and return
+  `VERIFIED_BOUNDED` at row/task bound 2/2 after 2,141/41,735 and
+  2,139/41,728 ms. Their 5,770-byte reports have SHA-256 values
+  `303f4af0cc03844a75eab41c8e1eb0b13e4b50dee71d4f60c9cf4f03327bde60`
+  and
+  `3d6c2b61326f57b3eb33fb108761658b124ef7f5db09eac20709a2be0c2206f1`;
+  test/suite times are 47.651/48.609 and 47.436/48.386 seconds. Successful
+  proof rows intentionally preserve no standalone formula or verdict artifact.
+  Policy commit `42a879e19f5` adds q88 as TPC-DS proof obligation twenty-one;
+  focused policy validation passes 16/16. This promotion changes no semantic
+  model, bound, or weaker coverage floor.
+
+  Fresh authoritative proof gates are policy-valid with zero violations and
+  verify all 34/34 obligations. TPCH prepares and proves 13/13 after summed
+  1,779/83,055 ms; its 10,171-byte report has SHA-256
+  `d558bc7f56e4d013b539a2023ccd02ad3c696ba9b5b29e54fc80fb92b7d556b0`
+  and test/suite/graph/outer wall times of
+  86.799/87.601/188.589/209.36 seconds. TPC-DS prepares and proves 21/21 after
+  summed 18,227/162,856 ms; q9 spends 9,806/28,951 ms, q88
+  2,240/41,824 ms, and q97 304/2,255 ms. Its 17,550-byte report has SHA-256
+  `1f45ea729e1bb7f393023545123942c1fa6726c7ac7701b70fa4fb7923c676fd`;
+  subtest/suite/chunk/outer wall times are
+  184.902/185.910/185.903/210.45 seconds. The current
+  floor is therefore 34/121 workload queries (28.1%), 34/101 formula-covered
+  exact pairs (33.7%), and 34/34 curated obligations. Within TPC-DS it is
+  21/99 workload rows (21.2%) and 21/81 formula-covered rows (25.9%). Formula,
+  exact-pair, verifier-entry, preparation, and defect inventories remain
+  unchanged.
+
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
@@ -3709,10 +3751,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
-  q3, q8, q9, q16, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93,
-  q94, q95, q96, and q97 with a fixed 60-second per-query budget. The current
-  policy covers 13 TPCH and 20 TPC-DS queries: 33 obligations, 33/121 (27.3%)
-  of the workload, and 33/101 (32.7%) of formula-covered queries.
+  q3, q8, q9, q16, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q88, q90,
+  q93, q94, q95, q96, and q97 with a fixed 60-second per-query budget. The
+  current policy covers 13 TPCH and 21 TPC-DS queries: 34 obligations, 34/121
+  (28.1%) of the workload, and 34/101 (33.7%) of formula-covered queries.
   Historically, the post-M78 reports verified all 32/32 as
   `VERIFIED_BOUNDED`: TPCH passed 13/13
   after 1,745/82,550 ms (SHA-256
@@ -3735,8 +3777,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   TPCH report above retains 13/13; the authoritative M80 TPC-DS rerun verifies
   20/20 after 16,156/120,815 ms (SHA-256
   `50f4a7e37793c804265ef94a8ac29ec6a2a86211eb3a88795a8b665a3497cc00`).
-  All 33/33 current obligations are therefore `VERIFIED_BOUNDED` with zero
+  At M80 all 33/33 obligations were therefore `VERIFIED_BOUNDED` with zero
   policy violations.
+
+  M82 policy commit `42a879e19f5` adds only TPC-DS q88. Fresh reports verify
+  13/13 TPCH after 1,779/83,055 ms (SHA-256
+  `d558bc7f56e4d013b539a2023ccd02ad3c696ba9b5b29e54fc80fb92b7d556b0`)
+  and 21/21 TPC-DS after 18,227/162,856 ms (SHA-256
+  `1f45ea729e1bb7f393023545123942c1fa6726c7ac7701b70fa4fb7923c676fd`).
+  All 34/34 current obligations are `VERIFIED_BOUNDED` with zero policy
+  violations.
 
   The immediately preceding complete policy gate on source `4c2c1359e28`
   passed 10/10 TPCH and 12/12 TPC-DS. Its TPCH proof-floor report spent
@@ -3808,9 +3858,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   after 158/5,636 ms, and TPC-DS q69 after 374/3,781 ms and again after
   359/3,758 ms. q50 emits a formula but its
   solver experiment ended `SOLVER_ERROR` after the external process exceeded its
-  65.0-second deadline; it is not part of the proof floor. TPC-DS q15, q61, q62,
-  q76, q79, and q88 return `UNKNOWN` at the 60-second solver budget. q43 likewise
-  returns `UNKNOWN` after 147/69,391 ms. q61's
+  65.0-second deadline; it is not part of the proof floor. At that historical
+  checkpoint TPC-DS q15, q61, q62, q76, q79, and q88 returned `UNKNOWN` at the
+  60-second solver budget. M82's fresh proof evidence supersedes only
+  q88's current proof status; no particular intervening change is credited for
+  the different solver result. q43 likewise returned `UNKNOWN` after
+  147/69,391 ms. q61's
   1,572,871-byte formula recorded 955 ms of preparation and 63,897 ms of
   verification. The fresh q76 dashboard row records 424/1,723 ms; its preserved
   focused formula run recorded 391/14,169 ms, and its solver experiment recorded
@@ -4477,10 +4530,14 @@ regression locks the corrected boundary.
   M80 policy commit `ebb5c8806fc` promotes already-supported TPC-DS q97 to
   proof depth without changing any semantic model or weaker coverage floor.
   Focused q97 and the clean 20/20 TPC-DS proof gate are recorded above; the
-  checked floor is now 33 obligations.
+  M80 checked floor became 33 obligations.
   M81 records the focused q33 `UNKNOWN` at unchanged HEAD `3d1d99a953c`.
-  It changes no policy or implementation, so the checked floor remains 33;
+  It changes no policy or implementation, so the M81 checked floor remained 33;
   exact semantic reduction is the next q33 step.
+  M82 policy commit `42a879e19f5` promotes already-supported TPC-DS q88 to
+  proof depth without changing proof-producing code or a weaker coverage
+  floor. Two focused runs and fresh 13/13 TPCH plus 21/21 TPC-DS gates are
+  `VERIFIED_BOUNDED`; the checked floor is now 34 obligations.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

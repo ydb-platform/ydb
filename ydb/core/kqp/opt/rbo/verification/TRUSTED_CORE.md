@@ -1447,7 +1447,7 @@ not establish cause. No code changed before the clean rerun, which prepares
 and proves all 20/20 TPC-DS rows after summed
 16,156/120,815 ms (report SHA-256
 `50f4a7e37793c804265ef94a8ac29ec6a2a86211eb3a88795a8b665a3497cc00`).
-Together with the unchanged M79 TPCH 13/13 report, the checked floor is 33/33:
+Together with the unchanged M79 TPCH 13/13 report, the M80 checked floor was 33/33:
 33/121 workload rows (27.3%) and 33/101 formula-covered exact pairs (32.7%).
 This is stronger evidence under the existing bounded theorem, not an increase
 in the TCB or a new optimizer defect.
@@ -1459,8 +1459,27 @@ expires before branch 4/28 (`left_outcome_1_unmatched`). Its non-gating
 `solver_experiment` policy is valid with zero violations; report SHA-256 is
 `2dd30504eaa2e51f61fdd5894cb310360af4716471d40cbfa4aba54d5bdaffb4`.
 This establishes no new theorem result, defect, or external assumption. q33
-remains outside the 33-query proof floor; any future promotion requires exact
-semantic reduction and a reproducible proof, not timeout tuning.
+remains outside the then-33-query proof floor; any future promotion requires
+exact semantic reduction and a reproducible proof, not timeout tuning.
+
+M82 also changes no proof-producing file, accepted semantic contract, bound,
+or external assumption. Two focused q88 runs on unchanged proof-producing code
+reproducibly return `VERIFIED_BOUNDED` at row/task bound 2/2 after 2,141/41,735 and
+2,139/41,728 ms. Their 5,770-byte reports have SHA-256 values
+`303f4af0cc03844a75eab41c8e1eb0b13e4b50dee71d4f60c9cf4f03327bde60`
+and
+`3d6c2b61326f57b3eb33fb108761658b124ef7f5db09eac20709a2be0c2206f1`.
+Both are valid zero-violation non-gating experiments; successful proof rows
+retain no standalone formula or verdict artifact. Policy commit
+`42a879e19f5` changes only the q88 obligation and its regression fixtures, and
+policy validation passes 16/16. Fresh policy-valid gates verify 13/13 TPCH
+after 1,779/83,055 ms (report SHA-256
+`d558bc7f56e4d013b539a2023ccd02ad3c696ba9b5b29e54fc80fb92b7d556b0`)
+and 21/21 TPC-DS after 18,227/162,856 ms (report SHA-256
+`1f45ea729e1bb7f393023545123942c1fa6726c7ac7701b70fa4fb7923c676fd`).
+The checked floor is now 34/34: 34/121 workload rows (28.1%) and 34/101
+formula-covered exact pairs (33.7%). This strengthens evidence under the
+existing bounded theorem; it does not enlarge the TCB or defect inventory.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -2577,6 +2596,25 @@ M80 therefore changes the policy obligation set and its tests, not the trusted
 semantics. The documentation delta records the four-file proof-promotion
 closeout plus the q51 trusted-responsibility terminology correction above.
 
+The post-M82 physical-line audit compares the completed M81 documentation at
+`3523737aaf3` with proof-policy commit `42a879e19f5` plus this closeout. The
+commit changes only the benchmark policy and its C++ regression fixtures; the
+trusted implementation and diagnostic tooling are byte-for-byte unchanged.
+Counts use the same tracked raw `wc -l` sets as M79, with a recursive Markdown
+count for documentation.
+
+| Area | M81 physical lines | M82 physical lines | Delta |
+|---|---:|---:|---:|
+| Ten trusted Python semantic modules | 16,603 | 16,603 | 0 |
+| C++ exporter (including both private window headers) | 16,632 | 16,632 | 0 |
+| **Proof-producing code total** | **33,235** | **33,235** | **0** |
+| Tests, outside the TCB | 82,085 | 82,087 | +2 |
+| Diagnostic/orchestration tools, outside the TCB | 5,432 | 5,432 | 0 |
+| Documentation, outside the TCB | 15,225 | 15,431 | +206 |
+
+M82 therefore changes only proof policy depth, its regression fixtures, and
+the four-file closeout. No trusted semantic implementation grows.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -2835,4 +2873,4 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Ordered Decimal ROWS windows | `semantic_snapshot.cpp`; `window_expression_export_impl.h`; `window_projection_audit_impl.h`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `stages.py`; `verify.py` | `ut/test_window_rows.py`; exact q51 four-leaf/three-Project JSON; C++ binder plus cross-language names, local orders, frame, types, SUM-Aggregate provenance, distinct MAX-input, topology, mixed-family, fanout, and subplan mutations; concrete required/nullable item partition, NULL input, peer-order, prefix-SUM/MAX, Decimal-special/headroom, task-local, and no-published-order references; item-only HashV2 and Date-liveness routing checks; focused formula and 60-second `UNKNOWN`; focused real-host exact Initial/Final capture with later physical `YqlAggWin` failure |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; synthetic window full-group-key `COUNTEREXAMPLE` and synthetic partition-only `VERIFIED_BOUNDED`, with production q12 post-fix `UNKNOWN`; nullable-key routing, global/disjoint/untracked/malformed gather, rename-history/current-input checks, and `cpp_ut/stage_assignment_rules_ut.cpp`; staged Decimal-AVG carrier payload transport plus HashShuffle-key/Merge-order rejection; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; same-occurrence/opposite-fact gating, ordinary eight-row threshold, forced eligible Broadcast compaction, HashShuffle eight-cell/ten-cell boundary, conditional hash-key ITE and opposite new routing facts, NULL/Decimal/integral-AVG state preservation, and overlapping Broadcast multiplicity; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; delayed Filter/Cross single, reversed, composite, residual, factor-local rejection/NULL/order/outcome/work-cap, deferred-factor scheduling, certified seed rebase and three-factor continuation, explicit reordered-inner equivalence, mutation, exact column-restoration, cap, override, shared-producer, subplan, choice, and StageGraph-gate tests; literal-false Join inputs across all kinds, poisoned payloads, symbolic-presence retention, sequence-metadata erasure, and exact cap accounting; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
-| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97 and the clean M80 20/20 TPC-DS proof gate, inspector and replay for candidates |
+| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97/q88 and the clean M80 20/20 plus M82 21/21 TPC-DS proof gates, inspector and replay for candidates |

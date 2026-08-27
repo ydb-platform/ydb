@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // Mark DDisk#1 completely fresh.
         DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
-        // Start data coping
+        // Start data copying
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
         auto complete = Copier->Start();
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
 
-        // Start data coping again
+        // Start data copying again
         ExpectedRange = TBlockRange64::WithLength(256, BlocksPerCopy);
         complete = Copier->Start();
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
@@ -749,7 +749,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             "H1[256..511]wait;",
             DirtyMap->DebugPrintInflightSync());
 
-        // Complete flushes to start coping range #1.
+        // Complete flushes to start copying range #1.
         FinishFlushes(*DirtyMap, flushHints);
 
         // Coping range #1 in progress.

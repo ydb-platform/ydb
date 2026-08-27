@@ -31,7 +31,8 @@ exact direct Decimal
 semantics for comparison, weak integral-to-Decimal casts, same-scale
 nondecreasing-precision Decimal widening plus the one exact
 `Decimal(35,2) -> Decimal(15,4)` rescale, arithmetic, ordering, `SUM`, and
-Decimal `MIN`/`MAX` and phase-aware Decimal `AVG`, exact global q49 Decimal
+private exact summary composition of directly linked split Decimal `SUM`,
+Decimal `MIN`/`MAX`, and phase-aware Decimal `AVG`, exact global q49 Decimal
 `Rank` with independently unstable peer order and serial routing, exact same-output-type
 fixed-width signed/unsigned integral `MIN`/`MAX`, narrowly certified ordering of
 completed integral-`AVG` `Optional<Double>` results, exact ordered logical `UnionAll`,
@@ -401,9 +402,12 @@ claimed. q21 proves twice at 2x2; q56/q60 remain `UNKNOWN` at the same
 preferred payload branch. Policy commit `95182b541fb` promotes only q21, and
 fresh policy-valid, zero-violation proof gates verify 13/13 TPCH and 23/23 TPC-DS.
 The current floor is 36/36: 36/121 workload queries (29.8%) and 36/101
-formula-covered exact pairs (35.6%). M86 starts with summary-state diagnosis
-of the shared q56/q60 payload branch; no further reduction or promotion is
-assumed.
+formula-covered exact pairs (35.6%). Milestone 86 semantic commit
+`374f8fb65df` implements the diagnosed reduction as a private, fail-closed
+`DecimalSumState` for one exact intermediate-to-final Decimal-SUM lineage.
+The focused q56/q60 obligations and their preferred payload branches shrink by
+about 3%, but both remain `UNKNOWN` at branch 7/8. No query is promoted, so the
+proof floor remains 36/36.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -1538,9 +1542,119 @@ subtest and outer wall times are 72.351277 and 322.93 seconds. Exact graph times
 were not retained and are not inferred. The current floor is 36/36: 36/121
 workload rows (29.8%), 36/101 formula-covered exact pairs (35.6%), and within
 TPC-DS 23/99 workload rows (23.2%) and 23/81 formula-covered rows (28.4%). No
-weaker coverage or defect inventory changes. M86 first performs summary-state
-diagnosis of the common q56/q60 payload branch; it assumes no proof or further
-policy promotion.
+weaker coverage or defect inventory changes. The common q56/q60 payload branch
+is the measured input to M86 below.
+
+M86 semantic commit `374f8fb65df` implements that measured reduction without
+changing the exporter, snapshot schema, IR, row/task bounds, solver schedule,
+or proof policy. `DecimalSumState` is proof-only metadata attached to the
+ordinary authoritative Decimal scalar. It records the accumulator type,
+`any_non_null`, NaN/positive-infinity/negative-infinity flags, the exact finite
+total, and a conservative absolute finite bound. Finishing the state applies
+the existing Decimal-SUM rule: NaN or opposing infinities yield NaN, otherwise
+one infinity wins, otherwise the finite codes add exactly.
+
+The composition theorem is the flattened-bag SUM theorem. For guarded partial
+states of one maximum-precision Decimal type, OR the selected presence and
+special lanes and add the selected finite totals. If the sum of their
+conservative finite bounds remains strictly below `10^precision`, finishing
+that combined state equals applying the existing exact SUM to all selected
+original inputs. The final guard is the partial scalar's semantic non-NULL
+condition, deliberately not the state's original-input-presence bit: a
+non-nullable empty intermediate SUM materializes zero and must be an active
+final input. The same strict headroom rejection remains in force, so the
+summary does not assume associativity across a possible Decimal overflow.
+
+Admission is an exact private lineage, not a general aggregate rewrite. The
+producer must be an unexposed, non-`DistinctAll` phase-`intermediate`
+Aggregate with exactly one parent. That parent must be its direct
+phase-`final` Aggregate consumer with identical grouping keys. One plain,
+non-distinct, non-unwrap Decimal `sum` output must have exactly one matching
+plain final `sum` use with the same accumulator type; roots, subplan roots,
+fanout, duplicate use, key use, phase/function/type changes, or either
+`DistinctAll` decline the certificate. The old scalar-finalization path remains
+the fallback.
+
+The intermediate result still materializes its ordinary Decimal value, NULL
+bit, and finite bound. The hidden state travels only with that `Value` through
+the already exact dataflow. Mutually exclusive task-copy compaction retains it
+only when every alternative reconstructs its authoritative scalar and shares
+the type; it selects every symbolic lane under the row guard and takes the
+maximum alternative bound because only one row can be live. All state terms
+participate in bounded-choice dependency discovery. At the matching final
+Aggregate, every selected partial must carry a state whose type, bound, NULL
+condition, and finished scalar exactly reproduce the visible `Value`. A single
+missing or malformed state makes the whole aggregate use the prior scalar
+path. A successful combine consumes the state once and publishes only the
+ordinary final scalar.
+
+The semantic regressions cover direct-versus-composed NULL, finite, NaN, both
+infinities, opposing infinities, inactive partials, grouped/ungrouped bags and
+both task placements; malformed lane sorts, types, values, bounds,
+fanout, roots/subplans, phases, keys, functions, duplicate uses, and exact
+headroom limits; nullable versus non-nullable empty partials; choice
+dependencies; exclusive-route state selection and fail-closed compaction; and
+the absence of re-decoding in the accepted final term. Independent theorem,
+gate, fallback, transport, headroom, packaging, and commit-scope audits found
+no blocker.
+
+The first complete verification-subtree run completed 1,349/1,350 checks. Its
+only failure was an unused `Sort` import reported as flake8 F401; semantic and
+workload results were green. In that same run the main Python target passed
+765/765, all Python targets aggregated to 878/878, all ten import checks
+passed, and both complete dashboards and both proof floors passed. The one
+unused-import line was then removed and is included in `374f8fb65df`; the
+post-fix all-flake8 corrective run passed 68/68. A post-fix rerun of the full
+subtree was not made and is not claimed.
+
+The focused committed-HEAD q56/q60 `solver_experiment` uses row/task bound 2/2
+and the 60,000-ms global solver deadline. Both queries prepare, capture exact
+pairs, and enter the verifier, but both remain `UNKNOWN` at branch 7/8,
+`preferred_left_row_0_column_1_payload_mismatch`. q56 spends 1,554/61,600 ms
+and q60 1,533/61,579 ms in preparation/verification. The policy-valid,
+zero-violation 8,339-byte report has SHA-256
+`4303275234ed765184f460d50ba17996f09e031a0fe5f0f89dc70918ffda6ef7`;
+the 18,419-byte trace has SHA-256
+`bd4b047a5ee0027c1a5287c257757de5ce697903efe5ec143aaed3d4385a58b1`
+and records 130.106070 seconds of subtest time, 131.122184 seconds of chunk
+wall time, and 1,089,244 KiB peak process-tree RSS.
+
+The canonical q56 formula is 615,352 bytes with SHA-256
+`e8b86462179dbb64863b939a6c4f0765cb9eede153594228414f4e6ca62e1d56`,
+down 19,134 bytes (3.0157%) from M85's 634,486 bytes. q60 is 610,286 bytes
+with SHA-256
+`cb799a6af02dfd548ea9f4bd195d52c4aebf871d054a4a636946bb9deac1d060`,
+down 19,104 bytes (3.0353%) from 629,390. The corresponding branch-7
+obligations shrink from 623,078 to 603,906 bytes for q56 (-19,172,
+3.0770%) and from 618,881 to 599,709 for q60 (-19,172, 3.0978%); they still
+occupy 98.1399% and 98.2669% of the canonical formulas. This is a measured
+exact-formula reduction, not a proof.
+
+The complete formula dashboards from the first subtree run are policy-valid
+with zero violations. TPCH selects 22 rows: 20 prepare successfully, two fail
+preparation, 20 exact pairs enter the verifier and emit formulas, and two rows
+are `OPTIMIZER_FAILURE`; summed preparation/verifier work is 3,446/107,695 ms.
+Its 17,334-byte report has SHA-256
+`3ff1b10464b6047e87fed8c75eb933aa27928fba0981452e570e9721e96b5d98`.
+TPC-DS selects 99 rows: preparation is 73 successful/26 failed, all 81 exact
+pairs enter and emit formulas, and the remaining 18 rows are
+`OPTIMIZER_FAILURE`; summed work is 78,725/835,364 ms. Its 342,052-byte report
+has SHA-256
+`607bc657da5ecfb1b50c274e5bd18609bd5684cdbc3fce741caa9ddf7c55f980`.
+Together the dashboards retain all 101 formula-covered exact pairs and spend
+82,171/943,059 ms.
+
+The proof reports are likewise policy-valid with zero violations. TPCH has 13
+successful preparations, exact pairs, verifier entries, and
+`VERIFIED_BOUNDED` rows after summed 1,788/67,191 ms; its 10,169-byte report
+has SHA-256
+`19ada38b50826598462c4e7fe3ee4a89dbc62c1c8d24d5d3a2914f60efb89254`.
+TPC-DS has the corresponding 23/23 counts after 18,785/266,278 ms; its
+18,758-byte report has SHA-256
+`efae364213953fd25ee34d1e0777fd9b452ffa84713d77a882762c0a998715a3`.
+The floors therefore spend 20,573/333,469 ms and verify the unchanged 36/36
+obligations. M86 changes no formula, pair, entry, preparation, proof, or defect
+inventory and promotes neither q56 nor q60.
 
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
@@ -1793,8 +1907,10 @@ M85 adds the exact gated keyed cover and branch-first scheduler while retaining
 the canonical formula. It proves q21 reproducibly; q56/q60 preserve their
 common preferred payload branch as the first `UNKNOWN`. Policy commit
 `95182b541fb` promotes q21, and fresh 13/13 TPCH plus 23/23 TPC-DS gates raise
-the current floor to 36/36. M86 begins with summary-state diagnosis of the
-shared q56/q60 payload branch rather than assuming another proof reduction.
+the current floor to 36/36. M86 commit `374f8fb65df` then carries one exact
+private Decimal-SUM summary across the matching intermediate/final lineage.
+q56/q60 formulas and payload branches shrink by about 3% but remain
+`UNKNOWN`, so the floor stays 36/36.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a

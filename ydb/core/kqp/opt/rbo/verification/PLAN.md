@@ -94,11 +94,11 @@ rbo_verifier/ir.py          strict, versioned snapshot decoding
 rbo_verifier/types.py       supported type identities, domains, and compatibility
 rbo_verifier/smt.py         typed SMT terms and deterministic SMT-LIB output
 rbo_verifier/string_order.py exact finite String/Utf8 byte-order quotient
-rbo_verifier/decimal.py     exact Decimal values, comparison, arithmetic, and ordering
-rbo_verifier/scalar.py      nullable values, SQL Bool3, scalar UFs
+rbo_verifier/decimal.py     exact Decimal values, SUM summaries, comparison, arithmetic, ordering
+rbo_verifier/scalar.py      nullable values, private metadata, SQL Bool3, scalar UFs
 rbo_verifier/sort_network.py audited bitonic compare-exchange topology
-rbo_verifier/relation.py    bounded bag/sequence operator semantics
-rbo_verifier/stages.py      two-task StageGraph and connection semantics
+rbo_verifier/relation.py    bounded bags/sequences and certified aggregate composition
+rbo_verifier/stages.py      two-task StageGraph, metadata transport, connection semantics
 rbo_verifier/verify.py      one counterexample formula and verdict decoding
 ```
 
@@ -1042,9 +1042,11 @@ Implementation sequence:
     `preferred_left_row_0_column_1_payload_mismatch` as the first unresolved
     branch. Policy commit `95182b541fb` promotes only q21; policy validation
     passes 16/16, and fresh gates prove 13/13 TPCH plus 23/23 TPC-DS. The
-    checked floor is now 36/36. M86 begins with summary-state diagnosis of the
-    q56/q60 payload branch; it promises neither a new reduction nor a policy
-    promotion before that branch is understood. M4 remains current.
+    checked floor is now 36/36. M86 semantic commit `374f8fb65df` follows the
+    q56/q60 diagnosis with a private, headroom-certified intermediate/final
+    Decimal-SUM summary. Both canonical formulas and branch-7 obligations
+    shrink by about 3%, but both queries remain `UNKNOWN`; the floor stays
+    36/36. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -1580,7 +1582,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Grouped/scalar count, integer sum, headroom-bounded Decimal sum, and
   row-level `DistinctAll`, including
   split intermediate/final execution, NULLs, exact 64-bit integer behavior,
-  Decimal specials, partial-state bound provenance, same-type Decimal MIN/MAX,
+  Decimal specials, partial-state bound provenance, private exact
+  `DecimalSumState` composition for one directly linked split-SUM lineage,
+  same-type Decimal MIN/MAX,
   phase-aware Decimal AVG with explicit `(sum,count)` state, and
   the closed staged Decimal AVG carrier with one producer and certified
   physical NULL pads, plus
@@ -2028,6 +2032,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   including ordered NaN and exact Decimal key identity. Decimal `sum` widens to
   `Decimal(35,s)` and is exact whenever its carried finite bound proves that
   saturating partial addition cannot overflow; unsafe bounds fail closed.
+  A narrowly certified intermediate/final pair may additionally retain a
+  private `(any_non_null, has_nan, has_pos_inf, has_neg_inf, finite_total,
+  finite_abs_bound)` summary beside the authoritative partial scalar. The
+  matching final SUM composes those lanes directly and finishes once; missing,
+  malformed, exposed, fanned-out, or mismatched state uses the established
+  scalar path. Combined finite headroom must still be strictly below the
+  maximum-precision accumulator limit.
   Same-type Decimal `min`/`max` ignore NULL and reduce the raw signed codes in
   the runtime's total order, `-Inf < finite < +Inf < NaN`, with the same scalar
   state in logical, intermediate, and final phases. Same-type Decimal `avg`
@@ -3744,12 +3755,119 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   formula-covered rows (28.4%). Formula, exact-pair, verifier-entry,
   preparation, and defect inventories remain unchanged.
 
-  M86 starts with summary-state diagnosis of the shared q56/q60 branch-7
-  payload: whether its cost comes from repeated key guards, aggregate summary
-  terms, or another exact SMT
-  structure must be measured before choosing a reduction. This observation is
-  neither a promised proof nor permission to weaken the cover, raise the
-  timeout, or promote either query.
+  Milestone 86 implements the measured aggregate-summary reduction in semantic
+  commit `374f8fb65df`. It changes only the trusted Python semantic kernel and
+  its tests: the C++ exporter, snapshot/IR schema, row/task bounds, solver
+  protocol, mismatch cover, and policy are unchanged. A private
+  `DecimalSumState` accompanies one certified intermediate Decimal-SUM scalar.
+  Its lanes are the maximum-precision accumulator type, `any_non_null`, NaN,
+  positive-infinity, and negative-infinity flags, exact finite total, and a
+  conservative absolute finite bound. The visible Decimal scalar remains
+  authoritative and is still materialized by the existing finish rule.
+
+  For guarded states of the same accumulator type, combination ORs the
+  selected presence/special flags and adds selected finite totals. Finishing
+  the result is exactly SUM over the flattened selected input bags: NaN or
+  opposing infinities produce NaN, otherwise a present infinity wins, and
+  otherwise finite codes add. The guard is each partial scalar's semantic
+  non-NULL condition rather than its state's original-input presence. This
+  preserves the physical non-nullable empty-intermediate case, whose
+  materialized zero is an active final input. The sum of all selected
+  `finite_abs_bound` values must remain strictly below `10^precision`; equality
+  with the limit is rejected with the existing non-associative-overflow
+  diagnostic. Thus the optimization removes repeated decoding but adds no
+  associativity assumption outside the old safe domain.
+
+  Admission is exact and private. The producer is a non-`DistinctAll`,
+  phase-`intermediate` Aggregate that is neither a result nor subplan root and
+  has exactly one parent. That direct parent must be a non-`DistinctAll`
+  phase-`final` Aggregate over the producer with identical grouping keys. One
+  plain non-distinct, non-unwrap Decimal `sum` producer output must not be a
+  key and must have exactly one plain final `sum` consumer with the identical
+  output type. Fanout, exposure, duplicate use, phase/function/key/type changes,
+  distinct, or unwrap declines the certificate and retains the old scalar
+  path.
+
+  The hidden state is carried on `Value`, never in the snapshot or runtime
+  wire. A final consumer accepts it only when the state type and bound equal
+  the scalar metadata, reconstructs the visible NULL bit as `not any_non_null`
+  for nullable columns and `false` otherwise, and finishes exactly to the visible
+  scalar. One missing or malformed selected state makes the complete final
+  aggregate use the old scalar fallback. Mutually exclusive row compaction
+  transports a state only when every alternative is valid and type-compatible;
+  it ITE-selects every SMT lane and takes the maximum alternative bound because
+  only one alternative can be live. State lanes are registered as quantified
+  choice dependencies. The matching final combine consumes the metadata and
+  publishes no state downstream.
+
+  Exact regressions cover flattened-versus-composed finite, NULL, NaN,
+  positive/negative/opposing-infinity and inactive-partial cases; exhaustive
+  direct/staged grouped and ungrouped two-row references over both task
+  placements; empty nullable and non-nullable partials; lane-sort, type, bound,
+  scalar, phase, function, key, exposure, fanout, duplicate-use, and
+  subplan mutations; exact-below/equal-headroom boundaries; choice dependency
+  discovery; exclusive-compaction selection/fallback; and accepted-term
+  evidence that finalized partial scalars are not decoded again. Independent
+  theorem, gate, fallback, transport, headroom, packaging, and diff audits
+  found no blocker.
+
+  The first full verification-subtree gate completed 1,349/1,350 checks. Its
+  sole failure was the unused `Sort` import reported by flake8 F401. Within
+  that same run the main Python target passed 765/765, all Python targets
+  aggregated to 878/878, all ten import checks passed, and the two dashboards
+  plus two proof floors were green. Removing that one line is part of
+  `374f8fb65df`; the corrective all-flake8 run passed 68/68. No post-fix full
+  subtree rerun is claimed.
+
+  The focused q56/q60 `solver_experiment` at committed HEAD uses the standard
+  2x2 bound and 60,000-ms deadline. Both exact pairs prepare and enter the
+  verifier, but both remain `UNKNOWN` at branch 7/8,
+  `preferred_left_row_0_column_1_payload_mismatch`: q56 spends
+  1,554/61,600 ms and q60 1,533/61,579 ms in preparation/verification. The
+  policy-valid, zero-violation 8,339-byte report has SHA-256
+  `4303275234ed765184f460d50ba17996f09e031a0fe5f0f89dc70918ffda6ef7`;
+  the 18,419-byte trace has SHA-256
+  `bd4b047a5ee0027c1a5287c257757de5ce697903efe5ec143aaed3d4385a58b1`
+  and records 130.106070 seconds of subtest time, 131.122184 seconds of chunk
+  wall time, and 1,089,244 KiB peak process-tree RSS.
+
+  q56's canonical formula shrinks from 634,486 to 615,352 bytes, -19,134
+  (-3.0157%), and has SHA-256
+  `e8b86462179dbb64863b939a6c4f0765cb9eede153594228414f4e6ca62e1d56`.
+  q60 shrinks from 629,390 to 610,286 bytes, -19,104 (-3.0353%), with
+  SHA-256
+  `cb799a6af02dfd548ea9f4bd195d52c4aebf871d054a4a636946bb9deac1d060`.
+  Preferred branch 7 falls from 623,078 to 603,906 bytes for q56, -19,172
+  (-3.0770%), and from 618,881 to 599,709 for q60, also -19,172
+  (-3.0978%). Those branches remain 98.1399% and 98.2669% of their canonical
+  formulas, respectively. The smaller exact obligations do not prove either
+  query.
+
+  The full formula dashboards from the first subtree run are policy-valid with
+  no violation. TPCH selects 22 rows, prepares 20 successfully and two
+  unsuccessfully, emits formulas for all 20 exact-pair/verifier entries, and
+  classifies two rows as `OPTIMIZER_FAILURE`; preparation/verifier sums are
+  3,446/107,695 ms. Its 17,334-byte report SHA-256 is
+  `3ff1b10464b6047e87fed8c75eb933aa27928fba0981452e570e9721e96b5d98`.
+  TPC-DS selects 99 rows, prepares 73 successfully and 26 unsuccessfully,
+  emits formulas for all 81 exact-pair/verifier entries, and classifies 18
+  rows as `OPTIMIZER_FAILURE`; sums are 78,725/835,364 ms. Its 342,052-byte
+  report SHA-256 is
+  `607bc657da5ecfb1b50c274e5bd18609bd5684cdbc3fce741caa9ddf7c55f980`.
+  Combined dashboard work is 82,171/943,059 ms and all 101 exact pairs remain
+  formula-covered.
+
+  The proof-floor reports are also policy-valid with no violation. TPCH has 13
+  successful preparations, exact pairs, verifier entries, and
+  `VERIFIED_BOUNDED` rows after 1,788/67,191 ms; its 10,169-byte report has
+  SHA-256
+  `19ada38b50826598462c4e7fe3ee4a89dbc62c1c8d24d5d3a2914f60efb89254`.
+  TPC-DS has the corresponding 23/23 counts after 18,785/266,278 ms; its
+  18,758-byte report SHA-256 is
+  `efae364213953fd25ee34d1e0777fd9b452ffa84713d77a882762c0a998715a3`.
+  Combined proof-floor work is 20,573/333,469 ms. No obligation or weaker
+  inventory changes: M86 retains 13/13 TPCH plus 23/23 TPC-DS, 36/36 overall,
+  and promotes neither q56 nor q60.
 
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
@@ -4843,9 +4961,12 @@ regression locks the corrected boundary.
   cover and branch-first schedule without changing the canonical SMT theorem.
   q21 proves twice; q56/q60 retain their common preferred payload branch as
   the first `UNKNOWN`. Policy commit `95182b541fb` promotes only q21, and fresh
-  13/13 TPCH plus 23/23 TPC-DS gates raise the checked floor to 36/36. M86
-  starts with summary-state diagnosis of the shared q56/q60 payload branch, not an assumed
-  reduction or promotion.
+  13/13 TPCH plus 23/23 TPC-DS gates raise the checked floor to 36/36.
+  M86 semantic commit `374f8fb65df` adds the exact private
+  intermediate/final `DecimalSumState` composition after that diagnosis. It
+  shrinks q56/q60's canonical and preferred payload obligations by about 3%,
+  but both stay `UNKNOWN` at branch 7/8. Fresh dashboards and the unchanged
+  13/13 plus 23/23 proof floors are green, so the checked floor remains 36/36.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

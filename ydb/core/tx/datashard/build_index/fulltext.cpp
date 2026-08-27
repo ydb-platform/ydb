@@ -382,6 +382,11 @@ public:
         } else {
             tokens = Analyze(row.Get(0).AsBuf(), TextAnalyzers);
         }
+        const ui32 docTokens = tokens.size();
+        if (PrefixColumns.size()) {
+            // Add an empty token to count documents in prefix
+            tokens.emplace_back();
+        }
         if (Compact) {
             Y_ENSURE(key.size() == 1);
             ui64 docId;
@@ -398,6 +403,11 @@ public:
                 if (i < tokens.size() - 1 && tokens[i] == tokens[i + 1]) {
                     freq++;
                     continue;
+                }
+                if (tokens[i].empty()) {
+                    // Empty token's frequency is the document's total length + 1 (to support length == 0),
+                    // used to calculate per-prefix document statistics
+                    freq = docTokens + 1;
                 }
                 TString bucketKey = MakeCompactBucketKey(prefixCells, tokens[i]);
                 auto tokenIt = TokenBuf.find(bucketKey);
@@ -437,7 +447,7 @@ public:
                 }
             }
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
-                UploadDocRow(key, row, tokens.size());
+                UploadDocRow(key, row, docTokens);
             }
         } else if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             LastProcessedKey = TSerializedCellVec(key);
@@ -446,7 +456,7 @@ public:
             // safe across the asymmetrically-filling posting and docs buffers.
             Uploader.SetCurrentSourceKey(LastProcessedKey);
             UploadFulltextRelevance(prefixCells, docIdKey, tokens);
-            UploadDocRow(docIdKey, row, tokens.size());
+            UploadDocRow(docIdKey, row, docTokens);
         } else {
             LastProcessedKey = TSerializedCellVec(key);
             Uploader.SetCurrentSourceKey(LastProcessedKey);

@@ -24,10 +24,12 @@ using namespace NTableIndex::NFulltext;
 using namespace NKikimr::NFulltext;
 
 /*
- * TBuildFulltextDictScan aggregates rows from the fulltext posting table and does two things:
+ * TBuildFulltextDictScan aggregates rows from the fulltext posting table and does 3 things:
  * 1) calculates token frequencies, i.e. the number of documents containing each token.
+ *    (optional, unused in new versions because DictTable is removed).
  * 2) compacts fulltext segments generated during initial build process for compact index formats
  *    (FulltextCompact/FulltextCompactRelevance/JsonCompact).
+ * 3) calculates per-prefix document counts and total lengths.
  *
  * For simple index formats:
  * - This scan takes the indexImplTable and writes output to indexImplDictTable (optionally).
@@ -43,10 +45,13 @@ using namespace NKikimr::NFulltext;
  *
  * Request:
  * - The client sends TEvBuildFulltextDictRequest with:
+ *   - Index type
+ *   - Prefix columns
  *   - Name of the target dictionary table
  *   - Name of the target compacted posting table
- *   - Index type
+ *   - Name of the target stats table
  *   - SkipFirstToken, SkipLastToken
+ *   - SkipFirstPrefix, SkipLastPrefix (for stats)
  *
  * Execution Flow:
  * - TBuildFulltextDictScan scans the whole input shard
@@ -81,6 +86,7 @@ protected:
     bool Signed = false;
 
     TBufferData* DictBuf = nullptr;
+    TBufferData* StatsBuf = nullptr;
     TBufferData* PostingBuf = nullptr;
 
     bool SkipFirstToken = false;
@@ -90,11 +96,21 @@ protected:
     ui64 FirstTokenRows = 0;
     ui64 LastTokenRows = 0;
 
+    bool SkipFirstPrefix = false;
+    bool SkipLastPrefix = false;
+    TString FirstPrefix;
+    TString LastPrefix;
+    ui64 FirstPrefixDocCount = 0;
+    ui64 LastPrefixDocCount = 0;
+    ui64 FirstPrefixSumDocLength = 0;
+    ui64 LastPrefixSumDocLength = 0;
+
     // Number of leading prefix key columns in the posting table key [prefix..., token, max_id, gen].
     // Zero for non-prefixed indexes. Used to locate the token and to group segments per (prefix, token).
     ui32 NumPrefixColumns = 0;
     // Current group's key cells [prefix..., token] and its serialized form for group boundary detection.
     TOwnedCellVec LastGroupKey;
+    TString FirstGroupKeySerialized;
     TString LastGroupKeySerialized;
 
     bool WithFreq = false;
@@ -127,6 +143,8 @@ public:
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , SkipFirstToken(request.GetSkipFirstToken())
         , SkipLastToken(request.GetSkipLastToken())
+        , SkipFirstPrefix(request.GetSkipFirstPrefix())
+        , SkipLastPrefix(request.GetSkipLastPrefix())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId(responseActorId)
         , Response(std::move(response))
@@ -155,6 +173,26 @@ public:
                 uploadTypes->emplace_back(FreqColumn, type);
             }
             DictBuf = Uploader.AddDestination(request.GetDictTableName(), uploadTypes);
+        }
+
+        if (request.GetStatsTableName())
+        {
+            // Pre-prefix document count and total length stats
+            auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+            for (const auto& prefixColumn : request.GetPrefixColumns()) {
+                addType(uploadTypes, prefixColumn);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(DocCountType);
+                uploadTypes->emplace_back(DocCountColumn, type);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(DocCountType);
+                uploadTypes->emplace_back(SumDocLengthColumn, type);
+            }
+            StatsBuf = Uploader.AddDestination(request.GetStatsTableName(), uploadTypes);
         }
 
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
@@ -192,8 +230,11 @@ public:
             }
 
             auto tags = GetAllTags(table);
-            ScanTags.push_back(tags.at("__ydb_added"));
-            ScanTags.push_back(tags.at("__ydb_segment"));
+            ScanTags.push_back(tags.at(AddedColumn));
+            ScanTags.push_back(tags.at(SegmentColumn));
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
+            auto tags = GetAllTags(table);
+            ScanTags.push_back(tags.at(FreqColumn));
         }
     }
 
@@ -221,10 +262,17 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
-        record.SetFirstToken(FirstToken);
-        record.SetLastToken(LastToken);
+        record.SetFirstToken(NumPrefixColumns > 0 ? FirstGroupKeySerialized : FirstToken);
+        record.SetLastToken(NumPrefixColumns > 0 ? LastGroupKeySerialized : LastToken);
         record.SetFirstTokenRows(FirstTokenRows);
         record.SetLastTokenRows(LastTokenRows);
+
+        record.SetFirstPrefix(FirstPrefix);
+        record.SetLastPrefix(LastPrefix);
+        record.SetFirstPrefixDocCount(FirstPrefixDocCount);
+        record.SetLastPrefixDocCount(LastPrefixDocCount);
+        record.SetFirstPrefixSumDocLength(FirstPrefixSumDocLength);
+        record.SetLastPrefixSumDocLength(LastPrefixSumDocLength);
 
         Uploader.Finish(record, status);
 
@@ -295,6 +343,9 @@ public:
         if (LastTokenRows > 0) {
             FinishToken(true);
         }
+        if (LastPrefixDocCount > 0) {
+            FinishPrefix(true);
+        }
 
         // call Seek to wait uploads
         return EScan::Reset;
@@ -350,11 +401,40 @@ protected:
     {
         return TStringBuilder() << "TBuildFulltextDictScan TabletId: " << TabletId << " Id: " << BuildId
             << " SkipFirstToken: " << SkipFirstToken << " SkipLastToken: " << SkipLastToken
+            << " SkipFirstPrefix: " << SkipFirstPrefix << " SkipLastPrefix: " << SkipLastPrefix
             << " " << Uploader.Debug();
     }
 
     void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
+        if (!key[NumPrefixColumns].Size()) {
+            // Empty token is only used to count per-prefix document statistics
+            if (!StatsBuf) {
+                return;
+            }
+            auto curPrefix = TSerializedCellVec::Serialize(key.Slice(0, NumPrefixColumns));
+            if (LastPrefix != curPrefix) {
+                if (LastPrefixDocCount > 0) {
+                    FinishPrefix(false);
+                }
+                LastPrefix = curPrefix;
+            }
+            if (!PostingBuf) {
+                LastPrefixDocCount++;
+                LastPrefixSumDocLength += row[0].AsValue<TTokenCount>();
+            } else {
+                Y_ENSURE(row[0].AsValue<bool>());
+                TConstArrayRef<ui8> inBuf((ui8*)row[1].AsBuf().data(), row[1].AsBuf().size());
+                TDeltaReader rdr(inBuf, WithFreq, Signed);
+                ui64 docId = 0;
+                ui32 freq = 0;
+                while (rdr.Read(docId, freq)) {
+                    LastPrefixDocCount++;
+                    LastPrefixSumDocLength += freq - 1;
+                }
+            }
+            return;
+        }
         // Segments are grouped and compacted per (prefix..., token). The token sits at
         // key[NumPrefixColumns]; the prefix cells precede it. With prefix columns as the leading
         // sort key, the same token may appear under different prefixes (non-adjacent), so the group
@@ -420,6 +500,7 @@ protected:
         }
         if (SkipFirstToken && !FirstTokenRows) {
             FirstToken = LastToken;
+            FirstGroupKeySerialized = LastGroupKeySerialized;
             FirstTokenRows = LastTokenRows;
         } else if (DictBuf) {
             TVector<TCell> pk = {TCell(LastToken)};
@@ -430,6 +511,28 @@ protected:
         LastGroupKey = TOwnedCellVec();
         LastGroupKeySerialized.clear();
         LastTokenRows = 0;
+    }
+
+    void FinishPrefix(bool last)
+    {
+        if (last && SkipLastPrefix) {
+            return;
+        }
+        if (SkipFirstPrefix && FirstPrefixDocCount == 0) {
+            FirstPrefix = LastPrefix;
+            FirstPrefixDocCount = LastPrefixDocCount;
+            FirstPrefixSumDocLength = LastPrefixSumDocLength;
+        } else if (LastPrefixDocCount > 0) {
+            TSerializedCellVec uploadKey(LastPrefix);
+            TVector<TCell> uploadValue = {
+                TCell::Make(LastPrefixDocCount),
+                TCell::Make(LastPrefixSumDocLength),
+            };
+            StatsBuf->AddRow(uploadKey.GetCells(), uploadValue);
+        }
+        LastPrefix.clear();
+        LastPrefixDocCount = 0;
+        LastPrefixSumDocLength = 0;
     }
 };
 
@@ -545,6 +648,15 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             if (request.GetPostingTableName()) {
                 badRequest(TStringBuilder() << "Output posting table name is set for a non-compact index");
             }
+        }
+
+        bool requiresStats = request.PrefixColumnsSize() > 0 &&
+            (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
+        if (requiresStats && !request.GetStatsTableName()) {
+            badRequest(TStringBuilder() << "Empty output statistics table name");
+        } else if (!requiresStats && request.GetStatsTableName()) {
+            badRequest(TStringBuilder() << "Output statistics table name is set for a non-prefixed-relevance index");
         }
 
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {

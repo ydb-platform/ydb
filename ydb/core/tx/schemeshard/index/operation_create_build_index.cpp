@@ -249,9 +249,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             }
 
+            auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
             auto implTableDesc = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType,
-                NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()), false);
+                indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns, false);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc),
                 THashSet<TString>{NTableIndex::NFulltext::GenSequence}));
@@ -269,7 +269,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
                 const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
                 result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
-                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
+                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
             }
             break;
         }
@@ -296,14 +296,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames());
             auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
-                NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
+                indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType, prefixColumns);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
             result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
-            result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
+            result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc, prefixColumns)));
             break;
         }
         default:

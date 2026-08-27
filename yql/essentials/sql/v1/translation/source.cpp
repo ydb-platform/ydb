@@ -59,6 +59,10 @@ TSourcePtr ISource::CloneSource() const {
     return result;
 }
 
+ISource* ISource::GetSource() {
+    return this;
+}
+
 bool ISource::IsFake() const {
     return false;
 }

@@ -1,0 +1,8 @@
+PRAGMA YqlSelect = 'force';
+
+$postHandler = ($nodes, $state, $_) -> {
+    $tables = ListFilter($nodes, ($x) -> ($x.Type == 'table'));
+    RETURN ListExtend($state, ListExtract($tables, 'Path'));
+};
+
+SELECT * FROM plato.WalkFolders(``, $postHandler AS PostHandler);

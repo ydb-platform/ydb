@@ -2,11 +2,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/grpc/include/grpcpp/grpcpp.h>
 
-const TString kDatabase = "/Root/logbroker-federation/prod";
-const TString kTopicYdb = "write-disabled-topic";
-const TString kTopicCM  = "prod/write-disabled-topic";
-const TString kConsumer = "consumer";
-
 using namespace NYdb;
 using namespace NYdb::NTopic;
 using namespace NFederationTests;
@@ -14,42 +9,43 @@ using namespace NFederationTests;
 Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
 
     Y_UNIT_TEST(DisableWriteOnClusterA) {
-        const char* portA  = std::getenv("cluster_a_port");
-        const char* cmPort = std::getenv("CM_PORT");
-        UNIT_ASSERT_C(portA, "cluster_a_port is not set by federation_recipe");
-        UNIT_ASSERT_C(cmPort, "CM_PORT is not set by federation_recipe");
+        NFederationTests::TClusterEndpoints env;
 
-        const TString endpointA = TString("localhost:") + portA;
-
-        auto channel = grpc::CreateChannel(
-            TString("localhost:") + cmPort,
-            grpc::InsecureChannelCredentials()
-        );
-        auto stub = NLogBroker::NAdmin::ConfigurationManagerAdminService::NewStub(channel);
+        const TString prodDatabasePath = "/logbroker-federation/prod";
+        const TString fullProdDatabasePath = "/Root/logbroker-federation/prod";
+        const TString topicPath = "write-disabled-topic";
+        const TString fullTopicPath  = "prod/write-disabled-topic";
+        const TString kConsumer = "consumer";
 
         {
-            NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
-            req.set_comment("create write-disabled-topic for test");
-            auto* action = req.add_actions();
-            action->mutable_create_topic()->mutable_path()->set_path(kTopicCM);
-            action->mutable_create_topic()->set_parent_template("default");
-            action->mutable_create_topic()->mutable_properties()->mutable_partitions_count()->set_user_defined(1);
-            ExecCmRequest(*stub, req, "create topic");
+            TDriver driver = MakeDriver(env.EndpointCM, prodDatabasePath);
+            TTopicClient client(driver);
+            auto result = client.CreateTopic(
+                topicPath,
+                TCreateTopicSettings()
+                    .PartitioningSettings(1, 1)
+            ).GetValueSync();
+            driver.Stop(true);
+            UNIT_ASSERT_C(result.IsSuccess(),
+                TStringBuilder() << "CreateTopic(" << topicPath << ") failed: " << result.GetIssues().ToString());
         }
+
+        Sleep(TDuration::Seconds(2));
+
 
         const std::vector<TString> initialMsgs = {
             "msg-0", "msg-1", "msg-2", "msg-3", "msg-4",
             "msg-5", "msg-6", "msg-7", "msg-8", "msg-9",
         };
-        WriteMessages(endpointA, kDatabase, kTopicYdb, "producer-initial", initialMsgs);
+        WriteMessages(env.EndpointA, fullProdDatabasePath, topicPath, "producer-initial", initialMsgs);
 
         {
-            TDriver driverA = MakeDriver(endpointA, kDatabase);
+            TDriver driverA = MakeDriver(env.EndpointA, fullProdDatabasePath);
             TTopicClient client(driverA);
             auto session = client.CreateReadSession(
                 TReadSessionSettings()
                     .ConsumerName(kConsumer)
-                    .AppendTopics(TTopicReadSettings(kTopicYdb))
+                    .AppendTopics(TTopicReadSettings(topicPath))
             );
             auto got = ReadMessages(session, initialMsgs.size());
             UNIT_ASSERT_VALUES_EQUAL_C(got.size(), initialMsgs.size(), "Expected 10 initial messages, got " + std::to_string(got.size()));
@@ -58,15 +54,17 @@ Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
             }
         }
 
-        SetClusterWriteEnabled(*stub, "cluster_a", false);
-        Sleep(TDuration::Seconds(5));
+
+        SetClusterWriteEnabledYql(env.EndpointA, "cluster_a", false);
+
+        Sleep(TDuration::Seconds(30));
 
         {
-            TDriver driver = MakeDriver(endpointA, kDatabase);
+            TDriver driver = MakeDriver(env.EndpointA, fullProdDatabasePath);
             TTopicClient client(driver);
             auto session = client.CreateSimpleBlockingWriteSession(
                 TWriteSessionSettings()
-                    .Path(kTopicYdb)
+                    .Path(topicPath)
                     .MessageGroupId("producer-on-closed")
                     .RetryPolicy(NYdb::Dev::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
                     /*minDelay=*/TDuration::MilliSeconds(10),
@@ -79,36 +77,39 @@ Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
             session->Close(TDuration::Seconds(2));
             driver.Stop(true);
 
+
+
             UNIT_ASSERT_C(!writeOk, "Write to cluster_a must be rejected when write_enabled=false in CM");
         }
 
 
         {
-            TDriver driverA = MakeDriver(endpointA, kDatabase);
+            TDriver driverA = MakeDriver(env.EndpointA, fullProdDatabasePath);
             TTopicClient client(driverA);
             auto session = client.CreateReadSession(
                 TReadSessionSettings()
                     .ConsumerName(kConsumer)
-                    .AppendTopics(TTopicReadSettings(kTopicYdb))
+                    .AppendTopics(TTopicReadSettings(topicPath))
             );
             auto noNewMsgs = ReadMessages(session, 1, TDuration::Seconds(5));
             UNIT_ASSERT_C(noNewMsgs.empty(),
                 "No new messages should appear on cluster_a while write-disabled");
         }
 
-        SetClusterWriteEnabled(*stub, "cluster_a", true);
-        Sleep(TDuration::Seconds(5));
+        SetClusterWriteEnabledYql(env.EndpointA, "cluster_a", true);
+
+        Sleep(TDuration::Seconds(30));
 
         const TString msgAfterReEnable = "msg-after-reenable";
-        WriteMessages(endpointA, kDatabase, kTopicYdb, "producer-reenable", {msgAfterReEnable});
+        WriteMessages(env.EndpointA, fullProdDatabasePath, topicPath, "producer-reenable", {msgAfterReEnable});
 
         {
-            TDriver driverA = MakeDriver(endpointA, kDatabase);
+            TDriver driverA = MakeDriver(env.EndpointA, fullProdDatabasePath);
             TTopicClient client(driverA);
             auto session = client.CreateReadSession(
                 TReadSessionSettings()
                     .ConsumerName(kConsumer)
-                    .AppendTopics(TTopicReadSettings(kTopicYdb))
+                    .AppendTopics(TTopicReadSettings(topicPath))
             );
             auto afterReEnabled = ReadMessages(session, 1);
             UNIT_ASSERT_C(!afterReEnabled.empty(), "Expected a message from cluster_a after re-enabling writes");

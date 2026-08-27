@@ -166,6 +166,7 @@ class FederationRecipe(object):
         os.environ["SERVERLESS_DATABASE_PATH_PREFIX"] = meta_database
         os.environ["NO_YDBCP_MODE"] = "1"
         os.environ["MIRROR_AUTOSCALING_ENABLED"] = "true"
+        os.environ["AUTOSCALING_ENABLED"] = "true"
 
         driver_config = ydb.DriverConfig(
             endpoint="localhost:{}".format(meta_port),
@@ -190,10 +191,7 @@ class FederationRecipe(object):
         with open('lb_config_manager_endpoint.txt', 'w') as f:
             f.write(cm_endpoint)
 
-        cm_binary = os.environ.get(
-            'FEDERATION_CM_BINARY',
-             yatest.common.build_path('ydb/public/tools/federation_recipe/bin/cm-binary-test'),
-        )
+        cm_binary = yatest.common.build_path('ydb/public/tools/federation_recipe/bin/cm-binary-test')
 
         command = [
             cm_binary,

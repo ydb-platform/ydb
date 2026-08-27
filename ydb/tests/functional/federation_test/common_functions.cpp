@@ -1,6 +1,7 @@
 #include <ydb/tests/functional/federation_test/common_functions.h>
-#include <library/cpp/testing/unittest/registar.h>
 
+using namespace NYdb;
+using namespace NYdb::NTopic;
 namespace NFederationTests {
     TDriver MakeDriver(const TString& endpoint, const TString& database) {
     return TDriver(
@@ -121,73 +122,37 @@ std::map<std::pair<uint64_t, uint64_t>, TString> ReadAutoscaledTopicMessages(
     return result;
 }
 
-using AdminStub = NLogBroker::NAdmin::ConfigurationManagerAdminService::Stub;
+void SetClusterWriteEnabledYql(const TString& endpoint, const TString& clusterName, bool enabled)
+  {
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root"));
+        NYdb::NTable::TTableClient tableClient(driver);
 
-NLogBroker::Operations::Operation WaitOperation(AdminStub& stub, const NLogBroker::Operations::Operation& initial, TDuration timeout)
-{
-    if (initial.ready()) {
-        return initial;
-    }
-    TInstant deadline = TInstant::Now() + timeout;
-    while (TInstant::Now() < deadline) {
-        Sleep(TDuration::MilliSeconds(200));
-        NLogBroker::Operations::GetOperationRequest req;
-        req.set_id(initial.id());
-        NLogBroker::Operations::GetOperationResponse resp;
-        grpc::ClientContext ctx;
-        if (stub.GetOperation(&ctx, req, &resp).ok() && resp.operation().ready()) {
-            return resp.operation();
-        }
-    }
-    return initial;
-}
+        auto sessionResult = tableClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(),
+            TString("GetSession failed: ") + sessionResult.GetIssues().ToString());
 
-void ExecCmRequest(AdminStub& stub, NLogBroker::NAdmin::ExecuteModifyCommandsRequest& req, const TString& comment)
-{
-    NLogBroker::ExecuteModifyCommandsResponse resp;
-    grpc::ClientContext ctx;
-    auto grpcStatus = stub.ExecuteModifyCommands(&ctx, req, &resp);
-    UNIT_ASSERT_C(grpcStatus.ok(),
-        comment + ": gRPC error: " + grpcStatus.error_message());
+        const TString query1 =
+            "UPDATE `/Root/PQ/Config/V2/Cluster` SET enabled = " +
+            TString(enabled ? "true" : "false") +
+            " WHERE name = \"" + clusterName + "\"";
 
-    auto op = WaitOperation(stub, resp.operation());
-    UNIT_ASSERT_C(op.ready(), comment + ": operation never became ready");
-    UNIT_ASSERT_C((int)op.status() == (int)NLogBroker::StatusIds::SUCCESS,
-        comment + ": CM status " + std::to_string((int)op.status()));
-}
+        const TString query2 =
+            "UPDATE `/Root/Clusters` SET Enabled = " +
+            TString(enabled ? "true" : "false") +
+            " WHERE Name = \"" + clusterName + "\"";
 
-void CmCreateTopic(AdminStub& stub, const TString& cmPath, const TString& comment, bool autoSplit)
-{
-    NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
-    req.set_comment(comment);
-    // req.mutable_credentials()->set_oauth_token("test-token");
+        auto result1 = sessionResult.GetSession().ExecuteDataQuery(
+            query1, NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()
+        ).GetValueSync();
 
-    auto* action = req.add_actions();
-    action->mutable_create_topic()->mutable_path()->set_path(cmPath);
-    action->mutable_create_topic()->set_parent_template("default");
-    action->mutable_create_topic()->mutable_properties()->mutable_partitions_count()->set_user_defined(1);
-    action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_strategy()->set_user_defined("disabled");
-    action->mutable_create_topic()->mutable_properties()->mutable_supported_codecs()->set_user_defined("raw");
-
-    if (autoSplit) {
-        action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_strategy()->set_user_defined("up");
-        action->mutable_create_topic()->mutable_properties()->mutable_max_partitions_count()->set_user_defined(4);
-        action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_up_utilization_percent()->set_user_defined(50);
-        action->mutable_create_topic()->mutable_properties()->mutable_auto_partitioning_stabilization_window_seconds()->set_user_defined(10);
-        action->mutable_create_topic()->mutable_admin_properties()->mutable_max_partition_write_speed()->set_user_defined(1_MB);
-    }
-
-    ExecCmRequest(stub, req, comment);
-}
-
-void SetClusterWriteEnabled(AdminStub& stub, const TString& clusterName, bool enabled) {
-    NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
-    req.set_comment(TString(enabled ? "enable" : "disable") + " writes on " + clusterName);
-    auto* action = req.add_actions();
-    action->mutable_update_cluster()->set_name(clusterName);
-    action->mutable_update_cluster()->mutable_properties()->mutable_write_enabled()->set_user_defined(enabled);
-    ExecCmRequest(stub, req, "SetClusterWriteEnabled");
-}
+        UNIT_ASSERT_C(result1.IsSuccess(), TString("SetClusterWriteEnabledYql failed: ") + result1.GetIssues().ToString());
+        auto result2 = sessionResult.GetSession().ExecuteDataQuery(
+            query2, NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()
+        ).GetValueSync();
+        UNIT_ASSERT_C(result2.IsSuccess(), TString("SetClusterWriteEnabledYql failed: ") + result2.GetIssues().ToString());
+        driver.Stop(true);
+        Cerr << TInstant::Now() << "SetClusterWriteEnabledYql is successfull" << Endl;
+  }
 
 size_t GetActivePartitionCount(const TString& endpoint, const TString& database, const TString& topicPath) {
     TDriver driver = MakeDriver(endpoint, database);

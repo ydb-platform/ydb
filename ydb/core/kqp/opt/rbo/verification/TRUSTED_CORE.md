@@ -101,7 +101,7 @@ A defect in these files can turn inequivalent supported plans into
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
 | `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including reviewed generic/pushed compiled LIKE, exact pushed Boolean coalesce, exact literal-only String `Concat` folding, restricted stored-String `Concat` provenance and total/checked-result selection, the restricted nullable String-to-Utf8 `Unicode.ToUpper` bridge, exact checked nullable-String `Unwrap` projection metadata, private window-audit orchestration, exact nullable Decimal Abs, the q49 `Decimal(35,2)`-to-`Decimal(15,4)` rescale, the passive-Double constructor, strict direct and staged Decimal-AVG admission with certified physical-pad normalization, nullable Decimal and grouped fixed-width integer count-distinct admission, and independently tracked completed integral-AVG ordering provenance; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, both checked-projection demand topologies, correlated outer-binding, StageGraph, topology, task, and resource validation; exact read-range integration; deterministic JSON serialization. |
 | `window_expression_export_impl.h` | Closed whole-partition Decimal SUM/AVG, fixed q49 global-Rank, and fixed q51 ordered `ROWS` SUM/MAX source-expression grammars; annotations, binders, rename lineage, frame/order/name/type checks, and deterministic scalar JSON. Included exactly once inside `semantic_snapshot.cpp`'s anonymous namespace. |
-| `window_projection_audit_impl.h` | Private Aggregate/Project topology and dataflow certificates for the admitted whole-partition windows, exact three-branch q49 global-Rank corridor, and exact four-leaf/three-Project q51 SUM-then-MAX corridor. Included exactly once after the private plan exporter is complete. |
+| `window_projection_audit_impl.h` | Private Aggregate/Project topology and dataflow certificates for the admitted whole-partition windows, exact three-branch q49 global-Rank corridor, and exact four-leaf/three-window-Project q51 layout. Included exactly once after the private plan exporter is complete. |
 | `read_range_predicate_impl.h` | Closed q9/q45 point and finite point-set `RangeInfo::ComputeNode` grammar, physical-key/catalog binding, extractor-cap and node-identity validation, and lowering to existing equality/static-`IN` predicate IR. Included exactly once inside `semantic_snapshot.cpp`'s anonymous namespace. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, independently checked nullable-String projection-error and checked-Concat source/result/demand topology, exact `window_sum`/`window_avg` partition types and private grouped Aggregate/Project dataflow, fixed q49 `window_rank` leaves/topology/types and rescale use confinement, fixed q51 `window_rows_sum`/`window_rows_max` names, order indices, normalized input/partition/order fields, frame, exact source/result and compatible partition/order types, SUM Aggregate provenance, distinct typed MAX inputs, and four-leaf/three-Project confinement, exact nullable Decimal Abs typing, tagged aggregate-state contracts including direct/staged Decimal AVG, its carrier topology/dataflow/routing checks, phase-linked integral AVG, and fixed-width/nullable-Decimal count-distinct, independently derived integral-AVG rank provenance, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
@@ -1437,6 +1437,21 @@ packaged Python, 318/318 C++, 46/46 integration, and 16/16 policy checks. The
 canonical artifact digests, dashboard/proof timings, and focused gate details
 are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 
+M80 changes no proof-producing file or accepted semantic contract. The
+already-supported TPC-DS q97 returns `VERIFIED_BOUNDED` at row/task bound 2/2
+in focused evidence after 326/2,255 ms, and policy commit `ebb5c8806fc` adds it
+as the twentieth TPC-DS proof obligation. The first expanded floor run is
+retained as non-authoritative operational evidence: during observed suite-wide
+host contention, q9 reached its global deadline. The timing correlation does
+not establish cause. No code changed before the clean rerun, which prepares
+and proves all 20/20 TPC-DS rows after summed
+16,156/120,815 ms (report SHA-256
+`50f4a7e37793c804265ef94a8ac29ec6a2a86211eb3a88795a8b665a3497cc00`).
+Together with the unchanged M79 TPCH 13/13 report, the checked floor is 33/33:
+33/121 workload rows (27.3%) and 33/101 formula-covered exact pairs (32.7%).
+This is stronger evidence under the existing bounded theorem, not an increase
+in the TCB or a new optimizer defect.
+
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
 contains only the verifier's existing `Bool` and `Int` lane sorts, and can be
@@ -1819,7 +1834,7 @@ referenced collisions, and unused collisions. The complete benchmark
 dashboards independently move TPC-DS q2/q97 to formulas and q59 to the
 verifier's exact construction cap at that checkpoint. The later packed
 sorting-network carrier moves q59 through formula construction. None of q2,
-q97, or q59 is a bounded proof.
+q97, or q59 was a bounded proof at that checkpoint.
 
 The exact sorting-network slice crosses `sort_network.py`, `smt.py`,
 `relation.py`, and the row-preserving paths in `stages.py`. The topology module
@@ -2533,6 +2548,25 @@ ROWS-prefix Decimal SUM/MAX evaluation, task-local peer choices and routing,
 and the closed exporter/topology audits. Production optimizer changes, tests,
 diagnostics, and documentation remain outside the TCB.
 
+The post-M80 physical-line audit compares the completed M79 documentation and
+policy tree at `0f2ac692a86` with proof-policy commit `ebb5c8806fc` plus this
+closeout. The commit changes only the benchmark policy and its C++ regression
+fixtures; the trusted implementation and diagnostic tooling are byte-for-byte
+unchanged. Counts use the same tracked raw `wc -l` sets as M79.
+
+| Area | M79 physical lines | M80 physical lines | Delta |
+|---|---:|---:|---:|
+| Ten trusted Python semantic modules | 16,603 | 16,603 | 0 |
+| C++ exporter (including both private window headers) | 16,632 | 16,632 | 0 |
+| **Proof-producing code total** | **33,235** | **33,235** | **0** |
+| Tests, outside the TCB | 82,083 | 82,085 | +2 |
+| Diagnostic/orchestration tools, outside the TCB | 5,432 | 5,432 | 0 |
+| Documentation, outside the TCB | 14,953 | 15,136 | +183 |
+
+M80 therefore changes the policy obligation set and its tests, not the trusted
+semantics. The documentation delta records the four-file proof-promotion
+closeout plus the q51 trusted-responsibility terminology correction above.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -2791,4 +2825,4 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Ordered Decimal ROWS windows | `semantic_snapshot.cpp`; `window_expression_export_impl.h`; `window_projection_audit_impl.h`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `stages.py`; `verify.py` | `ut/test_window_rows.py`; exact q51 four-leaf/three-Project JSON; C++ binder plus cross-language names, local orders, frame, types, SUM-Aggregate provenance, distinct MAX-input, topology, mixed-family, fanout, and subplan mutations; concrete required/nullable item partition, NULL input, peer-order, prefix-SUM/MAX, Decimal-special/headroom, task-local, and no-published-order references; item-only HashV2 and Date-liveness routing checks; focused formula and 60-second `UNKNOWN`; focused real-host exact Initial/Final capture with later physical `YqlAggWin` failure |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; synthetic window full-group-key `COUNTEREXAMPLE` and synthetic partition-only `VERIFIED_BOUNDED`, with production q12 post-fix `UNKNOWN`; nullable-key routing, global/disjoint/untracked/malformed gather, rename-history/current-input checks, and `cpp_ut/stage_assignment_rules_ut.cpp`; staged Decimal-AVG carrier payload transport plus HashShuffle-key/Merge-order rejection; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; same-occurrence/opposite-fact gating, ordinary eight-row threshold, forced eligible Broadcast compaction, HashShuffle eight-cell/ten-cell boundary, conditional hash-key ITE and opposite new routing facts, NULL/Decimal/integral-AVG state preservation, and overlapping Broadcast multiplicity; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; delayed Filter/Cross single, reversed, composite, residual, factor-local rejection/NULL/order/outcome/work-cap, deferred-factor scheduling, certified seed rebase and three-factor continuation, explicit reordered-inner equivalence, mutation, exact column-restoration, cap, override, shared-producer, subplan, choice, and StageGraph-gate tests; literal-false Join inputs across all kinds, poisoned payloads, symbolic-presence retention, sequence-metadata erasure, and exact cap accounting; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
-| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |
+| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97 and the clean M80 20/20 TPC-DS proof gate, inspector and replay for candidates |

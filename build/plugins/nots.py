@@ -592,6 +592,20 @@ def _TS_LEGACY_CHECKS_CONFIGURE(unit: ymake.Unit) -> None:
     _setup_biome(unit)
 
 
+@ymake.macro
+def _TS_TSC_BUILD_COMMAND(unit: ymake.Unit) -> None:
+    commands = [
+        "tsc --project {} --incremental false --composite false --pretty".format(tsconfig_path)
+        for tsconfig_path in unit.get("TS_CONFIG_PATH").split()
+    ]
+    _set_ts_build_command(unit, " && ".join(commands))
+
+
+def _set_ts_build_command(unit: ymake.Unit, command: str) -> None:
+    unit.set(["_TS_BUILD_COMMAND", command])
+    unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(command.replace('"', '\\"'))])
+
+
 def _is_tests_enabled(unit: ymake.Unit) -> bool:
     return unit.get("CPP_ANALYSIS_MODE") != "yes"
 
@@ -1036,17 +1050,17 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
 
-    # remove "^./" and "/$"
-    # build/, ./build, ./build/ => build
-    # build/a/, ./build/a/, ./build/a => build/a
+    # remove leading "./" or "/" and trailing "/"
+    # build/, /build, ./build, ./build/ => build
+    # build/a/, /build/a, ./build/a/, ./build/a => build/a
     def _normalize_path(p):
         if p.startswith("./"):
             p = p[2:]
-        return p.rstrip("/")
+        return p.strip("/")
 
     # checks that build outputs contains in package.json#files
     # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
-    # TS_OUTPUTS(build) -- files: ["./build", "./build/", "build/"] ✅
+    # TS_OUTPUTS(build) -- files: ["/build", "./build", "./build/", "build/"] ✅
     # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
     # TS_OUTPUTS(dist) -- files: ["build"] ❌
     # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
@@ -1073,9 +1087,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
 
     after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
     if after_build_command:
-        build_command = "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command)
-        unit.set(["_TS_BUILD_COMMAND", build_command])
-        unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(build_command.replace('"', '\\"'))])
+        _set_ts_build_command(unit, "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command))
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":

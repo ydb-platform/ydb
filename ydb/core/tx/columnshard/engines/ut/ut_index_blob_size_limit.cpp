@@ -40,9 +40,6 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version) {
     *proto.MutableColumns()->Add() = columns[1].CreateColumn(ValueColumnId);
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(version);
-    proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
-    *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 
     NLocalIndex::NBloom::TRequestSettings request;
     request.NGrammSize = 3;

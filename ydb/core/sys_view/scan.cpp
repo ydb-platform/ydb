@@ -25,6 +25,7 @@
 #include <ydb/core/sys_view/storage/vslots.h>
 #include <ydb/core/sys_view/streaming_queries/streaming_queries.h>
 #include <ydb/core/sys_view/tablets/tablets.h>
+#include <ydb/core/sys_view/udf_modules/udf_modules.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -272,6 +273,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return CreateShowCreate(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EStreamingQueries:
         return CreateStreamingQueriesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken), reverse);
+    case ESysViewType::EUdfModules:
+        return CreateUdfModulesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken), reverse);
     default:
         return {};
     }

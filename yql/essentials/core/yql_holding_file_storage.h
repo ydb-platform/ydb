@@ -39,7 +39,7 @@ private:
 
     TFileLinkPtr RegisterLink(const TUserDataBlock& block, TFileLinkPtr link);
 
-private:
+
     TFileStoragePtr FileStorage_;
     TMap<TUserDataBlock, TFileLinkPtr, TDataLess> Links_;
 };

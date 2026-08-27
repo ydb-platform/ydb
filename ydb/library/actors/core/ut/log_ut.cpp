@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(TLoggerActorTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
+Y_UNIT_TEST_SUITE(TWriteJsonValuesInMessageLogTest) {
 
     Y_UNIT_TEST(MemLogAdapter) {
         TFixture env{NoBufferSettings()};
@@ -796,5 +796,36 @@ Y_UNIT_TEST_SUITE(TLogEscaping) {
             }
 
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TWriteJsonValuesInJsonLogTest) {
+
+    Y_UNIT_TEST(WriteJson) {
+        TFixture env{NoBufferSettings()};
+        env.Settings->EnableStructuredLogInJson = true;
+        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
+
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+                         R"("cluster":"","database":"static","node_id":0,"priority":"DEBUG","npriority":7,"component":"FAKE","tag":"KIKIMR",)"
+                         R"("revision":-1,"location":"log_ut.cpp:809","message":"Test message"})");
+        env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
+                         R"("cluster":"","database":"static","node_id":0,"priority":"DEBUG","npriority":7,"component":"FAKE","tag":"KIKIMR",)"
+                         R"("revision":-1,"location":"log_ut.cpp:810","message":"Test message with data","value":"1"})");
+    }
+
+    Y_UNIT_TEST(WriteMeta) {
+        TFixture env{NoBufferSettings()};
+        env.Settings->EnableStructuredLogInJson = true;
+        env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
+
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+        env.FetchMeta({});
+        env.FetchMeta({{"meta.value","1"}});
+        env.FetchMeta({{"meta.value","1"}, {"meta.value2","2"}});
     }
 }

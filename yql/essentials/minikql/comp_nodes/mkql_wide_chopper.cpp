@@ -328,7 +328,6 @@ public:
         return {result, std::move(getres.second)};
     }
 #endif
-private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow_)) {
             std::for_each(ItemArgs_.cbegin(), ItemArgs_.cend(), std::bind(&TWideChopperWrapper::Own, flow, std::placeholders::_1));
@@ -339,6 +338,8 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(readability-redundant-access-specifiers)
+private:
     IComputationWideFlowNode* const Flow_;
 
     const TComputationExternalNodePtrVector ItemArgs_;

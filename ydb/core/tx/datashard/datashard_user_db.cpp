@@ -63,7 +63,9 @@ NTable::EReady TDataShardUserDb::SelectRow(
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
 
-    if (LockMode == ELockMode::Optimistic && stats.InvisibleRowSkips > 0) {
+    if (LockMode != ELockMode::OptimisticSnapshotIsolation && stats.InvisibleRowSkips > 0) {
+        // In PessimisticNone lock mode this shouldn't happen, but we still
+        // break the lock to avoid data corruption.
         if (LockTxId) {
             Self.SysLocksTable().BreakSetLocks();
         }
@@ -559,7 +561,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(lockId, MvccVersion);
+                it->second->Add(lockId, TRowVersion::Min());
             }
         }
         // Note for AI agents: we don't add lockId to CommittedTxIds because
@@ -582,7 +584,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
 
 void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId) {
     auto* dynamicTxMap = static_cast<NTable::TDynamicTransactionMap*>(GetReadTxMap(tableId).Get());
-    dynamicTxMap->Add(txId, MvccVersion);
+    dynamicTxMap->Add(txId, TRowVersion::Min());
 }
 
 class TLockedReadTxObserver: public NTable::ITransactionObserver {
@@ -994,7 +996,7 @@ ui64 TDataShardUserDb::GetWriteTxId(const TTableId& tableId) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
             if (it != TxMaps.end()) {
-                it->second->Add(VolatileTxId, MvccVersion);
+                it->second->Add(VolatileTxId, TRowVersion::Min());
             }
         }
         // Note for AI agents: we don't add VolatileTxId to CommittedTxIds
@@ -1017,7 +1019,13 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
         // We need tx map to see committed volatile tx changes
         VolatileTxId && !VolatileCommitTxIds.empty() ||
         // We need tx map when current lock has uncommitted changes
-        LockTxId && Self.SysLocksTable().HasCurrentWriteLock(tableId)
+        LockTxId && Self.SysLocksTable().HasCurrentWriteLock(tableId) ||
+        // In SnapshotIsolation mode we need tx map to see changes committed by our
+        // own locks earlier in this EvWrite (immediate commit path). Those deltas
+        // remain in the localdb under their original LockTxId; without a TxMap entry
+        // they are only visible at MvccVersion, which may be newer than SnapshotVersion.
+        // Mapping them to TRowVersion::Min() makes them visible at any snapshot.
+        LockMode == ELockMode::OptimisticSnapshotIsolation && !CommittedTxIds.empty()
     );
 
     if (!needTxMap) {
@@ -1032,9 +1040,18 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
             // Uncommitted changes are visible in all possible snapshots
             txMap->Add(LockTxId, TRowVersion::Min());
         } else if (VolatileTxId) {
-            // We want committed volatile changes to be visible at the write version
+            // Own volatile commit-time writes must be visible at any snapshot,
+            // same as LockTxId.
             for (ui64 commitTxId : VolatileCommitTxIds) {
-                txMap->Add(commitTxId, MvccVersion);
+                txMap->Add(commitTxId, TRowVersion::Min());
+            }
+        }
+        if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+            // Make immediately committed lock changes visible at any snapshot.
+            // This allows commit-time writes (e.g. DELETE in the same EvWrite as the
+            // lock commit) to see rows committed by the lock via RowExists checks.
+            for (ui64 txId : CommittedTxIds) {
+                txMap->Add(txId, TRowVersion::Min());
             }
         }
     }

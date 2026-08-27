@@ -35,13 +35,13 @@
 
 Схематично это показано на рисунке ниже.
 
-![PDisk, VDisk, группа](_assets/Slide3_group_layout.svg)
+![PDisk, VDisk, группа](_assets/Slide3_group_layout.svg){inline=false}
 
 Разноцветными квадратиками выделены VDisk'и разных групп; один цвет означает одну группу.
 
 Группу можно рассматривать как совокупность VDisk'ов:
 
-![Группа](_assets/Slide_group_content.svg)
+![Группа](_assets/Slide_group_content.svg){inline=false}
 
 Каждый VDisk внутри группы имеет порядковый номер. Диски нумеруются от 0 до N-1, где N — число дисков в группе.
 

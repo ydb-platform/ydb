@@ -42,6 +42,17 @@ message TUpdateDDiskMapResponse {
 }
 
 //
+// Запрос на удаление всех отношений таблетки в Rel(DDiskId, TabletId).
+//
+message TRemoveTabletDDiskMapRequest {
+  uint64 TabletId = 1;                  // Id таблетки partition
+}
+
+message TRemoveTabletDDiskMapResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+}
+
+//
 // GetPartitionsForNode
 //
 message TGetPartitionsForNodeRequest
@@ -54,19 +65,4 @@ message TGetPartitionsForNodeResponse
   NYdb.NBS.NProto.TError Error = 1;
 
   repeated uint64 Partitions = 2;
-}
-
-//
-// GetNodesForPartition
-//
-message TGetNodesForPartitionRequest
-{
-  uint64 PartitionTabletId = 1;
-}
-
-message TGetNodesForPartitionResponse
-{
-  NYdb.NBS.NProto.TError Error = 1;
-
-  repeated uint32 Nodes = 2;
 }

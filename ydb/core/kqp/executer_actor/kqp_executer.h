@@ -124,8 +124,6 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
-    // Sent by TKqpPqTopicResolver to the executer when all PQ topic describes
-    // have finished (or at least one failed).
     struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
         TKqpExecuterEvents::EvPqTopicResolveStatus>
     {
@@ -190,8 +188,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     TPartitionPrunerConfig partitionPrunerConfig, TVector<NKikimr::TTableId> tableIdsForSnapshot, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2);
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target,

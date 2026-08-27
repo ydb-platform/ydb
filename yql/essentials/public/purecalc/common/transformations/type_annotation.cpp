@@ -207,7 +207,6 @@ private:
         return TStatus::Ok;
     }
 
-private:
     bool TryBuildTableNameNode(
         TPositionHandle position, const TExprNode::TPtr& row, TExprNode::TPtr& result, TExprContext& ctx)
     {

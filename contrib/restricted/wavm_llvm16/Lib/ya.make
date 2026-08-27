@@ -11,8 +11,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-SUBSCRIBER(g:contrib)
-
 VERSION(2022-05-14)
 
 PEERDIR(
@@ -166,6 +164,7 @@ SRCS(
     Runtime/Linker.cpp
     Runtime/Memory.cpp
     Runtime/Module.cpp
+    Runtime/ModuleDebugInfo.cpp
     Runtime/ObjectGC.cpp
     Runtime/ResourceQuota.cpp
     Runtime/Runtime.cpp

@@ -43,9 +43,7 @@ ISource::ISource(TPosition pos)
 {
 }
 
-ISource::~ISource()
-{
-}
+ISource::~ISource() = default;
 
 TSourcePtr ISource::CloneSource() const {
     Y_DEBUG_ABORT_UNLESS(dynamic_cast<ISource*>(Clone().Get()), "Cloned node is no source");
@@ -1046,14 +1044,32 @@ TSourcePtr MoveOutIfSource(TNodePtr& node) {
     return source;
 }
 
+TSourceResult Wrap(TSourcePtr source) {
+    if (!source) {
+        return std::unexpected(ESQLError::Basic);
+    }
+    return TNonNull(std::move(source));
+}
+
+TSourcePtr Unwrap(TSourceResult result) {
+    EnsureUnwrappable(result);
+    return result ? TSourcePtr(std::move(*result)) : nullptr;
+}
+
+TNodeResult ToNode(TSourceResult x) {
+    if (!x) {
+        return std::unexpected(x.error());
+    }
+
+    return TNonNull(TNodePtr(*x));
+}
+
 IJoin::IJoin(TPosition pos)
     : ISource(pos)
 {
 }
 
-IJoin::~IJoin()
-{
-}
+IJoin::~IJoin() = default;
 
 IJoin* IJoin::GetJoin() {
     return this;

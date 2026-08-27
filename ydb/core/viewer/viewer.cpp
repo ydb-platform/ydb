@@ -303,6 +303,10 @@ public:
                     {"/viewer/metainfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/browse", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/content", {EViewerEndpointAccessType::Viewer}},
+                    // `/viewer/render` is used by GraphShard metrics rendering.
+                    // It may expose cluster-level metrics, so it's intentionally restricted to Viewer access.
+                    // Before changing it back to Database access, ensure that only database-scoped metrics are returned.
+                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
                     {"/storage/groups", {EViewerEndpointAccessType::Database, true}},
@@ -313,7 +317,6 @@ public:
                     {"/query/script/execute", {EViewerEndpointAccessType::Database, true}},
                     {"/query/script/fetch", {EViewerEndpointAccessType::Database, true}},
                     {"/scheme/directory", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/render", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/topic_data", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},

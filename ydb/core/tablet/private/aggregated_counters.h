@@ -36,8 +36,10 @@ struct TTabletCounterValue {
 
 class TAggregatedSimpleCounters {
 public:
-    //
-    TAggregatedSimpleCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    TAggregatedSimpleCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     void Reserve(size_t hint);
 
@@ -57,6 +59,7 @@ public:
 
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 
     TCountersVector MaxSimpleCounters;
     TCountersVector SumSimpleCounters;
@@ -71,8 +74,10 @@ private:
 
 class TAggregatedCumulativeCounters {
 public:
-    //
-    TAggregatedCumulativeCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    TAggregatedCumulativeCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     void Reserve(size_t hint);
 
@@ -89,6 +94,7 @@ public:
 
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 
     TCountersVector MaxCumulativeCounters;
     THistogramVector HistCumulativeCounters;
@@ -102,7 +108,10 @@ private:
 
 class TAggregatedHistogramCounters {
 public:
-    TAggregatedHistogramCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    TAggregatedHistogramCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     void Reserve(size_t hint);
 
@@ -131,6 +140,7 @@ private:
 
 private:
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 
     // monitoring counters holders, updated only during recalculation
     TVector<NMonitoring::THistogramPtr> Histograms;

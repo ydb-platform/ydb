@@ -565,5 +565,7 @@ message TTableServiceConfig {
     optional bool EnableSmallComputeMemoryAllocations = 143 [default = true];
 
     // Prune key columns
-    optional bool EnablePruneKeyColumns = 144 [default = false];
+    optional bool EnablePruneKeyColumns = 144 [default = true];
+
+    optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
 };

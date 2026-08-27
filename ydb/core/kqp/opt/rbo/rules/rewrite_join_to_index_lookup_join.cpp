@@ -332,8 +332,14 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         keys = MatchKeyPrefix(*join, *read, tableMeta->KeyColumnNames, 0);
     }
 
+    if (!keys) {
+        return input;
+    }
+
     // Different types for keys are not supported.
-    if (!keys || !KeyTypesMatch(*join->GetLeftInput(), *read, *keys)) {
+    if (!KeyTypesMatch(*join->GetLeftInput(), *read, *keys)) {
+        // This check is missing in CBO, so we need to change join implementation in this case
+        join->Props.JoinAlgo = EJoinAlgoType::MapJoin;
         return input;
     }
 

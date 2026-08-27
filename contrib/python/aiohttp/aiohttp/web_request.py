@@ -146,6 +146,8 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
             "_transport_peername",
         ]
     )
+    _post: Optional[MultiDictProxy[Union[str, bytes, FileField]]] = None
+    _read_bytes: Optional[bytes] = None
 
     def __init__(
         self,
@@ -162,8 +164,6 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
         host: Optional[str] = None,
         remote: Optional[str] = None,
     ) -> None:
-        if state is None:
-            state = {}
         self._message = message
         self._protocol = protocol
         self._payload_writer = payload_writer
@@ -187,23 +187,19 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
             self._cache["scheme"] = url.scheme
             self._rel_url = url.relative()
         else:
-            self._rel_url = message.url
+            self._rel_url = url
             if scheme is not None:
                 self._cache["scheme"] = scheme
             if host is not None:
                 self._cache["host"] = host
-        self._post: Optional[MultiDictProxy[Union[str, bytes, FileField]]] = None
-        self._read_bytes: Optional[bytes] = None
 
-        self._state = state
+        self._state = {} if state is None else state
         self._task = task
         self._client_max_size = client_max_size
         self._loop = loop
 
-        transport = self._protocol.transport
-        assert transport is not None
-        self._transport_sslcontext = transport.get_extra_info("sslcontext")
-        self._transport_peername = transport.get_extra_info("peername")
+        self._transport_sslcontext = protocol.ssl_context
+        self._transport_peername = protocol.peername
 
         if remote is not None:
             self._cache["remote"] = remote
@@ -226,7 +222,7 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
         will reuse the one from the current request object.
         """
         if self._read_bytes:
-            raise RuntimeError("Cannot clone request " "after reading its content")
+            raise RuntimeError("Cannot clone request after reading its content")
 
         dct: Dict[str, Any] = {}
         if method is not sentinel:
@@ -779,7 +775,7 @@ class BaseRequest(MutableMapping[str, Any], HeadersMixin):
                             )
                 else:
                     raise ValueError(
-                        "To decode nested multipart you need " "to use custom reader",
+                        "To decode nested multipart you need to use custom reader",
                     )
 
                 field = await multipart.next()
@@ -847,14 +843,7 @@ class Request(BaseRequest):
 
     ATTRS = BaseRequest.ATTRS | frozenset(["_match_info"])
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-
-        # matchdict, route_name, handler
-        # or information about traversal lookup
-
-        # initialized after route resolving
-        self._match_info: Optional[UrlMappingMatchInfo] = None
+    _match_info: Optional["UrlMappingMatchInfo"] = None
 
     if DEBUG:
 

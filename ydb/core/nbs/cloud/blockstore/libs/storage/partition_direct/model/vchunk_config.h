@@ -2,7 +2,7 @@
 
 #include "host_roles.h"
 
-#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -102,9 +102,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Vchunk index -> persisted config override. Vchunks without an entry fall
-// back to TVChunkConfig::Make().
-using TVChunkConfigByIndex = THashMap<ui32, TVChunkConfig>;
+using TVChunkConfigs = TMap<ui32, TVChunkConfig>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

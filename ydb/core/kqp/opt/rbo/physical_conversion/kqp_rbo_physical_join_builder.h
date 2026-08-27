@@ -40,7 +40,7 @@ private:
                                        const TVector<TCoAtom>& leftKeyColumnIdxs, const TVector<TCoAtom>& rightKeyColumnIdsx,
                                        const TVector<TCoAtom>& leftKeyColumnNames, const TVector<TCoAtom>& rightKeyColumnNames,const TVector<TString>& leftInputColumns, const TVector<TString>& rightInputColumns, bool isReverseBlockJoin);
     void PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExprNode::TPtr& rightLambda, TExprNode::TPtr& commonLambda, const TVector<TString>& leftInputColumns,
-                            const TVector<TString>& rightInputColumns);
+                            const TVector<TString>& rightInputColumns, const TString& joinType);
 
     TIntrusivePtr<TOpJoin> Join;
 };

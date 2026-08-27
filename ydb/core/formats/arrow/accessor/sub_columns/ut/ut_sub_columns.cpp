@@ -7,7 +7,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>

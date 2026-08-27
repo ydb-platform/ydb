@@ -20,7 +20,7 @@
     },
     "Combine": {
         "description": "COMBINE",
-        "min_langver": "max",
+        "min_langver": "2026.02",
         "is_backport_allowed": true
     },
     "AggPhases": {
@@ -36,11 +36,28 @@
         "description": "Reserved '_yql_' column name prefix in YT tables",
         "min_langver": "max"
     },
+    "ConvertDynamicTablesToStaticBeforeJoin": {
+        "description": "Converts dynamic tables to static before join by default",
+        "min_langver": "2026.02"
+    },
     "Materialize": {
         "description": "MATERIALIZE",
         "min_langver": "2026.02"
     },
+    "AlwaysWithFixDecimalConversionMode": {
+        "description": "Always use Decimal common type conversion fixup",
+        "min_langver": "2026.02"
+    },
+    "DecimalArithmeticWithCommonType": {
+        "description": "Arithmetic operations on Decimal values with different types",
+        "min_langver": "2026.02",
+        "is_backport_allowed": true
+    },
     "TypeErasure": {
+        "min_langver": "2026.02"
+    },
+    "DecimalListFromRange": {
+        "description": "ListFromRange over Decimal",
         "min_langver": "2026.02"
     },
     "HybridRankFunction": {

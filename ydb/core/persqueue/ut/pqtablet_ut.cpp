@@ -400,6 +400,8 @@ protected:
     void TestMultiplePQTablets(const TString& consumer1, const TString& consumer2);
     void TestParallelTransactions(const TString& consumer1, const TString& consumer2);
 
+    void AssertTabletIsAlive(ui64 txId = 2);
+
     void StartPQCalcPredicateObserver(size_t& received);
     void WaitForPQCalcPredicate(size_t& received, size_t expected);
 
@@ -1452,6 +1454,13 @@ NHelpers::TPQTabletMock* TPQTabletFixture::CreatePQTabletMock(ui64 tabletId)
     Ctx->Runtime->DispatchEvents(options);
 
     return mock;
+}
+
+void TPQTabletFixture::AssertTabletIsAlive(ui64 txId)
+{
+    SendProposeTransactionRequest({.TxId=txId});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
 void TPQTabletFixture::TestMultiplePQTablets(const TString& consumer1, const TString& consumer2)
@@ -2512,6 +2521,15 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_1, TPQTabletFixture)
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
+Y_UNIT_TEST_F(Ignore_Late_TransactionCompleted_For_Unknown_WriteId, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvTransactionCompleted(TWriteId(0, 3)));
+
+    AssertTabletIsAlive();
+}
+
 Y_UNIT_TEST_F(ProposeTx_Unknown_WriteId, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -2545,6 +2563,15 @@ Y_UNIT_TEST_F(ProposeTx_Unknown_Partition_2, TPQTabletFixture)
                                   .WriteId=writeId});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
+}
+
+Y_UNIT_TEST_F(Ignore_MLPConsumerStatus_Without_ReadBalancer, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendToPipe(Ctx->Edge, new TEvPQ::TEvMLPConsumerStatus("user", 0, true));
+
+    AssertTabletIsAlive();
 }
 
 Y_UNIT_TEST_F(ProposeTx_Command_After_Propose, TPQTabletFixture)
@@ -4118,6 +4145,28 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Successful_Commit,
     SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie2, 1);
 
     const NKikimrPQ::TTabletTxInfo& txInfo = WaitForExactTxWritesCount(2);
+    CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Commit_Without_Writes_Should_Succeed, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Commit_With_Unwritten_Partition_Should_Succeed, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+    EnsurePipeExist();
+
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId, 0);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie, 0);
+    WaitForExactTxWritesCount(1);
+
     CommitKafkaTransaction(producerInstanceId, txId, {0, 1});
 }
 

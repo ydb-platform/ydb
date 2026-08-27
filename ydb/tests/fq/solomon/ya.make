@@ -24,6 +24,7 @@ DATA(
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 PEERDIR(
+    ydb/library/yql/tools/solomon_emulator/testing
     ydb/tests/fq/tools
     yql/essentials/tests/common/test_framework
 )

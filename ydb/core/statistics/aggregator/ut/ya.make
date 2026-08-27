@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/testlib/default
     ydb/core/statistics/ut_common
+    ydb/core/tx/conveyor_composite/usage
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
 )

@@ -2,6 +2,7 @@ RECURSE(
     blobsan
     cfg
     disk_obliterator
+    pdisktool
     mnc
     include_sanitizer
     partcheck

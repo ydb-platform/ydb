@@ -227,7 +227,7 @@ void TLocalLeaderElection::Bootstrap() {
     CoordinationNodePath = JoinPath(NKikimr::AppData()->TenantName, DefaultCoordinationNodePath);
 
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
-    YDB_LOG_DEBUG("Successfully bootstrapped, local coordinator id coordination node path",
+    YDB_LOG_DEBUG("Successfully bootstrapped",
         {"logPrefix", LogPrefix},
         {"coordinatorId", CoordinatorId},
         {"coordinationNodePath", CoordinationNodePath});
@@ -609,7 +609,7 @@ void TLocalLeaderElection::AddSessionEvent(TRpcIn&& message) {
 
 void TLocalLeaderElection::SendSessionEvents() {
     Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
-    YDB_LOG_DEBUG("Going to send session events, RpcResponses",
+    YDB_LOG_DEBUG("Going to send session events",
         {"logPrefix", LogPrefix},
         {"pendingRpcResponses", PendingRpcResponses},
         {"rpcResponses", RpcResponses.size()});
@@ -621,7 +621,7 @@ void TLocalLeaderElection::SendSessionEvents() {
 }
 
 void TLocalLeaderElection::SendSessionEvent(TRpcIn&& message, bool success) {
-    YDB_LOG_DEBUG("Sending session",
+    YDB_LOG_DEBUG("Sending session event",
         {"logPrefix", LogPrefix},
         {"event", static_cast<i64>(message.request_case())},
         {"success", success});
@@ -644,7 +644,7 @@ void TLocalLeaderElection::CloseSession(NYdb::EStatus status, const NYql::TIssue
     const bool success = status ==  NYdb::EStatus::SUCCESS;
     if (!success) {
         Metrics.Errors->Inc();
-        YDB_LOG_ERROR("Closing session with status and",
+        YDB_LOG_ERROR("Closing session with failed status",
             {"logPrefix", LogPrefix},
             {"status", status},
             {"issues", issues.ToOneLineString()});
@@ -654,7 +654,7 @@ void TLocalLeaderElection::CloseSession(NYdb::EStatus status, const NYql::TIssue
     }
 
     if (SessionClosed) {
-        YDB_LOG_WARN("Session already closed, but got status and",
+        YDB_LOG_WARN("Session already closed, but got close request",
             {"logPrefix", LogPrefix},
             {"status", status},
             {"issues", issues.ToOneLineString()});
@@ -856,12 +856,12 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
     }
 
     NActors::TActorId id = ActorIdFromProto(protoId);
-    YDB_LOG_DEBUG("Semaphore successfully described: coordinator id generation",
+    YDB_LOG_DEBUG("Semaphore successfully described",
         {"logPrefix", LogPrefix},
         {"id", id},
         {"generation", generation});
     if (!LeaderActorId || (*LeaderActorId != id)) {
-        YDB_LOG_INFO("Send TEvCoordinatorChanged to new coordinator id previous coordinator id",
+        YDB_LOG_INFO("Send TEvCoordinatorChanged to new coordinator",
             {"logPrefix", LogPrefix},
             {"parentId", ParentId},
             {"id", id},
@@ -923,7 +923,7 @@ void TLocalLeaderElection::ProcessDeleteSemaphoreResult(const TRpcOut& message) 
 
 void TLocalLeaderElection::UpdateLastKnownGoodTimestampLocked(TInstant timestamp) {
     SessionLastKnownGoodTimestamp = Max(SessionLastKnownGoodTimestamp, timestamp);
-    YDB_LOG_TRACE("UpdateLastKnownGoodTimestampLocked timestamp new",
+    YDB_LOG_TRACE("UpdateLastKnownGoodTimestampLocked",
         {"logPrefix", LogPrefix},
         {"timestamp", timestamp},
         {"sessionLastKnownGoodTimestamp", SessionLastKnownGoodTimestamp});

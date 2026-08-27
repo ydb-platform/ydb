@@ -44,6 +44,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_watermarks = param.get("enable_watermarks", True)
     enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
+    enable_shared_reading_structured_json_parsing = param.get("enable_shared_reading_structured_json_parsing", True)
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
@@ -68,6 +69,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     }
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
+    if enable_shared_reading_structured_json_parsing:
+        extra_feature_flags.add("enable_shared_reading_structured_json_parsing")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
     if enable_dq_source_stream_lookup_join_local_lookups:
@@ -109,6 +112,9 @@ def get_ydb_config(request, enable_fq_connector=None):
             "enable_compile_cache_warmup": False,
             "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
             "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
+            "query_limits": {
+                "result_rows_limit": 20,
+            },
         },
         replication_config={
             "iam_service_control": {

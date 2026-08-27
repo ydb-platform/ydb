@@ -29,6 +29,8 @@
 #include <ydb/library/yql/providers/pq/common/pq_partitions.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
+
 #include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
@@ -753,10 +755,6 @@ void TKqpTasksGraph::FillStages() {
                             meta.IndexMetas.emplace_back();
                             meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDocsTable());
                             meta.IndexMetas.back().TablePath = indexSettings.GetDocsTable().GetPath();
-                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-                            meta.IndexMetas.emplace_back();
-                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDictTable());
-                            meta.IndexMetas.back().TablePath = indexSettings.GetDictTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                             meta.IndexMetas.emplace_back();
                             meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetStatsTable());
@@ -1932,6 +1930,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
 
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     result->MutableProgram()->CopyFrom(stage.GetProgram());
+
+    if (stage.WasmUdfModulesSize() > 0) {
+        TVector<TString> modules = NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules());
+        (*result->MutableTaskParams())[TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)] =
+            NUdfStore::NWasm::SerializeWasmUdfModulesTaskParam(modules);
+    }
 
     for (const auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
@@ -3207,6 +3211,27 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     settings->MutableIndexDescription()->CopyFrom(fullTextSource.GetIndexDescription());
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
+    auto extractFloatingPointSetting = [&](const NKqpProto::TKqpPhyValue& protoValue) -> std::optional<double> {
+        NMiniKQL::TType* valueType = nullptr;
+        auto value = ExtractPhyValue(
+            stageInfo, protoValue,
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod(), &valueType);
+        if (!value.HasValue()) {
+            return std::nullopt;
+        }
+
+        YQL_ENSURE(valueType && valueType->GetKind() == NMiniKQL::TType::EKind::Data,
+            "Unexpected fulltext floating-point setting type");
+        const auto schemeType = static_cast<NMiniKQL::TDataType*>(valueType)->GetSchemeType();
+        if (schemeType == NUdf::TDataType<float>::Id) {
+            return static_cast<double>(value.Get<float>());
+        }
+
+        YQL_ENSURE(schemeType == NUdf::TDataType<double>::Id,
+            "Unexpected fulltext floating-point setting scheme type: " << schemeType);
+        return value.Get<double>();
+    };
+
     {
         TStringBuilder queryBuilder;
         for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
@@ -3248,12 +3273,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasBFactor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetBFactor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-
-        if (value.HasValue()) {
-            settings->SetBFactor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetBFactor())) {
+            settings->SetBFactor(*value);
         }
     }
 
@@ -3276,11 +3297,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasK1Factor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetK1Factor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-        if (value.HasValue()) {
-            settings->SetK1Factor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetK1Factor())) {
+            settings->SetK1Factor(*value);
         }
     }
 

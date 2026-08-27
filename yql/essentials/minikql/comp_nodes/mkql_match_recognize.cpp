@@ -159,11 +159,11 @@ public:
         bool validPartitionHandler = in.Read<bool>();
         if (validPartitionHandler) {
             NUdf::TUnboxedValue key = PartitionKeyPacker_.Unpack(CurPartitionPackedKey_, SerializerContext_.Ctx.HolderFactory);
-            PartitionHandler_.reset(new TStreamingMatchRecognize(
+            PartitionHandler_ = std::make_unique<TStreamingMatchRecognize>(
                 std::move(key),
                 Parameters_,
                 RowsFormatterState_,
-                RowPatternConfiguration_));
+                RowPatternConfiguration_);
             PartitionHandler_->Load(in);
         }
         bool validDelayedRow = in.Read<bool>();
@@ -227,11 +227,11 @@ public:
             InputRowArg_->SetValue(ctx, NUdf::TUnboxedValue(temp));
             auto partitionKey = PartitionKey_->GetValue(ctx);
             CurPartitionPackedKey_ = PartitionKeyPacker_.Pack(partitionKey);
-            PartitionHandler_.reset(new TStreamingMatchRecognize(
+            PartitionHandler_ = std::make_unique<TStreamingMatchRecognize>(
                 std::move(partitionKey),
                 Parameters_,
                 RowsFormatterState_,
-                RowPatternConfiguration_));
+                RowPatternConfiguration_);
             PartitionHandler_->ProcessInputRow(std::move(temp), ctx);
         }
         if (Terminating_) {
@@ -258,7 +258,7 @@ private:
 class TStateForInterleavedPartitions
     : public TComputationValue<TStateForInterleavedPartitions> {
     using TPartitionMapValue = std::unique_ptr<TStreamingMatchRecognize>;
-    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std::equal_to<TString>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
+    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std::equal_to<>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
 
 public:
     TStateForInterleavedPartitions(
@@ -383,7 +383,6 @@ private:
         }
     }
 
-private:
     TPartitionMap Partitions_;
     std::stack<TPartitionMap::iterator, std::deque<TPartitionMap::iterator, TMKQLAllocator<TPartitionMap::iterator>>> HasReadyOutput_;
     bool Terminating_ = false;
@@ -502,7 +501,7 @@ private:
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {
-    std::unordered_map<size_t, TOutputColumnEntry, std::hash<size_t>, std::equal_to<size_t>, TMKQLAllocator<std::pair<const size_t, TOutputColumnEntry>, EMemorySubPool::Temporary>> temp;
+    std::unordered_map<size_t, TOutputColumnEntry, std::hash<size_t>, std::equal_to<>, TMKQLAllocator<std::pair<const size_t, TOutputColumnEntry>, EMemorySubPool::Temporary>> temp;
     {
         auto list = AS_VALUE(TListLiteral, partitionKyeColumnsIndexes);
         for (ui32 i = 0; i != list->GetItemsCount(); ++i) {
@@ -602,7 +601,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     const auto& inputFlow = callable.GetInput(inputIndex++);
     const auto& inputRowArg = callable.GetInput(inputIndex++);
     const auto& partitionKeySelector = callable.GetInput(inputIndex++);
-    const auto& partitionColumnIndexes = callable.GetInput(inputIndex++);
+    Y_UNUSED(callable.GetInput(inputIndex++));
     const auto& measureInputDataArg = callable.GetInput(inputIndex++);
     const auto& measureSpecialColumnIndexes = callable.GetInput(inputIndex++);
     const auto& inputRowColumnCount = callable.GetInput(inputIndex++);

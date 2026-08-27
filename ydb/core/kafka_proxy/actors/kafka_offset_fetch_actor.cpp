@@ -1,12 +1,14 @@
 #include "kafka_offset_fetch_actor.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_service.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include "ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
@@ -160,18 +162,42 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             {"originalTopicName", OriginalTopicName},
             {"userSID", UserSID},
             {"present", (response.PQGroupInfo.Get() != nullptr)});
+
+        if (CheckingTopicExistence) {
+            // Unauthenticated describe: if the topic exists, the user was denied by ACL.
+            if (response.PQGroupInfo) {
+                RaiseError(
+                    "access denied",
+                    Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                    Ydb::StatusIds::UNAUTHORIZED,
+                    ActorContext());
+            } else {
+                ReplyUnknownTopic();
+            }
+            return;
+        }
+
+        if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
+            RaiseError(
+                "access denied",
+                Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                Ydb::StatusIds::UNAUTHORIZED,
+                ActorContext());
+            return;
+        }
         if (!response.PQGroupInfo) {
-            THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
-            response->TopicName = OriginalTopicName;
-            response->Status = UNKNOWN_TOPIC_OR_PARTITION;
-            Send(Requester, response.Release());
-            TActorBootstrapped::PassAway();
+            if (UserToken) {
+                CheckingTopicExistence = true;
+                SendUnauthenticatedExistenceCheck();
+                return;
+            }
+            ReplyUnknownTopic();
             return;
         }
         auto path = CanonizePath(NKikimr::JoinPath(response.Path));
         bool hasRights = true;
-        if (UserToken && UserToken->GetSerializedToken()) {
-            hasRights = response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *UserToken);
+        if (UserToken) {
+            hasRights = response.SecurityObject && response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *UserToken);
         } else if (RequireAuthentication) {
             hasRights = false;
         }
@@ -202,12 +228,33 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         Die(ctx);
     };
 
+    void ReplyUnknownTopic() {
+        THolder<TEvKafka::TEvCommitedOffsetsResponse> response(new TEvKafka::TEvCommitedOffsetsResponse());
+        response->TopicName = OriginalTopicName;
+        response->Status = UNKNOWN_TOPIC_OR_PARTITION;
+        Send(Requester, response.Release());
+        TActorBootstrapped::PassAway();
+    }
+
+    void SendUnauthenticatedExistenceCheck() {
+        auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        navigateRequest->DatabaseName = Database;
+        navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
+            .Path = NKikimr::SplitPath(GetTopicPath()),
+            .Access = NACLib::DescribeSchema,
+            .Operation = NSchemeCache::TSchemeCacheNavigate::OpList,
+            .SyncVersion = true,
+        });
+        Send(NKikimr::MakeSchemeCacheID(), new NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
+    }
+
     private:
         const TActorId Requester;
         const TString OriginalTopicName;
         const TString UserSID;
         const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         bool RequireAuthentication;
+        bool CheckingTopicExistence = false;
         std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>>();
 };
 
@@ -276,7 +323,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
                 topicToEntities.second.Partitions,
                 topicToEntities.first,
                 GetUsernameOrAnonymous(Context),
-                Context->UserToken,
+                Context->Token.UserToken,
                 Context->RequireAuthentication
             ));
             InflyTopics++;
@@ -290,36 +337,38 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
 
     auto eventPtr = ev->Release();
     TString topicName = eventPtr->TopicName;
+    if (eventPtr->Status == NONE_ERROR) {
+        Context->RememberTopicAclOk(topicName);
+    } else if (eventPtr->Status == UNKNOWN_TOPIC_OR_PARTITION && Context->HadTopicAclOk(topicName)) {
+        eventPtr->Status = TOPIC_AUTHORIZATION_FAILED;
+    }
+    const bool topicExists = eventPtr->Status == NONE_ERROR;
     TopicsToResponses[topicName] = eventPtr;
-    bool topicNotCreatedYet = false;
     auto& topicGroupRequests = GroupRequests[topicName];
     for (const auto& [topicRequest, groupId] : topicGroupRequests) {
-        if (topicNotCreatedYet) {
-            break;
-        }
-        auto topicResponse = GetOffsetResponseForTopic(topicRequest, groupId);
-        for (const auto& topicPartition : topicResponse.Partitions) {
-            if (topicNotCreatedYet) {
-                break;
+        TString topicNameWithoutDb = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
+        TString topicPath = NormalizePath(DatabasePath, topicNameWithoutDb);
+        if (topicExists && Context->Config.GetAutoCreateConsumersEnable()) {
+            auto partitionsToOffsets = TopicsToResponses[topicName]->PartitionIdToOffsets;
+            bool consumerOnTopic = false;
+            if (partitionsToOffsets) {
+                for (const auto& [_, consumers] : *partitionsToOffsets) {
+                    if (consumers.contains(groupId)) {
+                        consumerOnTopic = true;
+                        break;
+                    }
+                }
             }
-            TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
-            TString topicPath = NormalizePath(DatabasePath, topicName);
-            if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&
-                Context->Config.GetAutoCreateConsumersEnable()) {
-                // consumer is not assigned to the topic case
-                TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
-                                                                        topicPath,
-                                                                        topicName,
-                                                                        groupId);
-                break;
-            } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
-                        Context->Config.GetAutoCreateTopicsEnable()) {
-                // topic or partition does not exist case
-                CreateTopicIfNecessary(topicName, *topicRequest.Name, ctx);
-                topicNotCreatedYet = true;
-                break;
+            if (!consumerOnTopic) {
+                CreateConsumerGroupIfNecessary(topicNameWithoutDb, topicPath, topicNameWithoutDb, groupId);
             }
         }
+        // Do not auto-create a topic reported as unknown. Apache Kafka OffsetFetch never creates
+        // topics (auto.create.topics.enable applies to Metadata, not OffsetFetch). For a missing
+        // topic/partition the group coordinator returns NONE + committedOffset -1; see
+        // https://issues.apache.org/jira/browse/KAFKA-20165. Scheme cache also uses "unknown" to
+        // hide topics without DescribeSchema; auto-create on that path would grant access. If this
+        // connection already saw the topic with access, the unknown describe is mapped to AUTH.
     }
     if (InflyTopics == 0) {
         auto response = GetOffsetFetchResponse();
@@ -356,7 +405,7 @@ void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const
         TopicToEntities[createdTopicName].Partitions,
         createdTopicName,
         GetUsernameOrAnonymous(Context),
-        Context->UserToken,
+        Context->Token.UserToken,
         Context->RequireAuthentication
     ));
 }
@@ -396,7 +445,7 @@ void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlter
         TopicToEntities[alteredTopicName].Partitions,
         alteredTopicName,
         GetUsernameOrAnonymous(Context),
-        Context->UserToken,
+        Context->Token.UserToken,
         Context->RequireAuthentication
     ));
 
@@ -468,7 +517,7 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
             topicToEntities.second.Partitions,
             topicToEntities.first,
             GetUsernameOrAnonymous(Context),
-            Context->UserToken,
+            Context->Token.UserToken,
             Context->RequireAuthentication
         ));
         InflyTopics++;
@@ -506,13 +555,11 @@ void TKafkaOffsetFetchActor::ParseGroupsAssignments(const NKqp::TEvKqp::TEvQuery
         TString groupId = parser.ColumnParser("consumer_group").GetUtf8().c_str();
         if (!assignmentStr.empty()) {
             TKafkaBytes assignment = assignmentStr;
-            TKafkaVersion version = *(TKafkaVersion*)(assignment.value().data() + sizeof(TKafkaVersion));
-            TBuffer buffer(assignment.value().data() + sizeof(TKafkaVersion), assignment.value().size_bytes() - sizeof(TKafkaVersion));
-            TKafkaReadable readable(buffer);
-
-            TConsumerProtocolAssignment consumerAssignment;
-            consumerAssignment.Read(readable, version);
-            assignments.emplace_back(groupId, consumerAssignment);
+            auto consumerAssignment = TryReadConsumerProtocolBlob<TConsumerProtocolAssignment>(assignment);
+            if (!consumerAssignment) {
+                continue;
+            }
+            assignments.emplace_back(groupId, *consumerAssignment);
         }
     }
 }
@@ -547,7 +594,7 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
     };
     NKikimr::NGRpcService::DoAlterTopicRequest(
         std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-        topicName, DatabasePath, std::move(request), callback, Context->UserToken),
+        topicName, DatabasePath, std::move(request), callback, Context->Token.UserToken),
         NKikimr::NReplication::TLocalProxyActor(DatabasePath));
 
 }
@@ -570,7 +617,7 @@ void TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
     TContext::TPtr ContextForTopicCreation;
     ContextForTopicCreation = std::make_shared<TContext>(TContext(*Context));
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
-    ContextForTopicCreation->UserToken = Context->UserToken;
+    ContextForTopicCreation->Token.UserToken = Context->Token.UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
     ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     ContextForTopicCreation->RequireAuthentication = Context->RequireAuthentication;
@@ -631,19 +678,34 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                     partition.Metadata = groupPartitionToOffset->second.Metadata;
                     partition.ErrorCode = NONE_ERROR;
                 } else {
-                    partition.ErrorCode = RESOURCE_NOT_FOUND;
-                    YDB_LOG_ERROR("Group not found for topic",
+                    // Existing partition, no committed offset for this group.
+                    partition.CommittedOffset = -1;
+                    partition.ErrorCode = NONE_ERROR;
+                    YDB_LOG_DEBUG("No committed offset for group on partition",
                         {LogPrefix()},
                         {"groupId", groupId},
-                        {"topicName", topicName});
+                        {"topicName", topicName},
+                        {"requestPartition", requestPartition});
                 }
             } else {
-                partition.ErrorCode = RESOURCE_NOT_FOUND;
-                YDB_LOG_ERROR("Partition not found for topic",
+                // Kafka OffsetFetch does not fail on an unknown partition:
+                // NONE + committedOffset = -1.
+                partition.CommittedOffset = -1;
+                partition.ErrorCode = NONE_ERROR;
+                YDB_LOG_DEBUG("Partition not found for topic",
                     {LogPrefix()},
                     {"requestPartition", requestPartition},
                     {"topicName", topicName});
             }
+            topic.Partitions.push_back(partition);
+        }
+    } else if (TopicsToResponses[topicName]->Status == UNKNOWN_TOPIC_OR_PARTITION) {
+        // Kafka coordinator OffsetFetch does not check that the topic exists.
+        for (auto requestPartition: requestTopic.PartitionIndexes) {
+            TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
+            partition.PartitionIndex = requestPartition;
+            partition.CommittedOffset = -1;
+            partition.ErrorCode = NONE_ERROR;
             topic.Partitions.push_back(partition);
         }
     } else {

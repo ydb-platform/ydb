@@ -47,9 +47,7 @@ INode::INode(TPosition pos)
 {
 }
 
-INode::~INode()
-{
-}
+INode::~INode() = default;
 
 TPosition INode::GetPos() const {
     return Pos_;
@@ -735,9 +733,7 @@ TAstAtomNode::TAstAtomNode(TPosition pos, TString content, ui32 flags, bool isOp
 {
 }
 
-TAstAtomNode::~TAstAtomNode()
-{
-}
+TAstAtomNode::~TAstAtomNode() = default;
 
 void TAstAtomNode::DoUpdateState() const {
     State_.Set(ENodeState::Const);
@@ -783,9 +779,7 @@ TAstListNode::TAstListNode(TPosition pos)
 {
 }
 
-TAstListNode::~TAstListNode()
-{
-}
+TAstListNode::~TAstListNode() = default;
 
 bool TAstListNode::DoInit(TContext& ctx, ISource* src) {
     for (auto& node : Nodes_) {
@@ -1594,9 +1588,7 @@ TColumnNode::TColumnNode(TPosition pos, TNodePtr column, TString source)
 {
 }
 
-TColumnNode::~TColumnNode()
-{
-}
+TColumnNode::~TColumnNode() = default;
 
 bool TColumnNode::IsAsterisk() const {
     return ColumnName_ == "*";
@@ -2404,9 +2396,7 @@ TNodePtr BuildEmptyAction(TPosition pos) {
     return BuildLambda(pos, params, arg);
 }
 
-TDeferredAtom::TDeferredAtom()
-{
-}
+TDeferredAtom::TDeferredAtom() = default;
 
 TDeferredAtom::TDeferredAtom(TPosition pos, const TString& str, ui32 flags)
 {

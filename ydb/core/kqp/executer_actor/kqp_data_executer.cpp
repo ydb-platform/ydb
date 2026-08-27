@@ -69,7 +69,6 @@ public:
         const TActorId bufferActorId,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        ui64 generation,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
         bool useKqpTasksGraphV2,
         TVector<NKikimr::TTableId> tableIdsForSnapshot)
@@ -82,7 +81,6 @@ public:
         , ReadOnlyTx(IsReadOnlyTx())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
-        , Generation(generation)
     {
         TasksGraph.GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
@@ -523,7 +521,9 @@ private:
         SecretSnapshotRequired = false;
         // SecureParams is now populated — launch any deferred PQ topic describes
         // that need the resolved secret token.
-        StartPqTopicResolver();
+        if (TopicPartitionSnapshotRequired) {
+            StartPqTopicResolver();
+        }
         if (!WaitRequired()) {
             Execute();
         }
@@ -587,9 +587,6 @@ private:
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
 
-                    // For restored streaming queries with PQ sources, asynchronously fetch
-                    // the current partition count so we can update the task graph before
-                    // RestoreTasksGraph() is called (avoids SCHEME_ERROR on first partition check).
                     if (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
                         && transaction.Body->GetHasPqSources()
                         && Request.QueryPhysicalGraph
@@ -616,11 +613,7 @@ private:
         }
         if (SecretSnapshotRequired) {
             GetSecretsSnapshot();
-            // PQ topic resolver is started after secrets are resolved
-            // in HandleResolve(TEvDescribeSecretsResponse).
-        } else {
-            // No secrets needed — SecureParams is already populated, so we can
-            // start the PQ topic resolver right away.
+        } else if (TopicPartitionSnapshotRequired) {
             StartPqTopicResolver();
         }
         if (ResourceSnapshotRequired) {
@@ -1279,25 +1272,33 @@ private:
             counters = counters->GetSubgroup("host", "");
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
+
+        NFq::TCheckpointCoordinatorSettings setting;
+        if (const auto& checkpointInterval = context->CheckpointInterval) {
+            setting.SetCheckpointingPeriod(*checkpointInterval);
+        }
+
         const auto& checkpointId = context->CheckpointId;
+        const auto generation = context->CurrentExecutionGeneration;
+        Y_VALIDATE(generation, "Missing current execution generation");
+
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
-            ::NFq::TCoordinatorId(checkpointId, Generation),
+            ::NFq::TCoordinatorId(checkpointId, generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
-            {},
+            setting,
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition).Release());
+            streamingDisposition
+        ).Release());
+
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
             {"checkpointCoordinatorId", CheckpointCoordinatorId},
-            {"executionId", context->CurrentExecutionId},
-            {"checkpointId", checkpointId},
-            {"generation", Generation},
             {"stateLoadMode", FederatedQuery::StateLoadMode_Name(stateLoadMode)},
             {"streamingDisposition", streamingDisposition.ShortDebugString()},
             {"hasQueryPhysicalGraph", Request.QueryPhysicalGraph != nullptr},
@@ -1396,26 +1397,11 @@ private:
         }
     }
 
-private:
-    // Starts TKqpPqTopicResolver.
-    // Must be called only after SecureParams has been populated.
-    // The resolver collects PQ source descriptors from transactions internally.
     void StartPqTopicResolver() {
-        if (!TopicPartitionSnapshotRequired) {
-            return;
-        }
-
         // Pass a non-const mutable copy of the shared_ptr so the resolver can patch it.
         auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
             Request.QueryPhysicalGraph);
 
-        // TDqPqTopicSource.Token.Name is the *external source name*
-        // (e.g. "cluster:default_/Root/logbroker_source2"), which is the key in
-        // externalSource.GetSourceName() and in task.Meta.SecureParams.
-        // FillExternalSourceSecureParams resolves the structured token authInfo
-        // (from externalSource.GetAuthInfo()) using TasksGraph.GetMeta().SecureParams
-        // (raw secret name -> secret value), producing the map the resolver needs:
-        //   "cluster:default_/Root/logbroker_source2" -> "<actual_token>"
         THashMap<TString, TString> resolvedSecureParams;
         for (const auto& transaction : Request.Transactions) {
             for (const auto& stage : transaction.Body->GetStages()) {
@@ -1434,6 +1420,8 @@ private:
 
         RegisterWithSameMailbox(resolverActor);
     }
+
+private:
 
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;
@@ -1460,7 +1448,6 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    ui64 Generation = 0;
 };
 
 } // namespace
@@ -1472,13 +1459,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2,
     TVector<NKikimr::TTableId> tableIdsForSnapshot)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
+        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig,
         channelService, useKqpTasksGraphV2, std::move(tableIdsForSnapshot));
 }
 

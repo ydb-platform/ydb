@@ -1498,6 +1498,7 @@ struct Schema : NIceDb::Schema {
         struct RowIdColumnBuildId : Column<56, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1558,7 +1559,8 @@ struct Schema : NIceDb::Schema {
             AutoUniqueIndexName,
             RowIdColumnBuildId,
             RowIdUniqueBuildId,
-            ParentBuildId
+            ParentBuildId,
+            IsRebuild
         >;
     };
 

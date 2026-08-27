@@ -28,6 +28,7 @@ public:
                 .Error = TDescribeSchemaError{
                     .Status = Ydb::StatusIds::BAD_REQUEST,
                     .Message = TStringBuilder() << "No partition " << PartitionId << " in topic",
+                    .RetryWithSync = true,
                 },
             };
         }

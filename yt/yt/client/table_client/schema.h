@@ -574,6 +574,8 @@ void ValidateNoDescendingSortOrder(
 
 void ValidateNoRenamedColumns(const TTableSchema& schema);
 
+void ValidateNoAggregateStateType(const TTableSchema& schema);
+
 void ValidateColumnUniqueness(const TTableSchema& schema);
 
 void ValidatePivotKey(

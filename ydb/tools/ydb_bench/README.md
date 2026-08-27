@@ -2,17 +2,19 @@
 
 `ydb_bench` packages actor benchmark executables into one Python tool and runs
 reproducible benchmark profiles described by a YAML file. Build it with the
-profile build type so the same binary can also be used with `perf`:
+profile build type when embedded `ydb` and `ydbd` symbols are needed. Other
+build types store stripped server and CLI binaries to keep the bundle compact:
 
 ```bash
 ./ya make --build=profile ydb/tools/ydb_bench
 ```
 
-The tool provides three benchmarks:
+The tool provides four benchmarks:
 
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
+- `local-ydb`: a local static/dynamic YDB cluster driven by `ydb workload kv`.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -69,7 +71,110 @@ memory-bandwidth-bench:
     duration: 3
     repetitions: 3
     affinity: [none, pack-numa, spread-numa-pack-chiplet]
+
+local-ydb:
+  storage-capacity:
+    workload:
+      type: kv
+      operation: upsert
+      options:
+        init-upserts: 1000
+    geometry:
+      preset: storage
+      static-nodes: 2
+      dynamic-nodes: 1
+      max-dynamic-nodes: 8
+      disk-size-gb: 64
+      storage-groups: 1
+    client:
+      threads: 64
+    load:
+      parameter: rate
+      allow-errors: false
+      search:
+        start: 1000
+        maximum: 1000000
+        resolution-percent: 2
+      objective:
+        type: maximize-throughput
+        target-role: static
+    measurement:
+      warmup: 10
+      duration: 30
+      repetitions: 3
+    affinity:
+      ydb-cli:
+        mode: pack-numa-pack-chiplet-spread-core
+        cpus: one-chiplet
+      static-nodes:
+        mode: none
+      dynamic-nodes:
+        mode: none
 ```
+
+The local YDB benchmark bundles `ydbd` and the YDB CLI, creates an isolated
+Config V2 cluster backed by in-memory SectorMap PDisks, and stops it after the
+profile. `single` always uses one dynamic node. `storage` may grow the
+dynamic-node count up to `max-dynamic-nodes` when dynamic CPU is saturated but
+static/storage CPU is not; `custom` keeps the explicitly requested geometry.
+Each static node gets its own `NONE`-profile SectorMap with the virtual size
+specified by `disk-size-gb`, so benchmark results are not limited by a host
+block device.
+
+`load.parameter` selects the one monotonic YDB CLI setting controlled by the
+benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. A
+`values` list measures exact points. For adaptive runs, `search` defines the
+range and resolution. `maximize-throughput` uses a discrete ternary search and
+prefers the lowest load with the best observed throughput; a plateau is
+confirmed only when the selected role's CPU is saturated. `latency-slo` uses
+the configured `multiplier` to find the first failing point, then a binary
+search to find the highest load whose millisecond percentile, error count, and
+achieved-rate ratio satisfy the SLO. For example:
+
+```yaml
+    load:
+      parameter: rate
+      search:
+        start: 1000
+        maximum: 1000000
+        multiplier: 2
+        resolution-percent: 2
+      objective:
+        type: latency-slo
+        percentile: p99
+        max-ms: 10
+        max-errors: 0
+        min-achieved-rate-ratio: 0.98
+```
+
+Set `load.allow-errors: true` when request-level errors reported by
+`ydb workload` are an expected part of the experiment. Such points remain
+eligible for selection and the error counts stay in CSV, manifests, tables,
+and charts. The flag does not hide or tolerate a failed CLI process, timeout,
+malformed output, cluster failure, or workload setup/cleanup failure. For a
+latency SLO, it disables the `max-errors` rejection while keeping the latency
+and achieved-rate checks active.
+
+The previous flat `mode`, `start`, and `slo` fields remain accepted for config
+compatibility, but newly generated YAML uses `search` and `objective`.
+
+During a local YDB run, the CLI reports cluster startup, workload initialization,
+warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.
+The web profile page shows the same live phase with elapsed time and a countdown
+for warmup and measurement. Completed attempts appear immediately on synchronized
+search-order charts for candidate load, current best load, throughput, latency,
+CPU by role, errors, and retries. Geometry stages and the chronological attempt
+table remain available after completion. Profile `run.json` stores attempt and
+stage timestamps, durations, structured decisions, scaling actions, and the
+final outcome so consumers do not have to parse diagnostic text.
+
+Linux CPU metrics are sampled independently for static nodes, dynamic nodes,
+the YDB CLI, and the whole host. Role affinity uses the existing placement
+modes. `mode: none` deliberately leaves YDB server placement to Linux; the CLI
+is pinned to one chiplet by default and its mask stays fixed throughout the
+search. The web UI Builder edits workload, geometry, load controller,
+measurement, and per-role affinity settings; the YAML tab exposes the same
+portable configuration directly.
 
 The memory benchmark runs every matrix combination in a separate process. Each
 worker owns and first-touches its private buffer after process affinity has been

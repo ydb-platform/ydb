@@ -120,16 +120,21 @@ structural equality, so collisions are resolved by equality and the cache
 changes lookup cost only. Equality uses an iterative pair worklist with
 identity-pair sharing, preserving ordered structure and exact runtime classes
 without Python recursion depth becoming a verifier limit. The renderer gives
-each quantifier body its own scope
-and emits repeated compound terms once through hygienic, dependency-ordered SMT
-`let` bindings. It never lifts a term across a quantifier that binds one of its
-symbols. This preserves the direct mathematical obligation while avoiding
-textual duplication in large ordered queries; the sharing transformation is an
-exact rendering step, not a solver hint or semantic approximation. A separate
-iterative post-order interner assigns equal IDs exactly when complete SMT term
-structure is equal. It uses object identity only to traverse the DAG and never
-recursively hashes a deep term; grouped-key classification and deferred
-String-domain compaction consume those exact structural IDs.
+each quantifier body its own lexical scope and never lifts a term across a
+binder. Within a scope containing at most 16,384 distinct object identities,
+an iterative bottom-up pass assigns one ID to every exact
+`(runtime class, sort, operation, atom, ordered child IDs)` structure. Thus
+independently rebuilt equal compound terms share one hygienic,
+dependency-ordered SMT `let`, while different Script-owner tokens, sorts,
+atoms, operations, child orders, and near misses remain distinct. Quantifier
+nodes are opaque to their containing scope and their bodies re-enter the same
+bounded process independently. A larger scope uses the preceding exact
+identity-sharing renderer byte-for-byte, retaining shared object identities
+without paying an unbounded structural-interning cost. Both paths are exact
+rendering transformations, not solver hints, algebraic rewrites, or semantic
+approximations. A separate iterative post-order interner used by grouped-key
+classification and deferred String-domain compaction likewise assigns equal
+IDs exactly when complete SMT term structure is equal.
 
 ## Scalar expressions
 
@@ -1047,6 +1052,21 @@ Implementation sequence:
     Decimal-SUM summary. Both canonical formulas and branch-7 obligations
     shrink by about 3%, but both queries remain `UNKNOWN`; the floor stays
     36/36. M4 remains current.
+86. M4: Milestone 87 shares independently rebuilt exact SMT subtrees within one
+    bounded lexical scope. Structural-CSE commit `0077c196ea8` uses runtime
+    class, sort, operation, atom, and ordered child structural IDs; it preserves
+    Script-owner identity, treats quantifiers as opaque in the containing
+    scope, and gives each body a fresh scope. A direct `Term`-key prototype was
+    rejected before commit after a colliding-hash deep-DAG audit exposed
+    quadratic behavior. Cap commit `d9be39ad01b` limits structural interning to
+    16,384 distinct identities per scope and restores the preceding exact
+    identity-sharing bytes above that ceiling; nested scopes re-enter the
+    bounded path independently. The packaged target passes 801/801. q56/q60
+    canonical and preferred-branch obligations shrink by about 22%, but the
+    same branch 7 remains `UNKNOWN` at the 60-second direct checks. Fresh
+    policy-valid dashboards retain all 101 formulas, and proof gates verify
+    the unchanged 13/13 TPCH plus 23/23 TPC-DS floor, 36/36. M4 remains
+    current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -2262,8 +2282,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   remove the former factorial and repeated-structure construction gates.
   SMT occurrence discovery, dependency levels, and term emission are also
   iterative: deeply nested exact obligations no longer depend on Python's
-  recursion limit, while 3,000 randomized shared and quantified DAGs preserve
-  the preceding renderer's bytes exactly.
+  recursion limit. The earlier stack-safe rewrite preserved its predecessor's
+  bytes on 3,000 randomized shared and quantified DAGs; M87 intentionally
+  changes only independently rebuilt exact subtrees below its scope cap and
+  preserves the preceding identity-renderer bytes above it.
 
   The historical Milestone 69 checkpoint includes the preceding q72, q9, and q24
   formula checkpoints plus reviewed generic/pushed compiled LIKE, exact
@@ -3869,6 +3891,115 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   inventory changes: M86 retains 13/13 TPCH plus 23/23 TPC-DS, 36/36 overall,
   and promotes neither q56 nor q60.
 
+  Milestone 87 changes only exact SMT rendering and its tests. Commit
+  `0077c196ea8` extends scope-local `let` sharing from repeated object
+  identities to independently constructed terms with the identical runtime
+  class, sort, operation, atom, and ordered child structural IDs. The
+  bottom-up keys contain no `Term` objects, so cached-hash collisions cannot
+  invoke recursive structural equality while IDs are assigned. Script-owned
+  declaration tokens remain identity atoms. Quantifiers are opaque in their
+  containing scope, their bodies start fresh scopes, and definition bodies use
+  their own render contexts; no term crosses a binder or definition boundary.
+  Alias order remains deterministic by dependency level and first discovery,
+  and the existing reserved-name hygiene and parallel nested `let` semantics
+  are unchanged. This is exact common-subexpression serialization, not an
+  algebraic quotient or a change to the asserted theorem.
+
+  An earlier direct-`Term` interning prototype was not committed. An
+  adversarial deep graph whose cached hashes collide took about 26.5 seconds,
+  exposing a quadratic comparison path. Replacing those keys with bottom-up
+  scalar child IDs reduced independently rebuilt equal depth-2,500 DAGs to
+  0.047--0.058 seconds and collision-heavy unequal DAGs to 0.071--0.082
+  seconds in the recorded probes. Complete-class/sort/atom/operation/child
+  near misses, owner isolation, quantifier shadowing and sibling scopes,
+  definition-parameter scopes, alias hygiene, determinism, deep/colliding
+  DAGs, and independent Z3 equivalence are regression-tested.
+
+  The initially unbounded implementation passed all semantic gates but its
+  complete TPCH diagnostic exposed an unacceptable performance checkpoint.
+  It was policy-valid with the unchanged 20 `FORMULA_EMITTED` and two
+  `OPTIMIZER_FAILURE` rows, but spent 5,918/223,834 ms in preparation/verifier
+  work. q2 alone spent 764/178,922 ms, compared with M86's 288/86,319 ms.
+  The 17,342-byte report and 18,332-byte trace have SHA-256 values
+  `d47711a72f437631466651ad87a4fcdf6d1e072fb45f01b56f8d9c687c706dec`
+  and
+  `511fe85603fc45a6a9e3c718a8d00bab95b977b5cee68c32bf3406fbca417d88`.
+  This run is retained as a superseded diagnostic, not the authoritative M87
+  performance gate; removing timing fields makes its report agree with the
+  unchanged M86 classifications.
+
+  Commit `d9be39ad01b` therefore bounds structural interning at 16,384
+  distinct object identities per lexical scope. Discovery stops at the first
+  excess identity and invokes the preceding identity-only renderer exactly;
+  repeated object identities still share, and quantifier bodies independently
+  re-enter the bounded structural path. Boundary, forced-fallback, generated
+  DAG, hygiene, nested-scope, and Z3 tests confirm structural sharing through
+  16,384 and byte-identical identity fallback at 16,385. In the retained q2
+  census, five scopes contain 1,236,701, 981,382, 929,609, 345,387, and 51,824
+  identities and therefore fall back. q56/q60 remain below the cap, with
+  maximum scopes 10,013/9,793. The registered package passes 801/801 checks:
+  21 flake8, one import, and 779 Python tests; the solver-backed SMT module
+  passes 63/63 and the full direct Python suite passes 779/779.
+
+  Structural sharing reduces q56's canonical formula from 615,352 to 480,892
+  bytes (-134,460, 21.8509%) and preferred branch 7 from 603,906 to 470,708
+  (-133,198, 22.0561%). Their SHA-256 values are
+  `1fa866f6c87699acfc6ea05a9cf9a912d9d4d0f319229ef16f8863ee9be63b5b`
+  and
+  `87650e134222b1642a882894e5344c9b70b65749734f2b3ab1518fcbf894709b`.
+  q60's canonical formula falls from 610,286 to 478,281 bytes (-132,005,
+  21.6300%) and branch 7 from 599,709 to 468,829 (-130,880, 21.8239%), with
+  SHA-256 values
+  `5a541e83dd92179bf057143593420953e9ef0c75bead71f393d60f4ba0f308c8`
+  and
+  `178b7c26361735196cf772b92589de23993ab351a1109fa023c21d69b96868a3`.
+  Direct 60-second Z3 checks of the two branch-7 obligations still return
+  `UNKNOWN` after 60.085/60.083 seconds. Smaller exact syntax is not an
+  `UNSAT` result, so neither query is promoted.
+
+  The authoritative capped formula dashboards are policy-valid with zero
+  violations and preserve all classifications. TPCH has 20 successful and two
+  failed preparations, 20 exact-pair/verifier/formula rows, and two
+  `OPTIMIZER_FAILURE` rows after 3,325/107,979 ms. q2 recovers to 285/86,749
+  ms. Its 17,333-byte report and 18,353-byte trace have SHA-256 values
+  `98be7aca3d174cf03d6f09224d72f17364158a4503984e86a1c15a0a6870e0ac`
+  and
+  `fd50903ec7b21f6fb43a5a2dff8ef0d1e633757584eab47f4ae63c9b9a7d3d14`;
+  subtest/chunk wall times are 113.306928/114.383010 seconds. TPC-DS has 73
+  successful and 26 failed preparations, 81 exact-pair/verifier/formula rows,
+  and 18 `OPTIMIZER_FAILURE` rows after 78,615/842,344 ms. Its 342,055-byte
+  report and 18,409-byte trace have SHA-256 values
+  `c594ac967e6a98c3190c4eeb4c962816f2eb3d34e9cc51072bc195b38e1c9eb5`
+  and
+  `f26102544159a3b183afec264371238874250013cdbdfcb9fe10174dc0de7929`.
+  Combined dashboard work is 81,940/950,323 ms; all 101 exact pairs still
+  construct formulas.
+
+  Fresh capped proof gates are likewise policy-valid with no violation. TPCH
+  proves 13/13 after 1,808/62,582 ms. Its 10,171-byte report and 18,439-byte
+  trace have SHA-256 values
+  `9c878b942e75fc6d55983b876fdaff9c0a35600577782255cc056707894000fb`
+  and
+  `14f3d0d098b8b88df34e6e1e3599a05ddcb054a6bf15fd1572f9695d036ab4ad`;
+  subtest/metadata/outer wall times are 66.532420/67.447879/94.27 seconds.
+  TPC-DS proves 23/23 after 19,215/265,971 ms. Its 18,759-byte report and
+  18,439-byte trace have SHA-256 values
+  `b1f42045517c78146e15049acf95e00d35e357e586bed73880ef47fb1076eb05`
+  and
+  `00a90afc96ed67a99c3ad0604c8dc1f7d3ff9869043be007c8e01ad0fa326800`;
+  subtest/metadata/outer wall times are 289.258978/290.234779/907.52 seconds,
+  with the outer command including a cold build. Combined proof work is
+  21,023/328,553 ms. The floor remains 13/13 TPCH plus 23/23 TPC-DS, 36/36;
+  no formula, exact-pair, entry, preparation, policy, or defect inventory
+  changes.
+
+  A separate attempted TPC-DS q18/q59/q78 discovery batch exhausted the filesystem
+  while creating its Ya output root, before any test ran. It produced no
+  report, trace, solver status, or timing and is therefore `NO RESULT`, not
+  three `UNKNOWN` queries. The failed materialization was removed and Ya's
+  supported cache garbage collection restored working headroom; no conclusion
+  about those obligations is drawn from that operational failure.
+
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
@@ -4967,6 +5098,11 @@ regression locks the corrected boundary.
   shrinks q56/q60's canonical and preferred payload obligations by about 3%,
   but both stay `UNKNOWN` at branch 7/8. Fresh dashboards and the unchanged
   13/13 plus 23/23 proof floors are green, so the checked floor remains 36/36.
+  M87 commits `0077c196ea8` and `d9be39ad01b` add exact structural SMT sharing
+  inside a 16,384-identity lexical-scope cap, with the preceding exact
+  identity renderer above the cap. q56/q60 syntax shrinks by about 22% while
+  branch 7 remains `UNKNOWN`; authoritative capped dashboards and fresh 13/13
+  plus 23/23 proof gates stay green, so the checked floor remains 36/36.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

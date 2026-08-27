@@ -47,7 +47,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
         for(auto victimQuerySpanId: victimQuerySpanIds) {
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                 stlogMessageTLI,
-                {"otherVictimQuerySpanId", victimQuerySpanId});
+                {"victimQuerySpanId", victimQuerySpanId});
         }
     }
 

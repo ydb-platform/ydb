@@ -99,8 +99,7 @@ def extract_between(line: str, field: str, end_field: Optional[str]) -> Optional
 # ==================== Regex Patterns ====================
 
 RE_VICTIM_ID = re.compile(r"\bVictimQuerySpanId:\s*(\d+)\b")
-RE_BREAKER_ID = re.compile(r"\bBreakerQuerySpanId:\s*(\d+)\b")
-RE_VICTIM_IDS_LIST = re.compile(r"\bVictimQuerySpanIds:\s*\[([^\]]*)\]")
+RE_BREAKER_ID = re.compile(r"\bbreakerQuerySpanId=\s*(\d+)\b")
 RE_ISO = re.compile(r"\b(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z\b")
 RE_TX_ITEM = re.compile(
     r"QuerySpanId=(\d+)\s+QueryText=(.*?)(?=\s+\|\s+QuerySpanId=|\s*\Z)",
@@ -149,11 +148,10 @@ def extract_breaker_id(line: str) -> Optional[str]:
 
 def victim_id_in_line(line: str, victim_id: str) -> bool:
     """Check if victim_id appears in VictimQuerySpanId or VictimQuerySpanIds."""
-    if re.search(rf"\bVictimQuerySpanId:\s*{re.escape(victim_id)}\b", line):
+    if re.search(rf"\bvictimQuerySpanId=\s*{re.escape(victim_id)}\b", line):
         return True
-    m = RE_VICTIM_IDS_LIST.search(line)
-    if m:
-        return re.search(rf"\b{re.escape(victim_id)}\b", m.group(1)) is not None
+    if re.search(rf"\botherVictimQuerySpanId=\s*{re.escape(victim_id)}\b", line):
+        return True
     return False
 
 
@@ -275,7 +273,6 @@ def main():
     relevant_lines: List[Tuple[float, str]] = []
 
     try:
-        print("Lookup victim_id=", victim_id)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 print("LINE:", line, end="")
@@ -310,32 +307,37 @@ def main():
     w_start = anchor_t - W
     w_end = anchor_t + W
 
-    print("HEY 2 w_start=", w_start, " w_end=", w_end)
-
     # Process all relevant lines within the time window
     for t, line in relevant_lines:
-        print("RELEVANT_LINE:", line, end="")
         if not in_window(t, w_start, w_end):
             continue
 
-        # Victim SessionActor line: "was a victim of broken locks" + Component: SessionActor
+        print("CHECK_LINE:", line, end="")
+
+        # Victim SessionActor line: "was a victim of broken locks" + component=SessionActor
         if victim_log_sa is None:
             if ("was a victim of broken locks" in line) and \
-               ("Component: SessionActor" in line) and \
+               ("component=SessionActor" in line) and \
                victim_id_in_line(line, victim_id):
                 victim_log_sa = line.rstrip("\n")
+                print("CHECK_LINE:")
+                print("CHECK_LINE:     victim_log_sa =", victim_log_sa)
+                print("CHECK_LINE:")
 
         # Breaker DataShard line: "broke other locks" + Component: DataShard
         if breaker_log_ds is None:
             if ("broke other locks" in line) and \
-               ("Component: DataShard" in line or "datashard_integrity_trails" in line) and \
+               ("component=DataShard" in line or "datashard_integrity_trails" in line) and \
                victim_id_in_line(line, victim_id):
                 breaker_log_ds = line.rstrip("\n")
                 breaker_id = extract_breaker_id(line)
+                print("CHECK_LINE:")
+                print("CHECK_LINE:     breaker_id =", breaker_id)
+                print("CHECK_LINE:")
 
         # Breaker SessionActor lines: "had broken other locks" + Component: SessionActor
         # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
-        if ("had broken other locks" in line) and ("Component: SessionActor" in line):
+        if ("had broken other locks" in line) and ("component=SessionActor" in line):
             bid = extract_breaker_id(line)
             if bid:
                 sline = line.rstrip("\n")

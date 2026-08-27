@@ -8,9 +8,9 @@
 | Авторы                                           | TBD                                        |
 | Рецензенты                                       | TBD                                        |
 | Создан                                           | 2026-08-11                                 |
-| Обновлён                                         | 2026-08-20                                 |
-| Целевая ревизия YDB                              | `3529cbcc660f1bb87c2e4e691675f584589f047b` |
-| Кандидат на source revision classic NBS contract | `5e95a6646c3cc8af5797ba307f99ec9431aaecbe` |
+| Обновлён                                         | 2026-08-27                                 |
+| Целевая ревизия YDB                              | `409f857c9f1ec487f12ef947c14f238b820b7ee3` |
+| Source revision classic NBS contract             | `953e9966ce94d1724ccdb3e6676ac1f6036f04ae` |
 
 Документы:
 
@@ -208,7 +208,7 @@ NBS1_1 --> NBS2_2: 4. MountVolume
 
 #### 3.4.1. Граница совместимости
 
-NBS2 frontend реализует совместимое подмножество classic protobuf service `NCloud.NBlockStore.NProto.TBlockStoreService` из зафиксированной source revision, кандидат которой указан в метаданных RFC.
+NBS2 frontend реализует совместимое подмножество classic protobuf service `NCloud.NBlockStore.NProto.TBlockStoreService` из source revision, указанной в метаданных RFC.
 
 #### 3.4.2. Поддерживаемые операции
 

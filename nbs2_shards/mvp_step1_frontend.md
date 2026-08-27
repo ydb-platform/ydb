@@ -63,6 +63,8 @@ classic NBS client/test
 
 ## 2. Принятые входные решения
 
+- YDB build baseline для compile/dependency spike — revision
+  `409f857c9f1ec487f12ef947c14f238b820b7ee3`;
 - source для classic protobuf, gRPC server, RDMA wire protocol и error codes —
   revision `953e9966ce94d1724ccdb3e6676ac1f6036f04ae`;
 - frontend использует отдельный classic NBS gRPC server внутри `ydbd`, а не
@@ -93,27 +95,35 @@ classic NBS client/test
 
   **Исходное состояние:**
 
-  - classic gRPC server находится в `cloud/blockstore/libs/server` и использует
+  - classic gRPC server находится в
+    `/home/yudovmaksim/nbs/cloud/blockstore/libs/server` и использует
     `NCloud::NBlockStore::IBlockStore` и полный classic protobuf service;
-  - classic RDMA target находится в `cloud/blockstore/libs/service_rdma` и
-    использует тот же `IBlockStore` contract;
-  - текущий YDB subtree `ydb/core/nbs/cloud/blockstore` не содержит этих двух
-    библиотек, `cloud/blockstore/public/api/grpc` и transport-support
-    библиотек `cloud/storage/core/libs/grpc`, `uds` и `rdma`;
-  - существующий YDB `ydb/core/nbs/cloud/blockstore/libs/service` предоставляет
-    NBS2 `NYdb::NBS::NBlockStore::IStorage`, а не classic
+  - classic RDMA target находится в
+    `/home/yudovmaksim/nbs/cloud/blockstore/libs/service_rdma` и использует тот
+    же `IBlockStore` contract;
+  - текущий YDB subtree
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore` не содержит
+    этих двух библиотек,
+    `/home/yudovmaksim/nbs/cloud/blockstore/public/api/grpc` и
+    transport-support библиотек
+    `/home/yudovmaksim/nbs/cloud/storage/core/libs/grpc`,
+    `/home/yudovmaksim/nbs/cloud/storage/core/libs/uds` и
+    `/home/yudovmaksim/nbs/cloud/storage/core/libs/rdma`;
+  - существующий YDB
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/libs/service`
+    предоставляет NBS2 `NYdb::NBS::NBlockStore::IStorage`, а не classic
     `NCloud::NBlockStore::IBlockStore`, поэтому он не является прямой заменой
     classic service library;
   - текущий `ydbd` получает embedded NBS2 через
-    `ydb/core/nbs/cloud/blockstore/bootstrap`, но в этом пункте новые
-    библиотеки к bootstrap ещё не подключаются.
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/bootstrap`, но
+    в этом пункте новые библиотеки к bootstrap ещё не подключаются.
 
   Начальные source roots зафиксированы принятой архитектурой:
 
   ```text
-  cloud/blockstore/libs/server
-  cloud/blockstore/libs/service_rdma
-  cloud/blockstore/public/api/grpc
+  /home/yudovmaksim/nbs/cloud/blockstore/libs/server
+  /home/yudovmaksim/nbs/cloud/blockstore/libs/service_rdma
+  /home/yudovmaksim/nbs/cloud/blockstore/public/api/grpc
   ```
 
   - [x] **3.1.1. Размещение build spike.** Первый перенос выполняется в
@@ -123,20 +133,24 @@ classic NBS client/test
     **Решение:** временно разместить перенесённый код в:
 
     ```text
-    ydb/core/nbs/classic/cloud/blockstore/...
-    ydb/core/nbs/classic/cloud/storage/...
+    /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/cloud/blockstore/...
+    /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/cloud/storage/...
     ```
 
     В этом subtree сохраняются classic namespaces и protobuf packages, а
     include paths и `PEERDIR` механически получают новый prefix. После
     успешной сборки и фиксации фактически нужного dependency closure перенести
-    только необходимый код в обычные NBS2 paths под `ydb/core/nbs/cloud/...`,
-    интегрируя его с уже существующими NBS2 libraries и proto.
+    только необходимый код в обычные NBS2 paths под
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/...`, интегрируя его с
+    уже существующими NBS2 libraries и proto.
 
     **Обоснование:** изолированный первый перенос позволяет собрать исходные
     classic library targets без преждевременного объединения одноимённых, но
-    несовместимых classic и NBS2 `libs/service` и protobuf. Полученный build
-    graph показывает фактически необходимые зависимости и места адаптации.
+    несовместимых classic
+    `/home/yudovmaksim/nbs/cloud/blockstore/libs/service` и NBS2
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/libs/service`,
+    а также protobuf. Полученный build graph показывает фактически необходимые
+    зависимости и места адаптации.
     После этого итоговый перенос можно выполнить осознанно, не сохраняя второй
     постоянный набор classic infrastructure рядом с NBS2.
 
@@ -149,8 +163,9 @@ classic NBS client/test
 
     **Условие замены:** после успешной отдельной сборки classic gRPC server и
     RDMA target, фиксации dependency closure и списка немеханических адаптаций
-    нужный код переносится под `ydb/core/nbs/cloud/...`, а временный
-    `ydb/core/nbs/classic/...` удаляется.
+    нужный код переносится под
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/...`, а временный
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/...` удаляется.
 
     **Детализация:** второй перенос не означает копирование поверх существующих
     файлов. Для каждого конфликтующего library/proto target отдельно
@@ -164,46 +179,50 @@ classic NBS client/test
     targets:
 
     ```text
-    cloud/blockstore/public/api/grpc
-    cloud/blockstore/libs/server
-    cloud/blockstore/libs/service_rdma
-    cloud/blockstore/libs/rdma
+    /home/yudovmaksim/nbs/cloud/blockstore/public/api/grpc
+    /home/yudovmaksim/nbs/cloud/blockstore/libs/server
+    /home/yudovmaksim/nbs/cloud/blockstore/libs/service_rdma
+    /home/yudovmaksim/nbs/cloud/blockstore/libs/rdma
     ```
 
-    `cloud/blockstore/libs/rdma` переносится отдельно от
-    `cloud/blockstore/libs/service_rdma`: первый target создаёт RDMA server и
-    приводит к RDMA implementation libraries, второй реализует blockstore RDMA
-    target поверх classic `IBlockStore`.
+    `/home/yudovmaksim/nbs/cloud/blockstore/libs/rdma` переносится отдельно от
+    `/home/yudovmaksim/nbs/cloud/blockstore/libs/service_rdma`: первый target
+    создаёт RDMA server и приводит к RDMA implementation libraries, второй
+    реализует blockstore RDMA target поверх classic `IBlockStore`.
 
     Начальный dependency closure для gRPC части:
 
     ```text
-    cloud/blockstore/public/api/protos
-    cloud/blockstore/config
-    cloud/blockstore/libs/common
-    cloud/blockstore/libs/diagnostics
-    cloud/blockstore/libs/service
-    cloud/storage/core/libs/grpc
-    cloud/storage/core/libs/uds
+    /home/yudovmaksim/nbs/cloud/blockstore/public/api/protos
+    /home/yudovmaksim/nbs/cloud/blockstore/config
+    /home/yudovmaksim/nbs/cloud/blockstore/libs/common
+    /home/yudovmaksim/nbs/cloud/blockstore/libs/diagnostics
+    /home/yudovmaksim/nbs/cloud/blockstore/libs/service
+    /home/yudovmaksim/nbs/cloud/storage/core/libs/grpc
+    /home/yudovmaksim/nbs/cloud/storage/core/libs/uds
     ```
 
     Начальный dependency closure для RDMA части:
 
     ```text
-    cloud/blockstore/libs/storage/protos
-    cloud/storage/core/libs/rdma/iface
-    cloud/storage/core/libs/rdma/impl
-    cloud/storage/core/libs/common
-    cloud/storage/core/libs/coroutine
-    cloud/storage/core/libs/diagnostics
+    /home/yudovmaksim/nbs/cloud/blockstore/libs/storage/protos
+    /home/yudovmaksim/nbs/cloud/storage/core/libs/rdma/iface
+    /home/yudovmaksim/nbs/cloud/storage/core/libs/rdma/impl
+    /home/yudovmaksim/nbs/cloud/storage/core/libs/common
+    /home/yudovmaksim/nbs/cloud/storage/core/libs/coroutine
+    /home/yudovmaksim/nbs/cloud/storage/core/libs/diagnostics
     ```
 
     Это начальный, а не окончательный список. Полный closure определяется по
-    `ya.make`, include graph и результатам сборки зафиксированной classic
-    revision `953e9966ce94d1724ccdb3e6676ac1f6036f04ae`. Необходимые classic
-    targets переносятся во временный `ydb/core/nbs/classic/cloud/...` subtree.
-    Совместимые общие зависимости из `library/`, `contrib/` и существующих YDB
-    targets переиспользуются без копирования.
+    source `ya.make` в `/home/yudovmaksim/nbs`, include graph и результатам
+    сборки зафиксированной classic revision
+    `953e9966ce94d1724ccdb3e6676ac1f6036f04ae`. Необходимые classic targets
+    переносятся во временный
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/cloud/...` subtree.
+    Совместимые общие зависимости из
+    `/home/yudovmaksim/ydbwork/ydb/library/`,
+    `/home/yudovmaksim/ydbwork/ydb/contrib/` и существующих YDB targets
+    переиспользуются без копирования.
 
     Допустимыми механическими адаптациями считаются:
 
@@ -225,17 +244,17 @@ classic NBS client/test
     Корневые targets проверяются отдельно следующими командами:
 
     ```bash
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/classic/cloud/blockstore/public/api/grpc
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/cloud/blockstore/public/api/grpc
 
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/classic/cloud/blockstore/libs/server
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/cloud/blockstore/libs/server
 
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/classic/cloud/blockstore/libs/service_rdma
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/cloud/blockstore/libs/service_rdma
 
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/classic/cloud/blockstore/libs/rdma
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/cloud/blockstore/libs/rdma
     ```
 
     На этом этапе не запускаются tests, полный `ydbd` и runtime frontend.
@@ -277,7 +296,8 @@ classic NBS client/test
 
     **Условие замены:** после успешной сборки и фиксации blockers пункт 3.1.3
     переносит только требуемый код в обычные NBS2 paths, устраняет ненужные
-    зависимости и удаляет временный `ydb/core/nbs/classic/...` subtree.
+    зависимости и удаляет временный
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/...` subtree.
 
   - [x] **3.1.3. Итоговое размещение в NBS2 tree.**
 
@@ -287,21 +307,24 @@ classic NBS client/test
 
     | Classic source | Итоговое размещение |
     |---|---|
-    | `cloud/blockstore/public/api/protos` и `grpc` | `ydb/core/nbs/cloud/blockstore/compat/public/api/{protos,grpc}` |
-    | Требуемая часть `cloud/blockstore/config` | `ydb/core/nbs/cloud/blockstore/compat/config` |
-    | Требуемые classic `common`, `diagnostics` и `IBlockStore` service contract | `ydb/core/nbs/cloud/blockstore/compat/libs/{common,diagnostics,service}` |
-    | `cloud/blockstore/libs/server` | `ydb/core/nbs/cloud/blockstore/compat/libs/server` |
-    | `cloud/blockstore/libs/service_rdma` и `rdma` | `ydb/core/nbs/cloud/blockstore/compat/libs/{service_rdma,rdma}` |
-    | Требуемые classic storage wire protobuf | `ydb/core/nbs/cloud/storage/core/compat/protos` |
-    | Общие `cloud/storage/core/libs/grpc`, `uds` и `rdma` | `ydb/core/nbs/cloud/storage/core/libs/{grpc,uds,rdma}` |
-    | Уже существующие NBS2 `common`, `coroutine` и `diagnostics` | переиспользовать и при необходимости дополнить недостающими API без создания их classic-копии |
+    | `/home/yudovmaksim/nbs/cloud/blockstore/public/api/protos` и `/home/yudovmaksim/nbs/cloud/blockstore/public/api/grpc` | `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/public/api/{protos,grpc}` |
+    | Требуемая часть `/home/yudovmaksim/nbs/cloud/blockstore/config` | `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/config` |
+    | Требуемые classic `common`, `diagnostics` и `IBlockStore` service contract из `/home/yudovmaksim/nbs/cloud/blockstore/libs/{common,diagnostics,service}` | `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/libs/{common,diagnostics,service}` |
+    | `/home/yudovmaksim/nbs/cloud/blockstore/libs/server` | `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/libs/server` |
+    | `/home/yudovmaksim/nbs/cloud/blockstore/libs/service_rdma` и `/home/yudovmaksim/nbs/cloud/blockstore/libs/rdma` | `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/libs/{service_rdma,rdma}` |
+    | `/home/yudovmaksim/nbs/cloud/blockstore/libs/storage/protos` | `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/storage/core/compat/protos` |
+    | `/home/yudovmaksim/nbs/cloud/storage/core/libs/{grpc,uds,rdma}` | `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/storage/core/libs/{grpc,uds,rdma}` |
+    | Уже существующие NBS2 `common`, `coroutine` и `diagnostics` в `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/storage/core/libs/{common,coroutine,diagnostics}` | переиспользовать и при необходимости дополнить недостающими API без создания их classic-копии |
 
-    Код в `blockstore/compat` и `storage/core/compat` сохраняет classic
-    protobuf packages, gRPC RPC contract, `IBlockStore` contract, error codes,
-    RDMA message IDs и wire layout. Общие transport implementation libraries
-    переносятся как обычный NBS2-код: используют пути `ydb/core/nbs/...` и
-    namespace `NYdb::NBS`; compatibility server и RDMA target адаптируются к
-    этим внутренним libraries без изменения внешнего classic contract.
+    Код в
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat` и
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/storage/core/compat`
+    сохраняет classic protobuf packages, gRPC RPC contract, `IBlockStore`
+    contract, error codes, RDMA message IDs и wire layout. Общие transport
+    implementation libraries переносятся как обычный NBS2-код: используют пути
+    под `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/...` и namespace
+    `NYdb::NBS`; compatibility server и RDMA target адаптируются к этим
+    внутренним libraries без изменения внешнего classic contract.
 
     **Правило фиксации состава:** приведённая таблица задаёт постоянный layout
     и dependency boundary, но не является предположительным file manifest.
@@ -327,29 +350,31 @@ classic NBS client/test
     После переноса итоговые корневые targets проверяются отдельно:
 
     ```bash
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/cloud/blockstore/compat/public/api/grpc
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/public/api/grpc
 
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/cloud/blockstore/compat/libs/server
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/libs/server
 
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/cloud/blockstore/compat/libs/service_rdma
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/libs/service_rdma
 
-    ./ya make --build relwithdebinfo \
-      ydb/core/nbs/cloud/blockstore/compat/libs/rdma
+    /home/yudovmaksim/ydbwork/ydb/ya make --build relwithdebinfo \
+      /home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/compat/libs/rdma
     ```
 
-    Временный `ydb/core/nbs/classic/...` subtree удаляется только после
-    успешной сборки этих четырёх targets и проверки, что каждый элемент
-    manifest получил итоговое решение.
+    Временный `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/...` subtree
+    удаляется только после успешной сборки этих четырёх targets и проверки,
+    что каждый элемент manifest получил итоговое решение.
 
-    **Обоснование:** существующие NBS2 protobuf и `libs/service` имеют другие
-    packages, namespaces и внутренний `IStorage` contract, поэтому classic
-    wire/API нельзя переносить поверх них. Отдельный постоянный `compat`
-    boundary исключает конфликт и явно показывает назначение classic-кода.
-    Общие gRPC, UDS и RDMA libraries при этом становятся обычными NBS2
-    libraries и не создают второй постоянный набор transport infrastructure.
+    **Обоснование:** существующие NBS2 protobuf и
+    `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/cloud/blockstore/libs/service`
+    имеют другие packages, namespaces и внутренний `IStorage` contract,
+    поэтому classic wire/API нельзя переносить поверх них. Отдельный постоянный
+    `compat` boundary исключает конфликт и явно показывает назначение
+    classic-кода. Общие gRPC, UDS и RDMA libraries при этом становятся обычными
+    NBS2 libraries и не создают второй постоянный набор transport
+    infrastructure.
 
     **Статус:** целевое решение. Постоянными являются layout и dependency
     boundary, описанные выше.
@@ -399,7 +424,8 @@ classic NBS client/test
 - каждый blocker, мешающий итоговому переносу, отдельно согласован;
 - код перенесён в итоговые `compat` и NBS2 transport paths, а четыре итоговых
   корневых target собираются в режиме `relwithdebinfo`;
-- временный `ydb/core/nbs/classic/...` subtree удалён.
+- временный `/home/yudovmaksim/ydbwork/ydb/ydb/core/nbs/classic/...` subtree
+  удалён.
 
 До выполнения checkpoint дальнейшая проработка пунктов 3.2–3.9
 приостанавливается. После реализации фактические manifest, адаптации и blockers

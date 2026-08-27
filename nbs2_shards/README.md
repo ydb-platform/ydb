@@ -98,5 +98,6 @@ StartEndpoint в NBS1
 3. Не расширять MVP работами из раздела «За пределами MVP-1/MVP-2», если они
    не нужны для gRPC/RDMA E2E.
 4. Перед изменением кода проверить актуальные YDB/NBS revisions и подтвердить
-   classic NBS wire contract, указанный кандидатом в метаданных RFC.
+   classic NBS wire contract из source revision, зафиксированной в метаданных
+   RFC.
 5. Содержимое `archive/` сохранять без изменений.

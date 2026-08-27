@@ -54,6 +54,15 @@ const ui64 NEW_TABLE_ALTER_VERSION = 1;
 
 namespace {
 
+bool IsVirtualGeneratedColumn(const TTableInfo::TColumn& column) {
+    if (column.DefaultKind != ETableColumnDefaultKind::FromExpression) {
+        return false;
+    }
+
+    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+    return generatedDesc.ParseFromString(column.DefaultValue) && !generatedDesc.GetStored();
+}
+
 bool ResolvePoolNames(
     const ui32 channelCount,
     const std::function<TStringBuf(ui32)> &channel2poolKind,
@@ -8162,6 +8171,11 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
 
     for (const auto& col : alterData->Columns) {
         const TTableInfo::TColumn& colInfo = col.second;
+        // A VIRTUAL generated column never reached the datashards, so neither its addition nor
+        // its drop may be sent there (the datashard verifies that a dropped column exists locally)
+        if (IsVirtualGeneratedColumn(colInfo)) {
+            continue;
+        }
         if (colInfo.IsDropped()) {
             auto descr = proto->AddDropColumns();
             descr->SetName(colInfo.Name);

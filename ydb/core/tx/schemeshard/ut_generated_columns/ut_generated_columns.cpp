@@ -1,4 +1,5 @@
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
@@ -15,6 +16,40 @@ void EnableGeneratedColumns(TTestActorRuntime& runtime) {
 const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name) {
     const auto& table = describe.GetPathDescription().GetTable();
     for (const auto& column : table.GetColumns()) {
+        if (column.GetName() == name) {
+            return &column;
+        }
+    }
+    return nullptr;
+}
+
+NKikimrSchemeOp::TTableDescription GetDataShardTableDescription(TTestActorRuntime& runtime, const TString& path) {
+    auto describe = DescribePath(runtime, path, /* returnPartitioning */ true);
+    const auto& partitions = describe.GetPathDescription().GetTablePartitions();
+    UNIT_ASSERT_C(partitions.size() > 0, "no partitions for " << path);
+    const ui64 datashardTabletId = partitions.Get(0).GetDatashardId();
+
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(datashardTabletId, sender, new TEvDataShard::TEvGetInfoRequest(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+
+    const auto tableName = TStringBuf(path).RNextTok('/');
+    for (const auto& table : response->Record.GetUserTables()) {
+        if (table.GetName() == tableName) {
+            return table.GetDescription();
+        }
+    }
+
+    UNIT_FAIL("table " << path << " not found on datashard " << datashardTabletId);
+    return {};
+}
+
+const NKikimrSchemeOp::TColumnDescription* FindDataShardColumn(
+    const NKikimrSchemeOp::TTableDescription& description, const TString& name)
+{
+    for (const auto& column : description.GetColumns()) {
         if (column.GetName() == name) {
             return &column;
         }
@@ -115,6 +150,135 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
             /* stored */ false,
             /* dependencies */ { "first", "last" },
             /* context */ "USE `/MyRoot`;");
+    }
+
+    Y_UNIT_TEST(VirtualColumnAbsentFromDataShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "a" Type: "Int32" }
+              Columns {
+                  Name: "sum"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a + 1"
+                      Stored: true
+                      DependencyColumnNames: ["a"]
+                      Context: ""
+                  }
+              }
+              Columns {
+                  Name: "diff"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a - 1"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                      Context: ""
+                  }
+              }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        CheckGeneratedColumn(describe, "diff", "a - 1", /* expectedStored */ false, { "a" }, "");
+
+        const auto datashardSchema = GetDataShardTableDescription(runtime, "/MyRoot/Table");
+        UNIT_ASSERT(FindDataShardColumn(datashardSchema, "key"));
+        UNIT_ASSERT(FindDataShardColumn(datashardSchema, "a"));
+        UNIT_ASSERT(FindDataShardColumn(datashardSchema, "sum"));
+        UNIT_ASSERT_C(!FindDataShardColumn(datashardSchema, "diff"),
+            "virtual generated column leaked into the datashard schema");
+    }
+
+    Y_UNIT_TEST(DropVirtualColumnDoesNotReachDataShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "a" Type: "Int32" }
+              Columns {
+                  Name: "diff"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a - 1"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                      Context: ""
+                  }
+              }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              DropColumns { Name: "diff" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "diff"));
+        UNIT_ASSERT(!FindDataShardColumn(GetDataShardTableDescription(runtime, "/MyRoot/Table"), "diff"));
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "b" Type: "Int32" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(FindDataShardColumn(GetDataShardTableDescription(runtime, "/MyRoot/Table"), "b"));
+    }
+
+    Y_UNIT_TEST(AlterAddVirtualColumnAbsentFromDataShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "a" Type: "Int32" }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns {
+                  Name: "v"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a * 2"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                      Context: ""
+                  }
+              }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        CheckGeneratedColumn(describe, "v", "a * 2", /* expectedStored */ false, { "a" }, "");
+
+        const auto datashardSchema = GetDataShardTableDescription(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_C(!FindDataShardColumn(datashardSchema, "v"),
+            "virtual generated column leaked into the datashard schema on ALTER");
+
+        UNIT_ASSERT_VALUES_EQUAL(datashardSchema.GetTableSchemaVersion(),
+            describe.GetPathDescription().GetTable().GetTableSchemaVersion());
     }
 
     Y_UNIT_TEST(GeneratedColumnSurvivesSchemeShardRestart) {

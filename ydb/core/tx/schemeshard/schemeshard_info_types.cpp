@@ -32,6 +32,15 @@ using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
 using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
 using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
 
+bool IsVirtualGeneratedColumn(const TTableInfo::TColumn& column) {
+    if (column.DefaultKind != ETableColumnDefaultKind::FromExpression) {
+        return false;
+    }
+
+    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+    return generatedDesc.ParseFromString(column.DefaultValue) && !generatedDesc.GetStored();
+}
+
 EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
@@ -1120,6 +1129,11 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
         for (auto& c : Columns) {
             const TColumn& column = c.second;
             if (column.IsDropped()) {
+                continue;
+            }
+            // A VIRTUAL generated column is computed at read time by KQP: the datashards
+            // must never learn about it
+            if (IsVirtualGeneratedColumn(column)) {
                 continue;
             }
             auto colDescr = TableDescription.AddColumns();

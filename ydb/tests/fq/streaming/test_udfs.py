@@ -202,7 +202,7 @@ END DO
         kikimr_udfs.ydb_client = kikimr_udfs._setup_ydb_client(kikimr_udfs.endpoint, enable_discovery=False)
 
         time.sleep(5)
-        second_node = list(kikimr_udfs.cluster.nodes.values())[1]
+        second_node = list(kikimr_udfs.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         logger.info("Checking query state after restart")
 

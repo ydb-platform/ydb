@@ -107,9 +107,9 @@ class TestStreamingLarge(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, path2)
 
         def test(i):
-            restart_node_id = random.randint(1, 9)
+            restart_node_id = random.randint(1, len(kikimr.cluster.slots))
             logger.debug(f"Restart node {restart_node_id}")
-            node = kikimr.cluster.nodes[restart_node_id]
+            node = kikimr.cluster.slots[restart_node_id]
             node.stop()
             node.start()
             value = f"value{i}"
@@ -142,7 +142,7 @@ class TestStreamingLarge(StreamingTestBase):
             shared=True,
             partitions_count=9
         )
-        node1 = kikimr.cluster.nodes[9]
+        node1 = kikimr.cluster.slots[len(kikimr.cluster.slots)]
         node1.stop()
 
         sql = R'''
@@ -170,9 +170,9 @@ class TestStreamingLarge(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         time.sleep(2)
 
-        stop_node_id = random.randint(1, 8)
+        stop_node_id = random.randint(1, len(kikimr.cluster.slots))
         logger.debug(f"Stop node {stop_node_id}, start node 1")
-        node2 = kikimr.cluster.nodes[stop_node_id]
+        node2 = kikimr.cluster.slots[stop_node_id]
         node2.stop()
         node1.start()
 

@@ -290,6 +290,7 @@ ydb/core/kqp/ut/indexes KqpUniqueIndex.UpdateOnNullInComplexFk
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/types KqpOlapJson.QuotedFilterVariants[10,false,1,1000,100,0.5]
+ydb/core/kqp/ut/olap/types KqpOlapJson.RestoreFullJsonVariants[10,true,0,1000,0,0.5]
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors

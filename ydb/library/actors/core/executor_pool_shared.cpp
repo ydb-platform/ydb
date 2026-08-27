@@ -102,6 +102,7 @@ namespace NActors {
         , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , PoolName("Shared")
         , SoftProcessingDurationTs(cfg.SoftProcessingDurationTs)
+        , United(cfg.United)
         , Threads(new NThreading::TPadded<TSharedExecutorThreadCtx>[PoolThreads])
         , ForeignThreadsAllowedByPool(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])
         , ForeignThreadSlots(new NThreading::TPadded<std::atomic<ui64>>[poolInfos.size()])

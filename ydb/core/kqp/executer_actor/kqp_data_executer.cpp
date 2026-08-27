@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
+#include "kqp_pq_topic_resolver.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -389,6 +390,7 @@ public:
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
+                hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -505,7 +507,8 @@ private:
     }
 
     bool WaitRequired() const {
-        return SecretSnapshotRequired || ResourceSnapshotRequired || SaveScriptExternalEffectRequired;
+        return SecretSnapshotRequired || ResourceSnapshotRequired
+            || SaveScriptExternalEffectRequired || TopicPartitionSnapshotRequired;
     }
 
     void HandleResolve(TEvDescribeSecretsResponse::TPtr& ev) {
@@ -516,6 +519,11 @@ private:
         }
 
         SecretSnapshotRequired = false;
+        // SecureParams is now populated — launch any deferred PQ topic describes
+        // that need the resolved secret token.
+        if (TopicPartitionSnapshotRequired) {
+            StartPqTopicResolver();
+        }
         if (!WaitRequired()) {
             Execute();
         }
@@ -533,6 +541,25 @@ private:
         }
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
         ResourceSnapshotRequired = false;
+        if (!WaitRequired()) {
+            Execute();
+        }
+    }
+
+    void HandleResolve(TEvKqpExecuter::TEvPqTopicResolveStatus::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_ERROR("PQ topic resolver finished with error",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"issues", ev->Get()->Issues.ToOneLineString()},
+                {"traceId", TraceId()});
+            ReplyErrorAndDie(ev->Get()->Status, ev->Get()->Issues);
+            return;
+        }
+
+        TopicPartitionSnapshotRequired = false;
         if (!WaitRequired()) {
             Execute();
         }
@@ -559,6 +586,15 @@ private:
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
+
+                    if (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
+                        && transaction.Body->GetHasPqSources()
+                        && Request.QueryPhysicalGraph
+                        && FederatedQuerySetup
+                        && FederatedQuerySetup->PqGatewayFactory)
+                    {
+                        TopicPartitionSnapshotRequired = true;
+                    }
                 }
                 if (requestContext->CurrentExecutionId) {
                     for (const auto& sink : stage.GetSinks()) {
@@ -577,6 +613,8 @@ private:
         }
         if (SecretSnapshotRequired) {
             GetSecretsSnapshot();
+        } else if (TopicPartitionSnapshotRequired) {
+            StartPqTopicResolver();
         }
         if (ResourceSnapshotRequired) {
             GetResourcesSnapshot();
@@ -1356,7 +1394,32 @@ private:
         }
     }
 
+    void StartPqTopicResolver() {
+        // Pass a non-const mutable copy of the shared_ptr so the resolver can patch it.
+        auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
+            Request.QueryPhysicalGraph);
+
+        THashMap<TString, TString> resolvedSecureParams;
+        for (const auto& transaction : Request.Transactions) {
+            for (const auto& stage : transaction.Body->GetStages()) {
+                TasksGraph.FillExternalSourceSecureParams(resolvedSecureParams, stage);
+            }
+        }
+
+        auto* resolverActor = CreateKqpPqTopicResolver(
+            SelfId(),
+            TxId,
+            Request.Transactions,
+            Database,
+            std::move(resolvedSecureParams),
+            FederatedQuerySetup->PqGatewayFactory,
+            std::move(mutableGraph));
+
+        RegisterWithSameMailbox(resolverActor);
+    }
+
 private:
+
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;
 
@@ -1364,6 +1427,7 @@ private:
     bool SecretSnapshotRequired = false;
     bool ResourceSnapshotRequired = false;
     bool SaveScriptExternalEffectRequired = false;
+    bool TopicPartitionSnapshotRequired = false;
 
     const bool ReadOnlyTx;
     bool ImmediateTx = false;

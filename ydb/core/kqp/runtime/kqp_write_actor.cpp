@@ -2972,8 +2972,11 @@ private:
     virtual ~TKqpDirectWriteActor() {
     }
 
-    void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
-    void LoadState(const NYql::NDq::TSinkState&) final {};
+    void CommitState(const NYql::NDqProto::TCheckpoint& checkpoint) final {
+        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+    }
+
+    void LoadState(const NYql::NDq::TSinkState&) final {}
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;

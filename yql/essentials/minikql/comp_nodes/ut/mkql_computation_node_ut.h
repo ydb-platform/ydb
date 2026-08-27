@@ -12,7 +12,7 @@
 
 #define UNBOXED_VALUE_STR_EQUAL(unboxed, expected)                                              \
     do {                                                                                        \
-        const auto v = (unboxed);                                                               \
+        const auto& v = (unboxed);                                                              \
         if (!(v.AsStringRef() == (expected))) {                                                 \
             UNIT_FAIL_IMPL(                                                                     \
                 "equal assertion failed",                                                       \

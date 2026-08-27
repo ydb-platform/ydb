@@ -1,26 +1,26 @@
-# Overview
+# Cluster Disk Subsystem Management Overview
 
-This section contains information about {{ ydb-short-name }} cluster maintenance operations.
+Managing a cluster's disk subsystem includes the following actions:
 
-Main topics:
+* Configuration changes:
 
-* [{#T}](../../devops/configuration-management/configuration-v2/state-storage-move.md)
-* [{#T}](../../devops/configuration-management/configuration-v2/static-group-move.md)
-* [{#T}](adding_storage_groups.md)
-* [{#T}](moving_vdisks.md)
-* [{#T}](balancing_load.md)
-* [{#T}](selfheal.md)
-* [{#T}](selfheal_statestorage.md)
-* [{#T}](scrubbing.md)
-* [{#T}](disk_end_space.md)
-* [{#T}](../../devops/deployment-options/manual/decommissioning.md)
-* [{#T}](virtual_storage_groups_decommit.md)
-* [{#T}](failure_model.md)
-* [{#T}](node_restarting.md)
-* [{#T}](dynamic-config.md)
-* [{#T}](cluster_expansion.md)
-* [{#T}](config-overview.md)
-* [{#T}](dynamic-config-volatile-config.md)
-* [{#T}](replacing_nodes.md)
-* [{#T}](blobdepot.md)
-* [{#T}](blobdepot_decommit.md)
+  * [{#T}](adding_storage_groups.md).
+
+* Maintenance:
+
+  * [{#T}](../../devops/configuration-management/configuration-v2/replacing-nodes.md).
+  * [{#T}](node_restarting.md).
+  * [{#T}](scrubbing.md).
+  * [{#T}](selfheal.md).
+  * [{#T}](selfheal_statestorage.md).
+  * [{#T}](../../devops/deployment-options/manual/decommissioning.md).
+  * [{#T}](virtual_storage_groups_decommit.md).
+  * [{#T}](moving_vdisks.md).
+  * [{#T}](blobdepot.md).
+  * [{#T}](blobdepot_decommit.md).
+
+* Troubleshooting:
+
+  * [{#T}](failure_model.md).
+  * [{#T}](balancing_load.md).
+  * [{#T}](disk_end_space.md).

@@ -10,7 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
@@ -24,8 +24,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
-
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -45,8 +43,7 @@ public:
         const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
-        ui64 vChunkSize,
-        NMonitoring::TDynamicCounterPtr counters);
+        ui64 vChunkSize);
 
     ~TVChunk() override;
 
@@ -76,16 +73,20 @@ public:
     [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex hostIndex) const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
-    // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
-    // Until the dirty map is restored it returns 0 (the blocking bound), so
-    // the cleanup cannot erase records that are not accounted for yet.
+    // smallest record id still held in PBuffers, or nullopt when nothing is
+    // inflight. Until the dirty map is restored it returns the zero record id
+    // (the blocking bound), so the cleanup cannot erase records that are not
+    // accounted for yet.
     // Must run on the executor thread.
-    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+    [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
 
     [[nodiscard]] TString DebugPrintDirtyMap();
 
     // Snapshot for the mon page. Must run on the executor thread.
     [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();
+
+    // Current request stats of this vchunk. Must run on the executor thread.
+    [[nodiscard]] const TVChunkStats& GetStats() const;
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(
@@ -153,6 +154,8 @@ private:
         THostIndex hostIndex,
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+    void DemoteUnavailbleHostsIfNeeded();
+    [[nodiscard]] THostMask GetDDisksForDemote() const;
 
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();
@@ -187,7 +190,7 @@ private:
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 
-    TVChunkCounters Counters;
+    TVChunkStats Stats;
 
     NThreading::TPromise<void> StopPromise = NThreading::NewPromise();
 };

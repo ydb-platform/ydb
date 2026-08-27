@@ -10,7 +10,7 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
     const TPositionHandle& pos,
     const TStructExprType* structType,
     TExprContext& ctx) {
-    const auto items = structType->GetItems();
+    const auto& items = structType->GetItems();
     Y_ENSURE(!items.empty());
     // clang-format off
     return ctx.Builder(pos)
@@ -72,7 +72,7 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
     const TPositionHandle& pos,
     const TStructExprType* structType,
     TExprContext& ctx) {
-    const auto items = structType->GetItems();
+    const auto& items = structType->GetItems();
     Y_ENSURE(!items.empty());
     // clang-format off
     return ctx.Builder(pos)

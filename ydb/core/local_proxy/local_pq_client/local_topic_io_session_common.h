@@ -109,7 +109,7 @@ public:
     }
 
     bool OnUnhandledException(const std::exception& e) final {
-        YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Got unexpected",
+        YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Got unexpected exception",
             {"logPrefix", LogPrefix()},
             {"exception", e.what()});
         CloseSession(NYdb::EStatus::INTERNAL_ERROR, TStringBuilder() << "Got unexpected exception: " << e.what());
@@ -157,7 +157,7 @@ protected:
         const bool success = status == NYdb::EStatus::SUCCESS;
         if (!success) {
             Counters->Errors->Inc();
-            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Closing session with status",
+            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Closing session with failed status",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
@@ -167,7 +167,7 @@ protected:
         }
 
         if (SessionClosed) {
-            YDB_LOG_WARN_COMP(NKikimrServices::YDB_SDK, "Session already closed, but got status",
+            YDB_LOG_WARN_COMP(NKikimrServices::YDB_SDK, "Session already closed, but got close request",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
@@ -239,9 +239,9 @@ protected:
     void Handle(TSessionEvents::TEvEventsConsumed::TPtr& ev) {
         const auto eventsCount = ev->Get()->EventsCount;
         Counters->MessagesInflight->Sub(eventsCount);
-        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Events",
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Events consumed",
             {"logPrefix", LogPrefix()},
-            {"handled", eventsCount});
+            {"eventsCount", eventsCount});
     }
 
     void Handle(TSessionEvents::TEvSessionFinished::TPtr& ev) {
@@ -263,9 +263,9 @@ protected:
         Y_VALIDATE(!RpcActor, "RpcActor is already set");
         RpcActor = ev->Get()->RpcActor;
 
-        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "RpcActor",
+        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Rpc actor attached",
             {"logPrefix", LogPrefix()},
-            {"attached", RpcActor});
+            {"rpcActorId", RpcActor});
         SendInitMessage();
     }
 
@@ -304,10 +304,10 @@ protected:
         if (status != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             IssuesFromMessage(message.issues(), issues);
-            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Rpc write request, got error",
+            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Rpc write request finished with error",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
-                {"reason", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             return CloseSession(status, issues);
         }
 
@@ -362,9 +362,9 @@ protected:
         Counters->MessagesInflight->Inc();
 
         OutgoingEvents.emplace(std::move(event), size);
-        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Added outgoing",
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Added outgoing event",
             {"logPrefix", LogPrefix()},
-            {"event", OutgoingEvents.back().Event.index()});
+            {"eventType", OutgoingEvents.back().Event.index()});
 
         SendOutgoingEvents();
     }
@@ -390,9 +390,9 @@ private:
     }
 
     void SendSessionEvent(TRpcIn&& message, bool success = true) {
-        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Sending session",
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Sending session event",
             {"logPrefix", LogPrefix()},
-            {"event", static_cast<i64>(message.client_message_case())},
+            {"eventType", static_cast<i64>(message.client_message_case())},
             {"success", success});
         Y_VALIDATE(PendingRpcResponses > 0, "Rpc read is not expected");
         PendingRpcResponses--;

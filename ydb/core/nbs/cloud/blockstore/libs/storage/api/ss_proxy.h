@@ -15,12 +15,12 @@ namespace NYdb::NBS::NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_SS_PROXY_REQUESTS(xxx, ...) \
-    xxx(CreateVolume, __VA_ARGS__)             \
-    xxx(ModifyScheme, __VA_ARGS__)             \
-    xxx(DescribeScheme, __VA_ARGS__)           \
-    xxx(WaitSchemeTx, __VA_ARGS__)             \
-    xxx(BackupPathDescriptions, __VA_ARGS__)   \
+#define BLOCKSTORE_SS_PROXY_REQUESTS(xxx, ...)                                 \
+    xxx(CreateVolume, __VA_ARGS__)                                             \
+    xxx(ModifyScheme, __VA_ARGS__)                                             \
+    xxx(DescribeScheme, __VA_ARGS__)                                           \
+    xxx(WaitSchemeTx, __VA_ARGS__)                                             \
+    xxx(BackupPathDescriptions, __VA_ARGS__)                                   \
     xxx(DestroyVolume, __VA_ARGS__)
 
 // BLOCKSTORE_SS_PROXY_REQUESTS

@@ -64,6 +64,7 @@ struct TAsyncOutputPromises {
     NThreading::TPromise<void> ResumeExecution = NThreading::NewPromise();
     NThreading::TPromise<TIssues> Issue = NThreading::NewPromise<TIssues>();
     NThreading::TPromise<TSinkState> StateSaved = NThreading::NewPromise<TSinkState>();
+    NThreading::TPromise<NDqProto::TCheckpoint> StateCommitted = NThreading::NewPromise<NDqProto::TCheckpoint>();
 };
 
 NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id = 0);
@@ -104,6 +105,12 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
             Y_UNUSED(outputIndex);
             Parent.AsyncOutputPromises->StateSaved.SetValue(state);
             Parent.AsyncOutputPromises->StateSaved = NThreading::NewPromise<TSinkState>();
+        };
+
+        void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
+            Y_UNUSED(outputIndex);
+            Parent.AsyncOutputPromises->StateCommitted.SetValue(checkpoint);
+            Parent.AsyncOutputPromises->StateCommitted = NThreading::NewPromise<NDqProto::TCheckpoint>();
         };
 
         void OnAsyncOutputFinished(ui64 outputIndex) override {

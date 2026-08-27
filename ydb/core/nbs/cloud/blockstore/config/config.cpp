@@ -47,16 +47,18 @@ TStorageConfig::TStorageConfig(
     xxx(PBufferCleanupLsnStep,              ui64,     3000                    )\
     xxx(UseDirectSessionTransport,          bool,     false                   )\
     xxx(EnableChecksums,                    bool,     true                    )\
+    xxx(CopyRangeBandwidthMbs,              ui32,     200                     )\
+    xxx(VChunkCountersUpdateInterval,       TDuration, TDuration::Seconds(15) )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on
 
-#define BLOCKSTORE_STORAGE_CONFIG(xxx) \
-    BLOCKSTORE_STORAGE_CONFIG_RO(xxx)  \
+#define BLOCKSTORE_STORAGE_CONFIG(xxx)                                         \
+    BLOCKSTORE_STORAGE_CONFIG_RO(xxx)                                          \
     // BLOCKSTORE_STORAGE_CONFIG
 
-#define BLOCKSTORE_STORAGE_DECLARE_CONFIG(name, type, value)  \
-    Y_DECLARE_UNUSED static const type Default##name = value; \
+#define BLOCKSTORE_STORAGE_DECLARE_CONFIG(name, type, value)                   \
+    Y_DECLARE_UNUSED static const type Default##name = value;                  \
     // BLOCKSTORE_STORAGE_DECLARE_CONFIG
 
 BLOCKSTORE_STORAGE_CONFIG(BLOCKSTORE_STORAGE_DECLARE_CONFIG)
@@ -90,34 +92,34 @@ TString ConvertValue<TString, TString>(const TString& value)
     return value;
 }
 
-#define CONFIG_ITEM_IS_SET_CHECKER(name, ...)               \
-    template <typename TProto>                              \
-    [[nodiscard]] bool Is##name##Set(const TProto& proto)   \
-    {                                                       \
-        if constexpr (requires() { proto.name##Size(); }) { \
-            return proto.name##Size() > 0;                  \
-        } else {                                            \
-            return proto.Has##name();                       \
-        }                                                   \
+#define CONFIG_ITEM_IS_SET_CHECKER(name, ...)                                  \
+    template <typename TProto>                                                 \
+    [[nodiscard]] bool Is##name##Set(const TProto& proto)                      \
+    {                                                                          \
+        if constexpr (requires() { proto.name##Size(); }) {                    \
+            return proto.name##Size() > 0;                                     \
+        } else {                                                               \
+            return proto.Has##name();                                          \
+        }                                                                      \
     }
 
 BLOCKSTORE_STORAGE_CONFIG(CONFIG_ITEM_IS_SET_CHECKER);
 
 #undef CONFIG_ITEM_IS_SET_CHECKER
 
-#define BLOCKSTORE_CONFIG_GET_CONFIG_VALUE(config, name, type, value) \
+#define BLOCKSTORE_CONFIG_GET_CONFIG_VALUE(config, name, type, value)          \
     (Is##name##Set(config) ? ConvertValue<type>(config.Get##name()) : value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_CONFIG_GETTER(name, type, ...)  \
-    type TStorageConfig::Get##name() const         \
-    {                                              \
-        return BLOCKSTORE_CONFIG_GET_CONFIG_VALUE( \
-            StorageServiceConfig,                  \
-            name,                                  \
-            type,                                  \
-            Default##name);                        \
+#define BLOCKSTORE_CONFIG_GETTER(name, type, ...)                              \
+    type TStorageConfig::Get##name() const                                     \
+    {                                                                          \
+        return BLOCKSTORE_CONFIG_GET_CONFIG_VALUE(                             \
+            StorageServiceConfig,                                              \
+            name,                                                              \
+            type,                                                              \
+            Default##name);                                                    \
     }
 
 BLOCKSTORE_STORAGE_CONFIG_RO(BLOCKSTORE_CONFIG_GETTER)

@@ -82,6 +82,27 @@ NWilson::TTraceId CreateTraceId()
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldDelegateCopyRangeBudgetToService, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>());
+
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        Service->CopyRangeBudgetDelay = TDuration::MilliSeconds(250);
+        const auto delay = RunOnExecutor(
+                               executor,
+                               [dbg] { return dbg->TakeCopyRangeBudget(2_MB); })
+                               .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(250), delay);
+        UNIT_ASSERT_VALUES_EQUAL(1u, Service->CopyRangeBudgetRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(2_MB, Service->LastCopyRangeBudgetByteCount);
+    }
+
     // The initial-ready signal fires exactly once, only after the locked
     // quorum (3 of 5 DDisk sessions and PBuffers) is reached.
     Y_UNIT_TEST_F(ShouldSignalInitialReadyOnceLockedQuorumReached, TDBGFixture)
@@ -366,7 +387,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     2,   // Coordinator
                     hosts,
-                    100,   // lsn
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -425,8 +446,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -488,8 +510,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -571,7 +594,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     coordinatorHost,
                     hosts,
-                    100,   // lsn
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -651,7 +674,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     coordinatorHost,
                     hosts,
-                    100,   // lsn
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -867,8 +890,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,
@@ -1213,7 +1237,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     2,
                     hosts,
-                    100,
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -1288,8 +1312,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         WaitReady(executor, initialReady);
 
         // A vchunk that still only knows the pre-add host count.
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters(
-            new ::NMonitoring::TDynamicCounters());
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
             TraceService.get(),
@@ -1302,8 +1324,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             TDirtyMapStateProto(),
             dbg,
             3,
-            vChunkSize,
-            counters);
+            vChunkSize);
 
         TString oracleDump;
         TString configBefore;

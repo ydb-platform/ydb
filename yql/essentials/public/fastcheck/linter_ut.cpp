@@ -1,5 +1,6 @@
 #include "linter.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/builder.h>
 
 using namespace NYql;
 using namespace NYql::NFastCheck;
@@ -12,6 +13,23 @@ TChecksRequest MakeCheckRequest() {
 }
 
 } // namespace
+
+namespace NDeduplicateIssues {
+
+TVector<TString> CheckNames = {"lexer", "parser", "translator", "typecheck"};
+
+struct TTestCase {
+    ESyntax Syntax;
+    TString Program;
+    size_t FailedCheckIndex;
+
+    TString ToString() const {
+        return TStringBuilder() << "syntax: " << ::ToString(Syntax)
+                                << ", failed check: " << CheckNames[FailedCheckIndex];
+    }
+};
+
+} // namespace NDeduplicateIssues
 
 Y_UNIT_TEST_SUITE(TLinterTests) {
 Y_UNIT_TEST(ListChecksResult) {
@@ -485,6 +503,116 @@ Y_UNIT_TEST(AllChecksByStar) {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(passedChecks, ListChecks());
+}
+
+Y_UNIT_TEST(DeduplicateIssuesWarnings) {
+    using namespace NDeduplicateIssues;
+
+    TChecksRequest request = MakeCheckRequest();
+    request.Program = R"sql(
+        SELECT * FROM (
+            SELECT 1 AS a
+            ORDER BY a
+        );
+    )sql";
+    request.ClusterMode = EClusterMode::Unknown;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    auto res = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT(res.Checks[0].Success);
+    UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].CheckName, "typecheck");
+    UNIT_ASSERT(res.Checks[1].Success);
+    UNIT_ASSERT(res.Checks[1].Issues.Size() > 0);
+
+    request.SuppressPrerequisiteIssues = true;
+    res = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT(res.Checks[0].Success);
+    UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].CheckName, "typecheck");
+    UNIT_ASSERT(res.Checks[1].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].Issues.Size(), 0);
+}
+
+Y_UNIT_TEST(DeduplicateIssuesMatrix) {
+    using namespace NDeduplicateIssues;
+
+    TVector<TTestCase> cases = {
+        {.Syntax = ESyntax::YQL,
+         .Program = "Я",
+         .FailedCheckIndex = 0},
+        {.Syntax = ESyntax::YQL,
+         .Program = "1",
+         .FailedCheckIndex = 1},
+        {.Syntax = ESyntax::YQL,
+         .Program = "select ListLengggth([1,2,3])",
+         .FailedCheckIndex = 2},
+        {.Syntax = ESyntax::YQL,
+         .Program = "select ListCreate('foo')",
+         .FailedCheckIndex = 3},
+
+        {.Syntax = ESyntax::SExpr,
+         .Program = "(",
+         .FailedCheckIndex = 1},
+        {.Syntax = ESyntax::SExpr,
+         .Program = R"yql(((return (List (String '"foo")))))yql",
+         .FailedCheckIndex = 3},
+
+        {.Syntax = ESyntax::PG,
+         .Program = "sel",
+         .FailedCheckIndex = 1},
+        {.Syntax = ESyntax::PG,
+         .Program = "select * from \"Input\"",
+         .FailedCheckIndex = 2},
+        {.Syntax = ESyntax::PG,
+         .Program = R"sql(
+             SELECT (Count(x) / (
+                 SELECT Count(y)
+                 FROM (VALUES ('1')) AS t(y)
+                 HAVING Count(x) = Count(y)
+             ))
+             FROM (VALUES (1)) AS t(x)
+             GROUP BY x;
+         )sql",
+         .FailedCheckIndex = 3},
+    };
+
+    for (const TTestCase& test : cases) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = test.Program;
+        request.Syntax = test.Syntax;
+        request.SuppressPrerequisiteIssues = true;
+        request.Filters.ConstructInPlace();
+        for (const auto& checkName : CheckNames) {
+            request.Filters->push_back(TCheckFilter{.CheckNameGlob = checkName});
+        }
+
+        const auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), std::size(CheckNames));
+        for (size_t i = 0; i < std::size(CheckNames); ++i) {
+            const auto& check = res.Checks[i];
+
+            UNIT_ASSERT_VALUES_EQUAL(check.CheckName, CheckNames[i]);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                check.Success,
+                i < test.FailedCheckIndex,
+                test.ToString() << ", target check: " << CheckNames[i]
+                                << ", issues: " << check.Issues.ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                check.Issues.Size(),
+                i == test.FailedCheckIndex ? 1 : 0,
+                test.ToString() << ", target check: " << CheckNames[i]
+                                << ", issues: " << check.Issues.ToString());
+        }
+    }
 }
 
 Y_UNIT_TEST(NoChecksByStarWithSecondFilter) {

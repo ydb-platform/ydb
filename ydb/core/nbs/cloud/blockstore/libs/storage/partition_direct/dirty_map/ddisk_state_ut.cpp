@@ -57,9 +57,9 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintAhead());
     }
 
-    // Save() encodes Ahead/Behind ranges as (start<<16)|size entries; Load()
-    // must restore exactly the same ranges.  An empty DDisk produces an empty
-    // proto and loads back to empty.
+    // Save() chooses a compact encoding for Ahead/Behind; Load() must restore
+    // exactly the same ranges. An empty DDisk produces an empty proto and loads
+    // back to empty.
     Y_UNIT_TEST(ShouldSaveAndLoadAheadAndBehind)
     {
         TTestBlockFieldMonitor monitor;
@@ -111,10 +111,12 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
         TDDiskStateProto emptyProto;
         empty.Save(&emptyProto);
-        UNIT_ASSERT_VALUES_EQUAL(0, emptyProto.GetAhead().StartAndLengthSize());
-        UNIT_ASSERT_VALUES_EQUAL(
-            0,
-            emptyProto.GetBehind().StartAndLengthSize());
+        UNIT_ASSERT(
+            emptyProto.GetAhead().GetEncodingCase() ==
+            TBlockFieldProto::ENCODING_NOT_SET);
+        UNIT_ASSERT(
+            emptyProto.GetBehind().GetEncodingCase() ==
+            TBlockFieldProto::ENCODING_NOT_SET);
 
         TTestBlockFieldMonitor monitor4;
         TDDiskState loaded;
@@ -125,6 +127,39 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         loaded.Load(emptyProto);
         UNIT_ASSERT_VALUES_EQUAL("", loaded.DebugPrintBehind());
         UNIT_ASSERT_VALUES_EQUAL("", loaded.DebugPrintAhead());
+    }
+
+    Y_UNIT_TEST(ShouldClearAheadAndBehindWhenSwitchedOffline)
+    {
+        TTestBlockFieldMonitor monitor;
+        TDDiskState ddisk;
+        ddisk.Init(
+            &monitor,
+            /*totalBlockCount=*/100,
+            /*operationalBlockCount=*/5);
+
+        ddisk.StartLagging();
+        ddisk.OnRangeFlushed(
+            TBlockRange64::WithLength(10, 10),
+            TDDiskState::EFlushCompletion::Missed);
+        ddisk.StopLagging();
+        ddisk.OnRangeFlushed(
+            TBlockRange64::WithLength(30, 5),
+            TDDiskState::EFlushCompletion::Completed);
+
+        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("[30..34]", ddisk.DebugPrintAhead());
+
+        ddisk.SwitchOffline();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDDiskState::EState::Disabled,
+            ddisk.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(false, ddisk.IsTrackingEnabled());
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetBehindSegmentsStat().Count);
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetAheadSegmentsStat().Count);
     }
 
     // HasBehindOverlapping: false when empty, true when the query overlaps

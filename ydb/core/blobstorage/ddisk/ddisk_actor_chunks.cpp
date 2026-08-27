@@ -19,6 +19,16 @@ namespace NKikimr::NDDisk {
         HandleChunkReserved();
     }
 
+    size_t TDDiskActor::CountPendingPersistentBufferChunkAllocations() const {
+        size_t count = 0;
+        auto queue = ChunkAllocateQueue;
+        while (!queue.empty()) {
+            count += std::holds_alternative<TChunkForPersistentBuffer>(queue.front());
+            queue.pop();
+        }
+        return count;
+    }
+
     void TDDiskActor::Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev) {
         if (!CanHandleQuery(ev)) {
             return;
@@ -56,8 +66,20 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        for (TChunkIdx chunkIdx : msg.ChunkIds) {
-            if (Config.EnableChecksums) {
+        size_t chunksToAccept = msg.ChunkIds.size();
+        if (Y_UNLIKELY(IsBroken())) {
+            const size_t pendingAllocations = CountPendingPersistentBufferChunkAllocations();
+            chunksToAccept = pendingAllocations > ChunkReserve.size()
+                ? Min(chunksToAccept, pendingAllocations - ChunkReserve.size())
+                : 0;
+        }
+
+        for (size_t i = 0; i < chunksToAccept; ++i) {
+            const TChunkIdx chunkIdx = msg.ChunkIds[i];
+            // Broken state retains only PersistentBuffer allocations. PB initializes its own
+            // on-disk format, so the checksums-disabled data-chunk zeroing is neither needed nor
+            // possible after direct DDisk I/O has been stopped.
+            if (Config.EnableChecksums || IsBroken()) {
                 ChunkReserve.push(chunkIdx);
             } else {
                 const bool inserted = FormattingChunks.try_emplace(chunkIdx, 0).second;
@@ -104,6 +126,7 @@ namespace NKikimr::NDDisk {
             EnterBroken(TStringBuilder()
                 << "failed to zero-format newly reserved chunk " << msg.ChunkIdx
                 << " at offset " << msg.OffsetInBytes << ": " << msg.ErrorMessage);
+            HandleChunkReserved();
             return;
         }
         if (Y_UNLIKELY(IsBroken())) {
@@ -188,6 +211,17 @@ namespace NKikimr::NDDisk {
                 IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(),
                     &ChunkMapSnapshotLsn, {});
             }
+        }
+        if (Y_UNLIKELY(IsBroken())) {
+            const size_t pendingAllocations = CountPendingPersistentBufferChunkAllocations();
+            if (pendingAllocations > ChunkReserve.size() && !ReserveInFlight) {
+                Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(
+                    PDiskParams->Owner,
+                    PDiskParams->OwnerRound,
+                    pendingAllocations - ChunkReserve.size()));
+                ReserveInFlight = true;
+            }
+            return;
         }
         const size_t refillChunks = ChunkReserve.size() + FormattingChunks.size();
         if (refillChunks < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
@@ -665,12 +699,6 @@ namespace NKikimr::NDDisk {
                 chunk->SetGeneration(entry.Generation);
             }
             snapshot->SetGenerationCounter(IntegrityManager->GetGenerationCounter());
-        } else {
-            for (const auto& [chunkIdx, generation] : InheritedIntegrityChunks) {
-                auto *chunk = snapshot->AddIntegrityChunks();
-                chunk->SetChunkIdx(chunkIdx);
-                chunk->SetGeneration(generation);
-            }
         }
 
         ++*Counters.RecoveryLog.NumChunkMapSnapshots;

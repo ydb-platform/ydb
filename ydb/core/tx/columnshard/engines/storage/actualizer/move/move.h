@@ -35,6 +35,7 @@ private:
     // delete queues only when the change commits, so dropping them from the count
     // at submission would open a premature-TEvMoveDataResponse window.
     THashSet<ui64> InFlightPortionIds;
+    ui64 RejectedPortions = 0;
 
     // Remove from PortionsToMove/PortionAddress only; keeps InitialPortionIds intact
     // so the portion can re-enter PendingPortionIds if the change is aborted.

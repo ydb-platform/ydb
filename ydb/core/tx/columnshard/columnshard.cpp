@@ -335,12 +335,14 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 
-    // When MoveData is active and vacuum has completed, retry the completion gate
-    // until both rewriting and GC queues are clean — at most once per cadence, since
-    // the gate scans the GC queues.
-    if (MoveDataState.Active && MoveDataState.VacuumCompleted && ctx.Now() - MoveDataState.LastGateCheckAt >= MoveDataGateCheckCadence) {
+    // Retry the completion gate while a move is active — at most once per cadence, since
+    // the gate scans the GC queues. Deliberately not conditioned on VacuumCompleted: that
+    // flag is set only by the executor's vacuum callback, so gating the retry on it made
+    // the fallback depend on the very signal it exists to survive. A tablet whose vacuum
+    // callback never arrived then sat at Active=1 forever without evaluating the gate once.
+    if (MoveDataState.Active && ctx.Now() - MoveDataState.LastGateCheckAt >= MoveDataGateCheckCadence) {
         MoveDataState.LastGateCheckAt = ctx.Now();
-        MoveDataCompleted(ctx);
+        CheckMoveDataGate(ctx);
     }
 }
 
@@ -716,12 +718,23 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
         return;
     }
     MoveDataState.VacuumCompleted = true;
+    CheckMoveDataGate(ctx);
+}
+
+void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
+    if (!MoveDataState.Active) {
+        return;
+    }
 
     NOlap::NActualizer::TMoveDataQueueSizes queues;
     if (HasIndex()) {
         queues = GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataQueueSizes();
     }
     Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight);
+    if (queues.Rejected > MoveDataState.ReportedRejections) {
+        Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - MoveDataState.ReportedRejections);
+        MoveDataState.ReportedRejections = queues.Rejected;
+    }
     // HasBlobsForGroups walks BlobsToKeep, BlobsToDelete, BlobsToDeleteDelayed and the
     // shared/borrowed registries; as a plain argument it ran on every wakeup even when the
     // vacuum or the queues already blocked the gate. Short-circuit so the scan is paid for
@@ -730,7 +743,8 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     switch (NOlap::NActualizer::ClassifyMoveDataGate(MoveDataState.VacuumCompleted, queues,
         cheapGatesPass && GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {
         case NOlap::NActualizer::EMoveDataGate::BlockedByVacuum:
-            Y_UNREACHABLE();
+            Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
+            return;
         case NOlap::NActualizer::EMoveDataGate::BlockedByPortions:
             Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
             return;
@@ -741,7 +755,7 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
         case NOlap::NActualizer::EMoveDataGate::Ready:
             break;
     }
-    LOG_S_INFO("TColumnShard::MoveDataCompleted at tablet " << TabletID());
+    LOG_S_INFO("TColumnShard::MoveData gate passed at tablet " << TabletID());
 
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();

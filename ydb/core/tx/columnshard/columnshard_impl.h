@@ -346,6 +346,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
+    // Evaluates the response gate. Split out of MoveDataCompleted so the periodic wakeup
+    // can drive it without claiming the executor's vacuum has finished.
+    void CheckMoveDataGate(const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -553,6 +556,9 @@ private:
         // is a lower bound; wakeup granularity is acceptable for an hours-scale
         // decommission operation.
         TInstant LastGateCheckAt;
+        // The actualizer's rejection count is cumulative per session; remember what was
+        // already reported so the sensor stays a rate rather than a repeated total.
+        ui64 ReportedRejections = 0;
     };
 
     static constexpr TDuration MoveDataGateCheckCadence = TDuration::Seconds(5);

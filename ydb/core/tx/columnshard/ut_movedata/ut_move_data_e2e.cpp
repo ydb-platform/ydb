@@ -1,3 +1,5 @@
+#include "tablet_info_helper.h"
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -14,23 +16,10 @@ using namespace NColumnShard;
 
 namespace {
 
+using NTestMoveData::MakeTabletInfo;
+
 constexpr ui32 OldGroup = 2181038080;
 constexpr ui32 NewGroup = 2181038081;
-
-TIntrusivePtr<TTabletStorageInfo> MakeTabletInfo(const ui64 tabletId, const std::vector<std::pair<ui32, ui32>>& history) {
-    auto info = MakeIntrusive<TTabletStorageInfo>();
-    info->TabletID = tabletId;
-    info->TabletType = TTabletTypes::ColumnShard;
-    info->Channels.resize(5);
-    for (ui64 channel = 0; channel < info->Channels.size(); ++channel) {
-        info->Channels[channel].Channel = channel;
-        info->Channels[channel].Type = TBlobStorageGroupType(BootGroupErasure);
-        for (const auto& [fromGeneration, groupId] : history) {
-            info->Channels[channel].History.emplace_back(fromGeneration, groupId);
-        }
-    }
-    return info;
-}
 
 TActorId BootTablet(TTestBasicRuntime& runtime, const TIntrusivePtr<TTabletStorageInfo>& info) {
     auto setupInfo = MakeIntrusive<TTabletSetupInfo>(&CreateColumnShard, TMailboxType::Simple, ui32(0), TMailboxType::Simple, ui32(0));
@@ -56,16 +45,14 @@ std::vector<TLogoBlobID> LivePortionBlobs(const NFake::TProxyDS& proxy, const ui
     return result;
 }
 
-void RunMoveDataToCompletion(const bool ttlBackgroundDisabled) {
+void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDataEnabled = true) {
     TTestBasicRuntime runtime;
     runtime.SetScheduledLimit(10'000);
     TIntrusivePtr<NFake::TProxyDS> oldGroupProxy = new NFake::TProxyDS(TGroupId::FromValue(OldGroup));
     TIntrusivePtr<NFake::TProxyDS> newGroupProxy = new NFake::TProxyDS(TGroupId::FromValue(NewGroup));
     TTester::Setup(runtime,
         { new NFake::TProxyDS(TGroupId::FromValue(0)), oldGroupProxy, newGroupProxy, new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
-    // Without the flag TColumnShard hands TEvMoveData straight to the executor, which answers
-    // Success after moving the log and the local database only.
-    runtime.GetAppData().FeatureFlags.SetEnableColumnshardMoveData(true);
+    runtime.GetAppData().FeatureFlags.SetEnableColumnshardMoveData(moveDataEnabled);
     auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
     if (ttlBackgroundDisabled) {
         controller->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
@@ -114,9 +101,14 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled) {
     UNIT_ASSERT_VALUES_EQUAL((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::Success);
 
     // Success has to mean the portions were rewritten, not just that the queues happened to be
-    // empty: the only way data reaches the new group here is the move itself.
-    UNIT_ASSERT_C(LivePortionBlobs(*newGroupProxy, tabletId).size(),
-        "MoveData answered Success without rewriting any of the " << before.size() << " portion blobs out of the old group");
+    // empty: the only way data reaches the new group here is the move itself. With the flag off
+    // the executor answers for its own legs alone, and the portions must be left untouched.
+    const size_t movedBlobs = LivePortionBlobs(*newGroupProxy, tabletId).size();
+    if (moveDataEnabled) {
+        UNIT_ASSERT_C(movedBlobs, "answered Success without rewriting any of the " << before.size() << " portion blobs out of the old group");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL_C(movedBlobs, 0u, "the disabled feature flag still rewrote portions");
+    }
     UNIT_ASSERT_VALUES_EQUAL(ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep.Val(), 1), table.Schema)->num_rows(), 1000);
 }
 
@@ -134,6 +126,12 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     // decommission down with it - the tablet would select portions and never move one.
     Y_UNIT_TEST(MoveDataCompletesWithTtlDisabled) {
         RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/true);
+    }
+
+    // The kill switch: TColumnShard hands TEvMoveData straight to the executor, which answers
+    // for the log and the local database and leaves the portions where they are.
+    Y_UNIT_TEST(MoveDataDisabledLeavesPortionsInPlace) {
+        RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/false, /*moveDataEnabled=*/false);
     }
 }
 

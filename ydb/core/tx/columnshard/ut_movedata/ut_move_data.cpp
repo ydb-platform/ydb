@@ -222,6 +222,31 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 0, 1 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
     }
 
+    // Hive rebinds our channels only after we answer, so portions created during the session
+    // still land in the doomed group. They are adopted until the admission deadline, and
+    // ignored after it - the deadline is what stops a busy tablet feeding itself forever.
+    Y_UNIT_TEST(AdoptsPortionsCreatedDuringTheSessionUntilTheDeadline) {
+        const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
+        auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
+        NOlap::TVersionedIndex versionedIndex;
+        versionedIndex.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(NOlap::NTest::MakePortionTestIndexInfo()));
+
+        TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, versionedIndex);
+        const TInstant start = TInstant::Seconds(1000);
+        actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, {}));
+
+        auto makePortion = [&](const ui64 portionId) {
+            return NOlap::NTest::MakeTestCompactedPortion(pathId, portionId, 10, 19, 10, NOlap::TSnapshot(1, 1), std::nullopt);
+        };
+
+        const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
+        actualizer.AddPortion(makePortion(1), NOlap::NActualizer::TAddExternalContext(start + TDuration::Minutes(1), noPortions));
+        UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(1), "a portion created inside the window must be adopted");
+
+        actualizer.AddPortion(makePortion(2), NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
+        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(2), "past the deadline the session must stop adopting");
+    }
+
     Y_UNIT_TEST(MoveDataMetadataRequestsBatching) {
         static constexpr ui64 PortionsCount = 7;
         const auto pathId = NOlap::TInternalPathId::FromRawValue(1);

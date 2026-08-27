@@ -63,10 +63,13 @@ void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
     PortionAddress.erase(it);
 }
 
-void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext&) {
+void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) {
     const ui64 portionId = info.GetPortionId();
     if (!InitialPortionIds.contains(portionId)) {
-        return;
+        if (context.GetNow() >= AdmissionDeadline) {
+            return;
+        }
+        InitialPortionIds.emplace(portionId);
     }
     if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {
         return;
@@ -211,6 +214,7 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
 }
 
 void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
+    AdmissionDeadline = externalContext.GetNow() + AdmissionWindow;
     InitialPortionIds.clear();
     PendingPortionIds.clear();
     PortionsToMove.clear();

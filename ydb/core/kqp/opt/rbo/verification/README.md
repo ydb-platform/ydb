@@ -355,11 +355,30 @@ Milestone 83 is also policy-only. Two focused TPC-DS q99 runs on unchanged
 proof-producing code reproducibly return `VERIFIED_BOUNDED` at the unchanged
 2x2, 60-second contract. Policy commit `cc85514862d` adds q99 as TPC-DS
 obligation twenty-two. Fresh complete gates verify 13/13 TPCH and 22/22
-TPC-DS, so the current floor is 35/35: 35/121 workload queries (28.9%) and
+TPC-DS, so the M83 floor became 35/35: 35/121 workload queries (28.9%) and
 35/101 formula-covered exact pairs (34.7%). No semantic model, bound, or weaker
 coverage inventory changes. A fresh q21/q56/q60 batch remains `UNKNOWN`; its
 complete-group-key orderings motivate an exact derived unique-key ordering
 certificate as the next bounded-proof model slice.
+
+Milestone 84 implements that model slice without changing the snapshot wire
+contract or exporter. Semantic commit `476f2ea38f4` adds two private,
+schema-checked `Relation` certificates: a null-safe unique key `K` and a task
+partition key `P`. Grouped Aggregate and `DistinctAll` derive `K`; exact
+row-preserving operators and direct null-preserving aliases retain or remap it,
+while computed, missing, `error_on_null`, colliding, and uncertified
+row-combining paths drop it. HashShuffle records `P`, and a multi-task gather
+promotes local uniqueness only when every input agrees and `P ⊆ K`. If a
+Sort or Merge comparator contains all of `K`, SQL order is total: ordinary
+paths use exact predecessor counts, and eligible compact-prefix/network paths
+use concrete row-index tie ranks without adding a decision or bounded choice.
+Incomplete-key behavior and every construction budget remain unchanged.
+Independent semantic and packaging audits found no blocker, and the registered
+Python package passes 760/760. q21/q56/q60 shrink to one outcome per side and
+zero bounded order choices but remain `UNKNOWN`: the deadline is reported
+before branch 4/4 after earlier solver work, so that unattempted branch is not
+a localized cause. M84 makes no policy promotion; the current proof floor
+remains 35/35 and q21's deterministic singleton-family comparison is next.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -1367,7 +1386,7 @@ Fresh policy-valid, zero-violation gates verify TPCH 13/13 after
 `7b7904f9d460362253d0b87dc0f3439a67294f8e4a5f9dc35305cdd053c0e726`)
 and TPC-DS 22/22 after 18,379/190,504 ms (report SHA-256
 `883a491cc28c06731b47e25d6b7008f17514be0905da9d3eef850235acbd08bd`).
-The current floor is 35/35, or 35/121 workload rows (28.9%) and 35/101
+The M83 floor was 35/35, or 35/121 workload rows (28.9%) and 35/101
 formula-covered exact pairs (34.7%); TPC-DS contributes 22/99 workload rows
 (22.2%) and 22/81 formula-covered rows (27.2%). Successful q99 proofs retain
 no standalone formula/verdict artifact. Formula, pair, entry, preparation, and
@@ -1382,6 +1401,59 @@ Each ordering contains its complete grouped key. This motivates a narrowly
 derived null-safe unique-key and cross-task partition certificate; it does not
 license a hidden tie-break. q33 remains a separate problem because its order
 does not contain its grouped key.
+
+M84 semantic commit `476f2ea38f4` implements exactly that private certificate
+without a C++ exporter, snapshot JSON, IR-decoder, solver-bound, or policy
+change. A `Relation` certificate must be a nonempty `frozenset` contained in
+the visible schema. Ordinary grouped Aggregate mints the complete grouping
+output as `K`; `DistinctAll` mints its corresponding output aliases. Incoming
+`P` survives only when it is a subset of the input grouping columns and is
+remapped for `DistinctAll`. Filter, root/output retention, exact direct
+aliases, Sort,
+TopSort, Merge, Limit, and row-preserving window/prune paths preserve the
+applicable certificates. Computed, missing, colliding, or `error_on_null`
+Project columns drop them; Join/Cross, logical `UnionAll`, and uncertified
+row-combining constructors do likewise. HashShuffle writes its exact routing
+columns to `P`; Broadcast replication cannot promote a task-local key; Gather
+requires a common `K`, a common `P`, and `P ⊆ K` before publishing global
+uniqueness. Map connections pass certificates unchanged. Serial and parallel
+StageGraph `UnionAll` use the same gather rule and infer no disjointness from
+union alone; HashShuffle supplies `P` but never invents a missing `K`.
+
+When ordered columns cover `K`, equality under every SQL comparator would
+imply null-safe equality on `K`, which the certificate excludes for two
+present rows. The ordinary Sort/small-Merge path therefore assigns exact
+predecessor counts and preserves upstream outcomes, decisions, and choices.
+Eligible compact-prefix and large-Merge sorting networks use fixed row-index
+ranks because present rows cannot tie; absent-slot ordering remains
+unobservable. They add no fresh choice. An incomplete key continues through
+the previous enumerated, ordinal, or symbolic-tie path, including the same
+resource ceilings.
+
+The finalized q21/q56/q60 batch at that exact HEAD prepares every pair and
+returns `UNKNOWN` after 377/61,341, 3,379/63,374, and 3,952/64,088 ms. All
+three verdicts report deadline exhaustion before branch 4/4,
+`right_outcome_0_unmatched`, after earlier solver work; that branch was not
+attempted. Each comparison now has one left and one right outcome. M83-to-M84
+outcomes fall 55 to 6
+(-89.09%), bounded ordinal/tie/selection variables 16 to zero, and total SMT
+size 2,344,721 to 1,458,873 bytes (-37.78%). q21 is
+194,997 bytes / 696 lines / SHA-256
+`e8b528cecfaaeadb7fec86b5519e7e438092b2b1e3d27f75a0479a6c82d6d8f3`;
+q56 is 634,486 / 1,563 /
+`2c52982ec75b3bbd886535332410f362921d2fbd54acea8029aa6726276a9883`;
+q60 is 629,390 / 1,557 /
+`7164f0f1fc7cffb8404782469a3ab437c82322e6ab76edc3150aa905c8924e70`.
+The policy-valid, zero-violation 9,832-byte report SHA-256 is
+`6d69883451d8b71ccb2cc78a8e7e42d59fdfdf563d574f7725cb8e9c157b8714`;
+the 18,375-byte merged trace SHA-256 is
+`3e3492f504c32486f9a6b3a05b9e2de655a7a7f047e7379a488adce832238991`.
+Preparation/verifier sums are 7,708/188,803 ms and subtest/suite/graph wall
+times are 204.231814/206.927671/262.480557 seconds. Independent audits found
+no proof-soundness, test-gap, packaging, import, or diff blocker; the
+already-registered Python package passes 760/760. These results promote no
+query: the current floor remains 13/13 TPCH plus 22/22 TPC-DS, 35/35, and the
+next exact target is q21's deterministic singleton-family/keyed comparison.
 
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
@@ -1621,9 +1693,15 @@ weaker-floor change. Two focused proofs and fresh complete 13/13 TPCH plus
 21/21 TPC-DS gates raised that checkpoint to 34/34.
 M83 subsequently promotes already-supported TPC-DS q99 without a model or
 weaker-floor change. Two focused proofs and fresh complete 13/13 TPCH plus
-22/22 TPC-DS gates raise the current checkpoint to 35/35. The next exact
+22/22 TPC-DS gates raised that checkpoint to 35/35. The next exact
 proof-reduction target is derived unique-key ordering for q21/q56/q60, not a
 larger timeout or an assumed hidden tie-break.
+M84 subsequently implements that exact certificate without a wire/exporter or
+policy change. It removes every bounded order-choice variable from the batch
+and collapses 55 normalized outcomes to 6, but all three queries remain
+`UNKNOWN` after earlier solver work exhausts the budget before the reported
+fourth branch is attempted. The current floor stays 35/35; q21's deterministic
+singleton-family comparison is now the smallest exact next target.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -1965,7 +2043,8 @@ implementation or any weaker floor. Fresh reports verify 13/13 TPCH after
 `7b7904f9d460362253d0b87dc0f3439a67294f8e4a5f9dc35305cdd053c0e726`)
 and 22/22 TPC-DS after 18,379/190,504 ms (SHA-256
 `883a491cc28c06731b47e25d6b7008f17514be0905da9d3eef850235acbd08bd`).
-The current floor is 35/35.
+The M83 floor became 35/35. M84 commit `476f2ea38f4` changes the private
+semantic model but no proof obligation, so the current floor remains 35/35.
 
 The immediately preceding 30-obligation complete gate spent 1,633/56,327 ms for
 TPCH and produced report SHA-256

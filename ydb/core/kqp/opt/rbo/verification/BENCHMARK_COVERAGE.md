@@ -1675,9 +1675,24 @@ Milestone 83 promotes already-supported TPC-DS q99 from formula depth to the
 bounded proof floor. Policy commit `cc85514862d` changes no semantic model,
 bound, or weaker coverage floor. Two focused q99 runs and fresh complete 13/13
 TPCH plus 22/22 TPC-DS gates are `VERIFIED_BOUNDED`. The current policy
-therefore contains 35/35 proofs. A fresh q21/q56/q60 batch remains `UNKNOWN`;
+at that checkpoint contained 35/35 proofs. A fresh q21/q56/q60 batch remains `UNKNOWN`;
 its complete-group-key orderings motivate an exact derived unique-key ordering
 certificate as the next proof-reduction slice.
+
+Milestone 84 implements that slice in semantic commit `476f2ea38f4` without a
+snapshot-wire, exporter, policy, or bound change. Private null-safe unique-key
+and task-partition certificates propagate only through audited row-preserving
+operators and direct null-preserving aliases; multi-task promotion requires
+the exact `P ⊆ K` condition. Complete-key Sort/Merge uses exact predecessor
+counts or deterministic-tie networks and adds no bounded order choice;
+incomplete keys retain their former alternatives. The repeated q21/q56/q60
+batch reduces normalized outcomes from 55 to 6 and bounded order-choice
+variables from 16 to zero, but all rows remain `UNKNOWN`: the deadline is
+reported before branch 4/4 after earlier solver work, and that branch is not
+attempted. Independent audits are clean and the registered Python package
+passes 760/760. There is no proof-floor promotion: the current policy remains
+35/35 and q21's deterministic singleton-family comparison is the next exact
+target.
 
 The complete post-M71 formula dashboards are TPCH 20 / 0 / 2 after
 3,020/93,251 ms (report SHA-256
@@ -2892,7 +2907,7 @@ contains thirty-five confirmed `VERIFIED_BOUNDED` obligations.
   are 212.859294, 213.777879, and 251.13 seconds. The 18,154-byte report
   SHA-256 is
   `883a491cc28c06731b47e25d6b7008f17514be0905da9d3eef850235acbd08bd`.
-  The current floor is therefore 35/35 obligations: 35/121 workload queries
+  The M83 floor was therefore 35/35 obligations: 35/121 workload queries
   (28.9%) and 35/101 formula-covered exact pairs (34.7%). Within TPC-DS the
   corresponding ratios are 22/99 workload rows (22.2%) and 22/81
   formula-covered rows (27.2%). Formula, pair, entry, preparation, and defect
@@ -2915,6 +2930,88 @@ contains thirty-five confirmed `VERIFIED_BOUNDED` obligations.
   cross-task partition certificate the next exact proof-reduction target; it
   does not permit an implicit tie-break. q33 remains outside this slice because
   its ordering omits its grouped key.
+
+  M84 semantic commit `476f2ea38f4` implements that target privately inside
+  `Relation` and StageGraph evaluation. It adds no C++ exporter rule, snapshot
+  field, JSON/IR version, workload-policy edit, row/task bound, or solver
+  assumption. Grouped Aggregate and `DistinctAll` derive a null-safe unique
+  key `K`; direct null-preserving aliases and row-preserving operators retain
+  or remap it, while computed, missing, colliding, `error_on_null`, Join/Cross,
+  and logical-`UnionAll` paths drop it. HashShuffle supplies the exact
+  task-partition key `P`; a multi-task gather publishes global `K` only when
+  every task agrees on both certificates and `P ⊆ K`. Broadcast replication
+  cannot satisfy that promotion. Map passes certificates unchanged; serial or
+  parallel StageGraph `UnionAll` applies the same gather test and infers no
+  disjointness from union alone. HashShuffle supplies `P` but never invents
+  `K`. When the complete Sort/Merge comparator
+  contains `K`, present rows cannot tie: ordinary paths use exact predecessor
+  counts and eligible compact-prefix/large-Merge networks use concrete
+  row-index ranks. Neither adds a decision or bounded choice. Every
+  incomplete-key path and resource budget is unchanged.
+
+  The finalized M84 `solver_experiment` selects exactly q21/q56/q60 at
+  row/task bound 2/2 with a 60,000-ms global deadline. All three prepare,
+  capture exactly Initial then Final, and enter the verifier; none proves.
+  q21 spends 377/61,341 ms, q56 3,379/63,374 ms, and q60 3,952/64,088 ms in
+  preparation/verification. Each standalone verdict is exactly `UNKNOWN`
+  because the deadline expires before branch 4/4
+  (`right_outcome_0_unmatched`) after earlier solver work; the fourth branch
+  is not attempted. The branch cover has two language-empty
+  predicates plus one predicate per left/right outcome, so 4/4 establishes
+  exactly one normalized outcome on each side. Preparation/verifier sums are
+  7,708/188,803 ms. Subtest, merged-suite, and graph-execution wall times are
+  204.231814, 206.927671, and 262.480557 seconds; the chunk trace wall is
+  206.028302 seconds.
+
+  The 9,832-byte version-five report has SHA-256
+  `6d69883451d8b71ccb2cc78a8e7e42d59fdfdf563d574f7725cb8e9c157b8714`.
+  Its summary is `UNKNOWN:3`, preparation summary is `SUCCEEDED:3`, and
+  selected/prepared/snapshot-pair/verifier-entry sets are all exactly
+  `[21,56,60]`; the verified and status-derived policy-formula-emitted sets
+  are empty, while the `UNKNOWN` rows retain their SMT artifacts.
+  `solver_present` is true. The focused `solver_experiment` has
+  `full_selection=false`; formula, preparation, snapshot-pair,
+  verifier-entry, and proof floors are all unenforced; policy validity is true
+  with zero violations and empty optimizer-failure/unsupported inventories.
+  The 18,375-byte merged trace has SHA-256
+  `3e3492f504c32486f9a6b3a05b9e2de655a7a7f047e7379a488adce832238991`
+  and records the TPCDS subtest as `good`. Every report-declared digest and
+  standalone verdict was independently recomputed and matched.
+
+  | Query | Artifact | Bytes | SHA-256 |
+  |---:|---|---:|---|
+  | 21 | Initial snapshot | 27,524 | `e18253c8471982be8a436810a192ce8b3ccdb74cd0caeb29cff3abbaf780f63e` |
+  | 21 | Final snapshot | 18,203 | `3a0482cf7b30697a1ce116137e4e7f6bfed4efb906a0d35663db866c05802175` |
+  | 21 | Query | 1,587 | `16b9f3a864e254c844a3638f6bfd9a025c4ac1f252f4444ed018b768ea98ff7a` |
+  | 21 | SMT formula | 194,997 | `e8b528cecfaaeadb7fec86b5519e7e438092b2b1e3d27f75a0479a6c82d6d8f3` |
+  | 21 | Verdict | 201 | `730a39e51f137373d9342d3f983ff30486e688acc444223c168544e652740dc3` |
+  | 56 | Initial snapshot | 95,972 | `329639c3f2e97c82a413d439e9f7a87c0582e73a9efdeab2d05d57bb4088e612` |
+  | 56 | Final snapshot | 35,747 | `a927ddac13956c98ca876d962003bbba38dc0405535c94e0e876ed2ffc678032` |
+  | 56 | Query | 2,743 | `f4f8d23435231c6d6f544865e5e2716b9457fd059d1095ab7ff54f5f56f290ad` |
+  | 56 | SMT formula | 634,486 | `2c52982ec75b3bbd886535332410f362921d2fbd54acea8029aa6726276a9883` |
+  | 56 | Verdict | 201 | `730a39e51f137373d9342d3f983ff30486e688acc444223c168544e652740dc3` |
+  | 60 | Initial snapshot | 95,810 | `05a09a4ee26f8ceeab9397fd66f0b043906280ec0c8a9ea62bddfeb619192152` |
+  | 60 | Final snapshot | 35,471 | `cb6efa50751bf0b3705570ee33281b0648ac2ff0ce9f3218fa1bac9e468ee94a` |
+  | 60 | Query | 2,686 | `3c503c10890dd82a963e49382559b3b20e37664f4ec3630bcc6bd697f1f0a238` |
+  | 60 | SMT formula | 629,390 | `7164f0f1fc7cffb8404782469a3ab437c82322e6ab76edc3150aa905c8924e70` |
+  | 60 | Verdict | 201 | `730a39e51f137373d9342d3f983ff30486e688acc444223c168544e652740dc3` |
+
+  Initial, Final, and query hashes are byte-identical to the M83 batch.
+  Formula/verdict artifacts change, and report/trace metadata reflects the new
+  run. q21's formula falls from
+  647,187 bytes / 728 lines to 194,997 / 696 (-69.87%), normalized outcomes
+  fall 3 to 2, and bounded ordinal/tie/selection variables fall 16 to zero.
+  q56 falls from 855,106 to 634,486 bytes (-25.80%) and 26 to 2 outcomes;
+  q60 falls from 842,428 to 629,390 (-25.29%) and 26 to 2. q56/q60 remain at
+  1,563/1,557 formula lines and had zero named bounded order choices before
+  and after. Across the batch, outcomes fall 55 to 6 (-89.09%), bounded order
+  choices 16 to zero, and formulas 2,344,721 to 1,458,873 bytes (-37.78%).
+  Verification still consumes the global deadline, so this is a combinatorial
+  reduction rather than a proof. Independent proof-soundness, focused test-gap,
+  packaging/import, and four-file diff audits found no blocker; the
+  already-registered Python package passes 760/760. No query is promoted and
+  the current floor remains 13/13 TPCH plus 22/22 TPC-DS, 35/35. q21's
+  deterministic singleton-family/keyed comparison is the next exact target.
 
   Focused q8 prepares in 695 ms and proves after 2,041 ms.
   The preceding 30-obligation complete reports had SHA-256 values
@@ -3693,6 +3790,14 @@ Milestone 83 then promotes already-supported q99 to proof depth at policy
 commit `cc85514862d`, again without a semantic implementation change. Two
 focused q99 runs plus fresh TPCH 13/13 and TPC-DS 22/22 gates are green; the
 proof floor rises to thirty-five while every weaker inventory stays fixed.
+Milestone 84 then adds the private derived-order certificate at semantic commit
+`476f2ea38f4`, without changing the wire, exporter, policy, or any coverage
+inventory. The q21/q56/q60 batch loses all 16 bounded order-choice variables
+and collapses from 55 to 6 normalized outcomes, but each query remains
+`UNKNOWN` after earlier solver work exhausts the budget before the reported
+fourth branch is attempted. The proof floor therefore stays thirty-five, and
+q21's deterministic singleton-family comparison is the next exact reduction
+target.
 More than two dependencies, other correlation shapes, coercing dynamic `IN`,
 nullable String and non-positive nullable contexts, broader range grammars,
 and other OLAP pushdowns remain later work. Solver/formula-size work promotes

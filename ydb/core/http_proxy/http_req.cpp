@@ -79,10 +79,7 @@ namespace NKikimr::NHttpProxy {
         SourceAddress = NKikimr::NNet::FormatSourceAddress(
             Request->Address ? Request->Address->SockAddr() : nullptr);
 
-        DatabasePath = Request->URL.Before('?');
-        if (DatabasePath == "/") {
-           DatabasePath = "";
-        }
+        DatabasePath = ParseDatabasePathFromRequestUrl(Request->URL);
         CgiParameters = TCgiParameters(Request->URL.After('?'));
         if (auto it = CgiParameters.Find("folderId"); it != CgiParameters.end()) {
             FolderId = it->second;

@@ -5,8 +5,6 @@
 
 namespace NKikimr::NPQ {
 
-class TPartitionWriterCacheActor;
-
 NActors::IActor* CreatePartitionWriterCacheActor(
     const NActors::TActorId& owner,
     ui32 partition,

@@ -69,4 +69,15 @@ bool TCachedPartitionWriter::HasPendingRequests() const
     return !QuotedRequests.empty() || !SentRequests.empty() || !AcceptedRequests.empty();
 }
 
+ui64 TCachedPartitionWriter::FrontPendingCookie() const
+{
+    if (!SentRequests.empty()) {
+        return SentRequests.front().Cookie;
+    }
+    if (!QuotedRequests.empty()) {
+        return QuotedRequests.front().Write->Record.GetPartitionRequest().GetCookie();
+    }
+    return 0;
+}
+
 } // namespace NKikimr::NPQ

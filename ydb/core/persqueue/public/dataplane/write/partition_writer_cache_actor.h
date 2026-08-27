@@ -54,6 +54,9 @@ private:
     void ReplyError(const TString& sessionId, const TString& txId,
                     EErrorCode code, const TString& reason,
                     ui64 cookie);
+    void ReplyTxWriterInitError(TCachedPartitionWriter& writer,
+                                const TEvPartitionWriter::TEvInitResult& result,
+                                const TActorContext& ctx);
     void PoisonWriters();
 
     TCachedPartitionWriter* GetPartitionWriter(const TString& sessionId, const TString& txId,

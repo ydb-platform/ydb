@@ -142,6 +142,21 @@ void TPartitionWriterCacheActor::HandleDeferredDestinationUpsertRequest(
     }));
 }
 
+void TPartitionWriterCacheActor::ReplyTxWriterInitError(TCachedPartitionWriter& writer,
+                                                       const TEvPartitionWriter::TEvInitResult& result,
+                                                       const TActorContext& ctx)
+{
+    auto response = result.GetError().Response;
+    if (const ui64 cookie = writer.FrontPendingCookie(); cookie != 0) {
+        response.MutablePartitionResponse()->SetCookie(cookie);
+    }
+
+    ctx.Send(Owner, new TEvPartitionWriter::TEvWriteResponse(result.SessionId, result.TxId,
+                                                             EErrorCode::InternalError, result.GetError().Reason,
+                                                             std::move(response)));
+    writer.InitErrorReported = true;
+}
+
 void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx)
 {
     auto& result = *ev->Get();
@@ -152,6 +167,10 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr&
 
     if (result.IsSuccess()) {
         p->second->OnEvInitResult(ev);
+    } else if (result.SessionId || result.TxId) {
+        // InitResult is not forwarded for tx-writers; keep the original error
+        // (UNKNOWN_TXID / INITIALIZING) so the client does not retry UNAVAILABLE.
+        ReplyTxWriterInitError(*p->second, result, ctx);
     }
 
     if (!result.SessionId && !result.TxId) {
@@ -226,7 +245,7 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvWriteResponse::TP
                        p->second->AcceptedRequests.front().Cookie);
             this->Become(&TPartitionWriterCacheActor::StateBroken);
         }
-    } else {
+    } else if (!p->second->InitErrorReported) {
         ctx.Send(Owner, ev->Release().Release());
     }
 }

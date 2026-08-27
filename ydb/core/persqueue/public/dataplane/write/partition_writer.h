@@ -15,11 +15,13 @@ struct TCachedPartitionWriter {
     void OnWriteResponse(const TEvPartitionWriter::TEvWriteResponse& ev);
 
     bool HasPendingRequests() const;
+    ui64 FrontPendingCookie() const;
 
     TActorId Actor;
     TString OwnerCookie;
     ui64 MaxSeqNo = 0;
     TInstant LastActivity;
+    bool InitErrorReported = false;
 
     struct TUserWriteRequest {
         THolder<TEvPartitionWriter::TEvWriteRequest> Write;

@@ -280,3 +280,27 @@ message TEvPrepareWriteS3Result {
 
     repeated TItem Items = 1;
 }
+<<<<<<< HEAD
+=======
+
+message TEvPushS3RouterMetrics {
+    optional uint32 NodeId = 1;
+    optional uint64 BalancerRequests = 2;
+    optional uint64 BalancerErrors = 3;
+    optional uint64 NonBalancerRequests = 4;
+    optional uint64 NonBalancerErrors = 5;
+    optional uint64 NonBalancerBytesRead = 6;
+    optional uint64 NonBalancerBytesWritten = 7;
+    optional uint64 BalancerResolveRequests = 8;
+    optional uint64 BalancerResolveSuccesses = 9;
+    optional uint64 BalancerResolveFailures = 10;
+    optional uint64 EndpointSwitches = 11;
+    optional uint64 FiveXxRefreshTriggers = 12;
+    optional bool IsUsingProxy = 13;
+    repeated uint64 BalancerLatencyHistogram = 14;
+    repeated uint64 NonBalancerLatencyHistogram = 15;
+    repeated uint64 BalancerResolveLatencyHistogram = 16;
+    optional uint64 PendingRejects = 17;
+    repeated uint64 PendingLatencyHistogram = 18;
+}
+>>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))

@@ -1,9 +1,45 @@
 #pragma once
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/events/abstract.h>
+#include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <type_traits>
 
 namespace NKikimr::NWrappers::NExternalStorage {
+
+inline Aws::S3::S3Error MakeServiceUnavailableError(const TString& exceptionName, const TString& reason) {
+    return Aws::S3::S3Error(Aws::Client::AWSError<Aws::Client::CoreErrors>(
+        Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, exceptionName, reason, true));
+}
+
+template <class TResponse, class TRequest>
+std::unique_ptr<TResponse> MakeErrorResponse(const TRequest& request, const Aws::S3::S3Error& error) {
+    constexpr bool hasKey = requires { request.GetRequest().GetKey(); };
+    if constexpr (std::is_same_v<TResponse, TEvGetObjectResponse>) {
+        std::pair<ui64, ui64> range;
+        AFL_VERIFY(TResponse::TryParseRange(TString(request.GetRequest().GetRange()), range))(
+            "original", request.GetRequest().GetRange());
+        return std::make_unique<TResponse>(TString(request.GetRequest().GetKey()), range, error);
+    } else if constexpr (hasKey) {
+        return std::make_unique<TResponse>(TString(request.GetRequest().GetKey()), error);
+    } else {
+        return std::make_unique<TResponse>(error);
+    }
+}
+
+inline std::unique_ptr<NActors::IEventBase> MakeErrorResponse(NActors::IEventHandle& ev, const Aws::S3::S3Error& error) {
+    switch (ev.GetTypeRewrite()) {
+#define MAKE_ERROR_RESPONSE(NAME) \
+        case TEv##NAME##Request::EventType: \
+            return MakeErrorResponse<TEv##NAME##Response>(*ev.Get<TEv##NAME##Request>(), error);
+        Y_FOR_EACH_S3_WRAPPER_OP(MAKE_ERROR_RESPONSE)
+#undef MAKE_ERROR_RESPONSE
+        default:
+            return nullptr;
+    }
+}
 
 class TUnavailableExternalStorageOperator: public IExternalStorageOperator {
 private:
@@ -12,22 +48,8 @@ private:
 
     template <class TResponse, class TRequestPtr>
     void ExecuteImpl(TRequestPtr& ev) const {
-        const Aws::S3::S3Error error = Aws::S3::S3Error(
-            Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, true));
-        std::unique_ptr<TResponse> response;
-        constexpr bool hasKey = requires(const TRequestPtr& r) { r->Get()->GetRequest().GetKey(); };
-        constexpr bool hasRange = std::is_same_v<TResponse, TEvGetObjectResponse>;
-        if constexpr (hasRange) {
-            std::pair<ui64, ui64> range;
-            AFL_VERIFY(TResponse::TryParseRange(TString(ev->Get()->GetRequest().GetRange()), range))(
-                "original", ev->Get()->GetRequest().GetRange());
-            response = std::make_unique<TResponse>(TString(ev->Get()->GetRequest().GetKey()), range, error);
-        } else if constexpr (hasKey) {
-            response = std::make_unique<TResponse>(TString(ev->Get()->GetRequest().GetKey()), error);
-        } else {
-            response = std::make_unique<TResponse>(error);
-        }
-        ReplyAdapter.Reply(ev->Sender, std::move(response));
+        ReplyAdapter.Reply(ev->Sender, MakeErrorResponse<TResponse>(
+            *ev->Get(), MakeServiceUnavailableError(Exception, Reason)));
     }
 
     virtual TString DoDebugString() const override {
@@ -39,42 +61,13 @@ public:
         : Exception(exceptionName)
         , Reason(unavailabilityReason) {
     }
-    virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvCheckObjectExistsResponse>(ev);
+
+#define DECLARE_EXECUTE(NAME) \
+    virtual void Execute(TEv##NAME##Request::TPtr& ev) const override { \
+        ExecuteImpl<TEv##NAME##Response>(ev); \
     }
-    virtual void Execute(TEvListObjectsRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvListObjectsResponse>(ev);
-    }
-    virtual void Execute(TEvGetObjectRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvGetObjectResponse>(ev);
-    }
-    virtual void Execute(TEvHeadObjectRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvHeadObjectResponse>(ev);
-    }
-    virtual void Execute(TEvPutObjectRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvPutObjectResponse>(ev);
-    }
-    virtual void Execute(TEvDeleteObjectRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvDeleteObjectResponse>(ev);
-    }
-    virtual void Execute(TEvDeleteObjectsRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvDeleteObjectsResponse>(ev);
-    }
-    virtual void Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvCreateMultipartUploadResponse>(ev);
-    }
-    virtual void Execute(TEvUploadPartRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvUploadPartResponse>(ev);
-    }
-    virtual void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvCompleteMultipartUploadResponse>(ev);
-    }
-    virtual void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvAbortMultipartUploadResponse>(ev);
-    }
-    virtual void Execute(TEvUploadPartCopyRequest::TPtr& ev) const override {
-        ExecuteImpl<TEvUploadPartCopyResponse>(ev);
-    }
+    Y_FOR_EACH_S3_WRAPPER_OP(DECLARE_EXECUTE)
+#undef DECLARE_EXECUTE
 };
 
 }   // namespace NKikimr::NWrappers::NExternalStorage

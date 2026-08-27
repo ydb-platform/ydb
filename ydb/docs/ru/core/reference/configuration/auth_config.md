@@ -412,13 +412,13 @@ auth_config:
 
 ```yaml
 auth_config:
-  refresh_period: 1s
-  refresh_time: 1h
-  life_time: 2h
-  expire_time: 6h
-  login_token_expire_time: 12h
-  min_error_refresh_time: 1s
-  max_error_refresh_time: 1m
+  refresh_period: "1s"
+  refresh_time: "1h"
+  life_time: "2h"
+  expire_time: "6h"
+  login_token_expire_time: "12h"
+  min_error_refresh_time: "1s"
+  max_error_refresh_time: "1m"
 ```
 
 После создания токена пользователя следующая плановая проверка выполняется через интервал, случайно выбранный в диапазоне от `30m` до `1h` (`refresh_time`). Выполнение этого условия проверяется раз в `1s` (`refresh_period`). После успешной проверки интервал выбирается заново. При возникновении ретрабельной ошибки первая повторная проверка выполняется через интервал, случайно выбранный в диапазоне от `500ms` до `1s` (`min_error_refresh_time`), затем текущий интервал удваивается, пока не достигнет `1m` (`max_error_refresh_time`). Фактическая задержка каждый раз выбирается случайным образом в диапазоне от половины до полного текущего интервала.
@@ -429,9 +429,9 @@ auth_config:
 
 ```yaml
 auth_config:
-  refresh_period: 1s
-  life_time: 30m
-  as_signature_expire_time: 1h
+  refresh_period: "1s"
+  life_time: "30m"
+  as_signature_expire_time: "1h"
 ```
 
 Токен пользователя для запроса с подписью ключом доступа не обновляется планово. Запись считается действительной `1h` (`as_signature_expire_time`) с момента успешной проверки и удаляется при ближайшей проверке кеша. При указанных значениях она будет удалена не позднее чем через `1h + 1s` (`as_signature_expire_time + refresh_period`). Запись может быть удалена раньше из-за отсутствия запросов в течение `30m` (`life_time`).

@@ -6,7 +6,9 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/events/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/unavailable_storage.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -19,6 +21,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <deque>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
@@ -79,9 +82,11 @@ namespace NKikimr::NBlobDepot {
         std::atomic<ui64> BalancerResolveFailures{0};
         std::atomic<ui64> EndpointSwitches{0};
         std::atomic<ui64> FiveXxRefreshTriggers{0};
+        std::atomic<ui64> PendingRejects{0};
         std::atomic<bool> IsUsingProxy{false};
 
         TLatencyHistogram BalancerResolveLatency;
+        TLatencyHistogram PendingLatency;
     };
 
     class TRouteCounters : public TThrRefBase {
@@ -151,22 +156,11 @@ namespace NKikimr::NBlobDepot {
         }
 
 #define IMPL_REBUILD(NAME) \
-        std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::NAME>&& ev) const override { \
+        std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::TEv##NAME##Response>&& ev) const override { \
             return Inspect(std::move(ev)); \
         }
 
-        IMPL_REBUILD(TEvListObjectsResponse)
-        IMPL_REBUILD(TEvGetObjectResponse)
-        IMPL_REBUILD(TEvHeadObjectResponse)
-        IMPL_REBUILD(TEvPutObjectResponse)
-        IMPL_REBUILD(TEvDeleteObjectResponse)
-        IMPL_REBUILD(TEvDeleteObjectsResponse)
-        IMPL_REBUILD(TEvCreateMultipartUploadResponse)
-        IMPL_REBUILD(TEvUploadPartResponse)
-        IMPL_REBUILD(TEvCompleteMultipartUploadResponse)
-        IMPL_REBUILD(TEvAbortMultipartUploadResponse)
-        IMPL_REBUILD(TEvCheckObjectExistsResponse)
-        IMPL_REBUILD(TEvUploadPartCopyResponse)
+        Y_FOR_EACH_S3_WRAPPER_OP(IMPL_REBUILD)
 #undef IMPL_REBUILD
     };
 
@@ -194,6 +188,14 @@ namespace NKikimr::NBlobDepot {
         bool PipeConnected = false;
         bool RefreshInFlight = false;
         bool RefreshScheduled = false;
+
+        struct TPendingRequest {
+            TMonotonic EnqueuedAt;
+            std::unique_ptr<IEventHandle> Ev;
+        };
+
+        static constexpr size_t MaxPendingRequests = 256;
+        std::deque<TPendingRequest> PendingRequests;
 
         TRouterStats Stats;
 
@@ -242,6 +244,55 @@ namespace NKikimr::NBlobDepot {
                 TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow,
                 std::move(routeCounters)));
             InnerWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
+            FlushPendingRequests();
+        }
+
+        void RejectRequest(std::unique_ptr<IEventHandle> ev) {
+            YDB_LOG_DEBUG("S3Router has no endpoint yet, rejecting request",
+                {"marker", "BDTS32"},
+                {"id", LogId},
+                {"type", ev->GetTypeRewrite()},
+                {"pending", PendingRequests.size()});
+
+            ++Stats.PendingRejects;
+
+            auto response = NWrappers::NExternalStorage::MakeErrorResponse(
+                *ev,
+                NWrappers::NExternalStorage::MakeServiceUnavailableError(
+                    "ServiceUnavailable",
+                    TStringBuilder() << "S3 endpoint is not resolved yet, id# " << LogId));
+            Y_ABORT_UNLESS(response);
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
+
+        void RejectPendingRequest(TPendingRequest&& pending) {
+            RecordPendingLatency(pending, TActivationContext::Monotonic());
+            RejectRequest(std::move(pending.Ev));
+        }
+
+        void RecordPendingLatency(const TPendingRequest& pending, TMonotonic now) {
+            Stats.PendingLatency.Record((now - pending.EnqueuedAt).MilliSeconds());
+        }
+
+        void FlushPendingRequests() {
+            Y_ABORT_UNLESS(InnerWrapperId);
+            if (PendingRequests.empty()) {
+                return;
+            }
+
+            YDB_LOG_DEBUG("S3Router flushing pending requests",
+                {"marker", "BDTS33"},
+                {"id", LogId},
+                {"count", PendingRequests.size()},
+                {"endpoint", CurrentEndpoint});
+
+            const TMonotonic now = TActivationContext::Monotonic();
+            while (!PendingRequests.empty()) {
+                auto pending = std::move(PendingRequests.front());
+                PendingRequests.pop_front();
+                RecordPendingLatency(pending, now);
+                TActivationContext::Send(IEventHandle::Forward(std::move(pending.Ev), InnerWrapperId));
+            }
         }
 
         void BuildInnerWrapper(const TString& endpoint) {
@@ -343,11 +394,13 @@ namespace NKikimr::NBlobDepot {
                 record.SetBalancerResolveFailures(ExchangeAtomic(Stats.BalancerResolveFailures));
                 record.SetEndpointSwitches(ExchangeAtomic(Stats.EndpointSwitches));
                 record.SetFiveXxRefreshTriggers(ExchangeAtomic(Stats.FiveXxRefreshTriggers));
+                record.SetPendingRejects(ExchangeAtomic(Stats.PendingRejects));
                 record.SetIsUsingProxy(Stats.IsUsingProxy.load());
 
                 Stats.BalancerRoute.Latency.Take(record.MutableBalancerLatencyHistogram());
                 Stats.NonBalancerRoute.Latency.Take(record.MutableNonBalancerLatencyHistogram());
                 Stats.BalancerResolveLatency.Take(record.MutableBalancerResolveLatencyHistogram());
+                Stats.PendingLatency.Take(record.MutablePendingLatencyHistogram());
 
                 NTabletPipe::SendData(SelfId(), PipeId, event.release());
             }
@@ -450,10 +503,25 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Forward(STATEFN_SIG) {
-            if (!InnerWrapperId) {
+            if (InnerWrapperId) {
+                TActivationContext::Send(ev->Forward(InnerWrapperId));
                 return;
             }
-            TActivationContext::Send(ev->Forward(InnerWrapperId));
+
+            if (PendingRequests.size() < MaxPendingRequests) {
+                YDB_LOG_DEBUG("S3Router queueing request until balancer resolves",
+                    {"marker", "BDTS34"},
+                    {"id", LogId},
+                    {"type", ev->GetTypeRewrite()},
+                    {"pending", PendingRequests.size() + 1});
+                PendingRequests.push_back(TPendingRequest{
+                    .EnqueuedAt = TActivationContext::Monotonic(),
+                    .Ev = std::unique_ptr<IEventHandle>(ev.Release()),
+                });
+                return;
+            }
+
+            RejectRequest(std::unique_ptr<IEventHandle>(ev.Release()));
         }
 
     public:
@@ -471,7 +539,6 @@ namespace NKikimr::NBlobDepot {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
             OriginalEndpoint = endpoint;
             CreatePipe();
-            BuildInnerWrapper(endpoint);
             SchedulePushMetrics();
 
             YDB_LOG_INFO("S3Router bootstrap",
@@ -484,7 +551,10 @@ namespace NKikimr::NBlobDepot {
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
                 ScheduleNextRefresh();
+            } else {
+                BuildInnerWrapper(endpoint);
             }
+
             Become(&TThis::StateWork);
         }
 
@@ -492,7 +562,13 @@ namespace NKikimr::NBlobDepot {
             YDB_LOG_INFO("S3Router shutting down",
                 {"marker", "BDTS31"},
                 {"id", LogId},
-                {"currentEndpoint", CurrentEndpoint});
+                {"currentEndpoint", CurrentEndpoint},
+                {"pending", PendingRequests.size()});
+
+            while (!PendingRequests.empty()) {
+                RejectPendingRequest(std::move(PendingRequests.front()));
+                PendingRequests.pop_front();
+            }
 
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());

@@ -814,6 +814,119 @@ class SmtTest(unittest.TestCase):
             "(+ rbo_let_0 rbo_let_0))",
         )
 
+    def test_structural_cse_runs_at_and_just_below_scope_cap(self):
+        first = smt.add(
+            smt.symbol("rbo_let_0", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+        second = smt.add(
+            smt.symbol("rbo_let_0", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+        term = smt.add(first, second, smt.symbol("tail", smt.INT))
+        expected = (
+            "(let ((rbo_let_1 (+ rbo_let_0 right))) "
+            "(+ rbo_let_1 rbo_let_1 tail))"
+        )
+
+        # This scope has eight distinct object identities.  The exact cap and
+        # one spare slot must both retain structural sharing.
+        for cap in (8, 9):
+            with self.subTest(cap=cap), mock.patch.object(
+                smt,
+                "_MAX_STRUCTURAL_CSE_SCOPE_NODES",
+                cap,
+            ):
+                self.assertEqual(term.render_shared(), expected)
+                self.assertEqual(term.render_shared(), expected)
+
+    def test_quantified_scope_above_cap_uses_identity_only_sharing(self):
+        first = smt.add(
+            smt.symbol("rbo_let_0", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+        second = smt.add(
+            smt.symbol("rbo_let_0", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+        shared = smt.mul(
+            smt.symbol("left", smt.INT),
+            smt.symbol("factor", smt.INT),
+        )
+        body = smt.Term(
+            smt.BOOL,
+            "predicate",
+            (first, second, shared, shared),
+        )
+        term = smt.exists((smt.symbol("rank", smt.INT),), body)
+        expected = (
+            "(exists ((rank Int)) "
+            "(let ((rbo_let_1 (* left factor))) "
+            "(predicate (+ rbo_let_0 right) (+ rbo_let_0 right) "
+            "rbo_let_1 rbo_let_1)))"
+        )
+
+        # The quantifier is opaque in its one-node outer scope.  Its body has
+        # ten identities, so cap nine exercises the identity-only fallback.
+        with mock.patch.object(
+            smt,
+            "_MAX_STRUCTURAL_CSE_SCOPE_NODES",
+            9,
+        ):
+            self.assertEqual(term.render_shared(), expected)
+            self.assertEqual(term.render_shared(), expected)
+
+    def test_oversized_scope_does_not_disable_nested_structural_cse(self):
+        first = smt.add(
+            smt.symbol("rbo_let_0", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+        second = smt.add(
+            smt.symbol("rbo_let_0", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+        shared = smt.mul(
+            smt.symbol("left", smt.INT),
+            smt.symbol("factor", smt.INT),
+        )
+        nested_body = smt.Term(
+            smt.BOOL,
+            "nested",
+            (
+                smt.add(smt.symbol("rank", smt.INT), smt.ONE),
+                smt.add(
+                    smt.symbol("rank", smt.INT),
+                    smt.int_value(1),
+                ),
+            ),
+        )
+        nested = smt.exists(
+            (smt.symbol("rank", smt.INT),),
+            nested_body,
+        )
+        term = smt.Term(
+            smt.BOOL,
+            "outer",
+            (first, second, shared, shared, nested),
+        )
+        expected = (
+            "(let ((rbo_let_1 (* left factor))) "
+            "(outer (+ rbo_let_0 right) (+ rbo_let_0 right) "
+            "rbo_let_1 rbo_let_1 (exists ((rank Int)) "
+            "(let ((rbo_let_2 (+ rank 1))) "
+            "(nested rbo_let_2 rbo_let_2)))))"
+        )
+
+        # The outer scope has eleven identities and falls back at cap ten;
+        # the seven-node quantified body independently keeps structural CSE.
+        with mock.patch.object(
+            smt,
+            "_MAX_STRUCTURAL_CSE_SCOPE_NODES",
+            10,
+        ):
+            self.assertEqual(term.render_shared(), expected)
+            self.assertEqual(term.render_shared(), expected)
+
     def test_structural_cse_preserves_argument_order_and_exact_leaves(self):
         left = smt.symbol("left", smt.INT)
         right = smt.symbol("right", smt.INT)
@@ -1158,6 +1271,57 @@ class SmtTest(unittest.TestCase):
         formula = script.render()
         self.assertIn(
             "(let ((rbo_let_0 (+ v_0 v_1)))",
+            formula,
+        )
+        solved = subprocess.run(
+            (SOLVER, "-in"),
+            input=formula,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+
+        self.assertEqual(solved.returncode, 0, solved.stderr)
+        self.assertEqual(solved.stdout.strip(), "unsat")
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_z3_preserves_identity_fallback_arithmetic(self):
+        script = smt.Script(timeout_ms=10_000)
+        left = script.fresh_constant("left", smt.INT)
+        right = script.fresh_constant("right", smt.INT)
+        first = smt.add(left, right)
+        second = smt.add(
+            smt.symbol("v_0", smt.INT),
+            smt.symbol("v_1", smt.INT),
+        )
+        shared_product = smt.mul(left, right)
+        actual = smt.add(first, second, shared_product, shared_product)
+        expected_sum = smt.add(
+            smt.symbol("v_0", smt.INT),
+            smt.symbol("v_1", smt.INT),
+        )
+        expected_product = smt.mul(
+            smt.symbol("v_0", smt.INT),
+            smt.symbol("v_1", smt.INT),
+        )
+        expected = smt.add(
+            smt.mul(smt.int_value(2), expected_sum),
+            smt.mul(smt.int_value(2), expected_product),
+        )
+        script.assert_term(smt.not_(smt.eq(actual, expected)))
+
+        with mock.patch.object(
+            smt,
+            "_MAX_STRUCTURAL_CSE_SCOPE_NODES",
+            1,
+        ):
+            formula = script.render()
+            self.assertEqual(script.render(), formula)
+        self.assertIn(
+            "(let ((rbo_let_0 (* v_0 v_1))) "
+            "(not (= (+ (+ v_0 v_1) (+ v_0 v_1) "
+            "rbo_let_0 rbo_let_0)",
             formula,
         )
         solved = subprocess.run(

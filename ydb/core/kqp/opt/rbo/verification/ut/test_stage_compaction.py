@@ -1,18 +1,337 @@
 import unittest
+from itertools import product
+from unittest.mock import patch
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt, stages
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, StageEdge
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
+    relation as relation_model,
+    smt,
+    stages,
+)
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    Column,
+    SortOrder,
+    StageEdge,
+    parse_snapshot,
+    stage_task_counts,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
+    Database,
+    Evaluator as RelationEvaluator,
     Occurrence,
     PartitionFact,
     Relation,
     Row,
     single,
+    sort_family,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    Encoder as ScalarEncoder,
     IntegralAverageState,
     Value,
 )
+
+
+ABSENT = object()
+
+
+def _uint64(value):
+    return {"kind": "literal", "type": "Uint64", "value": value}
+
+
+def _order_item(column, ascending=True, nulls_first=False):
+    return {
+        "column": column,
+        "ascending": ascending,
+        "nulls_first": nulls_first,
+    }
+
+
+def _unique_order_stage_snapshot(
+    *,
+    shuffle_keys=("a.k1",),
+    final_aggregate=True,
+    complete_alias=True,
+):
+    scan = {
+        "id": "scan",
+        "op": "scan",
+        "table": "A",
+        "columns": [
+            {"source": "k1", "output": "a.k1"},
+            {"source": "k2", "output": "a.k2"},
+            {"source": "payload", "output": "a.payload"},
+        ],
+        "pushed_limit": None,
+    }
+    partial = {
+        "id": "partial",
+        "op": "aggregate",
+        "input": "scan",
+        "keys": ["a.k1", "a.k2"],
+        "aggregates": [
+            {
+                "input": "a.payload",
+                "function": "count",
+                "output": "_state",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "intermediate",
+        "distinct_all": False,
+    }
+    final = {
+        "id": "final",
+        "op": "aggregate",
+        "input": "partial",
+        "keys": ["a.k1", "a.k2"],
+        "aggregates": [
+            {
+                "input": "_state",
+                "function": "sum",
+                "output": "row_count",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "final",
+        "distinct_all": False,
+    }
+    aggregate_output = "row_count" if final_aggregate else "_state"
+    filter_node = {
+        "id": "filter",
+        "op": "filter",
+        "input": "final" if final_aggregate else "partial",
+        "predicate": {"kind": "literal", "type": "Bool", "value": True},
+    }
+    aliases = [
+        {
+            "output": "out.k1",
+            "expression": {"kind": "column", "column": "a.k1"},
+        },
+    ]
+    if complete_alias:
+        aliases.append(
+            {
+                "output": "out.k2",
+                "expression": {"kind": "column", "column": "a.k2"},
+            }
+        )
+    aliases.append(
+        {
+            "output": "out.count",
+            "expression": {"kind": "column", "column": aggregate_output},
+        }
+    )
+    project = {
+        "id": "alias",
+        "op": "project",
+        "input": "filter",
+        "ordered": False,
+        "columns": aliases,
+    }
+    order = [_order_item("out.count", ascending=False)]
+    order.append(_order_item("out.k1", nulls_first=True))
+    if complete_alias:
+        order.append(_order_item("out.k2", nulls_first=True))
+    top = {
+        "id": "top",
+        "op": "sort",
+        "input": "alias",
+        "order": [dict(item) for item in order],
+        "limit": _uint64(2),
+        "phase": "intermediate",
+    }
+    finish = {
+        "id": "finish",
+        "op": "limit",
+        "input": "top",
+        "count": _uint64(2),
+        "offset": None,
+        "phase": "final",
+    }
+    middle_nodes = []
+    nodes = [scan, partial]
+    if final_aggregate:
+        middle_nodes.append("final")
+        nodes.append(final)
+    middle_nodes.extend(("filter", "alias", "top"))
+    nodes.extend((filter_node, project, top, finish))
+    output = [column["output"] for column in aliases]
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "A",
+                        "columns": [
+                            {"name": "k1", "type": "Int64", "nullable": True},
+                            {"name": "k2", "type": "Int64", "nullable": True},
+                            {
+                                "name": "payload",
+                                "type": "Int64",
+                                "nullable": False,
+                            },
+                        ],
+                        "unique_keys": [],
+                    }
+                ]
+            },
+            "plan": {
+                "nodes": nodes,
+                "root": "finish",
+                "output": output,
+                "subplans": [],
+            },
+            "stage_graph": {
+                "root_stage": "root",
+                "stages": [
+                    {
+                        "id": "source",
+                        "nodes": ["scan", "partial"],
+                        "inputs": [],
+                        "outputs": [{"index": 0, "node": "partial"}],
+                        "source_storage": "column",
+                    },
+                    {
+                        "id": "grouped",
+                        "nodes": middle_nodes,
+                        "inputs": ["partial"],
+                        "outputs": [{"index": 0, "node": "top"}],
+                        "source_storage": None,
+                    },
+                    {
+                        "id": "root",
+                        "nodes": ["finish"],
+                        "inputs": ["top"],
+                        "outputs": [{"index": 0, "node": "finish"}],
+                        "source_storage": None,
+                    },
+                ],
+                "edges": [
+                    {
+                        "id": "shuffle",
+                        "producer": "source",
+                        "consumer": "grouped",
+                        "occurrence": 0,
+                        "producer_output": 0,
+                        "consumer_input": 0,
+                        "kind": "hash_shuffle",
+                        "keys": list(shuffle_keys),
+                        "hash_function": "HashV1",
+                        "use_spilling": False,
+                    },
+                    {
+                        "id": "merge",
+                        "producer": "grouped",
+                        "consumer": "root",
+                        "occurrence": 0,
+                        "producer_output": 0,
+                        "consumer_input": 0,
+                        "kind": "merge",
+                        "order": [dict(item) for item in order],
+                    },
+                ],
+                "assumptions": [],
+            },
+        }
+    )
+
+
+def _ground(term, constants, function_value=None):
+    if term.operation == "symbol":
+        return constants[term.atom]
+    if term.operation in {"bool", "int"}:
+        return term.atom
+    if term.operation == "not":
+        return not _ground(term.arguments[0], constants, function_value)
+    if term.operation == "and":
+        return all(_ground(item, constants, function_value) for item in term.arguments)
+    if term.operation == "or":
+        return any(_ground(item, constants, function_value) for item in term.arguments)
+    if term.operation == "=":
+        return _ground(term.arguments[0], constants, function_value) == _ground(
+            term.arguments[1], constants, function_value
+        )
+    if term.operation == "distinct":
+        values = tuple(
+            _ground(item, constants, function_value) for item in term.arguments
+        )
+        return len(values) == len(set(values))
+    if term.operation == "<":
+        return _ground(term.arguments[0], constants, function_value) < _ground(
+            term.arguments[1], constants, function_value
+        )
+    if term.operation == "ite":
+        branch = term.arguments[
+            1 if _ground(term.arguments[0], constants, function_value) else 2
+        ]
+        return _ground(branch, constants, function_value)
+    if term.operation in {"+", "-", "*", "mod"}:
+        values = tuple(
+            _ground(item, constants, function_value) for item in term.arguments
+        )
+        if term.operation == "+":
+            return sum(values)
+        if term.operation == "-":
+            return values[0] - values[1]
+        if term.operation == "*":
+            return values[0] * values[1]
+        return values[0] % values[1]
+    if term.operation.startswith("f_") and function_value is not None:
+        return function_value(
+            term.operation,
+            tuple(
+                _ground(item, constants, function_value)
+                for item in term.arguments
+            ),
+        )
+    raise AssertionError(f"unsupported ground SMT operation {term.operation!r}")
+
+
+def _family_sequences(family, constants, function_value):
+    sequences = set()
+    for outcome in family.outcomes:
+        if not _ground(outcome.enabled, constants, function_value):
+            continue
+        relation = outcome.relation
+        indices = [
+            index
+            for index, row in enumerate(relation.rows)
+            if _ground(row.present, constants, function_value)
+        ]
+        if relation.ordinals is not None:
+            indices.sort(
+                key=lambda index: _ground(
+                    relation.ordinals[index], constants, function_value
+                )
+            )
+        sequences.add(
+            tuple(
+                tuple(
+                    None
+                    if _ground(
+                        relation.rows[index].values[column.name].is_null,
+                        constants,
+                        function_value,
+                    )
+                    else _ground(
+                        relation.rows[index].values[column.name].value,
+                        constants,
+                        function_value,
+                    )
+                    for column in relation.columns
+                )
+                for index in indices
+            )
+        )
+    return sequences
 
 
 class StageCompactionTest(unittest.TestCase):
@@ -437,6 +756,402 @@ class StageCompactionTest(unittest.TestCase):
 
         self.assertEqual(known[0].values["d"].decimal_finite_abs_bound, 20)
         self.assertIsNone(unknown[0].values["d"].decimal_finite_abs_bound)
+
+
+class DerivedUniqueStageGraphTest(unittest.TestCase):
+    INPUT_KEY = frozenset(("a.k1", "a.k2"))
+    OUTPUT_KEY = frozenset(("out.k1", "out.k2"))
+
+    @staticmethod
+    def _evaluate(snapshot):
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        scalar = ScalarEncoder(script)
+        router = stages.Router(script)
+        observed_nodes = {}
+        observed_edges = {}
+
+        def observe_node(_scope, node, family):
+            observed_nodes.setdefault(node, []).append(family)
+
+        def observe_edge(edge, task, family):
+            observed_edges.setdefault(edge.id, []).append((task, family))
+
+        staged = stages.Evaluator(
+            snapshot,
+            database,
+            scalar,
+            router,
+            node_observer=observe_node,
+            edge_observer=observe_edge,
+        ).root()
+        return (
+            script,
+            database,
+            scalar,
+            router,
+            staged,
+            observed_nodes,
+            observed_edges,
+        )
+
+    @staticmethod
+    def _relations(families):
+        return tuple(
+            outcome.relation
+            for family in families
+            for outcome in family.outcomes
+        )
+
+    def assert_choice_free(self, families):
+        for family in families:
+            self.assertEqual(len(family.outcomes), 1)
+            self.assertEqual(family.outcomes[0].decisions, ())
+            self.assertEqual(family.outcomes[0].choices, ())
+
+    @staticmethod
+    def _constants(database, router, rows, tasks):
+        constants = {}
+        for witness, state in zip(database.witness["A"], rows):
+            present = state is not ABSENT
+            constants[witness.present.atom] = present
+            k1, k2, payload = (0, 0, 0) if not present else state
+            for name, value in (("k1", k1), ("k2", k2), ("payload", payload)):
+                cell = witness.cells[name]
+                if cell.is_null.operation == "symbol":
+                    constants[cell.is_null.atom] = value is None
+                constants[cell.value.atom] = 0 if value is None else value
+        for slot, task in enumerate(tasks):
+            constants[router.source_task("A", slot).atom] = task
+        return constants
+
+    @staticmethod
+    def _hash_value(_function, arguments):
+        value = 0
+        for is_null, payload in zip(arguments[::2], arguments[1::2]):
+            value = value * 131 + (17 if is_null else payload)
+        return bool(value % 2)
+
+    def test_nullable_group_key_pipeline_is_equivalent_and_choice_free(self):
+        snapshot = _unique_order_stage_snapshot()
+        self.assertEqual(
+            stage_task_counts(snapshot),
+            {"source": 2, "grouped": 2, "root": 1},
+        )
+        (
+            script,
+            database,
+            scalar,
+            router,
+            staged,
+            nodes,
+            edges,
+        ) = self._evaluate(snapshot)
+        logical = RelationEvaluator(
+            snapshot,
+            database,
+            scalar,
+            choice_scope="logical",
+        ).root()
+
+        shuffled = [family for _task, family in edges["shuffle"]]
+        self.assertTrue(all(
+            relation.null_safe_unique_key is None
+            and relation.task_partition_key == frozenset(("a.k1",))
+            for relation in self._relations(shuffled)
+        ))
+        for node_id in ("final", "filter"):
+            self.assertTrue(all(
+                relation.null_safe_unique_key == self.INPUT_KEY
+                and relation.task_partition_key == frozenset(("a.k1",))
+                for relation in self._relations(nodes[node_id])
+            ))
+        for node_id in ("alias", "top"):
+            self.assertTrue(all(
+                relation.null_safe_unique_key == self.OUTPUT_KEY
+                and relation.task_partition_key == frozenset(("out.k1",))
+                for relation in self._relations(nodes[node_id])
+            ))
+
+        merged = [family for _task, family in edges["merge"]]
+        self.assertTrue(all(
+            relation.null_safe_unique_key == self.OUTPUT_KEY
+            and relation.task_partition_key is None
+            for relation in self._relations(merged)
+        ))
+        self.assertTrue(all(
+            outcome.relation.null_safe_unique_key == self.OUTPUT_KEY
+            and outcome.relation.task_partition_key is None
+            for outcome in staged.outcomes
+        ))
+        self.assert_choice_free(nodes["top"] + merged + [staged])
+        self.assert_choice_free([logical])
+
+        states = (
+            ABSENT,
+            (None, None, 7),
+            (None, None, 8),
+            (None, 1, 9),
+            (0, None, 10),
+            (0, 1, 11),
+        )
+        for rows, tasks in product(
+            product(states, repeat=2),
+            product((False, True), repeat=2),
+        ):
+            constants = self._constants(database, router, rows, tasks)
+            self.assertEqual(
+                _family_sequences(staged, constants, self._hash_value),
+                _family_sequences(logical, constants, self._hash_value),
+                (rows, tasks),
+            )
+
+        nullable_duplicate = self._constants(
+            database,
+            router,
+            ((None, None, 7), (None, None, 8)),
+            (False, True),
+        )
+        self.assertEqual(
+            _family_sequences(staged, nullable_duplicate, self._hash_value),
+            {((None, None, 2),)},
+        )
+
+    def test_broken_stage_certificates_retain_ordering_alternatives(self):
+        cases = (
+            (
+                "partition_not_subset",
+                _unique_order_stage_snapshot(
+                    shuffle_keys=("a.k1", "a.k2", "_state")
+                ),
+            ),
+            (
+                "no_final_aggregate",
+                _unique_order_stage_snapshot(final_aggregate=False),
+            ),
+            (
+                "incomplete_alias",
+                _unique_order_stage_snapshot(complete_alias=False),
+            ),
+        )
+        for name, snapshot in cases:
+            with self.subTest(name=name):
+                (*_unused, staged, nodes, edges) = self._evaluate(snapshot)
+                shuffled = [family for _task, family in edges["shuffle"]]
+                merged = [family for _task, family in edges["merge"]]
+
+                if name == "partition_not_subset":
+                    self.assertTrue(all(
+                        relation.task_partition_key
+                        == frozenset(("a.k1", "a.k2", "_state"))
+                        for relation in self._relations(shuffled)
+                    ))
+                    self.assertTrue(all(
+                        relation.null_safe_unique_key == self.INPUT_KEY
+                        and relation.task_partition_key is None
+                        for relation in self._relations(nodes["final"])
+                    ))
+                elif name == "no_final_aggregate":
+                    self.assertTrue(all(
+                        relation.null_safe_unique_key is None
+                        for relation in self._relations(nodes["filter"])
+                    ))
+                else:
+                    self.assertTrue(all(
+                        relation.null_safe_unique_key == self.INPUT_KEY
+                        for relation in self._relations(nodes["final"])
+                    ))
+                    self.assertTrue(all(
+                        relation.null_safe_unique_key is None
+                        for relation in self._relations(nodes["alias"])
+                    ))
+
+                self.assertTrue(any(
+                    outcome.decisions or outcome.choices
+                    for family in merged
+                    for outcome in family.outcomes
+                ))
+                if name != "partition_not_subset":
+                    self.assertTrue(any(
+                        outcome.decisions or outcome.choices
+                        for family in nodes["top"]
+                        for outcome in family.outcomes
+                    ))
+                self.assertTrue(all(
+                    relation.null_safe_unique_key is None
+                    for relation in self._relations(merged + [staged])
+                ))
+
+    def test_broadcast_cannot_promote_replicated_local_keys_at_merge(self):
+        script = smt.Script()
+        scalar = ScalarEncoder(script)
+        evaluator = object.__new__(stages.Evaluator)
+        evaluator.scalar = scalar
+        columns = (Column("k", "Int64", True),)
+        key = frozenset(("k",))
+
+        def task_relation(value, occurrence):
+            return single(Relation(
+                columns,
+                (
+                    Row(
+                        smt.TRUE,
+                        {"k": Value("Int64", smt.FALSE, smt.int_value(value))},
+                        Occurrence("table", "A", occurrence),
+                    ),
+                ),
+                null_safe_unique_key=key,
+                task_partition_key=key,
+            ))
+
+        source = stages.Partitions((task_relation(0, 0), task_relation(1, 1)))
+        broadcast = evaluator._connect(
+            StageEdge(
+                "broadcast",
+                "source",
+                "sorted",
+                0,
+                0,
+                0,
+                "broadcast",
+            ),
+            source,
+            stages.TASKS,
+            0,
+        )
+        self.assertTrue(all(
+            family.certain().null_safe_unique_key == key
+            and family.certain().task_partition_key is None
+            for family in broadcast.relations
+        ))
+
+        order = (SortOrder("k", True, True),)
+        sorted_partitions = stages.Partitions(tuple(
+            sort_family(family, order, script, f"sort:{task}")
+            for task, family in enumerate(broadcast.relations)
+        ))
+        self.assert_choice_free(list(sorted_partitions.relations))
+        merged = evaluator._connect(
+            StageEdge(
+                "merge",
+                "sorted",
+                "root",
+                0,
+                0,
+                0,
+                "merge",
+                order=order,
+            ),
+            sorted_partitions,
+            1,
+            0,
+        ).relations[0]
+
+        self.assertTrue(all(
+            outcome.relation.null_safe_unique_key is None
+            for outcome in merged.outcomes
+        ))
+        self.assertTrue(any(
+            outcome.decisions or outcome.choices
+            for outcome in merged.outcomes
+        ))
+
+    def test_gather_drops_task_local_key_when_cross_task_duplicates_are_possible(self):
+        columns = (Column("k", "Int64", True),)
+        key = frozenset(("k",))
+
+        def local(task):
+            return single(Relation(
+                columns,
+                (
+                    Row(
+                        smt.TRUE,
+                        {"k": Value("Int64", smt.FALSE, smt.int_value(1))},
+                        Occurrence("table", "A", task),
+                    ),
+                ),
+                null_safe_unique_key=key,
+            ))
+
+        gathered = stages._gather((local(0), local(1))).certain()
+
+        self.assertEqual(len(gathered.rows), 2)
+        self.assertIsNone(gathered.null_safe_unique_key)
+        self.assertIsNone(gathered.task_partition_key)
+
+    def test_global_key_forces_choice_free_merge_network_under_pair_cap(self):
+        script = smt.Script()
+        evaluator = object.__new__(stages.Evaluator)
+        evaluator.scalar = ScalarEncoder(script)
+        columns = (
+            Column("k", "Int64", False),
+            Column("payload", "Int64", False),
+        )
+        key = frozenset(("k",))
+        order = (SortOrder("k", True, False),)
+        edge = StageEdge(
+            "merge",
+            "source",
+            "root",
+            0,
+            0,
+            0,
+            "merge",
+            order=order,
+        )
+
+        def producer(items, partition=True):
+            rows = tuple(
+                Row(
+                    smt.TRUE,
+                    {
+                        "k": Value("Int64", smt.FALSE, smt.int_value(k)),
+                        "payload": Value(
+                            "Int64", smt.FALSE, smt.int_value(payload)
+                        ),
+                    },
+                )
+                for k, payload in items
+            )
+            return single(Relation(
+                columns,
+                rows,
+                sequence=True,
+                order=order,
+                ordinals=tuple(smt.int_value(index) for index in range(len(rows))),
+                null_safe_unique_key=key,
+                task_partition_key=key if partition else None,
+            ))
+
+        def merge(partitions):
+            with patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 5):
+                return evaluator._connect(
+                    edge,
+                    stages.Partitions(partitions),
+                    1,
+                    0,
+                ).relations[0]
+
+        left = producer(((1, 10), (4, 40)))
+        right = producer(((2, 20), (3, 30)))
+        certified = merge((left, right))
+        outcome = certified.outcomes[0]
+
+        self.assertEqual(len(certified.outcomes), 1)
+        self.assertEqual(outcome.decisions, ())
+        self.assertEqual(outcome.choices, ())
+        self.assertTrue(outcome.relation.present_prefix)
+        self.assertIsNone(outcome.relation.ordinals)
+        self.assertEqual(outcome.relation.null_safe_unique_key, key)
+        self.assertIsNone(outcome.relation.task_partition_key)
+        self.assertEqual(len(outcome.relation.rows), 4)
+
+        near_miss = merge((left, producer(((2, 20), (3, 30)), False)))
+        near_outcome = near_miss.outcomes[0]
+        self.assertTrue(near_outcome.relation.present_prefix)
+        self.assertIsNone(near_outcome.relation.null_safe_unique_key)
+        self.assertEqual(near_outcome.decisions, ())
+        self.assertEqual(len(near_outcome.choices), 4)
 
 
 if __name__ == "__main__":

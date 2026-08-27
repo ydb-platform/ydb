@@ -1,5 +1,6 @@
 import copy
 import unittest
+from dataclasses import replace
 from itertools import permutations, product
 from unittest.mock import patch
 from weakref import WeakKeyDictionary
@@ -1054,6 +1055,426 @@ class SortIrTest(unittest.TestCase):
         invalid["plan"]["nodes"][1]["ordered"] = 1
         with self.assertRaisesRegex(SnapshotError, "expected a Boolean"):
             parse_snapshot(invalid)
+
+
+class NullSafeUniqueOrderTest(unittest.TestCase):
+    KEY = frozenset(("a.k1", "a.k2"))
+
+    @staticmethod
+    def _count_aggregate():
+        return {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": ["a.k1", "a.k2"],
+            "aggregates": [
+                {
+                    "input": "a.payload",
+                    "function": "count",
+                    "output": "a.payload",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+
+    @staticmethod
+    def _distinct_all(outputs=("a.k1", "a.k2")):
+        return {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": ["a.k1", "a.k2"],
+            "aggregates": [
+                {
+                    "input": key,
+                    "function": "distinct",
+                    "output": output,
+                    "type": "Int64",
+                    "nullable": True,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+                for key, output in zip(("a.k1", "a.k2"), outputs)
+            ],
+            "phase": "undefined",
+            "distinct_all": True,
+        }
+
+    @staticmethod
+    def _project(node_id, input_id, columns):
+        return {
+            "id": node_id,
+            "op": "project",
+            "input": input_id,
+            "ordered": False,
+            "columns": columns,
+        }
+
+    @staticmethod
+    def _column(output, source, *, error_on_null=False):
+        result = {
+            "output": output,
+            "expression": {"kind": "column", "column": source},
+        }
+        if error_on_null:
+            result["error_on_null"] = True
+        return result
+
+    @staticmethod
+    def _evaluate(
+        nodes,
+        root,
+        output,
+        row_bound=3,
+        key1_type="Int64",
+        scan_partition_key=None,
+    ):
+        value = snapshot(nodes, root, key1_type=key1_type)
+        value["plan"]["output"] = list(output)
+        parsed = parse_snapshot(value)
+        script = smt.Script()
+        database = Database(parsed, row_bound, script)
+        scalar = ScalarEncoder(script)
+        evaluator = RelationEvaluator(
+            parsed,
+            database,
+            scalar,
+        )
+        if scan_partition_key is not None:
+            source = evaluator.node("scan").certain()
+            evaluator = RelationEvaluator(
+                parsed,
+                database,
+                scalar,
+                node_overrides={
+                    "scan": single(replace(
+                        source,
+                        task_partition_key=scan_partition_key,
+                    )),
+                },
+            )
+        return script, database, evaluator
+
+    @staticmethod
+    def _grouped_count_rows(rows):
+        counts = {}
+        for row in rows:
+            if row is ABSENT:
+                continue
+            key = row[:2]
+            counts[key] = counts.get(key, 0) + 1
+        return tuple((*key, count) for key, count in counts.items())
+
+    def test_relation_certificates_are_nonempty_frozensets_of_columns(self):
+        columns = (Column("key", "Int64", True),)
+        for field in ("null_safe_unique_key", "task_partition_key"):
+            certified = Relation(
+                columns,
+                (),
+                **{field: frozenset(("key",))},
+            )
+            self.assertEqual(
+                getattr(certified, field),
+                frozenset(("key",)),
+            )
+            for invalid in (frozenset(), frozenset(("missing",)), {"key"}):
+                with self.subTest(field=field, invalid=invalid):
+                    with self.assertRaises(ValueError):
+                        Relation(columns, (), **{field: invalid})
+
+    def test_grouped_aggregate_and_distinct_all_derive_nullable_composite_key(self):
+        _script, _database, evaluator = self._evaluate(
+            [scan(), self._count_aggregate()],
+            "aggregate",
+            COLUMNS,
+        )
+        grouped = evaluator.node("aggregate").certain()
+        self.assertEqual(grouped.null_safe_unique_key, self.KEY)
+        self.assertTrue(all(
+            column.nullable
+            for column in grouped.columns
+            if column.name in self.KEY
+        ))
+
+        outputs = ("out.k1", "out.k2")
+        _script, _database, evaluator = self._evaluate(
+            [scan(), self._distinct_all(outputs)],
+            "aggregate",
+            outputs,
+            scan_partition_key=self.KEY,
+        )
+        distinct = evaluator.node("aggregate").certain()
+        aliases = frozenset(outputs)
+        self.assertEqual(distinct.null_safe_unique_key, aliases)
+        self.assertEqual(distinct.task_partition_key, aliases)
+        self.assertTrue(all(column.nullable for column in distinct.columns))
+
+    def test_filter_and_direct_alias_project_preserve_key(self):
+        aggregate = self._count_aggregate()
+        filtered = {
+            "id": "filter",
+            "op": "filter",
+            "input": "aggregate",
+            "predicate": {"kind": "literal", "type": "Bool", "value": True},
+        }
+        projected = self._project(
+            "project",
+            "filter",
+            [
+                self._column("out.k2", "a.k2"),
+                self._column("out.k1", "a.k1"),
+                self._column("out.count", "a.payload"),
+            ],
+        )
+        _script, _database, evaluator = self._evaluate(
+            [scan(), aggregate, filtered, projected],
+            "project",
+            ("out.k2", "out.k1", "out.count"),
+        )
+
+        self.assertEqual(
+            evaluator.node("aggregate").certain().null_safe_unique_key,
+            self.KEY,
+        )
+        self.assertEqual(
+            evaluator.node("filter").certain().null_safe_unique_key,
+            self.KEY,
+        )
+        aliases = frozenset(("out.k1", "out.k2"))
+        self.assertEqual(
+            evaluator.node("project").certain().null_safe_unique_key,
+            aliases,
+        )
+        self.assertEqual(evaluator.root().certain().null_safe_unique_key, aliases)
+
+    def test_project_drops_key_for_computed_missing_or_error_on_null_columns(self):
+        direct_k1 = self._column("out.k1", "a.k1")
+        direct_k2 = self._column("out.k2", "a.k2")
+        count = self._column("out.count", "a.payload")
+        cases = (
+            (
+                "computed",
+                [
+                    {
+                        "output": "out.k1",
+                        "expression": {
+                            "kind": "add",
+                            "left": {"kind": "column", "column": "a.k1"},
+                            "right": {
+                                "kind": "literal",
+                                "type": "Int64",
+                                "value": 0,
+                            },
+                            "type": "Int64",
+                            "nullable": True,
+                        },
+                    },
+                    direct_k2,
+                    count,
+                ],
+                "Int64",
+            ),
+            ("missing", [direct_k1, count], "Int64"),
+            (
+                "error_on_null",
+                [
+                    self._column(
+                        "out.k1",
+                        "a.k1",
+                        error_on_null=True,
+                    ),
+                    direct_k2,
+                    count,
+                ],
+                "String",
+            ),
+        )
+        for name, columns, key1_type in cases:
+            with self.subTest(name=name):
+                project = self._project("project", "aggregate", columns)
+                output = tuple(column["output"] for column in columns)
+                _script, _database, evaluator = self._evaluate(
+                    [scan(), self._count_aggregate(), project],
+                    "project",
+                    output,
+                    key1_type=key1_type,
+                    scan_partition_key=self.KEY,
+                )
+                self.assertEqual(
+                    evaluator.node("aggregate").certain().task_partition_key,
+                    self.KEY,
+                )
+                projected = evaluator.node("project")
+                root = evaluator.root()
+                self.assertEqual(len(projected.outcomes), 1)
+                self.assertEqual(len(root.outcomes), 1)
+                self.assertIsNone(
+                    projected.outcomes[0].relation.null_safe_unique_key
+                )
+                self.assertIsNone(
+                    root.outcomes[0].relation.null_safe_unique_key
+                )
+                self.assertIsNone(
+                    projected.outcomes[0].relation.task_partition_key
+                )
+                self.assertIsNone(
+                    root.outcomes[0].relation.task_partition_key
+                )
+
+    def test_complete_key_sort_is_choice_free_and_matches_exact_reference(self):
+        order = [
+            order_item("a.payload"),
+            order_item("a.k1", nulls_first=True),
+            order_item("a.k2", nulls_first=True),
+        ]
+        script, database, evaluator = self._evaluate(
+            [
+                scan(),
+                self._count_aggregate(),
+                sort_node("sort", "aggregate", order),
+            ],
+            "sort",
+            COLUMNS,
+        )
+        family = evaluator.root()
+        self.assertEqual(len(family.outcomes), 1)
+        self.assertEqual(family.outcomes[0].decisions, ())
+        self.assertEqual(family.outcomes[0].choices, ())
+        self.assertEqual(family.outcomes[0].relation.null_safe_unique_key, self.KEY)
+
+        cases = (
+            ((None, 1, 7), (None, 1, 8), (0, 1, 9)),
+            ((None, 2, 7), (0, 1, 8), (0, 2, 9)),
+            ((None, 1, 7), ABSENT, (1, 1, 9)),
+        )
+        for rows in cases:
+            with self.subTest(rows=rows):
+                grouped = self._grouped_count_rows(rows)
+                self.assertEqual(
+                    _sequences(
+                        family,
+                        _database_constants(database, rows),
+                        script,
+                    ),
+                    _reference_sequences(grouped, order),
+                )
+
+    def test_incomplete_key_sort_retains_every_tie_alternative(self):
+        order = [order_item("a.k2")]
+        script, database, evaluator = self._evaluate(
+            [
+                scan(),
+                self._count_aggregate(),
+                sort_node("sort", "aggregate", order),
+            ],
+            "sort",
+            COLUMNS,
+        )
+        family = evaluator.root()
+        rows = ((None, 1, 7), (0, 1, 8), (1, 1, 9))
+        expected = _reference_sequences(self._grouped_count_rows(rows), order)
+
+        self.assertTrue(all(
+            outcome.relation.null_safe_unique_key == self.KEY
+            for outcome in family.outcomes
+        ))
+        self.assertEqual(len(expected), 6)
+        self.assertEqual(
+            _sequences(
+                family,
+                _database_constants(database, rows),
+                script,
+            ),
+            expected,
+        )
+        self.assertTrue(any(
+            outcome.decisions or outcome.choices
+            for outcome in family.outcomes
+        ))
+
+    def test_nullable_string_complete_key_sort_is_choice_free_and_exact(self):
+        order = [
+            order_item("a.k1", nulls_first=True),
+            order_item("a.k2", ascending=False, nulls_first=True),
+        ]
+        script, database, evaluator = self._evaluate(
+            [
+                scan(),
+                self._count_aggregate(),
+                sort_node("sort", "aggregate", order),
+            ],
+            "sort",
+            COLUMNS,
+            key1_type="String",
+        )
+        family = evaluator.root()
+        self.assertEqual(len(family.outcomes), 1)
+        self.assertEqual(family.outcomes[0].decisions, ())
+        self.assertEqual(family.outcomes[0].choices, ())
+        self.assertEqual(family.certain().null_safe_unique_key, self.KEY)
+
+        cases = (
+            ((None, 2, 7), (None, 1, 8), (0, 1, 9)),
+            ((0, 2, 7), (0, 1, 8), (1, 1, 9)),
+            ((None, 1, 7), (None, 1, 8), (0, 1, 9)),
+        )
+        for rows in cases:
+            with self.subTest(rows=rows):
+                grouped = self._grouped_count_rows(rows)
+                self.assertEqual(
+                    _sequences(
+                        family,
+                        _database_constants(database, rows),
+                        script,
+                    ),
+                    _reference_sequences(grouped, order),
+                )
+
+    def test_top_sort_and_limit_preserve_key(self):
+        order = [
+            order_item("a.payload"),
+            order_item("a.k1", nulls_first=True),
+            order_item("a.k2", nulls_first=True),
+        ]
+        _script, _database, evaluator = self._evaluate(
+            [
+                scan(),
+                self._count_aggregate(),
+                sort_node(
+                    "top",
+                    "aggregate",
+                    order,
+                    limit=2,
+                    phase="intermediate",
+                ),
+                limit_node("limit", "top", 1),
+            ],
+            "limit",
+            COLUMNS,
+        )
+
+        # Three aggregate slots fit the cap exactly, while compacting the two
+        # task-local copies does not.  This exercises the TopSort network path.
+        with patch.object(relation, "MAX_RELATION_ROW_PAIRS", 9):
+            for node_id in ("aggregate", "top", "limit"):
+                with self.subTest(node=node_id):
+                    family = evaluator.node(node_id)
+                    self.assertEqual(len(family.outcomes), 1)
+                    self.assertEqual(family.outcomes[0].decisions, ())
+                    self.assertEqual(family.outcomes[0].choices, ())
+                    self.assertEqual(
+                        family.outcomes[0].relation.null_safe_unique_key,
+                        self.KEY,
+                    )
+            self.assertEqual(
+                evaluator.root().certain().null_safe_unique_key,
+                self.KEY,
+            )
 
 
 class SortConcreteDifferentialTest(unittest.TestCase):

@@ -89,7 +89,7 @@ public:
         std::function<NThreading::TFuture<TDBGReadBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            ui64 lsn,
+            TPBufferKey pBufferKey,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
@@ -104,7 +104,7 @@ public:
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            ui64 lsn,
+            TPBufferKey pBufferKey,
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
@@ -112,7 +112,7 @@ public:
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
@@ -171,6 +171,9 @@ public:
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+
+    ui32 GetTabletGeneration() const override;
+
     IOraclePtr GetOracle() override;
 
     void Schedule(TDuration delay, TCallback callback) override;
@@ -193,7 +196,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -208,7 +211,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -217,7 +220,7 @@ public:
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
@@ -238,7 +241,7 @@ public:
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
 
-    NThreading::TFuture<std::optional<ui64>>
+    NThreading::TFuture<std::optional<TPBufferKey>>
     GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(

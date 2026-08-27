@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
@@ -76,7 +77,7 @@ struct TDbgSnapshot
 struct TVChunkSnapshot
 {
     TVChunkConfig VChunkConfig;
-    std::optional<ui64> SafeBarrier;
+    std::optional<TPBufferKey> SafeBarrier;
     TString DirtyMapDump;
 };
 

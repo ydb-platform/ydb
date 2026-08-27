@@ -109,8 +109,9 @@ partition и подтвердить его end-to-end работоспособн
 
 Действия:
 
-- записать точную classic NBS source revision для protobuf, RDMA wire protocol
-  и error codes;
+- использовать classic NBS revision
+  `953e9966ce94d1724ccdb3e6676ac1f6036f04ae` как source для protobuf, RDMA
+  wire protocol и error codes;
 - определить регистрацию frontend внутри `ydbd`, gRPC/RDMA ports и
   конфигурацию безопасного включения;
 - зафиксировать benchmark config для одного disk, partition и статического
@@ -126,15 +127,17 @@ partition и подтвердить его end-to-end работоспособн
 
 - все перечисленные контракты однозначно записаны и проверяемы;
 - список classic messages, fields и error codes проверяется compatibility
-  tests относительно одной source revision;
+  tests относительно revision
+  `953e9966ce94d1724ccdb3e6676ac1f6036f04ae`;
 - benchmark session явно помечена как временное допущение из раздела 3;
 - минимальный session contract покрывает mount, unmount и unknown/revoked
   `SessionId` в рамках жизни frontend process.
 
 ### 4.3. Шаг 1. Встроить каркас NBS2 frontend
 
-Цель: доказать build/runtime совместимость classic gRPC facade с выбранным
-NBS2 process и заранее снять dependency-риск RDMA.
+Цель: доказать build/runtime совместимость перенесённого classic gRPC server с
+`ydbd` и заранее определить границу зависимостей classic gRPC server и RDMA
+target.
 
 ```text
 classic NBS client/test
@@ -146,24 +149,30 @@ classic NBS client/test
 Действия:
 
 - добавить выключенную по умолчанию конфигурацию frontend и ports;
-- зарегистрировать совместимое подмножество
-  `NCloud.NBlockStore.NProto.TBlockStoreService`;
+- перенести classic NBS gRPC server из зафиксированной source revision и
+  запустить его внутри `ydbd` на отдельном listener;
+- зарегистрировать classic `NCloud.NBlockStore.NProto.TBlockStoreService` и
+  `NCloud.NBlockStore.NProto.TBlockStoreDataService`; frontend backend adapter
+  реализует только необходимое MVP подмножество методов;
 - реализовать `Ping` и каркас `MountVolume`, `UnmountVolume`, `ReadBlocks`,
   `WriteBlocks`, а для `ZeroBlocks` — временную семантику из раздела 3;
 - не реализовывать `DescribeVolume` как runtime API NBS2 frontend; если общий
   classic service требует handler, он возвращает контролируемую ошибку, а NBS1
   не направляет в него этот RPC;
-- выполнить compile/dependency spike существующего classic RDMA target;
+- выполнить compile/dependency spike переноса classic gRPC server и classic
+  RDMA target;
 - не добавлять отдельный backend path или отдельный benchmark protocol.
 
 Проверка:
 
 - сборка и обычный запуск NBS2 не меняются при выключенном frontend;
+- отдельный classic gRPC listener открывается только при включённом frontend;
 - classic client получает совместимый `Ping` response;
 - неподдерживаемые RPC завершаются контролируемой classic error;
 - `DescribeVolume` не обслуживается NBS2 frontend как runtime API;
-- зафиксирован перенос existing target либо конкретный dependency blocker и
-  граница минимального wire-compatible adapter.
+- зафиксирован состав переносимых зависимостей classic gRPC server и RDMA
+  target либо конкретный dependency blocker и граница минимального
+  wire-compatible adapter.
 
 ### 4.4. Шаг 2. Подготовить один диск и закреплённый `DataRoute`
 

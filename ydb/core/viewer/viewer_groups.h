@@ -2192,7 +2192,10 @@ public:
             return;
         }
         if (BSGroupStateResponse.count(nodeId) == 0) {
-            BSGroupStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvBSGroupStateRequest()));
+            auto groupRequest = new TEvWhiteboard::TEvBSGroupStateRequest();
+            groupRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TBSGroupStateInfo>());
+            groupRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TBSGroupStateInfo::kGroupSizeInUnitsFieldNumber);
+            BSGroupStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, groupRequest));
             ++BSGroupStateRequestsInFlight;
         }
     }
@@ -2683,7 +2686,6 @@ public:
                           * `State`
                           * `Latency`
                           * `CapacityAlert`
-                          * `GroupSizeInUnits`
                     required: false
                     type: string
                   - name: filter_group_by
@@ -2739,6 +2741,7 @@ public:
                           * `MaxNormalizedOccupancy`
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
+                          * `GroupSizeInUnits`
                     required: false
                     type: string
                   - name: offset

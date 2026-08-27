@@ -853,9 +853,48 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_groups(cls):
-        return cls.normalize_result(cls.get_viewer("/viewer/groups", {
+        result = cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'
         }))
+
+        group_size_only = cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'GroupSizeInUnits',
+        })
+        group_size_only_groups = group_size_only.get('StorageGroups', [])
+        assert group_size_only_groups, group_size_only
+        assert all('GroupSizeInUnits' in group for group in group_size_only_groups), group_size_only
+        assert all('VDisks' not in group for group in group_size_only_groups), group_size_only
+
+        whiteboard_only = cls.get_viewer_normalized("/viewer/groups", {
+            'whiteboard_only': 'true',
+            'filter_group_by': 'PoolName',
+            'filter_group': 'dynamic_storage_pool:1',
+        })
+        whiteboard_only_groups = whiteboard_only.get('StorageGroups', [])
+        assert whiteboard_only_groups, whiteboard_only
+        assert all(
+            group.get('GroupSizeInUnits', 0) > 0
+            for group in whiteboard_only_groups
+        ), whiteboard_only
+        for group in whiteboard_only_groups:
+            vdisks = group.get('VDisks', [])
+            assert vdisks, group
+            assert all(
+                vdisk.get('Whiteboard', {}).get('GroupSizeInUnits') == group['GroupSizeInUnits']
+                for vdisk in vdisks
+            ), group
+
+        result['GroupSizeInUnitsChecks'] = {
+            'GroupSizeOnly': {
+                'AllGroupsHaveField': True,
+                'HasNestedDiskData': False,
+            },
+            'WhiteboardOnly': {
+                'AllGroupsHaveNonZeroSize': True,
+                'AllGroupsMatchVDisks': True,
+            },
+        }
+        return result
 
     # A strict database user is allowed to filter groups by group_id/node_id/pdisk_id, and every such
     # filter is validated against the storage of the database, so the handler has to fetch GroupId,

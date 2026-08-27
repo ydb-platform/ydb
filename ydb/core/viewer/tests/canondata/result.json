@@ -805,6 +805,16 @@
         "FieldsAvailable": "1111110111111111111111111111",
         "FieldsRequired": "1111111111111111111111111111",
         "FoundGroups": 5,
+        "GroupSizeInUnitsChecks": {
+            "GroupSizeOnly": {
+                "AllGroupsHaveField": true,
+                "HasNestedDiskData": false
+            },
+            "WhiteboardOnly": {
+                "AllGroupsHaveNonZeroSize": true,
+                "AllGroupsMatchVDisks": true
+            }
+        },
         "StorageGroups": [
             {
                 "Available": "not-zero-number-text",

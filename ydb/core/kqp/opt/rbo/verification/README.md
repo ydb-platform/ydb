@@ -224,6 +224,9 @@ verifier-entry requirement.
 TPC-DS q97 is pinned at successful preparation, formula construction, and
 bounded proof through the existing pushed-OLAP output-IU contract; it has no
 separate verifier-entry requirement.
+TPC-DS q99 is pinned at successful preparation, formula construction, and
+bounded proof. M83 adds only the proof requirement; it has no separate
+verifier-entry requirement.
 TPC-DS q84 is pinned at successful preparation and formula construction
 through the checked-Concat demand contract; it is not separately pinned at
 verifier entry and is not in the proof floor.
@@ -344,9 +347,19 @@ runs on unchanged proof-producing code reproducibly return
 `VERIFIED_BOUNDED` at the unchanged 2x2, 60-second contract, and policy commit
 `42a879e19f5` adds q88 as obligation
 twenty-one for TPC-DS. Fresh complete gates verify 13/13 TPCH and 21/21 TPC-DS,
-so the current floor is 34/34: 34/121 workload queries (28.1%) and 34/101
+so the M82 floor was 34/34: 34/121 workload queries (28.1%) and 34/101
 formula-covered exact pairs (33.7%). No semantic model, bound, or weaker
 coverage inventory changes.
+
+Milestone 83 is also policy-only. Two focused TPC-DS q99 runs on unchanged
+proof-producing code reproducibly return `VERIFIED_BOUNDED` at the unchanged
+2x2, 60-second contract. Policy commit `cc85514862d` adds q99 as TPC-DS
+obligation twenty-two. Fresh complete gates verify 13/13 TPCH and 22/22
+TPC-DS, so the current floor is 35/35: 35/121 workload queries (28.9%) and
+35/101 formula-covered exact pairs (34.7%). No semantic model, bound, or weaker
+coverage inventory changes. A fresh q21/q56/q60 batch remains `UNKNOWN`; its
+complete-group-key orderings motivate an exact derived unique-key ordering
+certificate as the next bounded-proof model slice.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -1334,12 +1347,41 @@ Fresh policy-valid, zero-violation gates verify TPCH 13/13 after
 `d558bc7f56e4d013b539a2023ccd02ad3c696ba9b5b29e54fc80fb92b7d556b0`)
 and TPC-DS 21/21 after 18,227/162,856 ms (report SHA-256
 `1f45ea729e1bb7f393023545123942c1fa6726c7ac7701b70fa4fb7923c676fd`).
-The current floor is 34/34, or 34/121 workload rows (28.1%) and 34/101
+The M82 floor was 34/34, or 34/121 workload rows (28.1%) and 34/101
 formula-covered exact pairs (33.7%); TPC-DS contributes 21/99 workload rows
 (21.2%) and 21/81 formula-covered rows (25.9%). Successful q88 proofs retain
 no standalone formula/verdict artifact. Formula, pair, entry, preparation, and
 defect counts remain unchanged; complete timings are in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
+
+M83 promotes already formula-covered, preparation-successful q99 without a
+proof-producing code change. Two focused non-gating runs capture exactly
+Initial then Final and prove the existing 2x2 obligation after 238/28,834 and
+245/29,337 ms. Their 5,783-byte reports have SHA-256 values
+`905deaa1c381a24d853b95887c842480666ae5543cf7fbd7295fa2b5c29d7fbf`
+and
+`a44d73544e498f6180aaf9538a7073ca989d52ae95e2591943e181c1c878bdc1`.
+Policy commit `cc85514862d` promotes q99, and policy validation passes 16/16.
+Fresh policy-valid, zero-violation gates verify TPCH 13/13 after
+1,841/83,004 ms (report SHA-256
+`7b7904f9d460362253d0b87dc0f3439a67294f8e4a5f9dc35305cdd053c0e726`)
+and TPC-DS 22/22 after 18,379/190,504 ms (report SHA-256
+`883a491cc28c06731b47e25d6b7008f17514be0905da9d3eef850235acbd08bd`).
+The current floor is 35/35, or 35/121 workload rows (28.9%) and 35/101
+formula-covered exact pairs (34.7%); TPC-DS contributes 22/99 workload rows
+(22.2%) and 22/81 formula-covered rows (27.2%). Successful q99 proofs retain
+no standalone formula/verdict artifact. Formula, pair, entry, preparation, and
+defect counts remain unchanged.
+
+A fresh non-gating q21/q56/q60 batch remains `UNKNOWN` after 203/60,905,
+1,516/61,876, and 1,520/61,835 ms. q21 reaches the deadline before branch 4/5;
+q56 and q60 before branch 4/28, all at `left_outcome_1_unmatched`. The
+9,816-byte report SHA-256 is
+`50eabcd0183e49fa928a01309010944890e0a00cbd39adb375146c9f69784271`.
+Each ordering contains its complete grouped key. This motivates a narrowly
+derived null-safe unique-key and cross-task partition certificate; it does not
+license a hidden tie-break. q33 remains a separate problem because its order
+does not contain its grouped key.
 
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
@@ -1576,7 +1618,12 @@ M81 then records q33's focused 60-second `UNKNOWN` without promotion. The
 future q33 work targets exact semantic reduction, not timeout tuning.
 M82 subsequently promotes already-supported TPC-DS q88 without a model or
 weaker-floor change. Two focused proofs and fresh complete 13/13 TPCH plus
-21/21 TPC-DS gates raise the current checkpoint to 34/34.
+21/21 TPC-DS gates raised that checkpoint to 34/34.
+M83 subsequently promotes already-supported TPC-DS q99 without a model or
+weaker-floor change. Two focused proofs and fresh complete 13/13 TPCH plus
+22/22 TPC-DS gates raise the current checkpoint to 35/35. The next exact
+proof-reduction target is derived unique-key ordering for q21/q56/q60, not a
+larger timeout or an assumed hidden tie-break.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -1871,8 +1918,8 @@ Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q13, q14, q15,
 q16, q18, q19, q21, and q22 plus TPC-DS q3, q8, q9, q16, q28, q34, q38, q42,
-q48, q52, q55, q69, q73, q87, q88, q90, q93, q94, q95, q96, and q97:
-thirty-four obligations, 34/121 (28.1%) of the workload and 34/101 (33.7%) of the current
+q48, q52, q55, q69, q73, q87, q88, q90, q93, q94, q95, q96, q97, and q99:
+thirty-five obligations, 35/121 (28.9%) of the workload and 35/101 (34.7%) of the current
 formula-covered exact pairs. The post-M75 through M79 32-query checkpoints
 below remain historical records.
 
@@ -1910,7 +1957,15 @@ implementation or any weaker floor. Fresh reports verify 13/13 TPCH after
 `d558bc7f56e4d013b539a2023ccd02ad3c696ba9b5b29e54fc80fb92b7d556b0`)
 and 21/21 TPC-DS after 18,227/162,856 ms (SHA-256
 `1f45ea729e1bb7f393023545123942c1fa6726c7ac7701b70fa4fb7923c676fd`).
-The current floor is 34/34.
+The M82 floor was 34/34.
+
+Policy commit `cc85514862d` then adds TPC-DS q99 without changing the semantic
+implementation or any weaker floor. Fresh reports verify 13/13 TPCH after
+1,841/83,004 ms (SHA-256
+`7b7904f9d460362253d0b87dc0f3439a67294f8e4a5f9dc35305cdd053c0e726`)
+and 22/22 TPC-DS after 18,379/190,504 ms (SHA-256
+`883a491cc28c06731b47e25d6b7008f17514be0905da9d3eef850235acbd08bd`).
+The current floor is 35/35.
 
 The immediately preceding 30-obligation complete gate spent 1,633/56,327 ms for
 TPCH and produced report SHA-256
@@ -2014,21 +2069,24 @@ checkpoint TPC-DS q15, q61, q62, q76, q79, and q88 were `UNKNOWN` at the
 q88's current proof status; no particular intervening change is credited for
 the different solver result. The q37 and q82 obligations were likewise
 `UNKNOWN` at 60 seconds. q43 was formula-covered
-but returned `UNKNOWN` after 147/69,391 ms at that same budget. Fresh TPC-DS
-experiments also returned `UNKNOWN` for q10 after 524/81,517 ms, q19 after
+but returned `UNKNOWN` after 147/69,391 ms at that same budget. At that
+historical checkpoint, TPC-DS experiments also returned `UNKNOWN` for q10 after 524/81,517 ms, q19 after
 219/61,811 ms, q65 after 283/80,633 ms, and q99 after 218/63,299 ms. A separate
 non-gating q40 experiment with a 10-second solver budget reported
 `SOLVER_ERROR` after the external solver exceeded its 15.0-second process
-deadline; the focused `ya` experiment failed on that status as designed. These
-obligations are formula-covered, not proved, and not part of the proof floor.
-None is evidence of an optimizer correctness bug.
+deadline; the focused `ya` experiment failed on that status as designed. Those
+obligations were formula-covered and outside the proof floor at that
+checkpoint. None was evidence of an optimizer correctness bug.
 The post-decomposition portfolio repeat keeps q19, q65, and q99 `UNKNOWN` after
 207/61,602, 259/73,190, and 206/62,883 ms of preparation/verification. Their
 first unresolved exact branches are q19's left outcome 0 unmatched (branch
 3/28), q65's right language absent (branch 2/4), and q99's left outcome 0
 unmatched (branch 3/4). The retained three-query report SHA-256 is
 `58cc491e30e2b866f36916f2b01db36e385f005ffe3b38685f250d95ccd10164`.
-This localizes proof work but adds no proof or bug finding.
+This localizes proof work but adds no proof or bug finding. M83's repeated
+focused q99 proofs and complete proof-floor gate supersede only q99's current
+proof status. This report remains historical, and the evidence does not
+attribute the different solver result to a particular intervening change.
 After exact direct literal-to-Date normalization, regenerated full TPC-DS
 solver runs return `UNKNOWN` for q5 after 1,552/64,916 ms and q77 after
 2,035/66,344 ms of preparation/verification. Those results likewise extend

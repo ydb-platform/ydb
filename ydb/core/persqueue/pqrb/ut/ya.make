@@ -1,4 +1,4 @@
-UNITTEST()
+GTEST()
 
 ADDINCL(
     ydb/public/sdk/cpp

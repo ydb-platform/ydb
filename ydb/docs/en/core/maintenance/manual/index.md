@@ -16,7 +16,6 @@ Main topics:
 * [{#T}](failure_model.md)
 * [{#T}](node_restarting.md)
 * [{#T}](cluster_expansion.md)
-* [{#T}](cms.md)
 * [{#T}](config-overview.md)
 * [{#T}](dynamic-config-volatile-config.md)
 * [{#T}](replacing_nodes.md)

@@ -249,7 +249,9 @@ namespace NKikimr {
             Setup(server, sender);
 
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
-                request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->set_use_filter_superlemmer(true);
+                auto* analyzers = request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers();
+                analyzers->set_use_filter_superlemmer(true);
+                analyzers->set_language("russian");
             }, "{ <main>: Error: Scan failed Superlemmer can't be enabled in opensource ydb build }", false,
                 NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }

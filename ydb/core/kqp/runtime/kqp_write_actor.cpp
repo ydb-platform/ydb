@@ -456,6 +456,7 @@ public:
         const ui64 lockNodeId,
         const bool inconsistentTx,
         const bool isOlap,
+        const std::optional<THashSet<ui64>>& targetShardIds,
         TVector<NScheme::TTypeInfo> keyColumnTypes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
@@ -486,6 +487,7 @@ public:
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .Inconsistent = InconsistentTx,
+                .TargetShardIds = std::move(targetShardIds),
             },
             Alloc);
 
@@ -2854,6 +2856,17 @@ private:
     i64 FirstUnknownPriority = 0;
 };
 
+namespace {
+
+static std::optional<THashSet<ui64>> TargetShardIdsFromSettings(const NKikimrKqp::TKqpTableSinkSettings& settings) {
+    if (settings.GetTargetShardIds().size() > 0) {
+        return THashSet<ui64>(settings.GetTargetShardIds().begin(), settings.GetTargetShardIds().end());
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {
     using TBase = TActorBootstrapped<TKqpDirectWriteActor>;
 
@@ -2917,6 +2930,7 @@ public:
                 Settings.GetLockNodeId(),
                 Settings.GetInconsistentTx(),
                 Settings.GetIsOlap(),
+                TargetShardIdsFromSettings(Settings),
                 std::move(keyColumnTypes),
                 Alloc,
                 GetOptionalMvccSnapshot(Settings),
@@ -3269,6 +3283,7 @@ struct TWriteSettings {
     TTransactionSettings TransactionSettings;
     i64 Priority = 0;
     bool IsOlap = false;
+    std::optional<THashSet<ui64>> TargetShardIds;
     THashSet<TStringBuf> DefaultColumns;
     bool SkipMissingRows = false;
     enum class EInputRowFormat { Flat, StructOfRows };
@@ -3596,6 +3611,7 @@ public:
             LockNodeId,
             InconsistentTx,
             settings.IsOlap,
+            settings.TargetShardIds,
             std::move(keyColumnTypes),
             Alloc,
             settings.TransactionSettings.MvccSnapshot,
@@ -6520,6 +6536,7 @@ private:
                 },
                 .Priority = Settings.GetPriority(),
                 .IsOlap = Settings.GetIsOlap(),
+                .TargetShardIds = TargetShardIdsFromSettings(Settings),
                 .DefaultColumns = std::move(defaultColumns),
                 .SkipMissingRows = Settings.GetSkipMissingRows(),
                 .InputRowFormat = Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS

@@ -159,7 +159,62 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
     return stage;
 }
 
+// Build the common Transform→HashShuffle(ColumnShardHashV1)→Sink pattern for
+// CS write affinity.  Used by BuildFillTableEffect, BuildUpsertRowsEffect,
+// and BuildDeleteRowsEffect to avoid duplicating the same ~40-line block.
+//
+// Parameters:
+//   ctx          — expression context for builders
+//   pos          — source position for error reporting
+//   transformStage — already-built Transform Stage (the data producer)
+//   keyColumnAtoms — key column atoms for HashShuffle (from table metadata or fallback)
+//   sink          — already-built sink node (TDqSink or TDqTransform)
+//
+// Returns the Sink Stage that receives rows via HashShuffle from the Transform Stage.
+static TExprNode::TPtr BuildCsWriteAffinitySinkStage(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TExprNode::TPtr transformStage,
+    const TVector<TCoAtom>& keyColumnAtoms,
+    TExprNode::TPtr sinkNode)
+{
+    auto sinkInput = Build<TDqCnHashShuffle>(ctx, pos)
+        .Output<TDqOutput>()
+            .Stage(transformStage)
+            .Index().Build("0")
+            .Build()
+        .KeyColumns()
+            .Add(keyColumnAtoms)
+        .Build()
+        .UseSpilling().Build(false)
+        .HashFunc().Build("ColumnShardHashV1")
+        .Done();
+
+    const auto sinkRowArgument = Build<TCoArgument>(ctx, pos)
+        .Name("sinkRow")
+        .Done();
+
+    auto sinkStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(sinkInput)
+            .Build()
+        .Program()
+            .Args({sinkRowArgument})
+            .Body<TCoToFlow>()
+                .Input(sinkRowArgument)
+                .Build()
+            .Build()
+        .Outputs<TDqStageOutputsList>()
+            .Add(sinkNode)
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    return sinkStage.Ptr();
+}
+
 bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx,
     TMaybeNode<TExprBase>& effect, const i64 order)
 {
     const i64 priority = 0;
@@ -233,26 +288,130 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
         .Output(dqUnion.Output())
         .Done();
-    auto stageInput = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(mapCn)
-            .Build()
-        .Program()
-            .Args({rowArgument})
-            .Body<TCoToFlow>()
-                .Input(rowArgument)
-                .Build()
-            .Build()
-        .Outputs<TDqStageOutputsList>()
-            .Add(sink)
-            .Build()
-        .Settings().Build()
-        .Done();
 
-    effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-        .Stage(stageInput.Ptr())
-        .SinkIndex().Build("0")
-        .Done();
+    // QP_FORCE_CS_WRITE_AFFINITY: force the per-shard write affinity mode regardless of the PRAGMA.
+    const bool enableCsWriteAffinity =
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+        true;
+#else
+        kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(true);
+#endif
+
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+    // kqpCtx is only used to read EnableCsWriteAffinity in the non-force build.
+    Y_UNUSED(kqpCtx);
+#endif
+
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+    // Invariant: with the force flag, the affinity mode must be enabled.
+    AFL_VERIFY(enableCsWriteAffinity)("msg", "QP_FORCE_CS_WRITE_AFFINITY must force affinity mode");
+#endif
+
+    // Stage 4: Affinity marker for sink settings
+    //
+    // At optimization time, ShardIdToNodeId is NOT available. Therefore, we cannot
+    // populate TargetShardIds or ExpectedNodeId here. Instead:
+    //   - The EnableCsWriteAffinity flag is already in TKqpPhyTx (Stage 1),
+    //     accessible in TasksGraph at runtime.
+    //   - The sink mode "fill_table" identifies this as a CTAS sink.
+    //   - In TasksGraph (Stage 5), the combination of EnableCsWriteAffinity +
+    //     fill_table mode triggers multi-task creation with proper shard-to-node
+    //     mapping, populating TargetShardIds and ExpectedNodeId per task.
+    //
+    // No changes to sink settings are needed at this stage.
+
+    if (enableCsWriteAffinity) {
+        // Per-node write affinity: WriteActor (sink) is extracted into a separate
+        // TDqStage so it can be independently parallelized (M tasks, one per node
+        // hosting column shards) and assigned via node affinity.
+        //
+        //   Transform Stage (mapCn -> ToFlow)         — 1 task (arbitrary node)
+        //       | TDqCnHashShuffle (ColumnShardHashV1) — routes rows to correct shard task
+        //   Sink Stage (ToFlow -> DqSink -> TKqpDirectWriteActor)  — M tasks, pinned to shard nodes
+        //
+        // Each Sink task receives only the rows destined for its assigned shards
+        // (routed by ColumnShardHashV1 hash on the PK columns).
+        //
+        // HashShuffle (not Map) is used so that the Sink Stage can have a different,
+        // independent task count (M) from the Transform Stage (1).  With Map the two
+        // stages would be forced into the same copy-group with equal task counts.
+        auto transformStage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
+                .Build()
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        // TDqCnHashShuffle with ColumnShardHashV1: routes each row to the one Sink task
+        // that owns the target shard for that row's PK hash.  This avoids the M× traffic
+        // overhead of Broadcast: each row is sent only to the correct Sink task.
+        //
+        // KeyColumns: The type annotation for TDqCnHashShuffle requires at least 1 key
+        // column that exists in the output struct type. For CTAS, the target table may
+        // not exist in kqpCtx.Tables yet (it's created by a preceding scheme operation).
+        // We use the first column from the SELECT output struct as a placeholder — the
+        // actual hash routing columns are determined at runtime by
+        // BuildColumnShardHashV1ForWriteAffinity from CsShardingColumns, not by these
+        // proto KeyColumns.
+        //
+        // Try to get key columns from the table metadata first (if the table exists).
+        // Fall back to the first column from the input struct type.
+        TVector<TCoAtom> keyColumnAtoms;
+        if (const auto* tableDesc = kqpCtx.Tables->EnsureTableExists(
+                kqpCtx.Cluster, TString(node.Table().Value()), node.Pos(), ctx)) {
+            for (const auto& keyCol : tableDesc->Metadata->KeyColumnNames) {
+                keyColumnAtoms.emplace_back(Build<TCoAtom>(ctx, node.Pos()).Value(keyCol).Done());
+            }
+        }
+        if (keyColumnAtoms.empty()) {
+            // Table doesn't exist in metadata yet (CTAS temp table). Use the first
+            // column from the input struct type as a placeholder for type validation.
+            const auto inputType = mapCn.Output().Stage().Program().Body().Ref().GetTypeAnn();
+            Y_ENSURE(inputType && inputType->GetKind() == ETypeAnnotationKind::Flow,
+                "Expected flow type for transform stage program body");
+            const auto* itemType = inputType->Cast<TFlowExprType>()->GetItemType();
+            Y_ENSURE(itemType && itemType->GetKind() == ETypeAnnotationKind::Struct,
+                "Expected struct type for transform stage output");
+            const auto& structType = *itemType->Cast<TStructExprType>();
+            Y_ENSURE(!structType.GetItems().empty(), "Empty struct type for CTAS input");
+            keyColumnAtoms.emplace_back(
+                Build<TCoAtom>(ctx, node.Pos()).Value(structType.GetItems().front()->GetName()).Done());
+        }
+
+        // BuildCsWriteAffinitySinkStage creates HashShuffle(ColumnShardHashV1) + Sink Stage.
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), keyColumnAtoms, sink.Ptr()))
+            .SinkIndex().Build("0")
+            .Done();
+    } else {
+        // Original behavior: transform program and sink in a single stage.
+        auto stageInput = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
+                .Build()
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(sink)
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(stageInput.Ptr())
+            .SinkIndex().Build("0")
+            .Done();
+    }
 
     return true;
 }
@@ -275,6 +434,14 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
     const i64 priority = (isOlap || settings.AllowInconsistentWrites) ? 0 : order;
 
+    // QP_FORCE_CS_WRITE_AFFINITY: force the per-shard write affinity mode regardless of the PRAGMA.
+    const bool enableCsWriteAffinity =
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+        true;
+#else
+        kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(true);
+#endif
+
     if (isOlap && !(kqpCtx.IsGenericQuery() || (kqpCtx.IsDataQuery() && kqpCtx.Config->GetAllowOlapDataQuery()))) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
             TStringBuilder() << "Data manipulation queries with column-oriented tables are supported only by API QueryService."));
@@ -296,6 +463,79 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             AFL_ENSURE(returning);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Ptr())
+                .SinkIndex().Build("0")
+                .Done();
+        } else if (isOlap && enableCsWriteAffinity) {
+            // Pure OLAP + write affinity: split into Transform + Sink stages.
+            //
+            //   Pure Expression (VALUES)
+            //       ↓ (ToFlow)
+            //   Transform Stage (pure, 0 inputs, 1 task)
+            //       ↓ TDqCnHashShuffle (ColumnShardHashV1)
+            //   Sink Stage (N tasks, one per shard, input via HashShuffle)
+            //       ↓ TDqSink → TKqpDirectWriteActor
+            //
+            // TDqCnHashShuffle with ColumnShardHashV1 routes each row to the one Sink
+            // task that owns the target shard for that row's PK hash. This avoids the
+            // M× traffic overhead of Broadcast: each row is sent only to the correct
+            // Sink task. HashShuffle (not Map) also lets the Sink Stage have an
+            // independent task count (N, one per shard) from the Transform Stage (1).
+            auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
+                .Table(node.Table())
+                .InconsistentWrite(settings.AllowInconsistentWrites
+                    ? ctx.NewAtom(node.Pos(), "true")
+                    : ctx.NewAtom(node.Pos(), "false"))
+                .StreamWrite(useStreamWrite
+                    ? ctx.NewAtom(node.Pos(), "true")
+                    : ctx.NewAtom(node.Pos(), "false"))
+                .Mode(ctx.NewAtom(node.Pos(), settings.Mode))
+                .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
+                .IsBatch(node.IsBatch())
+                .IsIndexImplTable(isIndexImplTable
+                    ? ctx.NewAtom(node.Pos(), "true")
+                    : ctx.NewAtom(node.Pos(), "false"))
+                .DefaultColumns(node.DefaultColumns())
+                .ReturningColumns(ctx.NewList(node.Pos(), {}))
+                .Settings()
+                    .Build()
+                .Done();
+
+            auto sink = Build<TDqSink>(ctx, node.Pos())
+                .DataSink<TKqpTableSink>()
+                    .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                    .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                    .Build()
+                .Index().Value("0").Build()
+                .Settings(sinkSettings)
+                .Done();
+
+            // Transform Stage: pure expression, no inputs, 1 task.
+            auto transformStage = Build<TDqStage>(ctx, node.Pos())
+                .Inputs()
+                    .Build()
+                .Program()
+                    .Args({})
+                    .Body<TCoToFlow>()
+                        .Input(node.Input())
+                        .Build()
+                    .Build()
+                .Settings().Build()
+                .Done();
+
+            // TDqCnHashShuffle with ColumnShardHashV1: routes each row to the one Sink
+            // task that owns the target shard for that row's PK hash. KeyColumns come
+            // from the table metadata (the table exists for INSERT/REPLACE, unlike CTAS).
+            // The actual hash routing columns are determined at runtime by
+            // BuildColumnShardHashV1ForWriteAffinity from CsShardingColumns.
+            TVector<TCoAtom> keyColumnAtoms;
+            for (const auto& keyCol : table.Metadata->KeyColumnNames) {
+                keyColumnAtoms.emplace_back(Build<TCoAtom>(ctx, node.Pos()).Value(keyCol).Done());
+            }
+            Y_ENSURE(!keyColumnAtoms.empty(), "Empty key columns for OLAP table with write affinity");
+
+            // BuildCsWriteAffinitySinkStage creates HashShuffle(ColumnShardHashV1) + Sink Stage.
+            effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+                .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), keyColumnAtoms, sink.Ptr()))
                 .SinkIndex().Build("0")
                 .Done();
         } else {
@@ -369,8 +609,56 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Name("row")
             .Done();
 
-        auto stageInput = [&]() {
-            if ((table.Metadata->Kind == EKikimrTableKind::Olap && useStreamWrite)
+        auto stageInput = [&]() -> TExprNode::TPtr {
+            if (isOlap && enableCsWriteAffinity) {
+                // Non-pure OLAP + write affinity (UPDATE/INSERT with source):
+                // split into Transform + Sink stages so that the Sink stage
+                // uses wide channels (Multi type) and ColumnShardHashV1 routing
+                // can correctly use numeric indices for key columns.
+                //
+                //   Source (TableFullScan via UnionAll)
+                //       ↓ (Map)
+                //   Transform Stage (mapCn -> ToFlow)         — 1 task (arbitrary node)
+                //       ↓ TDqCnHashShuffle (ColumnShardHashV1) — routes rows to correct shard task
+                //   Sink Stage (ToFlow -> DqSink -> TKqpDirectWriteActor)  — N tasks, pinned to shard nodes
+                //
+                // TDqCnHashShuffle with ColumnShardHashV1 routes each row to the one Sink
+                // task that owns the target shard. KeyColumns come from the table metadata.
+                // The actual hash routing columns are determined at runtime by
+                // BuildColumnShardHashV1ForWriteAffinity from CsShardingColumns.
+                // HashShuffle (not Map) lets the Sink Stage have an independent task count
+                // (N, one per shard) from the Transform Stage (1 task).
+                // The Transform stage output uses wide channels (Multi type) so that
+                // ColumnShardHashV1 can use numeric indices for key column resolution.
+
+                auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
+                    .Output(dqUnion.Output())
+                    .Done();
+
+                auto transformStage = Build<TDqStage>(ctx, node.Pos())
+                    .Inputs()
+                        .Add(mapCn)
+                        .Build()
+                    .Program()
+                        .Args({rowArgument})
+                        .Body<TCoToFlow>()
+                            .Input(rowArgument)
+                            .Build()
+                        .Build()
+                    .Settings().Build()
+                    .Done();
+
+                // TDqCnHashShuffle with ColumnShardHashV1: routes each row to the one Sink
+                // task that owns the target shard for that row's PK hash.
+                TVector<TCoAtom> keyColumnAtoms;
+                for (const auto& keyCol : table.Metadata->KeyColumnNames) {
+                    keyColumnAtoms.emplace_back(Build<TCoAtom>(ctx, node.Pos()).Value(keyCol).Done());
+                }
+                Y_ENSURE(!keyColumnAtoms.empty(), "Empty key columns for OLAP table with write affinity");
+
+                // BuildCsWriteAffinitySinkStage creates HashShuffle(ColumnShardHashV1) + Sink Stage.
+                return BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), keyColumnAtoms, sink);
+            } else if ((table.Metadata->Kind == EKikimrTableKind::Olap && useStreamWrite)
                     || settings.AllowInconsistentWrites) {
                 auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
                     .Output(dqUnion.Output())
@@ -389,7 +677,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                         .Add(sink)
                         .Build()
                     .Settings().Build()
-                    .Done();
+                    .Done().Ptr();
             } else {
                 // OLTP is expected to mostly use just few shards,
                 // so we use union all + one sink. It's important for write optimizations support.
@@ -409,21 +697,21 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                         .Add(sink)
                         .Build()
                     .Settings().Build()
-                    .Done();
+                    .Done().Ptr();
             }
         }();
 
         if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
             returning = Build<TDqCnUnionAll>(ctx, node.Pos())
                 .Output()
-                    .Stage(stageInput.Ptr())
+                    .Stage(stageInput)
                     .Index().Build("0")
                     .Build()
                 .Done().Ptr();
         }
 
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(stageInput.Ptr())
+            .Stage(stageInput)
             .SinkIndex().Build("0")
             .Done();
     }
@@ -542,8 +830,47 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
             .Name("row")
             .Done();
 
-        auto stageInput = [&]() {
-            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+        auto stageInput = [&]() -> TExprNode::TPtr {
+            const bool enableCsWriteAffinity =
+                kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(true);
+            
+            if (isOlap && enableCsWriteAffinity) {
+                // Non-pure OLAP + write affinity (DELETE with source):
+                // split into Transform + Sink stages so that the Sink stage
+                // uses wide channels (Multi type) and ColumnShardHashV1 routing
+                // can correctly use numeric indices for key columns.
+                //
+                // TDqCnHashShuffle with ColumnShardHashV1 routes each row to the one Sink
+                // task that owns the target shard. KeyColumns come from the table metadata.
+
+                auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
+                    .Output(dqUnion.Output())
+                    .Done();
+
+                auto transformStage = Build<TDqStage>(ctx, node.Pos())
+                    .Inputs()
+                        .Add(mapCn)
+                        .Build()
+                    .Program()
+                        .Args({rowArgument})
+                        .Body<TCoToFlow>()
+                            .Input(rowArgument)
+                            .Build()
+                        .Build()
+                    .Settings().Build()
+                    .Done();
+
+                // TDqCnHashShuffle with ColumnShardHashV1: routes each row to the one Sink
+                // task that owns the target shard for that row's PK hash.
+                TVector<TCoAtom> keyColumnAtoms;
+                for (const auto& keyCol : table.Metadata->KeyColumnNames) {
+                    keyColumnAtoms.emplace_back(Build<TCoAtom>(ctx, node.Pos()).Value(keyCol).Done());
+                }
+                Y_ENSURE(!keyColumnAtoms.empty(), "Empty key columns for OLAP table with write affinity");
+
+                // BuildCsWriteAffinitySinkStage creates HashShuffle(ColumnShardHashV1) + Sink Stage.
+                return BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), keyColumnAtoms, sink);
+            } else if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                 auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
                     .Output(dqUnion.Output())
                     .Done();
@@ -561,7 +888,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                         .Add(sink)
                         .Build()
                     .Settings().Build()
-                    .Done();
+                    .Done().Ptr();
             } else {
                 return Build<TDqStage>(ctx, node.Pos())
                     .Inputs()
@@ -577,21 +904,21 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                         .Add(sink)
                         .Build()
                     .Settings().Build()
-                    .Done();
+                    .Done().Ptr();
             }
         }();
 
         if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
             returning = Build<TDqCnUnionAll>(ctx, node.Pos())
                 .Output()
-                    .Stage(stageInput.Ptr())
+                    .Stage(stageInput)
                     .Index().Build("0")
                     .Build()
                 .Done().Ptr();
         }
 
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(stageInput.Ptr())
+            .Stage(stageInput)
             .SinkIndex().Build("0")
             .Done();
     }
@@ -608,7 +935,7 @@ bool BuildEffects(const TVector<TExprBase>& effects, TExprNode::TPtr& returning,
         if (effect.Maybe<TKqlFillTable>()) {
             const auto maybeFillTable = effect.Maybe<TKqlFillTable>();
             AFL_ENSURE(maybeFillTable);
-            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, newEffect, builtEffects.size())) {
+            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, kqpCtx, newEffect, builtEffects.size())) {
                 return false;
             }
         } else if (effect.Maybe<TKqlTableEffect>()) {

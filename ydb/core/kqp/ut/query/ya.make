@@ -1,5 +1,12 @@
 UNITTEST_FOR(ydb/core/kqp)
 
+### DO NOT REMOVE THESE FLAGS. They are important
+    CFLAGS(
+        -DKQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+        -DKQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT=1
+    )
+###
+
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
@@ -15,6 +22,7 @@ SRCS(
     kqp_query_event_log_ut.cpp
     kqp_stats_ut.cpp
     kqp_types_ut.cpp
+    kqp_write_affinity_ut.cpp
 )
 
 PEERDIR(

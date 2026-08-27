@@ -1,5 +1,10 @@
 LIBRARY()
-
+### DO NOT REMOVE THESE FLAGS. They are important
+    CFLAGS(
+        -DKQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+        -DKQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT=1
+    )
+###
 SRCS(
     kqp_arrow_memory_pool.cpp
     kqp_buffer_lock_actor.cpp

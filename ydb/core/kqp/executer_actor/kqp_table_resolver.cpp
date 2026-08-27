@@ -108,6 +108,31 @@ private:
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
+                    // For OLAP (column table) writes, set ColumnTableInfoPtr and CsShardingColumns
+                    // here in HandleResolveNames, because non-CTAS cases (INSERT/REPLACE/UPDATE/DELETE)
+                    // don't go through HandleResolveKeys where these would normally be set.
+                    YDB_LOG_INFO("CS Write Affinity: HandleResolveNames",
+                        {"stageId", stageId}
+                        , {"isOlap", isOlap}
+                        , {"hasColumnTableInfo", entry.ColumnTableInfo != nullptr}
+                        , {"enableCsWriteAffinity", stageMeta.Tx.Body->EnableCsWriteAffinity()});
+
+                    if (isOlap && entry.ColumnTableInfo) {
+                        stageMeta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+
+                        // Extract hash sharding columns for per-shard routing.
+                        // This is needed for all OLAP sinks, not just EnableCsWriteAffinity.
+                        const auto& desc = entry.ColumnTableInfo->Description;
+                        if (desc.HasSharding() && desc.GetSharding().HasHashSharding()) {
+                            for (const auto& col : desc.GetSharding().GetHashSharding().GetColumns()) {
+                                stageMeta.CsShardingColumns.emplace_back(col);
+                            }
+                            YDB_LOG_INFO("CS Write Affinity: Set CsShardingColumns in HandleResolveNames",
+                                {"stageId", stageId}
+                                , {"csShardingColumnsSize", stageMeta.CsShardingColumns.size()});
+                        }
+                    }
+
                     const auto& stage = stageMeta.GetStage(stageId);
                     const NKqpProto::TKqpInternalSink* intSinkPtr = nullptr;
 
@@ -128,7 +153,8 @@ private:
                     AFL_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     AFL_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
-                    AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+                    // Support all OLAP sink operations (MODE_FILL, MODE_INSERT, etc.)
+                    AFL_ENSURE(isOlap || settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
                     settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
                     settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);
                     settings.MutableTable()->SetSysView(entry.TableId.SysViewInfo);
@@ -151,9 +177,7 @@ private:
                     TMap<ui32, ui32> columnIdToIndex;
                     TVector<NScheme::TTypeInfo> keyTypes;
 
-                    // CTAS writes all columns
-                    AFL_ENSURE(static_cast<size_t>(settings.GetInputColumns().size()) == entry.Columns.size());
-
+                    // Build column mappings from schema
                     for (const auto& [index, columnInfo] : entry.Columns) {
                         columnNameToIndex[columnInfo.Name] = index;
                         columnIdToIndex[columnInfo.Id] = index;
@@ -168,8 +192,12 @@ private:
                         const auto columnInfo = entry.Columns.FindPtr(index);
                         AFL_ENSURE(columnInfo);
 
-                        auto keyColumnProto = settings.AddKeyColumns();
-                        fillColumnProto(*columnInfo, keyColumnProto);
+                        // For CTAS (MODE_FILL), key columns are not yet populated
+                        // For other OLAP operations (INSERT, etc.), key columns may already be set
+                        if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                            auto keyColumnProto = settings.AddKeyColumns();
+                            fillColumnProto(*columnInfo, keyColumnProto);
+                        }
 
                         keyTypes.push_back(columnInfo->PType);
                     }
@@ -178,45 +206,72 @@ private:
                     stageMeta.ShardKey = ExtractKey(
                         stageMeta.TableId,
                         keyTypes,
-                        TKeyDesc::ERowOperation::Update); // CTAS is Update operation
+                        TKeyDesc::ERowOperation::Update);
 
-                    for (const auto& columnName : settings.GetInputColumns()) {
-                        const auto index = columnNameToIndex.FindPtr(columnName);
-                        AFL_ENSURE(index);
-                        const auto columnInfo = entry.Columns.FindPtr(*index);
-                        AFL_ENSURE(columnInfo);
-
-                        auto columnProto = settings.AddColumns();
-                        fillColumnProto(*columnInfo, columnProto);
-                    }
-
-                    {
-                        THashMap<TStringBuf, ui32> columnToOrder;
-                        ui32 currentIndex = 0;
-                        if (!isOlap) {
-                            for (const auto& [_, index] : keyPositionToIndex) {
-                                const auto columnInfo = entry.Columns.FindPtr(index);
-                                AFL_ENSURE(columnInfo);
-                                columnToOrder[columnInfo->Name] = currentIndex++;
-                            }
-                        }
-                        for (const auto& [id, index] : columnIdToIndex) {
-                            const auto columnInfo = entry.Columns.FindPtr(index);
-                            AFL_ENSURE(columnInfo);
-                            AFL_ENSURE(columnInfo->Id == id);
-                            if (isOlap || columnInfo->KeyOrder == -1) {
-                                columnToOrder[columnInfo->Name] = currentIndex++;
-                            } else {
-                                AFL_ENSURE(columnToOrder.contains(columnInfo->Name));
-                            }
-                        }
+                    // For CTAS (MODE_FILL), populate columns from InputColumns
+                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                        AFL_ENSURE(static_cast<size_t>(settings.GetInputColumns().size()) == entry.Columns.size());
 
                         for (const auto& columnName : settings.GetInputColumns()) {
-                            settings.AddWriteIndexes(columnToOrder.at(columnName));
+                            const auto index = columnNameToIndex.FindPtr(columnName);
+                            AFL_ENSURE(index);
+                            const auto columnInfo = entry.Columns.FindPtr(*index);
+                            AFL_ENSURE(columnInfo);
+
+                            auto columnProto = settings.AddColumns();
+                            fillColumnProto(*columnInfo, columnProto);
+                        }
+
+                        {
+                            THashMap<TStringBuf, ui32> columnToOrder;
+                            ui32 currentIndex = 0;
+                            if (!isOlap) {
+                                for (const auto& [_, index] : keyPositionToIndex) {
+                                    const auto columnInfo = entry.Columns.FindPtr(index);
+                                    AFL_ENSURE(columnInfo);
+                                    columnToOrder[columnInfo->Name] = currentIndex++;
+                                }
+                            }
+                            for (const auto& [id, index] : columnIdToIndex) {
+                                const auto columnInfo = entry.Columns.FindPtr(index);
+                                AFL_ENSURE(columnInfo);
+                                AFL_ENSURE(columnInfo->Id == id);
+                                if (isOlap || columnInfo->KeyOrder == -1) {
+                                    columnToOrder[columnInfo->Name] = currentIndex++;
+                                } else {
+                                    AFL_ENSURE(columnToOrder.contains(columnInfo->Name));
+                                }
+                            }
+
+                            for (const auto& columnName : settings.GetInputColumns()) {
+                                settings.AddWriteIndexes(columnToOrder.at(columnName));
+                            }
+                        }
+                    }
+                    // For non-CTAS OLAP operations (INSERT/REPLACE/UPDATE/DELETE), ensure
+                    // columns and write indexes are populated for ColumnShardHashV1 routing.
+                    // The optimizer may have set columns, but we guarantee consistency
+                    // with the actual table schema. WriteIndexes is needed by the runtime
+                    // CreateColumnDataBatcher which requires writeIndex.size() == columns.size().
+                    if (settings.GetColumns().empty() && isOlap) {
+                        for (const auto& [index, columnInfo] : entry.Columns) {
+                            auto columnProto = settings.AddColumns();
+                            fillColumnProto(columnInfo, columnProto);
+                        }
+                    }
+                    // Populate WriteIndexes as identity mapping when columns are present
+                    // but write indexes are not (non-CTAS OLAP case).
+                    // For INSERT VALUES, the input columns match the table column order,
+                    // so WriteIndexes is simply (0, 1, 2, ..., N-1).
+                    if (isOlap && settings.GetWriteIndexes().empty() && !settings.GetColumns().empty()) {
+                        for (ui32 i = 0; i < static_cast<ui32>(settings.GetColumns().size()); ++i) {
+                            settings.AddWriteIndexes(i);
                         }
                     }
 
-                    AFL_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
+                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                        AFL_ENSURE(settings.GetColumns().size() == settings.GetWriteIndexes().size());
+                    }
 
                     stageMeta.ResolvedSinkSettings = settings;
                 }
@@ -261,7 +316,71 @@ private:
             TableRequestIds.erase(entry.TableId);
 
             for (auto stageId : stageIds) {
-                TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+                auto& stageMeta = TasksGraph.GetStageInfo(stageId).Meta;
+                stageMeta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+
+                YDB_LOG_INFO("CS Write Affinity: Table resolver setting ColumnTableInfoPtr",
+                    {"stageId", stageId}
+                    , {"hasColumnTableInfo", entry.ColumnTableInfo != nullptr}
+                    , {"hasSharding", entry.ColumnTableInfo && entry.ColumnTableInfo->Description.HasSharding()}
+                    , {"hasResolvedSinkSettings", stageMeta.ResolvedSinkSettings.has_value()});
+
+                // For CTAS affinity (EnableCsWriteAffinity): extract hash sharding columns
+                // from the target column table so they can be used later in BuildKqpStageChannels
+                // to configure ColumnShardHashV1 shuffle on the upstream Transform Stage.
+                //
+                // For CTAS, ResolvedSinkSettings may be null at this point (the navigate
+                // for ColumnTableInfo can arrive before HandleResolveNames sets it).
+                // Check the raw sink settings proto directly for IsOlap flag.
+                bool isOlapSink = false;
+                if (stageMeta.ResolvedSinkSettings) {
+                    isOlapSink = stageMeta.ResolvedSinkSettings->GetIsOlap();
+                } else {
+                    // Fallback: check raw sink settings proto (CTAS case)
+                    const auto& stage = stageMeta.GetStage(stageId);
+                    for (const auto& sink : stage.GetSinks()) {
+                        if (sink.HasInternalSink()
+                                && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                            if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)) {
+                                isOlapSink = sinkSettings.GetIsOlap();
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Populate sharding metadata for ALL OLAP sinks (not just when
+                // EnableCsWriteAffinity=true). This is needed for per-shard task creation
+                // in CountComputeTasks to ensure each WriteActor handles exactly one CS.
+                if (entry.ColumnTableInfo && isOlapSink) {
+                    const auto& desc = entry.ColumnTableInfo->Description;
+                    if (desc.HasSharding() && desc.GetSharding().HasHashSharding()) {
+                        for (const auto& col : desc.GetSharding().GetHashSharding().GetColumns()) {
+                            stageMeta.CsShardingColumns.emplace_back(col);
+                        }
+
+                        // Populate ShardKey with ColumnShard partitions for per-shard task routing.
+                        TVector<TKeyDesc::TPartitionInfo> partitions;
+                        for (const auto& shardId : desc.GetSharding().GetColumnShards()) {
+                            partitions.emplace_back(shardId);
+                        }
+                        if (!partitions.empty()) {
+                            if (!stageMeta.ShardKey) {
+                                stageMeta.ShardKey = TKeyDesc::CreateMiniKeyDesc(TVector<NScheme::TTypeInfo>{});
+                            }
+                            stageMeta.ShardKey->Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+                        }
+                    }
+
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+                    // Invariant: with the force flag, CsShardingColumns must be populated
+                    // for OLAP sinks so ColumnShardHashV1 routing can be built.
+                    AFL_VERIFY(!stageMeta.CsShardingColumns.empty())
+                        ("stageId", stageId)
+                        ("msg", "QP_FORCE_CS_WRITE_AFFINITY requires CsShardingColumns for OLAP sink");
+#endif
+                }
             }
         }
 
@@ -464,6 +583,27 @@ private:
                         entry.Access = NACLib::EAccessRights::UpdateRow;
                     }
                 }
+            }
+        }
+
+        // For OLAP sink stages (INSERT, FILL, etc.), request ColumnTableInfo
+        // to get the column shard IDs for per-shard WriteActor routing.
+        for (auto& pair : TasksGraph.GetStagesInfo()) {
+            auto& stageInfo = pair.second;
+
+            // Check if this stage has an OLAP sink with known TableId
+            if (stageInfo.Meta.ResolvedSinkSettings
+                    && stageInfo.Meta.ResolvedSinkSettings->GetIsOlap()
+                    && stageInfo.Meta.TableId) {
+                // Request ColumnTableInfo for the target table
+                if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                    auto& entry = requestNavigate->ResultSet.emplace_back();
+                    entry.TableId = stageInfo.Meta.TableId;
+                    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                }
+
+                TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
             }
         }
 

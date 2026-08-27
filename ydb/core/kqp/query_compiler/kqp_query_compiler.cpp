@@ -1211,6 +1211,14 @@ private:
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination()));
         txProto.SetHasEffects(hasEffectStage);
         txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
+        // QP_FORCE_CS_WRITE_AFFINITY: force the per-shard write affinity mode regardless of the PRAGMA.
+        txProto.SetEnableCsWriteAffinity(
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+            true
+#else
+            Config->EnableCsWriteAffinity.Get().GetOrElse(true)
+#endif
+        );
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -2462,10 +2470,27 @@ private:
     void FillCreateTableAs(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, const TSinkInputShape& shape) {
         settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
         // Table info will be filled during execution after resolving table by name.
+        // Note: Table().Path() is the SOURCE table (used as schema template for CTAS).
         settingsProto.MutableTable()->SetPath(TString(settings.Table().Path()));
         for (const auto& column : shape.Columns) {
             settingsProto.AddInputColumns(TString(column));
         }
+
+        // Store the DESTINATION table path (OriginalPath) so that the table resolver
+        // can navigate the correct (destination) table for per-shard affinity.
+        // Without this, the resolver would navigate the source table and assign its shards.
+        const auto originalPathNode = GetSetting(settings.Settings().Ref(), "OriginalPath");
+        if (originalPathNode) {
+            const TString destinationPath = TString(TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>().StringValue());
+            settingsProto.SetCtasDestinationPath(destinationPath);
+        }
+
+#ifdef QP_FORCE_CS_WRITE_AFFINITY
+        // Invariant: with the force flag, CtasDestinationPath must be populated
+        // so the resolver can navigate the destination table for affinity.
+        AFL_VERIFY(!settingsProto.GetCtasDestinationPath().empty())
+            ("msg", "QP_FORCE_CS_WRITE_AFFINITY requires CtasDestinationPath");
+#endif
 
         AFL_ENSURE(settings.InconsistentWrite().StringValue() == "true");
         settingsProto.SetInconsistentTx(true);

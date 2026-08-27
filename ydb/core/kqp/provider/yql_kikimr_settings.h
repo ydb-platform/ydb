@@ -126,6 +126,7 @@ public:
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
     NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
+    NCommon::TConfSetting<bool, Static> EnableCsWriteAffinity;
 
     /* Internal CBO constants for tuning */
     NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;

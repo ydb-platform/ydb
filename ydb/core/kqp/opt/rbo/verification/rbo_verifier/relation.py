@@ -285,6 +285,10 @@ class FamilyMismatch:
 
     counterexample: smt.Term
     branches: tuple[MismatchBranch, ...]
+    # Optional exact portfolio whose shape is preferable to the canonical
+    # formula for the solver.  None deliberately means that ordinary
+    # canonical-first scheduling remains in force.
+    preferred_branches: tuple[MismatchBranch, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,6 +334,11 @@ MAX_SORT_NETWORK_PAYLOAD_CELLS = 131072
 # The exact lexicographic comparator is emitted once as a define-fun. Keeping
 # its key width bounded makes that shared definition easy to audit.
 MAX_SORT_NETWORK_KEY_COLUMNS = 64
+# Preferred keyed comparison is a solver-shape optimization, so keep both its
+# branch fan-out and the row-pair cell work independently auditable.  Falling
+# back to the ordinary exact decomposition preserves semantics at either cap.
+MAX_PREFERRED_KEYED_MISMATCH_BRANCHES = 64
+MAX_PREFERRED_KEYED_MISMATCH_COMPARISONS = 256
 
 
 def _require_relation_rows(count: int, operation: str) -> None:
@@ -6220,6 +6229,263 @@ def _outcome_equal_matrix(
     )
 
 
+def _preferred_keyed_mismatch_branches(
+    left: RelationFamily,
+    right: RelationFamily,
+    scalar: ScalarEncoder,
+    ordered: bool,
+) -> tuple[MismatchBranch, ...] | None:
+    """Return an exact small portfolio for two certified total sequences.
+
+    A shared positional NULL-safe key contained in an identical positional
+    order makes each side's sequence tie-free.  Equality then reduces to
+    bidirectional key inclusion and equality of the non-key payload at each
+    matching key.  Every other shape deliberately retains the general family
+    comparison.
+    """
+
+    if not ordered or len(left.outcomes) != 1 or len(right.outcomes) != 1:
+        return None
+    left_outcome = left.outcomes[0]
+    right_outcome = right.outcomes[0]
+    if (
+        left_outcome.choices
+        or right_outcome.choices
+        or left_outcome.decisions
+        or right_outcome.decisions
+    ):
+        return None
+    left_relation = left_outcome.relation
+    right_relation = right_outcome.relation
+    if not left_relation.sequence or not right_relation.sequence:
+        return None
+    if len(left_relation.columns) != len(right_relation.columns):
+        return None
+    if any(
+        (
+            left_column.type,
+            left_column.nullable,
+            left_column.integral_avg_rank,
+        )
+        != (
+            right_column.type,
+            right_column.nullable,
+            right_column.integral_avg_rank,
+        )
+        for left_column, right_column in zip(
+            left_relation.columns,
+            right_relation.columns,
+        )
+    ):
+        return None
+
+    def column_positions(relation: Relation) -> dict[str, int] | None:
+        positions = {
+            column.name: index
+            for index, column in enumerate(relation.columns)
+        }
+        return positions if len(positions) == len(relation.columns) else None
+
+    left_positions = column_positions(left_relation)
+    right_positions = column_positions(right_relation)
+    if left_positions is None or right_positions is None:
+        return None
+    left_key = left_relation.null_safe_unique_key
+    right_key = right_relation.null_safe_unique_key
+    if left_key is None or right_key is None:
+        return None
+    if any(name not in left_positions for name in left_key) or any(
+        name not in right_positions for name in right_key
+    ):
+        return None
+    left_key_positions = frozenset(left_positions[name] for name in left_key)
+    right_key_positions = frozenset(right_positions[name] for name in right_key)
+    if not left_key_positions or left_key_positions != right_key_positions:
+        return None
+
+    def order_signature(
+        relation: Relation,
+        positions: Mapping[str, int],
+    ) -> tuple[tuple[int, bool, bool, str | None], ...] | None:
+        if relation.order is None:
+            return None
+        if any(item.column not in positions for item in relation.order):
+            return None
+        return tuple(
+            (
+                positions[item.column],
+                item.ascending,
+                item.nulls_first,
+                item.comparison,
+            )
+            for item in relation.order
+        )
+
+    left_order = order_signature(left_relation, left_positions)
+    right_order = order_signature(right_relation, right_positions)
+    if left_order is None or left_order != right_order:
+        return None
+    ordered_positions = frozenset(item[0] for item in left_order)
+    if not left_key_positions <= ordered_positions:
+        return None
+
+    left_live = _live_row_indices(left_relation.rows)
+    right_live = _live_row_indices(right_relation.rows)
+    payload_positions = tuple(
+        index
+        for index in range(len(left_relation.columns))
+        if index not in left_key_positions
+    )
+    smaller_count = min(len(left_live), len(right_live))
+    branch_count = (
+        4
+        + len(left_live)
+        + len(right_live)
+        + smaller_count * len(payload_positions)
+    )
+    comparison_count = len(left_live) * len(right_live) * (
+        2 * len(left_key_positions)
+        + len(payload_positions) * (len(left_key_positions) + 1)
+    )
+    if (
+        branch_count > MAX_PREFERRED_KEYED_MISMATCH_BRANCHES
+        or comparison_count > MAX_PREFERRED_KEYED_MISMATCH_COMPARISONS
+    ):
+        return None
+
+    key_positions = tuple(sorted(left_key_positions))
+
+    def key_equal(left_index: int, right_index: int) -> smt.Term:
+        left_row = left_relation.rows[left_index]
+        right_row = right_relation.rows[right_index]
+        return smt.and_(
+            *(
+                scalar.not_distinct(
+                    left_row.values[left_relation.columns[position].name],
+                    right_row.values[right_relation.columns[position].name],
+                )
+                for position in key_positions
+            )
+        )
+
+    key_equalities = {
+        (left_index, right_index): key_equal(left_index, right_index)
+        for left_index in left_live
+        for right_index in right_live
+    }
+    both_enabled = smt.and_(left_outcome.enabled, right_outcome.enabled)
+    both_successful = smt.and_(
+        both_enabled,
+        smt.not_(left_outcome.error),
+        smt.not_(right_outcome.error),
+    )
+    branches: list[MismatchBranch] = []
+
+    def append(name: str, predicate: smt.Term) -> None:
+        if predicate != smt.FALSE:
+            branches.append(MismatchBranch(name, predicate))
+
+    append(
+        "preferred_left_language_empty",
+        smt.not_(left_outcome.enabled),
+    )
+    append(
+        "preferred_right_language_empty",
+        smt.not_(right_outcome.enabled),
+    )
+    append(
+        "preferred_left_error_only",
+        smt.and_(
+            both_enabled,
+            left_outcome.error,
+            smt.not_(right_outcome.error),
+        ),
+    )
+    append(
+        "preferred_right_error_only",
+        smt.and_(
+            both_enabled,
+            smt.not_(left_outcome.error),
+            right_outcome.error,
+        ),
+    )
+    for left_index in left_live:
+        left_row = left_relation.rows[left_index]
+        append(
+            f"preferred_left_row_{left_index}_key_missing",
+            smt.and_(
+                both_successful,
+                left_row.present,
+                smt.not_(smt.or_(
+                    *(
+                        smt.and_(
+                            right_relation.rows[right_index].present,
+                            key_equalities[left_index, right_index],
+                        )
+                        for right_index in right_live
+                    )
+                )),
+            ),
+        )
+    for right_index in right_live:
+        right_row = right_relation.rows[right_index]
+        append(
+            f"preferred_right_row_{right_index}_key_missing",
+            smt.and_(
+                both_successful,
+                right_row.present,
+                smt.not_(smt.or_(
+                    *(
+                        smt.and_(
+                            left_relation.rows[left_index].present,
+                            key_equalities[left_index, right_index],
+                        )
+                        for left_index in left_live
+                    )
+                )),
+            ),
+        )
+
+    payload_on_left = len(left_live) <= len(right_live)
+    source_relation = left_relation if payload_on_left else right_relation
+    target_relation = right_relation if payload_on_left else left_relation
+    source_live = left_live if payload_on_left else right_live
+    target_live = right_live if payload_on_left else left_live
+    side = "left" if payload_on_left else "right"
+    for source_index in source_live:
+        source_row = source_relation.rows[source_index]
+        for position in payload_positions:
+            source_name = source_relation.columns[position].name
+            target_name = target_relation.columns[position].name
+
+            def matching_payload_differs(target_index: int) -> smt.Term:
+                pair = (
+                    (source_index, target_index)
+                    if payload_on_left
+                    else (target_index, source_index)
+                )
+                return smt.and_(
+                    target_relation.rows[target_index].present,
+                    key_equalities[pair],
+                    smt.not_(scalar.not_distinct(
+                        source_row.values[source_name],
+                        target_relation.rows[target_index].values[target_name],
+                    )),
+                )
+
+            append(
+                f"preferred_{side}_row_{source_index}_column_{position}_payload_mismatch",
+                smt.and_(
+                    both_successful,
+                    source_row.present,
+                    smt.or_(
+                        *(matching_payload_differs(index) for index in target_live)
+                    ),
+                ),
+            )
+    return tuple(branches) or None
+
+
 def _family_mismatch(
     left: RelationFamily,
     right: RelationFamily,
@@ -6313,7 +6579,16 @@ def _family_mismatch(
             for index, predicate in enumerate(right_unmatched)
         ),
     )
-    return FamilyMismatch(counterexample, branches)
+    return FamilyMismatch(
+        counterexample,
+        branches,
+        _preferred_keyed_mismatch_branches(
+            left,
+            right,
+            scalar,
+            ordered,
+        ),
+    )
 
 
 def compare_families(

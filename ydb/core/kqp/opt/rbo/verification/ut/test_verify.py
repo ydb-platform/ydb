@@ -3417,6 +3417,20 @@ class SolverProtocolTest(unittest.TestCase):
         return Problem(script, {}, branches), requested, predicates
 
     @staticmethod
+    def _preferred_branch_problem(count=2):
+        problem, requested, predicates = SolverProtocolTest._branch_problem(count)
+        ordered_predicates = tuple(reversed(predicates))
+        preferred = tuple(
+            relation_model.MismatchBranch(f"preferred_{index}", predicate)
+            for index, predicate in enumerate(ordered_predicates)
+        )
+        return (
+            replace(problem, preferred_branches=preferred),
+            requested,
+            ordered_predicates,
+        )
+
+    @staticmethod
     def _integral_average_problem():
         script = smt.Script()
         exact = script.fresh_constant("semantic_mismatch", smt.BOOL)
@@ -3536,6 +3550,31 @@ class SolverProtocolTest(unittest.TestCase):
         self.assertIn("exact binary64 replay is required", query.reason)
         self.assertEqual(run.call_count, 3)
 
+    def test_preferred_portfolio_keeps_integral_average_soundness_first(self):
+        problem, exact, inexact = self._integral_average_problem()
+        problem = replace(
+            problem,
+            preferred_branches=problem.mismatch_branches,
+        )
+        responses = (
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n", ""),
+        )
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=responses,
+        ) as run:
+            query = verifier.query_solver(problem, "z3", (exact,))
+
+        self.assertEqual(query.status, "unknown")
+        self.assertEqual(query.phase, "abstract")
+        formulas = [call.args[1] for call in run.call_args_list]
+        self.assertIn(f"(assert {inexact.render()})", formulas[0])
+        self.assertIn(f"(assert {exact.render()})", formulas[1])
+        self.assertTrue(all("(get-value" not in formula for formula in formulas))
+
     def test_string_rank_decoder_is_exact_and_rejects_out_of_universe_values(self):
         representatives = {0: "", 1: "a", 2: "é"}
         self.assertEqual(verifier.decode_string_atom(2, representatives), "é")
@@ -3553,6 +3592,148 @@ class SolverProtocolTest(unittest.TestCase):
 
         self.assertEqual(query.status, "unsat")
         run.assert_called_once()
+
+    def test_preferred_portfolio_skips_canonical_probe(self):
+        problem, _, predicates = self._preferred_branch_problem()
+        problem = replace(problem, mismatch_branches=None)
+        sat = subprocess.CompletedProcess(["z3"], 0, "sat\n", "")
+
+        with mock.patch.object(verifier, "_run_solver", return_value=sat) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "sat")
+        run.assert_called_once()
+        formula = run.call_args.args[1]
+        self.assertIn(f"(assert {predicates[0].render()})", formula)
+        self.assertNotIn(f"(assert {predicates[1].render()})", formula)
+
+    def test_preferred_metadata_does_not_change_canonical_formula(self):
+        problem, _, _ = self._preferred_branch_problem()
+        without_preferred = replace(problem, preferred_branches=None)
+
+        self.assertEqual(problem.formula(), without_preferred.formula())
+
+    def test_all_preferred_branches_must_be_unsat_to_verify(self):
+        problem, _, predicates = self._preferred_branch_problem(3)
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+
+        with mock.patch.object(verifier, "_run_solver", return_value=unsat) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unsat")
+        self.assertEqual(run.call_count, 3)
+        for formula, predicate in zip(
+            (call.args[1] for call in run.call_args_list),
+            predicates,
+        ):
+            self.assertIn(f"(assert {predicate.render()})", formula)
+
+    def test_preferred_sat_reuses_the_winning_branch_for_its_model(self):
+        problem, requested, predicates = self._preferred_branch_problem()
+        responses = (
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n((v_0 true))\n", ""),
+        )
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=responses,
+        ) as run:
+            query = verifier.query_solver(problem, "z3", (requested,))
+
+        self.assertEqual(query.status, "sat")
+        self.assertEqual(query.values, {"v_0": True})
+        formulas = [call.args[1] for call in run.call_args_list]
+        self.assertIn(f"(assert {predicates[0].render()})", formulas[0])
+        self.assertIn(f"(assert {predicates[1].render()})", formulas[1])
+        self.assertIn(f"(assert {predicates[1].render()})", formulas[2])
+        self.assertNotIn("(get-value", formulas[1])
+        self.assertIn("(get-value (v_0))", formulas[2])
+
+    def test_preferred_portfolio_shares_one_decreasing_solver_deadline(self):
+        problem, _, _ = self._preferred_branch_problem()
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+        tick = iter(index / 40 for index in range(40))
+
+        with (
+            mock.patch.object(verifier.time, "monotonic", side_effect=tick),
+            mock.patch.object(verifier, "_run_solver", return_value=unsat) as run,
+        ):
+            query = verifier.query_solver(problem, "z3", timeout_ms=1000)
+
+        self.assertEqual(query.status, "unsat")
+        formulas = [call.args[1] for call in run.call_args_list]
+        solver_timeouts = [
+            int(
+                next(
+                    line
+                    for line in formula.splitlines()
+                    if line.startswith("(set-option :timeout ")
+                ).removeprefix("(set-option :timeout ").removesuffix(")")
+            )
+            for formula in formulas
+        ]
+        process_timeouts = [call.args[2] for call in run.call_args_list]
+        self.assertGreater(solver_timeouts[0], 750)
+        self.assertGreater(solver_timeouts[0], solver_timeouts[1])
+        self.assertGreater(process_timeouts[0], process_timeouts[1])
+
+    def test_preferred_deadline_cannot_prove_with_an_untried_branch(self):
+        problem, _, _ = self._preferred_branch_problem()
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+        budget = mock.Mock()
+        budget.remaining_ms.side_effect = (1000, 1000, 1000, 1000, 0)
+        budget.process_timeout_seconds.return_value = 6.0
+
+        with (
+            mock.patch.object(verifier._SolverBudget, "start", return_value=budget),
+            mock.patch.object(verifier, "_run_solver", return_value=unsat) as run,
+        ):
+            query = verifier.query_solver(problem, "z3", timeout_ms=1000)
+
+        self.assertEqual(query.status, "unknown")
+        self.assertIn("deadline expired before branch 2/2", query.reason)
+        run.assert_called_once()
+
+    def test_preferred_deadline_does_not_overwrite_the_first_unknown(self):
+        problem, _, _ = self._preferred_branch_problem()
+        unknown = subprocess.CompletedProcess(["z3"], 0, "unknown\n", "")
+        budget = mock.Mock()
+        budget.remaining_ms.side_effect = (1000, 1000, 1000, 0)
+        budget.process_timeout_seconds.return_value = 6.0
+
+        with (
+            mock.patch.object(verifier._SolverBudget, "start", return_value=budget),
+            mock.patch.object(verifier, "_run_solver", return_value=unknown) as run,
+        ):
+            query = verifier.query_solver(problem, "z3", timeout_ms=1000)
+
+        self.assertEqual(query.status, "unknown")
+        self.assertIn("branch 1/2 (preferred_0): solver returned unknown", query.reason)
+        self.assertNotIn("deadline expired before branch 2/2", query.reason)
+        run.assert_called_once()
+
+    def test_ordinary_portfolio_retains_canonical_first_scheduling(self):
+        problem, _, predicates = self._branch_problem()
+        responses = (
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n", ""),
+        )
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=responses,
+        ) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "sat")
+        formulas = [call.args[1] for call in run.call_args_list]
+        self.assertNotIn(f"(assert {predicates[0].render()})", formulas[0])
+        self.assertNotIn(f"(assert {predicates[1].render()})", formulas[0])
+        self.assertIn(f"(assert {predicates[0].render()})", formulas[1])
 
     def test_all_exact_branches_must_be_unsat_after_canonical_unknown(self):
         problem, _, _ = self._branch_problem(3)
@@ -3630,6 +3811,14 @@ class SolverProtocolTest(unittest.TestCase):
     def test_empty_exact_branch_set_cannot_verify(self):
         with self.assertRaisesRegex(SolverError, "has no branches"):
             verifier.query_solver(Problem(smt.Script(), {}, ()), "z3")
+
+    def test_empty_preferred_portfolio_cannot_verify(self):
+        problem, _, _ = self._branch_problem()
+        with self.assertRaisesRegex(SolverError, "preferred.*has no branches"):
+            verifier.query_solver(
+                replace(problem, preferred_branches=()),
+                "z3",
+            )
 
     def test_portfolio_shares_one_decreasing_solver_deadline(self):
         problem, _, _ = self._branch_problem()

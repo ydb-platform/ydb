@@ -1,9 +1,16 @@
 import copy
+import os
+import subprocess
 import unittest
 from dataclasses import replace
 from itertools import permutations, product
 from unittest.mock import patch
 from weakref import WeakKeyDictionary
+
+try:
+    import yatest.common as yatest_common
+except ImportError:
+    yatest_common = None
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
     decimal,
@@ -57,6 +64,11 @@ REFERENCE_DECIMAL_INF = 100_000_000_000_000_000_000_000_000_000_000_000
 REFERENCE_DECIMAL_NAN = REFERENCE_DECIMAL_INF + 1
 COLUMNS = ("a.k1", "a.k2", "a.payload")
 COLUMN_INDEX = {name: index for index, name in enumerate(COLUMNS)}
+SOLVER = (
+    yatest_common.binary_path("contrib/tools/z3/z3")
+    if yatest_common is not None
+    else os.environ.get("RBO_Z3")
+)
 
 
 class SortNetworkTopologyTest(unittest.TestCase):
@@ -1475,6 +1487,745 @@ class NullSafeUniqueOrderTest(unittest.TestCase):
                 evaluator.root().certain().null_safe_unique_key,
                 self.KEY,
             )
+
+
+class PreferredKeyedMismatchTest(unittest.TestCase):
+    @staticmethod
+    def _columns(prefix, payload_count=2):
+        names = ("k1", "k2") + tuple(
+            f"payload{index}"
+            for index in range(payload_count)
+        )
+        return tuple(
+            Column(f"{prefix}.{name}", "Int64", True)
+            for name in names
+        )
+
+    @staticmethod
+    def _value(cell, value_type="Int64"):
+        if isinstance(cell, Value):
+            return cell
+        return Value(
+            value_type,
+            smt.TRUE if cell is None else smt.FALSE,
+            smt.ZERO if cell is None else smt.int_value(cell),
+        )
+
+    @classmethod
+    def _row(cls, columns, cells, present=smt.TRUE):
+        return Row(
+            present,
+            {
+                column.name: cls._value(cell, column.type)
+                for column, cell in zip(columns, cells)
+            },
+        )
+
+    @classmethod
+    def _relation(
+        cls,
+        prefix,
+        cells,
+        *,
+        payload_count=2,
+        presence=None,
+        key_positions=frozenset((0, 1)),
+        order_positions=None,
+        columns=None,
+        sequence=True,
+        order_overrides=None,
+    ):
+        columns = cls._columns(prefix, payload_count) if columns is None else columns
+        if presence is None:
+            presence = (smt.TRUE,) * len(cells)
+        if order_positions is None:
+            order_positions = tuple(sorted(key_positions))
+        order = tuple(
+            SortOrder(columns[position].name, True, True)
+            for position in order_positions
+        )
+        if order_overrides is not None:
+            order = order_overrides
+        return Relation(
+            columns,
+            tuple(
+                cls._row(columns, row, present)
+                for row, present in zip(cells, presence)
+            ),
+            sequence=sequence,
+            order=order if sequence else None,
+            null_safe_unique_key=(
+                None
+                if key_positions is None
+                else frozenset(columns[position].name for position in key_positions)
+            ),
+        )
+
+    @staticmethod
+    def _family(
+        value,
+        *,
+        enabled=smt.TRUE,
+        error=smt.FALSE,
+        decisions=(),
+        choices=(),
+    ):
+        return RelationFamily((Outcome(
+            enabled,
+            value,
+            error,
+            decisions,
+            choices,
+        ),))
+
+    @staticmethod
+    def _mismatch(left, right, script=None):
+        script = smt.Script() if script is None else script
+        return compare_families(
+            left,
+            right,
+            ScalarEncoder(script),
+        ).mismatch
+
+    @classmethod
+    def _symbolic_family(
+        cls,
+        script,
+        prefix,
+        row_count,
+        *,
+        payload_count=2,
+        enabled=smt.TRUE,
+    ):
+        columns = cls._columns(prefix, payload_count)
+        rows = []
+        presence = []
+        for row_index in range(row_count):
+            presence.append(script.fresh_constant(
+                f"{prefix} row {row_index} present",
+                smt.BOOL,
+            ))
+            rows.append(tuple(
+                Value(
+                    column.type,
+                    script.fresh_constant(
+                        f"{prefix} row {row_index} {column.name} null",
+                        smt.BOOL,
+                    ),
+                    script.fresh_constant(
+                        f"{prefix} row {row_index} {column.name} value",
+                        smt.INT,
+                    ),
+                )
+                for column in columns
+            ))
+        value = cls._relation(
+            prefix,
+            rows,
+            payload_count=payload_count,
+            presence=tuple(presence),
+            columns=columns,
+        )
+        return cls._family(
+            value,
+            enabled=enabled,
+            error=script.fresh_constant(f"{prefix} error", smt.BOOL),
+        )
+
+    @staticmethod
+    def _preferred_predicate(mismatch):
+        assert mismatch.preferred_branches is not None
+        return smt.or_(*(
+            branch.predicate
+            for branch in mismatch.preferred_branches
+        ))
+
+    def test_q21_and_q56_shapes_have_stable_minimal_portfolios(self):
+        script = smt.Script()
+        q21 = self._mismatch(
+            self._symbolic_family(script, "logical", 2),
+            self._symbolic_family(script, "staged", 8),
+            script,
+        )
+        self.assertEqual(
+            tuple(branch.name for branch in q21.preferred_branches),
+            (
+                "preferred_left_error_only",
+                "preferred_right_error_only",
+                "preferred_left_row_0_key_missing",
+                "preferred_left_row_1_key_missing",
+                *(f"preferred_right_row_{index}_key_missing" for index in range(8)),
+                "preferred_left_row_0_column_2_payload_mismatch",
+                "preferred_left_row_0_column_3_payload_mismatch",
+                "preferred_left_row_1_column_2_payload_mismatch",
+                "preferred_left_row_1_column_3_payload_mismatch",
+            ),
+        )
+        self.assertEqual(len(q21.preferred_branches), 16)
+        self.assertEqual(
+            tuple(branch.name for branch in q21.branches),
+            (
+                "left_language_empty",
+                "right_language_empty",
+                "left_outcome_0_unmatched",
+                "right_outcome_0_unmatched",
+            ),
+        )
+
+        script = smt.Script()
+        q56 = self._mismatch(
+            self._symbolic_family(
+                script,
+                "logical",
+                2,
+                payload_count=1,
+            ),
+            self._symbolic_family(
+                script,
+                "staged",
+                4,
+                payload_count=1,
+            ),
+            script,
+        )
+        self.assertEqual(
+            tuple(branch.name for branch in q56.preferred_branches),
+            (
+                "preferred_left_error_only",
+                "preferred_right_error_only",
+                "preferred_left_row_0_key_missing",
+                "preferred_left_row_1_key_missing",
+                *(f"preferred_right_row_{index}_key_missing" for index in range(4)),
+                "preferred_left_row_0_column_2_payload_mismatch",
+                "preferred_left_row_1_column_2_payload_mismatch",
+            ),
+        )
+        self.assertEqual(len(q56.preferred_branches), 10)
+
+    def test_symbolic_language_empty_branches_are_kept_and_false_ones_omitted(self):
+        script = smt.Script()
+        symbolic = self._mismatch(
+            self._symbolic_family(
+                script,
+                "left",
+                1,
+                enabled=script.fresh_constant("left enabled", smt.BOOL),
+            ),
+            self._symbolic_family(
+                script,
+                "right",
+                1,
+                enabled=script.fresh_constant("right enabled", smt.BOOL),
+            ),
+            script,
+        )
+        self.assertEqual(
+            tuple(branch.name for branch in symbolic.preferred_branches[:2]),
+            (
+                "preferred_left_language_empty",
+                "preferred_right_language_empty",
+            ),
+        )
+
+        empty = self._mismatch(
+            self._family(self._relation("left", ())),
+            self._family(self._relation("right", ())),
+        )
+        self.assertIsNone(empty.preferred_branches)
+
+    def test_exhaustive_sparse_nullable_composite_key_cover_is_exact(self):
+        script = smt.Script()
+        columns_left = self._columns("left", 1)
+        columns_right = self._columns("right", 1)
+
+        def symbolic_rows(prefix, columns, keys):
+            rows = []
+            presence = []
+            payloads = []
+            for index, key in enumerate(keys):
+                present = script.fresh_constant(
+                    f"{prefix} row {index} present",
+                    smt.BOOL,
+                )
+                payload = script.fresh_constant(
+                    f"{prefix} row {index} payload",
+                    smt.INT,
+                )
+                presence.append(present)
+                payloads.append(payload)
+                rows.append((
+                    self._value(key[0]),
+                    self._value(key[1]),
+                    Value("Int64", smt.FALSE, payload),
+                ))
+            return rows, presence, payloads
+
+        left_rows, left_presence, left_payloads = symbolic_rows(
+            "left",
+            columns_left,
+            ((None, 0), (0, None)),
+        )
+        right_rows, right_presence, right_payloads = symbolic_rows(
+            "right",
+            columns_right,
+            ((None, 0), (0, None), (1, 0)),
+        )
+        left_enabled = script.fresh_constant("left enabled", smt.BOOL)
+        right_enabled = script.fresh_constant("right enabled", smt.BOOL)
+        left_error = script.fresh_constant("left error", smt.BOOL)
+        right_error = script.fresh_constant("right error", smt.BOOL)
+        mismatch = self._mismatch(
+            self._family(
+                self._relation(
+                    "left",
+                    left_rows,
+                    payload_count=1,
+                    presence=left_presence,
+                    columns=columns_left,
+                ),
+                enabled=left_enabled,
+                error=left_error,
+            ),
+            self._family(
+                self._relation(
+                    "right",
+                    right_rows,
+                    payload_count=1,
+                    presence=right_presence,
+                    columns=columns_right,
+                ),
+                enabled=right_enabled,
+                error=right_error,
+            ),
+            script,
+        )
+        preferred = self._preferred_predicate(mismatch)
+        symbols = (
+            *left_presence,
+            *right_presence,
+            *left_payloads,
+            *right_payloads,
+            left_enabled,
+            right_enabled,
+            left_error,
+            right_error,
+        )
+        domains = (
+            *((False, True),) * (len(left_presence) + len(right_presence)),
+            *((0, 1),) * (len(left_payloads) + len(right_payloads)),
+            *((False, True),) * 4,
+        )
+        for assignment in product(*domains):
+            constants = {
+                symbol.atom: value
+                for symbol, value in zip(symbols, assignment)
+            }
+            self.assertEqual(
+                _ground(mismatch.counterexample, constants),
+                _ground(preferred, constants),
+                assignment,
+            )
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_z3_proves_symbolic_preferred_cover_matches_canonical(self):
+        script = smt.Script(timeout_ms=10_000)
+        scalar = ScalarEncoder(script)
+
+        def sorted_family(prefix, row_count):
+            columns = self._columns(prefix, 1)
+            rows = []
+            for index in range(row_count):
+                rows.append(Row(
+                    script.fresh_constant(
+                        f"{prefix} row {index} present",
+                        smt.BOOL,
+                    ),
+                    {
+                        column.name: Value(
+                            column.type,
+                            script.fresh_constant(
+                                f"{prefix} row {index} column {position} null",
+                                smt.BOOL,
+                            ),
+                            script.fresh_constant(
+                                f"{prefix} row {index} column {position} value",
+                                smt.INT,
+                            ),
+                        )
+                        for position, column in enumerate(columns)
+                    },
+                ))
+            source = Relation(
+                columns,
+                tuple(rows),
+                null_safe_unique_key=frozenset((
+                    columns[0].name,
+                    columns[1].name,
+                )),
+            )
+            order = (
+                SortOrder(columns[0].name, True, True),
+                SortOrder(columns[1].name, False, False),
+            )
+            return relation.sort_family(
+                single(source),
+                order,
+                script,
+                f"{prefix} sort",
+            )
+
+        left = sorted_family("left", 2)
+        right = sorted_family("right", 3)
+        mismatch = compare_families(left, right, scalar).mismatch
+
+        def unique(family):
+            value = family.outcomes[0].relation
+            key = tuple(sorted(value.null_safe_unique_key))
+            return smt.and_(*(
+                smt.not_(smt.and_(
+                    first.present,
+                    second.present,
+                    *(
+                        scalar.not_distinct(
+                            first.values[name],
+                            second.values[name],
+                        )
+                        for name in key
+                    ),
+                ))
+                for first_index, first in enumerate(value.rows)
+                for second in value.rows[first_index + 1:]
+            ))
+
+        script.assert_term(smt.and_(
+            unique(left),
+            unique(right),
+            smt.not_(smt.eq(
+                mismatch.counterexample,
+                self._preferred_predicate(mismatch),
+            )),
+        ))
+        solved = subprocess.run(
+            (SOLVER, "-in"),
+            input=script.render(),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+        self.assertEqual(solved.returncode, 0, solved.stderr)
+        self.assertEqual(solved.stdout.strip(), "unsat")
+
+    def test_each_observable_mismatch_has_a_specific_sat_branch(self):
+        base = ((None, 0, 10, 20), (1, None, 30, 40))
+        cases = (
+            (
+                "left missing key",
+                base,
+                base[:1],
+                {},
+                "preferred_left_row_1_key_missing",
+            ),
+            (
+                "right missing key",
+                base[:1],
+                base,
+                {},
+                "preferred_right_row_1_key_missing",
+            ),
+            (
+                "first payload",
+                ((None, 0, 11, 20), (1, None, 30, 40)),
+                base,
+                {},
+                "preferred_left_row_0_column_2_payload_mismatch",
+            ),
+            (
+                "second payload",
+                ((None, 0, 10, 21), (1, None, 30, 40)),
+                base,
+                {},
+                "preferred_left_row_0_column_3_payload_mismatch",
+            ),
+            (
+                "left error",
+                base,
+                base,
+                {"left_error": smt.TRUE},
+                "preferred_left_error_only",
+            ),
+            (
+                "right error",
+                base,
+                base,
+                {"right_error": smt.TRUE},
+                "preferred_right_error_only",
+            ),
+            (
+                "left language empty",
+                base,
+                base,
+                {"left_enabled": smt.FALSE},
+                "preferred_left_language_empty",
+            ),
+            (
+                "right language empty",
+                base,
+                base,
+                {"right_enabled": smt.FALSE},
+                "preferred_right_language_empty",
+            ),
+        )
+        for name, left_rows, right_rows, statuses, expected in cases:
+            with self.subTest(name=name):
+                mismatch = self._mismatch(
+                    self._family(
+                        self._relation("left", left_rows),
+                        enabled=statuses.get("left_enabled", smt.TRUE),
+                        error=statuses.get("left_error", smt.FALSE),
+                    ),
+                    self._family(
+                        self._relation("right", right_rows),
+                        enabled=statuses.get("right_enabled", smt.TRUE),
+                        error=statuses.get("right_error", smt.FALSE),
+                    ),
+                )
+                sat = tuple(
+                    branch.name
+                    for branch in mismatch.preferred_branches
+                    if _ground(branch.predicate, {})
+                )
+                self.assertIn(expected, sat)
+                self.assertTrue(_ground(mismatch.counterexample, {}))
+
+        script = smt.Script()
+        extra = script.fresh_constant("extra left row present", smt.BOOL)
+        mismatch = self._mismatch(
+            self._family(self._relation(
+                "left",
+                ((0, 0, 10, 20), (1, 0, 30, 40)),
+                presence=(smt.TRUE, extra),
+            )),
+            self._family(self._relation(
+                "right",
+                ((0, 0, 11, 20),),
+            )),
+            script,
+        )
+        self.assertTrue(_ground(
+            next(
+                branch.predicate
+                for branch in mismatch.preferred_branches
+                if branch.name
+                == "preferred_right_row_0_column_2_payload_mismatch"
+            ),
+            {extra.atom: False},
+        ))
+
+    def test_gate_is_positional_and_fails_closed_on_near_misses(self):
+        left = self._relation("left", ((0, 0, 1, 2),))
+        right = self._relation("right", ((0, 0, 1, 2),))
+        gate_script = smt.Script()
+        left_error = gate_script.fresh_constant("left error", smt.BOOL)
+        right_error = gate_script.fresh_constant("right error", smt.BOOL)
+
+        def left_family(value, **kwargs):
+            return self._family(value, error=left_error, **kwargs)
+
+        def right_family(value, **kwargs):
+            return self._family(value, error=right_error, **kwargs)
+
+        self.assertIsNotNone(self._mismatch(
+            left_family(left),
+            right_family(right),
+            gate_script,
+        ).preferred_branches)
+
+        right_columns = list(right.columns)
+        right_columns[0] = replace(right_columns[0], nullable=False)
+        nullable_mismatch = replace(
+            right,
+            columns=tuple(right_columns),
+            rows=(self._row(tuple(right_columns), (0, 0, 1, 2)),),
+        )
+        choice_script = smt.Script()
+        choice = relation.BoundedChoice(
+            choice_script.fresh_constant("choice", smt.INT),
+            2,
+        )
+        incomplete = replace(
+            right,
+            order=(right.order[0],),
+        )
+        left_incomplete = replace(
+            left,
+            order=(left.order[0],),
+        )
+        wrong_direction = replace(
+            right,
+            order=(replace(right.order[0], ascending=False), *right.order[1:]),
+        )
+        wrong_nulls = replace(
+            right,
+            order=(replace(right.order[0], nulls_first=False), *right.order[1:]),
+        )
+        wrong_comparison = replace(
+            right,
+            order=(replace(right.order[0], comparison="integral_avg_rank"), *right.order[1:]),
+        )
+        different_key = replace(
+            right,
+            null_safe_unique_key=frozenset((
+                right.columns[0].name,
+                right.columns[2].name,
+            )),
+            order=tuple(
+                SortOrder(column.name, True, False)
+                for column in right.columns
+            ),
+        )
+        left_all_order = replace(
+            left,
+            order=tuple(
+                SortOrder(column.name, True, False)
+                for column in left.columns
+            ),
+        )
+        type_columns = list(right.columns)
+        type_columns[0] = replace(type_columns[0], type="Uint64")
+        type_mismatch = replace(
+            right,
+            columns=tuple(type_columns),
+            rows=(self._row(tuple(type_columns), (0, 0, 1, 2)),),
+        )
+        cases = (
+            (
+                "unordered",
+                left_family(replace(left, sequence=False, order=None)),
+                right_family(replace(right, sequence=False, order=None)),
+                gate_script,
+            ),
+            (
+                "multi outcome",
+                RelationFamily((
+                    Outcome(smt.TRUE, left, left_error),
+                    Outcome(smt.TRUE, left, left_error),
+                )),
+                right_family(right),
+                gate_script,
+            ),
+            (
+                "decision",
+                left_family(left, decisions=(("tie", 0),)),
+                right_family(right),
+                gate_script,
+            ),
+            (
+                "choice",
+                self._family(left, choices=(choice,)),
+                self._family(right),
+                choice_script,
+            ),
+            (
+                "no certificate",
+                left_family(replace(left, null_safe_unique_key=None)),
+                right_family(right),
+                gate_script,
+            ),
+            (
+                "incomplete key order",
+                left_family(left),
+                right_family(incomplete),
+                gate_script,
+            ),
+            (
+                "shared incomplete key order",
+                left_family(left_incomplete),
+                right_family(incomplete),
+                gate_script,
+            ),
+            (
+                "direction",
+                left_family(left),
+                right_family(wrong_direction),
+                gate_script,
+            ),
+            (
+                "null placement",
+                left_family(left),
+                right_family(wrong_nulls),
+                gate_script,
+            ),
+            (
+                "comparison tag",
+                left_family(left),
+                right_family(wrong_comparison),
+                gate_script,
+            ),
+            (
+                "positional key",
+                left_family(left_all_order),
+                right_family(different_key),
+                gate_script,
+            ),
+            (
+                "nullability",
+                left_family(left),
+                right_family(nullable_mismatch),
+                gate_script,
+            ),
+            (
+                "column type",
+                left_family(left),
+                right_family(type_mismatch),
+                gate_script,
+            ),
+        )
+        for name, left_family, right_family, script in cases:
+            with self.subTest(name=name):
+                mismatch = self._mismatch(
+                    left_family,
+                    right_family,
+                    script,
+                )
+                self.assertIsNone(mismatch.preferred_branches)
+
+    def test_preferred_portfolio_caps_are_inclusive_and_fail_closed(self):
+        script = smt.Script()
+        left = self._symbolic_family(
+            script,
+            "left",
+            2,
+            enabled=script.fresh_constant("left enabled", smt.BOOL),
+        )
+        right = self._symbolic_family(
+            script,
+            "right",
+            8,
+            enabled=script.fresh_constant("right enabled", smt.BOOL),
+        )
+        # 4 status/language + 10 key + 4 payload branches; 160 audited
+        # NULL-safe cell comparisons for a 2x8, K2, payload2 shape.
+        with patch.object(
+            relation,
+            "MAX_PREFERRED_KEYED_MISMATCH_BRANCHES",
+            18,
+        ), patch.object(
+            relation,
+            "MAX_PREFERRED_KEYED_MISMATCH_COMPARISONS",
+            160,
+        ):
+            self.assertIsNotNone(
+                self._mismatch(left, right, script).preferred_branches
+            )
+        for cap, value in (
+            ("MAX_PREFERRED_KEYED_MISMATCH_BRANCHES", 17),
+            ("MAX_PREFERRED_KEYED_MISMATCH_COMPARISONS", 159),
+        ):
+            with self.subTest(cap=cap), patch.object(relation, cap, value):
+                self.assertIsNone(
+                    self._mismatch(left, right, script).preferred_branches
+                )
 
 
 class SortConcreteDifferentialTest(unittest.TestCase):

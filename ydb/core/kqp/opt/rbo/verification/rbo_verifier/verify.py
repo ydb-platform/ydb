@@ -76,6 +76,8 @@ class Problem:
     # Model-domain obligation: rule out every exclusion before semantics.
     soundness_exclusion: MismatchBranch | None = None
     soundness_exclusions: tuple[MismatchBranch, ...] = ()
+    # Optional exact stable portfolio that replaces the canonical-first probe.
+    preferred_branches: tuple[MismatchBranch, ...] | None = None
 
     def witness_values(self) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
@@ -108,6 +110,10 @@ class Problem:
             ()
             if self.mismatch_branches is None
             else self.mismatch_branches
+        ) + (
+            ()
+            if self.preferred_branches is None
+            else self.preferred_branches
         ) + self.soundness_exclusions + (
             ()
             if self.semantic_mismatch is None
@@ -556,12 +562,13 @@ def _build_problem(
         )
     )
     return Problem(
-        script,
-        database.witness,
-        mismatch.branches,
-        semantic_mismatch,
-        soundness_exclusion,
-        tuple(soundness_exclusions),
+        script=script,
+        witness=database.witness,
+        mismatch_branches=mismatch.branches,
+        semantic_mismatch=semantic_mismatch,
+        soundness_exclusion=soundness_exclusion,
+        soundness_exclusions=tuple(soundness_exclusions),
+        preferred_branches=mismatch.preferred_branches,
     )
 
 
@@ -638,48 +645,53 @@ def query_solver(
             "abstract",
         )
 
-    branches = problem.mismatch_branches
-    if branches is None:
-        return classify_exact(
-            _query_obligation(
-                problem,
-                solver,
-                exact_requested,
-                budget,
-                None,
+    portfolio = problem.preferred_branches
+    if portfolio is None:
+        branches = problem.mismatch_branches
+        if branches is None:
+            return classify_exact(
+                _query_obligation(
+                    problem,
+                    solver,
+                    exact_requested,
+                    budget,
+                    None,
+                )
+            )
+        if not branches:
+            raise SolverError("exact mismatch decomposition has no branches")
+        canonical_limit = (
+            None
+            if effective_timeout is None
+            else max(
+                1,
+                effective_timeout
+                * _CANONICAL_PROBE_NUMERATOR
+                // _CANONICAL_PROBE_DENOMINATOR,
             )
         )
-    if not branches:
-        raise SolverError("exact mismatch decomposition has no branches")
-
-    canonical_limit = (
-        None
-        if effective_timeout is None
-        else max(
-            1,
-            effective_timeout
-            * _CANONICAL_PROBE_NUMERATOR
-            // _CANONICAL_PROBE_DENOMINATOR,
+        canonical = _query_obligation(
+            problem,
+            solver,
+            exact_requested,
+            budget,
+            problem.semantic_mismatch,
+            canonical_limit,
         )
-    )
-    canonical = _query_obligation(
-        problem,
-        solver,
-        exact_requested,
-        budget,
-        problem.semantic_mismatch,
-        canonical_limit,
-    )
-    if canonical.status in {"sat", "unsat"} or canonical.phase == "model":
-        return classify_exact(canonical)
+        if canonical.status in {"sat", "unsat"} or canonical.phase == "model":
+            return classify_exact(canonical)
+        portfolio = branches
+    elif not portfolio:
+        raise SolverError("preferred exact mismatch portfolio has no branches")
 
     first_unknown: str | None = None
-    for index, branch in enumerate(branches):
+    for index, branch in enumerate(portfolio):
         if budget.remaining_ms() == 0:
-            first_unknown = (
-                f"global solver deadline expired before branch "
-                f"{index + 1}/{len(branches)} ({branch.name})"
-            )
+            if first_unknown is None:
+                first_unknown = (
+                    f"global solver deadline expired before branch "
+                    f"{index + 1}/{len(portfolio)} ({branch.name})"
+                )
             break
         query = _query_obligation(
             problem,
@@ -694,7 +706,7 @@ def query_solver(
             return query
         if query.status == "unknown" and first_unknown is None:
             first_unknown = (
-                f"branch {index + 1}/{len(branches)} "
+                f"branch {index + 1}/{len(portfolio)} "
                 f"({branch.name}): {query.reason or 'solver returned unknown'}"
             )
 

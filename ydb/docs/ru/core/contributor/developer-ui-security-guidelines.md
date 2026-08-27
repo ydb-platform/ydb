@@ -2,7 +2,7 @@
 
 Эта статья — чеклист требований безопасности для разработчиков и контрибьюторов {{ ydb-short-name }}, которые пишут на C++ страницы мониторинга ([Developer UI](../../reference/embedded-ui/index.md)). Такие страницы генерируются во время выполнения кода с помощью макросов `HTML(str) { ... }` и отдаются встроенным HTTP-сервером мониторинга.
 
-Механизмы CSP (`nonce`) и CSRF в HTTP-слое мониторинга описаны ниже по текущему поведению кода; они появились в pull-запросе [#36981](https://github.com/ydb-platform/ydb/pull/36981).
+Механизмы [политики безопасности контента](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) (Content Security Policy, CSP), включая `nonce`, и защиты от [межсайтовой подделки запросов](https://ru.wikipedia.org/wiki/Межсайтовая_подделка_запроса) (Cross-Site Request Forgery, CSRF) в HTTP-слое мониторинга описаны ниже по текущему поведению кода. Они появились в pull-запросе [#36981](https://github.com/ydb-platform/ydb/pull/36981).
 
 ## Content Security Policy (CSP) и nonce {#csp-and-nonce}
 
@@ -16,7 +16,7 @@ Content-Security-Policy: script-src 'nonce-AbCd…=='
 
 В заголовке отсутствуют `style-src`, `font-src`, `connect-src`, `frame-src`, `img-src` и `default-src`. В текущей версии браузер контролирует только выполнение `<script>`; правила ниже для остальных типов ресурсов — рекомендации защитного программирования для совместимости с будущими версиями, а не требования, которые браузер уже принудительно обеспечивает.
 
-Преобразование `nonce` в заголовок CSP выполняется в [THttpMonLegacyActorRequest::Handle(TEvHttpInfoRes…)](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp) (legacy-путь мониторинга, который доставляет `TEvHttpInfoRes`/`TEvRemoteHttpInfoRes`). Обработчики, отвечающие «сырым» `THttpOutgoingResponse`, обеспечивают безопасность самостоятельно.
+Преобразование `nonce` в заголовок CSP выполняется в [THttpMonLegacyActorRequest::Handle(TEvHttpInfoRes…)](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp). Это legacy-путь мониторинга, который доставляет `TEvHttpInfoRes` и `TEvRemoteHttpInfoRes`. Обработчики, отвечающие «сырым» `THttpOutgoingResponse`, обеспечивают безопасность самостоятельно.
 
 {% endnote %}
 
@@ -39,7 +39,7 @@ str << R"___(
 
 {% endnote %}
 
-Код отрисовки страницы генерирует nonce для каждого ответа, подставляет его во все встроенные `<script>` и записывает в `res->Nonce` исходящего `TEvRemoteHttpInfoRes` / `TEvHttpInfoRes`. Фреймворк мониторинга предоставляет [NActors::NMon::GenerateCspNonce](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.h) — случайный GUID в кодировке base64. HTTP-слой автоматически добавляет заголовок `Content-Security-Policy: script-src 'nonce-<value>'`; заголовок CSP формировать вручную не требуется.
+Код отрисовки страницы генерирует nonce для каждого ответа, подставляет его во все встроенные `<script>` и записывает в поле `Nonce` исходящего события `TEvRemoteHttpInfoRes` / `TEvHttpInfoRes`. Сгенерировать такой токен можно через [NActors::NMon::GenerateCspNonce](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.h): это случайный [GUID](https://ru.wikipedia.org/wiki/GUID) в кодировке base64. HTTP-слой сам добавляет заголовок `Content-Security-Policy: script-src 'nonce-<value>'`; вручную его собирать не нужно.
 
 ```cpp
 #include <ydb/library/actors/core/mon.h>
@@ -68,7 +68,7 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 }
 ```
 
-Для страниц, отдаваемых через `TEvHttpInfoRes` (локальный mon, без проксирования через [таблетки](../../concepts/glossary.md#tablet)), действует то же присваивание `res->Nonce = nonce` — см. `Notify(...)` в [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
+Для страниц локального мониторинга, отдаваемых через `TEvHttpInfoRes` без проксирования через [таблетки](../../concepts/glossary.md#tablet), действует то же присваивание `res->Nonce = nonce`. Подробнее можно ознакомиться в `Notify(...)` в [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
 
 При пересылке ответа между узлами nonce сохраняется: [TEvRemoteHttpInfoRes::SerializeToArcadiaStream](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.cpp) упаковывает его вместе с HTML, поэтому тот же подход работает для удалённого мониторинга таблеток.
 
@@ -87,13 +87,17 @@ response << "Content-Security-Policy: script-src 'self' https://cdn.example.com\
 
 ### Встроенные стили {#inline-styles}
 
-В текущем заголовке CSP нет директивы `style-src`, поэтому встроенные стили (атрибуты `style="..."` и блоки `<style>`) браузером не блокируются. Они широко используются на существующих страницах Developer UI (hive monitoring, pdisk, tablet_flat, graph, cms, columnshard, tracing и т. д.); планируется миграция этих мест и последующее добавление более строгой `style-src` в заголовок.
+В текущем заголовке CSP нет директивы `style-src`, поэтому встроенные стили, такие как атрибуты `style="..."` и блоки `<style>`, браузером не блокируются. Они широко используются на существующих страницах Developer UI: hive monitoring, pdisk, tablet_flat, graph, cms, columnshard, tracing и т. д.
 
-Отсутствие блокировки встроенных стилей в текущей версии не означает, что их следует добавлять в новом коде.
+{% note info %}
+
+Планируется миграция этих мест и последующее добавление более строгой директивы `style-src` в заголовок.
+
+{% endnote %}
 
 {% note warning %}
 
-Для нового кода не рекомендуется добавлять встроенные стили — атрибуты `style="..."` и блоки `<style>`.
+Не добавляйте встроенные стили в новом коде. Их отсутствие в текущей политике CSP не означает, что такое использование допустимо.
 
 ```cpp
 str << "<div style='color:red; margin:5px'>...</div>";
@@ -102,7 +106,7 @@ str << "<style>.my-table th { text-align: center; }</style>";
 
 {% endnote %}
 
-Предпочтительно выносить стили в статический CSS-файл, отдаваемый с того же источника (origin):
+Предпочтительно выносить стили в статический CSS-файл, отдаваемый с того же источника:
 
 ```cpp
 // В ydb/core/viewer/.../monitoring.css (отдаётся из /static/):
@@ -124,7 +128,7 @@ str << "<div class='mon-warning'>...</div>";
 | Директива | Целевая политика | Применяется сейчас? |
 | --- | --- | --- |
 | `script-src` | `'self'` + nonce, без внешних скриптов | Да — `script-src 'nonce-…'` |
-| `style-src` | только `'self'`, без внешних таблиц стилей | Нет (см. [{#T}](#csp-and-nonce)) |
+| `style-src` | только `'self'`, без внешних таблиц стилей | Нет |
 | `font-src` | `'self'`, без внешних шрифтов | Нет |
 | `connect-src` | `'self'`, без внешних `fetch()`/XMLHttpRequest (XHR) | Нет |
 | `frame-src` | `'self'`, без внешних iframe | Нет |
@@ -135,7 +139,7 @@ str << "<div class='mon-warning'>...</div>";
 Страницы мониторинга могут отдаваться под разными префиксами, поэтому в генерируемом HTML не задаются абсолютные пути. В `href`, `src`, `action`, `formaction`, `fetch()`, `$.ajax()` и т. п. используются только относительные ссылки. Не используются:
 
 - полные URL: `https://example.com/...`;
-- URL без схемы (protocol-relative): `//example.com/...`;
+- URL без схемы, protocol-relative: `//example.com/...`;
 - пути от корня сайта: `/get_blob`, `/static/js/...`.
 
 {% note alert %}
@@ -160,7 +164,7 @@ out << "fetch('api/data')\n";
 
 ### Загрузка скриптов, стилей и шрифтов {#no-external-scripts}
 
-Ресурсы загружаются с того же источника (origin), без внешних ссылок.
+Ресурсы загружаются с того же источника, без внешних ссылок.
 
 {% note alert %}
 
@@ -219,10 +223,10 @@ out << "<iframe src='https://external.example.com/widget'></iframe>\n";
 
 HTTP-слой мониторинга реализует защиту от CSRF по схеме [double-submit cookie](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#alternative-using-a-double-submit-cookie-pattern):
 
-- при любом ответе сервер устанавливает cookie `csrf_token` (случайный GUID, `SameSite=Strict; Path=/`), если она ещё не задана. Cookie намеренно без флага `HttpOnly` (схема double-submit cookie требует чтения значения из JS) и без флага `Secure` (HTTP-слой мониторинга не знает, работает ли он за TLS);
-- для методов, изменяющих состояние (POST/PUT/DELETE/PATCH), сервер сравнивает cookie `csrf_token` с заголовком `X-CSRF-Token` или параметром формы `csrf_token`. При несовпадении возвращается `403 FORBIDDEN`;
-- проверка CSRF пропускается, если запрос не основан на cookie (нет cookie `ydb_session_id`) — например, для API-клиентов с заголовками `Authorization`;
-- если cookie `ydb_session_id` есть, а cookie `csrf_token` ещё не выдана (например, первый POST сразу после входа без предшествующего GET), запрос отклоняется. Перед запросом, изменяющим состояние, нужен хотя бы один GET.
+- При любом ответе сервер устанавливает cookie `csrf_token`, если она ещё не задана. Значение cookie — случайный [GUID](https://ru.wikipedia.org/wiki/GUID); параметры cookie: `SameSite=Strict` и `Path=/`. Флаг `HttpOnly` намеренно не выставляется: схема double-submit cookie требует чтения значения из JavaScript. Флаг `Secure` также не выставляется: HTTP-слой мониторинга не знает, работает ли он за TLS.
+- Для методов POST, PUT, DELETE и PATCH сервер сравнивает cookie `csrf_token` с заголовком `X-CSRF-Token` или параметром формы `csrf_token`. При несовпадении возвращается `403 FORBIDDEN`.
+- Проверка CSRF пропускается, если запрос не основан на cookie: отсутствует cookie `ydb_session_id`. Так работают, например, API-клиенты с заголовками `Authorization`.
+- Если cookie `ydb_session_id` есть, а cookie `csrf_token` ещё не выдана, запрос отклоняется. Так бывает при первом POST сразу после входа без предшествующего GET. Перед запросом, изменяющим состояние, нужен хотя бы один GET.
 
 Общего JS-набора мониторинга нет, поэтому каждый встроенный `<script>`, выполняющий POST, самостоятельно читает cookie `csrf_token`. Для этого подходит небольшая вспомогательная функция `getCsrfToken()` с тем же именем cookie, что и на сервере:
 
@@ -236,16 +240,16 @@ function getCsrfToken() {
 }
 ```
 
-Функцию можно встроить в каждый блок `<script nonce='...'>`, где она нужна, или — предпочтительнее — выводить один раз на страницу из общей вспомогательной функции (например, `RenderCsrfTokenHelper(str, nonce)` рядом с кодом отрисовки страницы).
+Функцию можно встроить в каждый блок `<script nonce='...'>`, где она нужна. Предпочтительнее выводить её один раз на страницу из общей вспомогательной функции рядом с кодом отрисовки страницы, например `RenderCsrfTokenHelper(str, nonce)`.
 
 ### CSRF-токен в запросах, изменяющих состояние {#csrf-token-required}
 
-Сервер мониторинга принимает токен из одного из двух мест (см. `CheckCsrfToken` в [mon.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp)):
+Сервер мониторинга принимает токен двумя способами. Реализация — `CheckCsrfToken` в [mon.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp):
 
-1. Заголовок запроса `X-CSRF-Token` — предпочтителен для `fetch`/`$.ajax`. Обязателен для тела, не закодированного как форма (в частности, для JSON): сервер разбирает тело как `TCgiParameters`, поэтому поле `csrf_token` внутри JSON не будет найдено.
-2. Параметр формы `csrf_token` в теле POST — работает только при `Content-Type: application/x-www-form-urlencoded` (обычная `<form method="POST">` или тело `URLSearchParams`), поскольку формы не могут задавать произвольные заголовки.
+1. Заголовок запроса `X-CSRF-Token` предпочтителен для `fetch` и `$.ajax`. Он обязателен, если тело запроса не закодировано как форма, в том числе для JSON: сервер разбирает тело как `TCgiParameters`, поэтому поле `csrf_token` внутри JSON не будет найдено.
+2. Параметр формы `csrf_token` в теле POST работает только при `Content-Type: application/x-www-form-urlencoded`. Это обычная `<form method="POST">` или тело `URLSearchParams`. Формы не могут задавать произвольные заголовки.
 
-Оба подхода допустимы. Форма подходит, когда нужен запасной вариант без JavaScript (как на странице Disable Self-Heal контроллера BlobStorage — см. [self_heal.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp)). В остальных случаях предпочтителен `fetch` с заголовком `X-CSRF-Token` — он лучше сочетается с динамическим UI и единственный для JSON-тел (как в [state_storage_state.js](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js)).
+Оба подхода допустимы. Форма подходит, когда нужен запасной вариант без JavaScript. Пример — страница Disable [Self-Heal](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp) контроллера BlobStorage. В остальных случаях предпочтителен `fetch` с заголовком `X-CSRF-Token`: он лучше сочетается с динамическим UI и единственный для JSON-тел. Пример — [state_storage_state.js](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js).
 
 {% note alert %}
 
@@ -262,7 +266,7 @@ str << "</form>\n";
 
 #### Вариант A: <form> со скрытым полем csrf_token
 
-Серверный обработчик читает cookie `csrf_token` из входящего `TEvRemoteHttpInfo` (через `ev->Get()->GetCookie("csrf_token")`) и передаёт её в код отрисовки. Токен экранируется для HTML при вставке в значение атрибута (подходит небольшое inline-экранирование как в [self_heal.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp) или `HtmlEscape` — см. [{#T}](#output-escaping)):
+Серверный обработчик читает cookie `csrf_token` из входящего `TEvRemoteHttpInfo` через `ev->Get()->GetCookie("csrf_token")` и передаёт её в код отрисовки. Токен экранируется для HTML при вставке в значение атрибута. Подходит небольшое inline-экранирование, как в [self_heal.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp), или `HtmlEscape`, см. [{#T}](#output-escaping):
 
 ```cpp
 void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
@@ -318,11 +322,11 @@ str << R"js(
 str << "</script>\n";
 ```
 
-Пример этого паттерна в репозитории — [state_storage_state.js](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js) (`loadDistconfStatus`): POST, который читает `csrf_token` из `document.cookie` и передаёт его как `X-CSRF-Token`.
+Пример этого паттерна в репозитории — функция `loadDistconfStatus` в [state_storage_state.js](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js): POST, который читает `csrf_token` из `document.cookie` и передаёт его как `X-CSRF-Token`.
 
 ### GET-запросы и изменение состояния {#get-no-side-effects}
 
-GET-запросы не защищены от CSRF: `CheckCsrfToken` проверяет токен только для `POST`/`PUT`/`DELETE`/`PATCH` (см. [mon.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp), `IsCsrfProtectedMethod`). Если странице нужно инициировать действие (перезапуск, остановка, переконфигурация), применяется один из защищённых методов — обычно POST.
+GET-запросы не защищены от CSRF: `CheckCsrfToken` проверяет токен только для `POST`, `PUT`, `DELETE` и `PATCH`. См. [mon.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp), функция `IsCsrfProtectedMethod`. Если странице нужно инициировать действие — перезапуск, остановку, переконфигурацию — применяется один из защищённых методов, обычно POST.
 
 {% note alert %}
 
@@ -361,7 +365,7 @@ void HandlePost(NMon::TEvHttpInfo::TPtr& ev) {
 
 ## Встроенные обработчики событий {#no-inline-handlers}
 
-Встроенные обработчики событий (`onclick="..."`, `onchange="..."` и т. д.) блокируются политикой CSP `script-src` даже при наличии nonce, поскольку nonce относится только к блокам `<script>`, а не к inline-атрибутам.
+Встроенные обработчики событий, такие как `onclick="..."` и `onchange="..."`, блокируются политикой CSP `script-src` даже при наличии nonce, поскольку nonce относится только к блокам `<script>`, а не к inline-атрибутам.
 
 {% note alert %}
 
@@ -412,7 +416,7 @@ TABLED() { str << HtmlEscape(pathName); }
 TABLED() { str << HtmlEscape(errorMessage); }
 ```
 
-Для URL в атрибутах `href` применяется URL-кодирование. Пример ниже показывает только экранирование значений; сами пути должны оставаться относительными (см. [{#T}](#relative-links)):
+Для URL в атрибутах `href` применяется URL-кодирование. Пример ниже показывает только экранирование значений; сами пути должны оставаться относительными, см. [{#T}](#relative-links):
 
 ```cpp
 str << "<a href='tablets?TabletID=" << tabletId << "'>";       // число — безопасно
@@ -421,7 +425,7 @@ str << "<a href='path?name=" << CGIEscapeRet(name) << "'>";    // строка �
 
 ### Динамические значения и <script> {#no-script-interpolation}
 
-У JavaScript свои правила экранирования, и `HtmlEscape` их **не покрывает**: не обрабатываются `'`, `\`, символы конца строки (`U+2028`, `U+2029`) и подстроки `</script>`. Значения вроде `O'Brien`, `foo\nbar` или `</script><script>alert(1)//` выходят из JS-литерала даже после `HtmlEscape`.
+У JavaScript свои правила экранирования, и `HtmlEscape` их **не покрывает**: не обрабатываются `'`, `\`, символы конца строки `U+2028` и `U+2029` и подстроки `</script>`. Значения вроде `O'Brien`, `foo\nbar` или `</script><script>alert(1)//` выходят из JS-литерала даже после `HtmlEscape`.
 
 Вместо самописного JS-экранирования на сервере тело скрипта остаётся полностью статичным, а динамические значения читаются из атрибутов `data-*` через стандартный API `dataset` — для контекста атрибута `HtmlEscape` подходит корректно.
 
@@ -459,9 +463,11 @@ str << R"js(
 str << "</script>";
 ```
 
-Тело скрипта остаётся фиксированной строкой без интерполяции, а каждое динамическое значение проходит через контекст HTML-атрибута, где `HtmlEscape` — подходящий инструмент. Тот же подход работает для массивов и объектов: их сериализуют в C++ в строку, помещают в один атрибут `data-...`, на клиенте вызывают `JSON.parse(el.dataset.items)`.
+Текст самого `<script>` лучше оставлять неизменным: не вставлять в него значения через конкатенацию или шаблоны. Все динамические данные передавайте через HTML-атрибуты — там их безопасно экранирует `HtmlEscape`.
 
-Встроенные обработчики (`onclick="..."`) и API вроде `eval`/`setTimeout('...')` со строковым кодом не входят в эту рекомендацию — они уже ограничены в [{#T}](#no-inline-handlers) и политикой `script-src` без `'unsafe-eval'`.
+Так же поступают с массивами и объектами: на стороне C++ сериализуют их в JSON-строку, кладут в один атрибут `data-...`, а в браузере читают через `JSON.parse(el.dataset.items)`.
+
+Встроенные обработчики вроде `onclick="..."` и API со строковым кодом, такие как `eval` и `setTimeout('...')`, не входят в эту рекомендацию: они уже ограничены в [{#T}](#no-inline-handlers) и политикой `script-src` без `'unsafe-eval'`.
 
 ## HTTP-ответы и GetHTTPOK() {#get-httpok}
 

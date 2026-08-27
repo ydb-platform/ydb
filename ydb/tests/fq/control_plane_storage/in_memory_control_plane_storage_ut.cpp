@@ -70,6 +70,7 @@ public:
 
         auto& computeConfig = *fqConfig.MutableCompute();
         computeConfig.SetDefaultCompute(NFq::NConfig::IN_PLACE);
+        computeConfig.MutableYdb()->MutableSynchronizationService()->SetEnable(false);
 
         auto& computeMapping = *computeConfig.AddComputeMapping();
         computeMapping.SetQueryType(FederatedQuery::QueryContent::ANALYTICS);

@@ -114,7 +114,9 @@ private:
 
         auto& ydbCompute = *fqConfig.MutableCompute()->MutableYdb();
         ydbCompute.SetEnable(Settings.EnableYdbCompute);
-        ydbCompute.MutableSynchronizationService()->SetEnable(Settings.EnableYdbCompute);
+        if (!ydbCompute.has_synchronizationservice()) {
+            ydbCompute.MutableSynchronizationService()->SetEnable(Settings.EnableYdbCompute);
+        }
 
         auto& computeControlPlane = *ydbCompute.MutableControlPlane();
         computeControlPlane.SetEnable(Settings.EnableYdbCompute);

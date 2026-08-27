@@ -2887,7 +2887,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 if (idx->State != TIndexDescription::EIndexState::Ready) {
                     return addError(TStringBuilder() << "fulltext index '" << *indexOverride << "' is not ready");
                 }
-                if (idx->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+                if (idx->Type != TIndexDescription::EType::GlobalFulltextRelevance &&
+                    idx->Type != TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                     return addError(TStringBuilder() << "index '" << *indexOverride << "' is not a fulltext relevance index");
                 }
                 if (!columnInList(idx->KeyColumns, b.ScoredColumn)) {
@@ -2898,9 +2899,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             } else {
                 ui32 matches = 0;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
-                    if (idx.State == TIndexDescription::EIndexState::Ready
-                        && idx.Type == TIndexDescription::EType::GlobalFulltextRelevance
-                        && columnInList(idx.KeyColumns, b.ScoredColumn)) {
+                    if ((idx.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                        idx.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) &&
+                        idx.State == TIndexDescription::EIndexState::Ready &&
+                        columnInList(idx.KeyColumns, b.ScoredColumn)) {
                         b.IndexName = idx.Name;
                         ++matches;
                     }

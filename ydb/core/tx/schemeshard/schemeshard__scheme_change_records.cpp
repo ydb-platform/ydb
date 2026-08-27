@@ -516,7 +516,59 @@ ui64 TSchemeShard::AllocateSchemeChangeOrderInMemory() {
     return ++NextSchemeChangeOrder;
 }
 
+void TSchemeShard::EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx) {
+    ctx.Schedule(SchemeChangeCleanupInterval, new TEvPrivate::TEvSchemeChangeRecordsCleanup());
+}
 
+void TSchemeShard::Handle(TEvPrivate::TEvSchemeChangeRecordsCleanup::TPtr&, const TActorContext& ctx) {
+    Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
+}
 
+bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 newMinOrder,
+        ui64 limit, bool& hasMore) {
+    hasMore = false;
+    // SchemeChangeFloorOrder is the only sound lower bound: it is what was actually
+    // deleted, not a watermark a prior pass may have stopped short of.
+    if (newMinOrder <= SchemeChangeFloorOrder) {
+        return true;
+    }
+    const ui64 from = SchemeChangeFloorOrder + 1;
+    // Bound both ends: an unbounded GreaterOrEqual().Select() would precharge
+    // the whole tail of the table.
+    auto logRowset = db.Table<Schema::SchemeChangeRecords>()
+        .GreaterOrEqual(from)
+        .LessOrEqual(newMinOrder)
+        .Select();
+    if (!logRowset.IsReady()) {
+        return false;
+    }
+    ui64 deleted = 0;
+    ui64 lastDeleted = 0;
+    while (!logRowset.EndOfSet()) {
+        TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_ROWS_SCANNED].Increment(1);
+        ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
+        if (order > newMinOrder) {
+            break;
+        }
+        if (deleted >= limit) {
+            hasMore = true;
+            break;
+        }
+        db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
+        db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
+        lastDeleted = order;
+        ++deleted;
+        if (!logRowset.Next()) {
+            return false;
+        }
+    }
+    // Advance to the last row actually removed, not newMinOrder: the batch
+    // limit may have stopped short.
+    if (lastDeleted > SchemeChangeFloorOrder) {
+        SchemeChangeFloorOrder = lastDeleted;
+        PersistSchemeChangeFloorOrder(db);
+    }
+    return true;
+}
 
 } // namespace NKikimr::NSchemeShard

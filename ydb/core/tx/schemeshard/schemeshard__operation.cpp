@@ -110,11 +110,23 @@ bool TSchemeShard::ProcessOperationParts(
         context.IsAllowedPrivateTables = true;
     }
 
+    // Overflow is a whole-schemeshard condition, not per-part; compute it
+    // once for the batch instead of rescanning Subscribers each iteration.
+    TString overflowErr;
+    const bool schemeChangeRecordsOverflow = !context.SS->CheckSchemeChangeRecordsOverflow(overflowErr, context.Ctx.Now());
+
     for (auto& part : parts) {
         TString errStr;
         if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else if (schemeChangeRecordsOverflow
+                && !part->GetTransaction().GetInternal()
+                && !IsChurnOp(part->GetTransaction().GetOperationType())) {
+            // Internal ops are never rejected: refusing split/merge or temp-dir GC
+            // is an outage, not backpressure.
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusResourceExhausted, overflowErr);
         } else {
             response = part->Propose(owner, context);
         }
@@ -313,21 +325,26 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
     // An unresolvable target is skipped and counted, never refused: refusing runs
     // AbortOperationPropose, whose per-operation stubs are Y_ABORT in 45 places.
-    if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+    //
+    // Subscribers.empty() alone is not enough: subscriber rows reload at TTxInit,
+    // so with the flag off and rows on disk reservation would stay live.
+    if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords() && !Subscribers.empty()) {
+        // Must reject before the first local-DB write below: AbortOperationPropose
+        // undoes in-memory operation state only, never local-DB writes.
+        for (const auto& transaction : rewrittenTransactions) {
+            TString rejectReason;
+            if (!CheckSchemeChangeRecordHasPath(transaction, rejectReason)) {
+                AbortOperationPropose(txId, context);
+                response.Reset(new TProposeResponse(NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId)));
+                response->SetError(NKikimrScheme::StatusInvalidParameter, rejectReason);
+                return response;
+            }
+        }
+
         NIceDb::TNiceDb db(context.GetDB());
         operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
         operation->SchemeChangeOrdersReserved = true;
         for (ui32 i = 0; i < rewrittenTransactions.size(); ++i) {
-            TString skipReason;
-            if (!CheckSchemeChangeRecordHasPath(rewrittenTransactions[i], skipReason)) {
-                TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_PATH_MISSING].Increment(1);
-                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "scheme change record skipped, target path unresolved"
-                        << ", txId: " << txId
-                        << ", requestIdx: " << i
-                        << ", reason: " << skipReason);
-                continue;
-            }
             TOperation::TSchemeChangeSlot slot;
             if (PersistSchemeChangeRecordAtPropose(db, txId, i, rewrittenTransactions[i], slot)) {
                 operation->SchemeChangeSlots.push_back(std::move(slot));

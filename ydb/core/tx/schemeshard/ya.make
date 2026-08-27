@@ -120,6 +120,8 @@ SRCS(
     schemeshard__monitoring.h
     schemeshard__notify.cpp
     schemeshard__scheme_change_records.cpp
+    schemeshard__scheme_change_records_cleanup.cpp
+    schemeshard__scheme_change_records_fetch.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h

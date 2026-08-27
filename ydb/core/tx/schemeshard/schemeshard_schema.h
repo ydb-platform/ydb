@@ -2746,6 +2746,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Order, Body>;
     };
 
+    struct SchemeChangeSubscribers : Table<142> {
+        struct SubscriberId :   Column<1, NScheme::NTypeIds::Utf8> {};
+        struct LastAckedOrder : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastActivityAtUs : Column<3, NScheme::NTypeIds::Uint64> {};
+        // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState. LOST means a
+        // cursor was advanced past records the subscriber never received.
+        struct State :          Column<4, NScheme::NTypeIds::Uint32> {};
+        struct StartOrder :     Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<SubscriberId>;
+        using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAtUs, State, StartOrder>;
+    };
 
     // Path is duplicated here because finalisation runs after NoMoreReadsForTx().
     struct SchemeChangePendingRecords : Table<144> {
@@ -2899,6 +2911,7 @@ struct Schema : NIceDb::Schema {
         TestShardSet,
         SchemeChangeRecords,
         SchemeChangeRecordDetails,
+        SchemeChangeSubscribers,
         SchemeChangePendingRecords
     >;
 

@@ -101,6 +101,19 @@ struct TIndexBuildInfo;
 struct TSetColumnConstraintOperationInfo;
 struct TIndexBuildShardStatus;
 
+// Refuse before the executor: without this, anything able to reach the tablet pipe
+// could drive a disabled feature into unbounded empty tablet transactions.
+template <typename TResultEvent>
+inline bool RejectSchemeChangeRequestIfDisabled(const TActorContext& ctx, const TActorId& sender) {
+    if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+        return false;
+    }
+    auto result = MakeHolder<TResultEvent>();
+    result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+    result->Record.SetReason("Scheme change records are disabled");
+    ctx.Send(sender, result.Release());
+    return true;
+}
 
 class TSchemeShard
     : public TActor<TSchemeShard>
@@ -1002,6 +1015,29 @@ public:
         const TOperation::TSchemeChangeSlot& slot, TStepId planStep, bool aborted = false);
     ui64 AllocateSchemeChangeOrderInMemory();
 
+    NTabletFlatExecutor::ITransaction* CreateTxRegisterSubscriber(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecords(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxAckSchemeChangeRecords(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecordBodies(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvAckSchemeChangeRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxUnregisterSubscriber(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev);
+    void Handle(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev, const TActorContext& ctx);
+    NTabletFlatExecutor::ITransaction* CreateTxSchemeChangeRecordsCleanup();
+    NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev);
+    // Force-advance initiated from the monitoring page, which has already
+    // authorized the caller; this in-process entry point skips the admin check.
+    NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriberFromMonitoring(
+        const TString& subscriberId, TActorId replyTo);
+    void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
+    bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 newMinOrder,
+        ui64 limit, bool& hasMore);
+    void EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx);
+    bool CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const;
+    // The outbox is scoped to a single domain, which keeps the borrowed
+    // LastAssignedPlanStep a sound lower bound.
     ui32 CountTransactionSupportingDomains() const;
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
@@ -1671,6 +1707,7 @@ public:
     bool ProcessPendingConditionalEraseResponseBatch(const TInstant& now, const TActorContext& ctx);
     void ScheduleConditionalEraseRun(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemeChangeRecordsCleanup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvFlushConditionalEraseBatch::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);

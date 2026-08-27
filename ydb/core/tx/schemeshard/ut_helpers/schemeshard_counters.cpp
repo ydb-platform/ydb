@@ -72,6 +72,20 @@ ui64 GetCumulativeCounter(TTestActorRuntime& runtime, const TString& name) {
     return 0; // unreachable
 }
 
+ui64 GetExecutorCumulativeCounter(TTestBasicRuntime& runtime, const TString& name) {
+    const auto counters = GetCounters(runtime);
+    for (const auto& counter : counters.GetTabletCounters().GetExecutorCounters().GetCumulativeCounters()) {
+        if (name != counter.GetName()) {
+            continue;
+        }
+
+        return counter.GetValue();
+    }
+
+    UNIT_ASSERT_C(false, "Executor cumulative counter not found: " << name);
+    return 0; // unreachable
+}
+
 ui64 GetPercentileCounter(const auto& counters, const TString& range) {
     for (ui32 i = 0; i < counters.RangesSize(); ++i) {
         if (range != counters.GetRanges(i)) {

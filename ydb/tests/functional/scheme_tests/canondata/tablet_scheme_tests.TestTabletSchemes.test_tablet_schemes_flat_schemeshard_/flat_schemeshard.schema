@@ -10768,6 +10768,68 @@
         }
     },
     {
+        "TableId": 142,
+        "TableName": "SchemeChangeSubscribers",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "SubscriberId",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LastAckedOrder",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "LastActivityAtUs",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "State",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "StartOrder",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
         "TableId": 143,
         "TableName": "SchemeChangeRecordDetails",
         "TableKey": [

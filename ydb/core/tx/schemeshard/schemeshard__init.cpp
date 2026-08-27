@@ -1379,6 +1379,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_LastAssignedPlanStep, Self->LastAssignedPlanStep));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_SchemeChangeFloorOrder, Self->SchemeChangeFloorOrder));
 
+        {
+            auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();
+            if (!subRowset.IsReady()) return false;
+            Self->Subscribers.clear();
+            while (!subRowset.EndOfSet()) {
+                TString id = subRowset.GetValue<Schema::SchemeChangeSubscribers::SubscriberId>();
+                TSchemeShard::TSubscriberInfo info;
+                info.LastAckedOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
+                info.LastActivityAt = TInstant::MicroSeconds(
+                    subRowset.GetValue<Schema::SchemeChangeSubscribers::LastActivityAtUs>());
+                // Rows written before these columns existed read as absent;
+                // keep TSubscriberInfo's defaults (State = READY) in that case.
+                if (subRowset.HaveValue<Schema::SchemeChangeSubscribers::State>()) {
+                    info.State = subRowset.GetValue<Schema::SchemeChangeSubscribers::State>();
+                }
+                if (subRowset.HaveValue<Schema::SchemeChangeSubscribers::StartOrder>()) {
+                    info.StartOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::StartOrder>();
+                }
+                Self->Subscribers.emplace(std::move(id), info);
+                if (!subRowset.Next()) return false;
+            }
+        }
 
         {
             ui64 isReadOnlyModeVal = 0;
@@ -6824,6 +6846,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         Self->ScheduleForcedCompactionProgress(ctx);
 
+        // The only other enqueue sites are Complete() hooks gated on the flag, so a
+        // tablet rebooting with the flag off would otherwise never drain.
+        if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords() &&
+            Self->NextSchemeChangeOrder > Self->SchemeChangeFloorOrder) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
     }
 };
 

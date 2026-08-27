@@ -1067,6 +1067,16 @@ Implementation sequence:
     policy-valid dashboards retain all 101 formulas, and proof gates verify
     the unchanged 13/13 TPCH plus 23/23 TPC-DS floor, 36/36. M4 remains
     current.
+87. M4: Milestone 88 retires stale pre-M84/M85 TPC-DS q15/q19 `UNKNOWN`
+    observations through two repeatable focused proofs at unchanged M87
+    proof-producing code. No particular intervening semantic change is
+    credited. Policy commit `b3ce77ab1d2`, based on M87 documentation commit
+    `bde0d7acdf5`, changes only the coverage policy and its fixtures; focused
+    policy validation passes 16/16. Fresh policy-valid proof gates verify the
+    promoted 25/25 TPC-DS obligations and unchanged 13/13 TPCH obligations,
+    raising the checked floor to 38/38 without changing any weaker inventory.
+    M87's capped dashboards remain authoritative because M88 reruns no
+    ordinary dashboard. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -3771,7 +3781,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and
   `ed3a9cadf535ace43e20dbfd139889783927790b399c3447ae79687da22ce29b`;
   subtest and outer wall times are 72.351277 and 322.93 seconds. Exact `ya`
-  graph times were not retained and are not inferred. The current floor is
+  graph times were not retained and are not inferred. The M85 checked floor is
   therefore 36/36: 36/121 workload queries (29.8%), 36/101 formula-covered
   exact pairs (35.6%), and within TPC-DS 23/99 workload rows (23.2%) and 23/81
   formula-covered rows (28.4%). Formula, exact-pair, verifier-entry,
@@ -3999,6 +4009,71 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   three `UNKNOWN` queries. The failed materialization was removed and Ya's
   supported cache garbage collection restored working headroom; no conclusion
   about those obligations is drawn from that operational failure.
+
+  Milestone 88 is a retrospective evidence and policy promotion, not a change
+  to proof-producing code. The historical TPC-DS q15 60-second `UNKNOWN` and
+  q19 219/61,811-ms `UNKNOWN` predate M84's derived total grouped-key ordering
+  commit `476f2ea38f4` and M85's exact keyed-cover/branch-first commit
+  `67655eaa786`. The later decomposed q19 repeat was still `UNKNOWN` after
+  207/61,602 ms at branch 3/28, `left outcome 0 unmatched`, in report SHA-256
+  `58cc491e30e2b866f36916f2b01db36e385f005ffe3b38685f250d95ccd10164`.
+  Those observations had become stale enough to justify rerunning the exact
+  queries, but no particular intervening change is credited for the new
+  solver outcomes.
+
+  Two independent `solver_experiment` runs at unchanged M87 proof-producing
+  checkpoint `bde0d7acdf53217fd25c14768ba7fbd6869eef7f` select exactly q15/q19
+  at row/task bounds 2/2 and a 60,000-ms timeout. Both are policy-valid with
+  zero violations and return 2/2 `VERIFIED_BOUNDED`. The first spends
+  394/8,540 ms in summed preparation/verification (q15 166/2,443; q19
+  228/6,097). Its 6,385-byte report and 18,393-byte trace have SHA-256 values
+  `1e6be8cbdea843212680c194b22009c148812077946042052ef87bee3747477d`
+  and
+  `f55d5eb690ea61131682df7a4f2221bea566f9894d2b5866b1c0d642ace43a55`;
+  subtest/metadata/chunk-wall times are
+  12.479636/13.570516/13.5643751621 seconds and peak process-tree RSS is
+  1,039,356 KiB. The repeat spends 406/8,513 ms (q15 174/2,447; q19
+  232/6,066). Its 6,385-byte report and 18,400-byte trace have SHA-256 values
+  `a6ef794e047894c30be7da91c9f4b09c3a851f29f740f2b29fc1500c2f303839`
+  and
+  `b579f2b9afcb024f97565c5adcf29f9fc5d905190997eca27d0395c6fe2e49ce`;
+  subtest/metadata/chunk-wall times are
+  12.636943/13.518327/13.5252709389 seconds and peak process-tree RSS is
+  1,039,780 KiB. Successful runs retain no standalone formula.
+
+  Policy commit `b3ce77ab1d2868ef6c55e62670022a6055018558` adds only q15/q19 to
+  the TPC-DS required-proof set and updates the corresponding C++ fixtures.
+  The two-file diff changes no optimizer, exporter, snapshot/IR, semantic
+  verifier, SMT renderer, row/task bound, solver schedule, formula/pair/entry/
+  preparation floor, or defect inventory. Focused policy validation passes
+  16/16 in 0.956049 seconds; its 33,305-byte trace has SHA-256
+  `0366331f0ed73f91af18e54fad7fcbb4195e9e2163005a9ccb863e06e03402c4`.
+
+  Authoritative committed-HEAD proof gates are policy-valid with zero
+  violations. TPC-DS prepares, captures, enters, and proves 25/25 after summed
+  19,216/274,946 ms. Its 19,964-byte report and 18,381-byte trace have SHA-256
+  values
+  `0d56ddbbe6c3667885e1b283bffda98ff7d73d618a827172413b5c677699b3e3`
+  and
+  `f78c07ad7e69dc15ce1ea91a045136642f18d6da0786cd9315eac41047f85af5`;
+  subtest/metadata/chunk-wall times are
+  298.359329/299.251476/299.2260770798 seconds and peak process-tree RSS is
+  1,156,460 KiB. TPCH retains 13/13 after 1,752/61,729 ms. Its 10,170-byte
+  report and 18,445-byte trace have SHA-256 values
+  `f81e4130fa445801c5be5c0106c810b8aa72fd72610009a73636b9a576fdc775`
+  and
+  `3c0152c38f4223c2809348b4c2a260e400fb91547957f960b92e018b7e1c2104`;
+  subtest/metadata/chunk-wall times are
+  65.455408/66.587568/66.5466856956 seconds and peak process-tree RSS is
+  861,528 KiB. Combined proof work is 20,968/336,675 ms.
+
+  The current checked floor is therefore 38/38: 38/121 workload rows (31.4%),
+  38/101 formula-covered exact pairs (37.6%), and within TPC-DS 25/99 workload
+  rows (25.3%) and 25/81 formula-covered rows (30.9%). Every weaker inventory
+  is unchanged. Because M88 changes only policy, fixtures, and documentation,
+  it makes no fresh ordinary-dashboard claim: M87's capped TPCH and TPC-DS
+  dashboards remain authoritative for the unchanged 20/81 formula counts,
+  2/18 optimizer failures, preparation 20/2 and 73/26, and all 101 formulas.
 
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
@@ -4277,10 +4352,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
-  q3, q8, q9, q16, q21, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q88, q90,
-  q93, q94, q95, q96, q97, and q99 with a fixed 60-second per-query budget. The
-  current policy covers 13 TPCH and 23 TPC-DS queries: 36 obligations, 36/121
-  (29.8%) of the workload, and 36/101 (35.6%) of formula-covered queries.
+  q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q42, q48, q52, q55, q69,
+  q73, q87, q88, q90, q93, q94, q95, q96, q97, and q99 with a fixed 60-second
+  per-query budget. The current policy covers 13 TPCH and 25 TPC-DS queries:
+  38 obligations, 38/121 (31.4%) of the workload, and 38/101 (37.6%) of
+  formula-covered queries.
   Historically, the post-M78 reports verified all 32/32 as
   `VERIFIED_BOUNDED`: TPCH passed 13/13
   after 1,745/82,550 ms (SHA-256
@@ -5103,6 +5179,13 @@ regression locks the corrected boundary.
   identity renderer above the cap. q56/q60 syntax shrinks by about 22% while
   branch 7 remains `UNKNOWN`; authoritative capped dashboards and fresh 13/13
   plus 23/23 proof gates stay green, so the checked floor remains 36/36.
+  M88 policy commit `b3ce77ab1d2`, based on M87 documentation checkpoint
+  `bde0d7acdf5`, promotes already formula-covered TPC-DS q15/q19 after two
+  repeatable focused proofs. The older `UNKNOWN` observations predate M84/M85
+  and are retained as historical evidence; no intervening change is credited
+  without an attribution run. Policy tests pass 16/16, and fresh 13/13 TPCH
+  plus 25/25 TPC-DS gates raise the current floor to 38/38 while every weaker
+  inventory and M87's authoritative dashboards remain unchanged.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

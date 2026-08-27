@@ -10,7 +10,6 @@ ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.QuotaNoResourceThenAllowed
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialPayloadRead
@@ -1402,7 +1401,6 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v0]
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v1]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[36]
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test

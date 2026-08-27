@@ -2,14 +2,8 @@
 
 #include "http_req.h"
 
-<<<<<<< HEAD
-=======
-#include <library/cpp/string_utils/url/url.h>
 #include <ydb/core/base/path.h>
-#include <ydb/library/http/rfc7239_forwarded.h>
 
-#include <util/generic/maybe.h>
->>>>>>> 2505fdb8d25 (Accept trailing slash on SQS HTTP database endpoint (#51279))
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>

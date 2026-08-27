@@ -4,9 +4,8 @@
 import grpc
 import logging
 import os
-import uuid
 
-import yatest.common
+import ydb
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.public.api.grpc.draft import ydb_datastreams_v1_pb2_grpc
@@ -45,42 +44,31 @@ def write_stream(path, data, partition_key=None, database=None, endpoint=None):
 
 #  Data plane grpc API is not implemented in datastreams.
 def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=None, database=None, endpoint=None):
-    result_file_name = "{}-{}-read-result-{}-{}-out".format(
-        os.getenv("PYTEST_CURRENT_TEST").rsplit('/', 1)[-1].replace(":", "_").replace(" (call)", ""),
-        path.replace("/", "_"),
-        consumer_name,
-        uuid.uuid4()
-    )
     if database is None:
         database = os.getenv("YDB_DATABASE")
     if endpoint is None:
         endpoint = os.getenv("YDB_ENDPOINT")
     if timeout is None:
         timeout = READ_TOOL_TIMEOUT
-    result_file = yatest.common.output_path(result_file_name)
-    cmd = [
-        yatest.common.binary_path("ydb/tests/tools/pq_read/pq_read"),
-        "--endpoint", endpoint,
-        "--database", database,
-        "--topic-path", path,
-        "--consumer-name", consumer_name,
-        "--disable-cluster-discovery",
-        "--messages-count", str(messages_count),
-        "--timeout", "{}ms".format(int(timeout * 1000))
-    ]
-    if commit_after_processing:
-        cmd += ["--commit-after-processing"]
 
-    execute_timeout = timeout + max(timeout, plain_or_under_sanitizer(10, 30))
-    with open(result_file, "w") as outfile:
-        yatest.common.execute(cmd, timeout=execute_timeout, stdout=outfile)
+    driver_config = ydb.DriverConfig(endpoint, database, disable_discovery=True)
+    driver = ydb.Driver(driver_config)
+    driver.wait(timeout=max(timeout, plain_or_under_sanitizer(10, 30)))
+    try:
+        ret = []
+        with driver.topic_client.reader(path, consumer=consumer_name) as reader:
+            while len(ret) < messages_count:
+                try:
+                    msg = reader.receive_message(timeout=timeout or None)
+                except TimeoutError:
+                    break
 
-    ret = []
-    with open(result_file, "r") as result:
-        for msg in result:
-            if msg.endswith("\n"):
-                msg = msg[:-1]
-            ret.append(msg)
+                data = msg.data
+                ret.append(data.decode("utf-8") if isinstance(data, bytes) else str(data))
+                if commit_after_processing:
+                    reader.commit_with_ack(msg, timeout=timeout or None)
+    finally:
+        driver.stop()
 
     logging.info("Data was read from {}: {}".format(path, ret))
     return ret

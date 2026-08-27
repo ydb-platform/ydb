@@ -99,3 +99,29 @@ Y_UNIT_TEST_SUITE(SqsRequestEndpoint) {
             "https://lbkx.example.net:8443");
     }
 }
+
+Y_UNIT_TEST_SUITE(DatabasePathFromRequestUrl) {
+    Y_UNIT_TEST(EmptyAndRoot) {
+        UNIT_ASSERT_VALUES_EQUAL(ParseDatabasePathFromRequestUrl(""), "");
+        UNIT_ASSERT_VALUES_EQUAL(ParseDatabasePathFromRequestUrl("/"), "");
+        UNIT_ASSERT_VALUES_EQUAL(ParseDatabasePathFromRequestUrl("/?folderId=abc"), "");
+    }
+
+    Y_UNIT_TEST(StripsTrailingSlash) {
+        UNIT_ASSERT_VALUES_EQUAL(ParseDatabasePathFromRequestUrl("/Root"), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(ParseDatabasePathFromRequestUrl("/Root/"), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(ParseDatabasePathFromRequestUrl("/Root/?folderId=abc"), "/Root");
+    }
+
+    Y_UNIT_TEST(FederationEndpoint) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            ParseDatabasePathFromRequestUrl("/Root/logbroker-federation/thist"),
+            "/Root/logbroker-federation/thist");
+        UNIT_ASSERT_VALUES_EQUAL(
+            ParseDatabasePathFromRequestUrl("/Root/logbroker-federation/thist/"),
+            "/Root/logbroker-federation/thist");
+        UNIT_ASSERT_VALUES_EQUAL(
+            ParseDatabasePathFromRequestUrl("/Root/federation/"),
+            "/Root/federation");
+    }
+}

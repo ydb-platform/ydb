@@ -1703,8 +1703,10 @@ global deadline, while the canonical SMT theorem and ordinary canonical-first
 fallback remain unchanged. q21 proves twice; q56/q60 retain the same preferred
 payload branch as their first `UNKNOWN`. Policy commit `95182b541fb` promotes
 only q21. Fresh complete gates prove 13/13 TPCH and 23/23 TPC-DS, so the current
-policy is 36/36. M86 starts with summary-state diagnosis of q56/q60's common payload branch;
-it assumes no new proof reduction or promotion.
+policy is 36/36. M86 semantic commit `374f8fb65df` then composes one exact
+private intermediate/final Decimal-SUM state. q56/q60's canonical and preferred
+payload obligations shrink by about 3%, but both remain `UNKNOWN` at branch
+7/8. No policy row moves, so the floor stays 36/36.
 
 The complete post-M71 formula dashboards are TPCH 20 / 0 / 2 after
 3,020/93,251 ms (report SHA-256
@@ -1943,8 +1945,9 @@ M84 implements that ordering certificate and reduces the batch to one outcome
 per side without a proof promotion. M85 adds the exact preferred keyed cover,
 proves q21 twice, and promotes it in `95182b541fb`; fresh 13/13 TPCH plus 23/23
 TPC-DS gates establish the current 36/36 floor. q56/q60 remain localized at the
-same preferred payload branch, whose summary state M86 diagnoses before proposing any next
-reduction.
+same preferred payload branch. M86 commit `374f8fb65df` implements its exact
+private Decimal-SUM summary reduction; both obligations shrink by about 3% but
+remain `UNKNOWN`, so the 36/36 floor and every weaker inventory remain fixed.
 M4 remains the current milestone.
 
 The exact sorting-network slice adds TPCH q2 to the formula and preparation
@@ -3140,11 +3143,120 @@ contains thirty-six confirmed `VERIFIED_BOUNDED` obligations.
 
   The checked floor is therefore 36/36: 36/121 workload queries (29.8%),
   36/101 formula-covered exact pairs (35.6%), and within TPC-DS 23/99 workload
-  rows (23.2%) and 23/81 formula-covered rows (28.4%). M86 begins with
-  summary-state diagnosis of the shared q56/q60 preferred payload branch—
-  repeated key guards, aggregate summary terms, or another exact SMT
-  structure—before choosing any reduction. This is not a
-  proof promise, timeout change, or policy promotion.
+  rows (23.2%) and 23/81 formula-covered rows (28.4%).
+
+  M86 semantic commit `374f8fb65df` implements the measured aggregate-summary
+  reduction. A private `DecimalSumState` records original-input presence,
+  NaN/positive-infinity/negative-infinity flags, the finite total, accumulator
+  type, and a conservative finite bound beside one authoritative intermediate
+  Decimal-SUM scalar. The exact directly linked final SUM combines guarded
+  lanes and finishes once. The admitted producer is an unexposed,
+  single-parent, non-`DistinctAll` phase-`intermediate` Aggregate; its direct
+  phase-`final` parent has identical keys and exactly one same-type plain SUM
+  use. Exposure, fanout, duplicate use, key use, phase/function/type changes,
+  distinct, unwrap, missing state, or a state that does not reconstruct the
+  scalar/NULL/bound causes the prior scalar fallback.
+
+  The summary theorem is exact flattened-bag composition. Selected presence
+  and special lanes combine by OR, finite totals by addition, and the existing
+  NaN/opposing-infinity/single-infinity/finite finish rule runs once. Selection
+  uses the partial scalar's semantic non-NULL guard, so a non-nullable empty
+  partial's materialized zero remains active. Combined finite bounds must stay
+  strictly below `10^precision`; the exact limit still rejects possible
+  non-associative overflow. Mutually exclusive task-copy compaction selects
+  every lane and uses the maximum alternative bound only after validating all
+  alternatives. The state is a bounded-choice dependency and is consumed at
+  the final Aggregate. There is no C++ exporter, snapshot/IR, solver-schedule,
+  row/task-bound, or policy change.
+
+  Semantic regressions cover composed-versus-flattened finite, NULL, inactive,
+  NaN, both infinity signs, and opposing-infinity cases; direct/staged grouped
+  and ungrouped two-row bags over both task placements; nullable/non-nullable
+  empty partials; lineage, exposure, fanout, phase, key, function, type,
+  distinct, unwrap, and duplicate-use near misses; malformed state/scalar/bound
+  reconstruction; exact headroom boundaries; choice dependencies;
+  exclusive-compaction selection and fallback; and accepted-term
+  non-redecoding. Independent theorem, gate, fallback, transport, headroom,
+  packaging, and commit-scope audits found no blocker.
+
+  The first full verification-subtree run completed 1,349/1,350 checks. The
+  sole failure was one unused `Sort` import, flake8 F401. Within that same run
+  the main Python target passed 765/765, aggregate Python results were
+  878/878, all ten import checks passed, and the four workload gates below
+  were green. The one-line removal is included in `374f8fb65df`; the corrective
+  all-flake8 run passed 68/68. No post-fix full-subtree rerun was made or is
+  claimed.
+
+  The committed-HEAD focused `solver_experiment` selects exactly q56/q60 at
+  row/task bound 2/2 and timeout 60,000 ms. Preparation, snapshot pairs, and
+  verifier-entry sets are exactly `[56,60]`; policy evaluation is valid with
+  zero violations. q56 returns `UNKNOWN` after 1,554/61,600 ms and q60 after
+  1,533/61,579 ms. Both reasons preserve branch 7/8,
+  `preferred_left_row_0_column_1_payload_mismatch`, as the first solver
+  `UNKNOWN`. The summary is `UNKNOWN:2` and preparation is `SUCCEEDED:2`.
+
+  q56's canonical formula falls from 634,486 to 615,352 bytes, -19,134
+  (-3.0157%); its branch-7 formula falls from 623,078 to 603,906, -19,172
+  (-3.0770%). q60's canonical formula falls from 629,390 to 610,286,
+  -19,104 (-3.0353%); branch 7 falls from 618,881 to 599,709, -19,172
+  (-3.0978%). The preferred branches still occupy 98.1399% and 98.2669% of
+  the canonical formulas. Branch 8 is 603,988 bytes for q56 and 599,834 bytes
+  for q60. Both queries therefore remain measured exact reductions, not
+  bounded proofs.
+
+  The retained focused artifacts are:
+
+  | Query | Artifact | Bytes | SHA-256 |
+  |---:|---|---:|---|
+  | 56 | Initial snapshot | 95,972 | `329639c3f2e97c82a413d439e9f7a87c0582e73a9efdeab2d05d57bb4088e612` |
+  | 56 | Final snapshot | 35,747 | `a927ddac13956c98ca876d962003bbba38dc0405535c94e0e876ed2ffc678032` |
+  | 56 | Query | 2,743 | `f4f8d23435231c6d6f544865e5e2716b9457fd059d1095ab7ff54f5f56f290ad` |
+  | 56 | Canonical SMT | 615,352 | `e8b86462179dbb64863b939a6c4f0765cb9eede153594228414f4e6ca62e1d56` |
+  | 56 | Verdict | 209 | `7584f7bdce0c2ea224f30d600b56ac1785f02615aabe361a0889cfe435aa2e67` |
+  | 60 | Initial snapshot | 95,810 | `05a09a4ee26f8ceeab9397fd66f0b043906280ec0c8a9ea62bddfeb619192152` |
+  | 60 | Final snapshot | 35,471 | `cb6efa50751bf0b3705570ee33281b0648ac2ff0ce9f3218fa1bac9e468ee94a` |
+  | 60 | Query | 2,686 | `3c503c10890dd82a963e49382559b3b20e37664f4ec3630bcc6bd697f1f0a238` |
+  | 60 | Canonical SMT | 610,286 | `cb799a6af02dfd548ea9f4bd195d52c4aebf871d054a4a636946bb9deac1d060` |
+  | 60 | Verdict | 209 | `7584f7bdce0c2ea224f30d600b56ac1785f02615aabe361a0889cfe435aa2e67` |
+
+  The 8,339-byte focused coverage report has SHA-256
+  `4303275234ed765184f460d50ba17996f09e031a0fe5f0f89dc70918ffda6ef7`.
+  The 18,419-byte trace has SHA-256
+  `bd4b047a5ee0027c1a5287c257757de5ce697903efe5ec143aaed3d4385a58b1`
+  and records 130.106070 seconds of subtest time, 131.122184 seconds of chunk
+  wall time, and 1,089,244 KiB peak process-tree RSS. The 1,780-byte captured
+  test output has SHA-256
+  `144657ae19a956c197c4fc75ae4838e5dd24268d1c9e3066f2e8fb280fb400c7`;
+  the 656-byte metadata file has SHA-256
+  `8b178b8eb5a3f530f0aa433d606904b92786a9ccb2a6c664e6a8ac9fdc6f15b6`.
+  Complete evidence is preserved under
+  `.rbo-verification-artifacts/20260827-m86-decimal-sum-state/`.
+
+  The first full-subtree run's complete formula dashboards are both
+  policy-valid with zero violations:
+
+  | Suite | Selected/status counts | Preparation | Exact pair / entry / formula | Preparation / verifier ms | Report bytes | Report SHA-256 |
+  |---|---|---|---|---:|---:|---|
+  | TPCH | 20 `FORMULA_EMITTED`, 2 `OPTIMIZER_FAILURE` | 20 succeeded, 2 failed | 20 / 20 / 20 | 3,446 / 107,695 | 17,334 | `3ff1b10464b6047e87fed8c75eb933aa27928fba0981452e570e9721e96b5d98` |
+  | TPC-DS | 81 `FORMULA_EMITTED`, 18 `OPTIMIZER_FAILURE` | 73 succeeded, 26 failed | 81 / 81 / 81 | 78,725 / 835,364 | 342,052 | `607bc657da5ecfb1b50c274e5bd18609bd5684cdbc3fce741caa9ddf7c55f980` |
+
+  Combined dashboard work is 82,171/943,059 ms. All 101 captured exact pairs
+  still enter and emit formulas; the independent preparation partition remains
+  93 successful/28 failed. No semantic `UNSUPPORTED` row is introduced.
+
+  Both proof reports are policy-valid with zero violations, and every selected
+  row prepares, captures an exact pair, enters, and returns
+  `VERIFIED_BOUNDED`:
+
+  | Suite | Required / verified | Preparation / verifier ms | Report bytes | Report SHA-256 |
+  |---|---:|---:|---:|---|
+  | TPCH | 13 / 13 | 1,788 / 67,191 | 10,169 | `19ada38b50826598462c4e7fe3ee4a89dbc62c1c8d24d5d3a2914f60efb89254` |
+  | TPC-DS | 23 / 23 | 18,785 / 266,278 | 18,758 | `efae364213953fd25ee34d1e0777fd9b452ffa84713d77a882762c0a998715a3` |
+
+  Combined proof-floor work is 20,573/333,469 ms. No proof requirement or
+  weaker coverage/defect inventory changes. The current floor remains 36/36:
+  36/121 workload queries (29.8%), 36/101 formula-covered pairs (35.6%), and
+  within TPC-DS 23/99 workload rows (23.2%) and 23/81 formula rows (28.4%).
 
   Focused q8 prepares in 695 ms and proves after 2,041 ms.
   The preceding 30-obligation complete reports had SHA-256 values
@@ -3935,13 +4047,16 @@ Milestone 85 adds the exact preferred keyed cover in semantic commit
 `67655eaa786`. q21 proves twice, while q56/q60 preserve the same preferred
 payload branch as their first `UNKNOWN`. Policy commit `95182b541fb` promotes
 only q21. Fresh TPCH 13/13 and TPC-DS 23/23 gates raise the proof floor to
-thirty-six while every weaker inventory stays fixed. M86 begins with
-summary-state diagnosis of the shared q56/q60 payload branch and assumes no further promotion.
+thirty-six while every weaker inventory stays fixed. M86 semantic commit
+`374f8fb65df` then carries the exact private Decimal-SUM summary across the
+matching intermediate/final lineage. q56/q60's formulas and payload branches
+shrink about 3%, but both stay `UNKNOWN`; fresh dashboards and the unchanged
+13/13 plus 23/23 proof gates are green, so every inventory remains fixed.
 More than two dependencies, other correlation shapes, coercing dynamic `IN`,
 nullable String and non-positive nullable contexts, broader range grammars,
 and other OLAP pushdowns remain later work. Solver/formula-size work promotes
 supported queries only after reproducible `VERIFIED_BOUNDED` results. The
-required policy now contains thirty-six obligations. Fresh M85 gates confirm
+required policy now contains thirty-six obligations. Fresh M86 gates confirm
 13/13 TPCH and 23/23 TPC-DS. The earlier
 contended q9 `UNKNOWN` was a failed operational run, not a counterexample or a
 new optimizer finding.

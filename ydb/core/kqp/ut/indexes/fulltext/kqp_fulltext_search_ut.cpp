@@ -176,6 +176,75 @@ void DropIndex(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+Y_UNIT_TEST(SelectWithAnalyzerPresets) {
+    auto kikimr = Kikimr(false);
+    auto db = kikimr.GetQueryClient();
+
+    auto execute = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return result;
+    };
+
+    execute(R"sql(
+        CREATE TABLE `/Root/StandardTexts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (analyzer="standard")
+        );
+    )sql");
+    execute(R"sql(
+        UPSERT INTO `/Root/StandardTexts` (Key, Text) VALUES (1, "Quick brown fox"), (2, "Lazy dog");
+    )sql");
+    {
+        auto result = execute(R"sql(
+            SELECT Key FROM `/Root/StandardTexts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "the FOX") ORDER BY Key;
+        )sql");
+        CompareYson("[[[1u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    execute(R"sql(
+        CREATE TABLE `/Root/SnowballTexts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text)
+                WITH (analyzer="snowball", language="russian")
+        );
+    )sql");
+    execute(R"sql(
+        UPSERT INTO `/Root/SnowballTexts` (Key, Text) VALUES (1, "Машины едут"), (2, "Кошки спят");
+    )sql");
+    {
+        auto result = execute(R"sql(
+            SELECT Key FROM `/Root/SnowballTexts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "и машина") ORDER BY Key;
+        )sql");
+        CompareYson("[[[1u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    execute(R"sql(
+        CREATE TABLE `/Root/KeywordTexts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (analyzer="keyword")
+        );
+    )sql");
+    execute(R"sql(
+        UPSERT INTO `/Root/KeywordTexts` (Key, Text) VALUES (1, "Hello World"), (2, "Hello");
+    )sql");
+    {
+        auto result = execute(R"sql(
+            SELECT Key FROM `/Root/KeywordTexts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "Hello World") ORDER BY Key;
+        )sql");
+        CompareYson("[[[1u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST_QUAD(SelectWithFulltextMatch, UTF8, EnableIndexStreamWrite) {
     auto kikimr = Kikimr(EnableIndexStreamWrite);
     auto db = kikimr.GetQueryClient();

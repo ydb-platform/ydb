@@ -3090,6 +3090,9 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
     if (proto.has_filter_length_max()) {
         result.FilterLengthMax = proto.filter_length_max();
     }
+    if (proto.has_use_filter_snowball()) {
+        result.UseFilterSnowball = proto.use_filter_snowball();
+    }
 
     return result;
 }
@@ -3147,8 +3150,32 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
     if (analyzers.FilterLengthMax.has_value()) {
         proto.set_filter_length_max(*analyzers.FilterLengthMax);
     }
+    if (analyzers.UseFilterSnowball.has_value()) {
+        proto.set_use_filter_snowball(*analyzers.UseFilterSnowball);
+    }
 
     return proto;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Standard() {
+    TAnalyzers result;
+    result.Tokenizer = ETokenizer::Standard;
+    result.UseFilterLowercase = true;
+    result.UseFilterStopwords = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Snowball(std::string language) {
+    TAnalyzers result = Standard();
+    result.Language = std::move(language);
+    result.UseFilterSnowball = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Keyword() {
+    TAnalyzers result;
+    result.Tokenizer = ETokenizer::Keyword;
+    return result;
 }
 
 TFulltextIndexSettings::TColumnAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {

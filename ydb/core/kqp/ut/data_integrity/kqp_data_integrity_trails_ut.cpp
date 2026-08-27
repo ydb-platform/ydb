@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 3},
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
-                {ConstructRegexToCheckLogs("INFO", "Executer"), 1}};
+                {ConstructRegexToCheckLogs("INFO", "Executer"), 3}};
 
             // ColumnShard doesn't have integrity logs.
         }

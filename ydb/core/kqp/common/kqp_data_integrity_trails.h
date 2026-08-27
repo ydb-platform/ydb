@@ -102,78 +102,81 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
 }
 
 // DataExecuter
-inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebugStr, const TString& traceId, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx) {
-    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
-        return;
-    }
-    auto message = YDB_LOG_CREATE_MESSAGE(
-        {"component", "Executer"},
-        {"type", "Request"},
-        {"traceId", traceId},
-        {"phyTxId", ToString(txId)},
-        {"locks", txLocksDebugStr},
-        {"txType", txType});
-    if (shardId) {
-        YDB_LOG_UPDATE_MESSAGE(message,
-            {"ShardId", ToString(*shardId)});
-    }
-    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
-}
-
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    TStringBuilder locksDebugStr;
-    for (const auto& lock : record.GetTxLocks()) {
-        locksDebugStr << lock.ShortDebugString() << " ";
-    }
 
     NYql::TIssues issues;
     NYql::IssuesFromMessage(record.GetIssues(), issues);
 
-    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
-        {"component", "Executer"},
+    auto message = YDB_LOG_CREATE_MESSAGE({"component", "Executer"},
         {"type", "Request"},
         {"state", state},
         {"traceId", traceId},
         {"phyTxId", ToString(record.GetTxId())},
         {"shardId", ToString(record.GetOrigin())},
-        {"locks", locksDebugStr},
         {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
         {"issues", issues.ToString()});
+
+    if (record.GetTxLocks().empty()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+        return ;
+    }
+
+    if (record.GetTxLocks().empty()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+        return ;
+    }
+
+    for (const auto& lock : record.GetTxLocks()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            message,
+            {"lock", lock.ShortDebugString()});
+    }
 }
 
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    TStringBuilder locksDebugStr;
-    for (const auto& lock : record.GetTxLocks()) {
-        locksDebugStr << lock.ShortDebugString() << " ";
-    }
 
-    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", "Executer"},
         {"type", "Response"},
         {"state", state},
         {"traceId", traceId},
         {"phyTxId", ToString(record.GetTxId())},
         {"shardId", ToString(record.GetOrigin())},
-        {"locks", locksDebugStr},
         {"status", NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(ev->Get()->GetStatus())},
         {"issues", ev->Get()->GetError()});
+
+    if (record.GetTxLocks().empty()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+        return ;
+    }
+
+    for (const auto& lock : record.GetTxLocks()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            message,
+            {"lock", lock.ShortDebugString()});
+        }
 }
 
 template <typename TActorResultInfo>
 inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64 txId, const TActorResultInfo& info, const TActorContext& ctx) {
-    TStringBuilder locksDebugStr;
-    for (const auto& lock : info.GetLocks()) {
-        locksDebugStr << lock.ShortDebugString() << " ";
-    }
-
-    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", "Executer"},
         {"type", type},
         {"traceId", traceId},
-        {"phyTxId", ToString(txId)},
-        {"locks", locksDebugStr});
+        {"phyTxId", ToString(txId)});
+
+    if (info.GetLocks().empty()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
+        return ;
+    }
+
+    for (const auto& lock : info.GetLocks()) {
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            message,
+            {"lock", lock.ShortDebugString()});
+    }
 }
 
 // WriteActor,BufferActor

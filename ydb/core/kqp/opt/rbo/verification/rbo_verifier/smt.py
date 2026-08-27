@@ -18,6 +18,8 @@ BOOL = "Bool"
 INT = "Int"
 SORTS = frozenset({BOOL, INT})
 _SYMBOL = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+# Keep structural interning bounded; larger scopes retain exact identity sharing.
+_MAX_STRUCTURAL_CSE_SCOPE_NODES = 16_384
 
 
 class SmtError(ValueError):
@@ -135,29 +137,40 @@ class _RenderContext:
                 return name
 
 
-def _render_scope(root: Term, context: _RenderContext) -> str:
-    """Linearize structurally equal terms without lifting bound expressions.
+def _bounded_identity_discovery(root: Term) -> list[Term] | None:
+    """Collect one quantifier scope while structural CSE stays bounded."""
 
-    Quantifier bodies start fresh scopes because their symbol names deliberately
-    shadow global witness constants.  Within one scope, structurally equal
-    compound terms become let aliases.  Dependency levels use nested,
-    parallel-binding lets, so every alias is defined outside the aliases that
-    refer to it.
-    """
-
-    identity_discovery: list[Term] = []
-    seen_identities: set[int] = set()
+    discovery: list[Term] = []
+    seen: set[int] = set()
     pending = [root]
     while pending:
         term = pending.pop()
         identity = id(term)
-        if identity in seen_identities:
+        if identity in seen:
             continue
-        seen_identities.add(identity)
-        identity_discovery.append(term)
+        seen.add(identity)
+        discovery.append(term)
+        if len(discovery) > _MAX_STRUCTURAL_CSE_SCOPE_NODES:
+            return None
         if term.operation in {"forall", "exists"}:
             continue
         pending.extend(reversed(term.arguments))
+    return discovery
+
+
+def _render_scope(root: Term, context: _RenderContext) -> str:
+    """Linearize shared terms without lifting bound expressions.
+
+    Quantifier bodies start fresh scopes because their symbol names deliberately
+    shadow global witness constants.  Within one bounded scope, structurally
+    equal compound terms become let aliases; oversized scopes use the original
+    identity-only sharing.  Dependency levels use nested, parallel-binding
+    lets, so every alias is defined outside the aliases that refer to it.
+    """
+
+    identity_discovery = _bounded_identity_discovery(root)
+    if identity_discovery is None:
+        return _render_identity_scope(root, context)
 
     # Give every exact structure a small scope-local identity.  Keys contain
     # only scalar metadata and already-computed child identities, so even deep
@@ -294,6 +307,97 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
     return body
 
 
+def _render_identity_scope(root: Term, context: _RenderContext) -> str:
+    """Render one oversized scope with the original identity-only sharing."""
+
+    terms: dict[int, Term] = {}
+    references: dict[int, int] = {}
+    discovery: list[int] = []
+
+    pending = [root]
+    while pending:
+        term = pending.pop()
+        identity = id(term)
+        references[identity] = references.get(identity, 0) + 1
+        if identity in terms:
+            continue
+        terms[identity] = term
+        discovery.append(identity)
+        if term.operation in {"forall", "exists"}:
+            continue
+        pending.extend(reversed(term.arguments))
+    candidates = {
+        identity
+        for identity in discovery
+        if references[identity] > 1 and terms[identity].arguments
+    }
+    if not candidates:
+        return _render_unshared(root, context)
+
+    levels: dict[int, int] = {}
+    maximum_below: dict[int, int] = {}
+    pending_levels = [(root, False)]
+    while pending_levels:
+        term, expanded = pending_levels.pop()
+        identity = id(term)
+        if identity in maximum_below:
+            continue
+        if not expanded:
+            pending_levels.append((term, True))
+            if term.operation not in {"forall", "exists"}:
+                pending_levels.extend(
+                    (argument, False)
+                    for argument in reversed(term.arguments)
+                    if id(argument) not in maximum_below
+                )
+            continue
+        child_level = 0
+        if term.operation not in {"forall", "exists"}:
+            child_level = max(
+                (
+                    maximum_below[id(argument)]
+                    for argument in term.arguments
+                ),
+                default=0,
+            )
+        if identity in candidates:
+            levels[identity] = child_level + 1
+            child_level += 1
+        maximum_below[identity] = child_level
+
+    positions = {
+        identity: index for index, identity in enumerate(discovery)
+    }
+    aliases = {
+        identity: context.fresh_alias()
+        for identity in sorted(
+            (item for item in discovery if item in candidates),
+            key=lambda item: (levels[item], positions[item]),
+        )
+    }
+
+    body = _render_term(root, context, aliases)
+    by_level: dict[int, list[int]] = {}
+    for identity in discovery:
+        if identity in candidates:
+            by_level.setdefault(levels[identity], []).append(identity)
+    for level in sorted(by_level, reverse=True):
+        rendered_bindings = []
+        for identity in by_level[level]:
+            definition = _render_term(
+                terms[identity],
+                context,
+                aliases,
+                defining=identity,
+            )
+            rendered_bindings.append(
+                f"({aliases[identity]} {definition})"
+            )
+        bindings = " ".join(rendered_bindings)
+        body = f"(let ({bindings}) {body})"
+    return body
+
+
 def _render_unshared(term: Term, context: _RenderContext) -> str:
     """Render without aliases while giving nested quantifiers their own DAG scope."""
 
@@ -321,17 +425,13 @@ def _render_term(
             continue
 
         assert isinstance(item, Term)
-        structural_id = (
-            None
+        render_id = (
+            id(item)
             if structural_ids is None
             else structural_ids[id(item)]
         )
-        alias = (
-            None
-            if structural_id is None
-            else aliases.get(structural_id)
-        )
-        if alias is not None and structural_id != bypass:
+        alias = aliases.get(render_id)
+        if alias is not None and render_id != bypass:
             pieces.append(alias)
             continue
         if item.operation == "symbol":

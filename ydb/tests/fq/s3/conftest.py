@@ -18,7 +18,6 @@ from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import BindingsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YdbMvpExtension
-from ydb.tests.tools.fq_runner.kikimr_utils import SynchronizationServiceExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 from ydb.tests.tools.fq_runner.kikimr_utils import YQV1_VERSION_NAME, YQV2_VERSION_NAME
 from ydb.tests.fq.s3.s3_helpers import S3

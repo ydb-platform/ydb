@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(Config) {
                 }
                 PinTenantName: "/root/cp"
                 SynchronizationService {
-                    Enable: True
+                    Enable: False
                 }
             }
         )", &proto));

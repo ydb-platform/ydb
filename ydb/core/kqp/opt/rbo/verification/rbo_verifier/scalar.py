@@ -10,6 +10,9 @@ from .ir import Expr
 from .types import BOOL, DATE, MAX_DATE, VOID, family, integer_bounds, integer_width
 
 
+DecimalSumState = decimal.DecimalSumState
+
+
 def smt_sort(scalar_type: str) -> str:
     return smt.BOOL if family(scalar_type) in {"bool", "unit"} else smt.INT
 
@@ -77,6 +80,18 @@ def average_metadata_terms(
     return (metadata.count,)
 
 
+def decimal_sum_state_terms(
+    state: DecimalSumState,
+) -> tuple[smt.Term, ...]:
+    return (
+        state.any_non_null,
+        state.has_nan,
+        state.has_pos_inf,
+        state.has_neg_inf,
+        state.finite_total,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Value:
     type: str
@@ -90,6 +105,11 @@ class Value:
     # metadata. Snapshot validation forbids intermediate state from ordinary
     # scalar flow; the completed certificate is consumed by a node observer.
     average_metadata: AverageMetadata | None = None
+    # Proof-only summary of one validated intermediate Decimal SUM. Unlike an
+    # AVG tuple, this is not physical wire state: the ordinary Decimal scalar
+    # remains authoritative and is used whenever the certificate cannot be
+    # transported to its one matching final aggregate.
+    decimal_sum_state: DecimalSumState | None = None
 
 
 @dataclass(frozen=True, slots=True)

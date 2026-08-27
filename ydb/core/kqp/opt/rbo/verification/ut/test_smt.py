@@ -26,6 +26,15 @@ def _deep_shared_term(leaf, depth=2000):
     return term
 
 
+def _structurally_repeated_successor_comparison(name):
+    first = smt.add(smt.symbol(name, smt.INT), smt.ONE)
+    second = smt.add(
+        smt.symbol(name, smt.INT),
+        smt.int_value(1),
+    )
+    return smt.lt(first, smt.add(second, smt.ONE))
+
+
 class SmtTest(unittest.TestCase):
     def test_term_structural_hash_is_cached_for_deep_shared_dags(self):
         first = _deep_shared_term(smt.symbol("value", smt.INT))
@@ -787,6 +796,143 @@ class SmtTest(unittest.TestCase):
         )
         self.assertEqual(term.render_shared(), term.render_shared())
 
+    def test_structurally_equal_compounds_share_one_let(self):
+        first = smt.add(
+            smt.symbol("left", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+        second = smt.add(
+            smt.symbol("left", smt.INT),
+            smt.symbol("right", smt.INT),
+        )
+
+        self.assertIsNot(first, second)
+        self.assertEqual(first, second)
+        self.assertEqual(
+            smt.add(first, second).render_shared(),
+            "(let ((rbo_let_0 (+ left right))) "
+            "(+ rbo_let_0 rbo_let_0))",
+        )
+
+    def test_structural_cse_preserves_argument_order_and_exact_leaves(self):
+        left = smt.symbol("left", smt.INT)
+        right = smt.symbol("right", smt.INT)
+        cases = (
+            (
+                smt.add(left, right),
+                smt.add(
+                    smt.symbol("right", smt.INT),
+                    smt.symbol("left", smt.INT),
+                ),
+                "(* (+ left right) (+ right left))",
+            ),
+            (
+                smt.add(left, right),
+                smt.add(
+                    smt.symbol("left", smt.INT),
+                    smt.symbol("other", smt.INT),
+                ),
+                "(* (+ left right) (+ left other))",
+            ),
+        )
+
+        for first, second, expected in cases:
+            with self.subTest(expected=expected):
+                self.assertNotEqual(first, second)
+                self.assertEqual(
+                    smt.mul(first, second).render_shared(),
+                    expected,
+                )
+
+    def test_structural_cse_separates_deep_exact_hash_collisions(self):
+        first = _deep_shared_term(smt.int_value(-1), depth=256)
+        second = _deep_shared_term(smt.int_value(-2), depth=256)
+        term = smt.add(first, first, second, second)
+
+        self.assertEqual(hash(first), hash(second))
+        self.assertNotEqual(first, second)
+        rendered = term.render_shared()
+        self.assertEqual(rendered.count("(let ("), 256)
+        self.assertEqual(rendered.count("(deep "), 512)
+        self.assertIn(
+            "(rbo_let_0 (deep (- 1) (- 1))) "
+            "(rbo_let_1 (deep (- 2) (- 2)))",
+            rendered,
+        )
+        self.assertIn(
+            "(+ rbo_let_510 rbo_let_510 "
+            "rbo_let_511 rbo_let_511)",
+            rendered,
+        )
+
+    def test_structural_cse_keeps_foreign_function_owners_distinct(self):
+        first_script = smt.Script()
+        second_script = smt.Script()
+        first_function = first_script.fresh_function(
+            "first owner",
+            (smt.INT,),
+            smt.INT,
+        )
+        second_function = second_script.fresh_function(
+            "second owner",
+            (smt.INT,),
+            smt.INT,
+        )
+        first = first_function(smt.ONE)
+        second = second_function(smt.ONE)
+
+        self.assertEqual(first.operation, second.operation)
+        self.assertNotEqual(first, second)
+        self.assertEqual(
+            smt.add(first, first, second, second).render_shared(),
+            "(let ((rbo_let_0 (f_0 1)) (rbo_let_1 (f_0 1))) "
+            "(+ rbo_let_0 rbo_let_0 rbo_let_1 rbo_let_1))",
+        )
+
+    def test_structural_alias_order_is_dependency_then_discovery_order(self):
+        first_product = smt.mul(
+            smt.add(
+                smt.symbol("a", smt.INT),
+                smt.symbol("b", smt.INT),
+            ),
+            smt.add(
+                smt.symbol("a", smt.INT),
+                smt.symbol("b", smt.INT),
+            ),
+        )
+        second_product = smt.mul(
+            smt.add(
+                smt.symbol("a", smt.INT),
+                smt.symbol("b", smt.INT),
+            ),
+            smt.add(
+                smt.symbol("a", smt.INT),
+                smt.symbol("b", smt.INT),
+            ),
+        )
+        first_difference = smt.sub(
+            smt.symbol("c", smt.INT),
+            smt.symbol("d", smt.INT),
+        )
+        second_difference = smt.sub(
+            smt.symbol("c", smt.INT),
+            smt.symbol("d", smt.INT),
+        )
+        term = smt.add(
+            first_product,
+            second_product,
+            first_difference,
+            second_difference,
+        )
+        expected = (
+            "(let ((rbo_let_0 (+ a b)) (rbo_let_1 (- c d))) "
+            "(let ((rbo_let_2 (* rbo_let_0 rbo_let_0))) "
+            "(+ rbo_let_2 rbo_let_2 rbo_let_1 rbo_let_1)))"
+        )
+
+        self.assertEqual(term.render_shared(), expected)
+        self.assertEqual(term.render_shared(), expected)
+
     def test_deep_unshared_term_renders_without_python_recursion(self):
         term = smt.symbol("leaf", smt.INT)
         for _ in range(2_000):
@@ -817,6 +963,21 @@ class SmtTest(unittest.TestCase):
         ))
         self.assertIn("rbo_let_1998", rendered)
 
+    def test_deep_independently_equal_dags_share_stack_safely(self):
+        first = _deep_shared_term(smt.symbol("leaf", smt.INT))
+        second = _deep_shared_term(smt.symbol("leaf", smt.INT))
+        term = smt.add(first, second)
+
+        rendered = term.render_shared()
+
+        self.assertEqual(rendered, term.render_shared())
+        self.assertEqual(rendered.count("(let ("), 2_000)
+        self.assertEqual(rendered.count("(deep "), 2_000)
+        self.assertTrue(rendered.startswith(
+            "(let ((rbo_let_0 (deep leaf leaf))) ",
+        ))
+        self.assertIn("(+ rbo_let_1999 rbo_let_1999)", rendered)
+
     def test_shared_quantified_body_is_not_hoisted_past_shadowing(self):
         rank = smt.symbol("rank", smt.INT)
         successor = smt.add(rank, smt.ONE)
@@ -830,11 +991,15 @@ class SmtTest(unittest.TestCase):
             "(< rbo_let_0 (+ rbo_let_0 1))))",
         )
 
-    def test_one_dag_gets_distinct_lets_across_a_shadowing_binder(self):
+    def test_structural_cse_stays_inside_global_and_shadowed_scopes(self):
         rank = smt.symbol("rank", smt.INT)
-        shared = smt.add(rank, smt.ONE)
-        repeated = smt.lt(shared, smt.add(shared, smt.ONE))
-        term = smt.and_(repeated, smt.exists((rank,), repeated))
+        term = smt.and_(
+            _structurally_repeated_successor_comparison("rank"),
+            smt.exists(
+                (rank,),
+                _structurally_repeated_successor_comparison("rank"),
+            ),
+        )
 
         self.assertEqual(
             term.render_shared(),
@@ -845,17 +1010,118 @@ class SmtTest(unittest.TestCase):
             "(< rbo_let_1 (+ rbo_let_1 1))))))",
         )
 
+    def test_sibling_quantifiers_have_separate_structural_cse_scopes(self):
+        rank = smt.symbol("rank", smt.INT)
+        term = smt.and_(
+            smt.exists(
+                (rank,),
+                _structurally_repeated_successor_comparison("rank"),
+            ),
+            smt.forall(
+                (smt.symbol("rank", smt.INT),),
+                _structurally_repeated_successor_comparison("rank"),
+            ),
+        )
+
+        self.assertEqual(
+            term.render_shared(),
+            "(and (exists ((rank Int)) "
+            "(let ((rbo_let_0 (+ rank 1))) "
+            "(< rbo_let_0 (+ rbo_let_0 1)))) "
+            "(forall ((rank Int)) "
+            "(let ((rbo_let_1 (+ rank 1))) "
+            "(< rbo_let_1 (+ rbo_let_1 1)))))",
+        )
+
+    def test_nested_quantifiers_have_separate_structural_cse_scopes(self):
+        rank = smt.symbol("rank", smt.INT)
+        term = smt.forall(
+            (rank,),
+            smt.and_(
+                _structurally_repeated_successor_comparison("rank"),
+                smt.exists(
+                    (smt.symbol("rank", smt.INT),),
+                    _structurally_repeated_successor_comparison("rank"),
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            term.render_shared(),
+            "(forall ((rank Int)) "
+            "(let ((rbo_let_0 (+ rank 1))) "
+            "(and (< rbo_let_0 (+ rbo_let_0 1)) "
+            "(exists ((rank Int)) "
+            "(let ((rbo_let_1 (+ rank 1))) "
+            "(< rbo_let_1 (+ rbo_let_1 1)))))))",
+        )
+
+    def test_defined_function_parameters_have_local_structural_cse_scopes(self):
+        def body(parameters):
+            parameter = parameters[0]
+            assert isinstance(parameter.atom, str)
+            first = smt.add(parameter, smt.ONE)
+            second = smt.add(
+                smt.symbol(parameter.atom, parameter.sort),
+                smt.int_value(1),
+            )
+            return smt.lt(first, smt.add(second, smt.ONE))
+
+        script = smt.Script()
+        first = script.fresh_defined_function(
+            "first comparison",
+            (smt.INT,),
+            smt.BOOL,
+            body,
+        )
+        second = script.fresh_defined_function(
+            "second comparison",
+            (smt.INT,),
+            smt.BOOL,
+            body,
+        )
+        script.assert_term(smt.and_(first(smt.ZERO), second(smt.ZERO)))
+
+        formula = script.render()
+
+        self.assertIn(
+            "(define-fun df_0 ((df_0_p0 Int)) Bool "
+            "(let ((rbo_let_0 (+ df_0_p0 1))) "
+            "(< rbo_let_0 (+ rbo_let_0 1))))",
+            formula,
+        )
+        self.assertIn(
+            "(define-fun df_1 ((df_1_p0 Int)) Bool "
+            "(let ((rbo_let_0 (+ df_1_p0 1))) "
+            "(< rbo_let_0 (+ rbo_let_0 1))))",
+            formula,
+        )
+        self.assertEqual(formula.count("(let ((rbo_let_0 "), 2)
+
     @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
-    def test_z3_observes_global_and_shadowed_uses_of_one_dag(self):
+    def test_z3_observes_global_and_shadowed_structural_cse(self):
         script = smt.Script(timeout_ms=10_000)
         rank = script.fresh_constant("global rank", smt.INT)
-        shared = smt.add(rank, smt.ONE)
-        global_value = smt.eq(shared, smt.ONE)
-        local_value = smt.eq(shared, smt.int_value(2))
+        global_value = smt.eq(
+            smt.add(rank, smt.ONE),
+            smt.ONE,
+        )
+        global_copy = smt.eq(
+            smt.add(smt.symbol("v_0", smt.INT), smt.int_value(1)),
+            smt.int_value(1),
+        )
+        local_value = smt.eq(
+            smt.add(rank, smt.ONE),
+            smt.int_value(2),
+        )
+        local_copy = smt.eq(
+            smt.add(smt.symbol("v_0", smt.INT), smt.int_value(1)),
+            smt.int_value(2),
+        )
         script.assert_term(smt.and_(
             global_value,
-            global_value,
-            smt.exists((rank,), smt.and_(local_value, local_value)),
+            global_copy,
+            smt.exists((rank,), smt.and_(local_value, local_copy)),
         ))
 
         solved = subprocess.run(
@@ -869,6 +1135,42 @@ class SmtTest(unittest.TestCase):
 
         self.assertEqual(solved.returncode, 0, solved.stderr)
         self.assertEqual(solved.stdout.strip(), "sat")
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_z3_preserves_independent_structural_cse_arithmetic(self):
+        script = smt.Script(timeout_ms=10_000)
+        left = script.fresh_constant("left", smt.INT)
+        right = script.fresh_constant("right", smt.INT)
+        first = smt.add(left, right)
+        second = smt.add(
+            smt.symbol("v_0", smt.INT),
+            smt.symbol("v_1", smt.INT),
+        )
+        third = smt.add(
+            smt.symbol("v_0", smt.INT),
+            smt.symbol("v_1", smt.INT),
+        )
+        script.assert_term(smt.not_(smt.eq(
+            smt.add(first, second),
+            smt.mul(smt.int_value(2), third),
+        )))
+
+        formula = script.render()
+        self.assertIn(
+            "(let ((rbo_let_0 (+ v_0 v_1)))",
+            formula,
+        )
+        solved = subprocess.run(
+            (SOLVER, "-in"),
+            input=formula,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+
+        self.assertEqual(solved.returncode, 0, solved.stderr)
+        self.assertEqual(solved.stdout.strip(), "unsat")
 
     @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
     def test_z3_observes_product_selectors_in_exact_definition(self):
@@ -955,13 +1257,16 @@ class SmtTest(unittest.TestCase):
 
     def test_let_aliases_are_hygienic(self):
         collision = smt.symbol("rbo_let_0", smt.INT)
-        shared = smt.add(collision, smt.ONE)
-        term = smt.lt(shared, smt.add(shared, smt.ONE))
+        first = smt.add(collision, smt.ONE)
+        second = smt.add(
+            smt.symbol("rbo_let_0", smt.INT),
+            smt.int_value(1),
+        )
 
         self.assertEqual(
-            term.render_shared(),
+            smt.add(first, second).render_shared(),
             "(let ((rbo_let_1 (+ rbo_let_0 1))) "
-            "(< rbo_let_1 (+ rbo_let_1 1)))",
+            "(+ rbo_let_1 rbo_let_1))",
         )
 
     def test_zero_variable_quantifier_is_the_body(self):

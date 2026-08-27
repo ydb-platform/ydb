@@ -990,6 +990,28 @@ Implementation sequence:
     exact unique-key ordering certificate the next bounded-proof model target;
     they do not justify an implicit tie-break or a larger timeout. M4 remains
     current.
+84. M4: derive exact private ordering certificates for grouped results. Commit
+    `476f2ea38f4` adds no snapshot field, IR node, exporter rule, policy
+    obligation, or runtime assumption. `Relation` instead carries a validated
+    nonempty null-safe unique key `K` and task-partition key `P`, both subsets
+    of its visible schema. Grouped Aggregate and `DistinctAll` mint `K`;
+    Filter and exact null-preserving aliases retain or rename certificates;
+    computed, missing, or `error_on_null` key projections and row-combining
+    operators drop them. Hash routing supplies `P`, and a multi-task gather
+    promotes task-local `K` only when every task agrees and `P ⊆ K`.
+    A Sort or Merge whose complete comparator contains `K` is total: the
+    ordinary path uses exact predecessor counts, while eligible compact-prefix
+    and large-Merge networks use concrete row-index tie ranks. Neither path
+    adds decisions or bounded choices, and the incomplete-key behavior is
+    unchanged. Independent semantic and packaging audits found no blocker;
+    the registered Python package passes 760/760. The focused q21/q56/q60
+    batch now has one outcome on each side and zero bounded order choices, but
+    all three remain `UNKNOWN`: the deadline is reported before branch 4/4
+    (`right_outcome_0_unmatched`) after earlier solver work. That label names
+    an unattempted branch, not a localized cause. This is a substantial
+    proof-shape reduction, not a proof-floor promotion: the floor stays 35/35,
+    and q21's deterministic singleton-family comparison is the next exact
+    target. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -3509,7 +3531,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   226/27,934 ms. Its 18,154-byte report has SHA-256
   `883a491cc28c06731b47e25d6b7008f17514be0905da9d3eef850235acbd08bd`;
   subtest/suite/outer wall times are 212.859/213.778/251.13 seconds. The
-  current floor is therefore 35/121 workload queries (28.9%), 35/101
+  M83 floor was therefore 35/121 workload queries (28.9%), 35/101
   formula-covered exact pairs (34.7%), and 35/35 curated obligations. Within
   TPC-DS it is 22/99 workload rows (22.2%) and 22/81 formula-covered rows
   (27.2%). Formula, exact-pair, verifier-entry, preparation, and defect
@@ -3526,6 +3548,67 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   a cross-task partition certificate, preserved only through audited
   operators. This is a proof-reduction target, not an assumed hidden tie-break;
   q33 remains ineligible because its ordering omits its grouped key.
+
+  Milestone 84 implements that exact proof-reduction slice in commit
+  `476f2ea38f4`. The two new `Relation` fields are private semantic
+  certificates and never enter the snapshot wire format: `K` is a nonempty
+  null-safe unique-key column set, and `P` is a nonempty task-partition column
+  set. Both must be subsets of the current schema. Grouped Aggregate mints
+  `K` from its complete grouping output; `DistinctAll` uses the corresponding
+  aggregate outputs. It retains `P` only when the incoming partition set is a
+  subset of the grouping keys, remapping it through `DistinctAll`. Filter,
+  exact root/output retention, exact direct aliases, Sort, TopSort, Merge,
+  ordered and unordered Limit, and row-preserving window/prune paths preserve
+  the applicable certificates. Project maps only direct null-preserving
+  aliases; computed, missing, colliding, or `error_on_null` key columns drop
+  the affected certificate. Join/Cross, logical `UnionAll`, and other
+  uncertified row-combining constructors drop it. HashShuffle records its
+  exact key as `P`; Broadcast cannot turn replicated local uniqueness into a
+  global key; and multi-task gather promotes a common local `K` only when all
+  inputs also carry the same `P` and `P ⊆ K`. Map connections pass the
+  certificates unchanged; serial and parallel StageGraph `UnionAll` use that
+  same gather rule and infer no disjointness from union alone. HashShuffle
+  supplies `P` but never invents a missing `K`.
+
+  Comparator equality on every ordered column then implies equality on `K`.
+  Because `K` is null-safe unique, two present rows cannot tie. Ordinary
+  complete-key Sort and eligible small Merge therefore use exact predecessor
+  counts and preserve the source outcome/decision/choice cardinality. The
+  compact-prefix sorting network and eligible large Merge use fixed concrete
+  row-index ranks only to order absent slots; they add no symbolic tie choice.
+  Incomplete-key Sort/Merge retains the preceding enumerated, ordinal, or
+  symbolic-network alternatives and budgets. No exporter, decoder, JSON
+  schema, wire artifact, solver theorem, or proof policy changes.
+
+  The fresh M84 q21/q56/q60 `solver_experiment` at exact HEAD
+  `476f2ea38f4` prepares all three exact Initial/Final pairs and returns
+  `UNKNOWN` after 377/61,341, 3,379/63,374, and 3,952/64,088 ms. Every row's
+  verdict says the deadline expired before branch 4/4,
+  `right_outcome_0_unmatched`, after earlier solver work; branch 4 itself was
+  not attempted. The normalized family has one left and one right outcome.
+  Compared with M83, total outcomes fall from 55 to 6
+  (-89.09%), bounded ordinal/tie/selection choices from 16 to zero, and SMT
+  bytes from 2,344,721 to 1,458,873 (-37.78%). Per query, q21 falls from
+  3 to 2 outcomes and 647,187 to 194,997 SMT bytes (-69.87%); q56 and q60
+  each fall from 26 to 2 outcomes and from 855,106/842,428 to
+  634,486/629,390 bytes (-25.80%/-25.29%). The formula SHA-256 values are
+  `e8b528cecfaaeadb7fec86b5519e7e438092b2b1e3d27f75a0479a6c82d6d8f3`,
+  `2c52982ec75b3bbd886535332410f362921d2fbd54acea8029aa6726276a9883`,
+  and
+  `7164f0f1fc7cffb8404782469a3ab437c82322e6ab76edc3150aa905c8924e70`.
+  The 9,832-byte report has SHA-256
+  `6d69883451d8b71ccb2cc78a8e7e42d59fdfdf563d574f7725cb8e9c157b8714`;
+  its policy is valid with zero violations. The 18,375-byte merged trace has
+  SHA-256
+  `3e3492f504c32486f9a6b3a05b9e2de655a7a7f047e7379a488adce832238991`.
+  Preparation/verifier sums are 7,708/188,803 ms, and
+  subtest/suite/graph wall times are
+  204.231814/206.927671/262.480557 seconds. Independent proof-soundness,
+  test-gap, packaging, import, and diff audits found no blocker, and the
+  already-registered Python package passes 760/760. No obligation is promoted:
+  the authoritative proof floor remains 13/13 TPCH plus 22/22 TPC-DS, 35/35.
+  q21's deterministic singleton-family/keyed-comparison residual is the next
+  exact target; a longer timeout alone is not evidence.
 
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
@@ -4609,6 +4692,12 @@ regression locks the corrected boundary.
   `VERIFIED_BOUNDED`; the checked floor is now 35 obligations. Fresh
   q21/q56/q60 `UNKNOWN` evidence directs the next proof-reduction work toward
   an exact derived unique-key ordering certificate.
+  M84 semantic commit `476f2ea38f4` implements that private certificate and
+  collapses the q21/q56/q60 normalized outcomes from 55 to 6 and bounded
+  order-choice variables from 16 to zero. All three still exhaust the budget
+  during singleton-family comparison, before the reported fourth branch is
+  attempted, so the checked floor remains 35/35 and q21 is the next exact
+  keyed-comparison reduction target.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

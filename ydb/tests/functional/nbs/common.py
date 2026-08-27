@@ -13,7 +13,10 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.functional.nbs.helpers import execute_ydbd, execute_dstool_grpc
+try:
+    from ydb.tests.functional.nbs.lib.helpers import execute_ydbd, execute_dstool_grpc
+except ImportError:
+    from helpers import execute_ydbd, execute_dstool_grpc
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +101,7 @@ class NbsTestBase:
 
         execute_ydbd(self.cluster, "token", ['admin', 'bs', 'config', 'invoke', '--proto', define_ddisk_pool])
 
-    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT):
+    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
         """
         Create a disk and return the parsed CreatePartition JSON result.
         """
@@ -111,7 +114,7 @@ class NbsTestBase:
                 'create',
                 '--pool',
                 self.ddisk_pool_name,
-                '--block-size=4096',
+                f'--block-size={block_size}',
                 f'--blocks-count={blocks_count}',
                 '--type=ssd',
                 '--disk-id',
@@ -134,12 +137,12 @@ class NbsTestBase:
 
         return output
 
-    def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT):
+    def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
         """
         Create a disk with specified number of blocks.
         Returns the partition tablet id.
         """
-        output = self.create_partition(disk_id, blocks_count)
+        output = self.create_partition(disk_id, blocks_count, block_size=block_size)
         assert output.get('status') == 'SUCCESS', (
             f"CreatePartition failed for disk {disk_id}: {output}"
         )

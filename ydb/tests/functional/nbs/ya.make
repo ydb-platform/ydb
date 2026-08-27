@@ -29,3 +29,12 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    F1_user_scenarios
+    F1_vhost
+    F2_fault_injection
+    F3_node_down_and_data_copy
+    F4_throttling_and_limits
+    F5_observability
+)

@@ -56,6 +56,9 @@ VHOST_USER_PROTOCOL_F_REPLY_ACK = 3
 # virtio-blk request types.
 VIRTIO_BLK_T_IN = 0
 VIRTIO_BLK_T_OUT = 1
+VIRTIO_BLK_T_FLUSH = 4
+VIRTIO_BLK_T_DISCARD = 11
+VIRTIO_BLK_T_WRITE_ZEROES = 13
 
 # virtio-blk request status codes.
 VIRTIO_BLK_S_OK = 0
@@ -101,7 +104,7 @@ _USED_OFFSET = 2 * _PAGE_SIZE
 _DATA_OFFSET = 4 * _PAGE_SIZE
 
 
-def _wait_for_socket(socket_path, timeout_seconds=30.0):
+def wait_for_socket(socket_path, timeout_seconds=30.0):
     """Polls for the vhost socket to be created."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
@@ -111,6 +114,10 @@ def _wait_for_socket(socket_path, timeout_seconds=30.0):
     raise TimeoutError(
         "vhost socket {} did not appear within {} seconds".format(
             socket_path, timeout_seconds))
+
+
+# Kept for callers that still import the private name.
+_wait_for_socket = wait_for_socket
 
 
 class VhostUserBlkError(Exception):
@@ -127,7 +134,13 @@ class VhostUserBlkClient(object):
             status, data = client.read(offset, length)
     """
 
-    def __init__(self, socket_path, queue_size=64, mem_size=4 * 1024 * 1024):
+    def __init__(
+        self,
+        socket_path,
+        queue_size=64,
+        mem_size=4 * 1024 * 1024,
+        socket_timeout=30.0,
+    ):
         if (queue_size & (queue_size - 1)) != 0:
             raise ValueError(
                 "queue_size must be a power of two, got {}".format(queue_size))
@@ -135,6 +148,7 @@ class VhostUserBlkClient(object):
         self._socket_path = socket_path
         self._queue_size = queue_size
         self._mem_size = mem_size
+        self._socket_timeout = socket_timeout
 
         self._sock = None
         self._memfd = None
@@ -158,7 +172,7 @@ class VhostUserBlkClient(object):
         return False
 
     def connect(self):
-        _wait_for_socket(self._socket_path)
+        wait_for_socket(self._socket_path, self._socket_timeout)
 
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.connect(self._socket_path)
@@ -299,6 +313,23 @@ class VhostUserBlkClient(object):
                     byte_offset, VIRTIO_BLK_SECTOR_SIZE))
         return self._do_request(
             VIRTIO_BLK_T_OUT, byte_offset, bytes(data), len(data), timeout)
+
+    def write_zeroes(self, byte_offset, length, timeout=5.0):
+        """
+        Issues a virtio-blk WRITE_ZEROES request. The NBS vhost server maps
+        this (and DISCARD) onto ZeroBlocksLocal, which currently aborts.
+        """
+        if byte_offset % VIRTIO_BLK_SECTOR_SIZE != 0:
+            raise ValueError(
+                "virtio-blk addresses are in 512-byte sectors, offset {}"
+                " is not a multiple of {}".format(
+                    byte_offset, VIRTIO_BLK_SECTOR_SIZE))
+        if length % VIRTIO_BLK_SECTOR_SIZE != 0:
+            raise ValueError(
+                "WRITE_ZEROES length {} is not a multiple of {}".format(
+                    length, VIRTIO_BLK_SECTOR_SIZE))
+        return self._do_request(
+            VIRTIO_BLK_T_WRITE_ZEROES, byte_offset, b"", length, timeout)
 
     def read(self, byte_offset, length, timeout=5.0):
         """

@@ -54,7 +54,7 @@ TMaybe<TColumnOrder> InferOrderForUnionAll(
     }
 
     for (ui32 i = 1; i < children.size(); i++) {
-        auto input = children[i];
+        const auto& input = children[i];
         auto current = ctx.LookupColumnOrder(*input);
         if (!current) {
             return Nothing();

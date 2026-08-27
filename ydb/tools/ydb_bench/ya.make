@@ -85,6 +85,8 @@ PEERDIR(
 END()
 
 RECURSE(
+    background
+    memory
     process_guard
 )
 

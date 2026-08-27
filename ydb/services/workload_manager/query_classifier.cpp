@@ -68,7 +68,7 @@ public:
                 return *PreClassifyResult;
             }
 
-            if (TryResolve(settings, PreClassifyResult)) {
+            if (TryResolve(value, PreClassifyResult)) {
                 return *PreClassifyResult;
             }
         }
@@ -138,7 +138,7 @@ public:
                 return *PostClassifyResult;
             }
 
-            if (TryResolve(settings, PostClassifyResult)) {
+            if (TryResolve(it->second, PostClassifyResult)) {
                 return *PostClassifyResult;
             }
         }
@@ -262,10 +262,11 @@ private:
     }
 
     template<typename TStore>
-    bool TryResolve(const NResourcePool::TClassifierSettings& classifier, TStore& store) {
+    bool TryResolve(const TResourcePoolClassifierConfig& config, TStore& store) {
+        const auto& classifier = config.GetClassifierSettings();
         Y_ABORT_UNLESS(classifier.ResourcePool.has_value(),
             "ResourcePool must be set for non-Reject classifiers");
-        return TryResolve(*classifier.ResourcePool, store, TResolver::Classifier(ToString(classifier.Rank)));
+        return TryResolve(*classifier.ResourcePool, store, TResolver::Classifier(config.GetName()));
     }
 
     static TReject MakeRejectFromClassifier(const TResourcePoolClassifierConfig& config) {
@@ -274,7 +275,7 @@ private:
         return TReject{
             .Code = Ydb::StatusIds::PRECONDITION_FAILED,
             .Message = TStringBuilder() << "Request is rejected by classifier '" << name << "' (rank=" << rank << ")",
-            .Resolver = TResolver::Classifier(ToString(rank)).ToLogString(),
+            .Resolver = TResolver::Classifier(name).ToLogString(),
         };
     }
 

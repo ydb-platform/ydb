@@ -18,7 +18,7 @@ struct TResolver {
     };
 
     EType Type;
-    TString Name;  // classifier rank/name for EType::Classifier; empty otherwise
+    TString Name;  // classifier name for EType::Classifier; empty otherwise
 
     static TResolver Direct()              { return {EType::Direct, {}}; }
     static TResolver Default()             { return {EType::Default, {}}; }
@@ -29,7 +29,7 @@ struct TResolver {
     TString ToSysViewString() const {
         switch (Type) {
             case EType::Direct:        return "USER";
-            case EType::Classifier:    return Name;
+            case EType::Classifier:    return TString("CLASSIFIER: ") + Name;
             case EType::Default:       return "NONE";
             case EType::SharedReading: return "SHARED_READING";
         }
@@ -40,7 +40,7 @@ struct TResolver {
     TString ToLogString() const {
         switch (Type) {
             case EType::Direct:        return "User request";
-            case EType::Classifier:    return TString("Classifier with rank: ") + Name;
+            case EType::Classifier:    return TString("Classifier: ") + Name;
             case EType::Default:       return "Default";
             case EType::SharedReading: return "ResourcePoolForSharedReading";
         }

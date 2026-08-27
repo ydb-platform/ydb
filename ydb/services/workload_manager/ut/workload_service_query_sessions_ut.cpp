@@ -435,6 +435,43 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     }
 
     ///
+    /// RFC C3.2: request routed by a classifier match must show
+    /// WmClassifiedBy = "CLASSIFIER: <name>".
+    ///
+    Y_UNIT_TEST(TestStateExecutingClassifiedByClassifier) {
+        using namespace NYdb::NTable;
+        TQuerySessionTestFixture f("my_pool", ISessionUpdater::EXITED);
+
+        const TString classifierId = "my_pool_classifier";
+        auto ddl = f.GetYdb()->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
+                RESOURCE_POOL="my_pool",
+                RANK=20
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+        UNIT_ASSERT_VALUES_EQUAL_C(ddl.GetStatus(), NYdb::EStatus::SUCCESS, ddl.GetIssues().ToString());
+        f.GetYdb()->WaitForClassifierPropagation();
+
+        const TString& query = TSampleQueries::TSelect42::Query;
+        TActorId edge = f.SetupInterceptor(query);
+        auto& runtime = *f.GetYdb()->GetRuntime();
+
+        auto session = f.GetYdb()->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto future = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx());
+        auto ev = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edge);
+
+        TQuerySessionReader reader(f.GetYdb());
+        reader.FetchAll(query);
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].State, "EXECUTING");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, TString("CLASSIFIER: ") + classifierId);
+
+        runtime.Send(new IEventHandle(ev->Sender, edge, ev->Release().Release()));
+        UNIT_ASSERT(future.GetValueSync().IsSuccess());
+    }
+
+    ///
     /// RFC C1: after the query finishes the session goes IDLE — Query is cleared,
     /// WmPoolId / WmClassifiedBy / QueryStartAt must all be NULL.
     ///

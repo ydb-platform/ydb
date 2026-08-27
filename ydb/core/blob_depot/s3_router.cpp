@@ -254,7 +254,8 @@ namespace NKikimr::NBlobDepot {
             const ui32 hi = RefreshSecMax();
             const ui32 sec = lo == hi ? lo
                 : lo + TAppData::RandomProvider->GenRand() % (hi - lo + 1);
-            return TDuration::Seconds(sec);
+            Y_UNUSED(sec);
+            return TDuration::Seconds(1);
         }
 
         TDuration MetricsPushInterval() const {

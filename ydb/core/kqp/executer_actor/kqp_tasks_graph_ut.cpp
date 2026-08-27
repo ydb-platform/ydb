@@ -80,6 +80,14 @@ struct TTaskDistribution {
     // BuildTransformChannels), relying entirely on the placement stage keeping copy-group columns co-located.
     TVector<TString> CrossNodeCopyChannels;
 
+    // ColumnShardHashV1 shuffle-elimination mapping check (see CheckShuffleEliminationHashMapping): one entry per
+    // hash bucket routed to a task that does not read the matching shard. Should always be empty.
+    TVector<TString> ShuffleEliminationHashErrors;
+
+    // How many scan stages actually saved a ColumnShardHashV1 mapping - guards the check above from passing vacuously
+    // on a query the optimizer decided not to shuffle-eliminate.
+    ui32 ShuffleEliminationMappings = 0;
+
     ui32 Count(ui32 txIdx = 0, ui32 stageIdx = 0) const {
         auto it = TasksPerStage.find(TStageId(txIdx, stageIdx));
         return it != TasksPerStage.end() ? it->second : 0;
@@ -350,6 +358,7 @@ public:
             }
         }
         CheckCrossNodeCopyChannels(reply->Result.CrossNodeCopyChannels);
+        CheckShuffleEliminationHashMapping(reply->Result.ShuffleEliminationHashErrors, reply->Result.ShuffleEliminationMappings);
         ctx.Send(Owner, reply.Release());
         Die(ctx);
     }
@@ -449,6 +458,79 @@ private:
                     << " (node " << (srcNode ? ToString(*srcNode) : TString("<none>")) << ") -> "
                     << channel.DstStageId << " task " << channel.DstTask
                     << " (node " << (dstNode ? ToString(*dstNode) : TString("<none>")) << ")");
+            }
+        }
+    }
+
+    // ColumnShardHashV1 shuffle-elimination invariant.
+    //
+    // A scan stage over a column table whose shuffle was eliminated saves TaskIndexByHash: hash bucket -> task. At
+    // runtime the shuffling stage's consumer (dq_output_consumer.cpp, TColumnShardHashV1::Finish) uses that value as
+    // an *index into its output channel vector*, and those channels were created one per task of the destination
+    // stage, walking stageInfo.Tasks in order (BuildHashShuffleChannels). So the saved value must be the position of
+    // the reading task in stageInfo.Tasks - the placed, node-major order - and not a position in any other
+    // enumeration of the same tasks.
+    //
+    // The check re-derives the expected mapping straight from what the tasks actually read: for every task at
+    // position i of the stage and every shard it reads, TaskIndexByHash[hashOf(shard)] must be i. When it is not,
+    // rows hash to a task that does not hold the matching shard - the value still fits the channel vector, so
+    // nothing fires at runtime and the join silently returns wrong results.
+    void CheckShuffleEliminationHashMapping(TVector<TString>& errors, ui32& mappingsFound) const {
+        for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {
+            const auto& params = stageInfo.Meta.ColumnShardHashV1Params;
+            if (!stageInfo.Meta.ColumnTableInfoPtr || !params.TaskIndexByHash) {
+                continue; // not a column-table scan stage, or this stage saved no mapping.
+            }
+
+            const auto& sharding = stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding();
+            THashMap<ui64 /* shardId */, ui64 /* hash */> hashByShardId;
+            for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+                hashByShardId[sharding.GetColumnShards(si)] = si;
+            }
+
+            THashMap<ui64 /* hash */, ui64 /* position in stageInfo.Tasks */> expected;
+            for (std::size_t i = 0; i < stageInfo.Tasks.size(); ++i) {
+                const auto& task = Graph->GetTask(stageInfo.Tasks[i]);
+                if (!task.Meta.Reads) {
+                    continue;
+                }
+                for (const auto& read : *task.Meta.Reads) {
+                    auto it = hashByShardId.find(read.ShardId);
+                    if (it != hashByShardId.end()) {
+                        expected[it->second] = i;
+                    }
+                }
+            }
+
+            if (expected.empty()) {
+                continue; // stage reads nothing from this table (fully pruned): nothing to compare against.
+            }
+            ++mappingsFound;
+
+            const auto nodeOf = [&](ui64 position) -> TString {
+                if (position >= stageInfo.Tasks.size()) {
+                    return "<out of range>";
+                }
+                const auto& node = Graph->GetTask(stageInfo.Tasks[position]).Meta.ExpectedNodeId;
+                return node ? ToString(*node) : TString("<none>");
+            };
+
+            for (const auto& [hash, expectedPosition] : expected) {
+                if (hash >= params.TaskIndexByHash->size()) {
+                    errors.push_back(TStringBuilder()
+                        << "stage " << stageId << ": hash " << hash << " is out of TaskIndexByHash range "
+                        << params.TaskIndexByHash->size());
+                    continue;
+                }
+
+                const ui64 actualPosition = (*params.TaskIndexByHash)[hash];
+                if (actualPosition != expectedPosition) {
+                    errors.push_back(TStringBuilder()
+                        << "stage " << stageId << ": shard " << sharding.GetColumnShards(hash) << " (hash " << hash
+                        << ") is read by task at position " << expectedPosition << " (node " << nodeOf(expectedPosition)
+                        << "), but TaskIndexByHash routes it to position " << actualPosition
+                        << " (node " << nodeOf(actualPosition) << ")");
+                }
             }
         }
     }
@@ -706,6 +788,17 @@ inline void AssertNodeDistribution(const TTaskDistribution& dist, ui32 txId,
 // regardless of query shape, so every test can call it unconditionally.
 inline void AssertNoCrossNodeCopyChannels(const TTaskDistribution& dist) {
     UNIT_ASSERT_C(dist.CrossNodeCopyChannels.empty(), JoinSeq("\n", dist.CrossNodeCopyChannels));
+}
+
+// Blanket invariant for queries with shuffle elimination over column tables: every hash bucket must be routed to the
+// task that actually reads the matching shard (see CheckShuffleEliminationHashMapping). minMappings guards against
+// the check going vacuous if the optimizer stops eliminating the shuffle for the query.
+inline void AssertShuffleEliminationHashMapping(const TTaskDistribution& dist, ui32 minMappings = 1) {
+    UNIT_ASSERT_C(dist.ShuffleEliminationMappings >= minMappings,
+        "expected at least " << minMappings << " shuffle-eliminated scan stage(s) with a ColumnShardHashV1 mapping, got "
+            << dist.ShuffleEliminationMappings << ": the query no longer covers the invariant");
+    UNIT_ASSERT_C(dist.ShuffleEliminationHashErrors.empty(),
+        "\n" << JoinSeq("\n", dist.ShuffleEliminationHashErrors));
 }
 
 // ============================================================================
@@ -2754,6 +2847,33 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
             /* stage 23 */ { {2, 79}, {3, 41} },
             /* stage 24 */ { {1, 1} },
         });
+    }
+
+    // Two column tables joined on the sharding key of the probe side: the optimizer eliminates the shuffle on
+    // `lineitem` and shuffles `orders` into lineitem's shards with ColumnShardHashV1. The mapping saved by the scan
+    // stage must address tasks by their position in the placed stageInfo.Tasks vector - the same order the shuffle's
+    // output channels are created in. Needs >= 2 nodes to be meaningful: on a single node every enumeration of the
+    // stage's tasks coincides.
+    Y_UNIT_TEST_F(ShuffleEliminationHashMapping, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            select
+                l.l_orderkey as l_orderkey,
+                o.o_orderdate as o_orderdate,
+                l.l_extendedprice as l_extendedprice
+            from
+                `/Root/lineitem` as l
+            inner join
+                `/Root/orders` as o
+            on l.l_orderkey = o.o_orderkey
+            where
+                o.o_orderdate >= Date('1995-01-01');
+        )";
+
+        auto dist = BuildTasks(queryText);
+        AssertNoCrossNodeCopyChannels(dist);
+        AssertShuffleEliminationHashMapping(dist);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
     }
 
 } // Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild)

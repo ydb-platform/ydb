@@ -522,6 +522,10 @@ private:
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
+    // The move's accessor requests are scheduled like TTL's but must not be *counted* as
+    // TTL's: one string drives both the broker queue and the ResourceType label, so sharing
+    // it made a stalled move indistinguishable from idle tiering in the sensors.
+    NOlap::NResourceBroker::NSubscribe::TTaskContext MoveDataTaskSubscription;
 
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
@@ -633,7 +637,8 @@ private:
     void SetupMetadata();
     // Re-arms only the move's accessor requests, ungated: they must not queue behind tiering's.
     void SetupMoveDataMetadata();
-    void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests);
+    void StartMetadataRequests(
+        std::vector<NOlap::TCSMetadataRequest>&& requests, const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext);
     bool SetupTtl();
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);

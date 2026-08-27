@@ -3292,6 +3292,9 @@ message TKafkaProxyConfig {
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
     optional string PublicHost = 16;
+    // How often an authenticated Kafka connection re-validates the SASL ticket via TicketParser.
+    // Zero disables periodic rechecks.
+    optional uint32 TokenRecheckIntervalMs = 21 [default = 300000];
 }
 
 message TAwsCompatibilityConfig {

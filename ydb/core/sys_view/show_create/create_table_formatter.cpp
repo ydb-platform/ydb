@@ -771,6 +771,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         if (analyzers.has_use_filter_snowball()) {
             Stream << ", use_filter_snowball=" << (analyzers.use_filter_snowball() ? "true" : "false");
         }
+        if (analyzers.has_use_filter_superlemmer()) {
+            Stream << ", use_filter_superlemmer=" << (analyzers.use_filter_superlemmer() ? "true" : "false");
+        }
 
         Stream << ")";
     }

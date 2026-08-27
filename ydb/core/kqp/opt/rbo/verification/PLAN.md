@@ -1012,6 +1012,39 @@ Implementation sequence:
     proof-shape reduction, not a proof-floor promotion: the floor stays 35/35,
     and q21's deterministic singleton-family comparison is the next exact
     target. M4 remains current.
+85. M4: use an exact certificate-gated keyed mismatch cover and schedule that
+    cover branch-first. Semantic commit `67655eaa786` changes only the trusted
+    Python comparison and solver protocol. The preferred cover is admitted
+    only for ordered singleton result families with no decisions or choices,
+    position-compatible schemas, the same nonempty positional null-safe unique
+    key, and the same positional order signature covering that key. It checks
+    possible language absence, asymmetric errors, bidirectional per-row key
+    absence, and non-key payload mismatch from the side with fewer live slots.
+    Null-safe uniqueness makes that cover equivalent to the unchanged canonical
+    mismatch; branch-count 64 and comparison-work 256 are inclusive ceilings,
+    with ordinary canonical-first comparison as the fallback. The canonical
+    SMT artifact, general exact decomposition, model-domain checks, and theorem
+    are unchanged. Eligible queries skip the canonical probe and spend one
+    monotonic global deadline on the preferred branches; every branch must be
+    `UNSAT`, and model extraction reuses a winning `SAT` branch. The first
+    branch `UNKNOWN` is retained instead of being overwritten by a later
+    deadline message.
+
+    Before the final scheduler-diagnostic regression, the packaged checkpoint
+    passed 776/776: 754 Python tests, 21 lint checks, and one import check. The
+    earlier keyed-cover slice passed 7/7. On the frozen tree, the lowercase
+    `preferred` slice collected 755 Python tests, selected 11, deselected 744,
+    and passed all 11; no post-regression full-package run is claimed. At exact
+    semantic HEAD, q21 proves twice at 2x2 in
+    216/47,563 and 199/47,320 ms of preparation/verification. q56 and q60
+    remain `UNKNOWN` after 1,561/61,589 and 1,609/61,586 ms, both preserving
+    branch 7/8
+    `preferred_left_row_0_column_1_payload_mismatch` as the first unresolved
+    branch. Policy commit `95182b541fb` promotes only q21; policy validation
+    passes 16/16, and fresh gates prove 13/13 TPCH plus 23/23 TPC-DS. The
+    checked floor is now 36/36. M86 begins with summary-state diagnosis of the
+    q56/q60 payload branch; it promises neither a new reduction nor a policy
+    promotion before that branch is understood. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -3610,6 +3643,114 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   q21's deterministic singleton-family/keyed-comparison residual is the next
   exact target; a longer timeout alone is not evidence.
 
+  Milestone 85 implements that exact comparison target in semantic commit
+  `67655eaa786`. It retains the canonical family mismatch and its ordinary
+  distributive branches, but may attach a preferred exact cover when both
+  sides are ordered singleton outcomes with no decisions or choices. Their
+  schemas must agree positionally in type, nullability, and integral-AVG rank;
+  their nonempty null-safe unique keys must occupy the same positions; and
+  their complete positional order signatures, including direction, NULL
+  placement, and comparison tag, must match and cover that key. Any near miss
+  uses the prior general comparison.
+
+  The preferred cover retains any syntactically possible language-empty branch
+  and both asymmetric error branches. Under two enabled successful outcomes it
+  then asks, in both directions, whether each live row lacks a null-safe key
+  match. Finally it checks each non-key payload cell from the side with fewer
+  live slots against the row with the same key on the other side.
+  Bidirectional key inclusion plus null-safe uniqueness gives the same present
+  key set with one row per key, so one complete payload direction is
+  sufficient; the identical key-covering total order then makes equal rows an
+  equal sequence. The prospective cover is limited to 64 branches and 256
+  audited row-pair cell comparisons. Crossing either limit declines the
+  optimization and keeps the old exact path.
+
+  `query_solver` runs mandatory model-domain exclusions before either semantic
+  schedule. For a preferred cover it skips the canonical three-quarter probe
+  and checks branches immediately under the same decreasing global deadline.
+  A proof still requires every branch to be `UNSAT`; `SAT` wins immediately
+  and its exact branch is reused for model extraction; any unknown or untried
+  branch prevents a proof. An empty preferred portfolio is rejected. Problems
+  without a preferred cover retain canonical-first scheduling. The canonical
+  counterexample term, ordinary branch cover, `Problem.formula()`, emitted SMT,
+  row/task bound, and theorem are unchanged. The loop also retains its first
+  branch `UNKNOWN` when the remaining deadline later reaches zero, correcting
+  the diagnostic overwrite visible in the historical M84 verdicts without
+  rewriting those artifacts.
+
+  Independent soundness and packaging audits found no blocker. Before the
+  final scheduler-diagnostic regression, the Python runner reported
+  `754 passed in 273.95s` and the packaged checkpoint passed 776/776: 754 Python, 21
+  flake8, and one import check. The earlier `Preferred` keyed-cover slice
+  passed 7/7. On the frozen tree, the lowercase `preferred` scheduler slice
+  collected 755 Python tests, selected 11, deselected 744, and passed all 11,
+  thereby covering the last-added regression. A full package run after that addition
+  was not made and is not claimed. Exactness evidence includes exhaustive
+  sparse nullable composite keys, an independent Z3 proof
+  of preferred/canonical equivalence under uniqueness, a satisfiable branch
+  for every observable mismatch class, fail-closed gates and inclusive caps,
+  canonical-formula invariance, soundness-exclusion priority, winning-branch
+  replay, one shared deadline, untried-branch rejection, first-UNKNOWN
+  retention, and unchanged ordinary scheduling.
+
+  The focused q21/q56/q60 run at exact semantic HEAD `67655eaa786` selects and
+  prepares all three exact 2x2 pairs under the 60,000-ms deadline. q21 returns
+  `VERIFIED_BOUNDED` after 216/47,563 ms of preparation/verification. q56 and
+  q60 return `UNKNOWN` after 1,561/61,589 and 1,609/61,586 ms; both now preserve
+  the first unresolved result exactly as branch 7/8,
+  `preferred_left_row_0_column_1_payload_mismatch`, rather than replacing it
+  with a later deadline label. The 8,928-byte, policy-valid zero-violation
+  report has SHA-256
+  `9f0814d5dbdc732d3dbd7e4eee7d8be398de170dd36492d76bc047901bb611ee`;
+  the 18,377-byte trace has SHA-256
+  `b5bd8460bd8264899688574d11fea58af8b44e7cc2a6d9073b56ea4a88b374e0`.
+  Subtest and outer wall times are 177.857866 and 360.13 seconds. The retained
+  q56/q60 canonical formulas remain byte-identical to M84 at
+  634,486/629,390 bytes with SHA-256 values
+  `2c52982ec75b3bbd886535332410f362921d2fbd54acea8029aa6726276a9883`
+  and
+  `7164f0f1fc7cffb8404782469a3ab437c82322e6ab76edc3150aa905c8924e70`.
+  Successful q21 intentionally retains no standalone solver artifact; its
+  unchanged M84 canonical formula is 194,997 bytes with SHA-256
+  `e8b528cecfaaeadb7fec86b5519e7e438092b2b1e3d27f75a0479a6c82d6d8f3`.
+
+  An independent q21-only repeat is again `VERIFIED_BOUNDED` after
+  199/47,320 ms. Its 5,797-byte report and 18,319-byte trace have SHA-256
+  values
+  `db25d8caa1a975d6d4264a5521879a7d9a451ccf93e0cd5b76dca2e6086d7a46`
+  and
+  `1c75bd5b501a079233ad77ad60e17250e4f3cba807aaa91430f5cc05bfa7aafc`;
+  subtest and outer wall times are 51.265575 and 68.89 seconds. Policy commit
+  `95182b541fb` therefore adds q21 as TPC-DS proof obligation twenty-three;
+  focused policy validation passes 16/16 in 0.982651 seconds.
+
+  Fresh proof gates at committed HEAD `95182b541fb` are authoritative and
+  policy-valid with zero violations. TPC-DS prepares and proves 23/23 after
+  summed 18,808/264,269 ms, with q21 at 169/47,086 ms. Its 18,758-byte report
+  and 18,418-byte trace have SHA-256 values
+  `f5b103cc73d4d339973610812dfe766560c677a0107f2761fb7ba7cc99ef4888`
+  and
+  `e44582b7662ce46eb91ba76c6aa12894b1589ec93c4861b340390f95ca59c3b6`;
+  subtest and outer wall times are 287.02436 and 306.09 seconds. TPCH prepares
+  and proves the unchanged 13/13 after summed 1,805/68,461 ms. Its 10,171-byte
+  report and 18,429-byte trace have SHA-256 values
+  `5d07e36d8df12909ef1e408d72e2f1bb7a72d033374f8e6e794bd28d67bfdc72`
+  and
+  `ed3a9cadf535ace43e20dbfd139889783927790b399c3447ae79687da22ce29b`;
+  subtest and outer wall times are 72.351277 and 322.93 seconds. Exact `ya`
+  graph times were not retained and are not inferred. The current floor is
+  therefore 36/36: 36/121 workload queries (29.8%), 36/101 formula-covered
+  exact pairs (35.6%), and within TPC-DS 23/99 workload rows (23.2%) and 23/81
+  formula-covered rows (28.4%). Formula, exact-pair, verifier-entry,
+  preparation, and defect inventories remain unchanged.
+
+  M86 starts with summary-state diagnosis of the shared q56/q60 branch-7
+  payload: whether its cost comes from repeated key guards, aggregate summary
+  terms, or another exact SMT
+  structure must be measured before choosing a reduction. This observation is
+  neither a promised proof nor permission to weaken the cover, raise the
+  timeout, or promote either query.
+
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
@@ -3887,10 +4028,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
-  q3, q8, q9, q16, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q88, q90,
+  q3, q8, q9, q16, q21, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q88, q90,
   q93, q94, q95, q96, q97, and q99 with a fixed 60-second per-query budget. The
-  current policy covers 13 TPCH and 22 TPC-DS queries: 35 obligations, 35/121
-  (28.9%) of the workload, and 35/101 (34.7%) of formula-covered queries.
+  current policy covers 13 TPCH and 23 TPC-DS queries: 36 obligations, 36/121
+  (29.8%) of the workload, and 36/101 (35.6%) of formula-covered queries.
   Historically, the post-M78 reports verified all 32/32 as
   `VERIFIED_BOUNDED`: TPCH passed 13/13
   after 1,745/82,550 ms (SHA-256
@@ -3929,7 +4070,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `7b7904f9d460362253d0b87dc0f3439a67294f8e4a5f9dc35305cdd053c0e726`)
   and 22/22 TPC-DS after 18,379/190,504 ms (SHA-256
   `883a491cc28c06731b47e25d6b7008f17514be0905da9d3eef850235acbd08bd`).
-  All 35/35 current obligations are `VERIFIED_BOUNDED` with zero policy
+  All 35/35 M83 obligations are `VERIFIED_BOUNDED` with zero policy
   violations.
 
   The immediately preceding complete policy gate on source `4c2c1359e28`
@@ -4689,7 +4830,7 @@ regression locks the corrected boundary.
   M83 policy commit `cc85514862d` promotes already-supported TPC-DS q99 to
   proof depth without changing proof-producing code or a weaker coverage
   floor. Two focused runs and fresh 13/13 TPCH plus 22/22 TPC-DS gates are
-  `VERIFIED_BOUNDED`; the checked floor is now 35 obligations. Fresh
+  `VERIFIED_BOUNDED`; the M83 checked floor became 35 obligations. Fresh
   q21/q56/q60 `UNKNOWN` evidence directs the next proof-reduction work toward
   an exact derived unique-key ordering certificate.
   M84 semantic commit `476f2ea38f4` implements that private certificate and
@@ -4698,6 +4839,13 @@ regression locks the corrected boundary.
   during singleton-family comparison, before the reported fourth branch is
   attempted, so the checked floor remains 35/35 and q21 is the next exact
   keyed-comparison reduction target.
+  M85 semantic commit `67655eaa786` adds the certificate-gated exact keyed
+  cover and branch-first schedule without changing the canonical SMT theorem.
+  q21 proves twice; q56/q60 retain their common preferred payload branch as
+  the first `UNKNOWN`. Policy commit `95182b541fb` promotes only q21, and fresh
+  13/13 TPCH plus 23/23 TPC-DS gates raise the checked floor to 36/36. M86
+  starts with summary-state diagnosis of the shared q56/q60 payload branch, not an assumed
+  reduction or promotion.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

@@ -28,31 +28,51 @@ If the pinned solver returns `UNSAT`, `VERIFIED_BOUNDED` means:
 > and no modeled execution choice within the fixed task semantics, makes the
 > initial and final modeled observable outcomes differ.
 
-The canonical formula is retained as one grouped mismatch assertion. Solver
-execution first sets that check's SMT timeout to at most three quarters of the
-one global solver deadline. If it returns `UNKNOWN`, the verifier replaces
-only that assertion with an exact distributive cover: no enabled left
-language, no enabled right language, then one guarded unmatched-result
-predicate for each normalized left and right outcome. The verdict is
-`VERIFIED_BOUNDED` only when the canonical assertion is `UNSAT`, or every
-branch is `UNSAT` before the same deadline. Any branch `SAT` wins immediately;
-an unresolved or untried branch prevents a proof. Model extraction reruns the
-exact winning assertion without resetting the deadline.
+The canonical formula is retained as one grouped mismatch assertion. The
+ordinary solver schedule first gives that check at most three quarters of the
+one global deadline. If it returns `UNKNOWN`, the verifier replaces only that
+assertion with an exact distributive cover: no enabled left language, no
+enabled right language, then one guarded unmatched-result predicate for each
+normalized left and right outcome.
+
+There is one exact branch-first exception. When both result families are
+ordered singletons with no decisions or choices, have position-compatible
+schemas, carry the same nonempty positional null-safe unique key, and publish
+the same positional order covering that key, `relation.py` may attach a
+preferred keyed cover. It contains the possible language-absence and
+asymmetric-error cases, bidirectional per-live-row key absence, and non-key
+payload mismatch from the side with fewer live slots. Under the trusted
+uniqueness certificate, bidirectional key inclusion gives the same set with
+one row per key; one complete payload direction and the shared total order therefore
+give exact sequence equality. The solver skips the canonical probe only for
+this cover. Ineligible or over-budget shapes retain the ordinary schedule.
+
+In either schedule, `VERIFIED_BOUNDED` requires the canonical assertion to be
+`UNSAT` or every selected exact branch to be `UNSAT` before the same deadline.
+Any branch `SAT` wins immediately; an unresolved or untried branch prevents a
+proof. Model extraction reruns the exact winning assertion without resetting
+the deadline. Mandatory proof-domain exclusions run before both schedules.
+The first branch `UNKNOWN` is retained if the remaining deadline later
+expires; a deadline message is synthesized only when no earlier unknown exists.
 
 The critical construction invariant is:
 
 ```text
-canonical mismatch = OR(all exact solver branches)
+canonical mismatch = OR(general exact solver branches)
+preferred admission premises =>
+    canonical mismatch = OR(preferred keyed solver branches)
 ```
 
-`relation.py` assembles both forms by local Boolean distribution. A
-solver-backed quantified 2-by-2 representative regression checks their
-equivalence and fixed branch order. A future edit to either representation
-requires reviewing the construction itself, not merely rerunning that example.
-`--emit-smt` deliberately writes the canonical monolithic formula for stable
-inspection. It is the exact theorem but not a transcript of the internal
-portfolio, so solving that one file can have different performance or return
-`UNKNOWN` where the portfolio succeeds.
+`relation.py` assembles the canonical and general forms by local Boolean
+distribution. The preferred equivalence additionally relies on the admitted
+null-safe uniqueness and key-covering total order. Solver-backed representative
+regressions prove both equalities, including sparse nullable composite keys,
+and pin branch order. A future edit to either representation requires reviewing
+the construction itself, not merely rerunning one workload. `--emit-smt`
+deliberately writes the canonical monolithic formula for stable inspection. It
+is the exact theorem but not a transcript of the internal portfolio, so solving
+that one file can have different performance or return `UNKNOWN` where the
+portfolio succeeds.
 
 Cardinality-certified integral `AVG` adds a solver-first proof-domain
 obligation without weakening that mismatch invariant. The raw asserted
@@ -1561,7 +1581,7 @@ zero policy violations but all three rows remain `UNKNOWN`: the deadline is
 reported before branch 4/4 `right_outcome_0_unmatched` after earlier solver
 work, so that branch itself was not attempted. It shrinks normalized outcomes 55 to 6,
 bounded order-choice variables 16 to zero, and SMT bytes 2,344,721 to
-1,458,873; it establishes no new bounded theorem result. The current floor
+1,458,873; it establishes no new bounded theorem result. The M84 floor
 therefore remains the M83 35/35, and q21's deterministic singleton-family/keyed
 comparison is the next exact target.
 
@@ -1582,6 +1602,91 @@ The report's selected, prepared, paired, and verifier-entry sets are exactly
 q21/q56/q60; its verified set is empty, as required by the three `UNKNOWN`
 rows. Complete per-artifact digests are recorded in
 `BENCHMARK_COVERAGE.md`.
+
+M85 changes the trusted Python proof path in `relation.py` and `verify.py`, but
+not the C++ exporter, snapshot/IR contract, scalar or relational semantics,
+row/task bound, pinned solver, external runtime boundary, or canonical theorem.
+Semantic commit `67655eaa786` adds optional preferred-branch metadata beside
+the existing canonical mismatch and general exact decomposition. That metadata
+does not enter `Problem.formula()` or the emitted SMT artifact.
+
+Admission is deliberately positional and closed. Both families must be
+ordered, have exactly one outcome, and carry no decisions or bounded choices.
+Their visible columns must agree positionally in type, nullability, and
+integral-AVG rank. Each relation must carry a nonempty null-safe unique key at
+the same column positions. Their complete order signatures must match by
+position, ascending direction, NULL placement, and comparison tag, and the
+ordered positions must contain every key position. Duplicate names, a missing
+certificate, an incomplete or mismatched order, a schema difference, a second
+outcome, a decision, or a choice declines the optimization. The prospective
+portfolio is also capped independently at 64 branches and 256 audited row-pair
+cell comparisons. Either exceeded cap falls back to the general exact path;
+it does not make the query unsupported or weaken the formula.
+
+The preferred cover retains every non-false language-empty branch and both
+asymmetric-error branches. When both singleton outcomes are enabled and
+successful, one branch per live row in each direction asks whether that row's
+key is missing on the other side. For each live row on the side with fewer
+slots and each non-key payload column, another branch asks whether the unique
+key-matching row carries a different null-safe payload value. Bidirectional
+key inclusion plus the `K` certificate establishes the same present key set
+and one row per key. Thus checking all payload cells from either complete side
+establishes row equality, and the identical key-covering total order establishes
+sequence equality. Syntactically false status branches are omitted; a builder
+result with no branch becomes no preferred portfolio, and a manually supplied
+empty portfolio is rejected by the protocol.
+
+`verify.py` propagates the optional portfolio into `Problem`. Model-domain
+soundness exclusions retain priority. If a portfolio exists, the solver does
+not spend three quarters of the deadline on the canonical assertion first; it
+checks the exact preferred branches under the same monotonic global budget.
+Every branch must be `UNSAT` for proof. A `SAT` branch wins immediately and is
+reused unchanged for model extraction. An `UNKNOWN` or an untried branch
+prevents proof. Problems without preferred metadata retain the established
+canonical-first protocol. The scheduler now records the first branch
+`UNKNOWN` and does not overwrite it when a later budget check reaches zero.
+This corrects future localization while leaving M84's SHA-bound verdicts as
+historical artifacts.
+
+Independent audit checked the key theorem, positional gates, nullable
+composite keys, one-sided payload direction, error/language cases, cap
+arithmetic, fallback, soundness priority, model replay, and deadline behavior.
+Before the final scheduler-diagnostic regression, the Python runner reported
+`754 passed in 273.95s` and the packaged checkpoint passed 776/776: 754
+Python, 21 flake8, and one import check. The earlier `Preferred` cover filter
+passed 7/7. On the frozen tree, the lowercase `preferred` scheduler filter
+collected 755 Python tests, selected 11, deselected 744, and passed all 11,
+covering the last-added regression. No post-regression full-package run is claimed.
+Evidence includes an independent Z3 equivalence proof under explicit
+uniqueness, exhaustive sparse nullable domains, a satisfiable preferred branch
+for every mismatch class, canonical-formula invariance, and rejection of every
+reviewed near miss.
+
+At exact semantic HEAD `67655eaa786`, q21 is `VERIFIED_BOUNDED` after
+216/47,563 ms and again after 199/47,320 ms. The batch and repeat reports have
+SHA-256 values
+`9f0814d5dbdc732d3dbd7e4eee7d8be398de170dd36492d76bc047901bb611ee`
+and
+`db25d8caa1a975d6d4264a5521879a7d9a451ccf93e0cd5b76dca2e6086d7a46`.
+q56/q60 remain `UNKNOWN` after 1,561/61,589 and 1,609/61,586 ms, both at the
+first preserved unresolved branch 7/8,
+`preferred_left_row_0_column_1_payload_mismatch`. Their canonical formulas are
+byte-identical to M84; successful q21 intentionally retains no standalone
+formula or verdict artifact.
+
+Policy commit `95182b541fb` adds only q21 as TPC-DS proof obligation
+twenty-three; validation passes 16/16. Fresh policy-valid, zero-violation gates
+prove 23/23 TPC-DS after summed 18,808/264,269 ms and 13/13 TPCH after
+1,805/68,461 ms. Their report SHA-256 values are
+`f5b103cc73d4d339973610812dfe766560c677a0107f2761fb7ba7cc99ef4888`
+and
+`5d07e36d8df12909ef1e408d72e2f1bb7a72d033374f8e6e794bd28d67bfdc72`.
+The current checked floor is 36/36: 36/121 workload rows (29.8%), 36/101
+formula-covered exact pairs (35.6%), and within TPC-DS 23/99 workload rows
+(23.2%) and 23/81 formula-covered rows (28.4%). This strengthens evidence under
+the same bounded theorem; it introduces no external assumption. M86 starts
+with summary-state diagnosis of the shared q56/q60 payload branch and assumes neither a new exact
+reduction nor a policy promotion.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -2763,6 +2868,32 @@ schema, strict IR, policy, and diagnostic tooling are unchanged. Physical size
 does not replace the semantic, differential, packaging, and workload evidence
 above.
 
+The post-M85 physical-line audit compares completed M84 documentation commit
+`5f86f3b11e0` with semantic commit `67655eaa786`, policy commit
+`95182b541fb`, and this four-file closeout. Counts use the same raw tracked
+`wc -l` sets as M84: the ten trusted Python modules, five C++ exporter files,
+every tracked file under `ut/`, `*_ut/`, and `prefix_capture/ut/`, the remaining
+diagnostic/orchestration source, and every tracked Markdown file under this
+directory.
+
+| Area | M84 physical lines | M85 physical lines | Delta |
+|---|---:|---:|---:|
+| Ten trusted Python semantic modules | 16,931 | 17,218 | +287 |
+| C++ exporter (including both private window headers) | 16,632 | 16,632 | 0 |
+| **Proof-producing code total** | **33,563** | **33,850** | **+287** |
+| Tests, outside the TCB | 83,225 | 84,167 | +942 |
+| Diagnostic/orchestration tools, outside the TCB | 5,432 | 5,432 | 0 |
+| Documentation, outside the TCB | 16,068 | 16,586 | +518 |
+
+The trusted increase is confined to `relation.py` (+275 net physical lines)
+and `verify.py` (+12), approximately 0.8551% of the M84 proof-producing core.
+The semantic tests add 940 lines in the already-registered `test_sort.py` and
+`test_verify.py`; the q21 policy fixture adds another two net test lines. The
+C++ exporter, wire schema, strict IR, diagnostic tooling, row/task bound, and
+canonical emitted formula are unchanged. Physical size does not replace the
+exact-cover proof, packaging, focused workload, repeat, and complete-gate
+evidence above.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -3015,10 +3146,10 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_checked_concat.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; `test_project_error.py`; `test_window_sum.py`; `test_window_avg.py`; `test_window_rank.py`; concrete same/different/cross-Script/symbolic String-atom equality and exhaustive ordinary/null-safe NULL matrices; canonical literal-only and restricted stored-String `Concat`, String-predicate, generic/pushed compiled-LIKE, pushed Boolean-coalesce, Date-year, dynamic Date-shift, nullable String-to-Utf8 `Unicode.ToUpper`, proven-total Date-`Unwrap`, checked nullable-String `Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast` including the fixed q49 rescale, exact nullable Decimal Abs including specials, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, exact whole-partition Decimal-window and global-rank leaves, passive-Double carrier, and exact literal-wrapper mutations; checked-Concat type/root-fingerprint/direct-argument mutations and shared value/failure identities; compiled-LIKE cross-dialect fingerprint/NOT/descriptor mutations and exhaustive compact-coalesce truth table; q24 exact JSON, 32 isolated Map/cast/lambda/UDF mutations, and 63/64 binding-depth boundary; checked-projection source/result/type/topology/error-composition mutations and direct-root plus empty-left-semi runtime boundaries; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, q49 scale/saturation/special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
-| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py`; `verify.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; `test_checked_concat.py`; checked-Concat present-row error composition, discarded-row eagerness, exact corridor, forbidden consumers, staged-root demand, producer-spine rejection, 2/3-row cardinality boundary, shared-stage proof, and dropped-error counterexample; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; completed-integral-AVG rank identity/order/mutation and provenance-forgery tests; fixed-sequence singleton-`Limit` permutations/presence masks, nullable payloads, tied-ordinal fallback, dead padding, metadata rejection, Decimal bounds, audit cap, and StageGraph Merge compaction; null-safe certificate validation, complete/incomplete-key exact-reference comparisons, nullable String and composite keys, choice-free predecessor/network paths, and TopSort/Limit preservation; packed-layout, declaration-structure, present-prefix equality, and cap tests; deep stack-safe rendering plus 3,000-DAG byte differential; focused concrete differential tests |
+| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py`; `verify.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; `test_checked_concat.py`; checked-Concat present-row error composition, discarded-row eagerness, exact corridor, forbidden consumers, staged-root demand, producer-spine rejection, 2/3-row cardinality boundary, shared-stage proof, and dropped-error counterexample; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; completed-integral-AVG rank identity/order/mutation and provenance-forgery tests; fixed-sequence singleton-`Limit` permutations/presence masks, nullable payloads, tied-ordinal fallback, dead padding, metadata rejection, Decimal bounds, audit cap, and StageGraph Merge compaction; null-safe certificate validation, complete/incomplete-key exact-reference comparisons, nullable String and composite keys, choice-free predecessor/network paths, and TopSort/Limit preservation; preferred keyed-cover sparse nullable-composite exhaustive reference, independent Z3 equivalence, per-mismatch SAT branches, positional near misses, and 64-branch/256-comparison cap boundaries; packed-layout, declaration-structure, present-prefix equality, and cap tests; deep stack-safe rendering plus 3,000-DAG byte differential; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | exact whole-partition Decimal SUM/AVG source grammar, AVG-only ordered one-through-four nullable String/Int64 partition keys (SUM retains one nullable String key), private Aggregate/Project topology, named duplicate-SUM carrier selection, NULL partition/input behavior, multiplicity, split-state lineage, SUM/count overflow headroom, task locality, exact positive-count tie rounding, and malformed/fanout/subplan mutations; aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; grouped-Aggregate and `DistinctAll` nullable-composite `K` derivation, direct-alias and partition-key remapping, and computed/missing/`error_on_null` Project drops; nullable Decimal count-distinct NULL/duplicate/NaN/raw-code references and type/nullability mutations; direct and staged Decimal-AVG topology, one-producer/pad/alias/fanout/exposure/descriptor mutations and weighted-state differentials; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, central producer-observe/parent-strip lifecycle, model-domain SAT/UNKNOWN/UNSAT protocol, and projected/sorted/limited/staged observation tests; fixed-width signed/unsigned integral-extrema boundary, NULL/group/split, odd-width exhaustive, and solver-mutation checks; exhaustive scalar/grouped fixed-width count-distinct duplicates, nullable grouping keys, `DistinctAll(group,value) -> count` differential, and full candidate-group triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | Global Decimal Rank | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `stages.py`; `verify.py` | `ut/test_window_rank.py`; six-leaf q49 exact JSON and topology/type/name/order/frame mutations; finite/infinity/NaN peer, gap, NULL, unstable-ordinal, and no-published-order references; q49 exact formula and 60-second `UNKNOWN`; fixed-database q49 serial control, hash-routing counterexample, and concrete trace; committed synthetic universal serial proof and hash-routing counterexample; focused real-host capture with physical `YqlWin` failure |
 | Ordered Decimal ROWS windows | `semantic_snapshot.cpp`; `window_expression_export_impl.h`; `window_projection_audit_impl.h`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `stages.py`; `verify.py` | `ut/test_window_rows.py`; exact q51 four-leaf/three-Project JSON; C++ binder plus cross-language names, local orders, frame, types, SUM-Aggregate provenance, distinct MAX-input, topology, mixed-family, fanout, and subplan mutations; concrete required/nullable item partition, NULL input, peer-order, prefix-SUM/MAX, Decimal-special/headroom, task-local, and no-published-order references; item-only HashV2 and Date-liveness routing checks; focused formula and 60-second `UNKNOWN`; focused real-host exact Initial/Final capture with later physical `YqlAggWin` failure |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; synthetic window full-group-key `COUNTEREXAMPLE` and synthetic partition-only `VERIFIED_BOUNDED`, with production q12 post-fix `UNKNOWN`; nullable-key routing, global/disjoint/untracked/malformed gather, rename-history/current-input checks, and `cpp_ut/stage_assignment_rules_ut.cpp`; staged Decimal-AVG carrier payload transport plus HashShuffle-key/Merge-order rejection; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; same-occurrence/opposite-fact gating, ordinary eight-row threshold, forced eligible Broadcast compaction, HashShuffle eight-cell/ten-cell boundary, conditional hash-key ITE and opposite new routing facts, NULL/Decimal/integral-AVG state preservation, and overlapping Broadcast multiplicity; `P ⊆ K` global promotion, broken-certificate alternatives, Broadcast non-promotion, cross-task duplicate rejection, and choice-free Merge-network cap boundary; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; delayed Filter/Cross single, reversed, composite, residual, factor-local rejection/NULL/order/outcome/work-cap, deferred-factor scheduling, certified seed rebase and three-factor continuation, explicit reordered-inner equivalence, mutation, exact column-restoration, cap, override, shared-producer, subplan, choice, and StageGraph-gate tests; literal-false Join inputs across all kinds, poisoned payloads, symbolic-presence retention, sequence-metadata erasure, and exact cap accounting; C++ topology/task mutations; real-host integration |
-| SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
-| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97/q88/q99, the clean M80 20/20, M82 21/21, and M83 22/22 TPC-DS proof gates, the M83 and M84 q21/q56/q60 exact-order batches and their outcome/choice/SMT-size differential, inspector, and replay for candidates |
+| SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations; preferred metadata/canonical-formula invariance, soundness-first protocol, canonical-skip versus ordinary canonical-first scheduling, all-branch proof, winning-branch replay, shared decreasing deadline, untried-branch rejection, first-UNKNOWN preservation, and empty-portfolio rejection |
+| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97/q88/q99/q21, the clean M80 20/20, M82 21/21, M83 22/22, and M85 23/23 TPC-DS proof gates, the M83/M84/M85 q21/q56/q60 batches, q21 repeat, canonical-formula stability, and q56/q60 preferred payload localization, inspector, and replay for candidates |

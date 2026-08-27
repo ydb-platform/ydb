@@ -1452,6 +1452,16 @@ Together with the unchanged M79 TPCH 13/13 report, the checked floor is 33/33:
 This is stronger evidence under the existing bounded theorem, not an increase
 in the TCB or a new optimizer defect.
 
+M81 changes neither the TCB nor the checked policy. At unchanged HEAD
+`3d1d99a953c`, the already-supported q33 pair reaches the existing 2x2 solver
+contract but returns `UNKNOWN` after 1,543/61,936 ms when the global deadline
+expires before branch 4/28 (`left_outcome_1_unmatched`). Its non-gating
+`solver_experiment` policy is valid with zero violations; report SHA-256 is
+`2dd30504eaa2e51f61fdd5894cb310360af4716471d40cbfa4aba54d5bdaffb4`.
+This establishes no new theorem result, defect, or external assumption. q33
+remains outside the 33-query proof floor; any future promotion requires exact
+semantic reduction and a reproducible proof, not timeout tuning.
+
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
 contains only the verifier's existing `Bool` and `Int` lane sorts, and can be

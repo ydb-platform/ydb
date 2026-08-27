@@ -965,6 +965,12 @@ Implementation sequence:
     TPC-DS obligation twenty. A clean full TPC-DS proof-floor rerun verifies
     all 20/20 obligations. Together with the unchanged 13-query TPCH floor,
     the checked-in floor is now 33/33. M4 remains current.
+81. M4: record a focused bounded-solver checkpoint for already-supported
+    TPC-DS q33. At unchanged code HEAD `3d1d99a953c`, the exact 2x2 obligation
+    reaches the solver but returns `UNKNOWN` at the global deadline before
+    branch 4/28. This is neither a proof nor a policy promotion; the floor
+    remains 33. Further q33 work should reduce the exact semantic outcome
+    structure, not merely tune the timeout. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -3410,6 +3416,22 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   (32.7%), and 33/33 curated obligations. Formula, exact-pair, verifier-entry,
   preparation, and defect inventories remain unchanged.
 
+  Milestone 81 is a deliberately non-promoting q33 solver checkpoint at exact
+  HEAD `3d1d99a953c`; no code or policy changes accompany it. q33 prepares and
+  captures exactly Initial then Final, then returns `UNKNOWN` at row/task bound
+  2/2 after 1,543/61,936 ms because the global deadline expires before branch
+  4/28 (`left_outcome_1_unmatched`). The 899,980-byte / 1,557-line formula has
+  SHA-256
+  `388c78990dca6afe2530d113a7a1ee247ebd0eec78f916a080628d8c67c2d9de`;
+  the 6,725-byte report has SHA-256
+  `2dd30504eaa2e51f61fdd5894cb310360af4716471d40cbfa4aba54d5bdaffb4`.
+  Test/suite/graph/outer wall times are
+  67.123/68.125/87.583/104.68 seconds. The focused `solver_experiment` policy
+  is valid with zero violations and does not enforce the proof floor. q33
+  therefore remains formula-covered but unproved, the checked floor remains
+  33, and the next step is exact semantic branch reduction rather than timeout
+  tuning.
+
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
@@ -4456,6 +4478,9 @@ regression locks the corrected boundary.
   proof depth without changing any semantic model or weaker coverage floor.
   Focused q97 and the clean 20/20 TPC-DS proof gate are recorded above; the
   checked floor is now 33 obligations.
+  M81 records the focused q33 `UNKNOWN` at unchanged HEAD `3d1d99a953c`.
+  It changes no policy or implementation, so the checked floor remains 33;
+  exact semantic reduction is the next q33 step.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

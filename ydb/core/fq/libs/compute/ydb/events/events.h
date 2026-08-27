@@ -67,6 +67,8 @@ struct TEvYdbCompute {
 
         EvCreateResourcePoolResponse,
 
+        EvUpdateAclResponse,
+
         EvEnd
     };
 
@@ -518,6 +520,14 @@ struct TEvYdbCompute {
 
     struct TEvCreateResourcePoolResponse : public NActors::TEventLocal<TEvCreateResourcePoolResponse, EvCreateResourcePoolResponse> {
         TEvCreateResourcePoolResponse(NYdb::TStatus status)
+            : Status(std::move(status))
+        {}
+
+        NYdb::TStatus Status;
+    };
+
+    struct TEvUpdateAclResponse : public NActors::TEventLocal<TEvUpdateAclResponse, EvUpdateAclResponse> {
+        TEvUpdateAclResponse(NYdb::TStatus status)
             : Status(std::move(status))
         {}
 

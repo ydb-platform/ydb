@@ -30,10 +30,16 @@ message TEncoding {
 }
 
 message TDefaultExpression {
+    enum EKind {
+        GENERATED_STORED = 0;
+        GENERATED_VIRTUAL = 1;
+        DEFAULT = 2;
+    }
+
     optional string ExprText = 1;
     optional string Context = 2;
-    repeated string Dependencies = 3;
-    optional bool Stored = 4 [default = false];
+    repeated string Dependencies = 3; // Always empty for Kind == DEFAULT
+    optional EKind Kind = 4;
 }
 
 message TKqpColumnMetadataProto {

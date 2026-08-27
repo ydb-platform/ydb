@@ -1343,4 +1343,372 @@ Y_UNIT_TEST(CreateTableGeneratedStringFunction) {
     UNIT_ASSERT(!program.Contains("virtual"));
 }
 
+Y_UNIT_TEST_SUITE(ColumnDefaultExpr) {
+
+Y_UNIT_TEST(CreateTableDefaultKeepsExprTreeAndText) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Uint32 DEFAULT 5,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('default (Int32 '"5"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('defaultSource '('"USE ydb;\n" '"5"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultArithmeticExpr) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT 1 + 2,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 2"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultParenthesizedExpr) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT (1 + 2) * 3,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"(1 + 2) * 3"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultFunctionCall) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Uint64 DEFAULT RandomNumber(1),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"RandomNumber(1)"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultExtraWhitespaceStripped) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT     7    ,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"7"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultPreservesUserSpelling) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT (1+2)*3,
+                w Int32 DEFAULT 1  +  2,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"(1+2)*3"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1  +  2"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultNoNotNull) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT 1 + 2,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 2"))#");
+    UNIT_ASSERT(!program.Contains("not_null"));
+}
+
+Y_UNIT_TEST(CreateTableDefaultAndNotNullCommaExprBefore) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 (DEFAULT 1 + 2, NOT NULL),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 2"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, "not_null");
+}
+
+Y_UNIT_TEST(CreateTableDefaultAndNotNullCommaExprAfter) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 (NOT NULL, DEFAULT 1 + 2),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 2"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, "not_null");
+}
+
+Y_UNIT_TEST(CreateTableNotNullSpaceDefault) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 NOT NULL DEFAULT 1 + 2,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 2"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, "not_null");
+}
+
+Y_UNIT_TEST(CreateTableMultipleDefaultsIndependent) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                a Int32 DEFAULT 1 + 1,
+                b Int32 DEFAULT 2 * 2,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 1"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"2 * 2"))#");
+}
+
+Y_UNIT_TEST(CreateTableMultipleDefaultsMixedWithNotNull) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                a Int32 NOT NULL DEFAULT 1 + 1,
+                b Int32 DEFAULT 2 * 2,
+                c Int32 (DEFAULT 3 - 1, NOT NULL),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 1"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"2 * 2"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"3 - 1"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultWithPragmaContext) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            PRAGMA FlexibleTypes;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT 1 + 2,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\nPRAGMA FlexibleTypes;\n" '"1 + 2"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultWithNamedNodeContext) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $factor = 10;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT $factor * 2,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n$factor = 10;\n" '"$factor * 2"))#");
+}
+
+Y_UNIT_TEST(AlterTableAddColumnDefault) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ADD COLUMN v Int32 DEFAULT 1 + 2;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 2"))#");
+}
+
+Y_UNIT_TEST(AlterTableAddColumnNotNullDefault) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ADD COLUMN v Int32 NOT NULL DEFAULT 5;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"5"))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, "not_null");
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetDefaultExpr) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ALTER COLUMN v SET DEFAULT 1 + 2;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "setDefaultValue");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('"USE ydb;\n" '"1 + 2"))#");
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetDefaultKeepsExprTree) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ALTER COLUMN v SET DEFAULT 42;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('setDefaultValue (Int32 '"42")#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#((Int32 '"42") '"USE ydb;\n" '"42"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultWithNamedNodeRefNoRead) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $base = 100;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Int32 DEFAULT $base + 1,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('default ("+MayWarn" namedexprnode0 (Int32 '"1"))) '('defaultSource '('"USE ydb;\n$base = 100;\n" '"$base + 1")))#");
+    UNIT_ASSERT(!program.Contains("Read!"));
+}
+
+Y_UNIT_TEST(AlterTableAddColumnDefaultWithNamedLambdaRefNoRead) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $f = ($x) -> ($x * 2);
+            ALTER TABLE tbl ADD COLUMN v Int32 DEFAULT $f(3);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('default (Apply namedexprnode0 (Int32 '"3"))) '('defaultSource '('"USE ydb;\n$f = ($x) -> ($x * 2);\n" '"$f(3)")))#");
+    UNIT_ASSERT(!program.Contains("Read!"));
+}
+
+Y_UNIT_TEST(CreateTableDefaultWithSubqueryNamedNodeRefKeepsRead) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $ids = (SELECT id FROM other);
+            CREATE TABLE tbl (
+                key Uint32,
+                v Bool DEFAULT 1 IN $ids,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#((Read! world (DataSource '"ydb" '"ydb") (Key '('table (String '"other"))))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('default (SqlIn subquery0 (Int32 '"1") '('('tableSource) '('warnNoAnsi)))) '('defaultSource '('"USE ydb;\n$ids = (SELECT id FROM other);\n" '"1 IN $ids")))#");
+}
+
+Y_UNIT_TEST(AlterTableAlterColumnSetDefaultWithSubqueryNamedNodeRefKeepsRead) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $ids = (SELECT id FROM other);
+            ALTER TABLE tbl ALTER COLUMN v SET DEFAULT 1 IN $ids;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#((Read! world (DataSource '"ydb" '"ydb") (Key '('table (String '"other"))))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('setDefaultValue (SqlIn subquery0 (Int32 '"1") '('('tableSource) '('warnNoAnsi))) '"USE ydb;\n$ids = (SELECT id FROM other);\n" '"1 IN $ids"))#");
+}
+
+Y_UNIT_TEST(CreateTableDefaultWithInlineSubqueryKeepsRead) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                v Bool DEFAULT 1 IN (SELECT id FROM other),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#((Read! world (DataSource '"ydb" '"ydb") (Key '('table (String '"other"))))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('default (SqlIn subquery0 (Int32 '"1") '('('tableSource) '('warnNoAnsi)))) '('defaultSource '('"USE ydb;\n" '"1 IN (SELECT id FROM other)")))#");
+}
+
+Y_UNIT_TEST(AlterTableAddColumnDefaultWithInlineSubqueryKeepsRead) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ADD COLUMN v Bool DEFAULT 1 IN (SELECT id FROM other);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#((Read! world (DataSource '"ydb" '"ydb") (Key '('table (String '"other"))))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('default (SqlIn subquery0 (Int32 '"1") '('('tableSource) '('warnNoAnsi)))) '('defaultSource '('"USE ydb;\n" '"1 IN (SELECT id FROM other)")))#");
+}
+
+} // Y_UNIT_TEST_SUITE(ColumnDefaultExpr)
+
 } // Y_UNIT_TEST_SUITE(GeneratedColumns)

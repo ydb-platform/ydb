@@ -3330,17 +3330,25 @@ bool TSqlQuery::AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_co
     TString name = Id(node.GetRule_an_id3(), *this);
     TPosition pos(Context().Pos());
 
+    TDefaultExpression defaultExpression;
+
     const auto& defaultValueRule = node.GetRule_default_value5();
     TSqlExpression expr(*this);
-    auto defaultExpr = Unwrap(expr.Build(defaultValueRule.GetRule_expr2()));
-    if (!defaultExpr) {
+
+    defaultExpression.Expr = Unwrap(expr.Build(defaultValueRule.GetRule_expr2()));
+    if (!defaultExpression.Expr) {
+        return false;
+    }
+
+    if (!ExtractExprTextAndContext(Context(), defaultValueRule.GetRule_expr2(), pos,
+            defaultExpression.ContextPrefix, defaultExpression.ExprText)) {
         return false;
     }
 
     params.AlterColumns.push_back({
         .Pos = std::move(pos),
         .Name = std::move(name),
-        .DefaultExpr = std::move(defaultExpr),
+        .Default = std::move(defaultExpression),
         .TypeOfChange = TColumnSchema::ETypeOfChange::SetDefault,
     });
     return true;

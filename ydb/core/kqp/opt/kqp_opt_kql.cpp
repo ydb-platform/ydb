@@ -1,5 +1,5 @@
 #include "kqp_opt_impl.h"
-#include "kqp_opt_generated_columns.h"
+#include "kqp_opt_column_expressions.h"
 
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -411,43 +411,46 @@ TBuildWriteInputResult BuildWriteInput(const TKiWriteTable& write, const TKikimr
     TExprBase input = write.Input();
     std::optional<TCoAtomList> inputCols;
 
-    // Split autoIncrement into sequence columns (handled at runtime by TKqlSequencer) and
-    // literal defaults (inlined at compile time into the row struct via TCoMap/TCoAsStruct).
-    if (kqpCtx.Config->GetEnableCompileTimeDefaults()) {
-        TVector<TExprNode::TPtr> sequenceColNodes;
-        TVector<TExprNode::TPtr> literalDefaultColNodes;
+    TVector<TExprNode::TPtr> sequenceColNodes;
+    TVector<TExprNode::TPtr> literalDefaultColNodes;
+    TVector<TExprNode::TPtr> defaultExprColNodes;
 
-        for (const auto& colAtom : autoIncrement) {
-            const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
-            if (colMeta && colMeta->IsDefaultFromLiteral() && !colMeta->DefaultFromLiteral.type().has_pg_type()) {
-                literalDefaultColNodes.push_back(colAtom.Ptr());
-            } else {
-                sequenceColNodes.push_back(colAtom.Ptr());
-            }
-        }
+    const bool compileTimeLiteralDefaults = kqpCtx.Config->GetEnableCompileTimeDefaults();
 
-        auto sequenceCols = Build<TCoAtomList>(ctx, pos).Add(sequenceColNodes).Done();
-        auto literalDefaultCols = Build<TCoAtomList>(ctx, pos).Add(literalDefaultColNodes).Done();
-
-        TCoAtomList inputColsAfterSequencer = BuildUpsertInputColumns(inputColumns, sequenceCols, pos, ctx);
-
-        if (sequenceCols.Ref().ChildrenSize() > 0) {
-            input = BuildKqlSequencer(input, table, inputColsAfterSequencer, sequenceCols, pos, ctx);
-        }
-
-        std::tie(input, inputCols) = ExtendInputRowsWithDefaultLiteralColumns(input, inputColsAfterSequencer,
-            literalDefaultCols, table, pos, ctx);
-    } else {
-        inputCols = BuildUpsertInputColumns(inputColumns, autoIncrement, pos, ctx);
-        if (autoIncrement.Ref().ChildrenSize() > 0) {
-            input = BuildKqlSequencer(input, table, inputCols.value(), autoIncrement, pos, ctx);
+    for (const auto& colAtom : autoIncrement) {
+        const auto* colMeta = table.Metadata->Columns.FindPtr(TString(colAtom.Value()));
+        if (colMeta && colMeta->IsDefaultFromExpression()) {
+            defaultExprColNodes.push_back(colAtom.Ptr());
+        } else if (compileTimeLiteralDefaults && colMeta && colMeta->IsDefaultFromLiteral()
+            && !colMeta->DefaultFromLiteral.type().has_pg_type())
+        {
+            literalDefaultColNodes.push_back(colAtom.Ptr());
+        } else {
+            sequenceColNodes.push_back(colAtom.Ptr());
         }
     }
+
+    auto sequenceCols = Build<TCoAtomList>(ctx, pos).Add(sequenceColNodes).Done();
+    auto literalDefaultCols = Build<TCoAtomList>(ctx, pos).Add(literalDefaultColNodes).Done();
+    auto defaultExprCols = Build<TCoAtomList>(ctx, pos).Add(defaultExprColNodes).Done();
+
+    TCoAtomList inputColsAfterSequencer = BuildUpsertInputColumns(inputColumns, sequenceCols, pos, ctx);
+
+    if (sequenceCols.Ref().ChildrenSize() > 0) {
+        input = BuildKqlSequencer(input, table, inputColsAfterSequencer, sequenceCols, pos, ctx);
+    }
+
+    std::tie(input, inputCols) = ExtendInputRowsWithDefaultLiteralColumns(input, inputColsAfterSequencer,
+        literalDefaultCols, table, pos, ctx);
+
+    std::tie(input, inputCols) = ExtendInputRowsWithDefaultExpressionColumns(input, inputCols.value(),
+        defaultExprCols, table, pos, ctx);
 
     YQL_ENSURE(inputCols.has_value());
 
     std::tie(input, inputCols) = ExtendInputRowsWithAbsentNullColumns(write, input, inputCols.value(), table, write.Pos(), ctx, kqpCtx);
-    auto generatedRewrite = ExtendInputRowsWithStoredGeneratedColumns(write, input, inputCols.value(), table, pos, ctx, generatedLookup);
+    auto generatedRewrite = ExtendInputRowsWithStoredGeneratedColumns(write, input, inputCols.value(), table, pos, ctx,
+        generatedLookup, &autoIncrement);
 
     auto baseInput = Build<TKqpWriteConstraint>(ctx, pos)
         .Input(generatedRewrite.Input)

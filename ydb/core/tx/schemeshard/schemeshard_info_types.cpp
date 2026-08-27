@@ -512,7 +512,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (col.HasDefaultFromExpression()) {
+            if (col.HasDefaultFromExpression()
+                && col.GetDefaultFromExpression().GetKind() != NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT)
+            {
                 errStr = Sprintf("Cannot add a generated (GENERATED ALWAYS AS) expression to the existing column '%s'", colName.data());
                 return nullptr;
             }
@@ -525,7 +527,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 && !columnFamily
                 && !col.HasDefaultFromSequence()
                 && !col.HasEmptyDefault()
-                && !col.HasDefaultFromLiteral())
+                && !col.HasDefaultFromLiteral()
+                && !col.HasDefaultFromExpression())
             {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
@@ -546,6 +549,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
                         break;
                     }
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromExpression: {
+                        if (!featureFlags.EnableDefaultFromExpression) {
+                            errStr = Sprintf("DEFAULT expressions are disabled. Column: %s", colName.c_str());
+                            return nullptr;
+                        }
+                        break;
+                    }
                     default: {
                         errStr = Sprintf("Cannot set default for column '%s'", colName.c_str());
                         return nullptr;
@@ -563,22 +573,31 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 }
             }
 
+            if (sourceColumn.IsGenerated()
+                && col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET)
+            {
+                errStr = Sprintf("Cannot alter the DEFAULT of generated column '%s'", colName.c_str());
+                return nullptr;
+            }
+
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
                 NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
-                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue) && !generatedDesc.GetStored()) {
+                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue)
+                    && generatedDesc.GetKind() == NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL)
+                {
                     errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
                     return nullptr;
                 }
             }
 
             if (isChangeNotNullConstraint || isChangeSetNotNullInProgress) {
-                if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                if (sourceColumn.IsGenerated()) {
                     errStr = Sprintf("Can't change nullability of generated column '%s'", colName.c_str());
                     return nullptr;
                 }
 
                 for (const auto& [_, srcCol] : source->Columns) {
-                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                    if (!srcCol.IsGenerated() || srcCol.IsDropped()) {
                         continue;
                     }
 
@@ -672,6 +691,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
                     break;
                 }
+                case NKikimrSchemeOp::TColumnDescription::kDefaultFromExpression: {
+                    column.DefaultKind = ETableColumnDefaultKind::FromExpression;
+                    column.DefaultValue = col.GetDefaultFromExpression().SerializeAsString();
+                    break;
+                }
                 default: break;
             }
         } else {
@@ -730,20 +754,39 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (col.HasDefaultFromExpression()) {
-                const bool stored = col.GetDefaultFromExpression().GetStored();
-                if (stored && !featureFlags.EnableGeneratedStored) {
-                    errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
+                const auto& defaultExpression = col.GetDefaultFromExpression();
+                if (!defaultExpression.HasKind()) {
+                    errStr = Sprintf("Column '%s' has an expression default of unknown kind", colName.c_str());
                     return nullptr;
                 }
 
-                if (!stored && !featureFlags.EnableGeneratedVirtual) {
-                    errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
-                    return nullptr;
-                }
+                switch (defaultExpression.GetKind()) {
+                    case NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_STORED: {
+                        if (!featureFlags.EnableGeneratedStored) {
+                            errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
+                            return nullptr;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL: {
+                        if (!featureFlags.EnableGeneratedVirtual) {
+                            errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
+                            return nullptr;
+                        }
 
-                if (!stored && columnFamily && columnFamily->GetId() != 0) {
-                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
-                    return nullptr;
+                        if (columnFamily && columnFamily->GetId() != 0) {
+                            errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                            return nullptr;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT: {
+                        if (!featureFlags.EnableDefaultFromExpression) {
+                            errStr = Sprintf("DEFAULT expressions are disabled. Column: %s", colName.c_str());
+                            return nullptr;
+                        }
+                        break;
+                    }
                 }
             }
 
@@ -806,7 +849,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
             for (const auto& [srcColId, srcCol] : source->Columns) {
-                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                if (!srcCol.IsGenerated() || srcCol.IsDropped()) {
                     continue;
                 }
 
@@ -1046,7 +1089,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             errStr = Sprintf("Key column '%s' must belong to the default family", keyName.data());
             return nullptr;
         }
-        if (column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+        if (column.IsGenerated()) {
             errStr = Sprintf("Generated column '%s' cannot be part of the primary key", keyName.data());
             return nullptr;
         }

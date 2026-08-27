@@ -1,4 +1,4 @@
-#include "generated_column.h"
+#include "column_expression.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -18,6 +18,10 @@ namespace NYql {
 
 TString AssembleGeneratedQuery(const TString& context, const TString& exprBody) {
     return TStringBuilder() << context << "SELECT " << exprBody << " FROM `__yql_generated_column_source`;";
+}
+
+TString AssembleDefaultQuery(const TString& context, const TString& exprBody) {
+    return TStringBuilder() << context << "SELECT " << exprBody << ";";
 }
 
 namespace {
@@ -280,13 +284,34 @@ bool UsesWholeRow(const TExprNode& node, const TExprNode* rowArg, TNodeSet& visi
     return false;
 }
 
+struct TDiagnostics {
+    TString Subject;
+    TString CompileFailure;
+    TStringBuf Scope;
+};
+
+TDiagnostics GeneratedDiagnostics(const TString& columnName) {
+    return {
+        .Subject = TStringBuilder() << "Generated column " << columnName << " expression",
+        .CompileFailure = TStringBuilder() << "Failed to compile the expression of generated column " << columnName,
+        .Scope = "must depend only on the row being written",
+    };
+}
+
+TDiagnostics DefaultDiagnostics(const TString& columnName) {
+    return {
+        .Subject = TStringBuilder() << "DEFAULT expression of column " << columnName,
+        .CompileFailure = TStringBuilder() << "Failed to compile the DEFAULT expression of column " << columnName,
+        .Scope = "must not depend on table data",
+    };
+}
+
 bool EmitOutOfRowError(const TGeneratedFindings& findings, bool readsDataIsSubquery,
-    const TString& columnName, TExprContext& ctx, TPositionHandle pos)
+    const TDiagnostics& diagnostics, TExprContext& ctx, TPositionHandle pos)
 {
     const auto rejectDependency = [&](const TStringBuf dependency) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-            << "Generated column " << columnName << " expression must depend only on the row being written,"
-            << " but it uses " << dependency));
+            << diagnostics.Subject << " " << diagnostics.Scope << ", but it uses " << dependency));
     };
 
     if (readsDataIsSubquery && findings.ReadsData) {
@@ -317,38 +342,38 @@ bool EmitOutOfRowError(const TGeneratedFindings& findings, bool readsDataIsSubqu
     return false;
 }
 
-}   // namespace
-
-TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
-    NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver)
+// Compiles `<context>SELECT <expr> [FROM <source>];` down to the projection lambda and rejects
+// everything that is not a scalar expression over the row
+TExprNode::TPtr CompileScalarExpr(const TString& sqlText, const TDiagnostics& diagnostics, ui32 expectedReads,
+    TExprContext& ctx, NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
+    const IModuleResolver::TPtr& moduleResolver)
 {
     auto queryGraph = CompileText(sqlText, ctx, settingsBuilder, moduleResolver);
     if (!queryGraph) {
-        ctx.AddError(TIssue(TStringBuilder() << "Failed to compile the expression of generated column " << columnName));
+        ctx.AddError(TIssue(diagnostics.CompileFailure));
         return nullptr;
     }
 
     auto checks = CollectFindings(queryGraph);
 
-    if (checks.HasStar || checks.Reads > 1 || checks.ProjectionItems > 1) {
+    if (checks.HasStar || checks.Reads > expectedReads || checks.ProjectionItems > 1) {
         ctx.AddError(TIssue(ctx.GetPosition(queryGraph->Pos()), TStringBuilder()
-            << "Generated column " << columnName << " expression must depend only on the row being written,"
-            << " but it uses a subquery"));
+            << diagnostics.Subject << " " << diagnostics.Scope << ", but it uses a subquery"));
         return nullptr;
     }
 
     if (checks.ProjectionItems != 1 || !checks.ProjectionLambda || checks.ProjectionLambda->Type() != TExprNode::Lambda) {
         ctx.AddError(TIssue(ctx.GetPosition(queryGraph->Pos()), TStringBuilder()
-            << "Generated column " << columnName << " must be defined by a single scalar expression"));
+            << diagnostics.Subject << " must be a single scalar expression"));
         return nullptr;
     }
 
-    if (EmitOutOfRowError(checks, /* readsDataIsSubquery */ false, columnName, ctx, queryGraph->Pos())) {
+    if (EmitOutOfRowError(checks, /* readsDataIsSubquery */ false, diagnostics, ctx, queryGraph->Pos())) {
         return nullptr;
     }
 
     const TGeneratedFindings body = CollectFindings(checks.ProjectionLambda->TailPtr());
-    if (EmitOutOfRowError(body, /* readsDataIsSubquery */ true, columnName, ctx, checks.ProjectionLambda->Pos())) {
+    if (EmitOutOfRowError(body, /* readsDataIsSubquery */ true, diagnostics, ctx, checks.ProjectionLambda->Pos())) {
         return nullptr;
     }
 
@@ -357,12 +382,56 @@ TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& colu
         || UsesWholeRow(checks.ProjectionLambda->Tail(), &checks.ProjectionLambda->Head().Head(), visited))
     {
         ctx.AddError(TIssue(ctx.GetPosition(checks.ProjectionLambda->Pos()), TStringBuilder()
-            << "Generated column " << columnName << " expression must reference columns by name,"
+            << diagnostics.Subject << " must reference columns by name,"
             << " but it uses the whole row (for example TableRow() or JoinTableRow())"));
         return nullptr;
     }
 
     return checks.ProjectionLambda;
+}
+
+// Names of the columns the lambda body reads off its row argument
+void CollectColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<TString>& refs) {
+    VisitExpr(body, [&](const TExprNode& node) {
+        if (node.IsCallable("Member") && node.ChildrenSize() == 2 && node.Child(0) == rowArg && node.Child(1)->IsAtom()) {
+            refs.insert(TString(node.Child(1)->Content()));
+        }
+        return true;
+    });
+}
+
+}   // namespace
+
+TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
+    NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver)
+{
+    // The generated envelope reads the table the column belongs to
+    return CompileScalarExpr(sqlText, GeneratedDiagnostics(columnName), /* expectedReads */ 1,
+        ctx, settingsBuilder, moduleResolver);
+}
+
+TExprNode::TPtr CompileDefaultExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
+    NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver)
+{
+    const TDiagnostics diagnostics = DefaultDiagnostics(columnName);
+
+    // The DEFAULT envelope has no FROM, so any read at all is a subquery
+    auto lambda = CompileScalarExpr(sqlText, diagnostics, /* expectedReads */ 0,
+        ctx, settingsBuilder, moduleResolver);
+    if (!lambda) {
+        return nullptr;
+    }
+
+    // A FROM-less SELECT already rejects column references while parsing; this is the backstop
+    THashSet<TString> refs;
+    CollectColumnRefs(lambda->Tail(), &lambda->Head().Head(), refs);
+    if (!refs.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
+            << diagnostics.Subject << " cannot reference table columns: " << *refs.begin()));
+        return nullptr;
+    }
+
+    return lambda;
 }
 
 }   // namespace NYql

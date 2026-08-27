@@ -19,6 +19,7 @@ RECURSE_FOR_TESTS(
     ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
+    ut_default_expr
     ut_shred
     ut_shred_reboots
     ut_export

@@ -793,8 +793,14 @@ struct TGeneratedColumn {
     bool Stored = false;
 };
 
+struct TDefaultExpression {
+    TString ContextPrefix;
+    TString ExprText;
+    TNodePtr Expr;
+};
+
 struct TColumnOptions {
-    TNodePtr DefaultExpr;
+    TMaybe<TDefaultExpression> Default;
     TVector<TIdentifier> Families;
     TMaybe<TCompression> Compression;
     bool Nullable = true;
@@ -818,7 +824,7 @@ struct TColumnSchema {
     TString Name;
     TNodePtr Type;
     TVector<TIdentifier> Families;
-    TNodePtr DefaultExpr;
+    TMaybe<TDefaultExpression> Default;
     TMaybe<TCompression> Compression;
     const ETypeOfChange TypeOfChange = ETypeOfChange::Nothing;
     bool Nullable = false;

@@ -2081,6 +2081,12 @@ public:
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
 
+                                    if (!IsLiteralDefaultValue(constraint.Value().Cast())) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "Column addition with a DEFAULT expression is not supported"));
+                                        return SyncError();
+                                    }
+
                                     columnBuild->SetColumnName(TString(columnName));
                                     auto err = FillLiteralProto(constraint.Value().Cast(), actualType, *columnBuild->mutable_default_from_literal());
                                     if (err) {
@@ -2186,12 +2192,12 @@ public:
                     THashSet<TString> generatedDependencyColumns;
 
                     for (const auto& [genName, genMeta] : table.Metadata->Columns) {
-                        if (!genMeta.IsDefaultFromExpression()) {
+                        if (!genMeta.IsDefaultFromExpression() || !genMeta.DefaultExpression->IsGenerated()) {
                             continue;
                         }
 
                         generatedColumns.insert(genName);
-                        if (!genMeta.DefaultExpression->Stored) {
+                        if (!genMeta.DefaultExpression->IsStored()) {
                             virtualGeneratedColumns.insert(genName);
                         }
 
@@ -2326,6 +2332,17 @@ public:
                             if (isNull) {
                                 alter_columns->set_empty_default(google::protobuf::NullValue());
                             } else {
+                                // An expression default reaches SchemeShard only through the
+                                // internal CREATE TABLE path; ALTER travels as a public
+                                // Ydb::Table::AlterTableRequest, which does not carry one
+                                if (!IsLiteralDefaultValue(defaultExpr)) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), TStringBuilder()
+                                        << "Cannot set a DEFAULT expression on the existing column "
+                                        << columnName.Value()
+                                        << ": a DEFAULT expression can only be defined in CREATE TABLE"));
+                                    return SyncError();
+                                }
+
                                 auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->mutable_from_literal());
                                 if (err) {
                                     ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));

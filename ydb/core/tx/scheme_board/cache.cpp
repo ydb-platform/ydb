@@ -812,10 +812,22 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     column.DefaultExpression.ConstructInPlace();
                     column.DefaultExpression->ExprText = generated.GetExprText();
                     column.DefaultExpression->Context = generated.GetContext();
-                    column.DefaultExpression->Stored = generated.GetStored();
                     column.DefaultExpression->Dependencies.assign(
                         generated.GetDependencyColumnNames().begin(),
                         generated.GetDependencyColumnNames().end());
+
+                    using EKind = TSysTables::TTableColumnInfo::EColumnExpressionKind;
+                    switch (generated.GetKind()) {
+                        case NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_STORED:
+                            column.DefaultExpression->Kind = EKind::GeneratedStored;
+                            break;
+                        case NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL:
+                            column.DefaultExpression->Kind = EKind::GeneratedVirtual;
+                            break;
+                        case NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT:
+                            column.DefaultExpression->Kind = EKind::Default;
+                            break;
+                    }
                 }
 
                 if (columnDesc.GetNotNull()) {

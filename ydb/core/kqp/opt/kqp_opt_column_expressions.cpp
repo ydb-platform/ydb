@@ -1,4 +1,4 @@
-#include "kqp_opt_generated_columns.h"
+#include "kqp_opt_column_expressions.h"
 
 #include "kqp_opt_impl.h"
 
@@ -44,6 +44,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
 {
     THashSet<TString> generatedNames;
     THashSet<TStringBuf> inputColumnsSet;
+
     for (const auto* colMeta : generatedColumns) {
         generatedNames.insert(colMeta->Name);
     }
@@ -134,7 +135,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
 
 std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(const TExprBase& input, const TCoAtomList& inputColumns,
     const TVector<const TKikimrColumnMetadata*>& generatedColumns, const TVector<TString>& missingDeps, const TKikimrTableDescription& table,
-    bool dropRowsAbsentFromTable, TPositionHandle pos, TExprContext& ctx)
+    bool dropRowsAbsentFromTable, const THashSet<TStringBuf>& insertOnlyColumns, TPositionHandle pos, TExprContext& ctx)
 {
     const auto& pk = table.Metadata->KeyColumnNames;
 
@@ -144,8 +145,10 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
     }
 
     auto rowArg = Build<TCoArgument>(ctx, pos).Name("input_row").Done();
+
     TVector<TExprBase> keyMembers;
     keyMembers.reserve(pk.size());
+
     for (const auto& key : pk) {
         keyMembers.push_back(
             Build<TCoNameValueTuple>(ctx, pos)
@@ -206,8 +209,9 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
     auto fetchedOpt = Build<TCoNth>(ctx, pos).Tuple(joinArg).Index().Build("1").Done();
 
     TVector<TExprBase> mergedMembers;
+    THashSet<TStringBuf> missingDepsSet(missingDeps.begin(), missingDeps.end());
     for (const auto& col : inputColumns) {
-        if (generatedNames.contains(TString(col.Value()))) {
+        if (generatedNames.contains(TString(col.Value())) || missingDepsSet.contains(col.Value())) {
             continue;
         }
 
@@ -226,11 +230,17 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
     for (const auto& dep : missingDeps) {
         const auto* columnType = table.GetColumnType(dep);
         YQL_ENSURE(columnType, "Unknown generated dependency column " << dep);
+        const bool hasInsertValue = insertOnlyColumns.contains(dep);
 
-        TExprBase depValue = Build<TCoMember>(ctx, pos)
-            .Struct(presentRowArg)
-            .Name().Build(dep)
-            .Done();
+        TExprBase depValue = hasInsertValue
+            ? TExprBase(Build<TCoMember>(ctx, pos)
+                .Struct(leftRow)
+                .Name().Build(dep)
+                .Done())
+            : TExprBase(Build<TCoMember>(ctx, pos)
+                .Struct(presentRowArg)
+                .Name().Build(dep)
+                .Done());
 
         if (!dropRowsAbsentFromTable) {
             const auto* optionalType = columnType->IsOptionalOrNull()
@@ -243,20 +253,33 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
                 .Name().Build(dep)
                 .Done();
 
-            TExprBase presentValue = columnType->IsOptionalOrNull()
+            // If a missing table row has an insert-only value, both lookup branches have the
+            // column's schema type. Do not make a NOT NULL dependency optional just to merge them
+            TExprBase presentValue = columnType->IsOptionalOrNull() || hasInsertValue
                 ? TExprBase(fetchedMember)
                 : TExprBase(Build<TCoJust>(ctx, pos).Input(fetchedMember).Done());
+
+            const TExprBase missingValue = [&]() -> TExprBase {
+                if (hasInsertValue) {
+                    return Build<TCoMember>(ctx, pos)
+                        .Struct(leftRow)
+                        .Name().Build(dep)
+                        .Done();
+                }
+                return Build<TCoNothing>(ctx, pos)
+                    .OptionalType(NCommon::BuildTypeExpr(pos, *optionalType, ctx))
+                    .Done();
+            }();
 
             depValue = Build<TCoIfPresent>(ctx, pos)
                 .Optional(fetchedOpt)
                 .PresentHandler<TCoLambda>()
                     .Args({fetchedArg})
-                    .Body(presentValue)
+                .Body(presentValue)
+                .Build()
+                .MissingValue(missingValue)
                     .Build()
-                .MissingValue<TCoNothing>()
-                    .OptionalType(NCommon::BuildTypeExpr(pos, *optionalType, ctx))
-                    .Build()
-                .Done();
+                .Value();
         }
 
         mergedMembers.push_back(
@@ -345,7 +368,9 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
     TVector<const TKikimrColumnMetadata*> generatedColumns;
     for (const auto& name : table.Metadata->ColumnOrder) {
         const auto* colMeta = table.Metadata->Columns.FindPtr(name);
-        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->Stored) {
+        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->IsGenerated()
+            && colMeta->DefaultExpression->IsStored())
+        {
             generatedColumns.push_back(colMeta);
         }
     }
@@ -418,7 +443,8 @@ TExprBase BuildGeneratedDependencyRow(const TVector<const TKikimrColumnMetadata*
 }
 
 TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteTable& write, const TExprBase& input,
-    const TCoAtomList& inputColumns, const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx, bool generatedLookup)
+    const TCoAtomList& inputColumns, const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx, bool generatedLookup,
+    const TCoAtomList* insertOnlyColumns)
 {
     auto generatedColumns = CollectStoredGeneratedColumns(table);
     if (generatedColumns.empty()) {
@@ -450,17 +476,90 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteT
         }
     }
 
+    THashSet<TStringBuf> insertOnlyColumnsSet;
+    if (insertOnlyColumns) {
+        for (const auto& col : *insertOnlyColumns) {
+            insertOnlyColumnsSet.insert(col.Value());
+        }
+    }
+
     if (generatedLookup && depsComeFromTable) {
-        auto missingDeps = GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet);
+        auto dependencyInputColumnsSet = inputColumnsSet;
+        for (const auto& col : insertOnlyColumnsSet) {
+            dependencyInputColumnsSet.erase(col);
+        }
+        auto missingDeps = GetMissingStoredGeneratedDeps(generatedColumns, dependencyInputColumnsSet);
         if (!missingDeps.empty()) {
             auto [rewritten, columns] = BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, generatedColumns,
-                missingDeps, table, WriteSkipsRowsAbsentFromTable(tableOp), pos, ctx);
+                missingDeps, table, WriteSkipsRowsAbsentFromTable(tableOp), insertOnlyColumnsSet, pos, ctx);
             return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=true };
         }
     }
 
     auto [rewritten, columns] = BuildStoredGeneratedColumnsInline(input, inputColumns, generatedColumns, table, pos, ctx);
     return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=false };
+}
+
+std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultExpressionColumns(const TExprBase& input,
+    const TCoAtomList& inputColumns, const TCoAtomList& defaultExprColumns, const TKikimrTableDescription& table,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    if (defaultExprColumns.Ref().ChildrenSize() == 0) {
+        return {input, inputColumns};
+    }
+
+    auto rowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
+
+    TVector<TCoAtom> allColumns;
+    TVector<TExprBase> allMembers;
+
+    for (const auto& col : inputColumns) {
+        allColumns.push_back(col);
+        allMembers.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(col)
+                .Value<TCoMember>()
+                    .Struct(rowArg)
+                    .Name().Build(col.Value())
+                    .Build()
+                .Done());
+    }
+
+    // A DEFAULT expression cannot reference columns, so it is applied to an empty row
+    auto emptyRow = Build<TCoAsStruct>(ctx, pos).Done();
+
+    for (const auto& col : defaultExprColumns) {
+        const TString colName(col.Value());
+        const auto* colMeta = table.Metadata->Columns.FindPtr(colName);
+        YQL_ENSURE(colMeta && colMeta->IsDefaultFromExpression(), "Column " << colName << " has no DEFAULT expression");
+        YQL_ENSURE(colMeta->DefaultExpression->Expr, "DEFAULT expression of column " << colName << " is not compiled");
+
+        allColumns.push_back(col);
+        allMembers.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(col)
+                .Value<TExprApplier>()
+                    .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
+                    .With(0, emptyRow)
+                    .Build()
+                .Done());
+    }
+
+    auto writeData = Build<TCoMap>(ctx, pos)
+        .Input(input)
+        .Lambda()
+            .Args({rowArg})
+            .Body<TCoAsStruct>()
+                .Add(allMembers)
+                .Build()
+            .Build()
+        .Done();
+
+    auto columnList = Build<TCoAtomList>(ctx, pos)
+        .Add(allColumns)
+        .Done();
+
+    return {writeData, columnList};
 }
 
 }   // namespace NKikimr::NKqp::NOpt

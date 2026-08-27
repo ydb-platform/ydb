@@ -1753,6 +1753,21 @@ private:
         FillDqInput(read.Ptr(), stageProto, stageProto.AddSources(), dataSourceCategory, ctx, false);
     }
 
+    // A column the shard fills itself when the row is new and leaves alone when it already exists.
+    // GENERATED columns also carry DEFAULT_KIND_EXPRESSION but are recomputed on every write, so
+    // they are never handled this way
+    static bool IsLocallyFilledDefaultColumn(const TKikimrColumnMetadata& column) {
+        switch (column.DefaultKind) {
+            case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE:
+            case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL:
+                return true;
+            case NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION:
+                return column.DefaultExpression && !column.DefaultExpression->IsGenerated();
+            default:
+                return false;
+        }
+    }
+
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
             const TVector<TStringBuf>& columns,
             const TKikimrTableMetadataPtr& tableMeta,
@@ -1773,9 +1788,7 @@ private:
         }
 
         const auto isDefaultColumn = [&tableMeta](const TString& columnName) {
-            const auto defaultKind = tableMeta->Columns.at(columnName).DefaultKind;
-            return defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
-                || defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+            return IsLocallyFilledDefaultColumn(tableMeta->Columns.at(columnName));
         };
 
         // Not DEFAULT columns
@@ -1912,9 +1925,7 @@ private:
             const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
             YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
 
-            const bool isDefault = columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
-                            ||  columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
-            if (isDefault) {
+            if (IsLocallyFilledDefaultColumn(*columnMeta)) {
                 result.Ids.insert(columnMeta->Id);
                 result.Names.insert(columnName);
             }
@@ -2806,7 +2817,11 @@ private:
                 if (autoIncrementColumns.contains(columnMeta->Name)) {
                     // it means, that column is a generated column
                     // so it means we should set default value for this column
-                    YQL_ENSURE(columnMeta->IsDefaultFromLiteral() || columnMeta->IsDefaultFromSequence());
+                    // DEFAULT expressions are inlined into the write input by BuildWriteInput and
+                    // must never reach the sequencer, which can only carry literals and sequences
+                    YQL_ENSURE(columnMeta->IsDefaultFromLiteral() || columnMeta->IsDefaultFromSequence(),
+                        "Column " << columnMeta->Name << " has an unsupported default kind for the sequencer: "
+                            << static_cast<int>(columnMeta->DefaultKind));
                     columnProto->SetDefaultKind(columnMeta->DefaultKind);
                     if (columnMeta->IsDefaultFromLiteral()) {
                         columnProto->MutableDefaultFromLiteral()->CopyFrom(columnMeta->DefaultFromLiteral);

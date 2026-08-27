@@ -368,4 +368,5 @@ message TFeatureFlags {
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
     optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
     optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
+    optional bool EnableDefaultFromExpression = 316 [default = true];
 }

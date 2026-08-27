@@ -16,6 +16,7 @@ namespace {
 
 void TestCompileTimeDefaultsPlan(const std::string& operation, bool enabled) {
     NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableDefaultFromExpression(false);
     appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(enabled);
 
     TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -1401,7 +1402,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 CREATE TABLE `/Root/Utf8AndDefault` (
                     Key Uint32,
                     Value Utf8 NOT NULL DEFAULT Utf8("Simple"),
-                    Value3 Utf8 NOT NULL DEFAULT CAST("Impossibru" as Utf8),
+                    Value3 Utf8 NOT NULL DEFAULT COALESCE(CAST("Impossibru" AS Utf8), Utf8("")),
                     PRIMARY KEY (Key),
                 );
             )";
@@ -3139,7 +3140,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported type of literal: Nothing");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Column addition with a DEFAULT expression is not supported");
         }
 
         {
@@ -3204,7 +3206,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported type of literal: CurrentUtcTimestamp");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Column addition with a DEFAULT expression is not supported");
         }
     }
 

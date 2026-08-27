@@ -435,4 +435,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
 
 std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token);
 
+bool ExtractExprTextAndContext(TContext& context, const NSQLv1Generated::TRule_expr& expr,
+    TPosition errorPos, TString& contextPrefix, TString& exprText);
+
 } // namespace NSQLTranslationV1

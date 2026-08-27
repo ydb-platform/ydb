@@ -1349,10 +1349,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // The grown host slot (H5) is absent in the vchunk before registering
         // and present after - the DBG caught it up at registration.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None} "
-            "Enabled{+++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff}",
             configBefore);
 
         // Reply UpdateConfig request.
@@ -1377,10 +1374,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // VChunk config contains six enabled hosts
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None;None} "
-            "Enabled{++++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff,HandOff}",
             configAfter);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"

@@ -1048,7 +1048,7 @@ void TVChunk::OnConfigPersisted()
 
     ApplyConfig(std::move(persisted.Config), persisted.Message);
     PersistNextPendingConfig();
-    DemoteUnavailbleHostsIfNeeded();
+    DemoteUnavailableHostsIfNeeded();
 }
 
 void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
@@ -1196,7 +1196,8 @@ void TVChunk::OnCopyComplete(
         ToString(result).c_str());
 
     if (result != TDDiskDataCopier::EResult::Ok) {
-        // TODO (drbasic). Decide what to do in case of a coping error.
+        // TODO (drbasic). Decide what to do in case of a copying error.
+        Copiers.erase(hostIndex);
         return;
     }
 
@@ -1214,7 +1215,7 @@ void TVChunk::OnCopyComplete(
         TStringBuilder() << PrintHostAndNode(hostIndex) << " copy finished");
 }
 
-void TVChunk::DemoteUnavailbleHostsIfNeeded()
+void TVChunk::DemoteUnavailableHostsIfNeeded()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 

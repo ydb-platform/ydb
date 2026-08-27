@@ -2377,7 +2377,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
 
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("Consumer `test_consumer` does not exist in topic");
+            return issues.contains("no read rule provided for consumer 'test_consumer'");
         });
 
         ExecExternalQuery(fmt::format(R"(

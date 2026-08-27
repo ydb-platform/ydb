@@ -1654,6 +1654,11 @@ TPC-DS proof gate passes 20/20. The current policy therefore contains 13 TPCH
 plus 20 TPC-DS proofs, 33/33 overall; the M79 dashboard inventory remains
 authoritative for unchanged formula, pair, entry, and preparation counts.
 
+Milestone 81 is a focused q33 solver checkpoint only. At unchanged HEAD
+`3d1d99a953c`, q33 returns `UNKNOWN` before branch 4/28. No policy floor moves:
+the checked proof set remains 33, and follow-up work targets exact semantic
+reduction rather than a larger timeout.
+
 The complete post-M71 formula dashboards are TPCH 20 / 0 / 2 after
 3,020/93,251 ms (report SHA-256
 `ac7f146bdfc39359254ad062cb310bb2d142cc8b1cd5ad4b0cca055870f4360c`)
@@ -1875,6 +1880,8 @@ captured pairs formulate. The remaining 20 workload rows have no exact pair.
 M80's focused q97 evidence, policy promotion, and clean 20/20 TPC-DS proof
 gate are closed. It changes only the proof depth: the floor is now 33/33 while
 all M79 formula and capture inventories remain unchanged.
+M81 records q33's focused `UNKNOWN` with no implementation or policy change.
+The proof floor remains 33; semantic reduction is the next q33 step.
 M4 remains the current milestone.
 
 The exact sorting-network slice adds TPCH q2 to the formula and preparation
@@ -2689,6 +2696,8 @@ M80 then promotes already-supported TPC-DS q97 to proof depth without changing
 those formula, pair, entry, or preparation counts. The TPC-DS proof floor rises
 to 20/99 workload rows and 20/81 formula-covered exact pairs; combined with the
 unchanged 13 TPCH proofs, the checked floor is thirty-three.
+M81's focused q33 run is `UNKNOWN` and does not change that trend or any
+weaker coverage count.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
@@ -2755,6 +2764,26 @@ contains thirty-three confirmed `VERIFIED_BOUNDED` obligations.
   report gives 33/33 obligations: 33/121 workload queries (27.3%) and 33/101
   formula-covered exact pairs (32.7%). Within TPC-DS the corresponding ratios
   are 20/99 workload rows (20.2%) and 20/81 formula-covered rows (24.7%).
+  M81 then probes q33 at exact, unchanged HEAD `3d1d99a953c`. It captures two
+  snapshots and prepares successfully in 1,543 ms, but returns `UNKNOWN` after
+  61,936 ms when the global deadline expires before branch 4/28
+  (`left_outcome_1_unmatched`). Test/suite/`ya` graph/outer wall times are
+  67.123042/68.125100/87.583037/104.68 seconds. The exact query, Initial, and
+  Final SHA-256 values are
+  `c47f89e9f098a06c8803e098178e05f3296b08cabcb475e559bd3506fe4c0038`,
+  `96287841d6d20776fa6d6f7f6c479ccf53d3e2c9c5218766ffc0cb481fe3f146`,
+  and
+  `32acd9f85da0b0e7439882f42dddc3c7117aa6155f969f1ff4e11ca069a907a3`.
+  The 899,980-byte / 1,557-line SMT formula has SHA-256
+  `388c78990dca6afe2530d113a7a1ee247ebd0eec78f916a080628d8c67c2d9de`;
+  verdict SHA-256 is
+  `c519f2ba5da4df7639f344c6827cccf0c658c2ac828820b95bbd064b3d895b19`.
+  The 6,725-byte report has SHA-256
+  `2dd30504eaa2e51f61fdd5894cb310360af4716471d40cbfa4aba54d5bdaffb4`.
+  Its `solver_experiment` policy is valid with zero violations and does not
+  enforce the proof floor. This is neither proof nor counterexample, so q33 is
+  not promoted and the floor remains 33. The 28-branch result directs follow-up
+  toward exact semantic reduction rather than timeout tuning.
   Focused q8 prepares in 695 ms and proves after 2,041 ms.
   The preceding 30-obligation complete reports had SHA-256 values
   `d641e3445696fce0f0a367a4f586aa20543d73cb6408a7cf0fefe49f42d64b47` and
@@ -3517,6 +3546,9 @@ required policy now contains thirty-three obligations. The retained M79 TPCH
 gate confirms 13/13 and the clean M80 TPC-DS gate confirms 20/20. The earlier
 contended q9 `UNKNOWN` was a failed operational run, not a counterexample or a
 new optimizer finding.
+Milestone 81's focused q33 `UNKNOWN` likewise changes neither policy nor the
+defect inventory. Its next step is exact semantic reduction, not a timeout
+increase.
 
 ### Optimizer correctness findings
 

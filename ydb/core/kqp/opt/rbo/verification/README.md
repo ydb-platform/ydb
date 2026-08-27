@@ -330,6 +330,12 @@ the unchanged 13-query TPCH floor, the checked policy now requires 33 proofs:
 33/121 workload queries (27.3%) and 33/101 formula-covered exact pairs (32.7%).
 All weaker coverage floors and inventories remain at their M79 values.
 
+Milestone 81 records a focused q33 solver experiment at unchanged HEAD
+`3d1d99a953c`. The exact 2x2 pair prepares successfully but returns `UNKNOWN`
+when the global deadline expires before branch 4/28. There is no policy
+promotion or code change: the proof floor remains 33, and the next q33 work is
+exact semantic reduction rather than timeout tuning.
+
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
 boundary applies the reviewed eight-child UDF envelope to an `Int32` literal;
@@ -1290,6 +1296,19 @@ formula/verdict artifact. Formula, pair, entry, preparation, and defect counts
 are unchanged; full SHA-bound evidence is in
 [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 
+M81 probes already formula-covered q33 without changing the solver, model, or
+policy. The exact Initial/Final pair prepares in 1,543 ms and returns
+`UNKNOWN` after 61,936 ms at bound 2x2, with the deadline reached before branch
+4/28 (`left_outcome_1_unmatched`). The 899,980-byte / 1,557-line formula and
+6,725-byte report have SHA-256 values
+`388c78990dca6afe2530d113a7a1ee247ebd0eec78f916a080628d8c67c2d9de`
+and
+`2dd30504eaa2e51f61fdd5894cb310360af4716471d40cbfa4aba54d5bdaffb4`.
+Test/suite/graph/outer wall times are 67.123/68.125/87.583/104.68 seconds.
+The focused policy is valid with zero violations but does not enforce the
+proof floor. q33 remains unproved and the floor stays 33; complete artifact
+digests are in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
+
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
 `97c0048b4bc31c8c02785bc3dea18c676b9ba6e2452411912c8984f06b376205`.
@@ -1520,6 +1539,9 @@ workload rows have no exact pair, and the unchanged proof checkpoint is 32/32.
 M80 subsequently promotes already-supported TPC-DS q97 without changing the
 model or those coverage inventories. The clean current proof checkpoint is
 33/33: unchanged TPCH 13/13 plus TPC-DS 20/20.
+M81 then records q33's focused 60-second `UNKNOWN` without promotion. The
+33-proof checkpoint and every weaker coverage inventory remain unchanged;
+future q33 work targets exact semantic reduction, not timeout tuning.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a

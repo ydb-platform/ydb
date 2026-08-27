@@ -180,7 +180,7 @@ Release date: November 1, 2025.
 
 #### New Features
 
-* Views are now supported in backup and restore operations. To use this feature, set the `enable_view_export` flag in the `feature_flags` section of the [database](./devops/configuration-management/configuration-v1/dynamic-config.md) or [cluster](./maintenance/manual/static-config) configuration.
+* Views are now supported in backup and restore operations. To use this feature, set the `enable_view_export` flag in the `feature_flags` section of the [database](./devops/configuration-management/configuration-v1/dynamic-config.md) or [cluster](./devops/configuration-management/configuration-v1/static-config.md) configuration.
 * Additional identifiers — the object path ID (`PathId`) and tablet ID (`TabletId`) — are now included in [Transaction locks invalidated](./troubleshooting/performance/queries/transaction-lock-invalidation) error messages when the table cannot be identified (Unknown table).
 
 ### Version 24.4.4.15 {#24-4-4-15}

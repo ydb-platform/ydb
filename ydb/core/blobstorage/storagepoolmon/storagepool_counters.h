@@ -8,7 +8,9 @@
 #include <ydb/core/mon/mon.h>
 
 #include <util/generic/bitops.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
+#include <util/system/mutex.h>
 #include <ydb/core/util/max_tracker.h>
 
 namespace NKikimr {
@@ -23,6 +25,12 @@ struct TRequestMonItem {
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
     NMonitoring::THistogramPtr ResponseTime;
     TMaxTracker ResponseTimeMax;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseTimeUsCompletedSum;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseTimeCompletedCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlightResponseTimeUsSum;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlightCount;
+    TMutex InFlightRequestsMutex;
+    THashMap<ui64, TMonotonic> InFlightRequests;
 
     void Init(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
         RequestBytes = counters->GetCounter("requestBytes", true);
@@ -34,17 +42,59 @@ struct TRequestMonItem {
         ResponseTime = counters->GetHistogram("responseTimeMs",
             NMonitoring::ExplicitHistogram(std::move(bounds)));
         ResponseTimeMax.Init(counters->GetCounter("responseTimeMsMax", false));
+        ResponseTimeUsCompletedSum = counters->GetCounter("responseTimeUsCompletedSum", true);
+        ResponseTimeCompletedCount = counters->GetCounter("responseTimeCompletedCount", true);
+        InFlightResponseTimeUsSum = counters->GetCounter("inFlightResponseTimeUsSum", false);
+        InFlightCount = counters->GetCounter("inFlightCount", false);
     }
 
     void Register(ui32 requestBytes, ui32 generatedSubrequests, ui32 generatedSubrequestBytes, double durationSeconds) {
+        const double durationMs = durationSeconds * 1000.0;
+        const ui64 durationMsInt = durationMs;
+        const ui64 durationUsInt = durationSeconds * 1'000'000.0;
         *RequestBytes += requestBytes;
         *GeneratedSubrequests += generatedSubrequests;
         *GeneratedSubrequestBytes += generatedSubrequestBytes;
-        ResponseTime->Collect(durationSeconds * 1000.0);
-        ResponseTimeMax.Collect((i64)(durationSeconds * 1000.0));
+        ResponseTime->Collect(durationMs);
+        ResponseTimeMax.Collect(durationMsInt);
+        ResponseTimeUsCompletedSum->Add(durationUsInt);
+        ResponseTimeCompletedCount->Inc();
+    }
+
+    void AddInFlightRequest(ui64 requestId, TMonotonic receivedTime) {
+        TGuard<TMutex> guard(InFlightRequestsMutex);
+        InFlightRequests.emplace(requestId, receivedTime);
+    }
+
+    void RemoveInFlightRequest(ui64 requestId) {
+        TGuard<TMutex> guard(InFlightRequestsMutex);
+        InFlightRequests.erase(requestId);
     }
 
     void Update() {
+        Update(TMonotonic::Now());
+    }
+
+    void Update(TMonotonic now) {
+        ui64 latencyUsSum = 0;
+        ui64 latencyMsMax = 0;
+        ui64 inFlightCount = 0;
+        {
+            TGuard<TMutex> guard(InFlightRequestsMutex);
+            inFlightCount = InFlightRequests.size();
+            for (const auto& [requestId, receivedTime] : InFlightRequests) {
+                Y_UNUSED(requestId);
+                if (now > receivedTime) {
+                    const TDuration latency = now - receivedTime;
+                    latencyUsSum += latency.MicroSeconds();
+                    latencyMsMax = Max<ui64>(latencyMsMax, latency.MilliSeconds());
+                }
+            }
+        }
+
+        InFlightResponseTimeUsSum->Set(latencyUsSum);
+        InFlightCount->Set(inFlightCount);
+        ResponseTimeMax.Collect(latencyMsMax);
         ResponseTimeMax.Update();
     }
 };
@@ -244,4 +294,3 @@ public:
 
 
 } // NKikimr
-

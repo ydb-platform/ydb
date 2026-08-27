@@ -285,6 +285,8 @@ public:
 
 private:
     void CheckPostponedQueue();
+    void RegisterStoragePoolRequestInFlight();
+    void UnregisterStoragePoolRequestInFlight();
 
 protected:
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
@@ -319,6 +321,8 @@ private:
     std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
     bool ExecutionRelayUsed = false;
     bool FirstResponse = true;
+    TRequestMonItem* StoragePoolRequestMonItem = nullptr;
+    ui64 StoragePoolRequestInFlightId = 0;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

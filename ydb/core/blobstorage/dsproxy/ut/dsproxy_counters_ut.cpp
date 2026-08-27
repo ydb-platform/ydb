@@ -50,6 +50,8 @@ Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.RequestBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequests->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequestBytes->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.ResponseTimeCompletedCount->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 0);
 
     TString buffer = TString::Uninitialized(blobId.BlobSize());
     for (char &ch : buffer) {
@@ -72,15 +74,78 @@ Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
     TGroupMock &groupMock = testState.GetGroupMock();
     groupMock.SetSpecialStatuses(specialStatuses);
 
-    testState.HandleVPutsWithMock(env.Info->Type.TotalPartCount());
+    TEvBlobStorage::TEvVPut::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
+    requestMonItem.Update();
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 1);
+
+    TVDiskID vDiskId = groupMock.GetVDiskID(*ev->Get());
+    NKikimrProto::EReplyStatus status = groupMock.OnVPut(*ev->Get());
+    TEvBlobStorage::TEvVPutResult::TPtr result = testState.CreateEventResultPtr(ev, status, vDiskId);
+    runtime.Send(result.Release());
+
+    testState.HandleVPutsWithMock(env.Info->Type.TotalPartCount() - 1);
 
     TMap<TLogoBlobID, NKikimrProto::EReplyStatus> expectedStatus;
     expectedStatus[blobId] = NKikimrProto::OK;
     testState.ReceivePutResults(expectedStatus.size(), expectedStatus);
 
+    requestMonItem.Update();
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.RequestBytes->Val(), 254);
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequests->Val(), 6);
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequestBytes->Val(), 64 * 6);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.ResponseTimeCompletedCount->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 0);
+}
+
+Y_UNIT_TEST(GetLatencyCounters) {
+    NKikimr::TBlobStorageGroupType erasure = TErasureType::Erasure4Plus2Block;
+    TTestBasicRuntime runtime(1, false);
+    SetLogPriorities(runtime);
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, erasure, 1, 0);
+    TTestState testState(runtime, erasure, env.Info);
+
+    TLogoBlobID blobId = TLogoBlobID(72075186224047637, 1, 864, 1, 254, 24577);
+    ui32 requestBytes = blobId.BlobSize();
+
+    TRequestMonItem &requestMonItem = env.StoragePoolCounters->GetItem(TStoragePoolCounters::HcGetFast, requestBytes);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.ResponseTimeCompletedCount->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 0);
+
+    TString buffer = TString::Uninitialized(blobId.BlobSize());
+    for (char &ch : buffer) {
+        ch = 'a';
+    }
+    TVector<TBlobTestSet::TBlob> blobs {
+        TBlobTestSet::TBlob(blobId, buffer)
+    };
+    testState.PutBlobsToGroupMock(blobs);
+
+    TEvBlobStorage::TEvGet::TPtr get = testState.CreateGetRequest({blobId}, false);
+    runtime.Register(env.CreateGetRequestActor(get, NKikimrBlobStorage::TabletLog).release());
+
+    TEvBlobStorage::TEvVGet::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvVGet>();
+    requestMonItem.Update();
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 1);
+
+    TEvBlobStorage::TEvVGetResult::TPtr result = testState.CreateEventResultPtr(ev, NKikimrProto::UNKNOWN);
+    testState.GetGroupMock().OnVGet(*ev->Get(), *result->Get());
+    runtime.Send(result.Release());
+
+    testState.HandleVGetsWithMock(env.Info->Type.TotalPartCount() - 1);
+
+    TAutoPtr<IEventHandle> handle;
+    TEvBlobStorage::TEvGetResult *getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
+    UNIT_ASSERT(getResult);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->Status, NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Status, NKikimrProto::OK);
+
+    requestMonItem.Update();
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.RequestBytes->Val(), requestBytes);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.ResponseTimeCompletedCount->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 0);
 }
 
 Y_UNIT_TEST(MultiPutGeneratedSubrequestBytes) {

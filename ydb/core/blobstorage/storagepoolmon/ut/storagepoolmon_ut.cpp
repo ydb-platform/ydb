@@ -33,6 +33,49 @@ Y_UNIT_TEST(ReducedSizeClassCalcTest) {
     }
 }
 
+Y_UNIT_TEST(RequestLatencyCountersIncludeCompletedAndInFlight) {
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    TRequestMonItem requestMonItem;
+    requestMonItem.Init(counters, NPDisk::DEVICE_TYPE_ROT);
+
+    requestMonItem.Register(42, 2, 84, 0.123);
+    requestMonItem.AddInFlightRequest(1, TMonotonic::MilliSeconds(1'000));
+    requestMonItem.AddInFlightRequest(2, TMonotonic::MilliSeconds(1'500));
+    requestMonItem.Update(TMonotonic::MilliSeconds(2'500));
+
+    auto completedSum = counters->FindCounter("responseTimeUsCompletedSum");
+    auto completedCount = counters->FindCounter("responseTimeCompletedCount");
+    auto inFlightSum = counters->FindCounter("inFlightResponseTimeUsSum");
+    auto inFlightCount = counters->FindCounter("inFlightCount");
+    auto maxLatency = counters->FindCounter("responseTimeMsMax");
+
+    UNIT_ASSERT(completedSum);
+    UNIT_ASSERT(completedCount);
+    UNIT_ASSERT(inFlightSum);
+    UNIT_ASSERT(inFlightCount);
+    UNIT_ASSERT(maxLatency);
+
+    UNIT_ASSERT(completedSum->ForDerivative());
+    UNIT_ASSERT(completedCount->ForDerivative());
+    UNIT_ASSERT(!inFlightSum->ForDerivative());
+    UNIT_ASSERT(!inFlightCount->ForDerivative());
+    UNIT_ASSERT(!maxLatency->ForDerivative());
+
+    UNIT_ASSERT_VALUES_EQUAL(completedSum->Val(), 123'000);
+    UNIT_ASSERT_VALUES_EQUAL(completedCount->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 2'500'000);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(maxLatency->Val(), 1'500);
+
+    requestMonItem.RemoveInFlightRequest(1);
+    requestMonItem.Update(TMonotonic::MilliSeconds(3'000));
+
+    UNIT_ASSERT_VALUES_EQUAL(completedSum->Val(), 123'000);
+    UNIT_ASSERT_VALUES_EQUAL(completedCount->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 1'500'000);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+}
+
 } // Y_UNIT_TEST_SUITE TBlobStorageStoragePoolMonTest
 } // namespace NBlobStorageStoragePoolMonTest
 } // namespace NKikimr

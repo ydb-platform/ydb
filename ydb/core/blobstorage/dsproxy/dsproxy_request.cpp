@@ -651,6 +651,7 @@ namespace NKikimr {
 
     void TBlobStorageGroupRequestActor::BootstrapImpl() {
         GetActiveCounter()->Inc();
+        RegisterStoragePoolRequestInFlight();
         Bootstrap();
     }
 
@@ -851,6 +852,7 @@ namespace NKikimr {
 
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!std::exchange(Dead, true));
+        UnregisterStoragePoolRequestInFlight();
         GetActiveCounter()->Dec();
         SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
         TActor::PassAway();
@@ -899,8 +901,12 @@ namespace NKikimr {
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!Dead);
         if (RequestHandleClass && PoolCounters && FirstResponse) {
-            PoolCounters->GetItem(*RequestHandleClass, RequestBytes).Register(
+            TRequestMonItem& requestMonItem = StoragePoolRequestMonItem
+                ? *StoragePoolRequestMonItem
+                : PoolCounters->GetItem(*RequestHandleClass, RequestBytes);
+            requestMonItem.Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
+            UnregisterStoragePoolRequestInFlight();
         }
 
         if (timeStats) {
@@ -934,6 +940,22 @@ namespace NKikimr {
 
     void TBlobStorageGroupRequestActor::SendResponse(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats) {
         SendResponse(std::move(ev), timeStats, Source, Cookie);
+    }
+
+    void TBlobStorageGroupRequestActor::RegisterStoragePoolRequestInFlight() {
+        if (RequestHandleClass && PoolCounters) {
+            StoragePoolRequestMonItem = &PoolCounters->GetItem(*RequestHandleClass, RequestBytes);
+            StoragePoolRequestInFlightId = SelfId().LocalId();
+            StoragePoolRequestMonItem->AddInFlightRequest(StoragePoolRequestInFlightId, RequestStartTime);
+        }
+    }
+
+    void TBlobStorageGroupRequestActor::UnregisterStoragePoolRequestInFlight() {
+        if (StoragePoolRequestMonItem) {
+            StoragePoolRequestMonItem->RemoveInFlightRequest(StoragePoolRequestInFlightId);
+            StoragePoolRequestMonItem = nullptr;
+            StoragePoolRequestInFlightId = 0;
+        }
     }
 
     double TBlobStorageGroupRequestActor::GetStartTime(const NKikimrBlobStorage::TTimestamps& timestamps) {

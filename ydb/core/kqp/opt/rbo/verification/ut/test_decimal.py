@@ -564,6 +564,171 @@ def _ref_arithmetic(kind, left, right, scalar_type):
 
 
 class DecimalKernelTest(unittest.TestCase):
+    def test_sum_state_composition_matches_flattened_special_and_null_cases(self):
+        scalar_type = "Decimal(35,0)"
+
+        def summarize(items):
+            finite_abs_bound = sum(
+                abs(value)
+                for _present, value in items
+                if -decimal.INF < value < decimal.INF
+            )
+            return decimal.summarize_sum_with_headroom(
+                tuple(
+                    (smt.bool_value(present), smt.int_value(value))
+                    for present, value in items
+                ),
+                scalar_type,
+                finite_abs_bound,
+            )
+
+        cases = (
+            # Empty and statically absent inputs are the aggregate-NULL case.
+            ((), ((False, 9),), False, False, (False, False, False, False, 0)),
+            (
+                ((True, 7), (True, -3)),
+                ((True, 5),),
+                True,
+                True,
+                (True, False, False, False, 9),
+            ),
+            (
+                ((True, decimal.NAN),),
+                ((True, 4),),
+                True,
+                True,
+                (True, True, False, False, decimal.NAN),
+            ),
+            (
+                ((True, decimal.INF),),
+                ((True, 4),),
+                True,
+                True,
+                (True, False, True, False, decimal.INF),
+            ),
+            (
+                ((True, -decimal.INF),),
+                ((True, -4),),
+                True,
+                True,
+                (True, False, False, True, -decimal.INF),
+            ),
+            (
+                ((True, decimal.INF),),
+                ((True, -decimal.INF),),
+                True,
+                True,
+                (True, False, True, True, decimal.NAN),
+            ),
+            # A whole inactive partial must contribute neither specials nor data.
+            (
+                ((True, decimal.NAN),),
+                ((True, 11),),
+                False,
+                True,
+                (True, False, False, False, 11),
+            ),
+        )
+        for left_items, right_items, left_active, right_active, expected in cases:
+            left = summarize(left_items)
+            right = summarize(right_items)
+            combined = decimal.combine_sum_states_with_headroom(
+                (
+                    (smt.bool_value(left_active), left),
+                    (smt.bool_value(right_active), right),
+                ),
+                scalar_type,
+            )
+            flattened = tuple(
+                (
+                    smt.and_(
+                        smt.bool_value(partial_active),
+                        smt.bool_value(item_active),
+                    ),
+                    smt.int_value(value),
+                )
+                for items, partial_active in (
+                    (left_items, left_active),
+                    (right_items, right_active),
+                )
+                for item_active, value in items
+            )
+            flat_bound = left.finite_abs_bound + right.finite_abs_bound
+            with self.subTest(
+                left=left_items,
+                right=right_items,
+                active=(left_active, right_active),
+            ):
+                self.assertEqual(
+                    (
+                        _ground(combined.any_non_null),
+                        _ground(combined.has_nan),
+                        _ground(combined.has_pos_inf),
+                        _ground(combined.has_neg_inf),
+                        _ground(decimal.finish_sum_state(combined)),
+                    ),
+                    expected,
+                )
+                self.assertEqual(combined.finite_abs_bound, flat_bound)
+                self.assertEqual(
+                    _ground(decimal.finish_sum_state(combined)),
+                    _ground(
+                        decimal.sum_with_headroom(
+                            flattened,
+                            scalar_type,
+                            flat_bound,
+                        )
+                    ),
+                )
+
+    def test_sum_state_rejects_malformed_layouts_and_exact_headroom_limit(self):
+        valid = {
+            "sum_type": "Decimal(35,0)",
+            "any_non_null": smt.TRUE,
+            "has_nan": smt.FALSE,
+            "has_pos_inf": smt.FALSE,
+            "has_neg_inf": smt.FALSE,
+            "finite_total": smt.ZERO,
+            "finite_abs_bound": 1,
+        }
+        mutations = (
+            ({"sum_type": "Decimal(34,0)"}, "maximum-precision"),
+            ({"any_non_null": smt.ZERO}, "any_non_null.*Boolean"),
+            ({"has_nan": smt.ZERO}, "has_nan.*Boolean"),
+            ({"has_pos_inf": smt.ZERO}, "has_pos_inf.*Boolean"),
+            ({"has_neg_inf": smt.ZERO}, "has_neg_inf.*Boolean"),
+            ({"finite_total": smt.FALSE}, "finite_total.*integer"),
+            ({"finite_abs_bound": -1}, "insufficient headroom"),
+            ({"finite_abs_bound": 10**35}, "insufficient headroom"),
+        )
+        for mutation, message in mutations:
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(ValueError, message):
+                    decimal.DecimalSumState(**(valid | mutation))
+
+        left = decimal.DecimalSumState(**valid)
+        wrong_type = decimal.DecimalSumState(
+            **(valid | {"sum_type": "Decimal(35,1)"})
+        )
+        with self.assertRaisesRegex(ValueError, "different accumulator types"):
+            decimal.combine_sum_states_with_headroom(
+                ((smt.TRUE, left), (smt.TRUE, wrong_type)),
+                "Decimal(35,0)",
+            )
+
+        half_limit = 5 * 10**34
+        exact_limit = tuple(
+            decimal.DecimalSumState(
+                **(valid | {"finite_abs_bound": half_limit})
+            )
+            for _ in range(2)
+        )
+        with self.assertRaisesRegex(ValueError, "insufficient headroom"):
+            decimal.combine_sum_states_with_headroom(
+                tuple((smt.TRUE, state) for state in exact_limit),
+                "Decimal(35,0)",
+            )
+
     def test_typed_domain_matches_ydb_import_boundaries_and_specials(self):
         accepted = (-decimal.INF, -999, -1, 0, 1, 999, decimal.INF, decimal.NAN)
         rejected = (-decimal.INF - 1, -1000, 1000, decimal.NAN + 1)

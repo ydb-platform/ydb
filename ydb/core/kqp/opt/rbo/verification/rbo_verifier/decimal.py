@@ -58,6 +58,52 @@ class Literal:
             raise ValueError("non-finite Decimal literal must not have a scaled value")
 
 
+@dataclass(frozen=True, slots=True)
+class DecimalSumState:
+    """Private headroom-certified summary of one Decimal SUM input bag."""
+
+    sum_type: str
+    any_non_null: smt.Term
+    has_nan: smt.Term
+    has_pos_inf: smt.Term
+    has_neg_inf: smt.Term
+    finite_total: smt.Term
+    finite_abs_bound: int
+
+    def __post_init__(self) -> None:
+        decimal_type = parse_type(self.sum_type)
+        if (
+            decimal_type is None
+            or decimal_type.precision != MAX_PRECISION
+        ):
+            raise ValueError(
+                "Decimal SUM state requires a maximum-precision sum type"
+            )
+        for name, term in (
+            ("any_non_null", self.any_non_null),
+            ("has_nan", self.has_nan),
+            ("has_pos_inf", self.has_pos_inf),
+            ("has_neg_inf", self.has_neg_inf),
+        ):
+            if not isinstance(term, smt.Term) or term.sort != smt.BOOL:
+                raise ValueError(
+                    f"Decimal SUM state {name} must be an SMT Boolean"
+                )
+        if (
+            not isinstance(self.finite_total, smt.Term)
+            or self.finite_total.sort != smt.INT
+        ):
+            raise ValueError(
+                "Decimal SUM state finite_total must be an SMT integer"
+            )
+        if type(self.finite_abs_bound) is not int or not (
+            0 <= self.finite_abs_bound < 10**decimal_type.precision
+        ):
+            raise ValueError(
+                "Decimal SUM state finite bound has insufficient headroom"
+            )
+
+
 def parse_type(scalar_type: str) -> Type | None:
     match = _TYPE.fullmatch(scalar_type)
     if match is None:
@@ -327,21 +373,30 @@ def sum_with_headroom(
     infinity sign wins, and finite codes add exactly.
     """
 
-    decimal_type = parse_type(result_type)
-    if decimal_type is None:
-        raise ValueError(f"not a Decimal type: {result_type!r}")
-    if decimal_type.precision != MAX_PRECISION:
-        raise ValueError("Decimal SUM result must have maximum precision")
-    if type(finite_abs_bound) is not int or not (
-        0 <= finite_abs_bound < 10**decimal_type.precision
-    ):
-        raise ValueError("Decimal SUM finite bound has insufficient headroom")
+    return finish_sum_state(
+        summarize_sum_with_headroom(
+            guarded_values,
+            result_type,
+            finite_abs_bound,
+        )
+    )
 
+
+def summarize_sum_with_headroom(
+    guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
+    result_type: str,
+    finite_abs_bound: int,
+) -> DecimalSumState:
+    """Summarize guarded Decimal inputs under the exact SUM headroom rule."""
+
+    decimal_type = _validate_sum_headroom(result_type, finite_abs_bound)
+    active = []
     active_nan = []
     active_pos_inf = []
     active_neg_inf = []
     finite_terms = []
     for guard, value in guarded_values:
+        active.append(guard)
         active_nan.append(smt.and_(guard, smt.eq(value, smt.int_value(NAN))))
         active_pos_inf.append(smt.and_(guard, smt.eq(value, smt.int_value(INF))))
         active_neg_inf.append(smt.and_(guard, smt.eq(value, smt.int_value(-INF))))
@@ -352,23 +407,95 @@ def sum_with_headroom(
                 smt.ZERO,
             )
         )
+    return DecimalSumState(
+        sum_type=result_type,
+        any_non_null=smt.or_(*active),
+        has_nan=smt.or_(*active_nan),
+        has_pos_inf=smt.or_(*active_pos_inf),
+        has_neg_inf=smt.or_(*active_neg_inf),
+        finite_total=smt.add(*finite_terms),
+        finite_abs_bound=finite_abs_bound,
+    )
 
-    has_nan = smt.or_(*active_nan)
-    has_pos_inf = smt.or_(*active_pos_inf)
-    has_neg_inf = smt.or_(*active_neg_inf)
+
+def combine_sum_states_with_headroom(
+    guarded_states: tuple[tuple[smt.Term, DecimalSumState], ...],
+    result_type: str,
+) -> DecimalSumState:
+    """Combine guarded non-NULL partials without decoding their scalars."""
+
+    active = []
+    active_nan = []
+    active_pos_inf = []
+    active_neg_inf = []
+    finite_terms = []
+    for guard, state in guarded_states:
+        if state.sum_type != result_type:
+            raise ValueError(
+                "Decimal SUM states have different accumulator types"
+            )
+        # The guard is the partial scalar's semantic non-NULL condition. It is
+        # deliberately independent of state.any_non_null: a non-nullable empty
+        # intermediate SUM materializes zero, which is an active final input.
+        selected = guard
+        active.append(selected)
+        active_nan.append(smt.and_(selected, state.has_nan))
+        active_pos_inf.append(smt.and_(selected, state.has_pos_inf))
+        active_neg_inf.append(smt.and_(selected, state.has_neg_inf))
+        finite_terms.append(
+            smt.ite(selected, state.finite_total, smt.ZERO)
+        )
+    finite_abs_bound = sum(
+        state.finite_abs_bound
+        for _guard, state in guarded_states
+    )
+    _validate_sum_headroom(result_type, finite_abs_bound)
+    return DecimalSumState(
+        sum_type=result_type,
+        any_non_null=smt.or_(*active),
+        has_nan=smt.or_(*active_nan),
+        has_pos_inf=smt.or_(*active_pos_inf),
+        has_neg_inf=smt.or_(*active_neg_inf),
+        finite_total=smt.add(*finite_terms),
+        finite_abs_bound=finite_abs_bound,
+    )
+
+
+def finish_sum_state(state: DecimalSumState) -> smt.Term:
+    """Materialize the exact non-NULL Decimal scalar represented by a state."""
+
     return smt.ite(
-        smt.or_(has_nan, smt.and_(has_pos_inf, has_neg_inf)),
+        smt.or_(
+            state.has_nan,
+            smt.and_(state.has_pos_inf, state.has_neg_inf),
+        ),
         smt.int_value(NAN),
         smt.ite(
-            has_pos_inf,
+            state.has_pos_inf,
             smt.int_value(INF),
             smt.ite(
-                has_neg_inf,
+                state.has_neg_inf,
                 smt.int_value(-INF),
-                smt.add(*finite_terms),
+                state.finite_total,
             ),
         ),
     )
+
+
+def _validate_sum_headroom(
+    result_type: str,
+    finite_abs_bound: int,
+) -> Type:
+    decimal_type = parse_type(result_type)
+    if decimal_type is None:
+        raise ValueError(f"not a Decimal type: {result_type!r}")
+    if decimal_type.precision != MAX_PRECISION:
+        raise ValueError("Decimal SUM result must have maximum precision")
+    if type(finite_abs_bound) is not int or not (
+        0 <= finite_abs_bound < 10**decimal_type.precision
+    ):
+        raise ValueError("Decimal SUM finite bound has insufficient headroom")
+    return decimal_type
 
 
 def multiply(

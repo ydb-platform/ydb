@@ -45,6 +45,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     RelationError,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    DecimalSumState,
     Encoder as ScalarEncoder,
     IntegralAverageCertificate,
     IntegralAverageState,
@@ -5757,6 +5758,675 @@ class ConstructionAuditBoundTest(unittest.TestCase):
 
 
 class AggregateConcreteDifferentialTest(unittest.TestCase):
+    @staticmethod
+    def _sum_state(
+        finite_total,
+        finite_abs_bound,
+        *,
+        sum_type="Decimal(35,0)",
+        any_non_null=smt.TRUE,
+        has_nan=smt.FALSE,
+        has_pos_inf=smt.FALSE,
+        has_neg_inf=smt.FALSE,
+    ):
+        return DecimalSumState(
+            sum_type=sum_type,
+            any_non_null=any_non_null,
+            has_nan=has_nan,
+            has_pos_inf=has_pos_inf,
+            has_neg_inf=has_neg_inf,
+            finite_total=finite_total,
+            finite_abs_bound=finite_abs_bound,
+        )
+
+    @staticmethod
+    def _sum_state_value(state, *, nullable=True):
+        return Value(
+            state.sum_type,
+            smt.not_(state.any_non_null) if nullable else smt.FALSE,
+            decimal.finish_sum_state(state),
+            state.finite_abs_bound,
+            decimal_sum_state=state,
+        )
+
+    def test_decimal_sum_state_matches_direct_special_null_and_group_reference(self):
+        values = (
+            None,
+            -REFERENCE_DECIMAL_INF,
+            -1,
+            0,
+            1,
+            REFERENCE_DECIMAL_INF,
+            REFERENCE_DECIMAL_NAN,
+        )
+        states = (None,) + tuple((0, value) for value in values)
+
+        for grouped in (False, True):
+            direct_snapshot = aggregate_stage_snapshot(
+                "sum",
+                grouped,
+                False,
+                nullable_input=True,
+                nullable_key=True,
+                input_type="Decimal(2,0)",
+            )
+            staged_snapshot = aggregate_stage_snapshot(
+                "sum",
+                grouped,
+                True,
+                nullable_input=True,
+                nullable_key=True,
+                input_type="Decimal(2,0)",
+            )
+            direct_script = smt.Script()
+            direct_database = Database(direct_snapshot, 2, direct_script)
+            direct = RelationEvaluator(
+                direct_snapshot,
+                direct_database,
+                ScalarEncoder(direct_script),
+            ).root().certain()
+
+            staged_script = smt.Script()
+            staged_database = Database(staged_snapshot, 2, staged_script)
+            router = Router(staged_script)
+            observed = {}
+            edge_families = []
+            with mock.patch.object(
+                decimal,
+                "combine_sum_states_with_headroom",
+                wraps=decimal.combine_sum_states_with_headroom,
+            ) as combine:
+                staged = StageEvaluator(
+                    staged_snapshot,
+                    staged_database,
+                    ScalarEncoder(staged_script),
+                    router,
+                    node_observer=(
+                        lambda _scope, node, family: observed.setdefault(
+                            node, []
+                        ).append(family)
+                    ),
+                    edge_observer=(
+                        lambda _edge, _task, family: edge_families.append(
+                            family
+                        )
+                    ),
+                ).root().certain()
+            with self.subTest(grouped=grouped, lifecycle="combine"):
+                self.assertGreater(combine.call_count, 0)
+
+            partial_values = tuple(
+                row.values["_state"]
+                for family in observed["partial"]
+                for outcome in family.outcomes
+                for row in outcome.relation.rows
+            )
+            edge_values = tuple(
+                row.values["_state"]
+                for family in edge_families
+                for outcome in family.outcomes
+                for row in outcome.relation.rows
+            )
+            final_values = tuple(
+                row.values["result"]
+                for family in observed["final"]
+                for outcome in family.outcomes
+                for row in outcome.relation.rows
+            )
+            with self.subTest(grouped=grouped, lifecycle="partial"):
+                self.assertTrue(partial_values)
+                self.assertTrue(all(
+                    isinstance(value.decimal_sum_state, DecimalSumState)
+                    for value in partial_values
+                ))
+            with self.subTest(grouped=grouped, lifecycle="edge"):
+                self.assertTrue(edge_values)
+                self.assertTrue(all(
+                    isinstance(value.decimal_sum_state, DecimalSumState)
+                    for value in edge_values
+                ))
+            with self.subTest(grouped=grouped, lifecycle="final"):
+                self.assertTrue(final_values)
+                self.assertTrue(all(
+                    value.decimal_sum_state is None
+                    for value in final_values
+                ))
+                self.assertTrue(all(
+                    row.values["result"].decimal_sum_state is None
+                    for row in staged.rows
+                ))
+
+            for rows, placements in product(
+                product(states, repeat=2),
+                product((False, True), repeat=2),
+            ):
+                expected = self._decimal_reference_bag("sum", grouped, rows)
+                direct_actual = self._symbolic_bag(
+                    direct,
+                    self._constants(direct_database, rows),
+                )
+                staged_constants = self._constants(staged_database, rows)
+                for slot, placement in enumerate(placements):
+                    staged_constants[
+                        router.source_task("A", slot).atom
+                    ] = placement
+                staged_actual = self._symbolic_bag(
+                    staged,
+                    staged_constants,
+                    self._hash_choice,
+                )
+                with self.subTest(
+                    grouped=grouped,
+                    rows=rows,
+                    placements=placements,
+                ):
+                    self.assertEqual(direct_actual, expected)
+                    self.assertEqual(staged_actual, expected)
+                    self.assertEqual(staged_actual, direct_actual)
+
+    def test_decimal_sum_state_lineage_gate_is_exact_and_private(self):
+        exact = aggregate_stage_snapshot(
+            "sum",
+            True,
+            True,
+            nullable_input=True,
+            nullable_key=True,
+            input_type="Decimal(2,0)",
+        )
+
+        def parents(snapshot):
+            result = {node.id: set() for node in snapshot.plan.nodes}
+            for parent in snapshot.plan.nodes:
+                for child in relation_model.plan_node_inputs(parent):
+                    result[child].add(parent.id)
+            return {
+                node: frozenset(consumers)
+                for node, consumers in result.items()
+            }
+
+        self.assertEqual(
+            relation_model._decimal_sum_state_lineages(
+                exact,
+                exact.plan.node_map(),
+                parents(exact),
+            ),
+            (
+                frozenset((('partial', '_state'),)),
+                frozenset((('final', 'result'),)),
+            ),
+        )
+
+        for description, snapshot in (
+            (
+                "undefined",
+                aggregate_stage_snapshot(
+                    "sum",
+                    True,
+                    True,
+                    final_phase="undefined",
+                    nullable_input=True,
+                    input_type="Decimal(2,0)",
+                ),
+            ),
+            (
+                "intermediate",
+                aggregate_stage_snapshot(
+                    "sum",
+                    True,
+                    True,
+                    final_phase="intermediate",
+                    nullable_input=True,
+                    input_type="Decimal(2,0)",
+                ),
+            ),
+            (
+                "wrong_function",
+                aggregate_stage_snapshot(
+                    "sum",
+                    True,
+                    True,
+                    final_function="max",
+                    nullable_input=True,
+                    input_type="Decimal(2,0)",
+                ),
+            ),
+            (
+                "direct",
+                aggregate_stage_snapshot(
+                    "sum",
+                    True,
+                    False,
+                    nullable_input=True,
+                    input_type="Decimal(2,0)",
+                ),
+            ),
+        ):
+            with self.subTest(description=description):
+                self.assertEqual(
+                    relation_model._decimal_sum_state_lineages(
+                        snapshot,
+                        snapshot.plan.node_map(),
+                        parents(snapshot),
+                    ),
+                    (frozenset(), frozenset()),
+                )
+
+        exact_nodes = exact.plan.node_map()
+        fanout = parents(exact) | {
+            "partial": frozenset(("final", "second_consumer")),
+        }
+        exposed = replace(
+            exact,
+            plan=replace(exact.plan, root="partial", output=("_state",)),
+            stage_graph=None,
+        )
+        mismatched_nodes = exact_nodes | {
+            "final": replace(exact_nodes["final"], keys=()),
+        }
+        final_trait = exact_nodes["final"].aggregates[0]
+        consumer_mutations = (
+            (
+                "distinct_all",
+                replace(exact_nodes["final"], distinct_all=True),
+            ),
+            (
+                "trait_distinct",
+                replace(
+                    exact_nodes["final"],
+                    aggregates=(replace(final_trait, distinct=True),),
+                ),
+            ),
+            (
+                "trait_unwrap",
+                replace(
+                    exact_nodes["final"],
+                    aggregates=(replace(final_trait, unwrap=True),),
+                ),
+            ),
+            (
+                "type_mismatch",
+                replace(
+                    exact_nodes["final"],
+                    aggregates=(
+                        replace(final_trait, output_type="Decimal(35,1)"),
+                    ),
+                ),
+            ),
+            (
+                "duplicate_use",
+                replace(
+                    exact_nodes["final"],
+                    aggregates=(
+                        final_trait,
+                        replace(final_trait, output="duplicate_result"),
+                    ),
+                ),
+            ),
+        )
+        subplan_exposed = replace(
+            exact,
+            plan=replace(
+                exact.plan,
+                subplans=(
+                    ScalarSubplan(
+                        "$sum_state",
+                        "partial",
+                        SubplanOutput(
+                            "_state",
+                            "Decimal(35,0)",
+                            True,
+                        ),
+                        ("final",),
+                    ),
+                ),
+            ),
+        )
+        for description, snapshot, nodes, parent_map in (
+            ("fanout", exact, exact_nodes, fanout),
+            ("root_exposure", exposed, exact_nodes, parents(exact)),
+            ("key_mismatch", exact, mismatched_nodes, parents(exact)),
+            (
+                "subplan_exposure",
+                subplan_exposed,
+                exact_nodes,
+                parents(exact),
+            ),
+            *(
+                (
+                    description,
+                    exact,
+                    exact_nodes | {"final": consumer},
+                    parents(exact),
+                )
+                for description, consumer in consumer_mutations
+            ),
+        ):
+            with self.subTest(description=description):
+                self.assertEqual(
+                    relation_model._decimal_sum_state_lineages(
+                        snapshot,
+                        nodes,
+                        parent_map,
+                    ),
+                    (frozenset(), frozenset()),
+                )
+
+    def test_decimal_sum_missing_or_malformed_state_uses_scalar_fallback(self):
+        snapshot = aggregate_stage_snapshot(
+            "sum",
+            False,
+            True,
+            nullable_input=True,
+            input_type="Decimal(35,0)",
+        )
+        script = smt.Script()
+        evaluator = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 1, script),
+            ScalarEncoder(script),
+        )
+        left_state = self._sum_state(smt.int_value(7), 7)
+        right_state = self._sum_state(smt.int_value(11), 11)
+        valid = (
+            self._sum_state_value(left_state),
+            self._sum_state_value(right_state),
+        )
+
+        wrong_type_state = self._sum_state(
+            smt.int_value(7),
+            7,
+            sum_type="Decimal(35,1)",
+        )
+        mutations = (
+            (
+                "missing",
+                replace(valid[0], decimal_sum_state=None),
+                18,
+            ),
+            (
+                "wrong_type",
+                replace(
+                    valid[0],
+                    value=decimal.finish_sum_state(wrong_type_state),
+                    decimal_sum_state=wrong_type_state,
+                ),
+                18,
+            ),
+            (
+                "inconsistent_scalar",
+                replace(valid[0], value=smt.int_value(6)),
+                17,
+            ),
+            (
+                "inconsistent_bound",
+                replace(valid[0], decimal_finite_abs_bound=8),
+                18,
+            ),
+        )
+        for description, mutated, expected in mutations:
+            source = relation_model.Relation(
+                (Column("_state", "Decimal(35,0)", True),),
+                tuple(
+                    relation_model.Row(
+                        smt.TRUE,
+                        {"_state": value},
+                    )
+                    for value in (mutated, valid[1])
+                ),
+            )
+            with (
+                self.subTest(description=description),
+                mock.patch.object(
+                    decimal,
+                    "combine_sum_states_with_headroom",
+                    wraps=decimal.combine_sum_states_with_headroom,
+                ) as combine,
+            ):
+                result = evaluator._aggregate(
+                    evaluator.nodes["final"],
+                    source,
+                )
+                self.assertEqual(combine.call_count, 0)
+                self.assertEqual(
+                    self._symbolic_bag(result, {}),
+                    Counter({(expected,): 1}),
+                )
+                self.assertIsNone(
+                    result.rows[0].values["result"].decimal_sum_state
+                )
+
+    def test_decimal_sum_state_is_a_registered_choice_dependency(self):
+        script = smt.Script()
+        choice = script.fresh_constant("decimal_sum_state_choice", smt.INT)
+        script.register_quantified_choice(choice, 2)
+        state = self._sum_state(
+            smt.ZERO,
+            0,
+            has_nan=smt.eq(choice, smt.ZERO),
+        )
+        family = relation_model.single(
+            relation_model.Relation(
+                (Column("state", "Decimal(35,0)", False),),
+                (
+                    relation_model.Row(
+                        smt.TRUE,
+                        {
+                            "state": Value(
+                                "Decimal(35,0)",
+                                smt.FALSE,
+                                smt.ZERO,
+                                0,
+                                decimal_sum_state=state,
+                            )
+                        },
+                    ),
+                ),
+            )
+        )
+
+        with self.assertRaisesRegex(RelationError, "without carrying"):
+            relation_model._bounded_choice_family(
+                family,
+                script,
+                "decimal_sum_state",
+            )
+
+        tracked = replace(
+            family,
+            outcomes=(
+                replace(
+                    family.outcomes[0],
+                    choices=(relation_model.BoundedChoice(choice, 2),),
+                ),
+            ),
+        )
+        bounded = relation_model._bounded_choice_family(
+            tracked,
+            script,
+            "decimal_sum_state",
+        )
+        enabled = bounded.outcomes[0].enabled
+        self.assertFalse(_evaluate_ground_term(enabled, {choice.atom: -1}))
+        self.assertTrue(_evaluate_ground_term(enabled, {choice.atom: 0}))
+        self.assertFalse(_evaluate_ground_term(enabled, {choice.atom: 2}))
+
+    def test_decimal_sum_state_preserves_empty_partial_nullability(self):
+        empty_state = self._sum_state(
+            smt.ZERO,
+            0,
+            any_non_null=smt.FALSE,
+        )
+        for nullable, expected in ((False, 0), (True, None)):
+            snapshot = aggregate_stage_snapshot(
+                "sum",
+                False,
+                True,
+                nullable_input=nullable,
+                input_type="Decimal(35,0)",
+            )
+            script = smt.Script()
+            evaluator = RelationEvaluator(
+                snapshot,
+                Database(snapshot, 1, script),
+                ScalarEncoder(script),
+            )
+            source = relation_model.Relation(
+                (Column("_state", "Decimal(35,0)", nullable),),
+                (
+                    relation_model.Row(
+                        smt.TRUE,
+                        {
+                            "_state": self._sum_state_value(
+                                empty_state,
+                                nullable=nullable,
+                            )
+                        },
+                    ),
+                ),
+            )
+            with (
+                self.subTest(nullable=nullable),
+                mock.patch.object(
+                    decimal,
+                    "combine_sum_states_with_headroom",
+                    wraps=decimal.combine_sum_states_with_headroom,
+                ) as combine,
+            ):
+                result = evaluator._aggregate(
+                    evaluator.nodes["final"],
+                    source,
+                )
+                self.assertEqual(combine.call_count, 1)
+                self.assertEqual(
+                    self._symbolic_bag(result, {}),
+                    Counter({(expected,): 1}),
+                )
+
+    def test_decimal_sum_state_rejects_exact_combined_headroom_limit(self):
+        snapshot = aggregate_stage_snapshot(
+            "sum",
+            False,
+            True,
+            nullable_input=True,
+            input_type="Decimal(35,0)",
+        )
+        script = smt.Script()
+        evaluator = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 1, script),
+            ScalarEncoder(script),
+        )
+        half_limit = 5 * 10**34
+
+        def source(right_bound):
+            states = (
+                self._sum_state(smt.ONE, half_limit),
+                self._sum_state(smt.ONE, right_bound),
+            )
+            return relation_model.Relation(
+                (Column("_state", "Decimal(35,0)", True),),
+                tuple(
+                    relation_model.Row(
+                        smt.TRUE,
+                        {"_state": self._sum_state_value(state)},
+                    )
+                    for state in states
+                ),
+            )
+
+        below = evaluator._aggregate(
+            evaluator.nodes["final"],
+            source(half_limit - 1),
+        )
+        self.assertEqual(
+            below.rows[0].values["result"].decimal_finite_abs_bound,
+            10**35 - 1,
+        )
+        with self.assertRaisesRegex(
+            RelationError,
+            "non-associative overflow is not modeled",
+        ):
+            evaluator._aggregate(
+                evaluator.nodes["final"],
+                source(half_limit),
+            )
+
+    def test_decimal_sum_state_avoids_redecoding_finalized_partial_scalars(self):
+        snapshot = aggregate_stage_snapshot(
+            "sum",
+            False,
+            True,
+            nullable_input=True,
+            input_type="Decimal(35,0)",
+        )
+        script = smt.Script()
+        evaluator = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 1, script),
+            ScalarEncoder(script),
+        )
+
+        def symbolic_state(prefix, bound):
+            return self._sum_state(
+                smt.symbol(f"{prefix}_poison_finite_total", smt.INT),
+                bound,
+                any_non_null=smt.symbol(f"{prefix}_any", smt.BOOL),
+                has_nan=smt.symbol(f"{prefix}_nan", smt.BOOL),
+                has_pos_inf=smt.symbol(f"{prefix}_pos_inf", smt.BOOL),
+                has_neg_inf=smt.symbol(f"{prefix}_neg_inf", smt.BOOL),
+            )
+
+        values = tuple(
+            self._sum_state_value(symbolic_state(prefix, bound))
+            for prefix, bound in (("left", 7), ("right", 11))
+        )
+        source = relation_model.Relation(
+            (Column("_state", "Decimal(35,0)", True),),
+            tuple(
+                relation_model.Row(smt.TRUE, {"_state": value})
+                for value in values
+            ),
+        )
+        optimized = evaluator._aggregate(
+            evaluator.nodes["final"],
+            source,
+        )
+        fallback_source = replace(
+            source,
+            rows=tuple(
+                replace(
+                    row,
+                    values={
+                        "_state": replace(
+                            row.values["_state"],
+                            decimal_sum_state=None,
+                        )
+                    },
+                )
+                for row in source.rows
+            ),
+        )
+        fallback = evaluator._aggregate(
+            evaluator.nodes["final"],
+            fallback_source,
+        )
+        optimized_term = optimized.rows[0].values["result"].value.render()
+        fallback_term = fallback.rows[0].values["result"].value.render()
+        partial_terms = tuple(value.value.render() for value in values)
+
+        self.assertIn("poison_finite_total", optimized_term)
+        for partial_term in partial_terms:
+            self.assertNotIn(partial_term, optimized_term)
+            self.assertIn(partial_term, fallback_term)
+        self.assertLess(len(optimized_term), len(fallback_term))
+        self.assertLess(
+            optimized_term.count("(ite "),
+            fallback_term.count("(ite "),
+        )
+        self.assertIsNone(
+            optimized.rows[0].values["result"].decimal_sum_state
+        )
+
     def test_staged_shared_name_join_keys_remain_side_explicit(self):
         states = (
             (False, None),

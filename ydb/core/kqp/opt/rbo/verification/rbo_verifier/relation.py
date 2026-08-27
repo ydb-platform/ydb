@@ -38,10 +38,12 @@ from .ir import (
 )
 from .scalar import (
     DecimalAverageState,
+    DecimalSumState,
     Encoder as ScalarEncoder,
     IntegralAverageCertificate,
     IntegralAverageState,
     average_metadata_terms,
+    decimal_sum_state_terms,
 )
 from .scalar import Value, date_domain, integer_domain, smt_sort
 from .types import BOOL, DATE, DOUBLE, family, is_decimal_type, is_ordered_type
@@ -239,8 +241,75 @@ class _EvaluatorContext:
     nodes: Mapping[str, PlanNode]
     schemas: Mapping[str, Mapping[str, Column]]
     parents: Mapping[str, frozenset[str]]
+    decimal_sum_state_producers: frozenset[tuple[str, str]]
+    decimal_sum_state_consumers: frozenset[tuple[str, str]]
     subplans_by_consumer: Mapping[str, tuple[Subplan, ...]]
     scalar_outer_binds: Mapping[str, OuterBind]
+
+
+def _decimal_sum_state_lineages(
+    snapshot: Snapshot,
+    nodes: Mapping[str, PlanNode],
+    parents: Mapping[str, frozenset[str]],
+) -> tuple[
+    frozenset[tuple[str, str]],
+    frozenset[tuple[str, str]],
+]:
+    """Return the exact private intermediate/final SUM certificate pairs."""
+
+    exposed_roots = {
+        snapshot.plan.root,
+        *(subplan.root for subplan in snapshot.plan.subplans),
+    }
+    producers: set[tuple[str, str]] = set()
+    consumers: set[tuple[str, str]] = set()
+    for producer in snapshot.plan.nodes:
+        if (
+            not isinstance(producer, Aggregate)
+            or producer.phase != "intermediate"
+            or producer.distinct_all
+            or producer.id in exposed_roots
+            or len(parents[producer.id]) != 1
+        ):
+            continue
+        consumer = nodes[next(iter(parents[producer.id]))]
+        if (
+            not isinstance(consumer, Aggregate)
+            or consumer.phase != "final"
+            or consumer.input != producer.id
+            or consumer.keys != producer.keys
+            or consumer.distinct_all
+        ):
+            continue
+
+        for producer_trait in producer.aggregates:
+            if (
+                producer_trait.function != "sum"
+                or producer_trait.distinct
+                or producer_trait.unwrap
+                or not decimal.is_type(producer_trait.output_type)
+                or producer_trait.output in consumer.keys
+            ):
+                continue
+            uses = tuple(
+                trait
+                for trait in consumer.aggregates
+                if trait.input == producer_trait.output
+            )
+            if len(uses) != 1:
+                continue
+            consumer_trait = uses[0]
+            if (
+                consumer_trait.function != "sum"
+                or consumer_trait.distinct
+                or consumer_trait.unwrap
+                or consumer_trait.output_type != producer_trait.output_type
+                or not decimal.is_type(consumer_trait.output_type)
+            ):
+                continue
+            producers.add((producer.id, producer_trait.output))
+            consumers.add((consumer.id, consumer_trait.output))
+    return frozenset(producers), frozenset(consumers)
 
 
 @dataclass(slots=True)
@@ -581,14 +650,25 @@ class Evaluator:
             for parent in snapshot.plan.nodes:
                 for child in plan_node_inputs(parent):
                     parents[child].add(parent.id)
+            frozen_parents = {
+                node_id: frozenset(consumers)
+                for node_id, consumers in parents.items()
+            }
+            (
+                decimal_sum_state_producers,
+                decimal_sum_state_consumers,
+            ) = _decimal_sum_state_lineages(
+                snapshot,
+                nodes,
+                frozen_parents,
+            )
             _context = _EvaluatorContext(
                 snapshot,
                 nodes,
                 schemas,
-                {
-                    node_id: frozenset(consumers)
-                    for node_id, consumers in parents.items()
-                },
+                frozen_parents,
+                decimal_sum_state_producers,
+                decimal_sum_state_consumers,
                 subplans_by_consumer,
                 scalar_outer_binds,
             )
@@ -1718,6 +1798,17 @@ class Evaluator:
             )
         if trait.function == "sum":
             if decimal.is_type(trait.output_type):
+                if (
+                    (node.id, trait.output)
+                    in self._context.decimal_sum_state_consumers
+                ):
+                    combined = self._combined_decimal_sum_value(
+                        trait,
+                        source,
+                        matches,
+                    )
+                    if combined is not None:
+                        return combined
                 guarded_values = tuple(
                     (guard, row.values[trait.input])
                     for guard, row in zip(non_null, source.rows)
@@ -1728,6 +1819,10 @@ class Evaluator:
                     trait.output_type,
                     trait.output_nullable,
                     "Decimal sum",
+                    carry_state=(
+                        (node.id, trait.output)
+                        in self._context.decimal_sum_state_producers
+                    ),
                 )
             total = smt.add(
                 *(
@@ -1764,6 +1859,58 @@ class Evaluator:
                 non_null,
             )
         raise AssertionError(f"unsupported aggregate function {trait.function!r}")
+
+    def _combined_decimal_sum_value(
+        self,
+        trait: AggregateTrait,
+        source: Relation,
+        matches: tuple[smt.Term, ...],
+    ) -> Value | None:
+        """Consume one complete matching set of private partial SUM states."""
+
+        input_column = next(
+            column
+            for column in source.columns
+            if column.name == trait.input
+        )
+        guarded_states: list[tuple[smt.Term, DecimalSumState]] = []
+        for match, row in zip(matches, source.rows):
+            if row.present == smt.FALSE:
+                continue
+            value = row.values[trait.input]
+            state = _validated_decimal_sum_state(
+                value,
+                input_column.nullable,
+            )
+            if (
+                state is None
+                or state.sum_type != trait.output_type
+            ):
+                return None
+            non_null = smt.and_(match, smt.not_(value.is_null))
+            if non_null != smt.FALSE:
+                guarded_states.append((non_null, state))
+
+        finite_abs_bound = sum(
+            state.finite_abs_bound
+            for _guard, state in guarded_states
+        )
+        result_type = decimal.parse_type(trait.output_type)
+        assert result_type is not None
+        if finite_abs_bound >= 10**result_type.precision:
+            raise RelationError(
+                f"Decimal sum may overflow its {trait.output_type} accumulator "
+                "within the current bound; non-associative overflow is not modeled"
+            )
+        state = decimal.combine_sum_states_with_headroom(
+            tuple(guarded_states),
+            trait.output_type,
+        )
+        return _finish_decimal_sum_value(
+            state,
+            trait.output_nullable,
+            carry_state=False,
+        )
 
     def _decimal_average_value(
         self,
@@ -3130,6 +3277,8 @@ def _decimal_sum_value(
     output_type: str,
     output_nullable: bool,
     operation: str,
+    *,
+    carry_state: bool = False,
 ) -> Value:
     """Build one exact Decimal SUM after proving accumulator headroom."""
 
@@ -3144,17 +3293,52 @@ def _decimal_sum_value(
             f"{operation} may overflow its {output_type} accumulator "
             "within the current bound; non-associative overflow is not modeled"
         )
-    guards = tuple(guard for guard, _value in guarded_values)
-    return Value(
+    state = decimal.summarize_sum_with_headroom(
+        tuple((guard, value.value) for guard, value in guarded_values),
         output_type,
-        smt.not_(smt.or_(*guards)) if output_nullable else smt.FALSE,
-        decimal.sum_with_headroom(
-            tuple((guard, value.value) for guard, value in guarded_values),
-            output_type,
-            finite_abs_bound,
-        ),
-        decimal_finite_abs_bound=finite_abs_bound,
+        finite_abs_bound,
     )
+    return _finish_decimal_sum_value(
+        state,
+        output_nullable,
+        carry_state=carry_state,
+    )
+
+
+def _finish_decimal_sum_value(
+    state: DecimalSumState,
+    output_nullable: bool,
+    *,
+    carry_state: bool,
+) -> Value:
+    """Materialize one Decimal SUM scalar and optionally retain its summary."""
+
+    return Value(
+        state.sum_type,
+        smt.not_(state.any_non_null) if output_nullable else smt.FALSE,
+        decimal.finish_sum_state(state),
+        decimal_finite_abs_bound=state.finite_abs_bound,
+        decimal_sum_state=state if carry_state else None,
+    )
+
+
+def _validated_decimal_sum_state(
+    value: Value,
+    nullable: bool,
+) -> DecimalSumState | None:
+    """Return a certificate only when it exactly reconstructs its scalar."""
+
+    state = value.decimal_sum_state
+    if (
+        not isinstance(state, DecimalSumState)
+        or state.sum_type != value.type
+        or state.finite_abs_bound != value.decimal_finite_abs_bound
+        or value.is_null
+        != (smt.not_(state.any_non_null) if nullable else smt.FALSE)
+        or value.value != decimal.finish_sum_state(state)
+    ):
+        return None
+    return state
 
 
 def _finish_decimal_average(
@@ -6132,6 +6316,9 @@ def _bounded_choice_family(
                 state = value.average_metadata
                 if state is not None:
                     observable_terms.extend(average_metadata_terms(state))
+                sum_state = value.decimal_sum_state
+                if sum_state is not None:
+                    observable_terms.extend(decimal_sum_state_terms(sum_state))
         dependencies = set(
             script.quantified_choice_dependencies(observable_terms)
         )

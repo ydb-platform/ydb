@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, TypeAlias
 
-from . import smt
+from . import decimal, smt
 from .ir import (
     Column,
     INTEGRAL_AVG_RANK_COMPARISON,
@@ -26,6 +26,7 @@ from .relation import (
     Relation,
     RelationFamily,
     Row,
+    _validated_decimal_sum_state,
     combine_families,
     limit_family,
     map_family,
@@ -34,6 +35,7 @@ from .relation import (
 )
 from .scalar import (
     DecimalAverageState,
+    DecimalSumState,
     Encoder as ScalarEncoder,
     IntegralAverageState,
     Value,
@@ -572,6 +574,8 @@ def _same_values(
         and left.values[column.name].value == right.values[column.name].value
         and left.values[column.name].average_metadata
         == right.values[column.name].average_metadata
+        and left.values[column.name].decimal_sum_state
+        == right.values[column.name].decimal_sum_state
         for column in columns
     )
 
@@ -685,12 +689,62 @@ def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
                 raise StageError(
                     "exclusive row compaction received unsupported AVG metadata"
                 )
+        sum_states = [
+            _validated_decimal_sum_state(alternative, column.nullable)
+            for alternative in alternatives
+        ]
+        sum_state = None
+        if (
+            average_state is None
+            and all(isinstance(state, DecimalSumState) for state in sum_states)
+        ):
+            states = [
+                state
+                for state in sum_states
+                if isinstance(state, DecimalSumState)
+            ]
+            first_state = states[0]
+            if all(
+                state.sum_type == first_state.sum_type
+                for state in states[1:]
+            ):
+                def select_state_term(attribute: str) -> smt.Term:
+                    term = getattr(states[-1], attribute)
+                    for row, state in reversed(
+                        list(zip(rows[:-1], states[:-1]))
+                    ):
+                        term = smt.ite(
+                            row.present,
+                            getattr(state, attribute),
+                            term,
+                        )
+                    return term
+
+                sum_state = DecimalSumState(
+                    sum_type=first_state.sum_type,
+                    any_non_null=select_state_term("any_non_null"),
+                    has_nan=select_state_term("has_nan"),
+                    has_pos_inf=select_state_term("has_pos_inf"),
+                    has_neg_inf=select_state_term("has_neg_inf"),
+                    finite_total=select_state_term("finite_total"),
+                    finite_abs_bound=max(
+                        state.finite_abs_bound for state in states
+                    ),
+                )
+                is_null = (
+                    smt.not_(sum_state.any_non_null)
+                    if column.nullable
+                    else smt.FALSE
+                )
+                value = decimal.finish_sum_state(sum_state)
+                bound = sum_state.finite_abs_bound
         values[column.name] = Value(
             alternatives[0].type,
             is_null,
             value,
             bound,
-            average_state,
+            average_metadata=average_state,
+            decimal_sum_state=sum_state,
         )
 
     common_facts = set(rows[0].partition_facts)

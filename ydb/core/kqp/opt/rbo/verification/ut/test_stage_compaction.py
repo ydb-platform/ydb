@@ -3,6 +3,7 @@ from itertools import product
 from unittest.mock import patch
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
+    decimal,
     relation as relation_model,
     smt,
     stages,
@@ -25,6 +26,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     sort_family,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    DecimalSumState,
     Encoder as ScalarEncoder,
     IntegralAverageState,
     Value,
@@ -456,6 +458,167 @@ class StageCompactionTest(unittest.TestCase):
                 for left, right in zip(payloads[0], payloads[1])
             ),
         )
+
+    def test_exclusive_compaction_selects_a_complete_decimal_sum_state(self):
+        column = Column("state", "Decimal(35,0)", True)
+        route = smt.symbol("decimal_sum_route", smt.BOOL)
+        payloads = (
+            (True, True, True, True, 10, 10),
+            (False, False, False, False, 0, 20),
+        )
+
+        def row(task, payload, state_mutation=None):
+            (
+                any_non_null,
+                has_nan,
+                has_pos_inf,
+                has_neg_inf,
+                finite_total,
+                bound,
+            ) = payload
+            state = DecimalSumState(
+                sum_type="Decimal(35,0)",
+                any_non_null=smt.bool_value(any_non_null),
+                has_nan=smt.bool_value(has_nan),
+                has_pos_inf=smt.bool_value(has_pos_inf),
+                has_neg_inf=smt.bool_value(has_neg_inf),
+                finite_total=smt.int_value(finite_total),
+                finite_abs_bound=bound,
+            )
+            if state_mutation is not None:
+                state = state_mutation(state)
+            present = route if task else smt.not_(route)
+            return Row(
+                present,
+                {
+                    "state": Value(
+                        "Decimal(35,0)",
+                        smt.not_(state.any_non_null),
+                        decimal.finish_sum_state(state),
+                        bound,
+                        decimal_sum_state=state,
+                    )
+                },
+                self.OCCURRENCE,
+                frozenset((PartitionFact(route, task),)),
+            )
+
+        rows = tuple(row(bool(task), payload) for task, payload in enumerate(payloads))
+        compacted = stages._compact_exclusive_rows(rows, (column,))
+
+        self.assertEqual(len(compacted), 1)
+        selected = compacted[0].values["state"]
+        state = selected.decimal_sum_state
+        self.assertIsInstance(state, DecimalSumState)
+        assert isinstance(state, DecimalSumState)
+        left_present = smt.not_(route)
+        expected_lanes = tuple(
+            smt.ite(
+                left_present,
+                smt.bool_value(left),
+                smt.bool_value(right),
+            )
+            for left, right in zip(payloads[0][:4], payloads[1][:4])
+        ) + (
+            smt.ite(
+                left_present,
+                smt.int_value(payloads[0][4]),
+                smt.int_value(payloads[1][4]),
+            ),
+        )
+        self.assertEqual(
+            (
+                state.any_non_null,
+                state.has_nan,
+                state.has_pos_inf,
+                state.has_neg_inf,
+                state.finite_total,
+            ),
+            expected_lanes,
+        )
+        self.assertEqual(state.finite_abs_bound, 20)
+        self.assertEqual(selected.decimal_finite_abs_bound, 20)
+        self.assertEqual(selected.is_null, smt.not_(state.any_non_null))
+        self.assertEqual(
+            selected.value,
+            decimal.finish_sum_state(state),
+        )
+
+        malformed_rows = (
+            (
+                (
+                    rows[0],
+                    Row(
+                        rows[1].present,
+                        {
+                            "state": Value(
+                                "Decimal(35,0)",
+                                rows[1].values["state"].is_null,
+                                rows[1].values["state"].value,
+                                rows[1]
+                                .values["state"]
+                                .decimal_finite_abs_bound,
+                            )
+                        },
+                        rows[1].occurrence,
+                        rows[1].partition_facts,
+                    ),
+                ),
+                20,
+            ),
+            (
+                (
+                    rows[0],
+                    row(
+                        True,
+                        payloads[1],
+                        lambda state: DecimalSumState(
+                            sum_type="Decimal(35,1)",
+                            any_non_null=state.any_non_null,
+                            has_nan=state.has_nan,
+                            has_pos_inf=state.has_pos_inf,
+                            has_neg_inf=state.has_neg_inf,
+                            finite_total=state.finite_total,
+                            finite_abs_bound=state.finite_abs_bound,
+                        ),
+                    ),
+                ),
+                20,
+            ),
+            (
+                (
+                    rows[0],
+                    Row(
+                        rows[1].present,
+                        {
+                            "state": Value(
+                                "Decimal(35,0)",
+                                rows[1].values["state"].is_null,
+                                rows[1].values["state"].value,
+                                19,
+                                decimal_sum_state=rows[1]
+                                .values["state"]
+                                .decimal_sum_state,
+                            )
+                        },
+                        rows[1].occurrence,
+                        rows[1].partition_facts,
+                    ),
+                ),
+                19,
+            ),
+        )
+        for kind, (alternatives, expected_bound) in enumerate(malformed_rows):
+            with self.subTest(kind=kind):
+                fallback = stages._compact_exclusive_rows(
+                    alternatives,
+                    (column,),
+                )[0].values["state"]
+                self.assertIsNone(fallback.decimal_sum_state)
+                self.assertEqual(
+                    fallback.decimal_finite_abs_bound,
+                    expected_bound,
+                )
 
     def test_overlapping_broadcast_copies_retain_bag_multiplicity(self):
         present = smt.symbol("present", smt.BOOL)

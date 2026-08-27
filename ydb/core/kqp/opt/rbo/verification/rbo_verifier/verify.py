@@ -18,7 +18,6 @@ from .ir import (
     Limit,
     Scan,
     Snapshot,
-    Sort,
     checked_concat_corridor,
 )
 from .relation import (

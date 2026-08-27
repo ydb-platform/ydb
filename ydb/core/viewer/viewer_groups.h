@@ -2555,7 +2555,7 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::CapacityAlert) && FieldsRequested.test(+EGroupFields::CapacityAlert)) {
                     jsonGroup.SetCapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(group->CapacityAlert));
                 }
-                if (FieldsRequested.test(+EGroupFields::GroupSizeInUnits)) {
+                if (FieldsAvailable.test(+EGroupFields::GroupSizeInUnits) && FieldsRequested.test(+EGroupFields::GroupSizeInUnits)) {
                     jsonGroup.SetGroupSizeInUnits(group->GroupSizeInUnits);
                 }
             }

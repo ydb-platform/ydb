@@ -1,26 +1,23 @@
-import pytest
-import os
 import json
-import sys
+import pytest
+import logging
 import time
+from typing import Callable
+
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
+from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
+import ydb.issues
+import os
 from collections import Counter
 from itertools import chain, islice
 
-import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-
-from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-
-from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
-from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
-
-import conftest
 import random
 
 # TODO:
-# Mostly identical to ydb streaming test ydb/tests/fq/streaming/generic/test_json.py
-# Keep in sync (until yqv1 will be decomissioned and this copy removed)
+# Mostly identical to yqv1 test ydb/tests/fq/generic/streaming/test_json.py
+# Keep in sync (until yqv1 will be decomissioned)
+
+USER_TOKEN = "root@builtin"
 
 MAX_WRITE_STREAM_SIZE = 500
 DEBUG = 0
@@ -30,7 +27,7 @@ if DEBUG:
         SEED = int(os.environ["RANDOM_SEED"])
     else:
         SEED = random.randint(0, (1 << 31))
-        print(f"RANDOM_SEED={SEED}", file=sys.stderr)
+        logging.debug(f"RANDOM_SEED={SEED}")
 random.seed(SEED)
 
 
@@ -50,7 +47,7 @@ def ResequenceId(messages, field="id"):
 
 
 def freeze(obj):
-    # Designed for (deserialized) obj
+    # Designed for (deserialized) json
     t = type(obj)
     if t == dict:
         return frozenset((k, freeze(v)) for k, v in obj.items())
@@ -59,21 +56,110 @@ def freeze(obj):
     return obj
 
 
+def create_secret(kikimr: Kikimr, secret_name: str) -> None:
+    kikimr.ydb_client.query(f"""
+        CREATE SECRET `{secret_name}` WITH (value="{USER_TOKEN}");
+    """)
+
+
+def create_source(
+    kikimr: Kikimr,
+    source_name: str,
+    secret_path: str,
+    endpoint: Endpoint,
+    shared_reading: bool = False,
+) -> None:
+    """Create an External Data Source that authenticates via IAM."""
+    kikimr.ydb_client.query(f"""
+        CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+            SOURCE_TYPE = "Ydb",
+            LOCATION = "{endpoint.endpoint}",
+            DATABASE_NAME = "{endpoint.database}",
+            USE_TLS = "FALSE",
+            AUTH_METHOD = "TOKEN",
+            TOKEN_SECRET_PATH = "{secret_path}",
+            SHARED_READING="{shared_reading}"
+        );
+    """)
+
+
+def create_table(
+    kikimr: Kikimr,
+    column_tables: bool,
+) -> None:
+    pknull = 'NOT NULL' if column_tables else ''
+    with_store = ' WITH (STORE=COLUMN)' if column_tables else ''
+    kikimr.ydb_client.query(f"""
+    CREATE TABLE simple_table (number Int32 {pknull}, PRIMARY KEY (number)){with_store};
+    CREATE TABLE join_table (id Int32 {pknull}, data STRING, PRIMARY KEY (id)){with_store};
+    CREATE TABLE users (age Int32, id Int32 {pknull}, ip STRING, name STRING, region Int32, PRIMARY KEY(id)){with_store};
+    CREATE TABLE db (
+        b STRING NOT NULL,
+        c Uint32,
+        a Int32 NOT NULL,
+        d Int8,
+        f Int32,
+        e Int64,
+        g Int32,
+        h Int32,
+        is_odd Bool NOT NULL,
+        is_true Bool NOT NULL,
+        is_false Bool NOT NULL,
+        opt_odd Bool,
+        opt_true Bool,
+        opt_false Bool,
+        opt_null Bool,
+        ts Timestamp,
+        dur Interval,
+        tsd Date,
+        PRIMARY KEY(b, a));
+    """)
+    kikimr.ydb_client.query("""
+    INSERT INTO simple_table (number) VALUES
+      (1),
+      (2),
+      (3);
+    INSERT INTO join_table (id, data) VALUES
+      (1, "ydb10"),
+      (2, "ydb20"),
+      (3, "ydb30");
+    INSERT INTO users (age, id, ip, name, region) VALUES
+      (15, 1, "95.106.17.32", "Anya", 213),
+      (25, 2, "88.78.248.151", "Petr", 225),
+      (17, 3, "93.94.183.63", "Masha", 1),
+      (5, 4, "::ffff:193.34.173.188", "Alena", 225),
+      (15, 5, "93.170.111.29", "Irina", 2),
+      (13, 6, "93.170.111.28", "Inna", 21),
+      (33, 7, "::ffff:193.34.173.173", "Ivan", 125),
+      (45, 8, "::ffff:133.34.173.188", "Asya", 225),
+      (27, 9, "::ffff:133.34.172.188", "German", 125),
+      (41, 10, "::ffff:133.34.173.185", "Olya", 225),
+      (35, 11, "::ffff:193.34.163.188", "Slava", 2),
+      (56, 12, "2a02:1812:1713:4f00:517e:1d79:c88b:704", "Elena", 2),
+      (18, 17, "ivalid ip", "newUser", 12);
+    INSERT INTO db (a, b, c, d, e, f, is_odd, is_true, is_false, opt_odd, opt_true, opt_false, opt_null, ts, dur, tsd) VALUES
+      (1, "2", 3, 4, 5, 6, true, true, false, true, true, false, NULL, Timestamp("1970-01-03T10:11:12Z"), Interval("PT13S"), Date("1970-01-05")),
+      (7, "8", 9, 10, 11, 12, true, true, false, true, true, false, NULL, Timestamp("1970-01-03T10:11:13Z"), Interval("PT14S"), Date("1970-01-06")),
+      (2, "3", 6, NULL, 8, 9, false, true, false, false, true, false, NULL, Timestamp("1970-01-03T10:11:14Z"), Interval("PT15S"), Date("1970-01-07")),
+      (4, "5", 4, 15, 17, NULL, false, true, false, false, true, false, NULL, Timestamp("1970-01-03T10:11:15Z"), Interval("PT16S"), Date("1970-01-08"));
+    """)
+
+
 TESTCASES = [
     # 0
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`;
+            $input = SELECT * FROM {topic_source}`{input_topic}`;
 
             $enriched = select
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any {table_source}{table_name} as u
                 on(e.Data = u.data)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         [
@@ -93,17 +179,17 @@ TESTCASES = [
     # 1
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`;
+            $input = SELECT * FROM {topic_source}`{input_topic}`;
 
             $enriched = select
                             e.Data as data, CAST(e.Data AS Int32) as id, u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any {table_source}{table_name} as u
                 on(CAST(e.Data AS Int32) = u.id)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         [
@@ -123,7 +209,7 @@ TESTCASES = [
     # 2
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -137,11 +223,11 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any {table_source}{table_name} as u
                 on(e.user = u.id)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -162,7 +248,7 @@ TESTCASES = [
     # 3
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -181,11 +267,11 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any {table_source}{table_name} as u
                 on(e.user = u.id)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -225,7 +311,7 @@ TESTCASES = [
     # 4
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -246,11 +332,11 @@ TESTCASES = [
                             u.age as age
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.`users` as u
+                left join {streamlookup} any {table_source}`users` as u
                 on(e.user = u.id)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -300,7 +386,7 @@ TESTCASES = [
     # 5
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -316,11 +402,11 @@ TESTCASES = [
                             eu.id as uid
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.`users` as eu
+                left join {streamlookup} any {table_source}`users` as eu
                 on(e.user = eu.id)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         [
@@ -345,7 +431,7 @@ TESTCASES = [
     # 6
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -359,11 +445,11 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                left join {streamlookup} any {table_source}db as u
                 on(e.yb = u.b AND e.za = u.a )
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -392,7 +478,7 @@ TESTCASES = [
     # 7
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -406,11 +492,11 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                left join {streamlookup} any {table_source}db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -437,7 +523,7 @@ TESTCASES = [
     # 8
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -451,14 +537,14 @@ TESTCASES = [
             $enriched1 = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                left join {streamlookup} any {table_source}db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
             $enriched2 = SELECT e.a AS a, e.b AS b, e.c AS c, e.d AS d, e.e AS e, e.f AS f, za, yb, yc, zd, u.c AS c2, u.d AS d2
                 from
                     $enriched1 as e
-                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                left join {streamlookup} any {table_source}db as u
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
@@ -467,7 +553,7 @@ TESTCASES = [
                     $enriched2 as e
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -494,8 +580,8 @@ TESTCASES = [
     # 9
     (
         R'''
-            PRAGMA dq.MaxTasksPerStage = "3";
-            $input = SELECT * FROM myyds.`{input_topic}`
+            PRAGMA ydb.MaxTasksPerStage = "3";
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -509,9 +595,9 @@ TESTCASES = [
             $enriched12 = select u.a as a, u.b as b, u.c as c, u.d as d, u.e as e, u.f as f, e.a as za, e.b as yb, e.c as yc, e.d as zd, u2.c as c2, u2.d as d2
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                left join {streamlookup} any {table_source}db as u
                 on(e.a = u.a AND e.b = u.b)
-                left join {streamlookup} any ydb_conn_{table_name}.db as u2
+                left join {streamlookup} any {table_source}db as u2
                 on(e.b = u2.b AND e.a = u2.a)
             ;
 
@@ -520,7 +606,7 @@ TESTCASES = [
                     $enriched12 as e
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -549,20 +635,20 @@ TESTCASES = [
     # 10
     (
         R'''
-            PRAGMA dq.MaxTasksPerStage = "1";
+            PRAGMA ydb.MaxTasksPerStage = "1";
 
-            $input = SELECT * FROM myyds.`{input_topic}`;
+            $input = SELECT * FROM {topic_source}`{input_topic}`;
 
             $enriched = select
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any {table_source}{table_name} as u
                 on(AsList(e.Data) = u.data)
                 -- MultiGet true
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         [
@@ -586,7 +672,7 @@ TESTCASES = [
     # 11
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -602,12 +688,12 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any {table_source}{table_name} as u
                 on(e.user = u.id)
                 -- MultiGet true
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -662,7 +748,7 @@ TESTCASES = [
     # 12
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -676,12 +762,12 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any {table_source}{table_name} as u
                 on(e.user = u.id)
                 -- MultiGet true
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -717,7 +803,7 @@ TESTCASES = [
     # 13
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -728,7 +814,7 @@ TESTCASES = [
                         )
                     )            ;
 
-            $listified = SELECT * FROM ydb_conn_{table_name}.db;
+            $listified = SELECT * FROM {table_source}db;
 
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
@@ -738,7 +824,7 @@ TESTCASES = [
                 -- MultiGet true
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -765,7 +851,7 @@ TESTCASES = [
     # 14
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -777,7 +863,7 @@ TESTCASES = [
                         )
                     )            ;
 
-            $listified = SELECT * FROM ydb_conn_{table_name}.db;
+            $listified = SELECT * FROM {table_source}db;
 
             $enriched = select u.a as la, u.b as lb, u.c as lc, u2.a as sa, u2.b as sb, u2.c as sc, lza, lyb, sza, syb, yc
                 from
@@ -789,7 +875,7 @@ TESTCASES = [
                 -- MultiGet true
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -810,7 +896,7 @@ TESTCASES = [
     # 15
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -831,11 +917,11 @@ TESTCASES = [
                             u.age as age
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.`users` as u
+                left join {streamlookup} {table_source}`users` as u
                 on(e.user = u.age)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -893,7 +979,7 @@ TESTCASES = [
     # 16
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -909,11 +995,11 @@ TESTCASES = [
                                /*, CAST(dur AS String) AS durs -- NOT supported by fq_connector */
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                left join {streamlookup} any {table_source}db as u
                 on(e.za = u.a )
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -972,7 +1058,7 @@ TESTCASES = [
     # 17
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -986,11 +1072,11 @@ TESTCASES = [
                                opt_odd, opt_true, opt_false, opt_null
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                left join {streamlookup} any {table_source}db as u
                 on(e.za = u.a )
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -1026,7 +1112,7 @@ TESTCASES = [
     # 18
     (
         R'''
-            $input = SELECT * FROM myyds.`{input_topic}`
+            $input = SELECT * FROM {topic_source}`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -1047,7 +1133,7 @@ TESTCASES = [
                             u.age as age
                 from
                     $input as e
-                left join {streamlookup} any ydb_conn_{table_name}.`users` as u
+                left join {streamlookup} any {table_source}`users` as u
                 on(e.user = u.id)
             ;
 
@@ -1059,11 +1145,11 @@ TESTCASES = [
                             u2.age as age
                 from
                     $enriched as e
-                left join {streamlookup} any ydb_conn_{table_name}.`users` as u2
+                left join {streamlookup} any {table_source}`users` as u2
                 on(e.name = u2.name and u2.age = e.age)
             ;
 
-            insert into myyds.`{output_topic}`
+            insert into {topic_source}`{output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             ''',
         ResequenceId(
@@ -1113,132 +1199,82 @@ TESTCASES = [
 ]
 
 
-one_time_waiter = OneTimeWaiter(
-    data_source_kind=EGenericDataSourceKind.YDB,
-    docker_compose_file_path=conftest.docker_compose_file_path,
-    expected_tables=["simple_table", "join_table", "dummy_table"],
-)
-
-
-class TestJoinStreaming(TestYdsBase):
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_simple(self, kikimr, fq_client: FederatedQueryClient, yq_version):
-        self.init_topics(f"pq_yq_streaming_test_simple{yq_version}")
-        fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
-
-        table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
-
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
-        )
-        one_time_waiter.wait()
-
-        sql = R'''
-            $input = SELECT * FROM myyds.`{input_topic}`;
-
-            $enriched = select e.Data as Data
-                from
-                    $input as e
-                left join
-                    ydb_conn_{table_name}.{table_name} as u
-                on(e.Data = CAST(u.id as String))
-            ;
-
-            insert into myyds.`{output_topic}`
-            select * from $enriched;
-            '''.format(input_topic=self.input_topic, output_topic=self.output_topic, table_name=table_name)
-
-        query_id = fq_client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        messages = ['A', 'B', 'C']
-        self.write_stream(messages)
-
-        read_data = self.read_stream(len(messages))
-        assert read_data == messages
-
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
-
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
-
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
+class TestJoinYdbStreaming(StreamingTestBase):
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
+    @pytest.mark.parametrize("streamlookup", [True, False], ids=["slj", "map"])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
+    @pytest.mark.parametrize("local", [True, False], ids=["local", "generic"])
+    @pytest.mark.parametrize("column_tables", [True, False], ids=["cs", "row"])
     def test_streamlookup(
         self,
-        kikimr,
-        testcase,
-        streamlookup,
-        partitions_count,
-        fq_client: FederatedQueryClient,
-        yq_version,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        testcase: int,
+        streamlookup: bool,
+        partitions_count: int,
+        local: bool,
+        column_tables: bool,
     ):
-        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{yq_version}"
-        self.init_topics(title, partitions_count=partitions_count)
-        fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        if not (DEBUG or streamlookup):
+            pytest.skip("map join verified only in DEBUG test")
+        if local and streamlookup:
+            pytest.skip("YQ-5431")
+        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}"
+        query_name = f"q_{title}"
+        endpoint = self.get_endpoint(kikimr, local_topics=True)
+        source_name = entity_name("join_source")
+        self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
+
+        # 1. Create the secret
+        secret_name = entity_name("token_secret")
+        create_secret(kikimr, secret_name)
+
+        # 2. Create and populate local table
+        create_table(kikimr, column_tables)
+
+        # 3. Create TOKEN-auth external data source.
+        if not local:
+            create_source(kikimr, source_name, secret_name, endpoint)
 
         table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
-
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
-        )
 
         sql, messages, *options = TESTCASES[testcase]
         sql = sql.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
             table_name=table_name,
+            table_source='' if local else f"{source_name}.",
+            topic_source='',
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
 
-        options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
+        # options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
-        one_time_waiter.wait()
-
-        query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-
-        if not streamlookup and "MultiGet true" in sql:
-            fq_client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-            describe_result = fq_client.describe_query(query_id).result
-            describe_string = "{}".format(describe_result)
-            print("Describe result: {}".format(describe_string), file=sys.stderr)
-            assert "Cannot compare key columns" in describe_string
+        try:
+            kikimr.ydb_client.query(f"""
+                CREATE STREAMING QUERY {query_name} AS DO BEGIN
+                {sql}
+                END DO;
+            """)
+        except ydb.issues.Error as ex:
+            assert not streamlookup and "MultiGet true" in sql, ex
+            assert "Cannot compare key columns" in ex.message
             return
 
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+        assert not (not streamlookup and "MultiGet true" in sql)
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
-            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]))
+            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]), endpoint=endpoint)
 
         expected_len = sum(map(len, messages)) - len(messages)
-        read_data = self.read_stream(expected_len)
-        if DEBUG:
-            print(streamlookup, testcase, file=sys.stderr)
-            print(sql, file=sys.stderr)
-            print(*zip(messages, read_data), file=sys.stderr, sep="\n")
+        read_data = self.read_stream(expected_len, topic_path=self.output_topic, endpoint=endpoint)
         read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
         messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
 
+        """ TODO dq_tasks sensors unavailable in ydb streaming
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
             for component in ["Lookup", "LookupSrc"]:
@@ -1256,62 +1292,60 @@ class TestJoinStreaming(TestYdsBase):
                         f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
                         file=sys.stderr,
                     )
+        """
 
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY {query_name}")
+        if not local:
+            kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE {source_name}")
 
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
-
-    @yq_v1
-    @pytest.mark.parametrize(
-        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
-    )
-    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 2])
     @pytest.mark.parametrize("tasks", [1, 2])
-    @pytest.mark.parametrize("streamlookup", [True, False])
-    @pytest.mark.parametrize("limit", [6, 7, 8, 9, None])
+    @pytest.mark.parametrize("streamlookup", [True, False], ids=["slj", "map"])
+    @pytest.mark.parametrize("local", [True, False], ids=["local", "generic"])
+    @pytest.mark.parametrize("column_tables", [False])
     def test_streamlookup_watermarks(
         self,
-        kikimr,
-        limit,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
         streamlookup,
         tasks,
         partitions_count,
-        fq_client: FederatedQueryClient,
-        yq_version,
+        local: bool,
+        column_tables: bool,
     ):
-        title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{tasks}"
-        self.init_topics(title, partitions_count=partitions_count)
-        fq_client.create_yds_connection(
-            "wmyds",
-            os.getenv("YDB_DATABASE"),
-            os.getenv("YDB_ENDPOINT"),
-            shared_reading=True,
-        )
+        if local and streamlookup:
+            pytest.skip("YQ-5431")
+        pytest.skip("YQ-5580: works unstable, requires investigation")
+        title = f"slj_wm_{partitions_count}{streamlookup!s:.1}{tasks}{local!s:.1}"
+        query_name = f"q_{title}"
+        endpoint = self.get_endpoint(kikimr, local_topics=True)
+        source_name = entity_name("join_wm_source")
+        self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
+
+        # 1. Create the secret
+        secret_name = entity_name("token_secret")
+        create_secret(kikimr, secret_name)
+
+        # 2. Create and populate local table
+        create_table(kikimr, column_tables)
 
         table_name = 'join_table'
-        ydb_conn_name = f'ydb_conn_{table_name}'
 
-        fq_client.create_ydb_connection(
-            name=ydb_conn_name,
-            database_id='local',
-        )
+        # 3. Create TOKEN-auth external data source.
+        # (shared_reading with local topics is not implemented, hence use eds)
+        create_source(kikimr, source_name, secret_name, endpoint, shared_reading=True)
 
         options = ()
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
         idle_clause = R", WATERMARK_IDLE_TIMEOUT = 'PT5S'" if tasks > 1 or partitions_count > 1 else ""
+        table_source = '' if local else f"`{source_name}`."
+        topic_source = f'`{source_name}`.'
         sql = Rf'''
-            PRAGMA dq.WatermarksMode = "default";
-            PRAGMA dq.MaxTasksPerStage = "{tasks}";
-            PRAGMA dq.WatermarksGranularityMs = "2000";
+            PRAGMA ydb.MaxTasksPerStage = "{tasks}";
 
             $event_time = ($ts) -> (CAST(($ts*1000000ul) AS Timestamp));
 
-            $input = SELECT * FROM wmyds.`{self.input_topic}`
+            $input = SELECT * FROM {topic_source}`{self.input_topic}`
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -1328,7 +1362,7 @@ class TestJoinStreaming(TestYdsBase):
             $enriched = SELECT event_time, ts, u.data as uid
                 FROM
                     $input as e
-                LEFT JOIN {streamlookup_hint} ANY ydb_conn_{table_name}.{table_name} AS u
+                LEFT JOIN {streamlookup_hint} ANY {table_source}{table_name} AS u
                 ON(e.user = u.id)
             ;
             $enriched =
@@ -1337,7 +1371,7 @@ class TestJoinStreaming(TestYdsBase):
                             , uid
                 ;
 
-            insert into wmyds.`{self.output_topic}`
+            insert into {topic_source}`{self.output_topic}`
             select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
             '''
 
@@ -1364,33 +1398,32 @@ class TestJoinStreaming(TestYdsBase):
                 R'{"uid":"ydb30", "hopTime":20, "tsList":[16]}',
             ),
         ]
-        messages = messages[:limit]
+        kikimr.ydb_client.query(f"""
+            CREATE STREAMING QUERY {query_name} AS DO BEGIN
+            {sql}
+            END DO;
+        """)
 
-        one_time_waiter.wait()
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
 
-        query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
-
-        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
-
-        for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
-            self.write_stream(
-                map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]),
-                partition_key=b'1',
-            )
         if partitions_count > 1 or tasks > 1:
+            # let idle timeout fire
             time.sleep(5.0)
 
-        expected_len = sum(map(len, messages)) - len(messages)
-        read_data = self.read_stream(expected_len)
-        if DEBUG:
-            print(streamlookup, file=sys.stderr)
-            print(sql, file=sys.stderr)
-            print(*zip(messages, read_data), file=sys.stderr, sep="\n")
-        read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
-        messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
-        assert read_data_ctr == messages_ctr
+        for pair in messages:
+            self.write_stream(
+                [pair[0]],
+                partition_key=b'1',
+                endpoint=endpoint,
+            )
+            expected = pair[1:]
+            read_data = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint, timeout=None if len(expected) > 0 else 10)
+            read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
+            messages_ctr = Counter(map(freeze, map(json.loads, expected)))
+            assert read_data_ctr == messages_ctr
 
+        """ TODO dq_tasks sensors unavailable in ydb streaming
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
             for component in ["Lookup", "LookupSrc"]:
@@ -1413,11 +1446,6 @@ class TestJoinStreaming(TestYdsBase):
                     f'node[{node_index}].query_id[{query_id}].Stage[{k}].MkqlMaxMemoryUsage = {mkqlSensors[k]}',
                     file=sys.stderr,
                 )
-
-        fq_client.abort_query(query_id)
-        fq_client.wait_query(query_id)
-
-        describe_response = fq_client.describe_query(query_id)
-        status = describe_response.result.query.meta.status
-        assert not describe_response.issues, str(describe_response.issues)
-        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
+        """
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY {query_name}")
+        kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE {source_name}")

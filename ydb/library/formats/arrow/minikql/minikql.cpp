@@ -1,4 +1,4 @@
-#include "kqp_formats_arrow.h"
+#include "minikql.h"
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -11,7 +11,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-namespace NKikimr::NKqp::NFormats {
+namespace NKikimr::NArrow::NMkql {
 
 namespace {
 
@@ -80,7 +80,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TStructType* struc
     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
         auto memberType = structType->GetMemberType(index);
         auto memberName = std::string(structType->GetMemberName(index));
-        auto memberArrowType = NFormats::GetArrowType(memberType);
+        auto memberArrowType = NMkql::GetArrowType(memberType);
 
         fields.emplace_back(std::make_shared<arrow::Field>(memberName, memberArrowType, memberType->IsOptional()));
     }
@@ -93,7 +93,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TTupleType* tupleT
     for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
         auto elementName = "field" + std::to_string(index);
         auto elementType = tupleType->GetElementType(index);
-        auto elementArrowType = NFormats::GetArrowType(elementType);
+        auto elementArrowType = NMkql::GetArrowType(elementType);
 
         fields.emplace_back(std::make_shared<arrow::Field>(elementName, elementArrowType, elementType->IsOptional()));
     }
@@ -102,7 +102,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TTupleType* tupleT
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TListType* listType) {
     auto itemType = listType->GetItemType();
-    auto itemArrowType = NFormats::GetArrowType(itemType);
+    auto itemArrowType = NMkql::GetArrowType(itemType);
     auto field = std::make_shared<arrow::Field>("item", itemArrowType, itemType->IsOptional());
     return arrow::list(field);
 }
@@ -112,8 +112,8 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TDictType* dictTyp
     auto payloadType = dictType->GetPayloadType();
 
     auto structType = arrow::struct_({
-        std::make_shared<arrow::Field>("key", NFormats::GetArrowType(keyType), keyType->IsOptional()),
-        std::make_shared<arrow::Field>("payload", NFormats::GetArrowType(payloadType), payloadType->IsOptional())
+        std::make_shared<arrow::Field>("key", NMkql::GetArrowType(keyType), keyType->IsOptional()),
+        std::make_shared<arrow::Field>("payload", NMkql::GetArrowType(payloadType), payloadType->IsOptional())
     });
     return arrow::list(structType);
 }
@@ -147,7 +147,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TVariantType* vari
             for (ui32 i = beginIndex; i < endIndex; ++i) {
                 auto itemName = (structType == nullptr) ? std::string("field" + ToString(i)) : std::string(structType->GetMemberName(i));
                 auto itemType = (structType == nullptr) ? tupleType->GetElementType(i) : structType->GetMemberType(i);
-                auto itemArrowType = NFormats::GetArrowType(itemType);
+                auto itemArrowType = NMkql::GetArrowType(itemType);
 
                 groupFields.emplace_back(std::make_shared<arrow::Field>( itemName, itemArrowType, itemType->IsOptional()));
             }
@@ -166,7 +166,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TVariantType* vari
     for (ui32 index = 0; index < variantType->GetAlternativesCount(); ++index) {
         auto itemName = (structType == nullptr) ? std::string("field" + ToString(index)) : std::string(structType->GetMemberName(index));
         auto itemType = (structType == nullptr) ? tupleType->GetElementType(index) : structType->GetMemberType(index);
-        auto itemArrowType = NFormats::GetArrowType(itemType);
+        auto itemArrowType = NMkql::GetArrowType(itemType);
 
         fields.emplace_back(std::make_shared<arrow::Field>(itemName, itemArrowType, itemType->IsOptional()));
     }
@@ -192,7 +192,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TOptionalType* opt
         ++depth;
     }
 
-    std::shared_ptr<arrow::DataType> innerArrowType = NFormats::GetArrowType(currentType);
+    std::shared_ptr<arrow::DataType> innerArrowType = NMkql::GetArrowType(currentType);
     while (depth > 1) {
         innerArrowType = arrow::struct_({std::make_shared<arrow::Field>("opt", innerArrowType, true)});
         --depth;
@@ -437,7 +437,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
     }
 
     if (innerValue) {
-        NFormats::AppendElement(innerValue.GetOptionalValue(), innerBuilder, innerType);
+        NMkql::AppendElement(innerValue.GetOptionalValue(), innerBuilder, innerType);
     } else {
         auto status = innerBuilder->AppendNull();
         YQL_ENSURE(status.ok(), "Failed to append null optional value: " << status.ToString());
@@ -457,13 +457,13 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
     if (auto item = value.GetElements()) {
         auto length = value.GetListLength();
         while (length > 0) {
-            NFormats::AppendElement(*item++, innerBuilder, itemType);
+            NMkql::AppendElement(*item++, innerBuilder, itemType);
             --length;
         }
     } else {
         const auto iter = value.GetListIterator();
         for (NUdf::TUnboxedValue item; iter.Next(item);) {
-            NFormats::AppendElement(item, innerBuilder, itemType);
+            NMkql::AppendElement(item, innerBuilder, itemType);
         }
     }
 }
@@ -479,7 +479,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
         auto innerBuilder = structBuilder->field_builder(index);
         auto memberType = structType->GetMemberType(index);
-        NFormats::AppendElement(value.GetElement(index), innerBuilder, memberType);
+        NMkql::AppendElement(value.GetElement(index), innerBuilder, memberType);
     }
 }
 
@@ -494,7 +494,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
     for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
         auto innerBuilder = structBuilder->field_builder(index);
         auto elementType = tupleType->GetElementType(index);
-        NFormats::AppendElement(value.GetElement(index), innerBuilder, elementType);
+        NMkql::AppendElement(value.GetElement(index), innerBuilder, elementType);
     }
 }
 
@@ -520,8 +520,8 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         auto status = structBuilder->Append();
         YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
 
-        NFormats::AppendElement(key, keyBuilder, keyType);
-        NFormats::AppendElement(payload, itemBuilder, payloadType);
+        NMkql::AppendElement(key, keyBuilder, keyType);
+        NMkql::AppendElement(payload, itemBuilder, payloadType);
     }
 }
 
@@ -558,13 +558,13 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
 
         auto doubleInnerBuilder = innerUnionBuilder->child_builder(innerVariantIndex);
-        NFormats::AppendElement(value.GetVariantItem(), doubleInnerBuilder.get(), innerType);
+        NMkql::AppendElement(value.GetVariantItem(), doubleInnerBuilder.get(), innerType);
     } else {
         auto status = unionBuilder->Append(variantIndex);
         YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
 
         auto innerBuilder = unionBuilder->child_builder(variantIndex);
-        NFormats::AppendElement(value.GetVariantItem(), innerBuilder.get(), innerType);
+        NMkql::AppendElement(value.GetVariantItem(), innerBuilder.get(), innerType);
     }
 }
 
@@ -846,4 +846,4 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
     }
 }
 
-} // namespace NKikimr::NKqp::NFormats
+} // namespace NKikimr::NArrow::NMkql

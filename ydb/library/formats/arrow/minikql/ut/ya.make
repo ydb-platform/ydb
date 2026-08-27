@@ -1,12 +1,12 @@
-UNITTEST_FOR(ydb/core/kqp/common/result_set_format)
+UNITTEST_FOR(ydb/library/formats/arrow/minikql)
 
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
 SRCS(
-    kqp_formats_ut_helpers.cpp
-    kqp_formats_arrow_ut.cpp
+    ut_helpers.cpp
+    minikql_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -337,6 +337,14 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpEnsure(value, predicate, issueCode, message);
         });
 
+    compiler->AddCallable(TKqpWasmResidentString::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            TKqpWasmResidentString residentString(&node);
+
+            const auto value = MkqlBuildExpr(residentString.Value().Ref(), buildCtx);
+            return ctx.PgmBuilder().KqpWasmResidentString(value);
+        });
+
     compiler->AddCallable(TKqpIndexLookupJoin::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpIndexLookupJoin indexLookupJoin(&node);

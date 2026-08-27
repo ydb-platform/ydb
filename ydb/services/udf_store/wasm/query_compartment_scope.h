@@ -3,6 +3,8 @@
 #include "compartment_manager.h"
 #include "module_catalog.h"
 
+#include <ydb/library/wasm/api/allocation_registry.h>
+
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -15,6 +17,10 @@ namespace NKikimr::NUdfStore::NWasm {
 //! Value: newline-separated module names from TKqpPhyStage.WasmUdfModules.
 inline constexpr TStringBuf WasmUdfModulesTaskParam = "_WasmUdfModules";
 
+//! TaskParams key for PreferWasm string column names (KQP → CA).
+//! Value: newline-separated column names from TKqpPhyStage.WasmUdfStringColumns.
+inline constexpr TStringBuf WasmUdfStringColumnsTaskParam = "_WasmUdfStringColumns";
+
 inline TString SerializeWasmUdfModulesTaskParam(const TVector<TString>& modules) {
     return JoinSeq('\n', modules);
 }
@@ -25,14 +31,24 @@ inline TVector<TString> ParseWasmUdfModulesTaskParam(TStringBuf data) {
     return modules;
 }
 
+inline TString SerializeWasmUdfStringColumnsTaskParam(const TVector<TString>& columns) {
+    return JoinSeq('\n', columns);
+}
+
+inline TVector<TString> ParseWasmUdfStringColumnsTaskParam(TStringBuf data) {
+    TVector<TString> columns;
+    StringSplitter(data).Split('\n').SkipEmpty().Collect(&columns);
+    return columns;
+}
+
 template <typename TRepeatedString>
-inline TVector<TString> WasmUdfModulesFromRepeated(const TRepeatedString& repeated) {
-    TVector<TString> modules;
-    modules.reserve(repeated.size());
-    for (const auto& module : repeated) {
-        modules.push_back(module);
+inline TVector<TString> WasmUdfStringColumnsFromRepeated(const TRepeatedString& repeated) {
+    TVector<TString> columns;
+    columns.reserve(repeated.size());
+    for (const auto& column : repeated) {
+        columns.push_back(column);
     }
-    return modules;
+    return columns;
 }
 
 //! Keep only module names registered in the WASM catalog.
@@ -52,19 +68,50 @@ inline TVector<TString> FilterLoadedWasmUdfModules(
     return result;
 }
 
-// Owns a per-query compartment. Install it as the current TLS compartment only
+template <typename TRepeatedString>
+inline TVector<TString> WasmUdfModulesFromRepeated(const TRepeatedString& repeated) {
+    TVector<TString> modules;
+    modules.reserve(repeated.size());
+    for (const auto& module : repeated) {
+        modules.push_back(module);
+    }
+    return FilterLoadedWasmUdfModules(modules);
+}
+
+// Holds a per-query compartment. Install it as the current TLS compartment only
 // for the duration of a TLS guard (actor event / task run).
+//
+// The scope is not the sole owner: strings materialized into linear memory are
+// destroyed by whoever holds the last reference to them, which can happen after
+// the scope is gone (a compute actor is destroyed before its task runner tears
+// the computation graph down). Those values keep the compartment alive through
+// TWasmAllocationRegistry.
 class TQueryCompartmentScope : public TNonCopyable {
 public:
     explicit TQueryCompartmentScope(const TVector<TString>& modules) {
         const auto loaded = FilterLoadedWasmUdfModules(modules);
         if (!loaded.empty()) {
             Handle_ = GetWasmCompartmentManager().Acquire(loaded);
+            NYdb::NWasm::TWasmAllocationRegistry::Instance().RetainOwner(
+                Handle_->Generation, Handle_);
+        }
+    }
+
+    ~TQueryCompartmentScope() {
+        if (Handle_) {
+            NYdb::NWasm::TWasmAllocationRegistry::Instance().ReleaseOwner(Handle_->Generation);
         }
     }
 
     bool HasHandle() const {
         return Handle_ != nullptr;
+    }
+
+    //! What the resident string path actually did in this query: how many column
+    //! values went into linear memory, how many UDF args reused those bytes, and
+    //! how many still had to be copied per call.
+    TPreferWasmCounters::TSnapshot GetPreferWasmSnapshot() const {
+        return Handle_ ? Handle_->PreferWasm.GetSnapshot() : TPreferWasmCounters::TSnapshot{};
     }
 
     TCurrentQueryCompartmentGuard MakeTlsGuard() const {

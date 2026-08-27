@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    allocation_registry.cpp
     bytecode.cpp
     compartment.cpp
     data_transfer.cpp

@@ -39,6 +39,8 @@ public:
         const TString& database
     );
 
+    ~TKqpComputeActor();
+
     void DoBootstrap();
 
     STFUNC(StateFunc);
@@ -58,7 +60,10 @@ public:
 private:
     void PassAway() override;
 
-private:
+    void DoTerminateImpl() override;
+
+    void FreeComputeCtxData();
+
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev);
 
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev);
@@ -66,6 +71,8 @@ private:
     void HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev);
 
     bool IsDebugLogEnabled(const TActorSystem* actorSystem);
+
+    void LogWasmResidentStringStats();
 
     ui64 CalculateFreeSpace() const;
 
@@ -81,6 +88,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
     std::optional<NUdfStore::NWasm::TQueryCompartmentScope> WasmQueryCompartment_;
+    THashSet<TString> WasmUdfStringColumns_;
 };
 
 } // namespace NKikimr::NKqp

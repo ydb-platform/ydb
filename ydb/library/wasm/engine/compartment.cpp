@@ -1347,19 +1347,40 @@ Runtime::ModuleRef LoadBuiltinUdfs()
 
 namespace {
 
+struct TStackBounds
+{
+    const char* Begin = nullptr;
+    size_t Length = 0;
+};
+
+// Bounds are fixed for the lifetime of a thread, and asking for them is not
+// cheap: on the main thread pthread_getattr_np parses /proc/self/maps, which
+// costs ~19 us. This check runs on entry to every guest function, so an
+// uncached query dominated the price of a host→guest call.
+const TStackBounds& GetStackBounds()
+{
+    static thread_local const TStackBounds bounds = [] {
+        const TCurrentThreadLimits limits;
+        return TStackBounds{
+            .Begin = static_cast<const char*>(limits.StackBegin),
+            .Length = limits.StackLength,
+        };
+    }();
+    return bounds;
+}
+
 bool CheckFreeStackSpace(size_t space)
 {
-    // Host stack grows downward. StackBegin is the low address of the mapping.
-    const TCurrentThreadLimits limits;
-    if (!limits.StackBegin || limits.StackLength == 0) {
+    // Host stack grows downward. Begin is the low address of the mapping.
+    const auto& bounds = GetStackBounds();
+    if (!bounds.Begin || bounds.Length == 0) {
         return true;
     }
-    const auto* stackBegin = static_cast<const char*>(limits.StackBegin);
     const auto* frame = static_cast<const char*>(__builtin_frame_address(0));
-    if (frame < stackBegin || frame >= stackBegin + limits.StackLength) {
+    if (frame < bounds.Begin || frame >= bounds.Begin + bounds.Length) {
         return true;
     }
-    return static_cast<size_t>(frame - stackBegin) >= space;
+    return static_cast<size_t>(frame - bounds.Begin) >= space;
 }
 
 void CheckStackDepth()

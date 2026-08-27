@@ -20,6 +20,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/hash_set.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
@@ -130,11 +132,13 @@ private:
 
 TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NScheme::TTypeInfo& type);
 TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
-    const TBatchDataAccessor& batch, i64 columnIndex, NScheme::TTypeInfo columnType);
+    const TBatchDataAccessor& batch, i64 columnIndex, NScheme::TTypeInfo columnType, bool preferWasm = false);
 TBytesStatistics WriteColumnValuesFromArrow(NUdf::TUnboxedValue* editAccessors,
-    const TBatchDataAccessor& batch, i64 columnIndex, const ui32 columnsCount, NScheme::TTypeInfo columnType);
+    const TBatchDataAccessor& batch, i64 columnIndex, const ui32 columnsCount, NScheme::TTypeInfo columnType,
+    bool preferWasm = false);
 TBytesStatistics WriteColumnValuesFromArrow(const TVector<NUdf::TUnboxedValue*>& editAccessors,
-    const TBatchDataAccessor& batch, i64 columnIndex, i64 resultColumnIndex, NScheme::TTypeInfo columnType);
+    const TBatchDataAccessor& batch, i64 columnIndex, i64 resultColumnIndex, NScheme::TTypeInfo columnType,
+    bool preferWasm = false);
 
 void FillSystemColumn(NUdf::TUnboxedValue& rowItem, TMaybe<ui64> shardId, NTable::TTag tag, NScheme::TTypeInfo type);
 
@@ -162,6 +166,10 @@ public:
 
         TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode,
             const TTypeEnvironment* typeEnv = nullptr);
+
+        void ApplyWasmUdfStringColumns(const THashSet<TString>& wasmUdfStringColumns) {
+            BatchReader->ApplyWasmUdfStringColumns(wasmUdfStringColumns);
+        }
 
         ~TScanData() = default;
 
@@ -408,7 +416,8 @@ public:
         const TSmallVec<TColumn>& columns, const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys);
 
     void AddTableScan(ui32 callableId, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-        NYql::NDqProto::EDqStatsMode statsMode, const TTypeEnvironment* typeEnv = nullptr);
+        NYql::NDqProto::EDqStatsMode statsMode, const TTypeEnvironment* typeEnv = nullptr,
+        const THashSet<TString>& wasmUdfStringColumns = {});
 
     TScanData& GetTableScan(ui32 callableId);
     TMap<ui32, TScanData>& GetTableScans();

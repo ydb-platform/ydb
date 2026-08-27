@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
+#include <ydb/core/kqp/query_compiler/kqp_wasm_string_columns.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -28,7 +29,9 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/bitmap.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NKqp {
 
@@ -957,6 +960,40 @@ private:
         return type;
     }
 
+    //! PreferWasm materialization writes a column value straight into WASM linear
+    //! memory. It pays off only when the read and the wasm UDF run in one task:
+    //! data crossing a channel between stages is repacked, so the resident buffer
+    //! is lost. Mark columns only for a stage that owns both.
+    void FillWasmUdfStringColumns(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto) {
+        stageProto.ClearWasmUdfStringColumns();
+        if (!Config->GetEnableWasmUdfResidentStringColumns()) {
+            return;
+        }
+
+        const auto wasmColumns = CollectWasmUdfStringColumns(stage);
+
+        if (wasmColumns.CanMaterializeInWasm()) {
+            TVector<TString> columns(wasmColumns.Columns.begin(), wasmColumns.Columns.end());
+            Sort(columns);
+            for (const auto& column : columns) {
+                stageProto.AddWasmUdfStringColumns(column);
+            }
+        }
+
+        if (wasmColumns.HasUdfCall) {
+            TStringBuilder columns;
+            for (const auto& column : stageProto.GetWasmUdfStringColumns()) {
+                if (columns) {
+                    columns << ",";
+                }
+                columns << column;
+            }
+            YQL_CLOG(DEBUG, ProviderKqp) << "Wasm UDF string columns for stage #" << stage.Ref().UniqueId()
+                << ", hasTableRead: " << wasmColumns.HasTableRead
+                << ", columns: [" << columns << "]";
+        }
+    }
+
     void CompileStage(
         const TDqPhyStage& stage,
         NKqpProto::TKqpPhyStage& stageProto,
@@ -1172,6 +1209,8 @@ private:
         for (const auto& module : stagePredictor.GetWasmUdfModules()) {
             stageProto.AddWasmUdfModules(module);
         }
+
+        FillWasmUdfStringColumns(stage, stageProto);
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());

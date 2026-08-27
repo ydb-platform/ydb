@@ -150,7 +150,7 @@ public:
 
 bool IsValidKey(const TEngineHost::TScheme& scheme, ui64 localTableId, TKeyDesc& key);
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags);
-NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type);
+NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type, bool preferWasm = false);
 NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const NTable::TScheme& scheme,
     const THolderFactory& holderFactory, const TTableId& tableId, ui64 localTid, const TSmallVec<NTable::TTag>& tags,
     const TSmallVec<bool>& skipNullKeys, const TTableRange& range, ui64 itemsLimit, ui64 bytesLimit,

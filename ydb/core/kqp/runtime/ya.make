@@ -8,6 +8,7 @@ SRCS(
     kqp_full_text_source.cpp
     kqp_sys_view_source.cpp
     kqp_fulltext_analyze.cpp
+    kqp_wasm_resident_string.cpp
     kqp_stream_enumerate.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
@@ -73,6 +74,7 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
     ydb/core/kqp/common/result_set_format
+    ydb/services/udf_store/wasm
 )
 
 YQL_LAST_ABI_VERSION()

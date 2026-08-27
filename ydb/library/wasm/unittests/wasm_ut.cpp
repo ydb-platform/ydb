@@ -1,3 +1,4 @@
+#include <ydb/library/wasm/api/allocation_registry.h>
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/data_transfer.h>
 #include <ydb/library/wasm/api/function.h>
@@ -7,8 +8,11 @@
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/yt/error/error.h>
 
 #include <util/generic/scope.h>
+
+#include <cstring>
 
 using NYT::Format;
 
@@ -250,6 +254,131 @@ TEST_F(TWebAssemblyTest, DataTransfer)
 
     auto secondActualSum = sum(secondCopied.GetCopiedOffset(), length);
     ASSERT_EQ(secondActualSum, secondExpectedSum);
+}
+
+TEST_F(TWebAssemblyTest, GuestBufferZeroCopyWrite)
+{
+    auto compartment = CreateMinimalRuntimeImage();
+    compartment->AddModule(ArraySum);
+    auto sum = TCompartmentFunction<i64(i64, i64)>(compartment.get(), "sum");
+
+    constexpr i64 length = 32;
+    const auto byteLength = sizeof(i64) * length;
+
+    auto buffer = TGuestBuffer::Allocate(compartment.get(), byteLength);
+    ASSERT_NE(buffer.Offset(), 0u);
+    ASSERT_EQ(buffer.Size(), byteLength);
+    ASSERT_NE(buffer.HostData(), nullptr);
+
+    i64 expected = 0;
+    auto* array = std::bit_cast<i64*>(buffer.HostData());
+    for (i64 i = 0; i < length; ++i) {
+        array[i] = i + 1;
+        expected += array[i];
+    }
+
+    const auto offset = buffer.Release();
+    ASSERT_EQ(sum(offset, length), expected);
+    compartment->FreeBytes(offset);
+}
+
+TEST_F(TWebAssemblyTest, GuestBufferResidentOffset)
+{
+    // Allocate in WASM, write once, then resolve host pointer back to offset
+    // (the PrepareArg skip-copy primitive).
+    auto compartment = CreateMinimalRuntimeImage();
+
+    const TString blob(64, 'z');
+    auto buffer = TGuestBuffer::Allocate(compartment.get(), blob.size());
+    std::memcpy(buffer.HostData(), blob.data(), blob.size());
+    const uintptr_t offset = buffer.Offset();
+    char* hostData = buffer.HostData();
+    buffer.Release();
+
+    ASSERT_EQ(compartment->GetCompartmentOffset(hostData), offset);
+    ASSERT_EQ(
+        TStringBuf(static_cast<char*>(compartment->GetHostPointer(offset, blob.size())), blob.size()),
+        TStringBuf(blob));
+
+    char hostBlob[64];
+    std::memset(hostBlob, 'h', sizeof(hostBlob));
+    ASSERT_THROW(
+        compartment->GetCompartmentOffset(hostBlob),
+        NYT::TErrorException);
+
+    compartment->FreeBytes(offset);
+}
+
+TEST_F(TWebAssemblyTest, AllocationRegistryTryFree)
+{
+    auto compartment = CreateMinimalRuntimeImage();
+    auto buffer = TGuestBuffer::Allocate(compartment.get(), 64);
+    void* host = buffer.HostData();
+    const uintptr_t offset = buffer.Offset();
+    const size_t size = buffer.Size();
+    buffer.Release();
+
+    auto& registry = TWasmAllocationRegistry::Instance();
+    registry.Register(host, compartment.get(), offset, size, /*generation*/ 1);
+    ASSERT_TRUE(registry.TryFree(host));
+    ASSERT_FALSE(registry.TryFree(host));
+}
+
+TEST_F(TWebAssemblyTest, AllocationRegistryOwnerOutlivesLiveAllocations)
+{
+    // A string materialized into linear memory keeps its refcount header there,
+    // so even destroying the value reads guest memory. Releasing the owner while
+    // an allocation is live must not unmap it.
+    std::shared_ptr<IWebAssemblyCompartment> compartment = CreateMinimalRuntimeImage();
+    auto buffer = TGuestBuffer::Allocate(compartment.get(), 64);
+    void* host = buffer.HostData();
+    const uintptr_t offset = buffer.Offset();
+    const size_t size = buffer.Size();
+    buffer.Release();
+
+    constexpr ui64 generation = 99;
+    auto& registry = TWasmAllocationRegistry::Instance();
+    registry.RetainOwner(generation, compartment);
+    registry.Register(host, compartment.get(), offset, size, generation);
+    ASSERT_EQ(registry.CountGeneration(generation), 1u);
+
+    std::weak_ptr<IWebAssemblyCompartment> weak = compartment;
+    registry.ReleaseOwner(generation);
+    compartment.reset();
+    ASSERT_FALSE(weak.expired()) << "compartment died under a live allocation";
+
+    ASSERT_TRUE(registry.TryFree(host));
+    ASSERT_TRUE(weak.expired()) << "compartment leaked past the last allocation";
+    ASSERT_FALSE(registry.TryFree(host));
+}
+
+TEST_F(TWebAssemblyTest, AllocationRegistryUnRefFreesBeforeOwnerRelease)
+{
+    // Models PreferWasm string lifetime: Make → drop UnboxedValue (UnRef) →
+    // FreeBytes via UdfTryFreeExternalString while compartment is still alive.
+    // Intermediate rows must not accumulate in the registry until teardown.
+    auto compartment = CreateMinimalRuntimeImage();
+    auto& registry = TWasmAllocationRegistry::Instance();
+    constexpr ui64 generation = 77;
+
+    const TString payload(64, 'x');
+    for (int i = 0; i < 8; ++i) {
+        {
+            auto buffer = TGuestBuffer::Allocate(compartment.get(), 80);
+            void* host = buffer.HostData();
+            const uintptr_t offset = buffer.Offset();
+            buffer.Release();
+            registry.Register(host, compartment.get(), offset, 80, generation);
+            ASSERT_EQ(registry.CountGeneration(generation), 1u);
+            // Simulate TStringValue UnRef → UdfTryFreeExternalString.
+            ASSERT_TRUE(registry.TryFree(host));
+        }
+        ASSERT_EQ(registry.CountGeneration(generation), 0u)
+            << "row " << i << " leaked past UnRef";
+    }
+
+    registry.ReleaseOwner(generation);
+    ASSERT_EQ(registry.CountGeneration(generation), 0u);
 }
 
 static const TStringBuf PointerDereference = R"(

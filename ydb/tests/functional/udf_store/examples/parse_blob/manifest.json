@@ -1,0 +1,29 @@
+{
+  "module_name": "ParseBlob",
+  "calling_convention": "unversioned_value",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk"],
+  "functions": [
+    {
+      "name": "parse_blob",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "string", "tag": "concrete_type"}
+    },
+    {
+      "name": "blob_head",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "string", "tag": "concrete_type"}
+    },
+    {
+      "name": "blob_offset",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    }
+  ]
+}

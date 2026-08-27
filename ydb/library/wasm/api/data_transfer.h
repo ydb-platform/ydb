@@ -2,6 +2,8 @@
 
 #include "compartment.h"
 
+#include <util/generic/yexception.h>
+
 namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,6 +24,38 @@ public:
 protected:
     IWebAssemblyCompartment* Compartment_ = nullptr;
     uintptr_t CopiedOffset_ = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Writable view into freshly allocated guest linear memory.
+//! Host writes via HostData(); guest sees Offset() after the call.
+class TGuestBuffer
+    : public TNonCopyable
+{
+public:
+    TGuestBuffer() = default;
+
+    static TGuestBuffer Allocate(IWebAssemblyCompartment* compartment, size_t size);
+
+    Y_WEAK ~TGuestBuffer();
+    TGuestBuffer(TGuestBuffer&& other) noexcept;
+    TGuestBuffer& operator=(TGuestBuffer&& other) noexcept;
+
+    uintptr_t Offset() const;
+    size_t Size() const;
+    char* HostData() const;
+
+    //! Relinquish ownership; caller must FreeBytes (or transfer to another owner).
+    uintptr_t Release() noexcept;
+
+private:
+    TGuestBuffer(IWebAssemblyCompartment* compartment, uintptr_t offset, size_t size, char* hostData);
+
+    IWebAssemblyCompartment* Compartment_ = nullptr;
+    uintptr_t Offset_ = 0;
+    size_t Size_ = 0;
+    char* HostData_ = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

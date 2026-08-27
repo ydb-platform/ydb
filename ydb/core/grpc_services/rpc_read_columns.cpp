@@ -276,7 +276,7 @@ private:
                     KeyColumnTypes[ci.second.KeyOrder] = ci.second.PType;
 
                     columns.resize(Max<size_t>(columns.size(), ci.second.KeyOrder + 1));
-                    columns[ci.second.KeyOrder] = {ci.second.Id, ci.second.PType, ci.second.PTypeMod};
+                    columns[ci.second.KeyOrder] = {ci.second.Id, ci.second.PType, ci.second.PTypeMod, ci.second.Name};
                 }
             }
 
@@ -289,7 +289,7 @@ private:
                 }
 
                 auto ci = entry.Columns.find(id->second);
-                columns.push_back({ci->second.Id, ci->second.PType, ci->second.PTypeMod});
+                columns.push_back({ci->second.Id, ci->second.PType, ci->second.PTypeMod, ci->second.Name});
 
                 valueColumnNamesAndTypes.push_back({ci->second.Name, ci->second.PType});
                 ValueColumnTypes.push_back(ci->second.PType);

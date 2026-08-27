@@ -1934,6 +1934,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
             NUdfStore::NWasm::SerializeWasmUdfModulesTaskParam(modules);
     }
 
+    if (stage.WasmUdfStringColumnsSize() > 0) {
+        TVector<TString> columns = NUdfStore::NWasm::WasmUdfStringColumnsFromRepeated(stage.GetWasmUdfStringColumns());
+        (*result->MutableTaskParams())[TString(NUdfStore::NWasm::WasmUdfStringColumnsTaskParam)] =
+            NUdfStore::NWasm::SerializeWasmUdfStringColumnsTaskParam(columns);
+    }
+
     for (const auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
         dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
@@ -2157,6 +2163,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                             // TODO: should we setup Database and PoolId for settings?
                             FillScanTaskLockTxId(*sourceSettings);
                             sourceSettings->ClearSnapshot();
+                            const auto& restoredStage = stageInfo.Meta.GetStage(stageId);
+                            for (const auto& columnName : restoredStage.GetWasmUdfStringColumns()) {
+                                sourceSettings->AddWasmUdfStringColumns(columnName);
+                            }
                         } else if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
                             auto* sourceSettings = newInput.Meta.FullTextSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpFullTextSourceSettings>();
                             // TODO: should we setup Database and PoolId for settings?
@@ -3054,6 +3064,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
                 *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
             }
             protoColumn->SetName(column.Name);
+        }
+
+        for (const auto& columnName : stage.GetWasmUdfStringColumns()) {
+            settings->AddWasmUdfStringColumns(columnName);
         }
 
         if (GetMeta().CheckDuplicateRows) {

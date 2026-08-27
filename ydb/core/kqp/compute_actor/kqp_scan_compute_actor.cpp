@@ -46,6 +46,32 @@ TKqpScanComputeActor::~TKqpScanComputeActor() {
     FreeComputeCtxData();
 }
 
+//! The only per-query evidence that resident string columns engaged: how many
+//! column values the scan wrote into linear memory and how many UDF args reused
+//! those bytes instead of copying them again.
+void TKqpScanComputeActor::LogWasmResidentStringStats() {
+    if (!WasmQueryCompartment_ || !WasmQueryCompartment_->HasHandle()) {
+        return;
+    }
+
+    const auto stats = WasmQueryCompartment_->GetPreferWasmSnapshot();
+    TStringBuilder columns;
+    for (const auto& name : WasmUdfStringColumns_) {
+        if (!columns.empty()) {
+            columns << ",";
+        }
+        columns << name;
+    }
+
+    YDB_LOG_INFO("Wasm resident string columns",
+        {"logPrefix", LogPrefix},
+        {"columns", columns},
+        {"materializedInWasm", stats.MaterializedInWasm},
+        {"residentReused", stats.ResidentReused},
+        {"copiedIntoCompartment", stats.CopiedIntoCompartment},
+        {"residentConstArgs", stats.ResidentConstArgs});
+}
+
 void TKqpScanComputeActor::ProcessRlNoResourceAndDie() {
     const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
         "Throughput limit exceeded for query");
@@ -280,6 +306,12 @@ void TKqpScanComputeActor::DoBootstrap() {
         }
     }
 
+    if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfStringColumnsTaskParam)); it != taskParams.end()) {
+        for (const auto& name : NUdfStore::NWasm::ParseWasmUdfStringColumnsTaskParam(it->second)) {
+            WasmUdfStringColumns_.insert(name);
+        }
+    }
+
     std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
     if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
         wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
@@ -337,8 +369,22 @@ void TKqpScanComputeActor::DoBootstrap() {
     };
     TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
-    ComputeCtx.AddTableScan(0, Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
+    ComputeCtx.AddTableScan(0, Meta, GetStatsMode(), &TaskRunner->GetTypeEnv(),
+        WasmUdfStringColumns_);
     ScanData = &ComputeCtx.GetTableScan(0);
+
+    if (!WasmUdfStringColumns_.empty()) {
+        TStringBuilder columns;
+        for (const auto& name : WasmUdfStringColumns_) {
+            if (!columns.empty()) {
+                columns << ",";
+            }
+            columns << name;
+        }
+        YDB_LOG_DEBUG("Applied WasmUdfStringColumns for scan",
+            {"logPrefix", this->LogPrefix},
+            {"columns", columns});
+    }
 
     ScanData->TaskId = GetTask().GetId();
     ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputsConsumed);

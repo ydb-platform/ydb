@@ -16,6 +16,10 @@ extern "C" void* UdfAllocateWithSize(ui64 size);
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size);
 extern "C" [[deprecated("Use UdfAllocateWithSize() instead")]] void* UdfAllocate(ui64 size);
 extern "C" [[deprecated("Use UdfFreeWithSize() instead")]] void UdfFree(const void* mem);
+//! Optional hook for TStringValue payloads not owned by UdfAllocateWithSize
+//! (e.g. WASM linear memory). Default weak stub returns false; host may override.
+//! When true, caller must not call UdfFreeWithSize on |mem|.
+extern "C" bool UdfTryFreeExternalString(void* mem, ui64 size);
 #else
 extern "C" void* UdfAllocate(ui64 size);
 extern "C" void UdfFree(const void* mem);

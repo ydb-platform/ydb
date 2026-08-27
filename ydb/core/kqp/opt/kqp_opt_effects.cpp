@@ -819,6 +819,66 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .Stage(stageInput.Ptr())
                 .SinkIndex().Build("0")
                 .Done();
+        } else if (isOlap && kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(true)) {
+            // For pure stage OLAP DELETE with write affinity, split into
+            // Transform Stage (pure expr, no inputs) → HashShuffle(ColumnShardHashV1)
+            // → Sink Stage so that per-shard tasks can be created with proper routing.
+            // Without this split, the single stage has no input channels, so CountComputeTasks
+            // creates 1 task with all shards in TargetShardIds, breaking the per-shard invariant.
+
+            auto [returningType, returningList] = BuildReturningType(node.ReturningColumns(), table, ctx);
+            auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
+                .Table(node.Table())
+                .InconsistentWrite(ctx.NewAtom(node.Pos(), "false"))
+                .StreamWrite(useStreamWrite
+                        ? ctx.NewAtom(node.Pos(), "true")
+                        : ctx.NewAtom(node.Pos(), "false"))
+                .Mode(ctx.NewAtom(node.Pos(), "delete"))
+                .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
+                .IsBatch(node.IsBatch())
+                .IsIndexImplTable(isIndexImplTable
+                        ? ctx.NewAtom(node.Pos(), "true")
+                        : ctx.NewAtom(node.Pos(), "false"))
+                .DefaultColumns<TCoAtomList>().Build()
+                .ReturningColumns(returningList)
+                .Settings()
+                    .Build()
+                .Done();
+
+            auto sink = Build<TDqSink>(ctx, node.Pos())
+                .DataSink<TKqpTableSink>()
+                    .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
+                    .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                    .Build()
+                .Index().Value("0").Build()
+                .Settings(sinkSettings)
+                .Done();
+
+            // Create Transform Stage from the pure expression (no inputs).
+            auto transformStage = Build<TDqStage>(ctx, node.Pos())
+                .Inputs()
+                    .Build()  // No inputs — pure stage
+                .Program()
+                    .Args({})
+                    .Body<TCoToFlow>()
+                        .Input(node.Input())
+                        .Build()
+                    .Build()
+                .Settings().Build()
+                .Done();
+
+            // Get key columns for HashShuffle from table metadata.
+            TVector<TCoAtom> keyColumnAtoms;
+            for (const auto& keyCol : table.Metadata->KeyColumnNames) {
+                keyColumnAtoms.emplace_back(Build<TCoAtom>(ctx, node.Pos()).Value(keyCol).Done());
+            }
+            Y_ENSURE(!keyColumnAtoms.empty(), "Empty key columns for OLAP table with write affinity");
+
+            // BuildCsWriteAffinitySinkStage creates HashShuffle(ColumnShardHashV1) + Sink Stage.
+            effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+                .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), keyColumnAtoms, sink.Ptr()))
+                .SinkIndex().Build("0")
+                .Done();
         } else {
             auto stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),

@@ -1,7 +1,17 @@
 items:
+- name: Резервное копирование
+  href: ../devops/backup-and-recovery/index.md
 - name: Диагностика
   include: { mode: link, path: ../troubleshooting/toc_p.yaml }
 - name: Обслуживание кластера
   items:
   - name: "{{ ydb-ui-name }}"
     include: { mode: link, path: ../reference/ydb-ui/toc_p.yaml }
+  - name: Управление дисковой подсистемой кластера
+    include: { mode: link, path: manual/toc_p.yaml }
+  - name: Изменение конфигурации актор-системы
+    href: ../devops/configuration-management/configuration-v1/change_actorsystem_configs.md
+  - name: Обслуживание без простоя
+    href: ../devops/concepts/maintenance-without-downtime.md
+  - name: Изменение конфигураций через CMS
+    href: ../devops/configuration-management/configuration-v1/cms.md

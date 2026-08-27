@@ -1,6 +1,6 @@
 items:
 - name: Backups
-  href: backup_and_recovery.md
+  href: ../devops/backup-and-recovery/index.md
 - name: Diagnostics
   include: { mode: link, path: ../troubleshooting/toc_p.yaml }
 - name: Cluster maintenance
@@ -12,6 +12,6 @@ items:
   - name: Changing an actor system's configuration
     href: ../devops/configuration-management/configuration-v1/change_actorsystem_configs.md
   - name: Maintenance without downtime
-    href: manual/maintenance-without-downtime.md
+    href: ../devops/concepts/maintenance-without-downtime.md
   - name: Updating configurations via CMS
     href: ../devops/configuration-management/configuration-v1/cms.md

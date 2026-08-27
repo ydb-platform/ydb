@@ -126,6 +126,8 @@ common:
     to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
   - from: /maintenance/manual/cms.md
     to: /devops/configuration-management/configuration-v1/cms.md
+  - from: /maintenance/manual/maintenance-without-downtime.md
+    to: /devops/concepts/maintenance-without-downtime.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
   - from: /devops/manual/backup-and-recovery.md

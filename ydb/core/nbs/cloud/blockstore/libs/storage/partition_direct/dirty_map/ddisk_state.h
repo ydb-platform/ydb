@@ -91,6 +91,7 @@ public:
     [[nodiscard]] TString DebugPrintAheadBehindBrief() const;
 
 private:
+    void CheckInvariants() const;
     [[nodiscard]] bool IsFresh() const;
     void UpdateState(bool force);
     void AddAhead(TBlockRange64 range);

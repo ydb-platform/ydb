@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/testlib
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
 
     library/cpp/testing/unittest

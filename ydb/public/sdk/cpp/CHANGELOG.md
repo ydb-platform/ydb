@@ -1,5 +1,7 @@
 # v3.22.0
 
+* Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
+
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
 
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.

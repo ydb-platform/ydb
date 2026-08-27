@@ -836,6 +836,9 @@ void TCreateTableFormatter::Format(const Ydb::Table::TableMultiColumnStatistics&
                 case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                     Stream << "COUNT_MIN_SKETCH";
                     break;
+                case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                    Stream << "EQ_HEIGHT_HISTOGRAM";
+                    break;
                 default:
                     ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::TableMultiColumnStatistics statistic type");
             }
@@ -867,6 +870,9 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TMultiColumnStatistics
             switch (statistics.GetTypes(i)) {
                 case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                     Stream << "COUNT_MIN_SKETCH";
+                    break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    Stream << "EQ_HEIGHT_HISTOGRAM";
                     break;
                 default:
                     ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected NKikimrSchemeOp::TMultiColumnStatisticsDescription statistic type");

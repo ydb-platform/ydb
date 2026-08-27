@@ -163,7 +163,7 @@ message TEvLoadTestRequest {
                 // InitType as INIT_ZEROES_FULL when IsReadLoad is set.
                 INIT_ZEROES_FULL = 2;
             }
-            optional uint32 AreaSize = 1; // must be a multiple of IoSizeBytes
+            optional uint32 AreaSize = 1; // must be a multiple of IoSizeBytes (and of background write size when enabled)
             optional EAreaInit InitType = 2 [default = INIT_ZEROES_FIRST_BLOCK];
             optional uint32 Weight = 3 [default = 1]; // probability weight
             optional bool Sequential = 4 [default = true];
@@ -179,7 +179,7 @@ message TEvLoadTestRequest {
         optional uint32 IntervalMsMin = 7;
         optional uint32 IntervalMsMax = 8;
 
-        optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB, must be divisible by IoSizeBytes
+        optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB, must be divisible by IoSizeBytes (and by background write size when enabled)
 
         repeated TArea Areas = 10;
 
@@ -201,9 +201,10 @@ message TEvLoadTestRequest {
         // Request size for read/write operations in bytes.
         optional uint32 IoSizeBytes = 18 [default = 4096];
         // Unmeasured background writes per measured read during IsReadLoad.
-        // 0 disables them; 1.0 issues one write per read.
+        // 0 disables them; 1.0 issues one write per read. Shares InFlight with measured reads.
         optional float BackgroundWriteRatio = 19 [default = 0];
-        // Background write size in KiB.
+        // Background write size in KiB (power of two, at least 4). When background writes
+        // are enabled, ExpectedChunkSize and each AreaSize must be divisible by this size.
         optional uint32 BackgroundWriteSizeKiB = 20 [default = 4];
     }
 

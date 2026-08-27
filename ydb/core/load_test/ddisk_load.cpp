@@ -12,6 +12,7 @@
 #include <util/random/fast.h>
 #include <util/random/shuffle.h>
 #include <util/generic/queue.h>
+#include <util/generic/ymath.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -279,10 +280,13 @@ public:
         IsReadLoad = cmd.GetIsReadLoad();
         Report->LoadType = IsReadLoad ? TEvLoad::TLoadReport::LOAD_READ : TEvLoad::TLoadReport::LOAD_WRITE;
         BackgroundWriteRatio = cmd.GetBackgroundWriteRatio();
-        Y_ABORT_UNLESS(BackgroundWriteRatio >= 0 && BackgroundWriteRatio <= 1,
-            "BackgroundWriteRatio must be in [0, 1] (writes per measured read)");
-        Y_ABORT_UNLESS(IsReadLoad || BackgroundWriteRatio == 0,
-            "BackgroundWriteRatio may only be used with IsReadLoad");
+        if (!IsValidFloat(BackgroundWriteRatio) || BackgroundWriteRatio < 0 || BackgroundWriteRatio > 1) {
+            ythrow TLoadActorException()
+                << "BackgroundWriteRatio must be a finite value in [0, 1] (writes per measured read)";
+        }
+        if (!IsReadLoad && BackgroundWriteRatio != 0) {
+            ythrow TLoadActorException() << "BackgroundWriteRatio may only be used with IsReadLoad";
+        }
 
         VERIFY_PARAM(InFlight);
         MaxInFlight = cmd.GetInFlight();
@@ -318,12 +322,15 @@ public:
             "ExpectedChunkSize must be divisible by IoSizeBytes");
         if (BackgroundWriteRatio > 0) {
             const ui64 backgroundWriteSizeBytes = static_cast<ui64>(cmd.GetBackgroundWriteSizeKiB()) << 10;
-            Y_ABORT_UNLESS(backgroundWriteSizeBytes >= 4096 && backgroundWriteSizeBytes <= Max<ui32>()
-                && (backgroundWriteSizeBytes & (backgroundWriteSizeBytes - 1)) == 0,
-                "BackgroundWriteSizeKiB must specify a power-of-two size of at least 4 KiB");
+            if (!(backgroundWriteSizeBytes >= 4096 && backgroundWriteSizeBytes <= Max<ui32>()
+                    && (backgroundWriteSizeBytes & (backgroundWriteSizeBytes - 1)) == 0)) {
+                ythrow TLoadActorException()
+                    << "BackgroundWriteSizeKiB must specify a power-of-two size of at least 4 KiB";
+            }
             BackgroundWriteSizeBytes = static_cast<ui32>(backgroundWriteSizeBytes);
-            Y_ABORT_UNLESS(ExpectedChunkSizeBytes % BackgroundWriteSizeBytes == 0,
-                "ExpectedChunkSize must be divisible by background write size");
+            if (ExpectedChunkSizeBytes % BackgroundWriteSizeBytes != 0) {
+                ythrow TLoadActorException() << "ExpectedChunkSize must be divisible by background write size";
+            }
         }
 
         Simulate = cmd.HasSimulate() ? cmd.GetSimulate() : false;
@@ -531,6 +538,8 @@ public:
             return;
         }
         Finished = true;
+        Report->MeasuredReadsSent = MeasuredReadsSent;
+        Report->BackgroundWritesSent = BackgroundWritesSent;
         ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, status));
         Die(ctx);
     }
@@ -869,6 +878,12 @@ public:
                     PARAM("DDiskId", Sprintf("%" PRIu32 ":%" PRIu32 ":%" PRIu32, DDiskNodeId, DDiskPDiskId, DDiskSlotId));
                     PARAM("I/O size", IOSizeInfo);
                     PARAM("Sequential", SequentialInfo);
+                    if (BackgroundWriteRatio > 0) {
+                        PARAM("Background write ratio", BackgroundWriteRatio);
+                        PARAM("Background write size", BackgroundWriteSizeBytes);
+                        PARAM("Measured reads sent", MeasuredReadsSent);
+                        PARAM("Background writes sent", BackgroundWritesSent);
+                    }
 
                     for (ui32 dt : {5, 10, 15, 20, 60}) {
                         TInstant now = TAppData::TimeProvider->Now();

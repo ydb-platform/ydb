@@ -3,6 +3,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <util/generic/bitops.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/ymath.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/info.h>
@@ -302,11 +303,12 @@ int main(int argc, char **argv) {
             }
 
             const float backgroundWriteRatio = load.GetBackgroundWriteRatio();
-            if (backgroundWriteRatio < 0 || backgroundWriteRatio > 1
+            if (!IsValidFloat(backgroundWriteRatio)
+                    || backgroundWriteRatio < 0 || backgroundWriteRatio > 1
                     || (backgroundWriteRatio > 0 && !load.GetIsReadLoad())) {
                 Cerr << "Error: invalid DDiskLoad.BackgroundWriteRatio in DDiskTestList[" << i
                     << "].DDiskTestList[" << j << "]: " << backgroundWriteRatio
-                    << " (must be in [0, 1] writes per measured read, and nonzero only for read load)" << Endl;
+                    << " (must be a finite value in [0, 1] writes per measured read, and nonzero only for read load)" << Endl;
                 return 1;
             }
             if (backgroundWriteRatio > 0) {
@@ -324,9 +326,11 @@ int main(int argc, char **argv) {
                         << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
                     return 1;
                 }
-                for (const auto& area : load.GetAreas()) {
-                    if (area.GetAreaSize() % backgroundWriteSizeBytes != 0) {
-                        Cerr << "Error: DDiskLoad.AreaSize must be divisible by background write size"
+                for (ui32 areaIdx = 0; areaIdx < static_cast<ui32>(load.AreasSize()); ++areaIdx) {
+                    const ui32 areaSize = load.GetAreas(areaIdx).GetAreaSize();
+                    if (!areaSize || areaSize % backgroundWriteSizeBytes != 0) {
+                        Cerr << "Error: DDiskLoad.Areas[" << areaIdx
+                            << "].AreaSize must be nonzero and divisible by background write size"
                             << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
                         return 1;
                     }

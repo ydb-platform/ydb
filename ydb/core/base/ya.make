@@ -138,6 +138,12 @@ PEERDIR(
     library/cpp/json
 )
 
+IF (OPENSOURCE)
+PEERDIR(
+    ydb/library/superlemmer_stub
+)
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
@@ -166,4 +172,3 @@ RECURSE_FOR_TESTS(
     ut_http_database_param
 )
 ENDIF()
-

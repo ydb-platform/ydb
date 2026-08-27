@@ -750,6 +750,7 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
+        queryProto.SetEnableOltpSink(true);
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
@@ -1925,6 +1926,15 @@ private:
         THashSet<size_t> AffectedKeys;
     };
 
+    static bool AnyColumnAffected(TConstArrayRef<TString> columns, const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet) {
+        for (auto& col: columns) {
+            if (columnsSet.contains(col) && !mainKeyColumnsSet.contains(col)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     TAffectedIndexes ComputeAffectedIndexes(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta,
             const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet) {
         const auto mode = settings.Mode().StringValue();
@@ -1935,30 +1945,34 @@ private:
 
             if (indexDescription.Type == TIndexDescription::EType::GlobalSync ||
                 indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
-                const auto& implTable = tableMeta->ImplTables[index];
-
                 if (mode == "update" || mode == "update_conditional") {
+                    const auto& implTable = tableMeta->ImplTables[index];
                     if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
                             return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
                         })) {
-                            result.Affected.push_back(index);
-                    }
-                    if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
-                            return columnsSet.contains(column) && !mainKeyColumnsSet.contains(column);
-                        })) {
-                            result.AffectedKeys.insert(index);
-                        }
-                    } else {
                         result.Affected.push_back(index);
+                    }
+                    if (AnyColumnAffected(implTable->KeyColumnNames, columnsSet, mainKeyColumnsSet)) {
                         result.AffectedKeys.insert(index);
                     }
+                } else {
+                    result.Affected.push_back(index);
+                    result.AffectedKeys.insert(index);
+                }
             } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
                 indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
                 indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
-                if (mode != "update" &&
-                    mode != "update_conditional" ||
-                    columnsSet.contains(indexDescription.KeyColumns[0])) {
+                if (mode == "update" || mode == "update_conditional") {
+                    if (AnyColumnAffected(indexDescription.KeyColumns, columnsSet, mainKeyColumnsSet)) {
+                        result.Affected.push_back(index);
+                        result.AffectedKeys.insert(index);
+                    } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance &&
+                        AnyColumnAffected(indexDescription.DataColumns, columnsSet, mainKeyColumnsSet)) {
+                        result.Affected.push_back(index);
+                    }
+                } else {
                     result.Affected.push_back(index);
+                    result.AffectedKeys.insert(index);
                 }
             }
         }
@@ -2055,6 +2069,11 @@ private:
                 indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
                 for (const auto& col: indexDescription.KeyColumns) {
                     lookupColumnsSet.insert(col);
+                }
+                if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    for (const auto& col: indexDescription.DataColumns) {
+                        lookupColumnsSet.insert(col);
+                    }
                 }
                 // In rowid mode the doc_id is the synthetic __ydb_row_id column, which for UPSERT/UPDATE
                 // must be read back from the existing row (it is not part of the user-supplied columns).
@@ -2163,7 +2182,7 @@ private:
             FillTableId(*docsTable, *indexSettings->MutableDocsTable());
             FillTablesMap(docsTable->Name, tablesMap);
             TVector<TStringBuf> docsColumns;
-            YQL_ENSURE(docsTable->KeyColumnNames.size() == 1);
+            YQL_ENSURE(docsTable->KeyColumnNames.size() == 1); // real PK or __ydb_row_id
             docsColumns.emplace_back(docsTable->KeyColumnNames[0]);
             docsColumns.emplace_back(NTableIndex::NFulltext::DocLengthColumn);
             for (const auto& columnName : indexDescription.DataColumns) {
@@ -2179,6 +2198,13 @@ private:
         }
 
         FillTablesMap(implTable->Name, tablesMap);
+        for (size_t i = 0; i+1 < indexDescription.KeyColumns.size(); i++) {
+            // Add prefix columns
+            const auto& columnName = indexDescription.KeyColumns[i];
+            const auto& columnMeta = implTable->Columns.at(columnName);
+            FillColumnProto(columnName, &columnMeta, indexSettings->AddImplColumns());
+            tablesMap[implTable->Name].emplace(columnName);
+        }
         for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn,
             NTableIndex::NFulltext::GenColumn,
             NTableIndex::NFulltext::MaxIdColumn,
@@ -2230,8 +2256,10 @@ private:
             }
             indexColumnsSet.emplace(columnName);
         }
+        ui32 dataColumns = 0;
         for (const auto& columnName : indexDescription.DataColumns) {
             if (updateColumnSet.contains(columnName) && !indexColumnsSet.contains(columnName)) {
+                dataColumns++;
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
                 // FIXME: Remove WriteIndexes and do not pass it at all
@@ -2240,6 +2268,7 @@ private:
                 indexColumnsSet.emplace(columnName);
             }
         }
+        indexSettings->SetDataColumnCount(dataColumns);
     }
 
     // Sets per-index OperationType and NeedDeleteOldRows.
@@ -3071,6 +3100,21 @@ private:
 
             if (const auto maybeFullscanLimit = streamLookup.FullscanLimit().Maybe<TCoAtom>()) {
                 dqSourceLookupCn.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
+            }
+
+            if (const auto maybeShuffleMode = streamLookup.ShuffleMode().Maybe<TCoAtom>()) {
+                switch (FromString<NDq::EShuffleMode>(maybeShuffleMode.Cast().StringValue())) {
+#define TRANSLATE(Id, PROTO) \
+                    case NDq::EShuffleMode::Id: \
+                        static_assert(static_cast<ui32>(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO) == static_cast<ui32>(NDq::EShuffleMode::Id)); \
+                        dqSourceLookupCn.SetShuffleMode(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO); \
+                        break
+                    TRANSLATE(Default, DEFAULT);
+                    TRANSLATE(Off, OFF);
+                    TRANSLATE(Map, MAP);
+                    TRANSLATE(Hash, HASH);
+#undef TRANSLATE
+                }
             }
 
             for (const auto& key : streamLookup.LeftJoinKeyNames()) {

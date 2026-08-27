@@ -126,7 +126,6 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
-    yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
     library/cpp/json
 )
@@ -141,6 +140,7 @@ ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+GENERATE_ENUM_SERIALIZATION(auth.h)
 
 END()
 

@@ -25,6 +25,7 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/boto3
+    contrib/python/requests
     ydb/tests/functional/secrets/lib
     ydb/tests/library
     ydb/tests/library/fixtures

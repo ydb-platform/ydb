@@ -1232,6 +1232,7 @@ private:
                         const TActorContext& ctx);
 
     void TryRunCompaction(bool force = false);
+    void AbortBlobsCompaction(const TString& reason, const TActorContext& ctx);
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();
     ui64 NextReadCookie();

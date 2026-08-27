@@ -86,6 +86,7 @@ union TBasicKikimrServicesMask {
         bool EnableCountersInfoProvider : 1;
         bool EnableNBSService : 1;
         bool EnableUdfStore : 1;
+        bool EnableWorkloadManagerService : 1;
     };
 
     struct {

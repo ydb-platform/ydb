@@ -2811,7 +2811,8 @@
             "Match": {"Type": "Callable", "Name": "WatermarkGenerator"},
             "Children": [
                 {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
-                {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"}
+                {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"},
+                {"Index": 2, "Name": "WatermarkSettings",    "Type": "TCoNameValueTupleList"}
             ]
         },
         {

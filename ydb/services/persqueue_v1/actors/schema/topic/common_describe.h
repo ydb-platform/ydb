@@ -13,6 +13,8 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
+#include <optional>
+
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 
     template<class T>
@@ -43,7 +45,12 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         using TBase = TGrpcProxyActor<TDerived, TRequest>;
 
         static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
+        static constexpr TDuration RequestTimeout = TDuration::Seconds(10);
+        static constexpr size_t StatsMaxRetries = 15;
+        static constexpr TDuration StatsRetryInitialDelay = TDuration::MilliSeconds(25);
+        static constexpr TDuration StatsRetryMaxDelay = TDuration::MilliSeconds(250);
         static constexpr ui64 LocationsRetryWakeupTag = 100;
+        static constexpr ui64 RequestTimeoutWakeupTag = 101;
 
     public:
         TDescribeBaseActor(NGRpcService::IRequestOpCtx* request, NPQ::NDescriber::TAccessRights accessRights)
@@ -69,6 +76,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void DoAction() {
             LOG_D("DoAction " << this->GetProtoRequest()->path());
+            RequestStartTime = TActivationContext::Now();
+            this->Schedule(RequestTimeout, new TEvents::TEvWakeup(RequestTimeoutWakeupTag));
+
             this->RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
                 this->SelfId(),
                 this->GetDatabase(),
@@ -94,6 +104,12 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);
+            case TEvents::TEvWakeup::EventType:
+                if (ev->Get<TEvents::TEvWakeup>()->Tag == RequestTimeoutWakeupTag) {
+                    HandleRequestTimeout();
+                    return;
+                }
+                [[fallthrough]];
             default:
                 this->StateFuncBase(ev);
             }
@@ -179,6 +195,13 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             case TEvents::TEvWakeup::EventType:
                 if (ev->Get<TEvents::TEvWakeup>()->Tag == LocationsRetryWakeupTag) {
                     HandleLocationsRetryWakeup();
+                    return;
+                }
+                if (ev->Get<TEvents::TEvWakeup>()->Tag == RequestTimeoutWakeupTag) {
+                    HandleRequestTimeout();
+                    return;
+                }
+                if (HandleStatsRetryWakeup(ev->Get<TEvents::TEvWakeup>()->Tag)) {
                     return;
                 }
                 [[fallthrough]];
@@ -287,7 +310,8 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
             LOG_D("Handle TEvDeliveryProblem. TabletId=" << ev->Get()->TabletId);
-            if (OnUndelivered(ev)) {
+            // OnUndelivered returns true for the current pipe subscription; false means a stale notification.
+            if (!OnUndelivered(ev)) {
                 return;
             }
 
@@ -298,7 +322,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             if (ev->Get()->TabletId == ReadBalancerTabletId) {
                 ScheduleLocationsRetry();
             } else {
-                RequestStats(ev->Get()->TabletId);
+                ScheduleStatsRetry(ev->Get()->TabletId);
             }
         }
 
@@ -317,6 +341,11 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             if (LocationsReceived && ReadSessionsReceived) {
                 return;
             }
+            const auto remaining = RemainingRequestTimeout();
+            if (!remaining) {
+                HandleRequestTimeout();
+                return;
+            }
             if (!LocationsReceived) {
                 TVector<ui64> partitionIds;
                 for (const auto& partition : TopicInfo.Info->Description.GetPartitions()) {
@@ -325,7 +354,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                     }
                 }
                 LOG_D("PartitionsLocation " << ReadBalancerTabletId << " partitions " << JoinSeq(", ", partitionIds));
-                SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvGetPartitionsLocation(partitionIds));
+                SendToTablet(
+                    ReadBalancerTabletId,
+                    new TEvPersQueue::TEvGetPartitionsLocation(partitionIds, remaining));
             }
             if (!ReadSessionsReceived && this->GetProtoRequest()->include_stats()) {
                 auto ev = CreateReadSessionsInfoRequest();
@@ -341,8 +372,49 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void RequestStats(ui64 tabletId) {
             LOG_D("Stats " << tabletId);
+            StatsBackoff.try_emplace(tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
             SendToTablet(tabletId, CreateStatusRequest().release(), tabletId);
             TabletsInflight.insert(tabletId);
+        }
+
+        void ScheduleStatsRetry(ui64 tabletId) {
+            if (!RemainingRequestTimeout()) {
+                HandleRequestTimeout();
+                return;
+            }
+            auto [it, _] = StatsBackoff.try_emplace(
+                tabletId, StatsMaxRetries, StatsRetryInitialDelay, StatsRetryMaxDelay);
+            if (!it->second.HasMore()) {
+                LOG_W("Stats retries exceeded for tablet " << tabletId);
+                TabletsInflight.erase(tabletId);
+                this->ReplyWithError(
+                    Ydb::StatusIds::UNAVAILABLE,
+                    TStringBuilder() << "Tablet " << tabletId << " unresponsive",
+                    Ydb::PersQueue::ErrorCode::ERROR);
+                return;
+            }
+            if (!StatsRetryPending.insert(tabletId).second) {
+                return;
+            }
+            const auto delay = it->second.Next();
+            LOG_D("Stats retry " << tabletId << " " << it->second.GetIteration() << " in " << delay);
+            // Wakeup tag is the tablet id (distinct from LocationsRetry/RequestTimeout tags).
+            this->Schedule(delay, new TEvents::TEvWakeup(tabletId));
+        }
+
+        bool HandleStatsRetryWakeup(ui64 tabletId) {
+            if (!StatsRetryPending.erase(tabletId)) {
+                return false;
+            }
+            if (!TabletsInflight.contains(tabletId)) {
+                return true;
+            }
+            if (!RemainingRequestTimeout()) {
+                HandleRequestTimeout();
+                return true;
+            }
+            RequestStats(tabletId);
+            return true;
         }
 
         void FailLocationsUnavailable() {
@@ -354,6 +426,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void ScheduleLocationsRetry() {
+            if (!RemainingRequestTimeout()) {
+                HandleRequestTimeout();
+                return;
+            }
             if (!LocationsBackoff.HasMore()) {
                 LOG_W("PartitionsLocation retries exceeded");
                 FailLocationsUnavailable();
@@ -376,6 +452,25 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             RequestReadBalancer();
         }
 
+        TDuration RemainingRequestTimeout() const {
+            if (!RequestStartTime) {
+                return RequestTimeout;
+            }
+            const auto now = TActivationContext::Now();
+            if (now >= *RequestStartTime + RequestTimeout) {
+                return TDuration::Zero();
+            }
+            return *RequestStartTime + RequestTimeout - now;
+        }
+
+        void HandleRequestTimeout() {
+            LOG_W("Describe request timed out");
+            this->ReplyWithError(
+                Ydb::StatusIds::TIMEOUT,
+                "Describe request timed out",
+                Ydb::PersQueue::ErrorCode::ERROR);
+        }
+
     protected:
         const NPQ::NDescriber::TAccessRights AccessRights;
 
@@ -388,6 +483,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         bool ReadSessionsReceived = false;
         bool LocationsRetryPending = false;
         TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
+        std::optional<TInstant> RequestStartTime;
+        absl::flat_hash_map<ui64, TBackoff> StatsBackoff;
+        absl::flat_hash_set<ui64> StatsRetryPending;
 
         Ydb::Scheme::Entry SelfEntry;
 

@@ -1640,6 +1640,7 @@ public:
         std::vector<ui32> OldColumnsIndexes;
         TKqpTableWriteActor* WriteActor = nullptr;
         std::vector<NScheme::TTypeInfo> ColumnTypes;
+        ui32 DataColumnCount = 0;
         bool NeedWriteProjection = true;
         EPathWriteType PathType = EPathWriteType::MainTable;
         Ydb::Table::FulltextIndexSettings FulltextSettings;
@@ -2393,6 +2394,7 @@ private:
         if (IsCompactPathType(info.PathType)) {
             auto projection = CreateFulltextTokenizeProjection(
                 info.ColumnTypes,
+                info.DataColumnCount,
                 info.PathType == EPathWriteType::FulltextCompactRelevance,
                 added,
                 info.FulltextSettings,
@@ -2958,7 +2960,7 @@ private:
                 return;
             }
 
-            if (!Closed && outOfMemory) {
+            if (!WriteTableActor->IsClosed() && (outOfMemory || CheckpointInProgress)) {
                 WriteTableActor->FlushBuffers();
             }
 
@@ -3120,14 +3122,14 @@ struct TWriteSettings {
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ImplColumns;
-    bool NeedLookup;
+    bool NeedLookup = false;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> ReturningColumns;
     TTransactionSettings TransactionSettings;
-    i64 Priority;
-    bool IsOlap;
+    i64 Priority = 0;
+    bool IsOlap = false;
     THashSet<TStringBuf> DefaultColumns;
-    bool SkipMissingRows;
+    bool SkipMissingRows = false;
     enum class EInputRowFormat { Flat, StructOfRows };
     EInputRowFormat InputRowFormat = EInputRowFormat::Flat;
 
@@ -3135,12 +3137,12 @@ struct TWriteSettings {
         TTableId TableId;
         TString TablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
-        ui32 KeyPrefixSize;
+        ui32 KeyPrefixSize = 0;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> ImplColumns;
-        bool IsUniq;
+        bool IsUniq = false;
         NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
-        bool NeedDeleteOldRows;
+        bool NeedDeleteOldRows = false;
         NKqpProto::EKqpFullTextIndexType IndexType;
         Ydb::Table::FulltextIndexSettings FulltextSettings;
         TTableId DocsTableId;
@@ -3152,11 +3154,12 @@ struct TWriteSettings {
         TTableId StatsTableId;
         TString StatsTablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> StatsColumns;
+        ui32 DataColumnCount = 0;
     };
 
     std::vector<TIndex> Indexes;
 
-    bool EnableStreamWrite;
+    bool EnableStreamWrite = false;
     ui64 QuerySpanId = 0;
 };
 
@@ -3772,6 +3775,7 @@ public:
                             /* preferAdditionalInputColumns */ true),
                 .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 .ColumnTypes = BuildColumnTypes(indexSettings.Columns),
+                .DataColumnCount = indexSettings.DataColumnCount,
                 .NeedWriteProjection = true,
                 .PathType = TKqpWriteTask::EPathWriteType::SecondaryIndex,
                 .FulltextSettings = indexSettings.FulltextSettings,
@@ -4746,6 +4750,12 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
+                    AFL_ENSURE(res->Record.HasStepId());
+                    AFL_ENSURE(res->Record.HasTxId());
+                    AFL_ENSURE(TxId && *TxId == res->Record.GetTxId());
+                    CommitTimestamp = TCommitTimestamp{res->Record.GetStepId(), res->Record.GetTxId()};
+                }
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
@@ -5507,7 +5517,8 @@ public:
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
-                BuildStats()
+                BuildStats(),
+                std::move(CommitTimestamp)
             });
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
@@ -5899,6 +5910,7 @@ private:
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
@@ -6096,28 +6108,59 @@ private:
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor receive EvBufferWriteResult from " << BufferActorId);
 
+        AFL_ENSURE(!PendingResult);
         WriteToken = result->Get()->Token;
 
         if (TransformOutput) {
-            AFL_ENSURE(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            for (const auto& batch : result->Get()->Data) {
-                for (const auto& row : GetRows(batch)) {
-                    AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
-                    NUdf::TUnboxedValue* outputRowItems = nullptr;
-                    auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+            PendingResult.Reset(result->Release().Release());
+            PendingBatchIndex = 0;
+            PendingRowIndex = 0;
+            ConsumePendingReturning();
+        } else {
+            OnFlushed();
+        }
+    }
 
-                    for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
-                        outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
-                    }
+    void ConsumePendingReturning() {
+        AFL_ENSURE(TransformOutput);
+        AFL_ENSURE(PendingResult);
+        AFL_ENSURE(Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
 
-                    AFL_ENSURE(TransformOutput->GetFillLevel() == NYql::NDq::EDqFillLevel::NoLimit);
-                    TransformOutput->Consume(std::move(outputRow));
+        const auto& data = PendingResult->Data;
+        while (PendingBatchIndex < data.size()) {
+            const auto rows = GetRows(data[PendingBatchIndex], PendingRowIndex);
+            for (size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
+                if (TransformOutput->GetFillLevel() != NYql::NDq::EDqFillLevel::NoLimit) {
+                    CA_LOG_D("TKqpForwardWriteActor TransformOutput is full, waiting for drain");
+                    Callbacks->ResumeExecution();
+                    return;
                 }
+                const auto& row = rows[rowIndex];
+                AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
+                NUdf::TUnboxedValue* outputRowItems = nullptr;
+                auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+                for (size_t colIndex = 0; colIndex < ReturningColumnsTypes.size(); ++colIndex) {
+                    outputRowItems[colIndex] = NMiniKQL::GetCellValue(row[colIndex], ReturningColumnsTypes[colIndex]);
+                }
+                TransformOutput->Consume(std::move(outputRow));
+                ++PendingRowIndex;
             }
+            PendingRowIndex = 0;
+            ++PendingBatchIndex;
         }
 
+        PendingResult.Reset();
+        PendingRowIndex = 0;
+        PendingBatchIndex = 0;
         OnFlushed();
+    }
+
+    void OnOutputConsumerReady() final {
+        if (!PendingResult) {
+            return;
+        }
+        ConsumePendingReturning();
     }
 
     void OnFlushed() {
@@ -6241,6 +6284,7 @@ private:
                     .FulltextSettings = (indexSettings.HasFulltextSettings()
                         ? indexSettings.GetFulltextSettings()
                         : Ydb::Table::FulltextIndexSettings()),
+                    .DataColumnCount = indexSettings.GetDataColumnCount(),
                 });
                 if (indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
                     auto& idx = ev->Settings->Indexes.back();
@@ -6330,6 +6374,7 @@ private:
         if (TransformOutput) {
             AFL_ENSURE(Alloc);
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            PendingResult.Reset();
             TransformOutput.Reset();
         }
 
@@ -6360,6 +6405,10 @@ private:
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
     NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
+
+    THolder<TEvBufferWriteResult> PendingResult;
+    size_t PendingBatchIndex = 0;
+    size_t PendingRowIndex = 0;
 
 private:
     template<typename TArgs>

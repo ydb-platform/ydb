@@ -714,6 +714,12 @@ protected:
                         uv.UnRef();
                         uv = TUnboxedValuePod{};
                     }
+                    if (isDehydrated) {
+                        // The keys just released were owned by the arena tuple (HydratedBuffer
+                        // aliases them without an extra Ref); clear the stale arena copies so a
+                        // mid-spill teardown (ReleaseAggregationsFromArena) doesn't release them again
+                        std::fill_n(static_cast<TUnboxedValuePod*>(static_cast<void*>(item)), keysWidth, TUnboxedValuePod{});
+                    }
                     if (!pageFuture.has_value()) {
                         continue;
                     }
@@ -849,6 +855,12 @@ protected:
 
             while (!stateSpiller.Empty()) {
                 TUnboxedValuePod* keyAndStateBuf = static_cast<TUnboxedValuePod*>(Store->Alloc(0));
+                if (isDehydratedState) {
+                    // The arena page may be reused and hold stale value bits; the tuple stays
+                    // allocated across the async read below, so clear the keys for the teardown
+                    // sweep (ForgetState is a no-op for dehydrated states)
+                    std::fill_n(keyAndStateBuf, keysCount, TUnboxedValuePod{});
+                }
 
                 TArrayRef<TUnboxedValue> keyAndStateArr(static_cast<TUnboxedValue*>(isDehydratedState ? HydratedBuffer.data() : keyAndStateBuf), keyAndStatesCount);
                 for (auto& uv : keyAndStateArr) {

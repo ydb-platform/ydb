@@ -175,9 +175,9 @@ public:
     void UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
 
     struct TParsedOpaqueConfig {
-        // Raw JSON section text used for cheap equality between updates.
+        // Raw YAML section text used for cheap equality between updates.
         // !empty() (empty strings aka "section present but empty" treated as absent config and not stored)
-        TString RawJson;
+        TString RawYaml;
         // May be null in the cache (parser produced nothing), but null
         // never placed into an outgoing event — see PopulateWithOpaqueConfigs.
         std::shared_ptr<const ::google::protobuf::Message> Parsed;
@@ -1167,53 +1167,66 @@ catch (...) {
 THashMap<ui32, TConfigsDispatcher::TParsedOpaqueConfig> TConfigsDispatcher::ParseOpaqueConfigs() const
 {
     THashMap<ui32, TParsedOpaqueConfig> result;
-    if (!YamlConfigEnabled || OpaqueConfigParsers.empty() || ResolvedJsonConfig.empty()) {
+    if (!YamlConfigEnabled || OpaqueConfigParsers.empty() || ResolvedYamlConfig.empty()) {
         return result;
     }
-    // The opaque carrier proto is empty by design — its content lives in the
-    // resolved YAML. Pull each kind's section out and pass it to the end-node
-    // parser that owns the real schema.
-    NJson::TJsonValue resolved;
-    if (!NJson::ReadJsonTree(ResolvedJsonConfig, &resolved)) {
-        return result;
-    }
-    const NJson::TJsonValue* configSection = &resolved;
-    if (const NJson::TJsonValue* c = nullptr; resolved.GetValuePointer("config", &c)) {
-        configSection = c;
-    }
-    const auto* desc = NKikimrConfig::TAppConfig::descriptor();
-    for (const auto& [kind, parser] : OpaqueConfigParsers) {
-        const auto* field = desc->FindFieldByNumber(kind);
-        if (!field) {
-            continue;
+
+    try {
+        // The opaque carrier proto is empty by design — its content lives in the
+        // resolved YAML. Pull each kind's section out and pass it to the end-node
+        // parser that owns the real schema.
+
+        NFyaml::TDocument yamlDoc = NFyaml::TDocument::Parse(ResolvedYamlConfig);
+
+        // ResolvedYamlConfig is the emitted 'config:' sub-tree (see
+        // NYamlConfig::Resolve) — its root IS the config content.
+        auto configSection = yamlDoc.Root();
+        if (configSection.Empty() || configSection.Type() != NFyaml::ENodeType::Mapping) {
+            return result;
         }
-        TString name = field->name();
-        NProtobufJson::ToSnakeCaseDense(&name);
-        const NJson::TJsonValue* section = nullptr;
-        if (!configSection->GetValuePointer(name, &section)) {
-            continue;   // section absent — no config
+
+        auto configMap = configSection.Map();
+        const auto* desc = NKikimrConfig::TAppConfig::descriptor();
+
+        for (const auto& [kind, parser] : OpaqueConfigParsers) {
+
+            const auto* field = desc->FindFieldByNumber(kind);
+            if (!field) {
+                continue;
+            }
+
+            TString name = field->name();
+            NProtobufJson::ToSnakeCaseDense(&name);
+            if (!configMap.Has(name)) {
+                continue;   // section absent — no config
+            }
+
+            TStringStream sectionStream;
+            sectionStream << configMap.at(name);
+            TString sectionYaml = sectionStream.Str();
+
+            TParsedOpaqueConfig entry;
+            entry.RawYaml = std::move(sectionYaml);
+            try {
+                entry.Parsed = parser(entry.RawYaml);
+                result.emplace(kind, std::move(entry));
+            }
+            catch (const std::exception& e) {
+                YDB_LOG_ERROR("Error parsing opaque config",
+                    {"kind", kind},
+                    {"name", name},
+                    {"error", e.what()});
+            }
+            catch (...) {
+                YDB_LOG_ERROR("Error parsing opaque config",
+                    {"kind", kind},
+                    {"name", name},
+                    {"error", "unknown exception"});
+            }
         }
-        TParsedOpaqueConfig entry;
-        entry.RawJson = NJson::WriteJson(section, /*formatOutput=*/ false);
-        if (entry.RawJson.empty()) {
-            continue;   // empty section — treated as "no config"
-        }
-        try {
-            entry.Parsed = parser(entry.RawJson);
-        }
-        catch (const std::exception& e) {
-            YDB_LOG_ERROR("Error parsing opaque config",
-                {"kind", kind},
-                {"name", name},
-                {"error", e.what()});
-        }
-        catch (...) {
-            YDB_LOG_ERROR("Error parsing opaque config",
-                {"kind", kind},
-                {"name", name},
-                {"error", "unknown exception"});
-        }
-        result.emplace(kind, std::move(entry));
+    } catch (const std::exception& e) {
+        YDB_LOG_ERROR("Error parsing resolved YAML config",
+            {"error", e.what()});
     }
     return result;
 }
@@ -1304,7 +1317,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         auto newOpaqueConfigs = ParseOpaqueConfigs();
         for (const auto& [kind, parsed] : newOpaqueConfigs) {
             auto it = CurrentOpaqueConfigs.find(kind);
-            if (it == CurrentOpaqueConfigs.end() || it->second.RawJson != parsed.RawJson) {
+            if (it == CurrentOpaqueConfigs.end() || it->second.RawYaml != parsed.RawYaml) {
                 // config was added or changed
                 affectedOpaqueKinds.insert(kind);
             }
@@ -1327,6 +1340,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 if (affectedOpaqueKinds.contains(kind)) {
                     hasAffectedKinds = true;
+                    break;
                 }
             }
             if (!isYamlChanged && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
@@ -1341,6 +1355,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 if (affectedKinds.contains(kind)) {
                     hasAffectedKinds = true;
+                    break;
                 }
             }
             // we try resend all configs if yaml config was turned off

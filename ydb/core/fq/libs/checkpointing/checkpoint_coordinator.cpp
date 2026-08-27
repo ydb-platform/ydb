@@ -570,9 +570,6 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
                 {"coordinatorId", CoordinatorId},
                 {"checkpointId", checkpointId});
             Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, checkpoint.GetStats().StateSize), IEventHandle::FlagTrackDelivery);
-            if (InitingZeroCheckpoint) {
-                Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
-            }
         }
     }
 }
@@ -611,6 +608,11 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
     UpdateInProgressMetric();
     for (const auto& [toTrigger, transport] : ActorsToNotify) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvCommitState(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, CoordinatorId.Generation));
+    }
+
+    // Fact of completed zero checkpoint must be saved after checkpoint become available for restoration as own checkpoint
+    if (InitingZeroCheckpoint) {
+        Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
     }
 }
 

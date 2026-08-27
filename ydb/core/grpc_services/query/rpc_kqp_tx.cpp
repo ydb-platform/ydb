@@ -181,7 +181,7 @@ public:
 private:
     virtual std::pair<TString, TString> GetReqData() const = 0;
     virtual void Fill(NKikimrKqp::TQueryRequest* req) const = 0;
-    virtual NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) const = 0;
+    virtual NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const NKikimrKqp::TQueryResponse& kqpResponse) const = 0;
 
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         try {
@@ -233,14 +233,15 @@ private:
         FillCommonKqpRespFields(record, Request.get());
 
         NYql::TIssues issues;
+        const NKikimrKqp::TQueryResponse* kqpResponse = nullptr;
         if (record.HasResponse()) {
-            const auto& kqpResponse = record.GetResponse();
-            const auto& issueMessage = kqpResponse.GetQueryIssues();
+            kqpResponse = &record.GetResponse();
+            const auto& issueMessage = kqpResponse->GetQueryIssues();
             NYql::IssuesFromMessage(issueMessage, issues);
             Request->RaiseIssues(issues);
         }
 
-        Reply(record.GetYdbStatus(), CreateResult(record.GetYdbStatus(), issues));
+        Reply(record.GetYdbStatus(), CreateResult(record.GetYdbStatus(), issues, kqpResponse ? *kqpResponse : NKikimrKqp::TQueryResponse::default_instance()));
     }
 
     void InternalError(const TString& message) {
@@ -285,10 +286,14 @@ private:
         req->MutableTxControl()->set_commit_tx(true);
     }
 
-    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) const override {
+    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const NKikimrKqp::TQueryResponse& kqpResponse) const override {
         auto result = TEvCommitTransactionRequest::AllocateResult<Ydb::Query::CommitTransactionResponse>(Request);
         result->set_status(status);
         NYql::IssuesToMessage(issues, result->mutable_issues());
+        if (kqpResponse.HasCommitTimestamp()) {
+            result->mutable_commit_timestamp()->set_plan_step(kqpResponse.GetCommitTimestamp().plan_step());
+            result->mutable_commit_timestamp()->set_tx_id(kqpResponse.GetCommitTimestamp().tx_id());
+        }
         return result;
     }
 };
@@ -308,7 +313,8 @@ private:
         req->SetAction(NKikimrKqp::QUERY_ACTION_ROLLBACK_TX);
     }
 
-    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) const override {
+    NProtoBuf::Message* CreateResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const NKikimrKqp::TQueryResponse& kqpResponse) const override {
+        Y_UNUSED(kqpResponse);
         auto result = TEvRollbackTransactionRequest::AllocateResult<Ydb::Query::RollbackTransactionResponse>(Request);
         result->set_status(status);
         NYql::IssuesToMessage(issues, result->mutable_issues());

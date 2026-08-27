@@ -21,6 +21,10 @@ namespace {
 
 using namespace NKikimr::NKqp;
 
+TString MetadataUserToken() {
+    return NACLib::TSystemUsers::Metadata().SerializeAsString();
+}
+
 TString MakeDeletePublicationSql() {
     return TStringBuilder() << R"(
         -- TFinalizePublicationActor::MakeDeletePublicationSql
@@ -111,13 +115,11 @@ public:
         TString database,
         ui64 intPublicationId,
         EFinalizePublicationOp op,
-        TString userToken,
         TString callerSid)
         : ReplyTo(replyTo)
         , Database(std::move(database))
         , IntPublicationId(intPublicationId)
         , Op(op)
-        , UserToken(std::move(userToken))
         , CallerSid(std::move(callerSid))
     {}
 
@@ -158,19 +160,11 @@ private:
         Become(&TFinalizePublicationActor::StateDeleteOnly);
     }
 
-    void SetCreateSessionIdentity(TEvKqp::TEvCreateSessionRequest& ev) {
-        if (!UserToken.empty()) {
-            NACLibProto::TUserToken token;
-            if (token.ParseFromString(UserToken)) {
-                ev.Record.SetUserSID(token.GetUserSID());
-            }
-        }
-    }
-
     void StartKqpSession() {
         auto ev = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Database);
-        SetCreateSessionIdentity(*ev);
+        // Registry and topic finalize ops run as metadata@system, like Begin/List query actors.
+        ev->Record.SetUserSID(BUILTIN_ACL_METADATA);
         Send(MakeKqpProxyID(SelfId().NodeId()), ev.Release());
         Step = EStep::KqpCreateSession;
         Become(&TFinalizePublicationActor::StateKqp);
@@ -178,9 +172,7 @@ private:
 
     void SendKqpBeginTx() {
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
-        if (!UserToken.empty()) {
-            ev->Record.SetUserToken(UserToken);
-        }
+        ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
         ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
@@ -197,9 +189,7 @@ private:
                 .Build();
 
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
-        if (!UserToken.empty()) {
-            ev->Record.SetUserToken(UserToken);
-        }
+        ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         ev->Record.MutableRequest()->SetQuery(MakeDeletePublicationSql());
@@ -218,9 +208,7 @@ private:
 
     void SendKqpDeferredPublication() {
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
-        if (!UserToken.empty()) {
-            ev->Record.SetUserToken(UserToken);
-        }
+        ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -235,9 +223,7 @@ private:
 
     void SendKqpCommit() {
         auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
-        if (!UserToken.empty()) {
-            ev->Record.SetUserToken(UserToken);
-        }
+        ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
         ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
@@ -369,7 +355,6 @@ private:
     const TString Database;
     const ui64 IntPublicationId;
     const EFinalizePublicationOp Op;
-    const TString UserToken;
     const TString CallerSid;
 
     TMaybe<TListDestinationsData> ListDestinationsData;
@@ -386,10 +371,9 @@ NActors::IActor* CreateFinalizePublicationActor(
     const TString& database,
     ui64 intPublicationId,
     EFinalizePublicationOp op,
-    const TString& userToken,
     const TString& callerSid)
 {
-    return new TFinalizePublicationActor(replyTo, database, intPublicationId, op, userToken, callerSid);
+    return new TFinalizePublicationActor(replyTo, database, intPublicationId, op, callerSid);
 }
 
 } // namespace NKikimr::NPQ::NDeferredPublish

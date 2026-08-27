@@ -3279,7 +3279,7 @@ public:
             TVector<ui32> channels;
             TVector<ui32> forcedGroupIds;
             bool skip = false;
-            if (GroupId != 0) {
+            if (GroupId != 0 || StoragePool != "") {
                 skip = true;
                 for (const auto& channel : tablet->TabletStorageInfo->Channels) {
                     if (StoragePool && channel.StoragePool != StoragePool) {
@@ -3287,7 +3287,7 @@ public:
                     }
                     if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
                         const auto* latest = channel.LatestEntry();
-                        if (latest != nullptr && latest->GroupID == GroupId) {
+                        if (latest != nullptr && (GroupId == 0 || latest->GroupID == GroupId)) {
                             skip = false;
                             channels.push_back(channel.Channel);
                             if (!ForcedGroupIds.empty()) {

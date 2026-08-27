@@ -118,21 +118,28 @@ public:
         return state;
     }
 
-    static EStateType GetStateType(const NYql::NDq::TComputeActorState& state) {
+    static EStateType GetStateType(const ui64 taskId, const NYql::NDq::TComputeActorState& state) {
         if (!state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
+
         const TString& blob = state.MiniKqlProgram->Data.Blob;
         TStringBuf buf(blob);
         while (!buf.empty()) {
-            auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            if (nodeStateSize == std::numeric_limits<ui64>::max()) {
+                throw yexception() << "Task " << taskId << " has incomplete program state: some stateful operators are still not initialized.";
+            }
+
             Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
             TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
             if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }
+
             buf.Skip(nodeStateSize);
         }
+
         Y_ENSURE(buf.empty(), "State/buf is corrupted");
         return EStateType::Snapshot;
     }
@@ -377,6 +384,10 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
         .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
         .AddNullableColumn("type", EPrimitiveType::Uint8)
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
+        .BeginPartitioningSettings()
+            .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
+        .EndPartitioningSettings()
         .Build();
 
     auto promise = NThreading::NewPromise<TIssues>();
@@ -417,7 +428,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
 
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
-    return TIncrementLogic::GetStateType(state);
+    return TIncrementLogic::GetStateType(taskInfo.TaskId, state);
 }
 
 size_t TStateStorage::SerializeState(
@@ -454,7 +465,7 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
     size_t size = 0;
 
     try {
-        type = TIncrementLogic::GetStateType(state);
+        type = TIncrementLogic::GetStateType(taskId, state);
         size = SerializeState(state, serializedState);
         if (!size || serializedState.empty()) {
             return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));

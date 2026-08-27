@@ -357,18 +357,26 @@ private:
     bool Extracted = false;
 
 public:
+    bool HasResources() const {
+        return !Extracted && !!Resources;
+    }
+
+    const NAccessor::TAccessorsCollection* GetResourcesOptional() const {
+        return HasResources() ? Resources.get() : nullptr;
+    }
+
     const NAccessor::TAccessorsCollection& GetResources() const {
-        AFL_VERIFY(!Extracted);
+        AFL_VERIFY(HasResources());
         return *Resources;
     }
 
     NAccessor::TAccessorsCollection& MutableResources() const {
-        AFL_VERIFY(!Extracted);
+        AFL_VERIFY(HasResources());
         return *Resources;
     }
 
     std::unique_ptr<NAccessor::TAccessorsCollection> ExtractResources() {
-        AFL_VERIFY(!Extracted);
+        AFL_VERIFY(HasResources());
         Extracted = true;
         return std::move(Resources);
     }

@@ -19,6 +19,7 @@ std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     read->SetOffset(startOffset);
     read->SetTimeoutMs(0);
     read->SetCanReadBatches(true);
+    read->SetReadToBlobEnd(false);
     if (count) {
         read->SetCount(count.value());
     }

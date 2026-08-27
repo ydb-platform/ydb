@@ -63,6 +63,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
     {
         CaFactory_->AccountDefaultPoolInScheduler.store(config.GetComputeSchedulerSettings().GetAccountDefaultPool());
+        EnableSmallComputeMemoryAllocations = config.GetEnableSmallComputeMemoryAllocations();
         EnableChannelMemoryTracking = config.GetEnableChannelMemoryTracking();
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
@@ -146,7 +147,7 @@ private:
         const auto executerId = ev->Sender;
 
         if (!CachedQueryManagerId) {
-            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_, EnableChannelMemoryTracking));
+            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_, EnableSmallComputeMemoryAllocations, EnableChannelMemoryTracking));
         }
 
         TActorId queryManagerId;
@@ -288,6 +289,7 @@ private:
                 (config, Config.DebugString()));
         }
 
+        EnableSmallComputeMemoryAllocations = event.GetConfig().GetTableServiceConfig().GetEnableSmallComputeMemoryAllocations();
         EnableChannelMemoryTracking = event.GetConfig().GetTableServiceConfig().GetEnableChannelMemoryTracking();
 
         if (event.GetConfig().GetTableServiceConfig().HasIteratorReadsRetrySettings()) {
@@ -475,6 +477,7 @@ private:
     std::shared_ptr<TNodeState> State_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState_;
     TActorId CachedQueryManagerId;
+    bool EnableSmallComputeMemoryAllocations = false;
     bool EnableChannelMemoryTracking = false;
 };
 

@@ -870,12 +870,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             }
         }
 
-        if (request.GetPrefixColumns().size() &&
-            (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
-             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact)) {
-            badRequest(TStringBuilder() << "Prefix columns are not supported for JSON indexes");
-        }
-
         // Compact builds scan a table with a single integer key holding the doc id: either the main
         // table (single-integer-PK case) or, for an arbitrary-PK main table, the row-id source table
         // built by the rowid-mode prepass (a generic secondary-index build keyed by __ydb_row_id).

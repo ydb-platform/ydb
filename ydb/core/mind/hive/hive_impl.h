@@ -171,7 +171,7 @@ protected:
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
     friend class TReassignTabletsActor;
-    friend class TCompactActor;
+    friend class TMoveDataActor;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -258,7 +258,7 @@ protected:
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     void StartReassignActor(std::vector<TReassignOperation> operations);
-    void StartCompactActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName);
+    void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -632,7 +632,7 @@ protected:
     void Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev);
     void Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev);
     void Handle(TEvPrivate::TEvReassignInactiveGroupsComplete::TPtr& ev);
-    void Handle(TEvPrivate::TEvCompactComplete::TPtr& ev);
+    void Handle(TEvPrivate::TEvMoveDataComplete::TPtr& ev);
     void Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr& ev);
 
 protected:
@@ -1149,7 +1149,7 @@ protected:
 
     void StartShrinkPool(TStoragePoolInfo& pool);
     bool ReassignInactiveGroups(TStoragePoolInfo& pool);
-    bool CompactInactiveGroups(TStoragePoolInfo& pool);
+    bool MoveDataInactiveGroups(TStoragePoolInfo& pool);
     void CheckRemainingHistory(TStoragePoolInfo& pool);
 };
 

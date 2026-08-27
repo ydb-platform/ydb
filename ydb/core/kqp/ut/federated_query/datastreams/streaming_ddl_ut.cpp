@@ -6,6 +6,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
 #include <fmt/format.h>
 
@@ -19,9 +20,12 @@ using namespace fmt::literals;
 using namespace NYql::NConnector::NTest;
 using namespace NTestUtils;
 using namespace NFederatedQueryTest;
+using namespace NYdb::NConsoleClient::NAi;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
         CreateTopic(inputTopicName);
@@ -90,6 +94,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(2, 1);
         Sleep(TDuration::Seconds(1));
 
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount << ", expected both to be 1";
+                return queryCount == 1 && runningCount == 1;
+            });
+        }
+
         WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
         ReadTopicMessages(outputTopicName, {"key1value1", "value2key2"});
 
@@ -101,6 +115,34 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(2, 0);
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount;
+                return queryCount == 1 && runningCount == 0;
+            });
+        }
+
+        const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            const TString issuesJson = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+            Cerr << "Issues: " << issuesJson << Endl;
+
+            TJsonParser issuesParser;
+            UNIT_ASSERT(issuesParser.Parse(issuesJson));
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetValue().GetIntegerRobust(), 1);
+
+            issuesParser = issuesParser.GetKey("issues");
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetValue().GetIntegerRobust(), 1);
+
+            issuesParser = issuesParser.GetElement(0);
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetValue().GetIntegerRobust(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetKey("message").GetString(), "Request was canceled by user");
+            UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetKey("severity").GetValue().GetIntegerSafe(), static_cast<i64>(NYql::TSeverityIds::S_INFO));
+        });
     }
 
     Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
@@ -143,6 +185,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(0, 0);
+
+        {
+            auto appCounters = GetCounters("tablets")->GetSubgroup("type", "SchemeShard")->GetSubgroup("category", "app");
+            WaitFor(TDuration::Seconds(60), "StreamingQueryCount and RunningStreamingQueryCount reach 1", [&](TString& error) {
+                auto queryCount = appCounters->GetCounter("SUM(SchemeShard/StreamingQueryCount)", false)->Val();
+                auto runningCount = appCounters->GetCounter("SUM(SchemeShard/RunningStreamingQueryCount)", false)->Val();
+                error = TStringBuilder() << "StreamingQueryCount=" << queryCount << ", RunningStreamingQueryCount=" << runningCount;
+                return queryCount == 0 && runningCount == 0;
+            });
+        }
     }
 
     Y_UNIT_TEST_F(MaxPartitionReadSkewWithRestartAndCheckpoint, TStreamingTestFixture) {
@@ -1260,6 +1312,359 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
     }
 
+    Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoinShuffleMode, WithFeatureFlag, TStreamingTestFixture) {
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinShuffleMode(WithFeatureFlag);
+        }
+
+        constexpr ui64 maxPartitions = 2;
+        const TVector<NYql::NDq::EShuffleMode> shuffleModes = {
+            NYql::NDq::EShuffleMode::Off,
+            NYql::NDq::EShuffleMode::Map,
+        };
+        ui64 maxTasks = 3;
+        ui64 combinations = (WithFeatureFlag ? maxPartitions*maxTasks*shuffleModes.size() : 1);
+        const auto connectorClient = SetupMockConnectorClient();
+
+        constexpr char inputTopicName[] = "sljShuffleInputTopicName";
+        constexpr char outputTopicName[] = "sljShuffleOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 2*(combinations + !WithFeatureFlag),
+                // 1 for table/topic discovery, 1 for LoadMeta
+                .ListSplitsCount = (1 + 2*2)*combinations + (!WithFeatureFlag),
+                // 1 for LoadMeta, (regular + fullscan) for each each of 2 lookups
+                // without feature flag, only one LoadMeta
+                .ValidateListSplitsArgs = false
+            });
+
+            {
+                ui64 readSplitsCount = 0;
+                const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+                SetupMockConnectorTableData(connectorClient, {
+                    .TableName = ydbTable,
+                    .Columns = columns,
+                    .NumberReadSplits = 4*combinations,
+                    .ValidateReadSplitsArgs = false,
+                    .ResultFactory = [&]() {
+                        readSplitsCount += 1;
+                        const auto payloadColumn = readSplitsCount <= 2
+                            ? std::vector<std::string>{"P1", "P2", "P3"}
+                            : std::vector<std::string>{"P4", "P5", "P6"};
+                        if (readSplitsCount == 4) {
+                            readSplitsCount = 0;
+                        }
+
+                        return MakeRecordBatch(
+                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                        );
+                    }
+                });
+            }
+        }
+
+        for (ui64 partitions = 1; partitions <= maxPartitions; ++partitions) {
+            AlterTopic(inputTopicName, NYdb::NTopic::TAlterTopicSettings{}.AlterPartitioningSettings(partitions, partitions));
+            for (ui64 tasks = 1; tasks <= maxTasks; ++tasks) {
+                for (auto shuffleMode : shuffleModes) {
+                    bool expectedSuccess = WithFeatureFlag || shuffleMode == NYql::NDq::EShuffleMode::Off;
+                    constexpr char queryName[] = "streamingQuery";
+                    ExecQuery(fmt::format(R"(
+                        CREATE STREAMING QUERY `{query_name}` AS
+                        DO BEGIN
+                            PRAGMA ydb.MaxTasksPerStage = "{tasks}";
+                            -- PRAGMA ydb.OverridePlanner = @@ [
+                            --    {{ "tx": 0, "stage": 0, "tasks": {tasks} }}
+                            -- ] @@;
+                            $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                            $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                                FORMAT = "json_each_row",
+                                SCHEMA (
+                                    time Int32 NOT NULL,
+                                    event String,
+                                    host String
+                                )
+                            );
+
+                            $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                            LEFT JOIN /*+ streamlookup(ShuffleMode {shuffle_mode}
+                                                       TTL {ttl}) */ ANY $ydb_lookup AS l
+                            ON (l.fqdn = p.host);
+
+                            INSERT INTO `{pq_source}`.`{output_topic}`
+                            SELECT Unwrap(event || "-" || payload) FROM $joined
+                        END DO;)",
+                        "query_name"_a = queryName,
+                        "pq_source"_a = pqSourceName,
+                        "ydb_source"_a = ydbSourceName,
+                        "ydb_table"_a = ydbTable,
+                        "input_topic"_a = inputTopicName,
+                        "output_topic"_a = outputTopicName,
+                        "shuffle_mode"_a = ToString(shuffleMode),
+                        "ttl"_a = (tasks > 1 && partitions > 1 && shuffleMode != NYql::NDq::EShuffleMode::Off ? TDuration::Minutes(10) : TDuration::Seconds(1)).Seconds(),
+                        "tasks"_a = tasks
+                    ),
+                    expectedSuccess ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+                    expectedSuccess ? TStringBuilder() : TStringBuilder() << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << shuffleMode);
+                    if (!expectedSuccess) {
+                        return;
+                    }
+                    // Different scenarios:
+                    // Unshuffled: second portion must come after expiring TTL (otherwise it will reuse cache)
+                    // Shuffled: second portion lands in different task, so two lookups performed anyway
+
+                    CheckScriptExecutionsCount(1, 1);
+
+                    {
+                        auto now = TInstant::Now();
+                        Sleep(TDuration::Seconds(1));
+                        WriteTopicMessages(inputTopicName, {
+                            R"({"time": 0, "event": "A", "host": "host1.example.com"})",
+                            R"({"time": 1, "event": "B", "host": "host3.example.com"})",
+                            R"({"time": 2, "event": "A", "host": "host1.example.com"})",
+                        });
+
+                        ReadTopicMessages(outputTopicName, {"A-P1", "B-P3", "A-P1"}, now, /*sort=*/ true);
+                    }
+
+                    Sleep(TDuration::Seconds(1));
+
+                    {
+                        auto now = TInstant::Now();
+                        Sleep(TDuration::Seconds(1));
+                        WriteTopicMessages(inputTopicName, {
+                            R"({"time": 3, "event": "A", "host": "host1.example.com"})",
+                            R"({"time": 4, "event": "B", "host": "host3.example.com"})",
+                            R"({"time": 5, "event": "A", "host": "host1.example.com"})",
+                        }, partitions - 1);
+
+                        ReadTopicMessages(outputTopicName, {"A-P4", "B-P6", "A-P4"}, now, /*sort=*/ true);
+                    }
+
+                    CheckScriptExecutionsCount(1, 1);
+
+                    const auto results = ExecQuery(
+                        "SELECT ast_compressed FROM `.metadata/script_executions`;"
+                    );
+                    UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+                    CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& result) {
+                        const auto& ast = result.ColumnParser(0).GetOptionalString();
+                        UNIT_ASSERT(ast);
+                        UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+                    });
+                    ExecQuery(
+                        fmt::format(R"(DROP STREAMING QUERY `{query_name}`;)",
+                        "query_name"_a = queryName
+                    ));
+                    Sleep(TDuration::Seconds(1));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoinShuffleModeHash, TStreamingTestFixture) {
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinShuffleMode(true);
+        }
+
+        constexpr ui64 partitions = 2;
+        constexpr auto shuffleMode = NYql::NDq::EShuffleMode::Hash;
+        ui64 tasks = 3;
+        const auto connectorClient = SetupMockConnectorClient();
+
+        constexpr char inputTopicName[] = "sljShuffleHashInputTopicName";
+        constexpr char outputTopicName[] = "sljShuffleHashOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 1 + 1, // table/topic discovery and LoadMeta
+                .ListSplitsCount = 1 + 1*2, // LoadMeta and 2 lookups
+                .ValidateListSplitsArgs = false
+            });
+
+            {
+                ui64 readSplitsCount = 0;
+                const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+                SetupMockConnectorTableData(connectorClient, {
+                    .TableName = ydbTable,
+                    .Columns = columns,
+                    .NumberReadSplits = 2, // 2 lookups (initial + lru refresh)
+                    .ValidateReadSplitsArgs = false,
+                    .ResultFactory = [&]() {
+                        readSplitsCount += 1;
+                        const auto payloadColumn = readSplitsCount <= 1
+                            ? std::vector<std::string>{"P1", "P2", "P3"}
+                            : std::vector<std::string>{"P4", "P5", "P6"};
+
+                        return MakeRecordBatch(
+                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                        );
+                    }
+                });
+            }
+        }
+
+        AlterTopic(inputTopicName, NYdb::NTopic::TAlterTopicSettings{}.AlterPartitioningSettings(partitions, partitions));
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "{tasks}";
+                -- PRAGMA ydb.OverridePlanner = @@ [
+                --    {{ "tx": 0, "stage": 0, "tasks": {tasks} }}
+                -- ] @@;
+                $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(ShuffleMode {shuffle_mode}
+                                           TTL {ttl} FullscanLimit 0) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "shuffle_mode"_a = ToString(shuffleMode),
+            "ttl"_a = TDuration::Seconds(1).Seconds(),
+            "tasks"_a = tasks
+        ));
+        // Hash shuffle: all messages with same key lands in one task,
+        // single lookup is performed
+
+        CheckScriptExecutionsCount(1, 1);
+
+        // write same keys to two partitions -> they lands in same task/transform actor
+        // (with ShuffleMode Map they'd land in different tasks, hence they'd take 2 lookups-per-refresh, 4 total)
+        {
+            auto now = TInstant::Now();
+            Sleep(TDuration::Seconds(1));
+            WriteTopicMessages(inputTopicName, {
+                R"({"time": 0, "event": "A", "host": "host1.example.com"})",
+                R"({"time": 1, "event": "B", "host": "host1.example.com"})",
+                R"({"time": 2, "event": "A", "host": "host1.example.com"})",
+            }, /*partition=*/0);
+            WriteTopicMessages(inputTopicName, {
+                R"({"time": 0, "event": "a", "host": "host1.example.com"})",
+                R"({"time": 1, "event": "b", "host": "host1.example.com"})",
+                R"({"time": 2, "event": "a", "host": "host1.example.com"})",
+            }, partitions - 1);
+
+            ReadTopicMessages(outputTopicName, {
+                "A-P1", "B-P1", "A-P1", "a-P1", "b-P1", "a-P1"
+            }, now, /*sort=*/ true);
+        }
+
+        Sleep(TDuration::Seconds(1));
+
+        {
+            auto now = TInstant::Now();
+            Sleep(TDuration::Seconds(1));
+            WriteTopicMessages(inputTopicName, {
+                R"({"time": 0, "event": "A", "host": "host1.example.com"})",
+                R"({"time": 1, "event": "B", "host": "host1.example.com"})",
+                R"({"time": 2, "event": "A", "host": "host1.example.com"})",
+            }, /*partition=*/0);
+            WriteTopicMessages(inputTopicName, {
+                R"({"time": 3, "event": "a", "host": "host1.example.com"})",
+                R"({"time": 4, "event": "b", "host": "host1.example.com"})",
+                R"({"time": 5, "event": "a", "host": "host1.example.com"})",
+            }, partitions - 1);
+
+            ReadTopicMessages(outputTopicName, {
+                "A-P4", "B-P4", "A-P4", "a-P4", "b-P4", "a-P4"
+            }, now, /*sort=*/ true);
+        }
+
+        CheckScriptExecutionsCount(1, 1);
+
+        const auto results = ExecQuery(
+            "SELECT ast_compressed FROM `.metadata/script_executions`;"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& result) {
+            const auto& ast = result.ColumnParser(0).GetOptionalString();
+            UNIT_ASSERT(ast);
+            UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
+        ExecQuery(
+            fmt::format(R"(DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+        Sleep(TDuration::Seconds(1));
+    }
+
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
@@ -2350,6 +2755,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                     UPSERT INTO `{ydb_table}`
                     SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
                         FORMAT = json_each_row,
@@ -2406,6 +2812,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                     UPSERT INTO `{ydb_table}`
                     SELECT (Key || "x") AS Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
                         FORMAT = json_each_row,
@@ -3383,6 +3790,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"sql(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
                 LIMIT 1 OFFSET 1
@@ -3634,6 +4042,165 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("count").GetUint64(), std::min(changesCount, static_cast<ui64>(4)));
             });
         }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryPlaningErrorRetry, TStreamingTestFixture) {
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(500);
+        appConfig.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr ui32 partitionCount = 1000;
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "1000";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 1000 }}
+                ] @@;
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Data FROM `{pq_source}`.`{input_topic}`
+                GROUP BY Data, HOP(CurrentUtcTimestamp(TableRow()), "PT10S", "PT10S", "PT10S");
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        WaitFor(TDuration::Seconds(60), "wait streaming query issues", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            bool hasIssues = false;
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                const TString issuesJson = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+                hasIssues = issuesJson.contains("Previous query retries") && issuesJson.contains("Not enough resources to execute query");
+                error = TStringBuilder() << "issues: " << issuesJson;
+
+                const auto status = *resultSet.ColumnParser("Status").GetOptionalUtf8();
+                if (!IsIn({"RUNNING", "SUSPENDED"}, status)) {
+                    UNIT_FAIL("Unexpected query status: " << status);
+                }
+            });
+
+            return hasIssues;
+        });
+    }
+
+    Y_UNIT_TEST_F(CheckpointSupportValidationForCallables, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "checkpointSupportValidationForCallablesInputTopic";
+        constexpr char outputTopicName[] = "checkpointSupportValidationForCallablesOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQueryFailed AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}` LIMIT 1
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Checkpoints are not supported for LIMIT operator, query may produce unstable results");
+
+        constexpr char queryNameLimit[] = "streamingQueryLimitRun";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}1` AS
+            DO BEGIN
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Data || "1" FROM `{pq_source}`.`{input_topic}` LIMIT 1
+            END DO;)",
+            "query_name"_a = queryNameLimit,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}2` AS
+            DO BEGIN
+                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Data || "2" FROM `{pq_source}`.`{input_topic}` LIMIT 1
+            END DO;)",
+            "query_name"_a = queryNameLimit,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(3, 2);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "test_message");
+        ReadTopicMessages(outputTopicName, {"test_message1", "test_message2"});
+
+        Sleep(TDuration::Seconds(1));
+        CheckScriptExecutionsCount(3, 0);
+
+        constexpr char queryNameTakeWhile[] = "streamingQueryTakeWhile";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    String::JoinFromList(
+                        ListTakeWhile(String::SplitToList(Data, ","), ($x) -> (LEN($x) <= 3)),
+                        ","
+                    )
+                FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryNameTakeWhile,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(4, 1);
+        const auto disposition = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "t,es,t_m,essa,gexxx");
+        ReadTopicMessage(outputTopicName, "t,es,t_m", disposition);
+
+        WaitFor(TDuration::Seconds(60), "wait streaming query ast", [&]() {
+            const auto& result = ExecQuery(fmt::format(R"(
+                SELECT Ast FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
+                "query_name"_a = queryNameTakeWhile
+            ));
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString ast;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                ast = resultSet.ColumnParser("Ast").GetOptionalUtf8().value_or("");
+            });
+
+            if (!ast) {
+                return false;
+            }
+
+            UNIT_ASSERT_STRING_CONTAINS(ast, "TakeWhile");
+            return true;
+        });
     }
 }
 

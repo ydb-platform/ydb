@@ -1,0 +1,85 @@
+{
+    "Plan" : {
+        "Plans" : [
+            {
+                "PlanNodeId" : 5,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 4,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 3,
+                                "Plans" : [
+                                    {
+                                        "PlanNodeId" : 2,
+                                        "Plans" : [
+                                            {
+                                                "PlanNodeId" : 1,
+                                                "Operators" : [
+                                                    {
+                                                        "Inputs" : [ ],
+                                                        "ExternalDataSource" : "pq",
+                                                        "Name" : "Read pq",
+                                                        "SourceType" : "pq"
+                                                    }
+                                                ],
+                                                "Node Type" : "Source"
+                                            }
+                                        ],
+                                        "Node Type" : "Stage"
+                                    }
+                                ],
+                                "Node Type" : "UnionAll",
+                                "PlanNodeType" : "Connection"
+                            }
+                        ],
+                        "Node Type" : "Collect"
+                    }
+                ],
+                "Node Type" : "ResultSet",
+                "PlanNodeType" : "ResultSet"
+            }
+        ],
+        "Node Type" : "Query",
+        "Stats" : {
+            "ResourcePoolId" : "default"
+        },
+        "PlanNodeType" : "Query"
+    },
+    "meta" : {
+        "version" : "0.2",
+        "type" : "query"
+    },
+    "tables" : [ ],
+    "SimplifiedPlan" : {
+        "PlanNodeId" : 0,
+        "Plans" : [
+            {
+                "PlanNodeId" : 1,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 5,
+                        "Operators" : [
+                            {
+                                "ExternalDataSource" : "pq",
+                                "Name" : "Read pq",
+                                "SourceType" : "pq"
+                            }
+                        ],
+                        "Node Type" : "Read pq"
+                    }
+                ],
+                "Node Type" : "ResultSet",
+                "PlanNodeType" : "ResultSet"
+            }
+        ],
+        "Node Type" : "Query",
+        "OptimizerStats" : {
+            "EquiJoinsCount" : 0,
+            "CBOTreesOptimized" : 0,
+            "JoinsCount" : 0,
+            "CBOTreesTotal" : 0
+        },
+        "PlanNodeType" : "Query"
+    }
+}

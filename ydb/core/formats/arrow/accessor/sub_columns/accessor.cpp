@@ -1,4 +1,5 @@
 #include "accessor.h"
+#include "types.h"
 #include "direct_builder.h"
 #include "signals.h"
 
@@ -137,7 +138,7 @@ TConclusion<NBinaryJson::TBinaryJson> ToBinaryJson(const TJsonRestorer& restorer
         [](NBinaryJson::TBinaryJson&& val) -> TConclusion<NBinaryJson::TBinaryJson> {
             return std::move(val);
         }},
-        NBinaryJson::SerializeToBinaryJson(restorer.GetResult().GetStringRobust()));
+        NBinaryJson::SerializeToBinaryJson(WriteJsonRoundTripSafe(restorer.GetResult())));
 }
 
 std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {

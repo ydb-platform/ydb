@@ -8,7 +8,8 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, max_json_depth
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)
@@ -1186,6 +1187,9 @@ FROM `{table_name}`"""
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 1)
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 1)
+
         data = [
             '{"dt": 1696849942000001, "str": "A" }',
             '{"dt": 1696849942500001, "str": "B" }'
@@ -1212,6 +1216,13 @@ FROM `{table_name}`"""
 
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 1)
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 1)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/StreamingQueryCount)", 0)
+        self.wait_schemeshard_counter(kikimr, "SUM(SchemeShard/RunningStreamingQueryCount)", 0)
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_json_errors(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
@@ -1543,3 +1554,153 @@ FROM `{table_name}`"""
 
         result_sets = kikimr.ydb_client.query(sql)
         assert result_sets[0].rows[0]['Data'] == message
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("kikimr", [{"enable_discovery": False, "lease_duration_sec": "30"}], indirect=["kikimr"])
+    def test_streaming_query_stop_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name)
+
+        path = f"/Root/{entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}')}"
+        kikimr.ydb_client.query(f"""
+            CREATE STREAMING QUERY `{path}` AS DO BEGIN
+                INSERT INTO {out}
+                SELECT * FROM {inp}
+            END DO;
+        """)
+
+        self.wait_completed_checkpoints(kikimr, path)
+
+        expected_data = ["test_data1"]
+        self.write_stream(expected_data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        self.wait_completed_checkpoints(kikimr, path)
+        logger.info("Query checked")
+
+        kikimr.ydb_client.stop()
+        kikimr.first_node.stop()
+        kikimr.first_node.set_log_file_prefix("logfile_restarted_")
+        kikimr.first_node.start()
+        logger.info("Node with query restarted")
+        kikimr.ydb_client = YdbClient(
+            database=kikimr.endpoint.database,
+            endpoint=f"grpc://{kikimr.endpoint.endpoint}",
+            enable_discovery=False,
+        )
+        kikimr.ydb_client.wait_connection()
+
+        second_node = list(kikimr.cluster.nodes.values())[1]
+        second_ydb_client = YdbClient(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
+        second_ydb_client.wait_connection()
+        second_ydb_client.query(f"""
+            ALTER STREAMING QUERY `{path}` SET (RUN = FALSE);
+        """, fail_fast=True)
+        logger.info("Query stopped")
+
+        time.sleep(5)
+        expected_data = ["test_data2"]
+        self.write_stream(expected_data, endpoint=endpoint)
+
+        second_ydb_client.query(f"""
+            ALTER STREAMING QUERY `{path}` SET (RUN = TRUE);
+        """)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("kikimr", [{"enable_discovery": False}], indirect=["kikimr"])
+    def test_streaming_query_issues_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_issues_after_restart_{local_topics!s:.1}", local_topics, entity_name)
+
+        join_table = f"test_issues_after_restart_table_{local_topics!s:.1}"
+        kikimr.ydb_client.query(f"""
+            CREATE TABLE `{join_table}` (
+                Key Int32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        """)
+        kikimr.ydb_client.query(f"""
+            UPSERT INTO `{join_table}`
+                (Key, Value)
+            VALUES
+                (1, "value-j-row"),
+                (2, NULL);
+        """)
+
+        path = f"/Root/{entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}')}"
+        kikimr.ydb_client.query(f"""
+            CREATE STREAMING QUERY `{path}` AS DO BEGIN
+                INSERT INTO {out}
+                SELECT Unwrap(j.Value) FROM {inp} AS i
+                LEFT JOIN `{join_table}` AS j ON CAST(i.Data AS Int32) = j.Key;
+            END DO;
+        """)
+
+        self.wait_completed_checkpoints(kikimr, path)
+        self.write_stream(["1"], endpoint=endpoint)
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-j-row"]
+        self.wait_completed_checkpoints(kikimr, path)
+        logger.info("Query checked")
+
+        def check_issues(substring: str = "", client=None):
+            if client is None:
+                client = kikimr.ydb_client
+
+            result_sets = client.query(f"""
+                SELECT
+                    Issues
+                FROM `.sys/streaming_queries`
+                WHERE Path = "{path}"
+            """)
+            assert len(result_sets) == 1
+            result_set_rows = result_sets[0].rows
+            assert len(result_set_rows) == 1
+            query_issues = result_set_rows[0].Issues
+
+            if substring:
+                assert substring in query_issues, query_issues
+                assert query_issues.count("Previous query retries") == 1, query_issues
+            else:
+                assert query_issues.count("Previous query retries") <= 1, query_issues
+
+            assert max_json_depth(json.loads(query_issues)) <= 10, query_issues
+            return query_issues
+
+        self.write_stream(["2"], endpoint=endpoint)
+        wait_for(lambda: "Previous query retries" in check_issues(), timeout_seconds=60, step_seconds=1)
+        check_issues("Failed to unwrap")
+
+        kikimr.ydb_client.query(f"""
+            UPSERT INTO `{join_table}`
+                (Key, Value)
+            VALUES
+                (2, "value-second"),
+                (3, "value-third");
+        """)
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-second"]
+        self.wait_completed_checkpoints(kikimr, path)
+        logger.info("Query fixed")
+
+        kikimr.ydb_client.stop()
+        kikimr.first_node.stop()
+        kikimr.first_node.set_log_file_prefix("logfile_restarted_")
+        kikimr.first_node.start()
+        logger.info("Node with query restarted")
+        kikimr.ydb_client = YdbClient(
+            database=kikimr.endpoint.database,
+            endpoint=f"grpc://{kikimr.endpoint.endpoint}",
+            enable_discovery=False,
+        )
+        kikimr.ydb_client.wait_connection()
+
+        time.sleep(5)
+        assert wait_for(lambda: "Lease expired" in check_issues(), timeout_seconds=120, step_seconds=1), "Failed to wait for script execution restart"
+
+        self.write_stream(["3"], endpoint=endpoint)
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-third"]
+        logger.info("Query checked after restart")
+
+        second_node = list(kikimr.cluster.nodes.values())[1]
+        second_ydb_client = YdbClient(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
+        second_ydb_client.wait_connection()
+        check_issues("Lease expired", client=second_ydb_client)

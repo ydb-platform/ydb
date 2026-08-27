@@ -2846,7 +2846,7 @@ value {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    size_t MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
+    std::pair<size_t, size_t> MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
         const TStringBuf exportPrefix = "/test_bucket/Export123/";
         NBackup::TEncryptionKey encryptionKey(key);
 
@@ -2939,7 +2939,7 @@ value {
             UNIT_ASSERT_VALUES_EQUAL(decodedLines, line);
         }
         UNIT_ASSERT(line > 0);
-        return line;
+        return {line, resultEncryptedData.size()};
     }
 
     TString PrintInProtoText(const NBackup::TEncryptionIV& iv) {
@@ -2954,11 +2954,23 @@ value {
         return result;
     }
 
+    enum class EEncryptedImportRebootMode {
+        None,
+        AfterLastPortion,
+        AfterReadAndAfterStateSave,
+    };
+
     // Test that checks different combinations of:
     // - downloaded blocks size
     // - decrypted blocks size
     // - compression blocks size
-    void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed) {
+    void ImportBigEncryptedFile(
+            size_t encryptedBlockSize,
+            size_t resultFileSize,
+            size_t readBatchSize,
+            bool compressed,
+            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
+    {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
 
@@ -2968,7 +2980,8 @@ value {
         TS3Mock s3Mock(s3Settings);
         s3Mock.Start();
 
-        const size_t lines = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
+        const auto [lines, contentLength] = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
+        UNIT_ASSERT_GT(contentLength, 0);
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(false));
@@ -2989,6 +3002,38 @@ value {
 
         const auto desc = DescribePath(runtime, "/MyRoot/TestTable", true, true);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+
+        bool wholeFileRead = false;
+        bool readyToReboot = false;
+        ui32 rebootCount = 0;
+
+        if (rebootMode != EEncryptedImportRebootMode::None) {
+            runtime.SetObserverFunc([&, contentLength](TAutoPtr<IEventHandle>& ev) {
+                if (readyToReboot) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                const bool afterRead = rebootCount % 2 == 0;
+                switch (ev->GetTypeRewrite()) {
+                case NWrappers::NExternalStorage::EvGetObjectResponse: {
+                    const auto& interval = ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>()->GetReadInterval();
+                    if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+                        wholeFileRead |= interval.second + 1 == contentLength;
+                    } else if (afterRead) {
+                        readyToReboot = true;
+                    }
+                    break;
+                }
+                case TEvDataShard::EvS3UploadRowsResponse:
+                    if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+                        readyToReboot = wholeFileRead;
+                    } else if (!afterRead) {
+                        readyToReboot = true;
+                    }
+                    break;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
 
         NKikimrScheme::EStatus status = (NKikimrScheme::EStatus)TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableName: "TestTable"
@@ -3013,10 +3058,53 @@ value {
             }
         )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(iv).c_str(), key.c_str()));
         UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
+
+        auto waitReadyToReboot = [&]() {
+            if (!readyToReboot) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&readyToReboot](IEventHandle&) -> bool {
+                    return readyToReboot;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(10));
+            }
+            return readyToReboot;
+        };
+
+        if (rebootMode == EEncryptedImportRebootMode::AfterLastPortion) {
+            UNIT_ASSERT(waitReadyToReboot());
+            runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+            RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+        } else if (rebootMode == EEncryptedImportRebootMode::AfterReadAndAfterStateSave) {
+            constexpr ui32 rebootsCount = 4;
+            ui32 rebootsDone = 0;
+            for (ui32 i = 0; i < rebootsCount; ++i) {
+                if (!waitReadyToReboot()) {
+                    break;
+                }
+                readyToReboot = false;
+                ++rebootCount;
+                RebootTablet(runtime, TTestTxConfig::FakeHiveTablets, runtime.AllocateEdgeActor());
+                ++rebootsDone;
+            }
+            runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+            Cerr << "Reboots done: " << rebootsDone << Endl;
+            UNIT_ASSERT_GE(rebootsDone, 0);
+        }
+
         env.TestWaitNotification(runtime, txId);
 
         const ui64 rows = CountRows(runtime, "/MyRoot/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(rows, lines);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false, EEncryptedImportRebootMode::AfterLastPortion);
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true, EEncryptedImportRebootMode::AfterLastPortion);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFileWithRebootsAfterReadAndStateSave) {
+        ImportBigEncryptedFile(315_B, 70_KB, 8_KB, false, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
+        ImportBigEncryptedFile(555_B, 70_KB, 8_KB, true, EEncryptedImportRebootMode::AfterReadAndAfterStateSave);
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFile) {
@@ -3762,6 +3850,181 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
         assertBloomIndexes("/MyRoot/OlapBloomImported");
+    }
+
+    // Runs an import that names one item present in the backup and one that is not, so that
+    // FillItemsFromSchemaMapping fails. It swaps the shortened list into Items regardless of the
+    // error and the cancellation persists that shorter count, while every ImportItems row written
+    // by PersistCreateImport is still there. Rebooting SchemeShard afterwards makes TTxInit read
+    // those rows back.
+    void ImportWithMissingItemImpl(bool forgetBeforeReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        // Needed to reach EState::DownloadExportMetadata, which is what fetches the schema
+        // mapping and thus runs FillItemsFromSchemaMapping.
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              items {
+                source_path: "Table"
+                destination_path: "/MyRoot/Restored"
+              }
+              items {
+                source_path: "NoSuchTable"
+                destination_path: "/MyRoot/Restored2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+        if (forgetBeforeReboot) {
+            // Without the fix, PersistRemoveImport deleted ImportItems for [0, Items.size()) but
+            // dropped the Imports row unconditionally, so rows past the shrunk count outlived
+            // their parent.
+            TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        }
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Getting here at all means SchemeShard came back up.
+        TestLs(runtime, "/MyRoot/Table", false, NLs::PathExist);
+    }
+
+    // Boots into "Invalid item's index": the recorded count no longer covers the persisted rows.
+    Y_UNIT_TEST(ShouldNotCorruptItemsWhenSchemaMappingFails) {
+        ImportWithMissingItemImpl(false);
+    }
+
+    // Boots into "Import not found": forgetting the import leaves the surplus rows orphaned.
+    Y_UNIT_TEST(ShouldNotOrphanItemsWhenForgettingFailedImport) {
+        ImportWithMissingItemImpl(true);
+    }
+
+    // Same corruption, reached without any error at all. exclude_regexps is matched against the
+    // destination path when the items are created and against the source object path when the
+    // schema mapping is applied, so an item can be persisted and then contribute nothing. Its
+    // prefix is still found, so no error is recorded and FillItemsFromSchemaMapping succeeds with
+    // a shorter list; the ImportItems row written for it by PersistCreateImport survives.
+    void ImportWithExcludedItemImpl(bool forgetBeforeReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        // "Table2" does not match the destination "/MyRoot/Restored2", so the second item is
+        // created and persisted, but it does match the source object path in the backup listing,
+        // so the schema mapping drops it.
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              exclude_regexps: "Table2"
+              items {
+                source_path: "Table1"
+                destination_path: "/MyRoot/Restored1"
+              }
+              items {
+                source_path: "Table2"
+                destination_path: "/MyRoot/Restored2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+
+        if (forgetBeforeReboot) {
+            TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        }
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Getting here at all means SchemeShard came back up.
+        TestLs(runtime, "/MyRoot/Table1", false, NLs::PathExist);
+    }
+
+    // Boots into "Invalid item's index" even though the import itself reported no error.
+    Y_UNIT_TEST(ShouldNotCorruptItemsWhenSchemaMappingExcludesItem) {
+        ImportWithExcludedItemImpl(false);
+    }
+
+    // Boots into "Import not found": the surplus row outlives the parent it was never counted in.
+    Y_UNIT_TEST(ShouldNotOrphanItemsWhenForgettingExcludedItemImport) {
+        ImportWithExcludedItemImpl(true);
     }
 
     Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalMinMaxIndexes) {
@@ -6950,6 +7213,55 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         // Check partition count
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 3);
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetPartitionPerTablet(), 3);
+    }
+
+    Y_UNIT_TEST(ImportCancelledWithIssueOnInvalidDestinationPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              destination_path: "Restored"
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+                        .GetResponse().GetEntry().GetIssues();
+        UNIT_ASSERT(!issues.empty());
+        Cerr << NYql::IssuesFromMessageAsString(issues) << Endl;
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(issues), "Restored");
     }
 
     Y_UNIT_TEST(UnknownSchemeObjectImport) {

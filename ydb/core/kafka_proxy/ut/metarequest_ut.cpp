@@ -104,6 +104,17 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
         UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+        UNIT_ASSERT(!response->Brokers.empty());
+        {
+            bool controllerInBrokers = false;
+            for (const auto& broker : response->Brokers) {
+                if (broker.NodeId == response->ControllerId) {
+                    controllerInBrokers = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT(controllerInBrokers);
+        }
 
         event = GetEvent(server, edgeId, {});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());

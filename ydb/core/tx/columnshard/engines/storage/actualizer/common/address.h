@@ -1,5 +1,6 @@
 #pragma once
 #include <util/generic/string.h>
+#include <util/stream/output.h>
 
 #include <set>
 
@@ -21,6 +22,10 @@ public:
     }
 
     TString DebugString() const;
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TRWAddress& address) {
+        return out << address.DebugString();
+    }
 
     TRWAddress(std::set<TString>&& readStorages, std::set<TString>&& writeStorages);
 

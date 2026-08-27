@@ -60,5 +60,8 @@ void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TCompac
 void PrintOperation(const NYdb::NTable::TAnalyzeOperation& operation, EDataFormat format);
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TAnalyzeOperation>& operations, EDataFormat format);
 
+void PrintOperation(const NYdb::NTable::TSetNotNullOperation& operation, EDataFormat format);
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TSetNotNullOperation>& operations, EDataFormat format);
+
 }
 }

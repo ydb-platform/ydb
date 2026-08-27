@@ -1097,17 +1097,19 @@ private:
         }
     }
 
-    void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf itemIssue, TStringBuf marker) {
+    void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf issue, TStringBuf marker) {
         if (itemIdx != ui32(-1)) {
             Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
             auto& item = importInfo->Items[itemIdx];
 
-            item.Issue = itemIssue;
+            item.Issue = issue;
             PersistImportItemState(db, *importInfo, itemIdx);
 
             if (importInfo->State != EState::Waiting) {
                 return;
             }
+        } else if (issue) {
+            importInfo->Issue = issue;
         }
 
         Cancel(*importInfo, itemIdx, marker);
@@ -1435,23 +1437,29 @@ private:
         Self->RunningImportSchemeGetters.erase(std::exchange(importInfo->SchemaMappingGetter, {}));
 
         if (!msg.Success) {
-            return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot get schema mapping: " << msg.Error);
+            return CancelAndPersist(db, importInfo, -1,
+                TStringBuilder() << "cannot get schema mapping: " << msg.Error, "cannot get schema mapping");
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
             if (importInfo->GetEncryptedBackup() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+                return CancelAndPersist(db, importInfo, -1,
+                    importInfo->GetEncryptedBackup()
+                        ? "encryption is requested, but the export is not encrypted"
+                        : "the export is encrypted, but no encryption settings are specified",
+                    "incorrect schema mapping");
             }
         }
 
+        const ui32 itemsSizeBefore = importInfo->Items.size();
         const TImportInfo::TFillItemsFromSchemaMappingResult fillResult = importInfo->FillItemsFromSchemaMapping(Self);
         if (!fillResult.Success) {
-            return CancelAndPersist(db, importInfo, -1, {}, fillResult.ErrorMessage);
+            return CancelAndPersist(db, importInfo, -1, fillResult.ErrorMessage, "invalid items in schema mapping");
         }
 
         importInfo->State = EState::Waiting;
         PersistImportState(db, *importInfo);
-        PersistSchemaMappingImportFields(db, *importInfo);
+        PersistSchemaMappingImportFields(db, *importInfo, itemsSizeBefore);
         Resume(txc, ctx);
     }
 

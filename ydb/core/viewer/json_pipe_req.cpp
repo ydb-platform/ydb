@@ -462,6 +462,9 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
         }
     }
     SendRequest(viewerServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+    if (flags & IEventHandle::FlagSubscribeOnSession) {
+        SubscriptionNodeIds.push_back(nodeId);
+    }
     return response;
 }
 

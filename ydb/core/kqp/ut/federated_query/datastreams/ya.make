@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
     ydb/core/sys_view/common
+    ydb/core/protos
     ydb/core/testlib
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
@@ -36,6 +37,7 @@ PEERDIR(
     ydb/library/testlib/solomon_helpers
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
+    ydb/public/lib/ydb_cli/commands/interactive/common
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     yql/essentials/udfs/common/yson2
@@ -44,6 +46,8 @@ PEERDIR(
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
 
 YQL_LAST_ABI_VERSION()
 

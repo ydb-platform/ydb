@@ -1113,6 +1113,37 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ShouldSwitchEncryptionOnOffWithoutReformatting(false);
     }
 
+    Y_UNIT_TEST(EmptyMetadataIsReportedAsNoMetadata) {
+        TActorTestContext testCtx({});
+        testCtx.GetPDisk();
+
+        const TString metadata = "metadata";
+        testCtx.Send(new NPDisk::TEvWriteMetadata(TRcBuf(metadata)));
+        auto writeResult = testCtx.Recv<NPDisk::TEvWriteMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(writeResult->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+
+        testCtx.Send(new NPDisk::TEvReadMetadata());
+        auto readResult = testCtx.Recv<NPDisk::TEvReadMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TRcBuf(readResult->Metadata).ExtractUnderlyingContainerOrCopy<TString>(),
+            metadata);
+
+        testCtx.Send(new NPDisk::TEvWriteMetadata(TRcBuf()));
+        writeResult = testCtx.Recv<NPDisk::TEvWriteMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(writeResult->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+
+        testCtx.Send(new NPDisk::TEvReadMetadata());
+        readResult = testCtx.Recv<NPDisk::TEvReadMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Outcome, NPDisk::EPDiskMetadataOutcome::NO_METADATA);
+
+        testCtx.RestartPDiskSync();
+
+        testCtx.Send(new NPDisk::TEvReadMetadata());
+        readResult = testCtx.Recv<NPDisk::TEvReadMetadataResult>();
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Outcome, NPDisk::EPDiskMetadataOutcome::NO_METADATA);
+    }
+
     Y_UNIT_TEST(PDiskOwnerSlayRace) {
         for (bool encryption: {true, false}) {
             TActorTestContext::TSettings settings{};

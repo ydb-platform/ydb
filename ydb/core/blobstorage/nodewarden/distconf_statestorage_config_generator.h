@@ -20,6 +20,8 @@ namespace NKikimr::NStorage {
         bool IsGoodConfig() const;
         void AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss);
 
+        bool IsEnoughNodesForOverride() const;
+
     private:
         static constexpr ui32 NodeStatesSize = (ui32)ENodeState::NODE_STATE_MAX;
 
@@ -48,5 +50,6 @@ namespace NKikimr::NStorage {
         ui32 OverrideReplicasInRingCount = 0;
         ui32 OverrideRingsCount = 0;
         ui32 ReplicasSpecificVolume = 200;
+        bool EnoughNodesForOverride = true;
     };
 }

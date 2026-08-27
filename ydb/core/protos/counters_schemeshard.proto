@@ -306,6 +306,8 @@ enum ESimpleCounters {
     COUNTER_TEST_SHARD_COUNT = 236                         [(CounterOpts) = {Name: "TestShardCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 237      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
     COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
+    
+    COUNTER_RUNNING_STREAMING_QUERY_COUNT = 239           [(CounterOpts) = {Name: "RunningStreamingQueryCount"}];
 }
 
 enum ECumulativeCounters {

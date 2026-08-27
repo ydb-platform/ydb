@@ -117,6 +117,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case Ydb::StatusIds::UNAUTHORIZED:
             return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::StatusIds::TIMEOUT:
+            return EKafkaErrors::REQUEST_TIMED_OUT;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -189,7 +191,8 @@ inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
     return context->RequireAuthentication ? context->UserToken->GetSerializedToken() : "";
 }
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,
+                                            TKafkaVersion requestApiVersion);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message,

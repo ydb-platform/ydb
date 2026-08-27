@@ -2317,7 +2317,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.GetClientId(),
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
                                        bytes,
-                                       cmd.GetReadToBlobEnd(),
+                                       cmd.HasReadToBlobEnd() ? cmd.GetReadToBlobEnd() : true,
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,
@@ -3454,6 +3454,25 @@ TMaybe<EDeferredFinalizeOp> GetSingleDeferredPublicationFinalizeOp(const NKikimr
     return result;
 }
 
+bool DeferredPublicationFinalizePartitionsMatchStaged(
+    const NKikimrPQ::TDataTransaction& txBody,
+    const THashMap<ui32, TPartitionId>& stagedPartitions)
+{
+    THashSet<ui32> opPartitions;
+    for (const auto& operation : txBody.GetOperations()) {
+        opPartitions.insert(operation.GetPartitionId());
+    }
+    if (opPartitions.size() != stagedPartitions.size()) {
+        return false;
+    }
+    for (const auto& [partitionId, _] : stagedPartitions) {
+        if (!opPartitions.contains(partitionId)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
@@ -3529,6 +3548,18 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                                         event.GetTxId(),
                                         NKikimrPQ::TError::BAD_REQUEST,
                                         "deferred publication finalize requires matching Publish or Cancel op",
+                                        ctx);
+            return;
+        }
+
+        const TWriteId writeId = GetWriteId(txBody);
+        if (TxWrites.contains(writeId)
+            && !DeferredPublicationFinalizePartitionsMatchStaged(txBody, TxWrites.at(writeId).Partitions)) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize partition set mismatch");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "deferred publication finalize partition set mismatch",
                                         ctx);
             return;
         }
@@ -3716,6 +3747,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
                     " will be sent later");
 
         AddPendingDeferredReadSetAck({.Sender = ev->Sender, .Ack = std::move(ack)});
+        TryWriteTxs(ctx);
     }
 }
 
@@ -3740,6 +3772,31 @@ void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
     }
 
     DeferredReadSetAcks.clear();
+}
+
+void TPersQueue::MovePendingDeferredPlanStepAcks()
+{
+    AFL_ENSURE(DeferredPlanStepAcks.empty())("DeferredPlanStepAcks", DeferredPlanStepAcks.size());
+    DeferredPlanStepAcks = std::move(PendingDeferredPlanStepAcks);
+    PendingDeferredPlanStepAcks.clear();
+}
+
+void TPersQueue::AddPendingDeferredPlanStepAck(TDeferredPlanStepAck&& ack)
+{
+    PendingDeferredPlanStepAcks.push_back(std::move(ack));
+}
+
+void TPersQueue::SendDeferredPlanStepAcks(const TActorContext& ctx)
+{
+    for (auto& e : DeferredPlanStepAcks) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send deferred TEvPlanStep acks",
+            {"logPrefix", LogPrefix()},
+            {"step", e.Event->Record.GetStep()},
+            {"txCount", e.Event->Record.TransactionsSize()});
+        SendPlanStepAcks(ctx, e.Sender, *e.Event);
+    }
+
+    DeferredPlanStepAcks.clear();
 }
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
@@ -3887,7 +3944,9 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessWriteTxs() ||
         CanProcessTxWrites() ||
         TxWritesChanged ||
-        DeleteTxsContainsKafkaTxs
+        !DeleteTxs.empty() ||
+        !PendingDeferredReadSetAcks.empty() ||
+        !PendingDeferredPlanStepAcks.empty()
         ;
     if (!canProcess) {
         return;
@@ -3901,6 +3960,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     AddCmdWriteTabletTxInfo(request->Record);
 
     MovePendingDeferredReadSetAcks();
+    MovePendingDeferredPlanStepAcks();
 
     WriteTxsInProgress = true;
 
@@ -3943,6 +4003,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
     SendDeferredReadSetAcks(ctx);
+    SendDeferredPlanStepAcks(ctx);
 
     WriteTxsInProgress = false;
 
@@ -3961,7 +4022,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx,
 {
     PQ_ENSURE(!WriteTxsInProgress);
 
-    if (CanProcessProposeTransactionQueue() || DeleteTxsContainsKafkaTxs) {
+    if (!DeleteTxs.empty()) {
         ProcessDeleteTxs(ctx, request);
     }
 
@@ -4055,6 +4116,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         }
     }
 
+    // PlanStep / PlanTxId advance only when at least one TxId from this message is in Txs.
     if ((step > PlanStep) && lastPlannedTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
         PlanStep = step;
@@ -4074,8 +4136,23 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
             SendPlanStepAcks(ctx, tx);
         }
     } else {
-        // таблетка PQ успела выполнить и удалить все транзакции этого шага. надо отправить подтверждение
-        SendPlanStepAcks(ctx, sender, *ev);
+        // No known TxId in this PlanStep (including an empty Transactions list).
+        //
+        // Do not ack immediately: PlanStep is advanced in memory before _txinfo is persisted.
+        // A stale leader can keep that inflated PlanStep after losing generation while the new
+        // leader still has the older durable watermark. Immediate ack on step <= PlanStep
+        // (retransmit of an already-handled step) or on step > PlanStep (e.g. SchemeShard
+        // CreatePQ re-plan after Attach→NODATA) would let the stale tablet confirm the step
+        // without a successful KV write. Defer ack until WRITE_TX succeeds — same fence as
+        // deferred TEvReadSetAck for unknown txs. Watermark is not moved on this path.
+        YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX,
+            "All-unknown PlanStep; deferring ack until WRITE_TX completes",
+            {"logPrefix", LogPrefix()},
+            {"step", step},
+            {"planStep", PlanStep},
+            {"txCount", event.TransactionsSize()});
+        AddPendingDeferredPlanStepAck({.Sender = sender, .Event = std::move(ev)});
+        TryWriteTxs(ctx);
     }
 
     PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
@@ -4185,7 +4262,6 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
     }
 
     DeleteTxs.clear();
-    DeleteTxsContainsKafkaTxs = false;
 }
 
 void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
@@ -4972,7 +5048,6 @@ void TPersQueue::DeleteTx(TDistributedTransaction& tx)
     PQ_LOG_TX_D("add an TxId " << tx.TxId << " to the list for deletion");
 
     DeleteTxs.insert(tx.TxId);
-    DeleteTxsContainsKafkaTxs |= (tx.WriteId.Defined() && tx.WriteId->IsKafkaApiTransaction());
 
     if (auto traceId = tx.GetExecuteSpanTraceId(); traceId) {
         HasTxDeleteSpan = true;

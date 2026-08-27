@@ -2135,7 +2135,21 @@ void TPartition::OnReadComplete(TReadInfo& info,
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->GetCookie();
     if (cookie == ERequestCookie::ReadBlobsForCompaction) {
-        BlobsForCompactionWereRead(ev->Get()->GetBlobs());
+        const auto* response = ev->Get();
+        if (HasError(*response)) {
+            AbortBlobsCompaction(TStringBuilder()
+                << "blob read failed: " << response->Error.ErrorStr, ctx);
+            return;
+        }
+        for (const auto& blob : response->GetBlobs()) {
+            if (blob.Empty()) {
+                AbortBlobsCompaction(TStringBuilder()
+                    << "empty blob in compaction read response"
+                    << " key=" << blob.Key.ToString(), ctx);
+                return;
+            }
+        }
+        BlobsForCompactionWereRead(response->GetBlobs());
         return;
     }
     auto it = ReadInfo.find(cookie);
@@ -3869,12 +3883,14 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 SendReadingFinished(user);
             }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
-            auto ui = UsersInfoStorage->GetIfExists(user);
-            if (ui && ui->LabeledCounters) {
-                ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+            // Consumer may already have been removed by an earlier write cycle
+            // (e.g. ChangePartitionConfig drop + FillReadFromTimestamps ESCI_DROP_READ_RULE).
+            if (auto* ui = UsersInfoStorage->GetIfExists(user)) {
+                if (ui->LabeledCounters) {
+                    ScheduleDropPartitionLabeledCounters(ui->LabeledCounters->GetGroup());
+                }
+                UsersInfoStorage->Remove(user, ctx);
             }
-
-            UsersInfoStorage->Remove(user, ctx);
 
             // Finish all ongoing reads
             std::unordered_set<ui64> readCookies;

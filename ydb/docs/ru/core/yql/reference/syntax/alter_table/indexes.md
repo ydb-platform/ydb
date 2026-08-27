@@ -123,6 +123,7 @@ ALTER TABLE `/Root/Table`
     false_positive_probability = 0.01,
     case_sensitive = true
   );
+```
 
 ## Изменение параметров индекса {#alter-index}
 

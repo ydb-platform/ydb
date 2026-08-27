@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -472,6 +473,7 @@ public:
         }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
+        NPQ::InitMaxHeaderSize(appData->FeatureFlags);
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
@@ -1529,6 +1531,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
     }
 
+    if (runConfig.AppConfig.HasHttpProxyConfig()) {
+        AppData->HttpProxyConfig.CopyFrom(runConfig.AppConfig.GetHttpProxyConfig());
+    }
+
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
     }
@@ -1745,6 +1751,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 
     if (logConfig.HasAllowDropEntries()) {
         LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries());
+    }
+
+    if (logConfig.HasEnableStructuredLogInJson()) {
+        LogSettings->SetEnableStructuredLogInJson(logConfig.GetEnableStructuredLogInJson());
     }
 
     if (logConfig.HasUseLocalTimestamps()) {
@@ -2126,6 +2136,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 #endif
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
+
+    if (serviceMask.EnableWorkloadManagerService) {
+        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig));
+    }
 
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));

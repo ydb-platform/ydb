@@ -491,7 +491,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 const auto& position = batch.FindPos(trueSearchOffset, PartNo);
                 batchStartIdx = position.BlobIdx;
                 if (batchStartIdx != Max<ui32>()) {
-                    Offset = position.Offset;
+                    // FindPos works in header coordinates; Key may differ after tx rename.
+                    Offset = blobs[blobIdx].Key.GetOffset() + (position.Offset - firstHeaderOffset);
                     PartNo = position.PartNo;
                 }
             }

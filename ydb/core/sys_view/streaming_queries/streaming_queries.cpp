@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
-#include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/library/query_actor/query_actor.h>
@@ -613,7 +613,7 @@ public:
     STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
-            hFunc(NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
+            hFunc(NWorkloadManager::TEvFetchDatabaseResponse, Handle);
             hFunc(TEvPrivate::TEvCheckStreamingQueriesTables, Handle);
             hFunc(TEvPrivate::TEvFetchStreamingQueriesResult, Handle);
             hFunc(TEvPrivate::TEvDescribeStreamingQueriesResult, Handle);
@@ -633,7 +633,7 @@ public:
         ContinueScan();
     }
 
-    void Handle(NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(NWorkloadManager::TEvFetchDatabaseResponse::TPtr& ev) {
         HasInflightOperation = false;
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
@@ -834,7 +834,7 @@ private:
 
         if (!DatabaseId) {
             HasInflightOperation = true;
-            const auto& databaseFetcher = Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), DatabaseName, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
+            const auto& databaseFetcher = Register(NWorkloadManager::CreateDatabaseFetcherActor(SelfId(), DatabaseName, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
             LOG_D("Start database fetcher " << databaseFetcher);
             return;
         }

@@ -12,7 +12,7 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32 recordsCount) const {
+TDictStats TDictStats::SelectSeparatedColumns(const TSettings& settings, const ui32 recordsCount) const {
     std::map<ui64, std::vector<TRTStats>> bySize;
     ui64 sumSize = 0;
     for (ui32 i = 0; i < GetColumnsCount(); ++i) {
@@ -20,42 +20,32 @@ TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32
         sumSize += GetColumnSize(i);
     }
     std::vector<TRTStats> columnStats;
-    std::vector<TRTStats> otherStats;
     TSettings::TColumnsDistributor distributor = settings.BuildDistributor(sumSize, recordsCount);
     for (auto it = bySize.rbegin(); it != bySize.rend(); ++it) {
         for (auto&& i : it->second) {
-            switch (distributor.TakeAndDetect(it->first, i.GetRecordsCount())) {
-                case TSettings::TColumnsDistributor::EColumnType::Separated:
-                    columnStats.emplace_back(std::move(i));
-                    break;
-                case TSettings::TColumnsDistributor::EColumnType::Other:
-                    otherStats.emplace_back(std::move(i));
-                    break;
+            // Keys not taken as separated fall into the Others store, whose stats are built elsewhere.
+            if (distributor.TakeAndDetect(it->first, i.GetRecordsCount()) == TSettings::TColumnsDistributor::EColumnType::Separated) {
+                columnStats.emplace_back(std::move(i));
             }
         }
     }
     std::sort(columnStats.begin(), columnStats.end());
-    std::sort(otherStats.begin(), otherStats.end());
     auto columnsBuilder = MakeBuilder();
-    auto othersBuilder = MakeBuilder();
     for (auto&& i : columnStats) {
         columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
     }
-    for (auto&& i : otherStats) {
-        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
-    }
-    return TSplittedColumns(columnsBuilder.Finish(), othersBuilder.Finish());
+    return columnsBuilder.Finish();
 }
 
-TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount) {
+TDictStats TDictStats::Merge(const std::vector<TDictStats>& stats, const TSettings& settings, const ui32 recordsCount) {
     std::map<std::string_view, TRTStats> resultMap;
     for (auto&& i : stats) {
-        for (ui32 idx = 0; idx < i->GetColumnsCount(); ++idx) {
-            auto it = resultMap.find(i->GetColumnName(idx));
+        for (ui32 idx = 0; idx < i.GetColumnsCount(); ++idx) {
+            auto it = resultMap.find(i.GetColumnName(idx));
             if (it == resultMap.end()) {
-                it = resultMap.emplace(i->GetColumnName(idx), TRTStats(i->GetColumnName(idx))).first;
+                it = resultMap.emplace(i.GetColumnName(idx), TRTStats(i.GetColumnName(idx))).first;
             }
-            it->second.Add(*i, idx);
+            it->second.Add(i, idx);
         }
     }
     auto builder = MakeBuilder();

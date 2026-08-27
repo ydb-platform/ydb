@@ -503,7 +503,7 @@ namespace NKikimr::NBsController {
                     break;
 
                 case NKikimrBlobStorage::EVirtualGroupState::WORKING:
-                    if (group->NeedAlter.GetOrElse(false) || group->AppliedGroupGeneration != group->Generation) {
+                    if (group->NeedAlter.GetOrElse(false)) {
                         return ConfigureBlobDepot();
                     }
                     [[fallthrough]];
@@ -557,7 +557,6 @@ namespace NKikimr::NBsController {
         bool TenantHiveInvalidated = false;
         bool TenantHiveInvalidateInProgress = false;
         bool IsDecommittingGroup = false;
-        ui32 AppliedGroupGeneration = 0;
 
         void HiveCreate(TGroupInfo *group) {
             auto& config = GetConfig(group);
@@ -893,8 +892,6 @@ namespace NKikimr::NBsController {
                 NTabletPipe::TClientRetryPolicy::WithRetries()));
             auto ev = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
             ev->Record.MutableConfig()->CopyFrom(config);
-            SerializeGroupInfo(ev->Record.MutableGroupInfo(), *group, Self->StoragePools);
-            AppliedGroupGeneration = group->Generation;
             NTabletPipe::SendData(SelfId(), BlobDepotPipeId, ev.release());
         }
 
@@ -935,7 +932,6 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(config.HasTabletId());
                 group.BlobDepotId = config.GetTabletId();
                 group.NeedAlter = false;
-                group.AppliedGroupGeneration = AppliedGroupGeneration;
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
                     group.DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS;
                     state.GroupContentChanged.insert(GroupId);

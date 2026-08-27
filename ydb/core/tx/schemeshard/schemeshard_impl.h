@@ -1679,7 +1679,7 @@ public:
 
     static void PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
-    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemsSizeBefore);
     void PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
@@ -1993,6 +1993,10 @@ public:
     THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> SetColumnConstraintOperationsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToSetColumnConstraintOperations;
+    // txIds of concurrent operations (e.g. a backup CopyTable) that a
+    // SetColumnConstraint operation is currently waiting on before it can retry
+    // one of its own internal sub-transactions.
+    THashMap<TTxId, THashSet<TIndexBuildId>> TxIdToDependentSetColumnConstraint;
 
     void PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
     void PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);

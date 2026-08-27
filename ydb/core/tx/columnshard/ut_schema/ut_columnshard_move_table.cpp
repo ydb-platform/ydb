@@ -253,5 +253,69 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         ui64 txId = 10;
         ProposeSchemaTxFail(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, srcPathId, 1), ++txId);
     }
+
+    Y_UNIT_TEST(WaitTxsIgnoresUnrelatedTxCompleted) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        Y_UNUSED(PrepareTablet(runtime, srcPathId, testTable.Schema));
+
+        ui64 txId = 10;
+        int writeId = 10;
+        std::vector<ui64> writeIdsSrc;
+        const auto lockSrc = 1;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true,
+                &writeIdsSrc, NEvWrite::EModificationType::Upsert, lockSrc);
+            UNIT_ASSERT(ok);
+        }
+        const auto commitSrcTxId = ++txId;
+        const auto commitSrcPlanStep = ProposeCommit(runtime, sender, commitSrcTxId, writeIdsSrc, lockSrc);
+
+        const ui64 dstPathId = 2;
+        const auto moveTableTxId = ++txId;
+        {
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, moveTableTxId, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), 0, 0);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        }
+        // Let MoveTable propose execute and register TWaitTxs before an unrelated tx completes.
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        TPlanStep lastPlanStep = commitSrcPlanStep;
+        {
+            constexpr ui64 auxPathId = 99;
+            NKikimrTxColumnShard::TSchemaTxBody auxTx;
+            Y_ABORT_UNLESS(auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Schema, testTable.Pk)));
+            auxTx.MutableSeqNo()->SetRound(2);
+            TString auxTxBody;
+            Y_PROTOBUF_SUPPRESS_NODISCARD auxTx.SerializeToString(&auxTxBody);
+            const auto auxPlan = ProposeSchemaTx(runtime, sender, auxTxBody, ++txId);
+            PlanSchemaTx(runtime, sender, { auxPlan, txId });
+            lastPlanStep = auxPlan;
+        }
+
+        PlanCommit(runtime, sender, TPlanStep{ lastPlanStep.Val() + 1 }, commitSrcTxId);
+
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(ev);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), moveTableTxId);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        const auto moveTablePlanStep = TPlanStep{ res.GetMaxStep() };
+        PlanSchemaTx(runtime, sender, { moveTablePlanStep, moveTableTxId });
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot{ moveTablePlanStep, moveTableTxId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+    }
 }
 }   // namespace NKikimr

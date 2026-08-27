@@ -216,3 +216,9 @@ Yandex Enterprise Database distributions are available for download via the link
 || v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [See list](../changelog-server.md#23-3-17) ||
 || v.23.3.13 | 12.10.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.13` | [See list](../changelog-server.md#23-3) ||
 |#
+
+## Certified version {#certified}
+
+Certified versions of Yandex Enterprise Database are not available for public download. Access is provided [upon request](https://ydb.yandex.ru/#form).
+
+The certified version of Yandex Enterprise Database 25.1 has a technical support end date of 30 October 2030.

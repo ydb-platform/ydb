@@ -15,24 +15,22 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     for (auto&& i : input) {
         OrderedIterators.emplace_back(NSubColumns::TChunksIterator(i, Context.GetLoader(), RemapKeyIndex, OrderedIterators.size()));
     }
-    std::vector<const TDictStats*> stats;
+    // Deduce value types over every chunk of every source, not just the first one: a portion's chunks
+    // may disagree on a key's native scalar type, and sampling one chunk would mislabel the merged column.
+    std::vector<TDictStats> stats;
     ui32 statRecordsCount = 0;
     for (auto&& i : OrderedIterators) {
-        if (i.GetCurrentSubColumnsArray()) {
-            stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetColumnsData().GetStats());
-            stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
-            statRecordsCount += i.GetCurrentSubColumnsArray()->GetRecordsCount();
+        for (auto&& sub : i.MaterializePerChunkArrays()) {
+            stats.emplace_back(sub->GetColumnsData().GetStats());
+            stats.emplace_back(sub->GetOthersData().GetStats());
+            statRecordsCount += sub->GetRecordsCount();
         }
     }
     AFL_VERIFY(stats.size());
     AFL_VERIFY(statRecordsCount);
     auto commonStats = TDictStats::Merge(stats, GetSettings(), statRecordsCount);
-    auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
-    ResultColumnStats = splitted.ExtractColumns();
+    ResultColumnStats = commonStats.SelectSeparatedColumns(GetSettings(), statRecordsCount);
     ResultColumnStats->CreateJsonPathAccessorTrieCache();
-    //    YDB_LOG_ERROR("",
-    //          {"columns", ResultColumnStats->DebugJson()},
-    //          {"others", splitted.ExtractOthers().DebugJson()});
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();
@@ -50,15 +48,13 @@ TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& cont
         const auto startRecord = [&](const ui32 /*sourceRecordIndex*/) {
             builder.StartRecord();
         };
-        const auto addKV = [&](const ui32 sourceKeyIndex, const NBinaryJson::TBinaryJson& value, const bool isColumnKey) {
+        const auto addKV = [&](const ui32 sourceKeyIndex, const NArrow::NAccessor::NSubColumns::TGeneralIterator& iter, const bool isColumnKey) {
             auto commonKeyInfo = RemapKeyIndex.RemapIndex(sourceIdx, sourceKeyIndex, isColumnKey);
-            TStringBuf valueBuf(value.data(), value.size());
             if (commonKeyInfo.GetIsColumnKey()) {
-                builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), valueBuf);
-                columnStats.Add(value.size());
+                columnStats.Add(builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), iter));
             } else {
-                builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), valueBuf);
-                otherStats.Add(value.size());
+                const auto bj = iter.GetValueAsBinaryJson();
+                otherStats.Add(builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), TStringBuf(bj.data(), bj.size())));
             }
         };
         const auto finishRecord = [&]() {

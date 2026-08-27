@@ -123,6 +123,8 @@ public:
 
     void DropTopic(const std::string& topicName, bool local = false);
 
+    void AlterTopic(const std::string& topicName, NYdb::NTopic::TAlterTopicSettings settings, bool local = false);
+
     void WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition = 0, bool local = false);
 
     void WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition = 0);
@@ -135,6 +137,14 @@ public:
         TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
         bool sort = false,
         bool local = false,
+        bool checkResult = true);
+
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const std::string& topicName,
+        std::vector<std::string> expectedMessages,
+        NYdb::NTopic::TTopicClient& topicClient,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
         bool checkResult = true);
 
     void TestReadTopicBasic(const std::string& testSuffix);
@@ -267,7 +277,7 @@ public:
         std::optional<std::string> Ast;
         std::optional<std::string> Text;
         bool Run = true;
-        std::string Pool = "default";
+        std::string Pool = "";
         ui64 RetryCount = 0;
         std::optional<TInstant> LastFailAt;
         std::optional<TInstant> SuspendedUntil;

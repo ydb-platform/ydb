@@ -306,7 +306,7 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
-    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
+    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = false];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
     // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
@@ -315,8 +315,8 @@ message TFeatureFlags {
     optional bool EnableTablePartitionsFormatShardIdx = 271 [default = false];
     optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
     optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
-    optional bool EnableTopicMessagesBatching = 274 [default = false];
-    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
+    optional bool EnableTopicMessagesBatching = 274 [default = false, (RequireRestart) = true];
+    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false, (RequireRestart) = true];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = false];
@@ -345,4 +345,9 @@ message TFeatureFlags {
     optional bool EnableColumnshardDyNumber = 298 [default = false];
     optional bool EnableDataShardDirectPartImport = 299 [default = false];
     optional bool EnableIdmPermissionsManagement = 301 [default = false];
+    optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = false];
+    optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
+    optional bool DisableOldSecrets = 306 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
 }

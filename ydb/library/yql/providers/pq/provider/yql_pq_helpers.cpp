@@ -10,6 +10,37 @@ namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
+bool EnsureWatermarkExpr(const TPosition pos, TCoArgument arg, TExprBase body, TExprContext& ctx) {
+    static constexpr std::string_view message = "Unrecognized watermark expression, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
+
+    const auto maybeMember = body.Maybe<TCoMember>();
+    if (!maybeMember) {
+        ctx.AddError(TIssue(pos, message));
+        return false;
+    }
+    const auto member = maybeMember.Cast();
+
+    const auto maybeArg = member.Struct().Maybe<TCoArgument>();
+    if (!maybeArg) {
+        ctx.AddError(TIssue(pos, message));
+        return false;
+    }
+
+    if (maybeArg.Cast().Name() != arg.Name()) {
+        ctx.AddError(TIssue(pos, message));
+        return false;
+    }
+    if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time", "__ydb_write_time"}, member.Name())) {
+        ctx.AddError(TIssue(pos, message));
+        return false;
+    }
+    return true;
+}
+
+} // anonymous namespace
+
 void Add(TVector<TCoNameValueTuple>& settings, TStringBuf name, TStringBuf value, TPositionHandle pos, TExprContext& ctx) {
     settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
         .Name().Build(name)
@@ -139,6 +170,63 @@ TMaybeNode<TExprBase> FindSetting(TExprNode::TPtr settings, TStringBuf name) {
         }
     }
     return nullptr;
+}
+
+TMaybe<std::pair<TCoLambda, ui64>> SplitWatermarkExpr(
+    const NNodes::TCoLambda& watermark,
+    const TPqState& state,
+    TExprContext& ctx
+) {
+    const auto pos = ctx.GetPosition(watermark.Pos());
+
+    if (!state.EnableWatermarks && !state.EnableWatermarksAdvanced) {
+        ctx.AddError(TIssue(pos, "Watermarks are disabled"));
+        return Nothing();
+    }
+
+    static constexpr std::string_view message = "Incorrect watermark expression";
+    const auto args = watermark.Args();
+    if (args.Size() != 1) {
+        ctx.AddError(TIssue(pos, message));
+        return Nothing();
+    }
+    const auto arg = args.Arg(0);
+
+    const auto body = watermark.Body();
+    const auto maybeSub = body.Maybe<TCoSub>();
+    if (!maybeSub) {
+        ctx.AddError(TIssue(pos, message));
+        return Nothing();
+    }
+    const auto sub = maybeSub.Cast();
+
+    if (state.EnableWatermarks && !state.EnableWatermarksAdvanced && !EnsureWatermarkExpr(pos, arg, sub.Left(), ctx)) {
+        return Nothing();
+    }
+
+    auto maybeInterval = sub.Right().Maybe<TCoInterval>();
+    if (!maybeInterval) {
+        ctx.AddError(TIssue(pos, message));
+        return Nothing();
+    }
+    auto interval = maybeInterval.Cast();
+
+    auto delay = TryFromString<ui64>(interval.Literal().Value());
+    if (!delay) {
+        ctx.AddError(TIssue(pos, message));
+        return Nothing();
+    }
+
+    const auto newArg = Build<TCoArgument>(ctx, arg.Pos())
+        .Name(arg.Name())
+        .Done();
+    return std::pair{
+        Build<TCoLambda>(ctx, watermark.Pos())
+            .Args({newArg})
+            .Body(ctx.ReplaceNode(sub.Left().Ptr(), arg.Ref(), newArg.Ptr()))
+            .Done(),
+        *delay
+    };
 }
 
 } // namespace NYql

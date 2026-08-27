@@ -25,6 +25,7 @@
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -35,6 +36,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -46,6 +48,11 @@ namespace {
 
 void InitializeRuntimeWithLogging(NActors::TTestActorRuntimeBase& runtime) {
     runtime.Initialize();
+    // Allow Schedule() only for explicitly whitelisted actors (needed for inflight watchdog wakeups).
+    runtime.SetScheduledEventFilter(
+        [](NActors::TTestActorRuntimeBase& rt, TAutoPtr<NActors::IEventHandle>& event, TDuration /*delay*/, TInstant& /*deadline*/) {
+            return !rt.IsScheduleForActorEnabled(event->GetRecipientRewrite());
+        });
     // Register TX_COLUMNSHARD_SCAN component in test runtime
     runtime.GetLogSettings(0)->Append(
         NKikimrServices::TX_COLUMNSHARD_SCAN, NKikimrServices::TX_COLUMNSHARD_SCAN + 1, [](NActors::NLog::EComponent) -> const TString& {
@@ -171,6 +178,79 @@ public:
     }
 };
 
+class TNeverRespondingColumnDataCacheService: public NActors::TActor<TNeverRespondingColumnDataCacheService> {
+    using TBase = NActors::TActor<TNeverRespondingColumnDataCacheService>;
+
+public:
+    TNeverRespondingColumnDataCacheService()
+        : TBase(&TNeverRespondingColumnDataCacheService::StateWork)
+    {
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NKikimr::NGeneralCache::NPublic::TEvents<TColumnDataCachePolicy>::TEvAskData, Handle);
+            default:
+                break;
+        }
+    }
+
+    void Handle(NKikimr::NGeneralCache::NPublic::TEvents<TColumnDataCachePolicy>::TEvAskData::TPtr&) {
+        // Intentionally never responds: reproduces Fetch Inflight plateau.
+    }
+};
+
+class TDroppingDeduplicationConveyorService: public NActors::TActor<TDroppingDeduplicationConveyorService> {
+    using TBase = NActors::TActor<TDroppingDeduplicationConveyorService>;
+
+public:
+    TDroppingDeduplicationConveyorService()
+        : TBase(&TDroppingDeduplicationConveyorService::StateWork)
+    {
+    }
+
+    STFUNC(StateWork) {
+        // Drop all conveyor tasks, including BUILD_DUPLICATE_FILTERS / TMergeBorders.
+        Y_UNUSED(ev);
+    }
+};
+
+class TInlineExecutingConveyorService: public NActors::TActor<TInlineExecutingConveyorService> {
+    using TBase = NActors::TActor<TInlineExecutingConveyorService>;
+
+public:
+    TInlineExecutingConveyorService()
+        : TBase(&TInlineExecutingConveyorService::StateWork)
+    {
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConveyorComposite::TEvExecution::TEvNewTask, Handle);
+            default:
+                break;
+        }
+    }
+
+    void Handle(NConveyorComposite::TEvExecution::TEvNewTask::TPtr& ev) {
+        auto task = ev->Get()->GetTask();
+        AFL_VERIFY(!!task);
+        task->Execute(nullptr, task);
+    }
+};
+
+void EnableDeduplicationConveyorFlag() {
+    std::unique_ptr<NActors::IActor> unusedDistributor(NConveyorComposite::TServiceOperator::CreateService(
+        NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
+    Y_UNUSED(unusedDistributor);
+}
+
+void EnsureInlineDeduplicationConveyor(NActors::TTestActorRuntimeBase& runtime) {
+    EnableDeduplicationConveyorFlag();
+    runtime.RegisterService(
+        NConveyorComposite::TServiceOperator::MakeServiceId(runtime.GetNodeId(0)), runtime.Register(new TInlineExecutingConveyorService()));
+}
+
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> MakeUInt64Column(const std::vector<ui64>& values) {
     arrow::UInt64Builder builder;
     AFL_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(values.data()), static_cast<int64_t>(values.size())).ok());
@@ -197,6 +277,9 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
 
     TReadDescription readDesc(0, requestSnapshot, sorting);
     readDesc.SetScanCursor(nullptr);
+    readDesc.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
+    readDesc.TableMetadataAccessor = std::make_shared<TUserTableAccessor>("test",
+        NColumnShard::TUnifiedPathId::BuildValid(TInternalPathId::FromRawValue(1), NColumnShard::TSchemeShardLocalPathId::FromRawValue(1)));
 
     auto readMetadata = std::make_shared<NTrivial::TReadMetadata>(versionedIndex, readDesc);
     readMetadata->SetPKRangesFilter(readDesc.PKRangesFilter);
@@ -216,18 +299,21 @@ class TManagerSetupActor: public NActors::TActorBootstrapped<TManagerSetupActor>
     std::shared_ptr<TReadContext> ReadCtx;
     std::deque<std::shared_ptr<TPortionInfo>> Portions;
     TManagerSetupResult* Result;
+    TDuration InflightTimeout;
 
 public:
-    TManagerSetupActor(std::shared_ptr<TReadContext> readCtx, std::deque<std::shared_ptr<TPortionInfo>> portions, TManagerSetupResult* result)
+    TManagerSetupActor(std::shared_ptr<TReadContext> readCtx, std::deque<std::shared_ptr<TPortionInfo>> portions, TManagerSetupResult* result,
+        const TDuration inflightTimeout)
         : ReadCtx(std::move(readCtx))
         , Portions(std::move(portions))
         , Result(result)
+        , InflightTimeout(inflightTimeout)
     {
     }
 
     void Bootstrap() {
         Result->Context = std::make_shared<NTrivial::TSpecialReadContext>(ReadCtx);
-        auto* manager = new TDuplicateManager(*Result->Context, Portions);
+        auto* manager = new TDuplicateManager(*Result->Context, Portions, InflightTimeout);
         Result->ManagerId = RegisterWithSameMailbox(manager);
         PassAway();
     }
@@ -237,9 +323,10 @@ NActors::TActorId SetupDuplicateManager(NActors::TTestActorRuntimeBase& runtime,
     const std::deque<std::shared_ptr<TPortionInfo>>& portions,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NActors::TActorId& scanActorId,
-    TManagerSetupResult& result, const ERequestSorting sorting = ERequestSorting::NONE) {
+    TManagerSetupResult& result, const ERequestSorting sorting = ERequestSorting::NONE,
+    const TDuration inflightTimeout = THangTracker::DefaultTimeout) {
     auto readContext = MakeTestReadContext(requestSnapshot, dataAccessorsManager, columnDataManager, scanActorId, sorting);
-    runtime.Register(new TManagerSetupActor(readContext, portions, &result));
+    runtime.Register(new TManagerSetupActor(readContext, portions, &result, inflightTimeout));
 
     NActors::TDispatchOptions options;
     options.CustomFinalCondition = [&result]() {
@@ -247,6 +334,7 @@ NActors::TActorId SetupDuplicateManager(NActors::TTestActorRuntimeBase& runtime,
     };
     runtime.DispatchEvents(options, TDuration::Seconds(1));
     AFL_VERIFY(result.ManagerId);
+    runtime.EnableScheduleForActor(result.ManagerId);
     return result.ManagerId;
 }
 
@@ -3740,5 +3828,129 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(TimeoutWhenColumnDataNeverArrives) {
+        NActors::TTestActorRuntimeBase runtime(1, false);
+        InitializeRuntimeWithLogging(runtime);
+        NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+        auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+        auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+        std::deque<std::shared_ptr<TPortionInfo>> portions;
+        portions.push_back(MakeTestPortion(1, 1, 5, 5));
+        portions.push_back(MakeTestPortion(2, 3, 7, 5));
+
+        auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(cacheId, runtime.Register(new TNeverRespondingColumnDataCacheService()));
+
+        TManagerSetupResult setup;
+        const TDuration inflightTimeout = TDuration::MilliSeconds(200);
+        auto actorId =
+            SetupDuplicateManager(runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::NONE, inflightTimeout);
+        NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        auto sub1 = std::make_shared<TTestFilterSubscriber>();
+        auto sub2 = std::make_shared<TTestFilterSubscriber>();
+        runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 5, sub1));
+        runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 5, sub2));
+
+        NActors::TDispatchOptions opts;
+        opts.CustomFinalCondition = [&]() {
+            return (sub1->FilterReady || sub1->Failed) && (sub2->FilterReady || sub2->Failed);
+        };
+        runtime.DispatchEvents(opts, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(sub1->Failed, "P1 must fail by fetch inflight timeout, got: " << sub1->FailureReason);
+        UNIT_ASSERT_C(sub2->Failed, "P2 must fail by fetch inflight timeout, got: " << sub2->FailureReason);
+        UNIT_ASSERT_STRING_CONTAINS(sub1->FailureReason, "inflight timeout");
+    }
+
+    Y_UNIT_TEST(TimeoutWhenDeduplicationConveyorDropsMergeTask) {
+        NActors::TTestActorRuntimeBase runtime(1, false);
+        InitializeRuntimeWithLogging(runtime);
+        NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+        EnableDeduplicationConveyorFlag();
+        UNIT_ASSERT(NConveyorComposite::TServiceOperator::IsEnabled());
+        runtime.RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(runtime.GetNodeId(0)),
+            runtime.Register(new TDroppingDeduplicationConveyorService()));
+
+        auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+        auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+        std::deque<std::shared_ptr<TPortionInfo>> portions;
+        portions.push_back(MakeTestPortion(1, 1, 5, 5));
+        portions.push_back(MakeTestPortion(2, 3, 7, 5));
+
+        TColumnDataMap columnStore;
+        RegisterColumnData(columnStore, tabletActorId, 1, { 1, 2, 3, 4, 5 }, { 10, 10, 10, 10, 10 }, { 1, 1, 1, 1, 1 }, { 0, 0, 0, 0, 0 });
+        RegisterColumnData(columnStore, tabletActorId, 2, { 3, 4, 5, 6, 7 }, { 20, 20, 20, 20, 20 }, { 1, 1, 1, 1, 1 }, { 0, 0, 0, 0, 0 });
+
+        auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(cacheId, runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+        TManagerSetupResult setup;
+        const TDuration inflightTimeout = TDuration::MilliSeconds(200);
+        auto actorId =
+            SetupDuplicateManager(runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup, ERequestSorting::NONE, inflightTimeout);
+        NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        auto sub1 = std::make_shared<TTestFilterSubscriber>();
+        auto sub2 = std::make_shared<TTestFilterSubscriber>();
+        runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 5, sub1));
+        runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 5, sub2));
+
+        NActors::TDispatchOptions opts;
+        opts.CustomFinalCondition = [&]() {
+            return (sub1->FilterReady || sub1->Failed) && (sub2->FilterReady || sub2->Failed);
+        };
+        runtime.DispatchEvents(opts, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(sub1->Failed, "P1 must fail by merge inflight timeout, got: " << sub1->FailureReason);
+        UNIT_ASSERT_C(sub2->Failed, "P2 must fail by merge inflight timeout, got: " << sub2->FailureReason);
+        UNIT_ASSERT_STRING_CONTAINS(sub1->FailureReason, "inflight timeout");
+    }
+
+    Y_UNIT_TEST(FailWhenPortionRecordsCountExceedsFetchedRows) {
+        NActors::TTestActorRuntimeBase runtime(1, false);
+        InitializeRuntimeWithLogging(runtime);
+        EnsureInlineDeduplicationConveyor(runtime);
+        NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
+
+        auto dam = std::make_shared<TMockDataAccessorsManager>(tabletActorId);
+        auto cdm = std::make_shared<NColumnFetching::TColumnDataManager>(tabletActorId);
+
+        std::deque<std::shared_ptr<TPortionInfo>> portions;
+        // Metadata says 10 rows, column data has only 5.
+        portions.push_back(MakeTestPortion(1, 1, 5, 10));
+        portions.push_back(MakeTestPortion(2, 1, 5, 10));
+
+        TColumnDataMap columnStore;
+        RegisterColumnData(columnStore, tabletActorId, 1, { 1, 2, 3, 4, 5 }, { 10, 10, 10, 10, 10 }, { 1, 1, 1, 1, 1 }, { 0, 0, 0, 0, 0 });
+        RegisterColumnData(columnStore, tabletActorId, 2, { 1, 2, 3, 4, 5 }, { 20, 20, 20, 20, 20 }, { 1, 1, 1, 1, 1 }, { 0, 0, 0, 0, 0 });
+
+        auto cacheId = NColumnFetching::TGeneralCache::MakeServiceId(runtime.GetNodeId(0));
+        runtime.RegisterService(cacheId, runtime.Register(new TMockColumnDataCacheService(std::move(columnStore))));
+
+        TManagerSetupResult setup;
+        auto actorId = SetupDuplicateManager(runtime, TSnapshot(100, 1), portions, dam, cdm, tabletActorId, setup);
+        NActors::TActorId edgeActor = runtime.AllocateEdgeActor();
+
+        auto sub1 = std::make_shared<TTestFilterSubscriber>();
+        auto sub2 = std::make_shared<TTestFilterSubscriber>();
+        runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 1, 10, sub1));
+        runtime.Send(MakeFilterRequestHandle(actorId, edgeActor, 2, 10, sub2));
+
+        NActors::TDispatchOptions opts;
+        opts.CustomFinalCondition = [&]() {
+            return (sub1->FilterReady || sub1->Failed) && (sub2->FilterReady || sub2->Failed);
+        };
+        runtime.DispatchEvents(opts, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(sub1->Failed, "P1 must fail on records count mismatch, got: " << sub1->FailureReason);
+        UNIT_ASSERT_C(sub2->Failed, "P2 must fail on records count mismatch, got: " << sub2->FailureReason);
+        UNIT_ASSERT_STRING_CONTAINS(sub1->FailureReason, "records mismatch");
     }
 }

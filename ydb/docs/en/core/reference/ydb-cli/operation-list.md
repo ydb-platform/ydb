@@ -1,54 +1,62 @@
-# Getting a list of long-running operations
+# Getting a list of background operations
 
-Use the `ydb operation list` subcommand to get a list of long-running operations of the specified type.
+Using the `ydb operation list` subcommand, you can get a list of background operations of the specified type.
 
-General format of the command:
+General command format:
+
 
 ```bash
 {{ ydb-cli }} [global options...] operation list [options...] <kind>
 ```
 
-* `global options`: [Global parameters](commands/global-options.md).
-* `options`: [Parameters of the subcommand](#options).
-* `kind`: The type of operation. Possible values:
 
-  * `analyze`: The [ANALYZE](../../yql/reference/syntax/analyze.md) statistics collection operations.
-  * `buildindex`: The build index operations.
-  * `compaction`: The table compaction operations.
-  * `export/s3`: The export to S3 operations.
-  * `export/nfs`: The export to NFS operations.
-  * `import/s3`: The import from S3 operations.
-  * `import/nfs`: The import from NFS operations.
-  * `scriptexec`: The script execution operations.
-  * `incbackup`: The incremental backup operations.
-  * `restore`: The backup collection restore operations.
+* `global options` — [global parameters](commands/global-options.md).
+* `options` — [subcommand parameters](#options).
+* `kind` — operation type. Possible values:
 
-View a description of the command to get a list of long-running operations:
+  * `analyze` — [ANALYZE](../../yql/reference/syntax/analyze.md) statistics collection operations
+  * `buildindex` — index building operations
+  * `compaction` — table compaction operations
+  * `export/s3` — export to S3 operations
+  * `export/nfs` — export to NFS operations
+  * `import/s3` — import from S3 operations
+  * `import/nfs` — import from NFS operations
+  * `scriptexec` — script execution operations
+  * `incbackup` — incremental backup operations
+  * `restore` — restore from backup operations
+  * `setnotnull` — operations for setting the `NOT NULL` limit.
+
+View the description of the command for getting a list of background operations:
+
 
 ```bash
 {{ ydb-cli }} operation list --help
 ```
 
-## Parameters of the subcommand {#options}
 
-| Name                 | Description                                                                                                                                                                                                                                                                                            |
-|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `-s`, `--page-size`  | Number of operations on one page. If the list of operations contains more strings than specified in the `--page-size` parameter, the result will be split into several pages. To get the next page, specify the `--page-token` parameter.                                                              |
-| `-t`, `--page-token` | Page token.                                                                                                                                                                                                                                                                                            |
-| `--format`           | Output format.<br/>Default value: `pretty`.<br/>Acceptable values:<ul><li>`pretty`: A human-readable format.</li><li>`proto-json-base64`: Protobuf result in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are encoded in [Base64](https://en.wikipedia.org/wiki/Base64).</li></ul> |
+## Subcommand parameters {#options}
+
+| Name | Description |
+| --- | --- |
+| `-s`, `--page-size` | Number of operations per page. If the operation list contains more rows than specified in the `--page-size` parameter, the output will be split into multiple pages. To get the next page, specify the `--page-token` parameter. |
+| `-t`, `--page-token` | Page token. |
+| `--format` | Output format.<br/>Default value — `pretty`.<br/>Possible values:<ul><li>`pretty` — human-readable format</li><li>`proto-json-base64` — Protobuf output in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are encoded in [Base64](https://en.wikipedia.org/wiki/Base64).</li></ul> |
 
 ## Examples {#examples}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-Get a list of long-running build index operations for the `series` table:
+Get a list of background index building operations for the `series` table:
+
 
 ```bash
 {{ ydb-cli }} -p quickstart operation list \
   buildindex
 ```
 
+
 Result:
+
 
 ```text
 ┌───────────────────────────────────────┬───────┬─────────┬───────┬──────────┬─────────────────────┬─────────────┐

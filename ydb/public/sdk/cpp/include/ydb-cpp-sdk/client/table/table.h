@@ -391,6 +391,7 @@ public:
         Whitespace,
         Standard,
         Keyword,
+        Alphanumeric,
     };
 
     struct TAnalyzers {
@@ -618,6 +619,23 @@ public:
         std::vector<std::string> Paths;           // All paths covered by this analyze.
         std::vector<std::string> InProgressPaths; // Subset of Paths currently being traversed
         std::vector<std::string> DonePaths;       // Subset of Paths whose analysis completed
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
+class TSetNotNullOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TSetNotNullOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        ESetNotNullState State = ESetNotNullState::Unspecified;
+        float Progress = 0;
+        std::string Path;
+        std::vector<std::string> Columns;
     };
 
     const TMetadata& Metadata() const;

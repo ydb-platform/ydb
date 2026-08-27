@@ -301,6 +301,7 @@ public:
         if (ev->Get()->Stats && Stats) {
             Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
+        ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();
     }
 
@@ -871,7 +872,10 @@ private:
         OnEmptyResult();
 
         StartCheckpointCoordinator();
-        ExecuteTasks();
+
+        if (!ExecuteTasks()) {
+            return;
+        }
 
         if (CheckExecutionComplete()) {
             return;
@@ -885,7 +889,7 @@ private:
         Become(&TKqpDataExecuter::ExecuteState);
     }
 
-    void ExecuteTasks() {
+    [[nodiscard]] bool ExecuteTasks() {
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
@@ -899,7 +903,7 @@ private:
 
         bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
         if (!isSubmitSuccessful) {
-            return;
+            return false;
         }
 
         KQP_STLOG_I(KQPDATA, "Total tasks",
@@ -922,6 +926,8 @@ private:
             }
         }
         Planner->PropagateChannelsUpdates(updates);
+
+        return true;
     }
 
     void Shutdown() override {

@@ -121,7 +121,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                         NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
                     }
                 },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui64 hashBase) {
+                [&](const NArrow::NAccessor::TJsonValueView& data, const ui64 hashBase) {
                     auto view = data.GetScalarOptional();
                     if (!view.has_value()) {
                         return;

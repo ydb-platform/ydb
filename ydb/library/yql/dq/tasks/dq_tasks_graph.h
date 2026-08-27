@@ -65,6 +65,8 @@ struct TStageInfo : private TMoveOnly {
 
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
+    NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
 
     TVector<ui64> Tasks;
     TStageInfoMeta Meta;
@@ -451,6 +453,11 @@ public:
 
             NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
             if (enableWatermarks) {
+                const auto& stageInfo = GetStageInfo(task.StageId);
+                if (stageInfo.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                    watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                    task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, stageInfo.WatermarksIdleTimeoutUs);
+                }
                 for (auto& input : task.Inputs) {
                     if (input.SourceType) {
                         if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {

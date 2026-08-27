@@ -149,12 +149,12 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::UndoCurrentPropositionNodeChange(TProposition& proposition) {
-        if (!proposition.AddedNodes.empty()) {
+        if (!proposition.AddedOrChangedNodeIdentifiers.empty()) {
             for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
                 Send(actorId, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
             }
-            for (const auto& nodeId : proposition.AddedNodes) {
-                UnsubscribeInterconnect(nodeId.NodeId());
+            for (const auto& node : proposition.AddedOrChangedNodeIdentifiers) {
+                UnsubscribeInterconnect(node.NodeId());
             }
         }
     }
@@ -855,17 +855,29 @@ namespace NKikimr::NStorage {
         });
 
         Y_ABORT_UNLESS(StorageConfig);
-        const auto& currentNodesProto = StorageConfig->GetAllNodes();
-        std::vector<TNodeIdentifier> currentNodes(currentNodesProto.begin(), currentNodesProto.end());
-        std::ranges::sort(currentNodes);
+        THashMap<ui32, TNodeIdentifier> currentNodes;
+        currentNodes.reserve(StorageConfig->AllNodesSize());
+        for (const auto& node : StorageConfig->GetAllNodes()) {
+            currentNodes.try_emplace(node.GetNodeId(), node);
+        }
 
-        const auto& newNodesProto = configToPropose->GetAllNodes();
-        std::vector<TNodeIdentifier> newNodes(newNodesProto.begin(), newNodesProto.end());
-        std::ranges::sort(newNodes);
+        auto& addedOrChangedNodeIdentifiers = CurrentProposition->AddedOrChangedNodeIdentifiers;
+        addedOrChangedNodeIdentifiers.reserve(configToPropose->AllNodesSize());
 
         std::vector<TNodeIdentifier> addedNodes;
-        std::ranges::set_difference(newNodes, currentNodes, std::back_inserter(addedNodes));
-        if (!addedNodes.empty()) {
+        for (const auto& nodeProto : configToPropose->GetAllNodes()) {
+            TNodeIdentifier node(nodeProto);
+            const auto it = currentNodes.find(node.NodeId());
+            const bool isAdded = it == currentNodes.end();
+            if (isAdded) {
+                addedNodes.push_back(node);
+            }
+            if (isAdded || it->second != node) {
+                addedOrChangedNodeIdentifiers.push_back(std::move(node));
+            }
+        }
+
+        if (!addedOrChangedNodeIdentifiers.empty()) {
             for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
                 Send(actorId, new TEvNodeWardenStorageConfig(
                     std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
@@ -875,7 +887,6 @@ namespace NKikimr::NStorage {
                         : nullptr
                 ));
             }
-            CurrentProposition->AddedNodes = {addedNodes.begin(), addedNodes.end()};
         }
 
         // issue scatter task

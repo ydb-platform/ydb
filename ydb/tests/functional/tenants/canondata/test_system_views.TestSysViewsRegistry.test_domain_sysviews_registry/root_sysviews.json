@@ -1027,6 +1027,10 @@
       {
         "name": "HasPath",
         "type": "Utf8?"
+      },
+      {
+        "name": "HasStream",
+        "type": "Bool?"
       }
     ],
     "primary_key": [

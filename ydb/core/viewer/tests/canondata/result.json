@@ -3104,6 +3104,1102 @@
                 "Owner": "user1",
                 "Path": "/Root/dedicated_db"
             }
+        },
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "None"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "None"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Object"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Object"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Container"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Container"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Only"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Only"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "user1"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
+        },
+        {},
+        {
+            "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
+                "EffectiveACL": [
+                    {
+                        "AccessRights": [
+                            "ConnectDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "USERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "METADATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-READERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "UpdateRow",
+                            "EraseRow"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATA-WRITERS"
+                    },
+                    {
+                        "AccessRights": [
+                            "WriteAttributes",
+                            "CreateDirectory",
+                            "CreateTable",
+                            "CreateQueue",
+                            "RemoveSchema",
+                            "AlterSchema",
+                            "WriteUserAttributes"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DDL-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "GrantAccessRights"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "CreateDatabase",
+                            "DropDatabase"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
+                "Owner": "user1",
+                "Path": "/Root/dedicated_db"
+            }
         }
     ],
     "test.TestViewer.test_viewer_acl_write_invalid": {
@@ -17476,8 +18572,8 @@
     },
     "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
-        "status_code": 403,
-        "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        "status_code": 400,
+        "text": "`database` is required for /viewer/whoami"
     },
     "test.TestViewer.test_whoami_monitoring": {
         "AuthType": "Login",

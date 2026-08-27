@@ -13,6 +13,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
@@ -49,6 +50,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return "[ForgetFullBackup]";
         case TOperationId::ANALYZE:
             return "[ForgetAnalyze]";
+        case TOperationId::SET_NOT_NULL:
+            return "[ForgetSetNotNull]";
         default:
             return "[Untagged]";
         }
@@ -70,6 +73,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             return new TEvForcedCompaction::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::FULL_BACKUP:
             return new TEvBackup::TEvForgetFullBackupRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::SET_NOT_NULL:
+            return new TEvSetColumnConstraint::TEvForgetRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -83,7 +88,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
             || kind == TOperationId::INCREMENTAL_BACKUP
             || kind == TOperationId::RESTORE
             || kind == TOperationId::COMPACTION
-            || kind == TOperationId::FULL_BACKUP;
+            || kind == TOperationId::FULL_BACKUP
+            || kind == TOperationId::SET_NOT_NULL;
     }
 
     void HandleNavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -198,6 +204,15 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         Reply(record.GetStatus(), record.GetIssues());
     }
 
+    void Handle(TEvSetColumnConstraint::TEvForgetResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvSetColumnConstraint::TEvForgetResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
     void Handle(NKqp::TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issuesProto;
         NYql::IssuesToMessage(ev->Get()->Issues, &issuesProto);
@@ -261,6 +276,7 @@ public:
             case TOperationId::RESTORE:
             case TOperationId::COMPACTION:
             case TOperationId::FULL_BACKUP:
+            case TOperationId::SET_NOT_NULL:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
@@ -300,6 +316,7 @@ public:
             hFunc(TEvImport::TEvForgetImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvForgetResponse, Handle);
             hFunc(TEvForcedCompaction::TEvForgetResponse, Handle);
+            hFunc(TEvSetColumnConstraint::TEvForgetResponse, Handle);
             hFunc(NKqp::TEvForgetScriptExecutionOperationResponse, Handle);
             hFunc(TEvBackup::TEvForgetIncrementalBackupResponse, Handle);
             hFunc(TEvBackup::TEvForgetBackupCollectionRestoreResponse, Handle);

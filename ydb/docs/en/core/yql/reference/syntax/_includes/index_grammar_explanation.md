@@ -21,4 +21,4 @@
 
 * `<index_columns>` — comma-separated list of column names for the table being created. This list defines the composition and order of columns included in the index key. Must be specified. The index key will include both the columns listed and the columns from the table's primary key.
 * `<cover_columns>` — comma-separated list of column names from the created table that will be saved in the index in addition to index key columns, providing the ability to get additional data without accessing the table. Empty by default.
-* `<parameter_name>` and `<parameter_value>` — index parameters specific to a particular `<index_type>`.
+* `<parameter_name>` and `<parameter_value>` — index parameters specific to a particular `<index_type>`. Some index parameters cannot be specified during index creation. See [Altering an index](../alter_table/indexes.md#alter-index).

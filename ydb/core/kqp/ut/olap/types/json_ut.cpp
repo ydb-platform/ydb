@@ -1588,6 +1588,7 @@ constexpr const char* CreateColumnTableDdl = R"(CREATE TABLE `/Root/ColumnTable`
 
 // STOP_COMPACTION + create the JsonDocument table + pin the SIMPLE scan reader, then turn Col2 into a
 // SUB_COLUMNS column that separates every key (OTHERS_ALLOWED_FRACTION=0) with native scalar storage on.
+// tiling++ compaction to enforce merging of portions.
 TString NativeTableSetup() {
     TStringBuilder script;
     script << R"(
@@ -1595,6 +1596,9 @@ TString NativeTableSetup() {
         ------
         SCHEMA:
         )" << CreateColumnTableDdl << R"(
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -1675,6 +1679,86 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonNativeScalars) {
         READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
         EXPECTED: [[1u;["{\"b\":true,\"n\":1.5,\"s\":\"x\"}"]];[2u;["{\"b\":false,\"n\":2.5,\"s\":\"yy\"}"]]]
         )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(Compaction) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"n" : 1.5}')), (2u, JsonDocument('{"n" : 2.5}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"n" : 3.5}')), (4u, JsonDocument('{"n" : 1.5}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.5}"]];[2u;["{\"n\":2.5}"]];[3u;["{\"n\":3.5}"]];[4u;["{\"n\":1.5}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::Double);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    // A full cycle test for doubles near max magnitude. The stored value stays exact; reading back renders
+    // it with fewer digits (17 in, 16 out) on BinaryJson level.
+    Y_UNIT_TEST(CompactionNearMaxDouble) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"n" : 1.7976931348623157e308}')),
+                                                             (2u, JsonDocument('{"n" : -1.7976931348623157e308}'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.797693134862316e+308}"]];[2u;["{\"n\":-1.797693134862316e+308}"]]]
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"n" : 1.5}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.797693134862316e+308}"]];[2u;["{\"n\":-1.797693134862316e+308}"]];[3u;["{\"n\":1.5}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::Double);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(CompactionDivergentTypesFallback) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"n" : 1.5}')), (2u, JsonDocument('{"n" : 2.5}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"n" : "a"}')), (4u, JsonDocument('{"n" : "b"}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.5}"]];[2u;["{\"n\":2.5}"]];[3u;["{\"n\":\"a\"}"]];[4u;["{\"n\":\"b\"}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::BinaryJson);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(IndexOverNativeStringColumn) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"s" : "xxxx"}')), (2u, JsonDocument('{"s" : "yyyy"}')),
+                                                             (3u, JsonDocument('{"s" : "zzzz"}'))
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=s_index, TYPE=BLOOM_NGRAMM_FILTER,
+            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
+                        "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"s"'}}`);
+        ------
+        ONE_ACTUALIZATION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.s") like "%xxx%" ORDER BY Col1;
+        EXPECTED: [[1u;["{\"s\":\"xxxx\"}"]]]
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.s") like "%aaa%" ORDER BY Col1;
+        EXPECTED: []
+        ------
+        )" << NativeValueTypeCheck(EValueType::String);
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
 }

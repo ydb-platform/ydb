@@ -9,6 +9,7 @@
 
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -461,6 +462,9 @@ void TPartitionActor::ResendRecentRequests() {
             WaitDataInfly.clear();
             if (IsNeedMorePartitionData()) {
                 WaitDataInPartition(ctx);
+            } else if (IsPartitionDataReady() && !PartitionInFlightMemoryController.IsMemoryLimitReached()) {
+                WaitForData = false;
+                SendPartitionReady(ctx);
             }
         }
     }
@@ -513,6 +517,12 @@ i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
     return 0;
 }
 
+void SetKafkaBatchBaseOffsetIfNeeded(NKikimrPQClient::TDataChunk& proto, ui64 offset) {
+    if (GetDataChunkCodec(proto) == Ydb::Topic::CODEC_KAFKA_BATCH) {
+        NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), offset);
+    }
+}
+
 template<typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
@@ -558,6 +568,7 @@ bool FillBatchedData(
         if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue; //TODO - no such chunks must be on prod
         }
+        SetKafkaBatchBaseOffsetIfNeeded(proto, r.GetOffset());
 
         TString sourceId;
         if (!r.GetSourceId().empty()) {

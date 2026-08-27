@@ -38,6 +38,7 @@ enum ESimpleCounters {
     COUNTER_VOLATILE_TX_ABORTING_COUNT = 28                        [(CounterOpts) = {Name: "VolatileTxAbortingCount"}];
     COUNTER_LOCK_ROWS_INFLIGHT = 29                                [(CounterOpts) = {Name: "LockRowsInFlight"}];
     COUNTER_LOCK_ROWS_WAITING = 30                                 [(CounterOpts) = {Name: "LockRowsWaiting"}];
+    COUNTER_CHANGE_QUEUE_BYTES = 31                                [(CounterOpts) = {Name: "ChangeQueueBytes"}];
 }
 
 enum ECumulativeCounters {
@@ -157,6 +158,7 @@ enum ECumulativeCounters {
     COUNTER_PREPARE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED = 113 [(CounterOpts) = {Name: "PrepareDatabaseDiskSpaceQuotaExceeded"}];
     COUNTER_REMOVED_COMMITTED_TXS = 114                   [(CounterOpts) = {Name: "RemovedCommittedTxs"}];
     COUNTER_LOCK_ROWS_FINISHED = 115                      [(CounterOpts) = {Name: "LockRowsFinished"}];
+    COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS = 116           [(CounterOpts) = {Name: "ChangeQueueOverflowRejects"}];
 }
 
 enum EPercentileCounters {

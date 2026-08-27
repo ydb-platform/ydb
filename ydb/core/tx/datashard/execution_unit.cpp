@@ -170,6 +170,11 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
 
+     // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
+    auto incOverloaded = [this, writeOp]() {
+        DataShard.IncCounter(writeOp ? COUNTER_WRITE_OVERLOADED : COUNTER_PREPARE_OVERLOADED);
+    };
+
     // Reject operations after receiving EvSplit
     // This is to avoid races when split is in progress
     if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||
@@ -191,6 +196,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
             "Tablet " << DataShard.TabletID() << " rejecting tx due to split");
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -212,6 +218,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -229,6 +236,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
 
+        incOverloaded();
         op->Abort();
         return true;
     }
@@ -249,6 +257,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
                      "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow");
 
+        incOverloaded();
+        DataShard.IncCounter(COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS);
         op->Abort();
         return true;
     }
@@ -267,6 +277,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
 
+        // no incOverloaded here as it's treated as BAD_REQUEST, not OVERLOAD
         op->Abort();
         return true;
     }

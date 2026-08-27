@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import time
@@ -19,17 +20,26 @@ from ydb.tests.library.common.types import Erasure
 logger = logging.getLogger(__name__)
 
 
+def max_json_depth(value):
+    if isinstance(value, dict):
+        return 1 + max((max_json_depth(v) for v in value.values()), default=0)
+
+    if isinstance(value, list):
+        return 1 + max((max_json_depth(item) for item in value), default=0)
+
+    return 0
+
+
 def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
-    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
+    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
-    print(f"rebalancing_timeout_ms {rebalancing_timeout_ms}")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
 
-def get_ydb_config(request):
+def get_ydb_config(request, enable_fq_connector=None):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", True)
     enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
@@ -37,6 +47,14 @@ def get_ydb_config(request):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
+    enable_dq_source_stream_lookup_join_local_lookups = param.get(
+        "enable_dq_source_stream_lookup_join_local_lookups", False
+    )  # TODO YQ-5431
+    enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
+    enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
+        "enable_dq_source_stream_lookup_join_shuffle_mode", True
+    )
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -49,12 +67,25 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    if enable_dq_source_stream_lookup_join_local_lookups:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
+    if enable_dq_source_stream_lookup_join_fullscan:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
+    if enable_dq_source_stream_lookup_join_shuffle_mode:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_shuffle_mode")
 
     disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
+
+    if os.environ.get("USE_ACCESS_SERVICE_V2", "false") == "true":
+        extra_feature_flags.add("enable_access_service_v2_interface")
+    else:
+        disabled_feature_flags.append("enable_access_service_v2_interface")
+
+    iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
 
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
@@ -71,10 +102,11 @@ def get_ydb_config(request):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
+            "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
         },
         replication_config={
             "iam_service_control": {
-                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
+                "endpoint": iam_emulator_endpoint,
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
                 "resource_type": "resource-manager.cloud",
@@ -85,6 +117,17 @@ def get_ydb_config(request):
         use_in_memory_pdisks=False,
     )
 
+    if enable_fq_connector:
+        config.yaml_config["query_service_config"]["generic"] = {
+            "connector": {
+                "use_ssl": False,
+                "endpoint": {
+                    "host": enable_fq_connector.connector.grpc_host,
+                    "port": enable_fq_connector.connector.grpc_port,
+                },
+            },
+        }
+
     config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
@@ -92,10 +135,16 @@ def get_ydb_config(request):
         "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
         "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
     }
+    config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
+    config.yaml_config["auth_config"]["use_access_service_tls"] = False
     return config
 
 
 class YdbClient:
+    def __fail_retry_callback(self, e):
+        self.retry_settings.on_ydb_error_callback(e)
+        raise RuntimeError(e)
+
     def __init__(self, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True):
         self.driver_config = ydb.DriverConfig(
             endpoint, database, auth_token=token, disable_discovery=not enable_discovery
@@ -118,8 +167,11 @@ class YdbClient:
     def wait_connection(self, timeout: int = 5):
         self.driver.wait(timeout, fail_fast=True)
 
-    def query(self, statement: str):
-        return self.session_pool.execute_with_retries(statement, retry_settings=self.retry_settings)
+    def query(self, statement: str, fail_fast: bool = False):
+        retry_settings = copy.copy(self.retry_settings)
+        if fail_fast:
+            retry_settings.on_ydb_error_callback = lambda e: self.__fail_retry_callback(e)
+        return self.session_pool.execute_with_retries(statement, retry_settings=retry_settings)
 
     def query_async(self, statement: str, timeout: Optional[float] = None):
         settings = None
@@ -233,6 +285,33 @@ class StreamingTestBase(TestYdsBase):
                 sum += sensor
         assert found or not expect_counters_exist
         return sum
+
+    def get_schemeshard_counter(self, kikimr: Kikimr, counter_name: str) -> int:
+        total = 0
+        for node_id in kikimr.cluster.nodes:
+            sensor = self.get_sensors(kikimr, node_id, "tablets").find_sensor(
+                {"type": "SchemeShard", "category": "app", "sensor": counter_name}
+            )
+            if sensor is not None:
+                total += sensor
+        return total
+
+    def wait_schemeshard_counter(
+        self,
+        kikimr: Kikimr,
+        counter_name: str,
+        expected_value: int,
+        timeout: int = plain_or_under_sanitizer_wrapper(60, 90),
+    ) -> None:
+        deadline = time.time() + timeout
+        while True:
+            value = self.get_schemeshard_counter(kikimr, counter_name)
+            if value == expected_value:
+                break
+            assert (
+                time.time() < deadline
+            ), f"wait_schemeshard_counter failed: {counter_name}={value}, expected {expected_value}"
+            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def wait_streaming_query_metric(
         self,

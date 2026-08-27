@@ -54,7 +54,8 @@ namespace {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "",
-            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false) {
+            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false,
+            const TVector<TString>& columnTables = {}) {
 
         TTablesWithAttrs tables;
 
@@ -146,6 +147,11 @@ namespace {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
             }, userAttrs);
+            env.TestWaitNotification(runtime, txId, schemeshardId);
+        }
+
+        for (const auto& table : columnTables) {
+            TestCreateColumnTable(runtime, schemeshardId, ++txId, dbName, table);
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -2600,6 +2606,206 @@ partitioning_settings {
 
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot");
+    }
+
+    Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+
+        // Reject the first 'CompleteMultipartUpload' the way s3 does when the stored etags do not
+        // match the parts it holds. The request is dropped, so the upload is still there and its
+        // parts have to be uploaded anew. 'InvalidPart' is unknown to the aws sdk, so it arrives
+        // as UNKNOWN with the exception name set and without the retryable flag.
+        THolder<IEventHandle> injectResult;
+        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
+
+                    if (schemeTx.HasBackup()) {
+                        schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
+                        record.SetTxBody(schemeTx.SerializeAsString());
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+                case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
+                    if (injectResult) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    Aws::Client::AWSError<Aws::S3::S3Errors> error(Aws::S3::S3Errors::UNKNOWN, "InvalidPart",
+                        "Unable to parse ExceptionName: InvalidPart Message: One or more of the specified"
+                        " parts could not be found.", false);
+                    // Without the response code the error defaults to REQUEST_NOT_MADE, which is retryable
+                    error.SetResponseCode(Aws::Http::HttpResponseCode::BAD_REQUEST);
+
+                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                        std::nullopt,
+                        Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(std::move(error))
+                    );
+                    injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), ev->Flags, ev->Cookie);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                default: {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+            }
+        });
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              number_of_retries: 10
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        if (!injectResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
+                return bool(injectResult);
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        Runtime().SetObserverFunc(prevObserver);
+        Runtime().Send(injectResult.Release(), 0, true);
+
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
+        UNIT_ASSERT(data);
+        UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        THolder<IEventHandle> injectResult;
+        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
+
+                    // Force a multipart upload so that CompleteMultipartUpload is reached.
+                    if (schemeTx.HasBackup()) {
+                        schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
+                        record.SetTxBody(schemeTx.SerializeAsString());
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+                case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
+                    // S3 no longer knows about this multipart upload (session expired, aborted by
+                    // a lifecycle policy, or lost across a restart). Drop the request so it never
+                    // reaches the server: CompleteMultipartUpload is what assembles the object, so
+                    // nothing is materialised - exactly what happens in production.
+                    Aws::Client::AWSError<Aws::S3::S3Errors> error(
+                        Aws::S3::S3Errors::NO_SUCH_UPLOAD,
+                        "NoSuchUpload",
+                        "The specified upload does not exist. The upload ID may be invalid,"
+                        " or the upload may have been aborted or completed.",
+                        false /* isRetryable */);
+                    // The 4-arg ctor leaves m_responseCode at REQUEST_NOT_MADE, which
+                    // NWrappers::ShouldRetry treats as retryable - set the real code explicitly.
+                    error.SetResponseCode(Aws::Http::HttpResponseCode::NOT_FOUND);
+
+                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                        std::nullopt,
+                        Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(error)
+                    );
+                    // Reply to the uploader (the request's sender) on behalf of the storage wrapper.
+                    injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                default: {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+            }
+        });
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        if (!injectResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
+                return bool(injectResult);
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        Runtime().SetObserverFunc(prevObserver);
+        Runtime().Send(injectResult.Release(), 0, true);
+
+        Env().TestWaitNotification(Runtime(), exportId);
+
+        // The table's data object was never assembled by S3.
+        const auto& data = S3Mock().GetData();
+        UNIT_ASSERT_C(data.find("/data_00.csv") == data.end(),
+            "precondition: CompleteMultipartUpload failed, so /data_00.csv must not exist");
+
+        // Therefore the export must NOT report success. Reporting SUCCESS here means the backup
+        // is recorded as complete while the exported table is missing from the bucket.
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(CorruptedDyNumber) {
@@ -5295,5 +5501,93 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             NLs::PathExist,
             NLs::CheckColumnTableMultiColumnStatistics("s1", {"data"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
         });
+    }
+
+    Y_UNIT_TEST(ShouldWriteBillRecordOnColumnTableServerlessDb) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TVector<TString> billRecords;
+        Runtime().SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            billRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/User/ColumnTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::SUCCESS, "/MyRoot/User", true, "", "", {}, false, {
+            R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            )"
+        });
+
+        if (billRecords.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&billRecords](IEventHandle&) -> bool {
+                return !billRecords.empty();
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"cloud_id\":\"CLOUD_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"folder_id\":\"FOLDER_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"resource_id\":\"DATABASE_ID_VAL\"");
+        UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"schema\":\"ydb.serverless.requests.v1\"");
+    }
+
+    Y_UNIT_TEST(ShouldNotWriteBillRecordOnColumnTableCommonDb) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TVector<TString> billRecords;
+        Runtime().SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            billRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/User/ColumnTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::SUCCESS, "/MyRoot/User", false, "", "", {}, false, {
+            R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            )"
+        });
+
+        UNIT_ASSERT(billRecords.empty());
     }
 }

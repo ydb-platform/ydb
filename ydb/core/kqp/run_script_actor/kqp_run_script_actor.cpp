@@ -77,8 +77,8 @@ public:
 
     TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig)
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
-        , QueryServiceConfig(queryServiceConfig)
-        , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig, *Ctx))
+        , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
+        , QueryServiceConfig(std::move(queryServiceConfig))
     {}
 
     void Bootstrap() {
@@ -113,12 +113,11 @@ private:
         });
     }
 
-    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreateQueryRequest(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TScriptExecutionContext& ctx) {
+    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreateQueryRequest(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record = request;
         ev->SetSaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph);
         ev->SetDisableDefaultTimeout(settings.DisableDefaultTimeout);
-        ev->SetUserRequestContext(ctx.UserRequestContext);
 
         if (settings.PhysicalGraph) {
             ev->SetQueryPhysicalGraph(std::move(*settings.PhysicalGraph));
@@ -235,6 +234,7 @@ private:
         LOG_D("Started ScriptResultHandlerActor: " << ScriptResultHandlerActor.Id << ", starting query, has physical graph: " << (physicalGraph ? "YES" : "NO"));
 
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
+        QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
         Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
     }
@@ -245,7 +245,7 @@ private:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
             const auto& issues = ev->Get()->Issues;
             LOG_E("Got lease watcher finished: " << ev->Sender << " with status " << status << ", issues: " << issues.ToOneLineString());
-            Finish(status, AddRootIssue("Script lease watcher error", issues));
+            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
         } else {
             LOG_I("Got lease watcher finished: " << ev->Sender);
             Finish();
@@ -321,6 +321,11 @@ private:
                 .AlreadyStopped = alreadyStopped,
             }, issues), /* flags */ 0, request->Cookie);
         }
+
+        LOG_I("Exit"
+            << ", finish status: " << FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
+            << ", issues: " << FinishInfo.Issues.ToOneLineString()
+            << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
     }
 
     void Finish() {
@@ -393,7 +398,7 @@ private:
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             WaitFinalizationRequest = true;
         } else {
-            LOG_N("Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", already waiting finalization");
+            LOG_N("Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString() << ", already waiting finalization");
         }
     }
 
@@ -402,8 +407,8 @@ private:
     }
 
     const TScriptExecutionContext::TPtr Ctx;
-    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
     TSessionState SessionState;

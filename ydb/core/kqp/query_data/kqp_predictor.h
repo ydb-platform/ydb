@@ -30,6 +30,8 @@ private:
     YDB_READONLY_FLAG(HasTop, false);
     YDB_READONLY_FLAG(HasRangeScan, false);
     YDB_READONLY_FLAG(HasLookup, false);
+    YDB_READONLY_FLAG(HasWatermarkGenerator, false);
+    YDB_OPT(ui64, WatermarkGeneratorIdleTimeoutUs);
 
     YDB_READONLY(double, InputDataPrediction, 1);
     YDB_READONLY(double, OutputDataPrediction, 1);

@@ -239,7 +239,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     };
 
     for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
-        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
         if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
@@ -258,6 +258,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         if (isKafkaBatch) {
             flushRecordsBatch();
+            SetKafkaBatchBaseOffset(*dataChunk.MutableData(), result.GetOffset());
             addRawKafkaBatch(dataChunk, result.GetLogicalMessageCount());
             continue;
         }

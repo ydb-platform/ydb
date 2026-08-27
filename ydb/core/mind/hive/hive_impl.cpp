@@ -551,6 +551,9 @@ TVector<TTabletId> THive::UpdateStoragePools(const google::protobuf::RepeatedPtr
         for (TTabletId tabletId : tabletsWaiting) {
             tabletsToUpdate.emplace_back(tabletId);
         }
+        if (storagePool.ShrinkRequest) {
+            Execute(CreateShrinkPool(std::move(storagePool.ShrinkRequest)));
+        }
     }
     return tabletsToUpdate;
 }
@@ -3697,7 +3700,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvShrinkStoragePoolReply, Handle);
         hFunc(TEvHive::TEvShrinkStoragePoolDone, Handle);
         hFunc(TEvPrivate::TEvReassignInactiveGroupsComplete, Handle);
-        hFunc(TEvPrivate::TEvCompactComplete, Handle);
+        hFunc(TEvPrivate::TEvMoveDataComplete, Handle);
     }
 }
 
@@ -3817,7 +3820,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvShrinkStoragePoolReply::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvShrinkStoragePoolDone::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvReassignInactiveGroupsComplete::EventType, EnqueueIncomingEvent);
-        fFunc(TEvPrivate::TEvCompactComplete::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvMoveDataComplete::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -4265,7 +4268,15 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
         }
     }
 
-    Execute(CreateShrinkPool(std::move(ev)));
+    if (pool.SetShrinkRequest(std::move(ev))) {
+        THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = pool.BuildRefreshRequest();
+        ++pool.RefreshRequestInFlight;
+        THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+        NKikimrBlobStorage::TEvControllerSelectGroups& selectRecord = request->Record;
+        selectRecord.SetReturnAllMatchingGroups(true);
+        selectRecord.MutableGroupParameters()->AddAllocated(std::move(item).Release());
+        SendToBSControllerPipe(request.Release());
+    }
 }
 
 void THive::Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev) {
@@ -4274,17 +4285,17 @@ void THive::Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvReassignInactiveGroupsComplete::TPtr& ev) {
     auto& pool = GetStoragePool(ev->Get()->PoolName);
-    if (!CompactInactiveGroups(pool)) {
+    if (!MoveDataInactiveGroups(pool)) {
         CheckRemainingHistory(pool);
     }
 }
 
-void THive::Handle(TEvPrivate::TEvCompactComplete::TPtr& ev) {
+void THive::Handle(TEvPrivate::TEvMoveDataComplete::TPtr& ev) {
     auto& pool = GetStoragePool(ev->Get()->PoolName);
     if (ev->Get()->Success) {
         CheckRemainingHistory(pool);
     } else {
-        if (!CompactInactiveGroups(pool)) {
+        if (!MoveDataInactiveGroups(pool)) {
             CheckRemainingHistory(pool);
         }
     }
@@ -4455,7 +4466,7 @@ void THive::StartShrinkPool(TStoragePoolInfo& pool) {
     if (ReassignInactiveGroups(pool)) {
         return;
     }
-    if (CompactInactiveGroups(pool)) {
+    if (MoveDataInactiveGroups(pool)) {
         return;
     }
     CheckRemainingHistory(pool);
@@ -4479,7 +4490,8 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
     for (const auto& [tabletId, tablet] : Tablets) {
         TVector<ui32> channels;
         for (const auto& channel : tablet.TabletStorageInfo->Channels) {
-            if (inactiveGroups.contains(channel.LatestEntry()->GroupID)) {
+            const auto* latest = channel.LatestEntry();
+            if (latest && inactiveGroups.contains(latest->GroupID)) {
                 channels.push_back(channel.Channel);
             }
         }
@@ -4498,9 +4510,9 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
     }
 }
 
-bool THive::CompactInactiveGroups(TStoragePoolInfo& pool) {
+bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
     std::unordered_set<TStorageGroupId> inactiveGroups(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
-    std::vector<TTabletId> tabletsToCompact;
+    std::vector<TTabletId> tabletsToMoveData;
     if (pool.RemainingHistory.empty()) {
         for (const auto& [tabletId, tablet] : Tablets) {
             bool foundHistory = false;
@@ -4516,21 +4528,21 @@ bool THive::CompactInactiveGroups(TStoragePoolInfo& pool) {
                 }
             }
             if (foundHistory) {
-                tabletsToCompact.push_back(tabletId);
+                tabletsToMoveData.push_back(tabletId);
             }
         }
     } else {
         auto tabletsWithHistory = pool.RemainingHistory | std::views::transform(&TStoragePoolInfo::THistoryEntry::Tablet);
         std::unordered_set<TTabletId> uniqueTablets(tabletsWithHistory.begin(), tabletsWithHistory.end());
-        tabletsToCompact.assign(uniqueTablets.begin(), uniqueTablets.end());
+        tabletsToMoveData.assign(uniqueTablets.begin(), uniqueTablets.end());
     }
-    if (tabletsToCompact.empty()) {
+    if (tabletsToMoveData.empty()) {
         return false;
     } else {
-        YDB_LOG_INFO("ShrinkPool: starting compact for tablets",
+        YDB_LOG_INFO("ShrinkPool: starting move data for tablets",
             {"logPrefix", GetLogPrefix()},
-            {"tabletsToCompactCount", tabletsToCompact.size()});
-        StartCompactActor(std::move(tabletsToCompact), pool.InactiveGroups, pool.Name);
+            {"tabletsToMoveDataCount", tabletsToMoveData.size()});
+        StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, pool.Name);
         return true;
     }
 }

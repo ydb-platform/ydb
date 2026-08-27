@@ -586,7 +586,34 @@ protected:
         }
     }
 
+    bool IsResultChannelPaused(ui32 channelId) const {
+        auto it = ResultChannelFlow.find(channelId);
+        return it != ResultChannelFlow.end() && it->second.IsPaused();
+    }
+
+    void AccountResultChannelBytesSent(ui32 channelId, i64 bytes) {
+        auto& state = ResultChannelFlow[channelId];
+        if (state.EstimatedFreeSpace != Max<i64>()) {
+            const bool wasPaused = state.IsPaused();
+            state.EstimatedFreeSpace -= bytes;
+            if (!wasPaused && state.IsPaused()) {
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel paused",
+                    {"marker", "KQPEX"},
+                    {"actorId", SelfId()},
+                    {"txId", TxId},
+                    {"ctx", *GetUserRequestContext()},
+                    {"channelId", channelId},
+                    {"freeSpace", state.EstimatedFreeSpace},
+                    {"traceId", TraceId()});
+            }
+        }
+    }
+
     void ReadResultFromInputBuffer(ui32 channelId, const std::shared_ptr<NYql::NDq::IChannelBuffer>& buffer) {
+        if (IsResultChannelPaused(channelId)) {
+            return;
+        }
+
         auto& channel = TasksGraph.GetChannel(channelId);
         YQL_ENSURE(channel.DstTask == 0);
         auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
@@ -613,6 +640,7 @@ protected:
                 if (streamingAllowed && !trailingResults) {
                     ui32 seqNo = 1;
                     SendStreamData(txResult, std::move(batches), channel.Id, seqNo, data.Finished);
+                    AccountResultChannelBytesSent(channel.Id, data.Bytes);
                 } else {
                     ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                     if (streamingAllowed) {
@@ -635,6 +663,9 @@ protected:
             }
 
             if (data.Finished) {
+                break;
+            }
+            if (IsResultChannelPaused(channelId)) {
                 break;
             }
         }
@@ -722,6 +753,31 @@ protected:
         this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
     }
 
+    void ApplyResultChannelAck(ui32 channelId, const NKikimrKqp::TEvExecuterStreamDataAck& record) {
+        auto& state = ResultChannelFlow[channelId];
+        const bool wasPaused = state.IsPaused();
+        if (record.HasFreeSpace()) {
+            state.EstimatedFreeSpace = record.GetFreeSpace();
+        } else {
+            state.EstimatedFreeSpace = Max<i64>();
+        }
+        if (wasPaused && !state.IsPaused()) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel resumed",
+                {"marker", "KQPEX"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"channelId", channelId},
+                {"freeSpace", state.EstimatedFreeSpace},
+                {"traceId", TraceId()});
+        }
+        if (!state.IsPaused()) {
+            if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
+                ReadResultFromInputBuffer(channelId, it->second);
+            }
+        }
+    }
+
     void HandleStreamAck(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
             return;
@@ -730,7 +786,21 @@ protected:
             if (ev->Get()->Record.GetEnough()) {
                 for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
                     inputBuffer->EarlyFinish();
+                    ResultChannelFlow.erase(channelId);
                 }
+                return;
+            }
+
+            const auto& record = ev->Get()->Record;
+            const ui32 requestedChannelId = record.GetChannelId();
+            if (requestedChannelId == 0) {
+                // Channel id 0 is not used by the task graph; scan-query RPC uses it
+                YQL_ENSURE(ResultInputBuffers.size() <= 1, "Expected at most one result channel");
+                for (const auto& [channelId, _] : ResultInputBuffers) {
+                    ApplyResultChannelAck(channelId, record);
+                }
+            } else {
+                ApplyResultChannelAck(requestedChannelId, record);
             }
             return;
         }
@@ -1405,7 +1475,7 @@ protected:
         };
     }
 
-    bool BuildPlannerAndSubmitTasks() {
+    [[nodiscard]] bool BuildPlannerAndSubmitTasks() {
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,
@@ -1902,6 +1972,15 @@ protected:
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
+
+    struct TResultChannelFlowState {
+        i64 EstimatedFreeSpace = Max<i64>();
+
+        bool IsPaused() const {
+            return EstimatedFreeSpace < 0;
+        }
+    };
+    THashMap<ui32, TResultChannelFlowState> ResultChannelFlow;
 
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";

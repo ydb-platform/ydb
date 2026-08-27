@@ -52,27 +52,45 @@ public:
             0 // dlq tables format
         );
 
-        TString query = Sprintf(R"__(
+        // Shared tables (TablesFormat == 1) store messages for all queues in a single
+        // table keyed by (QueueIdNumberHash, QueueIdNumber, ...). Per-queue tables
+        // (TablesFormat == 0) have no QueueIdNumber* columns, so they must be scanned
+        // without that filter.
+        const bool sharedTables = Settings_.TablesFormat == 1;
+
+        TString query;
+        if (sharedTables) {
+            query = Sprintf(R"__(
             DECLARE $QueueIdNumber as Uint64;
             DECLARE $QueueIdNumberHash as Uint64;
-    
+
             SELECT DISTINCT GroupId
             FROM `%s/Messages`
             WHERE QueueIdNumberHash = $QueueIdNumberHash
               AND QueueIdNumber = $QueueIdNumber
             LIMIT 101;
-    
+
         )__", queryMaker.GetQueueTablesFolder().c_str());
+        } else {
+            query = Sprintf(R"__(
+            SELECT DISTINCT GroupId
+            FROM `%s/Messages`
+            LIMIT 101;
+
+        )__", queryMaker.GetQueueTablesFolder().c_str());
+        }
 
         RLOG_SQS_DEBUG(TLogQueueName(Settings_.UserName, Settings_.QueueName, -1) << " Query: " << query);
-    
+
         auto builder = NYdb::TParamsBuilder();
-        builder.AddParam("$QueueIdNumberHash")
-                .Uint64(GetKeysHash(Settings_.QueueVersion))
-                .Build();
-        builder.AddParam("$QueueIdNumber")
-                .Uint64(Settings_.QueueVersion)
-                .Build();
+        if (sharedTables) {
+            builder.AddParam("$QueueIdNumberHash")
+                    .Uint64(GetKeysHash(Settings_.QueueVersion))
+                    .Build();
+            builder.AddParam("$QueueIdNumber")
+                    .Uint64(Settings_.QueueVersion)
+                    .Build();
+        }
 
         auto params = builder.Build();
 

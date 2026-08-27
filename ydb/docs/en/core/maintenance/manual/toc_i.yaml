@@ -11,7 +11,7 @@ items:
   href: selfheal.md
 - name: Self Heal State Storage
   href: selfheal_statestorage.md
-- name: Decommissioning a cluster part
+- name: Data Center Decommissioning
   href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Decommissioning groups using virtual groups
   href: virtual_storage_groups_decommit.md
@@ -27,16 +27,8 @@ items:
   href: replacing_nodes.md
 - name: Config overview
   href: config-overview.md
-- name: Dynamic cluster configuration
-  href: dynamic-config.md
-- name: Cluster configuration DSL
-  href: dynamic-config-selectors.md
 - name: Temporary configurations
   href: dynamic-config-volatile-config.md
-- name: CMS
-  href: cms.md
-- name: Changing actor system configs
-  href: change_actorsystem_configs.md
 - name: BlobDepot
   href: blobdepot.md
 - name: BlobDepot decommit

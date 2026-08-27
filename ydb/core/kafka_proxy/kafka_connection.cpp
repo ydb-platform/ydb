@@ -9,6 +9,7 @@
 
 
 #include "actors/actors.h"
+#include "actors/kafka_api_versions_actor.h"
 #include "kafka_connection.h"
 #include "kafka_events.h"
 #include <ydb/core/kafka_proxy/kafka_log_impl.h>
@@ -246,7 +247,7 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TApiVersionsRequestData>& message) {
-        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message, header->RequestApiVersion));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TProduceRequestData>& message, const TActorContext& ctx) {
@@ -684,6 +685,9 @@ protected:
         KAFKA_LOG_T("Building reply for method " << method << " and correlationId " << header->CorrelationId << " with error code: " << errorCode);
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
+        if (header->RequestApiKey == API_VERSIONS) {
+            version = ApiVersionsResponseWriteVersion(version);
+        }
 
         TResponseHeaderData responseHeader;
         responseHeader.CorrelationId = header->CorrelationId;
@@ -728,7 +732,7 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
+            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds ? std::make_optional(ServerCreds) : std::nullopt);
             if (res < 0) {
                 KAFKA_LOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
                 PassAway();
@@ -864,12 +868,17 @@ protected:
 
                         TKafkaReadable readable(*Request->Buffer);
                         readable.SetAllowCompressed(AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
+                        readable.SetMaxArrayBytes(static_cast<size_t>(Context->Config.GetMaxMessageSize()));
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
                             Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
-                            Request->Message->Read(readable, Request->ApiVersion);
+                            // KIP-511: an ApiVersions version the parser does not know is not a fatal error.
+                            // Skip the body (Kafka treats it as v0) and let the actor return UNSUPPORTED_VERSION.
+                            if (!(Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion))) {
+                                Request->Message->Read(readable, Request->ApiVersion);
+                            }
                         } catch(const yexception& e) {
                             KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request->ApiKey
                                                                     << ", Version=" << Request->ApiVersion

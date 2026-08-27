@@ -403,53 +403,51 @@
   - drive:
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
       type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-      type: SSD
     host_config_id: 1
   hosts:
-  - host: ydb-node-zone-a-1.local
+  - host: static-node-1.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 1
       data_center: 'zone-a'
       rack: '1'
-  - host: ydb-node-zone-a-2.local
+  - host: static-node-2.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 2
       data_center: 'zone-a'
       rack: '2'
-  - host: ydb-node-zone-a-3.local
+  - host: static-node-3.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 3
       data_center: 'zone-a'
       rack: '3'
-  - host: ydb-node-zone-a-4.local
+  - host: static-node-4.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 4
       data_center: 'zone-a'
       rack: '4'
-  - host: ydb-node-zone-a-5.local
+  - host: static-node-5.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 5
       data_center: 'zone-a'
       rack: '5'
-  - host: ydb-node-zone-a-6.local
+  - host: static-node-6.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 6
       data_center: 'zone-a'
       rack: '6'
-  - host: ydb-node-zone-a-7.local
+  - host: static-node-7.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 7
       data_center: 'zone-a'
       rack: '7'
-  - host: ydb-node-zone-a-8.local
+  - host: static-node-8.ydb-cluster.com
     host_config_id: 1
     walle_location:
       body: 8
@@ -458,11 +456,21 @@
   domains_config:
     security_config:
       enforce_user_token_requirement: true
-      default_users:
-        - name: "root"
-          password: ""
-      default_access:
-        - "+(F):root"
+      monitoring_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      viewer_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      register_dynamic_node_allowed_sids:
+      - databaseNodes@cert
+      - root@builtin
     domain:
     - name: Root
       storage_pool_types:
@@ -513,55 +521,55 @@
         rings:
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-1.local"
+            - node_id: "static-node-1.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-2.local"
+            - node_id: "static-node-2.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-3.local"
+            - node_id: "static-node-3.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-4.local"
+            - node_id: "static-node-4.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-5.local"
+            - node_id: "static-node-5.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-6.local"
+            - node_id: "static-node-6.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-7.local"
+            - node_id: "static-node-7.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - fail_domains:
           - vdisk_locations:
-            - node_id: "ydb-node-zone-a-8.local"
+            - node_id: "static-node-8.ydb-cluster.com"
               pdisk_category: SSD
               path: /dev/disk/by-partlabel/ydb_disk_ssd_01
   channel_profile_config:
     profile:
     - channel:
       - erasure_species: block-4-2
-        pdisk_category: 1
+        pdisk_category: 0
         storage_pool_kind: ssd
       - erasure_species: block-4-2
-        pdisk_category: 1
+        pdisk_category: 0
         storage_pool_kind: ssd
       - erasure_species: block-4-2
-        pdisk_category: 1
+        pdisk_category: 0
         storage_pool_kind: ssd
       profile_id: 0
   interconnect_config:
@@ -579,7 +587,7 @@
   client_certificate_authorization:
     request_client_certificate: true
     client_certificate_definitions:
-      - member_groups: ["registerNode@cert"]
+      - member_groups: ["databaseNodes@cert"]
         subject_terms:
         - short_name: "O"
           values: ["YDB"]

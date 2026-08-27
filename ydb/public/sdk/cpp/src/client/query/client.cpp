@@ -260,7 +260,12 @@ public:
 
                         obs->End(commitTxStatus.GetStatus(), commitTxStatus.GetEndpoint());
 
-                        TCommitTransactionResult commitTxResult(std::move(commitTxStatus));
+                        std::optional<NScheme::TVirtualTimestamp> commitTimestamp;
+                        if (response->has_commit_timestamp()) {
+                            commitTimestamp = NScheme::TVirtualTimestamp(response->commit_timestamp());
+                        }
+
+                        TCommitTransactionResult commitTxResult(std::move(commitTxStatus), std::move(commitTimestamp));
                         promise.SetValue(std::move(commitTxResult));
                     } else {
                         obs->End(status.Status, status.Endpoint);

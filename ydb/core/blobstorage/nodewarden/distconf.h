@@ -319,7 +319,7 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
             TActorId ActorId; // actor id waiting for this operation to complete
             bool MindPrev; // mind previous configuration quorum
-            std::vector<TNodeIdentifier> AddedNodes; // a list of nodes being added in this configuration change
+            std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
         };
         std::optional<TProposition> CurrentProposition;
 
@@ -518,7 +518,9 @@ namespace NKikimr::NStorage {
         bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig
             , std::unordered_set<ui32>& usedNodes
+            , const std::unordered_set<ui32>& nodesToUse = {}
             , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {}
+            , bool automaticManagement = true
             , ui32 overrideReplicasInRingCount = 0
             , ui32 overrideRingsCount = 0
             , ui32 replicasSpecificVolume = 200
@@ -536,7 +538,7 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
 
-        void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<TNodeIdentifier> addedNodes = {});
+        void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<const TNodeIdentifier> targetedNodes = {});
         void IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task);
         void CheckCompleteScatterTask(TScatterTasks::iterator it);
         void FinishAsyncOperation(ui64 cookie);

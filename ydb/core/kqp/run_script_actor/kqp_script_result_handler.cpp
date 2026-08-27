@@ -742,7 +742,11 @@ private:
             return;
         }
 
-        LOG_I("Exit, send response to " << Owner);
+        LOG_I("Exit, send response"
+            << ", finish status: " << *FinishInfo.Status
+            << ", issues: " << FinishInfo.Issues.ToOneLineString()
+            << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
+
         Send(Owner, new TEvRunScriptPrivate::TEvScriptResultHandlerFinished(*FinishInfo.Status, std::move(ExecutionInfo), std::move(FinishInfo.Issues)));
         PassAway();
     }

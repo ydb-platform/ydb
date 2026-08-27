@@ -694,6 +694,10 @@ public:
         return (NUdf::TUnboxedValue*)(this + 1);
     }
 
+    static consteval ui64 GetMaxSize() {
+        return (std::numeric_limits<ui64>::max() - sizeof(TDirectArrayHolderInplace)) / sizeof(NUdf::TUnboxedValue);
+    }
+
 private:
     class TIterator: public TTemporaryComputationValue<TIterator> {
     public:

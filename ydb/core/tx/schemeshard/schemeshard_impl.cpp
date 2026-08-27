@@ -4651,7 +4651,14 @@ void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, con
     auto subDomainId = ResolvePathIdForDomain(pathId);
     auto subDomainInfo = ResolveDomainInfo(pathId);
     subDomainInfo->AggrDiskSpaceUsage(this, newPartitionStats, oldPartitionStats);
-    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
+
+    const i64 smallBlobsBytesDelta = static_cast<i64>(newPartitionStats.SmallBlobsVolumeBytes)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsVolumeBytes);
+    const i64 smallBlobsCountDelta = static_cast<i64>(newPartitionStats.SmallBlobsCount)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsCount);
+    subDomainInfo->AggrSmallBlobsUsage(this, smallBlobsBytesDelta, smallBlobsCountDelta);
+
+    if (subDomainInfo->CheckQuotas(this)) {
         PersistSubDomainState(db, subDomainId, *subDomainInfo);
         // Publish is done in a separate transaction, so we may call this directly
         TDeque<TPathId> toPublish;
@@ -6441,9 +6448,17 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeSecret:
         TabletCounters->Simple()[COUNTER_SECRET_COUNT].Sub(1);
         break;
-    case TPathElement::EPathType::EPathTypeStreamingQuery:
+    case TPathElement::EPathType::EPathTypeStreamingQuery: {
         TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
+        const auto it = StreamingQueries.find(node->PathId);
+        if (it != StreamingQueries.end()) {
+            const auto& props = it->second->Properties.GetProperties();
+            if (const auto runIt = props.find("run"); runIt != props.end() && runIt->second == "true") {
+                TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Sub(1);
+            }
+        }
         break;
+    }
     case TPathElement::EPathType::EPathTypeTestShardSet:
         TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Sub(1);
         break;
@@ -6544,6 +6559,9 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             Y_ABORT("not implemented");
         case TPathElement::EPathType::EPathTypeTestShardSet:
             PersistRemoveTestShardSet(db, node->PathId);
+            break;
+        case TPathElement::EPathType::EPathTypeStreamingQuery:
+            PersistRemoveStreamingQuery(db, node->PathId);
             break;
         default:
             // not all path types support removal
@@ -8010,7 +8028,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         // Control op completed; finalize the tracked record.
         Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
     }
-    if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+    if (TxIdToSetColumnConstraintOperations.contains(txId) || TxIdToDependentSetColumnConstraint.contains(txId)) {
         Execute(CreateTxReplyCompletedSetColumnConstraint(txId), ctx);
         executed = true;
     }

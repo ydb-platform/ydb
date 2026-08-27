@@ -137,6 +137,7 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
                 hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
+                hFunc(TEvBlobDepot::TEvPushS3RouterMetrics, Handle);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
@@ -173,7 +174,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId}) {
+        for (const TActorId& actorId : {GroupAssimilatorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }

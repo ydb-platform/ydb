@@ -217,8 +217,14 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 void TColumnShard::PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const {
-    const auto minSnapshot = guard.GetMinSnapshotForNewReads();
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
+    const ui64 minNewScanStep = guard.GetMinSnapshotForNewReads().GetPlanStep();
+    // If SnapshotRegistry is not ready yet, we wanna publish 0 instead of (now - 0) - too big value, breaks charts
+    ui64 maxNewScanAgeSeconds = 0;
+    if (minNewScanStep != 0) {
+        ui64 nowStep = GetOutdatedStep();
+        maxNewScanAgeSeconds = nowStep > minNewScanStep ? (nowStep - minNewScanStep) / 1000 : 0;
+    }
+    Counters.GetRequestsTracingCounters()->OnMaxNewScanAgeSeconds(maxNewScanAgeSeconds);
 }
 
 NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {

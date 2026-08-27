@@ -169,9 +169,9 @@ namespace NKikimr::NSqsTopic::V1 {
             topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 
             topicRequest.set_content_based_deduplication(QueueAttributes.ContentBasedDeduplication.GetOrElse(false));
-            if (QueueAttributes.ContentBasedDeduplication.GetOrElse(false)) {
-                topicRequest.set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-                topicRequest.set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
+            if (QueueAttributes.FifoQueue) {
+                topicRequest.set_partition_write_speed_messages_per_second(NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+                topicRequest.set_partition_write_burst_messages(NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES);
             }
 
             AddConsumerToRequest(topicRequest.add_consumers());
@@ -261,8 +261,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 .Fifo = QueueAttributes.FifoQueue,
             };
 
-            TString path = PackQueueUrlPath(queueUrl);
-            TString url = TStringBuilder() << GetEndpoint(Cfg()) << path;
+            TString url = MakeQueueUrl(queueUrl, Request_.get());
             result.set_queue_url(std::move(url));
 
             return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);

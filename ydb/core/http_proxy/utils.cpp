@@ -2,6 +2,14 @@
 
 #include "http_req.h"
 
+<<<<<<< HEAD
+=======
+#include <library/cpp/string_utils/url/url.h>
+#include <ydb/core/base/path.h>
+#include <ydb/library/http/rfc7239_forwarded.h>
+
+#include <util/generic/maybe.h>
+>>>>>>> 2505fdb8d25 (Accept trailing slash on SQS HTTP database endpoint (#51279))
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
@@ -134,6 +142,10 @@ TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext) {
     const auto& request = *httpContext.Request;
     const bool tlsSecure = request.Endpoint && request.Endpoint->Secure;
     return MakeSqsRequestEndpoint(request.Host, request.Headers, tlsSecure);
+}
+
+TString ParseDatabasePathFromRequestUrl(TStringBuf url) {
+    return CanonizePath(TString{url.Before('?')});
 }
 
 } // namespace NKikimr::NHttpProxy

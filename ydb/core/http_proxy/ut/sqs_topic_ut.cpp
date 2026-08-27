@@ -415,6 +415,26 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
         }
 
+        Y_UNIT_TEST_F(TestGetQueueUrlWithTrailingSlashOnEndpoint, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            auto res = SendHttpRequest(
+                "/Root/",
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", topicName}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedPath, GetPathFromQueueUrlMap(json));
+        }
+
         Y_UNIT_TEST_F(TestGetQueueUrlUsesRequestHost, TNoAuthFixture) {
             auto driver = MakeDriver(*this);
             const TString topicName = "ExampleQueueName";
@@ -554,6 +574,38 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         Y_UNIT_TEST_F(TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
             TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithTrailingSlashOnFederationEndpoint, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString topicPath = TStringBuilder() << "federation/" << topicName;
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            const TString expectedQueueUrl = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                TStringBuf("my/consumer").size(),
+                "my/consumer");
+            auto res = SendHttpRequest(
+                database + "/",
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedQueueUrl, GetPathFromQueueUrlMap(json));
         }
 
         Y_UNIT_TEST_F(TestDeleteQueueInFederation, TNonFirstClassCitizenFixture) {

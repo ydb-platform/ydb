@@ -23,6 +23,8 @@ TVector<ui32> DecodeLengths(TStringBuf data, ui32 count);
 TString SerializeBinaryArray(const arrow::BinaryArray& array, const std::shared_ptr<arrow::util::Codec>& codec);
 std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
     TStringBuf blob, ui32 recordsCount, const std::shared_ptr<arrow::util::Codec>& codec);
+std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(TStringBuf blob, ui32 recordsCount, const std::shared_ptr<arrow::DataType>& valueType,
+    const std::shared_ptr<arrow::util::Codec>& codec);
 
 // Serialize a dictionary index stream (one index per record, nulls for absent records) as
 //   [has-nulls][validity bitmap][indices, packed at indexType's width]

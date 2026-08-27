@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -22,7 +23,7 @@ TBlobWithAdditionalAccessorData TBinaryDenseConstructor::DoSerializeToBlobAndMet
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     AFL_VERIFY(columnData->GetType() == IChunkedArray::EType::Array)("array_type", columnData->GetType());
     const auto* trivial = static_cast<const TTrivialArray*>(columnData.get());
-    AFL_VERIFY(trivial->GetArray()->type_id() == arrow::Type::BINARY)("element_type", trivial->GetArray()->type()->ToString());
+    AFL_VERIFY(arrow::is_binary_like(trivial->GetArray()->type_id()))("element_type", trivial->GetArray()->type()->ToString());
     const auto& binary = static_cast<const arrow::BinaryArray&>(*trivial->GetArray());
     return { SerializeBinaryArray(binary, GetCompressionCodec(externalInfo)),
         std::make_shared<TEmptyAdditionalData>() };
@@ -30,7 +31,8 @@ TBlobWithAdditionalAccessorData TBinaryDenseConstructor::DoSerializeToBlobAndMet
 
 TConclusion<std::shared_ptr<IChunkedArray>> TBinaryDenseConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
-    auto array = DeserializeBinaryArray(originalData, externalInfo.GetRecordsCount(), GetCompressionCodec(externalInfo));
+    auto array = DeserializeBinaryArray(
+        originalData, externalInfo.GetRecordsCount(), externalInfo.GetColumnType(), GetCompressionCodec(externalInfo));
     return std::make_shared<TTrivialArray>(array);
 }
 
@@ -39,7 +41,7 @@ TBlobWithAdditionalAccessorData TDictionaryDenseConstructor::DoSerializeToBlobAn
     AFL_VERIFY(columnData->GetType() == IChunkedArray::EType::Dictionary)("type", columnData->GetType());
     const auto* dict = static_cast<const TDictionaryArray*>(columnData.get());
     const auto& dictionary = dict->GetDictionary();
-    AFL_VERIFY(dictionary->type_id() == arrow::Type::BINARY)("element_type", dictionary->type()->ToString());
+    AFL_VERIFY(arrow::is_binary_like(dictionary->type_id()))("element_type", dictionary->type()->ToString());
     const auto& dictBinary = static_cast<const arrow::BinaryArray&>(*dictionary);
     const auto codec = GetCompressionCodec(externalInfo);
     const TString dictBlob = SerializeBinaryArray(dictBinary, codec);
@@ -79,7 +81,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TDictionaryDenseConstructor::DoDeser
     const TStringBuf positionsBlob(originalData.data() + dictionaryBlobSize, originalData.size() - dictionaryBlobSize);
     const auto codec = GetCompressionCodec(externalInfo);
 
-    auto dictionary = DeserializeBinaryArray(dictBlob, dictLength, codec);
+    auto dictionary = DeserializeBinaryArray(dictBlob, dictLength, externalInfo.GetColumnType(), codec);
     std::shared_ptr<arrow::Array> positions = DeserializeIndices(
         positionsBlob, externalInfo.GetRecordsCount(), NDictionary::TConstructor::GetTypeByVariantsCount(dictLength), codec);
     return std::make_shared<TDictionaryArray>(dictionary, positions);

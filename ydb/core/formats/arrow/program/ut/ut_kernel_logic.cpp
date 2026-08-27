@@ -71,13 +71,8 @@ Y_UNIT_TEST_SUITE(JsonValue) {
         UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Array);
 
         auto result = TTestGetJsonPath().ExtractArray(input, "$.s");
-        auto resultArray = result->GetChunkedArray()->chunk(0);
-        const auto& sourceArray = std::static_pointer_cast<NAccessor::TTrivialArray>(source)->GetArray();
-        UNIT_ASSERT(resultArray->type_id() == arrow::Type::STRING);
-        // Check that no contents were copied.
-        // A new array may have been created to relabel arrow::binary() as arrow::utf8().
-        UNIT_ASSERT_VALUES_EQUAL(resultArray->data()->buffers[1].get(), sourceArray->data()->buffers[1].get());
-        UNIT_ASSERT_VALUES_EQUAL(resultArray->data()->buffers[2].get(), sourceArray->data()->buffers[2].get());
+        UNIT_ASSERT(source->GetDataType()->id() == arrow::Type::STRING);
+        UNIT_ASSERT_VALUES_EQUAL(result.get(), source.get());
     }
 
     Y_UNIT_TEST(HandlesNestedAndAbsentPaths) {

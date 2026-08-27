@@ -3,7 +3,6 @@
 
 #include <arrow/array/array_binary.h>
 #include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
-#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/minikql/jsonpath/jsonpath.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -137,15 +136,10 @@ TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TS
 
 std::shared_ptr<IChunkedArray> TJsonPathAccessor::GetNativeStringArray() const {
     if (!RemainingPath.empty() || ValueType != EValueType::String || !ChunkedArrayAccessor ||
-        ChunkedArrayAccessor->GetType() != IChunkedArray::EType::Array || ChunkedArrayAccessor->GetDataType()->id() != arrow::Type::BINARY) {
+        ChunkedArrayAccessor->GetType() != IChunkedArray::EType::Array || ChunkedArrayAccessor->GetDataType()->id() != arrow::Type::STRING) {
         return nullptr;
     }
-
-    const auto& array = std::static_pointer_cast<TTrivialArray>(ChunkedArrayAccessor)->GetArray();
-    // Native string arrays are currently labeled arrow::binary, although they are guaranteed to be valid utf8
-    // by BinaryJson construction. So rewrapping is needed.
-    return std::make_shared<TTrivialArray>(arrow::MakeArray(
-        arrow::ArrayData::Make(arrow::utf8(), array->length(), array->data()->buffers, array->null_count(), array->offset())));
+    return ChunkedArrayAccessor;
 }
 
 void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {

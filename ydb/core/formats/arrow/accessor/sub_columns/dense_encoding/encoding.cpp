@@ -6,6 +6,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/data.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_run_reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_util.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
@@ -348,6 +349,17 @@ std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
     auto data = arrow::ArrayData::Make(
         arrow::binary(), recordsCount, { nullBitmap, offsetsBuf, valuesBuf }, nullBitmap ? arrow::kUnknownNullCount : 0);
     return std::static_pointer_cast<arrow::BinaryArray>(arrow::MakeArray(data));
+}
+
+std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(TStringBuf blob, ui32 recordsCount, const std::shared_ptr<arrow::DataType>& valueType,
+    const std::shared_ptr<arrow::util::Codec>& codec) {
+    AFL_VERIFY(arrow::is_binary_like(valueType->id()))("type", valueType->ToString());
+    auto array = DeserializeBinaryArray(blob, recordsCount, codec);
+    if (valueType->id() == arrow::Type::BINARY) {
+        return array;
+    }
+    return std::make_shared<arrow::StringArray>(arrow::ArrayData::Make(
+        valueType, array->length(), array->data()->buffers, array->null_count(), array->offset()));
 }
 
 TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const std::shared_ptr<arrow::FixedWidthType>& indexType,

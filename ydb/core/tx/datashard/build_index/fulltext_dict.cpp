@@ -418,7 +418,7 @@ protected:
         if (last && SkipLastToken) {
             return;
         }
-        if (SkipFirstToken && !FirstToken) {
+        if (SkipFirstToken && !FirstTokenRows) {
             FirstToken = LastToken;
             FirstTokenRows = LastTokenRows;
         } else if (DictBuf) {

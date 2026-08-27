@@ -4,8 +4,12 @@ Managing a cluster's disk subsystem includes the following actions:
 
 * Configuration changes:
 
+<<<<<<< HEAD
  * [{#T}](../../devops/configuration-management/configuration-v2/cluster-expansion.md).
  * [{#T}](adding_storage_groups.md).
+=======
+  * [{#T}](adding_storage_groups.md).
+>>>>>>> 00470783239 (docs: remove legacy EN cluster expansion page (#51328))
 
 * Maintenance:
 

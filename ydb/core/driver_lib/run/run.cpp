@@ -1753,6 +1753,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries());
     }
 
+    if (logConfig.HasEnableStructuredLogInJson()) {
+        LogSettings->SetEnableStructuredLogInJson(logConfig.GetEnableStructuredLogInJson());
+    }
+
     if (logConfig.HasUseLocalTimestamps()) {
         LogSettings->SetUseLocalTimestamps(logConfig.GetUseLocalTimestamps());
     }

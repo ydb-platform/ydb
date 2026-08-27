@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
                 auto var = result[0][1];
                 UNIT_ASSERT(var.GetVariantIndex() == 1);
                 auto val = var.GetVariantItem();
-                UNIT_ASSERT_VALUES_EQUAL(2, val.Get<i64>());
+                UNIT_ASSERT_VALUES_EQUAL(2, val.Get<i8>());
             }
             UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
 

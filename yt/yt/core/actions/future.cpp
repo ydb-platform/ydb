@@ -291,7 +291,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
     ] () mutable {
 #ifdef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
         // NB: Backtrace symbolization can take a quite and thus is being offloaded to Finalizer thread.
-        error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
+        error.Add("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
 #endif
         // Set the promise if the value is still missing.
         TrySetError(error);

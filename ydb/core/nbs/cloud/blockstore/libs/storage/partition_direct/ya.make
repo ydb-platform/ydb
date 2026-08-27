@@ -2,6 +2,7 @@ LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
 GENERATE_ENUM_SERIALIZATION(direct_block_group_impl.h)
+GENERATE_ENUM_SERIALIZATION(partition_direct_service.h)
 
 SRCS(
     ddisk_data_copier.cpp
@@ -21,6 +22,7 @@ SRCS(
     part_updatevchunkconfig.cpp
     part_updatedirtymapstate.cpp
     part_monitoring.cpp
+    partition_cleanup_actor.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
     read_request_executor.cpp
@@ -44,6 +46,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
+    ydb/core/nbs/cloud/blockstore/libs/throttling
     ydb/core/nbs/cloud/storage/core/libs/coroutine
 
     ydb/core/protos

@@ -2,7 +2,7 @@
 
 All VDisks hosted on a certain PDisk log data about their own performance to the common PDisk log. VDisks gradually delete their obsolete data at the beginning of the log to free up disk space. Sometimes, after one VDisk completes logging data and before another one starts logging it, a section with useless obsolete data may appear. In this case, such data is deleted automatically, and the PDiskLogLoad actor will perform a test to check whether such an operation is running correctly.
 
-![load-actors](../_assets/pdisklogload.svg)
+![load-actors](../_assets/pdisklogload.svg){inline=false}
 
 {% note info %}
 
@@ -59,4 +59,4 @@ PDiskLogLoad: {
 }
 ```
 
-The test passes if none of the cluster nodes got overloaded and the status of the PDisk in question is `Normal`. You can check this using the cluster Embedded UI.
+The test passes if none of the cluster nodes got overloaded and the status of the PDisk in question is `Normal`. You can check this using the cluster {{ ydb-ui-name }}.

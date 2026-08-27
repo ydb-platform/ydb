@@ -42,6 +42,7 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
@@ -70,14 +71,17 @@ public:
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
-    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex hostIndex) const;
+    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex hostIndex) const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
-    // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
-    // Until the dirty map is restored it returns 0 (the blocking bound), so
-    // the cleanup cannot erase records that are not accounted for yet.
+    // smallest record id still held in PBuffers, or nullopt when nothing is
+    // inflight. Until the dirty map is restored it returns the zero record id
+    // (the blocking bound), so the cleanup cannot erase records that are not
+    // accounted for yet.
     // Must run on the executor thread.
-    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+    [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
 
     [[nodiscard]] TString DebugPrintDirtyMap();
 
@@ -150,6 +154,8 @@ private:
         THostIndex hostIndex,
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+    void DemoteUnavailbleHostsIfNeeded();
+    [[nodiscard]] THostMask GetDDisksForDemote() const;
 
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();

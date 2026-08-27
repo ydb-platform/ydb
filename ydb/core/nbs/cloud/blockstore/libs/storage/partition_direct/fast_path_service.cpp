@@ -90,7 +90,8 @@ TVector<TRegionPtr> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
-    const TVChunkConfigByIndex& vChunkConfigs,
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
@@ -108,6 +109,7 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
+            dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
             regionCounters);
@@ -127,7 +129,8 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    TVChunkConfigByIndex vChunkConfigs,
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
@@ -147,6 +150,7 @@ TFastPathService::TFastPathService(
           blockSize,
           DirectBlockGroups,
           vChunkConfigs,
+          dirtyMapStates,
           *StorageConfig,
           MakeCountersChain(
               counters,
@@ -170,6 +174,15 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
+    const ui64 copyRangeBandwidth =
+        StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
+    if (copyRangeBandwidth) {
+        CopyRangeBucket.emplace(
+            ActorSystem->Timestamp(),
+            copyRangeBandwidth,
+            copyRangeBandwidth);
+    }
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -395,7 +408,7 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
+TPersistResultFuture TFastPathService::UpdateVChunkConfig(
     const TVChunkConfig& cfg)
 {
     auto event =
@@ -405,7 +418,7 @@ NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
     return result;
 }
 
-NThreading::TFuture<void> TFastPathService::UpdateDirtyMapState(
+TPersistResultFuture TFastPathService::UpdateDirtyMapState(
     ui32 vChunkIndex,
     TDirtyMapStateProto state)
 {
@@ -457,6 +470,16 @@ bool TFastPathService::TryAdvancePBufferBarrier(
         return true;
     }
     return false;
+}
+
+TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
+{
+    if (!CopyRangeBucket) {
+        return {};
+    }
+
+    auto guard = Guard(CopyRangeBucketLock);
+    return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
 }
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
@@ -559,8 +582,8 @@ void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 
 void TFastPathService::PBufferCleanup()
 {
-    // Pull the smallest inflight lsn from every DirectBlockGroup. Each group
-    // writes its own result slot; the last responder computes the global
+    // Pull the smallest inflight record id from every DirectBlockGroup. Each
+    // group writes its own result slot; the last responder computes the global
     // minimum (see FinishPBufferCleanup).
     const size_t dbgCount = DirectBlockGroups.size();
     CleanupGather.SafeBarriers.assign(dbgCount, std::nullopt);
@@ -569,7 +592,7 @@ void TFastPathService::PBufferCleanup()
     for (size_t i = 0; i < dbgCount; ++i) {
         DirectBlockGroups[i]->GatherSafeBarrierForErase().Subscribe(
             [weakSelf = weak_from_this(), i]   //
-            (const NThreading::TFuture<std::optional<ui64>>& f)
+            (const NThreading::TFuture<std::optional<TPBufferKey>>& f)
             {
                 if (auto self = weakSelf.lock()) {
                     self->OnGatherSafeBarrierForErase(i, f.GetValue());
@@ -580,7 +603,7 @@ void TFastPathService::PBufferCleanup()
 
 void TFastPathService::OnGatherSafeBarrierForErase(
     size_t dbgIndex,
-    std::optional<ui64> safeBarrier)
+    std::optional<TPBufferKey> safeBarrier)
 {
     CleanupGather.SafeBarriers[dbgIndex] = safeBarrier;
     if (CleanupGather.PendingResponses.fetch_sub(1) == 1) {
@@ -590,7 +613,7 @@ void TFastPathService::OnGatherSafeBarrierForErase(
 
 void TFastPathService::FinishPBufferCleanup()
 {
-    std::optional<ui64> globalMin;
+    std::optional<TPBufferKey> globalMin;
     for (const auto& safeBarrier: CleanupGather.SafeBarriers) {
         if (safeBarrier && (!globalMin || *safeBarrier < *globalMin)) {
             globalMin = safeBarrier;
@@ -599,15 +622,15 @@ void TFastPathService::FinishPBufferCleanup()
 
     CleanupGather.Active.store(false);
 
-    if (!globalMin || *globalMin == 0) {
-        // 0 is the blocking bound: some vchunk has not finished restoring its
-        // dirty map, so its records are not accounted for yet. Skip the tick.
+    // Lsn 0 is the blocking bound: some vchunk has not finished restoring its
+    // dirty map, so its records are not accounted for yet. Skip the tick.
+    if (!globalMin || globalMin->Lsn == 0) {
         return;
     }
 
-    LastSafeBarrier.store(*globalMin);
+    LastSafeBarrier.store(globalMin->Lsn);
 
-    const ui64 cleanupBound = *globalMin - 1;
+    const ui64 cleanupBound = globalMin->Lsn - 1;
     for (const auto& dbg: DirectBlockGroups) {
         dbg->BarrierEraseFromPBuffer(cleanupBound);
     }

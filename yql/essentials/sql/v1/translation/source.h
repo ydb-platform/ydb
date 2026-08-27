@@ -154,6 +154,14 @@ protected:
     TMatchRecognizeBuilderPtr MatchRecognizeBuilder_;
 };
 
+using TSourceResult = TSQLResult<TNonNull<TSourcePtr>>;
+
+TSourceResult Wrap(TSourcePtr source);
+
+TSourcePtr Unwrap(TSourceResult result);
+
+TNodeResult ToNode(TSourceResult x);
+
 template <>
 inline TVector<TSourcePtr> CloneContainer<TSourcePtr>(const TVector<TSourcePtr>& args) {
     TVector<TSourcePtr> cloneArgs;
@@ -246,7 +254,6 @@ private:
     TString GetOpName() const override;
     TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
-private:
     TVector<TNodePtr> Args_;
     TSourcePtr FakeSource_;
     TNodePtr TimeExtractor_;

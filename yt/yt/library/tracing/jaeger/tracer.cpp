@@ -261,7 +261,7 @@ bool TJaegerChannelManager::Push(const std::vector<TSharedRef>& batches, int spa
         PushErrors_.Increment();
         YT_TLOG_ERROR("Failed to send spans")
             .With("Endpoint", Endpoint_)
-            .With(TError(ex));
+            .With(ex);
         return false;
     }
 

@@ -57,13 +57,15 @@ public:
         std::unique_ptr<NTransport::IStorageTransport> storageTransport,
         NMonitoring::TDynamicCounterPtr counters);
 
-    ~TDirectBlockGroup() override = default;
+    ~TDirectBlockGroup() override;
 
     // IDirectBlockGroup implementation
 
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+
+    ui32 GetTabletGeneration() const override;
 
     IOraclePtr GetOracle() override;
 
@@ -87,7 +89,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -102,7 +104,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -111,7 +113,7 @@ public:
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
@@ -132,7 +134,7 @@ public:
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
 
-    NThreading::TFuture<std::optional<ui64>>
+    NThreading::TFuture<std::optional<TPBufferKey>>
     GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
@@ -147,6 +149,8 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
+
     ui32 GetNodeId(THostIndex host) const override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
@@ -158,7 +162,7 @@ public:
         THostIndex hostIndex,
         EHostState oldState,
         EHostState newState) override;
-    ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+    TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const override;
     void QueryAddHost(THostIndex newHostIndex) override;
 
 private:

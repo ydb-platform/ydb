@@ -17,6 +17,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/table

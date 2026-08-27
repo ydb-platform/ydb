@@ -1552,6 +1552,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
     }
 
+    if (runConfig.AppConfig.HasHttpProxyConfig()) {
+        AppData->HttpProxyConfig.CopyFrom(runConfig.AppConfig.GetHttpProxyConfig());
+    }
+
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
     }
@@ -2443,12 +2447,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         StopGRpcServers(GRpcServersWrapper, true);
     }
 
-    if (ActorSystem) {
-        ActorSystem->Stop();
-    }
-
     if (YqSharedResources) {
         YqSharedResources->Stop();
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Stop();
     }
 
     if (ModuleFactories) {

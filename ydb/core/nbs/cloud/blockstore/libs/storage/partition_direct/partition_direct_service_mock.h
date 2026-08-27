@@ -24,14 +24,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TUpdateConfigRequest
     {
         NStorage::NPartitionDirect::TVChunkConfig Config;
-        NThreading::TPromise<void> Promise;
+        TPersistResultPromise Promise;
     };
 
     struct TUpdateDirtyMapStateRequest
     {
         ui32 VChunkIndex = 0;
         TDirtyMapStateProto Proto;
-        NThreading::TPromise<void> Promise;
+        TPersistResultPromise Promise;
     };
 
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
@@ -44,6 +44,9 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     ui64 LsnGenerator = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
+    size_t CopyRangeBudgetRequestCount = 0;
+    ui64 LastCopyRangeBudgetByteCount = 0;
+    TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
 
@@ -64,21 +67,23 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         executor->ExecuteSimple(std::move(callback));
     }
 
-    NThreading::TFuture<void> UpdateVChunkConfig(
+    TPersistResultFuture UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
     {
-        UpdateConfigRequests.emplace_back(cfg, NThreading::NewPromise());
+        UpdateConfigRequests.emplace_back(
+            cfg,
+            NThreading::NewPromise<EPersistResult>());
         return UpdateConfigRequests.back().Promise.GetFuture();
     }
 
-    NThreading::TFuture<void> UpdateDirtyMapState(
+    TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override
     {
         UpdateDirtyMapStateRequests.emplace_back(TUpdateDirtyMapStateRequest{
             .VChunkIndex = vChunkIndex,
             .Proto = std::move(state),
-            .Promise = NThreading::NewPromise()});
+            .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 
@@ -107,6 +112,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(pbufferDDiskId);
         Y_UNUSED(lsn);
         return true;
+    }
+
+    TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override
+    {
+        ++CopyRangeBudgetRequestCount;
+        LastCopyRangeBudgetByteCount = byteCount;
+        return CopyRangeBudgetDelay;
     }
 };
 

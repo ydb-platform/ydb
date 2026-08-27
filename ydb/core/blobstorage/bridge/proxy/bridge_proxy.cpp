@@ -793,9 +793,7 @@ namespace NKikimr {
             }
 
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
-                if (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE && !ev.AlreadyEncrypted) {
-                    // we have to encrypt this message
-                } else if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
+                if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
                     // send this message as is
                 } else if (AppData()->FeatureFlags.GetEnableInterpileTrafficOptimization()) {
                     // enable reducing interpile traffic; clone the original message rather than

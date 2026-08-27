@@ -4662,7 +4662,7 @@ public:
         TScopedStatePtr scoped,
         bool replaceIfExists,
         bool existingOk)
-        : TBase(pos, objectId, params, context, scoped, replaceIfExists, existingOk, false)
+        : TBase(pos, objectId, params, context, scoped, replaceIfExists, existingOk, /*missingOk=*/false)
     {
     }
 
@@ -4698,7 +4698,7 @@ public:
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
         bool missingOk)
-        : TBase(pos, objectId, params, context, scoped, false, false, missingOk)
+        : TBase(pos, objectId, params, context, scoped, /*replaceIfExists=*/false, /*existingOk=*/false, missingOk)
     {
     }
 
@@ -4732,7 +4732,7 @@ public:
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
         bool missingOk)
-        : TBase(pos, objectId, TSecretParameters{}, context, scoped, false, false, missingOk)
+        : TBase(pos, objectId, TSecretParameters{}, context, scoped, /*replaceIfExists=*/false, /*existingOk=*/false, missingOk)
     {
     }
 

@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        Y_UNUSED(PrepareTablet(runtime, srcPathId, testTable.Schema));
+        Y_UNUSED(PrepareTablet(runtime, srcPathId, testTable.Schema, 1, testTable.Standalone));
 
         ui64 txId = 10;
         int writeId = 10;
@@ -290,7 +290,8 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         {
             constexpr ui64 auxPathId = 99;
             NKikimrTxColumnShard::TSchemaTxBody auxTx;
-            Y_ABORT_UNLESS(auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Schema, testTable.Pk)));
+            Y_ABORT_UNLESS(
+                auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Standalone, testTable.Schema, testTable.Pk)));
             auxTx.MutableSeqNo()->SetRound(2);
             TString auxTxBody;
             Y_PROTOBUF_SUPPRESS_NODISCARD auxTx.SerializeToString(&auxTxBody);

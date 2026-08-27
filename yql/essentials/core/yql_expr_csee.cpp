@@ -156,8 +156,9 @@ namespace {
             break;
         }
         case TExprNode::Lambda: {
-            if (const ui32 size = node.ChildrenSize())
+            if (const ui32 size = node.ChildrenSize()) {
                 hash = CseeHash(size, hash);
+            }
 
             const auto& args = node.Head();
             hash = CseeHash(args.ChildrenSize(), hash);
@@ -354,8 +355,9 @@ namespace {
             TLambdaFrame newRightFrame(&right, &currRightFrame);
 
             for (ui32 i = 1U; i < left.ChildrenSize(); ++i) {
-                if (!EqualNodes(*left.Child(i), newLeftFrame, *right.Child(i), newRightFrame, visited, coStore))
+                if (!EqualNodes(*left.Child(i), newLeftFrame, *right.Child(i), newRightFrame, visited, coStore)) {
                     return false;
+                }
             }
             return true;
         }
@@ -454,8 +456,9 @@ namespace {
             }
 
             for (ui32 i = 1U; i < left.ChildrenSize(); ++i) {
-                if (const auto c = CompareNodes(*left.Child(i), *right.Child(i), visited))
+                if (const auto c = CompareNodes(*left.Child(i), *right.Child(i), visited)) {
                     return c;
+                }
             }
             return 0;
         }
@@ -581,8 +584,9 @@ namespace {
                     continue;
                 }
 
-                if (iter->second == &node)
+                if (iter->second == &node) {
                     return nullptr;
+                }
 
                 if (!EqualNodes(node, *iter->second, coStore)) {
 #ifndef NDEBUG

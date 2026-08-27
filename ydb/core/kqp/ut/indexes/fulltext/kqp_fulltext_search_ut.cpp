@@ -612,8 +612,8 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, Text, FulltextScore(Text, "%s", 0.75 as K1, 1.2 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextScore(Text, "%s", 0.75 as K1, 1.2 as B) > 0
+            SELECT Key, Text, FulltextScore(Text, "%s", 0.75f as K1, 1.2f as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 0.75f as K1, 1.2f as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.839970958}, } } });
@@ -644,6 +644,17 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.839970958}, } } },
         std::move(NYdb::TParamsBuilder().AddParam("$bfactor").Double(1.2).Build().AddParam("$k1factor").Double(0.75).Build()));
+
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            DECLARE $bfactor as Float;
+            DECLARE $k1factor as Float;
+            SELECT Key, Text, FulltextScore(Text, "собаки любят", $bfactor as B, $k1factor as K1) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "собаки любят", $bfactor as B, $k1factor as K1) > 0
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", { {"собаки любят ", { {12, 2.839970958}, } } },
+        std::move(NYdb::TParamsBuilder().AddParam("$bfactor").Float(1.2f).Build().AddParam("$k1factor").Float(0.75f).Build()));
 
 }
 
@@ -2485,6 +2496,8 @@ Y_UNIT_TEST_QUAD(FullTextDeliveryProblem, LimitRowsPerRequest, EnableIndexStream
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     auto db = kikimr.GetQueryClient();
 
+    const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
+
     // Create table with fulltext index using RunCall to properly handle fake threads
     kikimr.RunCall([&]() { CreateTexts(db); return true; });
     kikimr.RunCall([&]() { UpsertTexts(db); return true; });
@@ -2506,7 +2519,7 @@ Y_UNIT_TEST_QUAD(FullTextDeliveryProblem, LimitRowsPerRequest, EnableIndexStream
     THashMap<ui64, int> shardSet;
     UNIT_ASSERT(!docsShards.empty());
     UNIT_ASSERT(!implShards.empty());
-    UNIT_ASSERT(!dictShards.empty());
+    UNIT_ASSERT(compact || !dictShards.empty());
     UNIT_ASSERT(!statsShards.empty());
     UNIT_ASSERT(!mainShards.empty());
 

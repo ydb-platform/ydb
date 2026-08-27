@@ -62,11 +62,14 @@ struct TPrinterStub : NKikimr::IResultPrinter {
 Y_UNIT_TEST_SUITE(TDeviceTestTool) {
 
 template<typename P, typename T>
-void ProbeTest(const TString &testDescription, bool expectResults, TMaybe<NKikimr::TResultPrinter::EOutputFormat> format = {}) {
+void ProbeTest(const TString &testDescription, bool expectResults,
+        TMaybe<NKikimr::TResultPrinter::EOutputFormat> format = {},
+        bool disableDDiskChecksums = false) {
     UNIT_ASSERT(!(expectResults && format));
     TTempFileHandle file;
     file.Resize(FileSize);
-    NKikimr::TPerfTestConfig config(file.Name(), "name", "ROT", "json", "", true);
+    NKikimr::TPerfTestConfig config(file.Name(), "name", "ROT", "json", "", true,
+        "1", "0", "0", false, disableDDiskChecksums);
 
     P testProto;
     NProtoBuf::TextFormat::ParseFromString(testDescription, &testProto);
@@ -239,7 +242,7 @@ Y_UNIT_TEST(PDiskTestWrite) {
     ProbeTest<NDevicePerfTest::TPDiskTest, TPDiskTest32>(perfCfg.Str(), true);
 }
 
-Y_UNIT_TEST(DDiskTestWrite) {
+void ProbeDDiskWrite(bool disableDDiskChecksums) {
     TStringStream perfCfg;
     perfCfg << R"___(
         DDiskTestList: {
@@ -261,10 +264,19 @@ Y_UNIT_TEST(DDiskTestWrite) {
         }
     )___";
 
-    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(
+        perfCfg.Str(), true, {}, disableDDiskChecksums);
 }
 
-Y_UNIT_TEST(DDiskTestRead) {
+Y_UNIT_TEST(DDiskTestWrite) {
+    ProbeDDiskWrite(false);
+}
+
+Y_UNIT_TEST(DDiskTestWriteChecksumsDisabled) {
+    ProbeDDiskWrite(true);
+}
+
+void ProbeDDiskRead(bool disableDDiskChecksums) {
     TStringStream perfCfg;
     perfCfg << R"___(
         DDiskTestList: {
@@ -287,7 +299,16 @@ Y_UNIT_TEST(DDiskTestRead) {
         }
     )___";
 
-    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(
+        perfCfg.Str(), true, {}, disableDDiskChecksums);
+}
+
+Y_UNIT_TEST(DDiskTestRead) {
+    ProbeDDiskRead(false);
+}
+
+Y_UNIT_TEST(DDiskTestReadChecksumsDisabled) {
+    ProbeDDiskRead(true);
 }
 
 Y_UNIT_TEST(DDiskTestWriteLargeIo) {
@@ -315,7 +336,7 @@ Y_UNIT_TEST(DDiskTestWriteLargeIo) {
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
 }
 
-Y_UNIT_TEST(PersistentBufferTestWrite) {
+void ProbePersistentBufferWrite(bool disableDDiskChecksums) {
     TStringStream perfCfg;
     perfCfg << R"___(
         PersistentBufferTestList: {
@@ -334,7 +355,16 @@ Y_UNIT_TEST(PersistentBufferTestWrite) {
         }
     )___";
 
-    ProbeTest<NDevicePerfTest::TPersistentBufferTest, TPersistentBufferTest32>(perfCfg.Str(), true);
+    ProbeTest<NDevicePerfTest::TPersistentBufferTest, TPersistentBufferTest32>(
+        perfCfg.Str(), true, {}, disableDDiskChecksums);
+}
+
+Y_UNIT_TEST(PersistentBufferTestWrite) {
+    ProbePersistentBufferWrite(false);
+}
+
+Y_UNIT_TEST(PersistentBufferTestWriteChecksumsDisabled) {
+    ProbePersistentBufferWrite(true);
 }
 
 Y_UNIT_TEST(PDiskTestLogWrite) {

@@ -82,7 +82,12 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is not a valid ISO 8601 duration: '" << *timeAgo << "'");
         }
 
-        *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(duration.Get<ui64>()));
+        const i64 signedDuration = duration.Get<i64>();
+        if (signedDuration < 0) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is negative: '" << *timeAgo << "'");
+        }
+
+        *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(signedDuration));
     }
 
     if (!streamingDispositionExtractor.IsFinished()) {
@@ -124,6 +129,7 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
         TStreamingQueryConfig::TProperties::Run,
         TStreamingQueryConfig::TProperties::ResourcePool,
         TStreamingQueryConfig::TProperties::Force,
+        TStreamingQueryConfig::TProperties::CheckpointInterval,
     }) {
         if (const auto& value = featuresExtractor.Extract(property)) {
             if (!properties.emplace(property, *value).second) {

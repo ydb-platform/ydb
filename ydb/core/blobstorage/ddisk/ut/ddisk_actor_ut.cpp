@@ -39,6 +39,7 @@ struct TDiskHandle {
     ui32 PDiskId;
     ui32 SlotId;
     ui32 FirstChunkId;
+    bool EnableChecksums = true;
 };
 
 class TTestContext {
@@ -75,8 +76,9 @@ public:
     }
 
     TDiskHandle CreateDDisk(ui32 pdiskId, ui32 slotId,
-            std::optional<NDDisk::TPersistentBufferFormat> customFormat = std::nullopt) {
-        TDiskHandle disk = RegisterDDisk(pdiskId, slotId, customFormat);
+            std::optional<NDDisk::TPersistentBufferFormat> customFormat = std::nullopt,
+            NDDisk::TDDiskConfig ddiskConfig = {}) {
+        TDiskHandle disk = RegisterDDisk(pdiskId, slotId, customFormat, std::move(ddiskConfig));
         BootstrapDDisk(disk);
         return disk;
     }
@@ -84,7 +86,9 @@ public:
     // Registers the actors without running the bootstrap protocol: tests that need a custom boot
     // sequence (e.g. recovery from starting points) drive the PDisk side themselves.
     TDiskHandle RegisterDDisk(ui32 pdiskId, ui32 slotId,
-            std::optional<NDDisk::TPersistentBufferFormat> customFormat = std::nullopt) {
+            std::optional<NDDisk::TPersistentBufferFormat> customFormat = std::nullopt,
+            NDDisk::TDDiskConfig ddiskConfig = {}) {
+        const bool enableChecksums = ddiskConfig.EnableChecksums;
         const TActorId pdiskEdge = Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         const TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
         Runtime.RegisterService(pdiskServiceId, pdiskEdge);
@@ -110,13 +114,20 @@ public:
         NDDisk::TPersistentBufferFormat pbFormat = customFormat.value_or(
             NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 5000, 512 * 1024});
         const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
-            std::move(pbFormat), NDDisk::TDDiskConfig{}, Counters),
+            std::move(pbFormat), std::move(ddiskConfig), Counters),
             NodeId);
         const TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
         const TActorId pbServiceId = MakeBlobStoragePersistentBufferId(NodeId, pdiskId, slotId);
         Runtime.RegisterService(ddiskServiceId, ddiskActor);
 
-        return TDiskHandle{ddiskServiceId, pbServiceId, pdiskEdge, pdiskId, slotId, 100000 + pdiskId * 1000};
+        return TDiskHandle{
+            ddiskServiceId,
+            pbServiceId,
+            pdiskEdge,
+            pdiskId,
+            slotId,
+            100000 + pdiskId * 1000,
+            enableChecksums};
     }
 
     std::set<TActorId> ClientWaitEdges(std::initializer_list<TActorId> extra = {}) const {
@@ -378,6 +389,69 @@ public:
             *bootReclaimedChunks = reclaim->Get()->CommitRecord.DeleteChunks;
             ReplyLog(disk, *reclaim);
         }
+        std::set<std::pair<ui64, ui64>> restoredDataChunks;
+        std::set<std::pair<ui64, ui64>> restoredDataChunksWithExtents;
+        bool hasIntegrityChunks = false;
+        const auto inspectChunkMap = [&](const auto& chunkMap) {
+            using TChunkMapLogRecord =
+                NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+            switch (chunkMap.GetRecordCase()) {
+                case TChunkMapLogRecord::kSnapshot:
+                    for (const auto& tablet : chunkMap.GetSnapshot().GetTabletRecords()) {
+                        for (const auto& chunk : tablet.GetChunkRefs()) {
+                            if (!chunk.GetChunkIdx()) {
+                                continue;
+                            }
+                            const auto key = std::make_pair(
+                                tablet.GetTabletId(), chunk.GetVChunkIndex());
+                            restoredDataChunks.insert(key);
+                            if (chunk.HasExtentRef()) {
+                                restoredDataChunksWithExtents.insert(key);
+                            }
+                        }
+                    }
+                    hasIntegrityChunks |=
+                        chunkMap.GetSnapshot().IntegrityChunksSize() != 0;
+                    break;
+                case TChunkMapLogRecord::kIncrement: {
+                    const auto& increment = chunkMap.GetIncrement();
+                    const auto& dataChunk = increment.GetDataChunk();
+                    if (dataChunk.GetChunkIdx()) {
+                        const auto key = std::make_pair(
+                            dataChunk.GetTabletId(), dataChunk.GetVChunkIndex());
+                        restoredDataChunks.insert(key);
+                        if (dataChunk.HasExtentRef()) {
+                            restoredDataChunksWithExtents.insert(key);
+                        }
+                    }
+                    hasIntegrityChunks |= increment.HasIntegrityChunk();
+                    break;
+                }
+                default:
+                    break;
+            }
+        };
+        if (chunkMapSnapshot) {
+            inspectChunkMap(*chunkMapSnapshot);
+        }
+        for (const auto& [record, lsn] : replay) {
+            Y_UNUSED(lsn);
+            inspectChunkMap(record);
+        }
+        const bool hasDataChunks = !restoredDataChunks.empty();
+        const bool hasDataChunksWithoutExtents = std::any_of(
+            restoredDataChunks.begin(),
+            restoredDataChunks.end(),
+            [&](const auto& key) {
+                return !restoredDataChunksWithExtents.contains(key);
+            });
+        if ((!disk.EnableChecksums && hasIntegrityChunks)
+                || (disk.EnableChecksums
+                    && (hasDataChunksWithoutExtents
+                        || (hasDataChunks && !hasIntegrityChunks)))) {
+            // The actor has entered Broken and does not perform normal reserve/PB bootstrap.
+            return;
+        }
 
         // DDisk bootstrap starts persistent buffer initialization in background.
         // Burn these PDisk requests here, so later client-only phases don't see unsolicited PDisk traffic.
@@ -389,6 +463,98 @@ public:
             reserveReply->ChunkIds.push_back(disk.FirstChunkId + i);
         }
         SendPDiskResponse(disk, *reserve, reserveReply.release());
+
+        if (!disk.EnableChecksums) {
+            ui32 pbLogs = 0;
+            bool checkSpaceReplied = false;
+            std::map<TChunkIdx, ui32> formattedBytes;
+            std::set<TChunkIdx> formattedChunks;
+            while (pbLogs < PersistentBufferInitChunks
+                    || formattedChunks.size() < startupReserveChunks) {
+                auto raw = Runtime.WaitForEdgeActorEvent({disk.PDiskEdge});
+                switch (raw->GetTypeRewrite()) {
+                    case NPDisk::TEvChunkWriteRaw::EventType: {
+                        auto write =
+                            RecastEvent<NPDisk::TEvChunkWriteRaw>(std::move(raw));
+                        const auto& request = *write->Get();
+                        ui32& expectedOffset = formattedBytes[request.ChunkIdx];
+                        UNIT_ASSERT_VALUES_EQUAL(request.Offset, expectedOffset);
+                        for (auto it = request.Data.Begin(); it.Valid();
+                                it.AdvanceToNextContiguousBlock()) {
+                            const char* data = it.ContiguousData();
+                            UNIT_ASSERT_C(
+                                std::all_of(
+                                    data,
+                                    data + it.ContiguousSize(),
+                                    [](char value) { return value == 0; }),
+                                "chunk formatting must write only zeroes");
+                        }
+                        expectedOffset += request.Data.size();
+                        UNIT_ASSERT(expectedOffset <= chunkSize);
+                        if (expectedOffset == chunkSize) {
+                            UNIT_ASSERT(
+                                formattedChunks.insert(request.ChunkIdx).second);
+                        }
+                        SendPDiskResponse(
+                            disk,
+                            *write,
+                            new NPDisk::TEvChunkWriteRawResult(
+                                NKikimrProto::OK, ""));
+                        break;
+                    }
+                    case NPDisk::TEvLog::EventType: {
+                        auto log = RecastEvent<NPDisk::TEvLog>(std::move(raw));
+                        UNIT_ASSERT(pbLogs < PersistentBufferInitChunks);
+                        ReplyLog(disk, *log);
+                        ++pbLogs;
+                        break;
+                    }
+                    case NPDisk::TEvCheckSpace::EventType: {
+                        auto checkSpace =
+                            RecastEvent<NPDisk::TEvCheckSpace>(std::move(raw));
+                        SendPDiskResponse(
+                            disk,
+                            *checkSpace,
+                            new NPDisk::TEvCheckSpaceResult(
+                                NKikimrProto::OK,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                "",
+                                0));
+                        checkSpaceReplied = true;
+                        break;
+                    }
+                    default:
+                        UNIT_FAIL(
+                            "unexpected PDisk event during checksums-disabled boot: "
+                            << raw->GetTypeRewrite());
+                }
+            }
+            if (!checkSpaceReplied) {
+                auto checkSpace =
+                    WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+                SendPDiskResponse(
+                    disk,
+                    *checkSpace,
+                    new NPDisk::TEvCheckSpaceResult(
+                        NKikimrProto::OK,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        "",
+                        0));
+            }
+            return;
+        }
 
         for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
             std::unique_ptr<TEventHandle<NPDisk::TEvLog>> log;
@@ -475,10 +641,44 @@ TRope MakeAlignedRope(const TString& data) {
     return TRope(std::move(buf));
 }
 
+std::vector<ui64> MakeBlockChecksums(const TString& data) {
+    return NDDisk::CalculatePayloadChecksums(MakeAlignedRope(data));
+}
+
 TRope MakeMisalignedRope(const TString& data) {
     auto buf = TRcBuf::UninitializedPageAligned(data.size() + BlockSize);
     memcpy(buf.GetDataMut() + 1, data.data(), data.size());
     return TRope(TRcBuf(TRcBuf::Piece, buf.data() + 1, data.size(), buf));
+}
+
+TRope MakeRestoredIntegrityPair(ui64 ddiskId, ui64 pdiskGuid, ui64 tabletId, ui64 vChunkIndex,
+        ui64 vChunkGeneration, ui32 integrityChunkIdx, ui32 extentSlot,
+        ui64 integrityChunkGeneration, const TString& blockData) {
+    UNIT_ASSERT_VALUES_EQUAL(blockData.size(), BlockSize);
+    const ui64 pureChecksum = NDDisk::CalculateRawChecksum(blockData.data(), blockData.size());
+    NDDisk::TIntegrityBlock slots[NDDisk::IntegrityPairSlots]{};
+    for (ui32 slotIdx = 0; slotIdx < NDDisk::IntegrityPairSlots; ++slotIdx) {
+        auto& block = slots[slotIdx];
+        auto& header = block.Header;
+        header.Magic = NDDisk::MagicIntegrityBlock;
+        header.FormatVersion = static_cast<ui16>(NDDisk::EIntegrityFormatVersion::BaseAwupf4KiB);
+        header.ChecksumBlockIdx = 0;
+        header.OwnerId = tabletId;
+        header.VChunkId = vChunkIndex;
+        header.VChunkGeneration = vChunkGeneration;
+        header.IntegrityChunkId = integrityChunkIdx;
+        header.IntegrityExtentId = extentSlot;
+        header.IntegrityChunkGeneration = integrityChunkGeneration;
+        header.IntegrityBlockDigest = NDDisk::Contribution(vChunkGeneration, 0, pureChecksum);
+        header.PairSequenceNumber = slotIdx;
+        header.UsedBlocksBitmap[0] = 1;
+        block.Checksums[0] = NDDisk::SealBlockChecksum(
+            pureChecksum, ddiskId, pdiskGuid, tabletId, vChunkIndex, 0);
+        header.BlockChecksum = NDDisk::CalculateRawChecksum(&block, sizeof(block));
+    }
+    auto data = TRcBuf::UninitializedPageAligned(sizeof(slots));
+    memcpy(data.GetDataMut(), slots, sizeof(slots));
+    return TRope(std::move(data));
 }
 
 std::unique_ptr<NDDisk::TEvWrite> MakeWrite(const NDDisk::TQueryCredentials& creds,
@@ -1175,6 +1375,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TString data = readResult->Get()->GetPayload(0).ConvertToString();
         UNIT_ASSERT_VALUES_EQUAL(data.size(), 2 * BlockSize);
         UNIT_ASSERT(std::all_of(data.begin(), data.end(), [](char c) { return c == '\0'; }));
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.GetChecksums(0), NDDisk::GetZeroBlockChecksum());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.GetChecksums(1), NDDisk::GetZeroBlockChecksum());
     }
 
     Y_UNIT_TEST(NoZeroRead) {
@@ -1302,6 +1505,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
         AssertStatus(readResult, TReplyStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
+        const auto expectedChecksums = NDDisk::CalculatePayloadChecksums(MakeAlignedRope(payload));
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), expectedChecksums.size());
+        for (ui32 i = 0; i < expectedChecksums.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
+        }
 
         // Second write to the same vchunk: only TEvChunkWriteRaw (DoWriteWithChunkAllocation's log/reserve path must not run)
 
@@ -1325,6 +1533,295 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto readResult2 = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
         AssertStatus(readResult2, TReplyStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(readResult2->Get()->GetPayload(0).ConvertToString(), payload2);
+        const auto expectedChecksums2 = NDDisk::CalculatePayloadChecksums(MakeAlignedRope(payload2));
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Get()->Record.ChecksumsSize(), expectedChecksums2.size());
+        for (ui32 i = 0; i < expectedChecksums2.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(readResult2->Get()->Record.GetChecksums(i), expectedChecksums2[i]);
+        }
+    }
+
+    Y_UNIT_TEST(WriteReplyWaitsForIntegrityPairDurability) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(5, 2);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 31, 1);
+
+        const TString firstPayload = MakeData('A', BlockSize);
+        auto first = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 0, 0, firstPayload),
+            disk.FirstChunkId + PersistentBufferInitChunks, 0, firstPayload, true, true);
+        AssertStatus(first.WriteResult, TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId, MakeWrite(creds, 0, BlockSize, MakeData('B', BlockSize)).release());
+        auto write1 = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto write2 = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto* dataWrite = write1->Get()->ChunkIdx == first.ChunkIdx ? write1.get() : write2.get();
+        auto* integrityWrite = write1->Get()->ChunkIdx == first.ChunkIdx ? write2.get() : write1.get();
+        UNIT_ASSERT_VALUES_UNEQUAL(dataWrite->Get()->ChunkIdx, integrityWrite->Get()->ChunkIdx);
+
+        ctx.SendPDiskResponse(disk, *dataWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertNoClientReplyBeforeSentinel(ctx,
+            "write reply must wait for the integrity pair image");
+
+        ctx.SendPDiskResponse(disk, *integrityWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(WriteReplyWaitsForDataWhenIntegrityCompletesFirst) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(75, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 253, 1);
+
+        const TString firstPayload = MakeData('A', BlockSize);
+        auto first = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 0, 0, firstPayload),
+            disk.FirstChunkId + PersistentBufferInitChunks, 0, firstPayload, true, true);
+        AssertStatus(first.WriteResult, TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            MakeWrite(creds, 0, BlockSize, MakeData('B', BlockSize)).release());
+        auto write1 =
+            ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto write2 =
+            ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto* dataWrite =
+            write1->Get()->ChunkIdx == first.ChunkIdx ? write1.get() : write2.get();
+        auto* integrityWrite =
+            write1->Get()->ChunkIdx == first.ChunkIdx ? write2.get() : write1.get();
+
+        bool sawWriteReply = false;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NDDisk::TEvWriteResult::EventType
+                    && ev->GetRecipientRewrite() == ctx.Edge) {
+                sawWriteReply = true;
+            }
+            return true;
+        };
+        ctx.SendPDiskResponse(disk, *integrityWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertNoClientReplyBeforeSentinel(
+            ctx, "write reply must also wait when integrity completes before data");
+        UNIT_ASSERT(!sawWriteReply);
+
+        ctx.SendPDiskResponse(disk, *dataWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto result = WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT(sawWriteReply);
+        AssertStatus(result, TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(SameExtentWritesSerializeDataAndIntegrity) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(5, 4);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 33, 1);
+
+        const TString initialPayload = MakeData('A', BlockSize);
+        auto initial = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 0, 0, initialPayload),
+            disk.FirstChunkId + PersistentBufferInitChunks, 0, initialPayload, true, true);
+        AssertStatus(initial.WriteResult, TReplyStatus::OK);
+
+        std::vector<std::unique_ptr<IEventHandle>> heldWrites;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && ev->GetTypeRewrite() == NPDisk::TEvChunkWriteRaw::EventType) {
+                heldWrites.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+
+        const TString firstPayload = MakeData('B', BlockSize);
+        const TString secondPayload = MakeData('C', BlockSize);
+        SendToDDisk(ctx, disk.ServiceId, MakeWrite(creds, 0, 0, firstPayload).release());
+        SendToDDisk(ctx, disk.ServiceId, MakeWrite(creds, 0, 0, secondPayload).release());
+        ui32 eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return heldWrites.size() < 2 && ++eventsProcessed <= 200;
+        });
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(heldWrites.size(), 2,
+            "only the first write's data and integrity I/O may be submitted");
+
+        auto firstRaw = std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>(
+            reinterpret_cast<TEventHandle<NPDisk::TEvChunkWriteRaw>*>(heldWrites[0].release()));
+        auto secondRaw = std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>(
+            reinterpret_cast<TEventHandle<NPDisk::TEvChunkWriteRaw>*>(heldWrites[1].release()));
+        auto* firstData = firstRaw->Get()->ChunkIdx == initial.ChunkIdx ? firstRaw.get() : secondRaw.get();
+        auto* firstIntegrity = firstRaw->Get()->ChunkIdx == initial.ChunkIdx ? secondRaw.get() : firstRaw.get();
+        UNIT_ASSERT_VALUES_EQUAL(firstData->Get()->Data.ConvertToString(), firstPayload);
+
+        heldWrites.clear();
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && ev->GetTypeRewrite() == NPDisk::TEvChunkWriteRaw::EventType) {
+                heldWrites.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        ctx.SendPDiskResponse(disk, *firstData,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.SendPDiskResponse(disk, *firstIntegrity,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::OK);
+        eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return heldWrites.size() < 2 && ++eventsProcessed <= 200;
+        });
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(heldWrites.size(), 2);
+
+        auto nextRaw1 = std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>(
+            reinterpret_cast<TEventHandle<NPDisk::TEvChunkWriteRaw>*>(heldWrites[0].release()));
+        auto nextRaw2 = std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>(
+            reinterpret_cast<TEventHandle<NPDisk::TEvChunkWriteRaw>*>(heldWrites[1].release()));
+        auto* secondData = nextRaw1->Get()->ChunkIdx == initial.ChunkIdx ? nextRaw1.get() : nextRaw2.get();
+        auto* secondIntegrity = nextRaw1->Get()->ChunkIdx == initial.ChunkIdx ? nextRaw2.get() : nextRaw1.get();
+        UNIT_ASSERT_VALUES_EQUAL(secondData->Get()->Data.ConvertToString(), secondPayload);
+
+        ctx.SendPDiskResponse(disk, *secondData,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.SendPDiskResponse(disk, *secondIntegrity,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+        auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+        ctx.SendPDiskResponse(
+            disk, *dataRead, new NPDisk::TEvChunkReadRawResult(TRope(secondPayload)));
+        auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(readResult, TReplyStatus::OK);
+        const auto expectedChecksums =
+            NDDisk::CalculatePayloadChecksums(MakeAlignedRope(secondPayload));
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.GetChecksums(0), expectedChecksums[0]);
+    }
+
+    Y_UNIT_TEST(DifferentExtentWritesRemainConcurrent) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(5, 6);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 35, 1);
+        const ui32 firstChunk = disk.FirstChunkId + PersistentBufferInitChunks;
+
+        auto first = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 0, 0, MakeData('A', BlockSize)),
+            firstChunk, 0, MakeData('A', BlockSize), true, true);
+        AssertStatus(first.WriteResult, TReplyStatus::OK);
+        auto second = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 1, 0, MakeData('B', BlockSize)),
+            firstChunk + 2, 0, MakeData('B', BlockSize), true, false);
+        AssertStatus(second.WriteResult, TReplyStatus::OK);
+
+        std::vector<std::unique_ptr<IEventHandle>> heldWrites;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && ev->GetTypeRewrite() == NPDisk::TEvChunkWriteRaw::EventType) {
+                heldWrites.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        SendToDDisk(ctx, disk.ServiceId,
+            MakeWrite(creds, 0, BlockSize, MakeData('C', BlockSize)).release());
+        SendToDDisk(ctx, disk.ServiceId,
+            MakeWrite(creds, 1, BlockSize, MakeData('D', BlockSize)).release());
+        ui32 eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return heldWrites.size() < 4 && ++eventsProcessed <= 300;
+        });
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(heldWrites.size(), 4,
+            "two different extents must submit both data+integrity batches concurrently");
+
+        bool sawFirstData = false;
+        bool sawSecondData = false;
+        for (auto& raw : heldWrites) {
+            auto write = std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>(
+                reinterpret_cast<TEventHandle<NPDisk::TEvChunkWriteRaw>*>(raw.release()));
+            if (write->Get()->ChunkIdx == first.ChunkIdx) {
+                sawFirstData = true;
+            } else if (write->Get()->ChunkIdx == second.ChunkIdx) {
+                sawSecondData = true;
+            }
+            ctx.SendPDiskResponse(disk, *write,
+                new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        }
+        UNIT_ASSERT(sawFirstData);
+        UNIT_ASSERT(sawSecondData);
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::OK);
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(IntegrityWriteFailureBreaksDDiskAndFailsPendingWrite) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(5, 3);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 32, 1);
+
+        const TString firstPayload = MakeData('A', BlockSize);
+        auto first = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 0, 0, firstPayload),
+            disk.FirstChunkId + PersistentBufferInitChunks, 0, firstPayload, true, true);
+        AssertStatus(first.WriteResult, TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            MakeWrite(creds, 0, BlockSize, MakeData('B', BlockSize)).release());
+        auto write1 = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto write2 = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto* dataWrite = write1->Get()->ChunkIdx == first.ChunkIdx ? write1.get() : write2.get();
+        auto* integrityWrite = write1->Get()->ChunkIdx == first.ChunkIdx ? write2.get() : write1.get();
+        UNIT_ASSERT_VALUES_UNEQUAL(dataWrite->Get()->ChunkIdx, integrityWrite->Get()->ChunkIdx);
+
+        ctx.SendPDiskResponse(disk, *dataWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.SendPDiskResponse(disk, *integrityWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::ERROR, "injected integrity failure"));
+
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::ERROR);
+        auto read = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+        AssertStatus(read, TReplyStatus::ERROR);
+    }
+
+    Y_UNIT_TEST(FallbackIntegrityReadFailureBreaksDDiskAndReplies) {
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.ForcePDiskFallback = true;
+        config.IntegrityChecksumCacheBytes = NDDisk::TIntegrityManager::BlockStateApproxBytes;
+        const TDiskHandle disk = ctx.CreateDDisk(5, 5, std::nullopt, std::move(config));
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 34, 1);
+
+        const TString firstPayload = MakeData('A', BlockSize);
+        auto initial = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 0, 0, firstPayload),
+            disk.FirstChunkId + PersistentBufferInitChunks, 0, firstPayload, true, true);
+        AssertStatus(initial.WriteResult, TReplyStatus::OK);
+
+        const ui32 secondPairOffset =
+            NDDisk::ChecksumsPerIntegrityBlock * NDDisk::IntegrityUnitSize;
+        AssertStatus(
+            DoWrite(ctx, disk, MakeWrite(
+                creds, 0, secondPairOffset, MakeData('B', BlockSize))),
+            TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+        auto integrityRead = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkReadRaw>(disk);
+        UNIT_ASSERT_VALUES_UNEQUAL(integrityRead->Get()->ChunkIdx, initial.ChunkIdx);
+        UNIT_ASSERT_VALUES_EQUAL(
+            integrityRead->Get()->Size,
+            NDDisk::IntegrityPairSlots * NDDisk::IntegrityUnitSize);
+        ctx.SendPDiskResponse(disk, *integrityRead,
+            new NPDisk::TEvChunkReadRawResult(
+                NKikimrProto::ERROR, "injected integrity read failure"));
+
+        AssertStatus(WaitFromDDisk<NDDisk::TEvReadResult>(ctx), TReplyStatus::ERROR);
+        auto laterRead = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+        AssertStatus(laterRead, TReplyStatus::ERROR);
     }
 
     Y_UNIT_TEST(CheckVChunksArePerTablet) {
@@ -2071,6 +2568,164 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(syncResult, TReplyStatus::ERROR);
     }
 
+    Y_UNIT_TEST(SyncRejectsCorruptedSourcePayloadBeforeWrite) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(10, 2);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 51, 1);
+        const ui32 srcPDiskId = 97;
+        const ui32 srcSlotId = 1;
+        const TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(
+            MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId), fakeSourceEdge);
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(creds);
+        sync->AddSegmentFromDDisk(
+            MakeSyncSourceId(srcPDiskId, srcSlotId), 42,
+            NDDisk::TBlockSelector(0, 0, BlockSize));
+        SendToDDisk(ctx, disk.ServiceId, sync.release());
+
+        auto readReq = ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge});
+        const TString payload = MakeData('C', BlockSize);
+        const std::vector<ui64> badChecksums{
+            NDDisk::CalculateRawChecksum(payload.data(), payload.size()) + 1};
+        bool sawTargetPersistence = false;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && (ev->GetTypeRewrite() == NPDisk::TEvChunkWriteRaw::EventType
+                        || ev->GetTypeRewrite() == NPDisk::TEvLog::EventType)) {
+                sawTargetPersistence = true;
+            }
+            return true;
+        };
+        ctx.Runtime.Send(new IEventHandle(readReq->Sender, fakeSourceEdge,
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(payload), badChecksums),
+            0, readReq->Cookie), NodeId);
+
+        auto result = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
+        ctx.Runtime.FilterFunction = {};
+        AssertStatus(result, TReplyStatus::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.SegmentResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(result->Get()->Record.GetSegmentResults(0).GetStatus()),
+            static_cast<int>(TReplyStatus::CORRUPTED));
+        UNIT_ASSERT_C(!sawTargetPersistence,
+            "checksum-mismatched source data must not persist target data or integrity metadata");
+    }
+
+    Y_UNIT_TEST(ChecksumsDisabledSyncIgnoresSourceChecksums) {
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const TDiskHandle disk =
+            ctx.RegisterDDisk(10, 4, std::nullopt, config);
+        ctx.BootstrapDDisk(disk, 4u << 20);
+        NDDisk::TQueryCredentials creds =
+            Connect(ctx, disk.ServiceId, 53, 1);
+
+        const ui32 srcPDiskId = 95;
+        const ui32 srcSlotId = 1;
+        const TActorId fakeSourceEdge =
+            ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(
+            MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId),
+            fakeSourceEdge);
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(creds);
+        sync->AddSegmentFromDDisk(
+            MakeSyncSourceId(srcPDiskId, srcSlotId),
+            42,
+            NDDisk::TBlockSelector(0, 0, BlockSize));
+        SendToDDisk(ctx, disk.ServiceId, sync.release());
+
+        auto readReq =
+            ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge});
+        const TString payload = MakeData('I', BlockSize);
+        const std::vector<ui64> badChecksums{
+            NDDisk::CalculateRawChecksum(payload.data(), payload.size()) + 1};
+        ctx.Runtime.Send(
+            new IEventHandle(
+                readReq->Sender,
+                fakeSourceEdge,
+                new NDDisk::TEvReadResult(
+                    TReplyStatus::OK,
+                    std::nullopt,
+                    TRope(payload),
+                    badChecksums),
+                0,
+                readReq->Cookie),
+            NodeId);
+
+        auto traffic =
+            ctx.CollectAllocationTraffic(disk, true, 1, true);
+        const auto increment =
+            TTestContext::ParseChunkMapLog(*traffic.Increment->Get());
+        UNIT_ASSERT(increment.GetChecksumsDisabled());
+        UNIT_ASSERT(!increment.GetIncrement().GetDataChunk().HasExtentRef());
+        UNIT_ASSERT(ctx.AutoServedIntegrityWriteChunks.empty());
+
+        ctx.SendPDiskResponse(
+            disk,
+            *traffic.DataWrites.front(),
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.ReplyLog(disk, *traffic.Increment);
+        auto result = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
+        AssertStatus(result, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.SegmentResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(
+                result->Get()->Record.GetSegmentResults(0).GetStatus()),
+            static_cast<int>(TReplyStatus::OK));
+    }
+
+    Y_UNIT_TEST(SyncRejectsSourceChecksumCountMismatchBeforeWrite) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(10, 3);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 52, 1);
+        const ui32 srcPDiskId = 96;
+        const ui32 srcSlotId = 1;
+        const TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(
+            MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId), fakeSourceEdge);
+
+        bool sawTargetPersistence = false;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && (ev->GetTypeRewrite() == NPDisk::TEvChunkWriteRaw::EventType
+                        || ev->GetTypeRewrite() == NPDisk::TEvLog::EventType)) {
+                sawTargetPersistence = true;
+            }
+            return true;
+        };
+        const TString payload = MakeData('M', 2 * BlockSize);
+        const auto validChecksums = MakeBlockChecksums(payload);
+        for (const ui32 checksumCount : {1u, 3u}) {
+            auto sync = std::make_unique<NDDisk::TEvSync>(creds);
+            sync->AddSegmentFromDDisk(
+                MakeSyncSourceId(srcPDiskId, srcSlotId), 42,
+                NDDisk::TBlockSelector(0, 0, 2 * BlockSize));
+            SendToDDisk(ctx, disk.ServiceId, sync.release());
+            auto readReq = ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge});
+
+            std::vector<ui64> checksums = validChecksums;
+            checksums.resize(checksumCount, 0);
+            ctx.Runtime.Send(new IEventHandle(readReq->Sender, fakeSourceEdge,
+                new NDDisk::TEvReadResult(
+                    TReplyStatus::OK, std::nullopt, TRope(payload), checksums),
+                0, readReq->Cookie), NodeId);
+
+            auto result = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
+            AssertStatus(result, TReplyStatus::ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.SegmentResultsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<int>(result->Get()->Record.GetSegmentResults(0).GetStatus()),
+                static_cast<int>(TReplyStatus::INCORRECT_REQUEST));
+        }
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT_C(!sawTargetPersistence,
+            "source checksum count mismatch must not persist target data or integrity metadata");
+    }
+
     Y_UNIT_TEST(LateOutdatedSyncReadResultDoesNotLogUnknownSync) {
         TStringStream log;
         TTestContext ctx;
@@ -2124,13 +2779,27 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             static_cast<int>(TReplyStatus::OUTDATED));
 
         const TString stalePayload = MakeData('O', BlockSize);
+        bool sawTargetPersistence = false;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && (ev->GetTypeRewrite() == NPDisk::TEvChunkWriteRaw::EventType
+                        || ev->GetTypeRewrite() == NPDisk::TEvLog::EventType)) {
+                sawTargetPersistence = true;
+            }
+            return true;
+        };
         ctx.Runtime.Send(new IEventHandle(staleReadReq->Sender, fakeSourceEdge,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(stalePayload)),
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(stalePayload),
+                MakeBlockChecksums(stalePayload)),
             0, staleReadReq->Cookie), NodeId);
 
         auto connectResult = SendToDDiskAndWait<NDDisk::TEvConnectResult>(ctx, disk.ServiceId, new NDDisk::TEvConnect(creds));
+        ctx.Runtime.FilterFunction = {};
         AssertStatus(connectResult, TReplyStatus::OK);
 
+        UNIT_ASSERT_C(!sawTargetPersistence,
+            "a late source result made stale by an overlapping sync must not persist metadata");
         UNIT_ASSERT_C(!log.Str().Contains("unknown sync for cookie"), log.Str());
     }
 
@@ -2189,7 +2858,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
 
         ctx.Runtime.Send(new IEventHandle(readReq->Sender, fakeSourceEdge,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload)),
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(payload), MakeBlockChecksums(payload)),
             0, readReq->Cookie), NodeId);
 
         auto traffic = ctx.CollectAllocationTraffic(disk, true, 1);
@@ -2205,6 +2875,251 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(
             static_cast<int>(syncResult->Get()->Record.GetSegmentResults(0).GetStatus()),
             static_cast<int>(TReplyStatus::OK));
+    }
+
+    Y_UNIT_TEST(DDiskToDDiskSyncPreservesPureChecksums) {
+        TTestContext ctx;
+        const TDiskHandle source = ctx.CreateDDisk(70, 1);
+        const TDiskHandle destination = ctx.CreateDDisk(71, 1);
+        NDDisk::TQueryCredentials sourceCreds =
+            Connect(ctx, source.ServiceId, 250, 1);
+        NDDisk::TQueryCredentials destinationCreds =
+            Connect(ctx, destination.ServiceId, 250, 1);
+        const TString payload =
+            MakeData('A', BlockSize) + MakeData('B', BlockSize);
+        const auto expectedChecksums = MakeBlockChecksums(payload);
+
+        auto sourceWrite = DoWriteWithChunkAllocation(
+            ctx, source, MakeWrite(sourceCreds, 3, 0, payload),
+            source.FirstChunkId + PersistentBufferInitChunks, 0, payload, true, true);
+        AssertStatus(sourceWrite.WriteResult, TReplyStatus::OK);
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(destinationCreds);
+        sync->AddSegmentFromDDisk(
+            MakeSyncSourceId(source.PDiskId, source.SlotId),
+            *sourceCreds.DDiskInstanceGuid,
+            NDDisk::TBlockSelector(3, 0, payload.size()));
+        SendToDDisk(ctx, destination.ServiceId, sync.release());
+
+        auto sourceRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(source);
+        UNIT_ASSERT_VALUES_EQUAL(sourceRead->Get()->ChunkIdx, sourceWrite.ChunkIdx);
+        ctx.SendPDiskResponse(source, *sourceRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(payload)));
+
+        auto allocation = ctx.CollectAllocationTraffic(destination, true, 1);
+        ctx.SendPDiskResponse(destination, *allocation.DataWrites[0],
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.ReplyLog(destination, *allocation.Increment);
+        AssertStatus(WaitFromDDisk<NDDisk::TEvSyncResult>(ctx), TReplyStatus::OK);
+
+        SendToDDisk(ctx, destination.ServiceId,
+            new NDDisk::TEvRead(destinationCreds, {3, 0, static_cast<ui32>(payload.size())}, {true}));
+        auto destinationRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(destination);
+        ctx.SendPDiskResponse(destination, *destinationRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(payload)));
+        auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(readResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult->Get()->Record.ChecksumsSize(), expectedChecksums.size());
+        for (ui32 i = 0; i < expectedChecksums.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferToDDiskSyncPreservesPureChecksums) {
+        TTestContext ctx;
+        const TDiskHandle source = ctx.CreateDDisk(72, 1);
+        const TDiskHandle destination = ctx.CreateDDisk(73, 1);
+        NDDisk::TQueryCredentials sourceCreds =
+            Connect(ctx, source.PBServiceId, 251, 1);
+        NDDisk::TQueryCredentials destinationCreds =
+            Connect(ctx, destination.ServiceId, 251, 1);
+        constexpr ui64 Lsn = 10;
+        const TString payload =
+            MakeData('P', BlockSize) + MakeData('Q', BlockSize);
+        const NDDisk::TBlockSelector selector{
+            4, 2 * BlockSize, static_cast<ui32>(payload.size())};
+        const auto expectedChecksums = MakeBlockChecksums(payload);
+
+        auto sourceWrite = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+            sourceCreds, selector, Lsn, NDDisk::TWriteInstruction(0));
+        sourceWrite->AddPayloadThenChecksum(TRope(payload));
+        SendToDDisk(ctx, source.PBServiceId, sourceWrite.release());
+        auto sourceWriteRaw =
+            ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(source);
+        ctx.SendPDiskResponse(source, *sourceWriteRaw,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(
+            WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx),
+            TReplyStatus::OK);
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(destinationCreds);
+        sync->AddSegmentFromPB(
+            MakeSyncSourceId(source.PDiskId, source.SlotId),
+            *sourceCreds.DDiskInstanceGuid, selector, Lsn, sourceCreds.Generation);
+        SendToDDisk(ctx, destination.ServiceId, sync.release());
+
+        auto allocation = ctx.CollectAllocationTraffic(destination, true, 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            allocation.DataWrites[0]->Get()->Data.ConvertToString(), payload);
+        ctx.SendPDiskResponse(destination, *allocation.DataWrites[0],
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.ReplyLog(destination, *allocation.Increment);
+        AssertStatus(WaitFromDDisk<NDDisk::TEvSyncResult>(ctx), TReplyStatus::OK);
+
+        SendToDDisk(ctx, destination.ServiceId,
+            new NDDisk::TEvRead(destinationCreds, selector, {true}));
+        auto destinationRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(destination);
+        ctx.SendPDiskResponse(destination, *destinationRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(payload)));
+        auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(readResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult->Get()->Record.ChecksumsSize(), expectedChecksums.size());
+        for (ui32 i = 0; i < expectedChecksums.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
+        }
+    }
+
+    Y_UNIT_TEST(SyncSlicesChecksumsAcrossSegmentsAndIntegrityPair) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(74, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 252, 1);
+        constexpr ui32 SourcePDiskId = 93;
+        const TActorId sourceEdge =
+            ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(
+            MakeBlobStorageDDiskId(NodeId, SourcePDiskId, 1), sourceEdge);
+
+        const ui32 firstOffset =
+            (NDDisk::ChecksumsPerIntegrityBlock - 1) * BlockSize;
+        const TString firstPayload =
+            MakeData('A', BlockSize) + MakeData('B', BlockSize);
+        const TString secondPayload =
+            MakeData('C', BlockSize) + MakeData('D', BlockSize);
+        const TString allPayload = firstPayload + secondPayload;
+        const auto expectedChecksums = MakeBlockChecksums(allPayload);
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(creds);
+        sync->AddSegmentFromDDisk(
+            MakeSyncSourceId(SourcePDiskId, 1), 42,
+            NDDisk::TBlockSelector(
+                6, firstOffset, static_cast<ui32>(firstPayload.size())));
+        sync->AddSegmentFromDDisk(
+            MakeSyncSourceId(SourcePDiskId, 1), 42,
+            NDDisk::TBlockSelector(
+                6, firstOffset + firstPayload.size(),
+                static_cast<ui32>(secondPayload.size())));
+        SendToDDisk(ctx, disk.ServiceId, sync.release());
+
+        for (const TString* payload : {&firstPayload, &secondPayload}) {
+            auto sourceRead = ctx.Runtime.WaitForEdgeActorEvent({sourceEdge});
+            ctx.Runtime.Send(new IEventHandle(sourceRead->Sender, sourceEdge,
+                new NDDisk::TEvReadResult(
+                    TReplyStatus::OK, std::nullopt, TRope(*payload),
+                    MakeBlockChecksums(*payload)),
+                0, sourceRead->Cookie), NodeId);
+        }
+
+        auto allocation = ctx.CollectAllocationTraffic(disk, true, 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            allocation.DataWrites[0]->Get()->Offset, firstOffset);
+        UNIT_ASSERT_VALUES_EQUAL(
+            allocation.DataWrites[0]->Get()->Data.ConvertToString(), firstPayload);
+        ctx.SendPDiskResponse(disk, *allocation.DataWrites[0],
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.ReplyLog(disk, *allocation.Increment);
+
+        auto secondWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(
+            secondWrite->Get()->Offset, firstOffset + firstPayload.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            secondWrite->Get()->Data.ConvertToString(), secondPayload);
+        ctx.SendPDiskResponse(disk, *secondWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvSyncResult>(ctx), TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {6, firstOffset, static_cast<ui32>(allPayload.size())},
+                {true}));
+        auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+        ctx.SendPDiskResponse(disk, *dataRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(allPayload)));
+        auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(readResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(
+            readResult->Get()->Record.ChecksumsSize(), expectedChecksums.size());
+        for (ui32 i = 0; i < expectedChecksums.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
+        }
+    }
+
+    Y_UNIT_TEST(SyncReplyWaitsForDestinationDataAndIntegrity) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(76, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 254, 1);
+        const TString initialPayload = MakeData('A', BlockSize);
+        auto initial = DoWriteWithChunkAllocation(
+            ctx, disk, MakeWrite(creds, 0, 0, initialPayload),
+            disk.FirstChunkId + PersistentBufferInitChunks,
+            0, initialPayload, true, true);
+        AssertStatus(initial.WriteResult, TReplyStatus::OK);
+
+        constexpr ui32 SourcePDiskId = 92;
+        const TActorId sourceEdge =
+            ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(
+            MakeBlobStorageDDiskId(NodeId, SourcePDiskId, 1), sourceEdge);
+        auto sync = std::make_unique<NDDisk::TEvSync>(creds);
+        sync->AddSegmentFromDDisk(
+            MakeSyncSourceId(SourcePDiskId, 1), 42,
+            NDDisk::TBlockSelector(0, BlockSize, BlockSize));
+        SendToDDisk(ctx, disk.ServiceId, sync.release());
+
+        auto sourceRead = ctx.Runtime.WaitForEdgeActorEvent({sourceEdge});
+        const TString sourcePayload = MakeData('S', BlockSize);
+        ctx.Runtime.Send(new IEventHandle(sourceRead->Sender, sourceEdge,
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(sourcePayload),
+                MakeBlockChecksums(sourcePayload)),
+            0, sourceRead->Cookie), NodeId);
+
+        auto write1 =
+            ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto write2 =
+            ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto* dataWrite =
+            write1->Get()->ChunkIdx == initial.ChunkIdx ? write1.get() : write2.get();
+        auto* integrityWrite =
+            write1->Get()->ChunkIdx == initial.ChunkIdx ? write2.get() : write1.get();
+
+        bool sawSyncReply = false;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NDDisk::TEvSyncResult::EventType
+                    && ev->GetRecipientRewrite() == ctx.Edge) {
+                sawSyncReply = true;
+            }
+            return true;
+        };
+        ctx.SendPDiskResponse(disk, *integrityWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertNoClientReplyBeforeSentinel(
+            ctx, "sync reply must wait for destination data after integrity is durable");
+        UNIT_ASSERT(!sawSyncReply);
+
+        ctx.SendPDiskResponse(disk, *dataWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto result = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT(sawSyncReply);
+        AssertStatus(result, TReplyStatus::OK);
     }
 
     Y_UNIT_TEST(SyncReplyWaitsForCombinedIncrement) {
@@ -2233,7 +3148,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         const TString payload = MakeData('G', BlockSize);
         ctx.Runtime.Send(new IEventHandle(firstRead->Sender, fakeSourceEdge,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload)),
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(payload), MakeBlockChecksums(payload)),
             0, firstRead->Cookie), NodeId);
 
         auto traffic = ctx.CollectAllocationTraffic(disk, true, 1);
@@ -2292,7 +3208,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         const TString payload = MakeData('O', BlockSize);
         ctx.Runtime.Send(new IEventHandle(completedRead->Sender, fakeSourceEdge,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload)),
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(payload), MakeBlockChecksums(payload)),
             0, completedRead->Cookie), NodeId);
 
         auto traffic = ctx.CollectAllocationTraffic(disk, true, 1);
@@ -2376,7 +3293,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetSize(), BlockSize);
         }
         ctx.Runtime.Send(new IEventHandle(readReq1->Sender, fakeSourceEdge1,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload1)),
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(payload1), MakeBlockChecksums(payload1)),
             0, readReq1->Cookie), NodeId);
 
         auto readReq2 = ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge2});
@@ -2389,17 +3307,19 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetSize(), BlockSize);
         }
         ctx.Runtime.Send(new IEventHandle(readReq2->Sender, fakeSourceEdge2,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(payload2)),
+            new NDDisk::TEvReadResult(
+                TReplyStatus::OK, std::nullopt, TRope(payload2), MakeBlockChecksums(payload2)),
             0, readReq2->Cookie), NodeId);
 
-        auto traffic = ctx.CollectAllocationTraffic(disk, true, 2);
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites.size(), 2u);
+        auto traffic = ctx.CollectAllocationTraffic(disk, true, 1);
+        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[0]->Get()->Offset, 0u);
         UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[0]->Get()->Data.ConvertToString(), payload1);
         ctx.SendPDiskResponse(disk, *traffic.DataWrites[0], new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[1]->Get()->Offset, BlockSize);
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[1]->Get()->Data.ConvertToString(), payload2);
-        ctx.SendPDiskResponse(disk, *traffic.DataWrites[1], new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto secondWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(secondWrite->Get()->Offset, BlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(secondWrite->Get()->Data.ConvertToString(), payload2);
+        ctx.SendPDiskResponse(disk, *secondWrite, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         ctx.ReplyLog(disk, *traffic.Increment);
 
         auto syncResult = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
@@ -2471,7 +3391,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
         ctx.Runtime.Send(new IEventHandle(pbufferReadReq->Sender, fakePBufferSourceEdge,
             new NDDisk::TEvReadPersistentBufferResult(TReplyStatus::OK, std::nullopt,
-                7, 0, BlockSize, TRope(pbufferPayload)),
+                7, 0, BlockSize, TRope(pbufferPayload), MakeBlockChecksums(pbufferPayload)),
             0, pbufferReadReq->Cookie), NodeId);
 
         auto ddiskReadReq = ctx.Runtime.WaitForEdgeActorEvent({fakeDDiskSourceEdge});
@@ -2487,17 +3407,19 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetSize(), BlockSize);
         }
         ctx.Runtime.Send(new IEventHandle(ddiskReadReq->Sender, fakeDDiskSourceEdge,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(ddiskPayload)),
+            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt,
+                TRope(ddiskPayload), MakeBlockChecksums(ddiskPayload)),
             0, ddiskReadReq->Cookie), NodeId);
 
-        auto traffic = ctx.CollectAllocationTraffic(disk, true, 2);
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites.size(), 2u);
+        auto traffic = ctx.CollectAllocationTraffic(disk, true, 1);
+        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[0]->Get()->Offset, 0u);
         UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[0]->Get()->Data.ConvertToString(), pbufferPayload);
         ctx.SendPDiskResponse(disk, *traffic.DataWrites[0], new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[1]->Get()->Offset, BlockSize);
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[1]->Get()->Data.ConvertToString(), ddiskPayload);
-        ctx.SendPDiskResponse(disk, *traffic.DataWrites[1], new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto secondWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(secondWrite->Get()->Offset, BlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(secondWrite->Get()->Data.ConvertToString(), ddiskPayload);
+        ctx.SendPDiskResponse(disk, *secondWrite, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         ctx.ReplyLog(disk, *traffic.Increment);
 
         auto syncResult = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
@@ -2567,7 +3489,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
         ctx.Runtime.Send(new IEventHandle(pbufferReadReq->Sender, fakePBufferSourceEdge,
             new NDDisk::TEvReadPersistentBufferResult(TReplyStatus::OK, std::nullopt,
-                7, 0, BlockSize, TRope(pbufferPayload)),
+                7, 0, BlockSize, TRope(pbufferPayload), MakeBlockChecksums(pbufferPayload)),
             0, pbufferReadReq->Cookie), NodeId);
 
         auto ddiskReadReq = ctx.Runtime.WaitForEdgeActorEvent({fakeDDiskSourceEdge});
@@ -2583,17 +3505,19 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(readRecord.GetSelector().GetSize(), BlockSize);
         }
         ctx.Runtime.Send(new IEventHandle(ddiskReadReq->Sender, fakeDDiskSourceEdge,
-            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt, TRope(ddiskPayload)),
+            new NDDisk::TEvReadResult(TReplyStatus::OK, std::nullopt,
+                TRope(ddiskPayload), MakeBlockChecksums(ddiskPayload)),
             0, ddiskReadReq->Cookie), NodeId);
 
-        auto traffic = ctx.CollectAllocationTraffic(disk, true, 2);
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites.size(), 2u);
+        auto traffic = ctx.CollectAllocationTraffic(disk, true, 1);
+        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[0]->Get()->Offset, 0u);
         UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[0]->Get()->Data.ConvertToString(), pbufferPayload);
         ctx.SendPDiskResponse(disk, *traffic.DataWrites[0], new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[1]->Get()->Offset, BlockSize);
-        UNIT_ASSERT_VALUES_EQUAL(traffic.DataWrites[1]->Get()->Data.ConvertToString(), ddiskPayload);
-        ctx.SendPDiskResponse(disk, *traffic.DataWrites[1], new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto secondWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(secondWrite->Get()->Offset, BlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(secondWrite->Get()->Data.ConvertToString(), ddiskPayload);
+        ctx.SendPDiskResponse(disk, *secondWrite, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         ctx.ReplyLog(disk, *traffic.Increment);
 
         auto syncResult = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
@@ -2635,7 +3559,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             static_cast<ui32>(NDDisk::TEv::EvReadPersistentBuffer));
         ctx.Runtime.Send(new IEventHandle(readReq->Sender, fakeSourceEdge,
             new NDDisk::TEvReadPersistentBufferResult(TReplyStatus::OK, std::nullopt,
-                5, 0, BlockSize, TRope(payload)),
+                5, 0, BlockSize, TRope(payload), MakeBlockChecksums(payload)),
             0, readReq->Cookie), NodeId);
 
         auto traffic = ctx.CollectAllocationTraffic(disk, true, 1);
@@ -3061,7 +3985,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TActorId pbServiceId = MakeBlobStoragePersistentBufferId(NodeId, pdiskId, slotId);
         ctx.Runtime.RegisterService(ddiskServiceId, ddiskActor);
 
-        TDiskHandle disk{ddiskServiceId, pbServiceId, pdiskEdge, pdiskId, slotId, 100000 + pdiskId * 1000};
+        TDiskHandle disk{
+            ddiskServiceId,
+            pbServiceId,
+            pdiskEdge,
+            pdiskId,
+            slotId,
+            100000 + pdiskId * 1000,
+            true};
 
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;
@@ -3623,6 +4554,16 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                     reinterpret_cast<TEventHandle<NPDisk::TEvChunkReserve>*>(raw.release()));
                 continue;
             }
+            if (type == NPDisk::TEvChunkWriteRaw::EventType) {
+                auto integrityWrite = std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>(
+                    reinterpret_cast<TEventHandle<NPDisk::TEvChunkWriteRaw>*>(raw.release()));
+                UNIT_ASSERT(TTestContext::IsIntegrityMetadataWrite(*integrityWrite->Get()));
+                UNIT_ASSERT_VALUES_EQUAL(integrityWrite->Get()->ChunkIdx, integrityChunk);
+                UNIT_ASSERT_VALUES_EQUAL(integrityWrite->Get()->Data.size(), NDDisk::IntegrityUnitSize);
+                ctx.SendPDiskResponse(disk, *integrityWrite,
+                    new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+                continue;
+            }
             UNIT_ASSERT_VALUES_EQUAL(type, NPDisk::TEvLog::EventType);
             logIncr = std::unique_ptr<TEventHandle<NPDisk::TEvLog>>(
                 reinterpret_cast<TEventHandle<NPDisk::TEvLog>*>(raw.release()));
@@ -3725,26 +4666,63 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         // The extent is ready and the write path is open, but allocation durability is pending.
         SendToDDisk(ctx, disk.ServiceId,
             MakeWrite(creds, 7, BlockSize, MakeData('B', BlockSize)).release(), 102);
+
+        ctx.SendPDiskResponse(disk, *first.DataWrites[0],
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // The second write is released only after the first data+integrity pair is complete.
         auto secondWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         UNIT_ASSERT(!TTestContext::IsIntegrityMetadataWrite(*secondWrite->Get()));
         UNIT_ASSERT_VALUES_EQUAL(
             secondWrite->Get()->ChunkIdx, first.DataWrites[0]->Get()->ChunkIdx);
-
-        ctx.SendPDiskResponse(disk, *first.DataWrites[0],
-            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         ctx.SendPDiskResponse(disk, *secondWrite,
             new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-        AssertNoClientReplyBeforeSentinel(
-            ctx, "all write replies must remain parked until the allocation increment commits");
+        const TActorId sentinelEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.Send(new IEventHandle(sentinelEdge, ctx.Edge, new TEvents::TEvWakeup()), NodeId);
+        for (;;) {
+            auto raw = ctx.Runtime.WaitForEdgeActorEvent(ctx.ClientWaitEdges({sentinelEdge}));
+            if (raw->Recipient == sentinelEdge) {
+                break;
+            }
+            if (ctx.TryAutoServeIntegrityTraffic<TEvents::TEvWakeup>(*raw)) {
+                continue;
+            }
+            UNIT_FAIL("all write replies must remain parked until the allocation increment commits");
+        }
 
         ctx.ReplyLog(disk, *first.Increment);
-        auto firstResult = WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
-        auto secondResult = WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
-        AssertStatus(firstResult, TReplyStatus::OK);
-        AssertStatus(secondResult, TReplyStatus::OK);
-        std::set<ui64> cookies{firstResult->Cookie, secondResult->Cookie};
+        std::set<ui64> cookies;
+        while (cookies.size() < 2) {
+            auto raw = ctx.Runtime.WaitForEdgeActorEvent(ctx.ClientWaitEdges());
+            if (ctx.TryAutoServeIntegrityTraffic<NDDisk::TEvWriteResult>(*raw)) {
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(raw->GetTypeRewrite(), NDDisk::TEvWriteResult::EventType);
+            const auto result = std::unique_ptr<TEventHandle<NDDisk::TEvWriteResult>>(
+                reinterpret_cast<TEventHandle<NDDisk::TEvWriteResult>*>(raw.release()));
+            AssertStatus(result, TReplyStatus::OK);
+            cookies.insert(result->Cookie);
+        }
         const std::set<ui64> expectedCookies{101, 102};
         UNIT_ASSERT(cookies == expectedCookies);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {7, 0, 2 * BlockSize}, {true}));
+        auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->ChunkIdx, first.DataWrites[0]->Get()->ChunkIdx);
+        UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->Offset, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->Size, 2 * BlockSize);
+        const TString expectedData = MakeData('A', BlockSize) + MakeData('B', BlockSize);
+        ctx.SendPDiskResponse(disk, *dataRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(expectedData)));
+
+        auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(readResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), expectedData);
+        const auto expectedChecksums = NDDisk::CalculatePayloadChecksums(MakeAlignedRope(expectedData));
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), expectedChecksums.size());
+        for (ui32 i = 0; i < expectedChecksums.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
+        }
     }
 
     Y_UNIT_TEST(ReadParkedBehindAllocatingWriteSeesData) {
@@ -4043,9 +5021,18 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             Connect(ctx, recovered.ServiceId, 227, 1);
         SendToDDisk(ctx, recovered.ServiceId,
             new NDDisk::TEvRead(recoveredCreds, {5, 0, BlockSize}, {true}));
-        auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(recovered);
-        UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, incrementData.GetChunkIdx());
-        ctx.SendPDiskResponse(recovered, *readRaw,
+        auto integrityRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(recovered);
+        UNIT_ASSERT_VALUES_EQUAL(
+            integrityRead->Get()->ChunkIdx, incrementData.GetExtentRef().GetIntegrityChunkIdx());
+        ctx.SendPDiskResponse(recovered, *integrityRead, new NPDisk::TEvChunkReadRawResult(
+            MakeRestoredIntegrityPair(recovered.SlotId, 0x100000 + recovered.PDiskId, 227, 5,
+                incrementData.GetExtentRef().GetVChunkGeneration(),
+                incrementData.GetExtentRef().GetIntegrityChunkIdx(),
+                incrementData.GetExtentRef().GetExtentSlot(),
+                incrementRecord.GetIncrement().GetIntegrityChunk().GetGeneration(), payload)));
+        auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(recovered);
+        UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->ChunkIdx, incrementData.GetChunkIdx());
+        ctx.SendPDiskResponse(recovered, *dataRead,
             new NPDisk::TEvChunkReadRawResult(TRope(payload)));
         auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
         AssertStatus(readResult, TReplyStatus::OK);
@@ -4109,14 +5096,21 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             {{olderIncrement, SnapshotLsn - 1}, {newerIncrement, SnapshotLsn + 1}});
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 228, 1);
 
-        for (const auto& [vChunkIndex, expectedChunk] :
-                std::vector<std::pair<ui64, ui32>>{{0, 500}, {1, 502}}) {
+        for (const auto& [vChunkIndex, expectedChunk, extentSlot, vChunkGeneration] :
+                std::vector<std::tuple<ui64, ui32, ui32, ui64>>{{0, 500, 0, 1}, {1, 502, 1, 2}}) {
+            const TString payload = MakeData('L', BlockSize);
             SendToDDisk(ctx, disk.ServiceId,
                 new NDDisk::TEvRead(creds, {vChunkIndex, 0, BlockSize}, {true}));
-            auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
-            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, expectedChunk);
-            ctx.SendPDiskResponse(disk, *readRaw,
-                new NPDisk::TEvChunkReadRawResult(TRope(MakeData('L', BlockSize))));
+            auto integrityRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(integrityRead->Get()->ChunkIdx, 600);
+            ctx.SendPDiskResponse(disk, *integrityRead, new NPDisk::TEvChunkReadRawResult(
+                MakeRestoredIntegrityPair(disk.SlotId, 0x100000 + disk.PDiskId,
+                    228, vChunkIndex, vChunkGeneration,
+                    600, extentSlot, 1, payload)));
+            auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->ChunkIdx, expectedChunk);
+            ctx.SendPDiskResponse(disk, *dataRead,
+                new NPDisk::TEvChunkReadRawResult(TRope(payload)));
             AssertStatus(WaitFromDDisk<NDDisk::TEvReadResult>(ctx), TReplyStatus::OK);
         }
     }
@@ -4161,9 +5155,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             NDDisk::TBlockSelector(0, 0, BlockSize));
         SendToDDisk(ctx, disk.ServiceId, sync.release());
         auto sourceRead = ctx.Runtime.WaitForEdgeActorEvent({sourceEdge});
+        const TString sourcePayload = MakeData('S', BlockSize);
         ctx.Runtime.Send(new IEventHandle(sourceRead->Sender, sourceEdge,
             new NDDisk::TEvReadResult(
-                TReplyStatus::OK, std::nullopt, TRope(MakeData('S', BlockSize))),
+                TReplyStatus::OK, std::nullopt, TRope(sourcePayload),
+                MakeBlockChecksums(sourcePayload)),
             0, sourceRead->Cookie), NodeId);
         auto allocation = ctx.CollectAllocationTraffic(disk, false, 1);
         const auto allocationRecord =
@@ -4320,14 +5316,16 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             NDDisk::TBlockSelector(0, BlockSize, BlockSize));
         SendToDDisk(ctx, disk.ServiceId, sync.release(), 402);
         auto sourceRead = ctx.Runtime.WaitForEdgeActorEvent({sourceEdge});
+        const TString sourcePayload = MakeData('B', BlockSize);
         ctx.Runtime.Send(new IEventHandle(sourceRead->Sender, sourceEdge,
             new NDDisk::TEvReadResult(
-                TReplyStatus::OK, std::nullopt, TRope(MakeData('B', BlockSize))),
+                TReplyStatus::OK, std::nullopt, TRope(sourcePayload),
+                MakeBlockChecksums(sourcePayload)),
             0, sourceRead->Cookie), NodeId);
-        auto syncWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
 
         ctx.SendPDiskResponse(disk, *allocation.DataWrites[0],
             new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto syncWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         ctx.SendPDiskResponse(disk, *syncWrite,
             new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertNoClientReplyBeforeSentinel(
@@ -4409,6 +5407,26 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT(WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx));
     }
 
+    Y_UNIT_TEST(BrokenIgnoresLateSerializedWriteResume) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(59, 1);
+        ctx.BootstrapDDisk(disk, TTestContext::ChunkSize, 1);
+        Connect(ctx, disk.ServiceId, 238, 1);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TDDiskActor::TEvPrivate::TEvIntegrityIoResult(
+                999903, TReplyStatus::ERROR, "injected failure before serialized resume"));
+
+        // EnterBroken clears SerializedWriteResumeScheduled but cannot recall a self-message
+        // already in the mailbox. The resume handler must not abort on the cleared flag.
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TDDiskActor::TEvPrivate::TEvHandleSerializedWriteForChunk(238, 0));
+
+        SendToDDisk(ctx, disk.PBServiceId,
+            new NDDisk::TEvGetPersistentBufferInfo(false, false));
+        UNIT_ASSERT(WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx));
+    }
+
     Y_UNIT_TEST(SyncErrorReplyStillGatedOnIncrementCommit) {
         // Unlike SyncReplyWaitsForCombinedIncrement, inject a target-write completion error after
         // a successful source read. The resulting ERROR reply obeys the same durability barrier.
@@ -4426,9 +5444,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             NDDisk::TBlockSelector(0, 0, BlockSize));
         SendToDDisk(ctx, disk.ServiceId, sync.release());
         auto sourceRead = ctx.Runtime.WaitForEdgeActorEvent({sourceEdge});
+        const TString sourcePayload = MakeData('S', BlockSize);
         ctx.Runtime.Send(new IEventHandle(sourceRead->Sender, sourceEdge,
             new NDDisk::TEvReadResult(
-                TReplyStatus::OK, std::nullopt, TRope(MakeData('S', BlockSize))),
+                TReplyStatus::OK, std::nullopt, TRope(sourcePayload),
+                MakeBlockChecksums(sourcePayload)),
             0, sourceRead->Cookie), NodeId);
         auto allocation = ctx.CollectAllocationTraffic(disk, true, 1);
 
@@ -4533,9 +5553,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         auto sourceRead = ctx.Runtime.WaitForEdgeActorEvent({fakeSourceEdge});
         UNIT_ASSERT_VALUES_EQUAL(sourceRead->GetTypeRewrite(), static_cast<ui32>(NDDisk::TEv::EvRead));
+        const TString sourcePayload = MakeData('S', BlockSize);
         ctx.Runtime.Send(new IEventHandle(sourceRead->Sender, fakeSourceEdge,
             new NDDisk::TEvReadResult(
-                TReplyStatus::OK, std::nullopt, TRope(MakeData('S', BlockSize))),
+                TReplyStatus::OK, std::nullopt, TRope(sourcePayload),
+                MakeBlockChecksums(sourcePayload)),
             0, sourceRead->Cookie), NodeId);
 
         auto snapshotLog = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvLog>(disk);
@@ -4651,13 +5673,198 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(writeResult, TReplyStatus::ERROR);
     }
 
+    Y_UNIT_TEST(RestoredColdReadsSharePairLoadAndWritePreservesMetadata) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+        constexpr ui64 TabletId = 255;
+        constexpr ui32 DataChunk = 500;
+        constexpr ui32 IntegrityChunk = 600;
+
+        TChunkMapLogRecord snapshotRecord;
+        auto* snapshot = snapshotRecord.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(TabletId);
+        auto* data = tablet->AddChunkRefs();
+        data->SetVChunkIndex(0);
+        data->SetChunkIdx(DataChunk);
+        data->MutableExtentRef()->SetIntegrityChunkIdx(IntegrityChunk);
+        data->MutableExtentRef()->SetExtentSlot(0);
+        data->MutableExtentRef()->SetVChunkGeneration(1);
+        auto* integrity = snapshot->AddIntegrityChunks();
+        integrity->SetChunkIdx(IntegrityChunk);
+        integrity->SetGeneration(1);
+        snapshot->SetGenerationCounter(1);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(77, 1);
+        ctx.BootstrapDDisk(
+            disk, TTestContext::ChunkSize, MinChunksReserved,
+            &snapshotRecord, 10);
+        NDDisk::TQueryCredentials creds =
+            Connect(ctx, disk.ServiceId, TabletId, 1);
+        const TString oldPayload = MakeData('R', BlockSize);
+        const ui64 oldChecksum =
+            NDDisk::CalculateRawChecksum(oldPayload.data(), oldPayload.size());
+
+        std::vector<std::unique_ptr<IEventHandle>> heldReads;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && ev->GetTypeRewrite()
+                        == NPDisk::TEvCheckSpace::EventType) {
+                ctx.Runtime.Send(new IEventHandle(
+                    ev->Sender,
+                    disk.PDiskEdge,
+                    new NPDisk::TEvCheckSpaceResult(
+                        NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                    0,
+                    ev->Cookie), NodeId);
+                return false;
+            }
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && ev->GetTypeRewrite() == NPDisk::TEvChunkReadRaw::EventType) {
+                heldReads.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}), 701);
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}), 702);
+        ui32 eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return heldReads.size() < 2 && ++eventsProcessed <= 300;
+        });
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(heldReads.size(), 1,
+            "concurrent cold reads of one checksum pair must share one metadata load");
+
+        auto integrityRead =
+            std::unique_ptr<TEventHandle<NPDisk::TEvChunkReadRaw>>(
+                reinterpret_cast<TEventHandle<NPDisk::TEvChunkReadRaw>*>(
+                    heldReads[0].release()));
+        UNIT_ASSERT_VALUES_EQUAL(integrityRead->Get()->ChunkIdx, IntegrityChunk);
+        ctx.SendPDiskResponse(disk, *integrityRead,
+            new NPDisk::TEvChunkReadRawResult(
+                MakeRestoredIntegrityPair(
+                    disk.SlotId, 0x100000 + disk.PDiskId,
+                    TabletId, 0, 1, IntegrityChunk, 0, 1, oldPayload)));
+
+        for (ui32 i = 0; i < 2; ++i) {
+            auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->ChunkIdx, DataChunk);
+            ctx.SendPDiskResponse(disk, *dataRead,
+                new NPDisk::TEvChunkReadRawResult(TRope(oldPayload)));
+        }
+        std::set<ui64> readCookies;
+        for (ui32 i = 0; i < 2; ++i) {
+            auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+            AssertStatus(readResult, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult->Get()->Record.GetChecksums(0), oldChecksum);
+            readCookies.insert(readResult->Cookie);
+        }
+        UNIT_ASSERT(readCookies == std::set<ui64>({701, 702}));
+
+        // The pair is now cached: another read must go straight to the data chunk.
+        heldReads.clear();
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && ev->GetTypeRewrite()
+                        == NPDisk::TEvCheckSpace::EventType) {
+                ctx.Runtime.Send(new IEventHandle(
+                    ev->Sender,
+                    disk.PDiskEdge,
+                    new NPDisk::TEvCheckSpaceResult(
+                        NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                    0,
+                    ev->Cookie), NodeId);
+                return false;
+            }
+            if (ev->GetRecipientRewrite() == disk.PDiskEdge
+                    && ev->GetTypeRewrite() == NPDisk::TEvChunkReadRaw::EventType) {
+                heldReads.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+        eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return heldReads.empty() && ++eventsProcessed <= 200;
+        });
+        ctx.Runtime.FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(heldReads.size(), 1);
+        auto cachedDataRead =
+            std::unique_ptr<TEventHandle<NPDisk::TEvChunkReadRaw>>(
+                reinterpret_cast<TEventHandle<NPDisk::TEvChunkReadRaw>*>(
+                    heldReads[0].release()));
+        UNIT_ASSERT_VALUES_EQUAL(cachedDataRead->Get()->ChunkIdx, DataChunk);
+        ctx.SendPDiskResponse(disk, *cachedDataRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(oldPayload)));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvReadResult>(ctx), TReplyStatus::OK);
+
+        // The first post-restart write updates block 1 but must carry block 0's restored
+        // checksum into the new ping-pong image.
+        const TString newPayload = MakeData('W', BlockSize);
+        const ui64 newChecksum =
+            NDDisk::CalculateRawChecksum(newPayload.data(), newPayload.size());
+        SendToDDisk(ctx, disk.ServiceId,
+            MakeWrite(creds, 0, BlockSize, newPayload).release());
+        auto write1 =
+            ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto write2 =
+            ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkWriteRaw>(disk);
+        auto* dataWrite =
+            write1->Get()->ChunkIdx == DataChunk ? write1.get() : write2.get();
+        auto* integrityWrite =
+            write1->Get()->ChunkIdx == DataChunk ? write2.get() : write1.get();
+        UNIT_ASSERT_VALUES_EQUAL(integrityWrite->Get()->ChunkIdx, IntegrityChunk);
+        const TString imageData = integrityWrite->Get()->Data.ConvertToString();
+        UNIT_ASSERT_VALUES_EQUAL(imageData.size(), sizeof(NDDisk::TIntegrityBlock));
+        NDDisk::TIntegrityBlock image;
+        memcpy(&image, imageData.data(), sizeof(image));
+        UNIT_ASSERT_VALUES_EQUAL(image.Header.Magic, NDDisk::MagicIntegrityBlock);
+        UNIT_ASSERT(image.Header.UsedBlocksBitmap[0] & 0x1);
+        UNIT_ASSERT(image.Header.UsedBlocksBitmap[0] & 0x2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NDDisk::UnsealBlockChecksum(
+                image.Checksums[0], disk.SlotId, 0x100000 + disk.PDiskId,
+                TabletId, 0, 0),
+            oldChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NDDisk::UnsealBlockChecksum(
+                image.Checksums[1], disk.SlotId, 0x100000 + disk.PDiskId,
+                TabletId, 0, 1),
+            newChecksum);
+
+        ctx.SendPDiskResponse(disk, *integrityWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        ctx.SendPDiskResponse(disk, *dataWrite,
+            new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+        auto untouchedRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(untouchedRead->Get()->ChunkIdx, DataChunk);
+        ctx.SendPDiskResponse(disk, *untouchedRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(oldPayload)));
+        auto untouchedResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(untouchedResult, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(
+            untouchedResult->Get()->Record.GetChecksums(0), oldChecksum);
+    }
+
     Y_UNIT_TEST(IntegrityMappingRestoredOnBootAndCutLogDeferred) {
         // The DataChunk -> IntegrityExtent mapping is persisted in the chunk-map snapshot and log
         // increments. On boot the DDisk must keep recovered integrity chunks that still have
         // extents, reclaim empty ones immediately (every restored chunk is Ready — a durable
         // increment is only logged after formatting), defer CutLog until replay has populated the
-        // manager, pass reads of restored data chunks through unchanged (bitmaps unknown), and keep
-        // the generation watermark monotonic.
+        // manager, lazily restore checksum pairs/bitmaps for reads, and keep the generation
+        // watermark monotonic.
         TTestContext ctx;
         const TDiskHandle disk = ctx.RegisterDDisk(25, 1);
 
@@ -4816,18 +6023,32 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT(ctx.AutoServedIntegrityWriteChunks.empty());
 
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 204, 1);
-        for (const auto& [vChunkIndex, chunkIdx] : std::vector<std::pair<ui64, ui32>>{{0, 500}, {1, 501}}) {
+        for (const auto& [vChunkIndex, chunkIdx, integrityChunkIdx] :
+                std::vector<std::tuple<ui64, ui32, ui32>>{{0, 500, 600}, {1, 501, 602}}) {
+            const TString payload = MakeData('R', BlockSize);
             SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {vChunkIndex, 0, BlockSize}, {true}));
-            auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
-            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, chunkIdx);
-            ctx.SendPDiskResponse(disk, *readRaw,
-                new NPDisk::TEvChunkReadRawResult(TRope(MakeData('R', BlockSize))));
+            auto integrityRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(integrityRead->Get()->ChunkIdx, integrityChunkIdx);
+            UNIT_ASSERT_VALUES_EQUAL(integrityRead->Get()->Size,
+                NDDisk::IntegrityPairSlots * NDDisk::IntegrityUnitSize);
+            ctx.SendPDiskResponse(disk, *integrityRead, new NPDisk::TEvChunkReadRawResult(
+                MakeRestoredIntegrityPair(disk.SlotId, 0x100000 + disk.PDiskId,
+                    204, vChunkIndex, 1,
+                    integrityChunkIdx, 0, 1, payload)));
+
+            auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->ChunkIdx, chunkIdx);
+            ctx.SendPDiskResponse(disk, *dataRead,
+                new NPDisk::TEvChunkReadRawResult(TRope(payload)));
             auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
             AssertStatus(readResult, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.GetChecksums(0),
+                NDDisk::CalculateRawChecksum(payload.data(), payload.size()));
         }
 
-        // A write to a restored chunk needs no allocation, log record or integrity formatting:
-        // it goes straight to the data chunk.
+        // A write to a restored chunk needs no allocation, log record or integrity formatting,
+        // but it does persist a new ping-pong slot alongside the data write.
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(0, 0, BlockSize), NDDisk::TWriteInstruction(0));
         write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('W', BlockSize)));
@@ -4838,7 +6059,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto writeResult = WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
         AssertStatus(writeResult, TReplyStatus::OK);
 
-        UNIT_ASSERT(ctx.AutoServedIntegrityWriteChunks.empty());
+        UNIT_ASSERT(!ctx.AutoServedIntegrityWriteChunks.empty());
 
         // A brand-new allocation (VChunk 2) draws its generation past the persisted watermark
         // (3) and reuses a free slot of the lowest restored chunk. The extent format write and
@@ -5931,6 +7152,242 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             "no PDisk request (deallocation) should be issued when ownedChunks == InitChunks");
 
         UNIT_ASSERT_VALUES_EQUAL(GetPBAllocatedChunks(ctx, disk), PersistentBufferInitChunks);
+    }
+
+    Y_UNIT_TEST(ChecksumsOnToOffTransitionBreaksDDisk) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+        constexpr ui64 TabletId = 501;
+        constexpr ui32 DataChunkIdx = 700;
+        constexpr ui32 IntegrityChunkIdx = 701;
+
+        TChunkMapLogRecord enabledSnapshot;
+        auto* snapshot = enabledSnapshot.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(TabletId);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(3);
+        chunk->SetChunkIdx(DataChunkIdx);
+        chunk->MutableExtentRef()->SetIntegrityChunkIdx(IntegrityChunkIdx);
+        chunk->MutableExtentRef()->SetExtentSlot(4);
+        chunk->MutableExtentRef()->SetVChunkGeneration(9);
+        auto* integrityChunk = snapshot->AddIntegrityChunks();
+        integrityChunk->SetChunkIdx(IntegrityChunkIdx);
+        integrityChunk->SetGeneration(8);
+        snapshot->SetGenerationCounter(9);
+
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const TDiskHandle disk =
+            ctx.RegisterDDisk(81, 1, std::nullopt, config);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &enabledSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = TabletId;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {3, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "integrity chunks while EnableChecksums=false");
+    }
+
+    Y_UNIT_TEST(ChecksumsOffToOnTransitionBreaksDDisk) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord disabledSnapshot;
+        disabledSnapshot.SetChecksumsDisabled(true);
+        auto* snapshot = disabledSnapshot.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(502);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(4);
+        chunk->SetChunkIdx(702);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(82, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &disabledSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 502;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {4, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "data chunks without integrity chunks while EnableChecksums=true");
+    }
+
+    Y_UNIT_TEST(ChecksumsEnabledRejectsMissingIntegrityChunks) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord snapshotWithDanglingExtent;
+        auto* snapshot = snapshotWithDanglingExtent.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(506);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(6);
+        chunk->SetChunkIdx(706);
+        chunk->MutableExtentRef()->SetIntegrityChunkIdx(707);
+        chunk->MutableExtentRef()->SetExtentSlot(0);
+        chunk->MutableExtentRef()->SetVChunkGeneration(1);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(86, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &snapshotWithDanglingExtent,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 506;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {6, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "data chunks without integrity chunks while EnableChecksums=true");
+    }
+
+    Y_UNIT_TEST(ChecksumsEnabledRejectsDataChunkWithoutExtent) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord transitionedSnapshot;
+        transitionedSnapshot.SetChecksumsDisabled(true);
+        auto* snapshot = transitionedSnapshot.MutableSnapshot();
+        auto* tablet = snapshot->AddTabletRecords();
+        tablet->SetTabletId(505);
+        auto* chunk = tablet->AddChunkRefs();
+        chunk->SetVChunkIndex(5);
+        chunk->SetChunkIdx(704);
+        auto* integrityChunk = snapshot->AddIntegrityChunks();
+        integrityChunk->SetChunkIdx(705);
+        integrityChunk->SetGeneration(1);
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(85, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &transitionedSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 505;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {5, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "data chunks without integrity extents while EnableChecksums=true");
+    }
+
+    Y_UNIT_TEST(EmptyDDiskAllowsChecksumsModeChange) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord disabledSnapshot;
+        disabledSnapshot.SetChecksumsDisabled(true);
+        disabledSnapshot.MutableSnapshot();
+
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.RegisterDDisk(83, 1);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &disabledSnapshot,
+            10);
+
+        const NDDisk::TQueryCredentials creds =
+            Connect(ctx, disk.ServiceId, 503, 1);
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {0, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(IntegrityChunksWithChecksumsDisabledBreaksDDisk) {
+        using TChunkMapLogRecord =
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+
+        TChunkMapLogRecord enabledSnapshot;
+        auto* integrityChunk =
+            enabledSnapshot.MutableSnapshot()->AddIntegrityChunks();
+        integrityChunk->SetChunkIdx(703);
+        integrityChunk->SetGeneration(1);
+
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const TDiskHandle disk =
+            ctx.RegisterDDisk(84, 1, std::nullopt, config);
+        ctx.BootstrapDDisk(
+            disk,
+            4u << 20,
+            MinChunksReserved,
+            &enabledSnapshot,
+            10);
+
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 504;
+        creds.Generation = 1;
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx,
+            disk.ServiceId,
+            new NDDisk::TEvRead(
+                creds,
+                {0, 0, BlockSize},
+                NDDisk::TReadInstruction(true)));
+        AssertStatus(readResult, TReplyStatus::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(
+            readResult->Get()->Record.GetErrorReason(),
+            "integrity chunks while EnableChecksums=false");
     }
 
 } // Y_UNIT_TEST_SUITE

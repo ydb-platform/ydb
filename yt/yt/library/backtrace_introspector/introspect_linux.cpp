@@ -186,7 +186,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Failed to get thread flags")
                 .With("ThreadId", threadId)
-                .With(TError(ex));
+                .With(ex);
             continue;
         }
 

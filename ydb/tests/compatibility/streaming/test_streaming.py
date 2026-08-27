@@ -5,6 +5,7 @@ import pytest
 import time
 
 from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
@@ -380,7 +381,8 @@ class StreamingTestBase:
             messages_count=len(expected_output),
             consumer_name=self.consumer_name,
             database=self.database_path,
-            endpoint=endpoint)
+            endpoint=endpoint,
+            timeout=plain_or_under_sanitizer(60, 300))
         if (len(read_data) != len(expected_output)):
             read_data = read_data[-len(expected_output):]        # deduplication disabled
         assert sorted(read_data) == sorted(expected_output)

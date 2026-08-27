@@ -6,6 +6,50 @@
 
 namespace NKikimr::NDDisk {
 
+    void TDDiskActor::ValidateChecksumsModeAfterLogReplay() {
+        if (!Config.EnableChecksums) {
+            if (!RestoredIntegrityMapping.IntegrityChunks.empty()) {
+                EnterBroken(TStringBuilder()
+                    << "restored " << RestoredIntegrityMapping.IntegrityChunks.size()
+                    << " integrity chunks while EnableChecksums=false");
+            }
+            return;
+        }
+
+        absl::flat_hash_set<TIntegrityManager::TDataChunkKey> coveredDataChunks;
+        coveredDataChunks.reserve(RestoredIntegrityMapping.Extents.size());
+        for (const auto& extent : RestoredIntegrityMapping.Extents) {
+            coveredDataChunks.insert(extent.Key);
+        }
+
+        size_t dataChunkCount = 0;
+        size_t uncoveredDataChunkCount = 0;
+        for (const auto& [tabletId, chunks] : ChunkRefs) {
+            for (const auto& [vChunkIndex, chunkRef] : chunks) {
+                if (!chunkRef.ChunkIdx) {
+                    continue;
+                }
+                ++dataChunkCount;
+                if (!coveredDataChunks.contains({tabletId, vChunkIndex})) {
+                    ++uncoveredDataChunkCount;
+                }
+            }
+        }
+
+        if (dataChunkCount && RestoredIntegrityMapping.IntegrityChunks.empty()) {
+            EnterBroken(TStringBuilder()
+                << "restored " << dataChunkCount
+                << " data chunks without integrity chunks while EnableChecksums=true");
+            return;
+        }
+
+        if (uncoveredDataChunkCount) {
+            EnterBroken(TStringBuilder()
+                << "restored " << uncoveredDataChunkCount << " of " << dataChunkCount
+                << " data chunks without integrity extents while EnableChecksums=true");
+        }
+    }
+
     void TDDiskActor::InitPDiskInterface() {
         Y_ABORT_UNLESS(!IsPersistentBufferActor);
         YDB_LOG_DEBUG("TDDiskActor::InitPDiskInterface",
@@ -34,10 +78,12 @@ namespace NKikimr::NDDisk {
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
         DiskFd = std::move(msg.DiskFd);
 
-        // The integrity manager needs the chunk size, so it is created here rather than in the ctor.
-        // VDiskSlotId + PDiskGuid identify this DDisk in TIntegrityChunkHeader.
-        IntegrityManager.emplace(DiskFormat->ChunkSize, BaseInfo.VDiskSlotId, BaseInfo.PDiskGuid,
-            Config.IntegrityChecksumCacheBytes);
+        if (Config.EnableChecksums) {
+            // The integrity manager needs the chunk size, so it is created here rather than in the ctor.
+            // VDiskSlotId + PDiskGuid identify this DDisk in TIntegrityChunkHeader.
+            IntegrityManager.emplace(DiskFormat->ChunkSize, BaseInfo.VDiskSlotId, BaseInfo.PDiskGuid,
+                Config.IntegrityChecksumCacheBytes);
+        }
         if (!DiskFd.IsOpen()) {
             YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) "
                 "DiskFd is invalid, all further I/O will be routed "
@@ -60,12 +106,14 @@ namespace NKikimr::NDDisk {
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
                     tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
                     ++*Counters.Chunks.ChunksOwned;
-                    const auto& ref = chunkRef.GetExtentRef();
-                    RestoredIntegrityMapping.Extents.push_back({
-                        .Key = {tabletRecord.GetTabletId(), chunkRef.GetVChunkIndex()},
-                        .DataChunkIdx = chunkRef.GetChunkIdx(),
-                        .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
-                    });
+                    if (chunkRef.HasExtentRef()) {
+                        const auto& ref = chunkRef.GetExtentRef();
+                        RestoredIntegrityMapping.Extents.push_back({
+                            .Key = {tabletRecord.GetTabletId(), chunkRef.GetVChunkIndex()},
+                            .DataChunkIdx = chunkRef.GetChunkIdx(),
+                            .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
+                        });
+                    }
                 }
             }
             for (const auto& chunk : snapshot.GetIntegrityChunks()) {
@@ -128,12 +176,14 @@ namespace NKikimr::NDDisk {
                                 ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()].ChunkIdx =
                                     data.GetChunkIdx();
                                 ++*Counters.Chunks.ChunksOwned;
-                                const auto& ref = data.GetExtentRef();
-                                RestoredIntegrityMapping.Extents.push_back({
-                                    .Key = {data.GetTabletId(), data.GetVChunkIndex()},
-                                    .DataChunkIdx = data.GetChunkIdx(),
-                                    .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
-                                });
+                                if (data.HasExtentRef()) {
+                                    const auto& ref = data.GetExtentRef();
+                                    RestoredIntegrityMapping.Extents.push_back({
+                                        .Key = {data.GetTabletId(), data.GetVChunkIndex()},
+                                        .DataChunkIdx = data.GetChunkIdx(),
+                                        .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
+                                    });
+                                }
                                 break;
                             }
                             default:
@@ -155,15 +205,19 @@ namespace NKikimr::NDDisk {
         }
 
         if (msg.IsEndOfLog) {
-            // Restore the DataChunk -> IntegrityExtent mapping accumulated from the snapshot and
-            // the replayed increments. Used-block bitmaps are not persisted, so the restored
-            // extents come up BitmapUnknown: reads of them pass through unchanged and new writes
-            // are tracked again (bitmap restore from the extents on disk is a later phase).
-            IntegrityManager->ApplyMappingSnapshot(RestoredIntegrityMapping);
+            ValidateChecksumsModeAfterLogReplay();
+            if (Config.EnableChecksums && !IsBroken()) {
+                // Restore the DataChunk -> IntegrityExtent mapping accumulated from the snapshot and
+                // the replayed increments. Used-block bitmaps are not persisted, so the restored
+                // extents come up BitmapUnknown: reads of them pass through unchanged and new writes
+                // are tracked again (bitmap restore from the extents on disk is a later phase).
+                IntegrityManager->ApplyMappingSnapshot(RestoredIntegrityMapping);
+                RestoredIntegrityMapping = {};
+                // A durable increment is only logged after formatting, so restored chunks are Ready.
+                // Empty integrity chunks (no restored extents) are released here.
+                ReclaimUnusedIntegrityChunks();
+            }
             RestoredIntegrityMapping = {};
-            // A durable increment is only logged after formatting, so restored chunks are Ready.
-            // Empty integrity chunks (no restored extents) are released here.
-            ReclaimUnusedIntegrityChunks();
             CreatePersistentBuffer();
 
             LogReplayComplete = true;

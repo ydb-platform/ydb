@@ -221,6 +221,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
                     ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
                 }
+                if (Cfg->DDiskConfig->HasEnableChecksums()) {
+                    ddiskConfig.EnableChecksums = Cfg->DDiskConfig->GetEnableChecksums();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {

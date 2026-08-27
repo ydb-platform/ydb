@@ -154,7 +154,7 @@ struct TIndexHash {
 template <typename T>
 using TNodeMapLimited = std::unordered_map<const TExprNode*, T, std::hash<const TExprNode*>, std::equal_to<const TExprNode*>, TStdIAllocator<std::pair<const TExprNode* const, T>>>;
 
-using TNodeSetLimited = std::unordered_set<const TExprNode*, std::hash<const TExprNode*>, std::equal_to<const TExprNode*>, TStdIAllocator<const TExprNode*>>;
+using TNodeSetLimited = std::unordered_set<const TExprNode*, std::hash<const TExprNode*>, std::equal_to<>, TStdIAllocator<const TExprNode*>>;
 
 template <class TKey,
           class TValue>
@@ -1884,7 +1884,6 @@ private:
         return newBuf;
     }
 
-private:
     const TExprNode& Root_;
     TTypeAnnotationContext& Ctx_;
     TExprContext& ExprCtx_;

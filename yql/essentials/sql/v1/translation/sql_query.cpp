@@ -382,7 +382,17 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
-            if (subquery && Mode_ == NSQLTranslation::ESqlMode::LIBRARY && Ctx_.ScopeLevel == 0) {
+            if (auto source = GetYqlSource(nodeExpr)) {
+                const auto alias = Ctx_.MakeName("yqlsubquerynode");
+                const auto ref = Ctx_.MakeName("yqlsubquery");
+
+                blocks.push_back(BuildYqlSubquery(source, alias));
+                blocks.back()->SetLabel(ref);
+
+                for (size_t i = 0; i < names.size(); ++i) {
+                    nodes.push_back(BuildYqlSubqueryRef(blocks.back(), ref));
+                }
+            } else if (subquery && Mode_ == NSQLTranslation::ESqlMode::LIBRARY && Ctx_.ScopeLevel == 0) {
                 for (size_t i = 0; i < names.size(); ++i) {
                     nodes.push_back(BuildInvalidSubqueryRef(subquery->GetPos()));
                 }
@@ -408,16 +418,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                 } else {
                     nodes.push_back(std::move(nodeExpr));
-                }
-            } else if (auto source = GetYqlSource(nodeExpr)) {
-                const auto alias = Ctx_.MakeName("yqlsubquerynode");
-                const auto ref = Ctx_.MakeName("yqlsubquery");
-
-                blocks.push_back(BuildYqlSubquery(source, alias));
-                blocks.back()->SetLabel(ref);
-
-                for (size_t i = 0; i < names.size(); ++i) {
-                    nodes.push_back(BuildYqlSubqueryRef(blocks.back(), ref));
                 }
             } else {
                 const auto ref = Ctx_.MakeName("namedexprnode");
@@ -533,7 +533,20 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TSourcePtr tableSource = nullptr;
             if (isCreateTableAs) {
-                tableSource = TSqlAsValues(*this).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
+                const auto& ruleVS = rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2();
+                TString sqlIntoUserModeStr = "CreateTableAs";
+                TNodePtr valuesNode = YqlSelectOrLegacy(
+                    [&]() -> TNodeResult {
+                        TSqlAsValues x(*this);
+                        x.SetYqlSelectProduced(true);
+                        return ToNode(x.Build(ruleVS, sqlIntoUserModeStr));
+                    },
+                    [&]() -> TNodePtr {
+                        TSqlAsValues x(*this);
+                        return Unwrap(ToNode(x.Build(ruleVS, sqlIntoUserModeStr)));
+                    },
+                    Ctx_.Pos());
+                tableSource = MoveOutIfSource(valuesNode);
                 if (!tableSource) {
                     return false;
                 }
@@ -4794,7 +4807,17 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
             case TRule_delete_stmt_TBlock5::kAlt2: {
                 const auto& alt = stmt.GetBlock5().GetAlt2();
 
-                auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "DELETE ON");
+                const auto& rule = alt.GetRule_into_values_source2();
+                TNodePtr valuesNode = YqlSelectOrLegacy(
+                    [&]() -> TNodeResult {
+                        return ToNode(BuildYqlSelect(*this, rule));
+                    },
+                    [&]() -> TNodePtr {
+                        TSqlIntoValues x(*this);
+                        return Unwrap(ToNode(x.Build(rule, "DELETE ON")));
+                    },
+                    Ctx_.TokenPosition(stmt.GetToken2()));
+                TSourcePtr values = MoveOutIfSource(valuesNode);
                 if (!values) {
                     return nullptr;
                 }
@@ -4872,7 +4895,17 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         case TRule_update_stmt_TBlock4::kAlt2: {
             const auto& alt = stmt.GetBlock4().GetAlt2();
 
-            auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "UPDATE ON");
+            const auto& rule = alt.GetRule_into_values_source2();
+            TNodePtr valuesNode = YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    return ToNode(BuildYqlSelect(*this, rule));
+                },
+                [&]() -> TNodePtr {
+                    TSqlIntoValues x(*this);
+                    return Unwrap(ToNode(x.Build(rule, "UPDATE ON")));
+                },
+                Ctx_.TokenPosition(stmt.GetToken2()));
+            TSourcePtr values = MoveOutIfSource(valuesNode);
             if (!values) {
                 return nullptr;
             }
@@ -4929,7 +4962,7 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
     FillTargetList(*this, stmt.GetRule_set_target_list1(), targetList);
 
     const TPosition pos(Ctx_.Pos());
-    auto parenthesis = stmt.GetRule_smart_parenthesis3();
+    const auto& parenthesis = stmt.GetRule_smart_parenthesis3();
 
     TNodePtr node = TSqlExpression(*this).BuildSourceOrNode(parenthesis);
     if (TSourcePtr source = MoveOutIfSource(node)) {

@@ -261,6 +261,22 @@ void RenderOverview(IOutputStream& str, const TFastPathServiceInfo& info)
     }
 }
 
+void RenderFreshPercentage(IOutputStream& str, const TDbgSnapshot& dbg)
+{
+    for (const auto& [vChunkId, vChunkConfig]: dbg.VChunkConfigs) {
+        TStringBuilder w;
+        for (auto host: vChunkConfig.GetDDisks()) {
+            if (auto watermark = vChunkConfig.GetWatermark(host)) {
+                w << PrintHostIndex(host) << ":" << *watermark;
+            }
+        }
+
+        if (w) {
+            str << vChunkId << "[" << w << "] ";
+        }
+    }
+}
+
 void RenderDbgList(
     IOutputStream& str,
     const TTabletInfo& tabletInfo,
@@ -289,10 +305,19 @@ void RenderDbgList(
                         str << "Inflight";
                     }
                     TABLEH () {
-                        str << "Consecutive errors";
+                        str << "Consecutive success / errors";
                     }
                     TABLEH () {
-                        str << "Consecutive success";
+                        str << "PBuffers usage";
+                    }
+                    TABLEH () {
+                        str << "Ahead";
+                    }
+                    TABLEH () {
+                        str << "Behind";
+                    }
+                    TABLEH () {
+                        str << "Fresh";
                     }
                 }
             }
@@ -302,6 +327,9 @@ void RenderDbgList(
                     size_t inflight = 0;
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
+                    TCountAndSize pBuffersUsage;
+                    TCountAndSize aheadBlocks;
+                    TCountAndSize behindBlocks;
                     for (const auto& host: dbg.Hosts) {
                         ++healthCounts[host.Health];
                         consecutiveErrors += host.Errors.ConsecutiveErrorCount;
@@ -312,6 +340,9 @@ void RenderDbgList(
                         {
                             inflight += host.InflightByOperation[operation];
                         }
+                        pBuffersUsage += host.PBuffersUsage;
+                        aheadBlocks += host.AheadBlocks;
+                        behindBlocks += host.BehindBlocks;
                     }
                     TABLER () {
                         TABLED () {
@@ -332,10 +363,20 @@ void RenderDbgList(
                             str << inflight;
                         }
                         TABLED () {
-                            str << consecutiveErrors;
+                            str << consecutiveErrors << " / "
+                                << consecutiveSuccesses;
                         }
                         TABLED () {
-                            str << consecutiveSuccesses;
+                            str << pBuffersUsage.Print(true);
+                        }
+                        TABLED () {
+                            str << aheadBlocks.Print(true);
+                        }
+                        TABLED () {
+                            str << behindBlocks.Print(true);
+                        }
+                        TABLED () {
+                            RenderFreshPercentage(str, dbg);
                         }
                     }
                 }
@@ -390,17 +431,16 @@ void RenderDbgDetail(
                         str << "PBuffer used";
                     }
                     TABLEH () {
+                        str << "Ahead blocks";
+                    }
+                    TABLEH () {
+                        str << "Behind blocks";
+                    }
+                    TABLEH () {
                         str << "Consecutive errors";
                     }
                     TABLEH () {
                         str << "Consecutive success";
-                    }
-                    for (size_t operation = 0; operation < OperationCount;
-                         ++operation)
-                    {
-                        TABLEH () {
-                            str << ToString(static_cast<EOperation>(operation));
-                        }
                     }
                 }
             }
@@ -417,13 +457,47 @@ void RenderDbgDetail(
                             str << ToString(host.Health);
                         }
                         TABLED () {
-                            str << host.PBufferUsedSize;
+                            str << host.PBuffersUsage.Print(true);
+                        }
+                        TABLED () {
+                            str << host.AheadBlocks.Print(true);
+                        }
+                        TABLED () {
+                            str << host.BehindBlocks.Print(true);
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveErrorCount;
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveSuccessCount;
+                        }
+                    }
+                }
+            }
+        }
+        TAG (TH4) {
+            str << "Inflight by operation";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Host";
+                    }
+                    for (size_t operation = 0; operation < OperationCount;
+                         ++operation)
+                    {
+                        TABLEH () {
+                            str << ToString(static_cast<EOperation>(operation));
+                        }
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& host: dbg.Hosts) {
+                    TABLER () {
+                        TABLED () {
+                            str << PrintHostIndex(host.Index);
                         }
                         for (size_t operation = 0; operation < OperationCount;
                              ++operation)
@@ -529,7 +603,7 @@ void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
                 }
             }
             TABLEBODY () {
-                for (const auto& config: db.VChunkConfigs) {
+                for (const auto& [vChunkIndex, config]: db.VChunkConfigs) {
                     TABLER () {
                         TABLED () {
                             str << config.GetVChunkIndex();
@@ -600,7 +674,7 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                     }
                     TABLED () {
                         if (vchunk.SafeBarrier) {
-                            str << *vchunk.SafeBarrier;
+                            str << vchunk.SafeBarrier->Print();
                         } else {
                             str << "-";
                         }

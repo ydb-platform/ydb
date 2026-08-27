@@ -30,7 +30,7 @@ public:
     };
 
 public:
-    TPartitionDatabase(NKikimr::NTable::TDatabase& database)
+    explicit TPartitionDatabase(NKikimr::NTable::TDatabase& database)
         : NKikimr::NIceDb::TNiceDb(database)
     {}
 
@@ -38,21 +38,18 @@ public:
 
     bool ReadVolumeConfig(
         TMaybe<NKikimrBlockStore::TVolumeConfig>& volumeConfig);
-
-    bool ReadDirectBlockGroupsConnections(
-        TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections);
-
-    bool ReadAllVChunkConfigs(TVector<TVChunkConfig>& out);
-
     void StoreVolumeConfig(
         const NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
+    bool ReadDirectBlockGroupsConnections(
+        TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections);
     void StoreDirectBlockGroupsConnections(
         const TDirectBlockGroupsConnections& directBlockGroupsConnections);
 
+    bool ReadAllVChunkConfigs(TVChunkConfigs& out);
     void StoreVChunkConfig(const TVChunkConfig& cfg);
 
-    bool ReadAllDirtyMapStates(TMap<ui32, TDirtyMapStateProto>& out);
+    bool ReadAllDirtyMapStates(TDirtyMapStateProtos& out);
     void StoreDirtyMapState(ui32 vChunkIndex, const TDirtyMapStateProto& state);
 
     bool ReadAddHostInProgress(TMaybe<TAddHostInProgress>& addHostInProgress);

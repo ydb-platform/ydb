@@ -89,12 +89,12 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TPBufferKey pBufferKey,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
         Y_UNUSED(traceId);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
@@ -117,14 +117,14 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TPBufferKey pBufferKey,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -301,7 +301,7 @@ size_t TBaseFixture::ReplyUpdateRequests()
 {
     auto requests = std::move(PartitionDirectService->UpdateConfigRequests);
     for (auto& r: requests) {
-        r.Promise.SetValue();
+        r.Promise.SetValue(EPersistResult::Success);
     }
     return requests.size();
 }
@@ -311,7 +311,7 @@ size_t TBaseFixture::ReplyUpdateDirtyMapStateRequests()
     auto requests =
         std::move(PartitionDirectService->UpdateDirtyMapStateRequests);
     for (auto& r: requests) {
-        r.Promise.SetValue();
+        r.Promise.SetValue(EPersistResult::Success);
     }
     return requests.size();
 }

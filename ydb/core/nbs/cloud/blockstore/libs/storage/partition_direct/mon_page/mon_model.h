@@ -1,9 +1,10 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/mind/bscontroller/types.h>
@@ -53,17 +54,6 @@ struct TFastPathServiceInfo
     size_t DbgCount = 0;
 };
 
-struct THostSnapshot
-{
-    THostIndex Index = InvalidHostIndex;
-    EHostState State = EHostState::Online;
-    EHostHealth Health = EHostHealth::Online;
-    TInflightByOperation InflightByOperation{};
-    THostStat::TErrorsInfo Errors;
-    ui64 PBufferUsedSize = 0;
-    TLatencyByOperation LatencyByOperation{};
-};
-
 struct TConnectionSnapshot
 {
     THostIndex HostIndex = InvalidHostIndex;
@@ -79,6 +69,7 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    TVChunkConfigs VChunkConfigs;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };
@@ -86,7 +77,7 @@ struct TDbgSnapshot
 struct TVChunkSnapshot
 {
     TVChunkConfig VChunkConfig;
-    std::optional<ui64> SafeBarrier;
+    std::optional<TPBufferKey> SafeBarrier;
     TString DirtyMapDump;
 };
 
@@ -98,7 +89,7 @@ struct TLocalDbContents
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
     // Persisted per-vchunk overrides.
-    TVector<TVChunkConfig> VChunkConfigs;
+    TVChunkConfigs VChunkConfigs;
 };
 
 struct TMonPageData

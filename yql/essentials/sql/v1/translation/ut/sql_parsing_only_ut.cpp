@@ -3090,7 +3090,7 @@ Y_UNIT_TEST(ForStatementLangVerFailure) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "FOR without EVALUATE is not available before language version 2026.02");
+        "FOR without EVALUATE is not available before language version 2026.03");
 }
 
 Y_UNIT_TEST(ForStatementLangVerSuccess) {
@@ -3114,7 +3114,7 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "PARALLEL FOR is not available before language version 2026.02");
+        "PARALLEL FOR is not available before language version 2026.03");
 }
 
 Y_UNIT_TEST(FunctionLangVerUnavailable) {
@@ -3247,13 +3247,14 @@ Y_UNIT_TEST(CombineLangverTest) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "Error: COMBINE is not available before language version 2026.02");
+        TStringBuilder() << "Error: COMBINE is not available before language version "
+                         << NYql::FormatLangVersion(NYql::NFeature::Combine.MinLangVer));
 }
 
 // TODO: rewrite to boilerplate
-NYql::TAstParseResult SqlToYql202602(const TString& query) {
+NYql::TAstParseResult SqlToYqlWithFeature(const TString& query, const NYql::TFeature& feature) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 2);
+    settings.LangVer = feature.MinLangVer;
     return SqlToYqlWithSettings(query, settings);
 }
 
@@ -3263,7 +3264,7 @@ Y_UNIT_TEST(CombineSmokeTest) {
                                ON A.key = B.key AND A.subkey = B.subkey
                                USING Foo::DoBar((A.value), (B.value)))sql";
 
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
@@ -3280,7 +3281,7 @@ Y_UNIT_TEST(CombineAsSubquery) {
                                    ON A.key = B.key
                                    USING Foo::DoBar((A.value), (B.value))
                                ))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
@@ -3295,7 +3296,7 @@ Y_UNIT_TEST(CombineSubselectInputs) {
                                WITH (SELECT key, value, extra FROM plato.Input) as B
                                ON A.key = B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
@@ -3310,7 +3311,7 @@ Y_UNIT_TEST(CombineDiscard) {
                                WITH plato.Input as B
                                ON A.key = B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "discard"};
@@ -3328,7 +3329,7 @@ Y_UNIT_TEST(CombineInSubquery) {
                                    USING Foo::Dobar((A.value), (B.value));
                                END DEFINE;
                                SELECT * FROM $q())sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "UnorderedSubquery "};
@@ -3343,7 +3344,7 @@ Y_UNIT_TEST(CombineTableRowArgs) {
                                WITH plato.Input as B PRESORT B.key, B.subkey
                                ON A.key = B.key AND A.subkey = B.subkey
                                USING Foo::DoBar(TableRow(), TableRow()))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "RemoveSystemMembers "};
@@ -3358,7 +3359,7 @@ Y_UNIT_TEST(CombineInvalidArgc) {
                                WITH plato.Input as B PRESORT B.key, B.subkey
                                ON A.key = B.key AND A.subkey = B.subkey
                                USING Foo::DoBar(TableRow()))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3370,7 +3371,7 @@ Y_UNIT_TEST(CombineOnNotEquality) {
                                WITH plato.Input as B
                                ON A.key > B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3382,7 +3383,7 @@ Y_UNIT_TEST(CombineOnNonColumnArg) {
                                WITH plato.Input as B
                                ON A.key = 1
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3394,7 +3395,7 @@ Y_UNIT_TEST(CombineOnColumnWithoutCorrelation) {
                                WITH plato.Input as B
                                ON key = B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3406,7 +3407,7 @@ Y_UNIT_TEST(CombineOnUnknownCorrelation) {
                                WITH plato.Input as B
                                ON A.key = C.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3418,7 +3419,7 @@ Y_UNIT_TEST(CombineOnSameCorrelationBothSides) {
                                WITH plato.Input as B
                                ON A.key = A.subkey
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),

@@ -501,6 +501,7 @@ public:
             unpreparedBatch.TotalDataSize += shardBatchMemory;
             Memory += shardBatchMemory;
             unpreparedBatch.Batches.emplace_back(shardBatch);
+            UnpreparedBatchedCount++;
 
             FlushUnpreparedBatch(shardId, unpreparedBatch, force);
         }
@@ -513,6 +514,8 @@ public:
             while (!unpreparedBatch.Batches.empty()) {
                 auto batch = unpreparedBatch.Batches.front();
                 unpreparedBatch.Batches.pop_front();
+                AFL_ENSURE(UnpreparedBatchedCount > 0);
+                UnpreparedBatchedCount--;
                 AFL_ENSURE(batch->num_rows() > 0);
                 const auto batchDataSize = NArrow::GetBatchDataSize(batch);
                 unpreparedBatch.TotalDataSize -= batchDataSize;
@@ -530,6 +533,7 @@ public:
                     if (toPrepareSize + nextRowSize >= (i64)ColumnShardMaxOperationBytes) {
                         toPrepare.push_back(batch->Slice(0, index));
                         unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
+                        UnpreparedBatchedCount++;
 
                         const auto newBatchDataSize = NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
 
@@ -588,7 +592,7 @@ public:
     }
 
     bool IsEmpty() override {
-        return Batches.empty();
+        return UnpreparedBatchedCount == 0 && Batches.empty();
     }
 
     bool IsFinished() override {
@@ -643,7 +647,7 @@ private:
     THashSet<ui64> ShardIds;
 
     i64 Memory = 0;
-
+    ui64 UnpreparedBatchedCount = 0;
     bool Closed = false;
 };
 
@@ -1022,6 +1026,7 @@ private:
 
     bool Closed = false;
 };
+
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -1118,7 +1123,7 @@ public:
             case NScheme::NTypeIds::Json: {
                 TString error;
                 tokens = NJsonIndex::TokenizeJson(text, error);
-                YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                // Ignore errors, JSON is already validated
                 break;
             }
             case NScheme::NTypeIds::JsonDocument:

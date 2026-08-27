@@ -17,7 +17,6 @@ public:
     {
     }
 
-public:
     T* Fetch() override {
         if (I_ >= Data_.size()) {
             return nullptr;

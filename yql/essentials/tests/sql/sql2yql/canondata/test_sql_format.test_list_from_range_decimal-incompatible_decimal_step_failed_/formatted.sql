@@ -1,0 +1,10 @@
+PRAGMA config.flags('DecimalCommonTypeConversionMode', 'with_common_type_fixup');
+
+/* custom error: Cannot infer common type for Decimal(35,1) and Decimal(35,34): common precision is 68, that is greater than 35 */
+SELECT
+    ListFromRange(
+        Decimal('1', 35, 1),
+        Decimal('2', 35, 1),
+        Decimal('0.1', 35, 34)
+    ) AS incompatible_step
+;

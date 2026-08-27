@@ -152,7 +152,7 @@ void TSolomonExporter::Start()
             DoCollect();
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Sensor collector crashed")
-                .With(TError(ex));
+                .With(ex);
         }
     })
         .AsyncVia(ControlQueue_->GetInvoker())
@@ -722,7 +722,7 @@ void TSolomonExporter::DoHandleShard(
             .ThrowOnError();
     } catch(const std::exception& ex) {
         YT_TLOG_DEBUG("Failed to export sensors")
-            .With(TError(ex));
+            .With(ex);
         responsePromise.TrySet(TError(ex));
 
         if (!rsp->AreHeadersFlushed()) {
@@ -736,7 +736,7 @@ void TSolomonExporter::DoHandleShard(
                     .ThrowOnError();
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Failed to send export error")
-                    .With(TError(ex));
+                    .With(ex);
             }
         }
     }

@@ -15,6 +15,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/throttling/simple_leaky_bucket.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -54,18 +55,21 @@ private:
     struct TPBufferCleanupGather
     {
         std::atomic<bool> Active{false};
-        TVector<std::optional<ui64>> SafeBarriers;
+        TVector<std::optional<TPBufferKey>> SafeBarriers;
         std::atomic<size_t> PendingResponses{0};
     };
 
     TPBufferCleanupGather CleanupGather;
 
-    // Result of the last finished cleanup round: the minimum safe barrier
-    // across all DBGs. 0 until the first round finishes.
+    // Result of the last finished cleanup round: the lsn of the minimum safe
+    // barrier across all DBGs. 0 until the first round finishes.
     std::atomic<ui64> LastSafeBarrier{0};
 
     TAdaptiveLock PBufferBarrierLock;
     TMap<NKikimr::NBsController::TDDiskId, ui64> LastSentBarrierByPBuffer;
+
+    TAdaptiveLock CopyRangeBucketLock;
+    std::optional<TSimpleLeakyBucket> CopyRangeBucket;
 
 public:
     TFastPathService(
@@ -75,7 +79,8 @@ public:
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        TVChunkConfigByIndex vChunkConfigs,
+        const TVChunkConfigs& vChunkConfigs,
+        const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
@@ -120,10 +125,9 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    NThreading::TFuture<void> UpdateVChunkConfig(
-        const TVChunkConfig& cfg) override;
+    TPersistResultFuture UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
-    NThreading::TFuture<void> UpdateDirtyMapState(
+    TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
 
@@ -136,6 +140,8 @@ public:
     bool TryAdvancePBufferBarrier(
         const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
         ui64 lsn) override;
+
+    TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
@@ -161,7 +167,7 @@ private:
     void PBufferCleanup();
     void OnGatherSafeBarrierForErase(
         size_t dbgIndex,
-        std::optional<ui64> safeBarrier);
+        std::optional<TPBufferKey> safeBarrier);
     void FinishPBufferCleanup();
 };
 

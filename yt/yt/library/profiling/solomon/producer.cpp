@@ -179,7 +179,7 @@ void DoCollectBatch(
             }
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Producer read failed")
-                .With(TError(ex));
+                .With(ex);
             continue;
         }
     }

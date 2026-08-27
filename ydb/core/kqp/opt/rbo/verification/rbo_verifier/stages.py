@@ -161,6 +161,14 @@ class Evaluator:
                 ),
                 ordinals=relation.ordinals,
                 present_prefix=relation.present_prefix,
+                null_safe_unique_key=_retained_key(
+                    relation.null_safe_unique_key,
+                    output,
+                ),
+                task_partition_key=_retained_key(
+                    relation.task_partition_key,
+                    output,
+                ),
             ),
         )
 
@@ -252,6 +260,7 @@ class Evaluator:
                 sequence=relation.sequence,
                 order=relation.order,
                 ordinals=relation.ordinals,
+                null_safe_unique_key=relation.null_safe_unique_key,
             )
 
         scan_partitions = tuple(
@@ -340,6 +349,8 @@ class Evaluator:
                     sequence=relation.sequence,
                     order=relation.order,
                     ordinals=relation.ordinals,
+                    null_safe_unique_key=relation.null_safe_unique_key,
+                    task_partition_key=frozenset(edge.keys),
                 )
 
             return Partitions(
@@ -388,6 +399,7 @@ class Evaluator:
                         for relation in relations
                         for ordinal in _sequence_ordinals(relation)
                     ),
+                    null_safe_unique_key=_gathered_unique_key(relations),
                 )
 
             groups = []
@@ -412,6 +424,39 @@ class Evaluator:
 def _canonical(value: Value) -> smt.Term:
     default = smt.FALSE if value.value.sort == smt.BOOL else smt.ZERO
     return smt.ite(value.is_null, default, value.value)
+
+
+def _retained_key(
+    key: frozenset[str] | None,
+    output: tuple[str, ...],
+) -> frozenset[str] | None:
+    if key is None:
+        return None
+    return key if key <= frozenset(output) else None
+
+
+def _gathered_unique_key(
+    relations: tuple[Relation, ...],
+) -> frozenset[str] | None:
+    """Promote a local key only when task routing makes it globally unique."""
+
+    if not relations:
+        return None
+    key = relations[0].null_safe_unique_key
+    if key is None or any(
+        relation.null_safe_unique_key != key
+        for relation in relations[1:]
+    ):
+        return None
+    if len(relations) == 1:
+        return key
+    partition = relations[0].task_partition_key
+    if partition is None or any(
+        relation.task_partition_key != partition
+        for relation in relations[1:]
+    ):
+        return None
+    return key if partition <= key else None
 
 
 def _gather(
@@ -444,6 +489,7 @@ def _gather(
                 order=relation.order,
                 ordinals=relation.ordinals,
                 present_prefix=relation.present_prefix,
+                null_safe_unique_key=_gathered_unique_key(relations),
             )
         rows = tuple(row for relation in relations for row in relation.rows)
         return Relation(
@@ -461,6 +507,7 @@ def _gather(
                     )
                 ),
             ),
+            null_safe_unique_key=_gathered_unique_key(relations),
         )
 
     return combine_families(families, gather)

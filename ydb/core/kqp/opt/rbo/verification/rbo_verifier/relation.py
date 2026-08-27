@@ -85,9 +85,34 @@ class Relation:
     order: tuple[SortOrder, ...] | None = None
     ordinals: tuple[smt.Term, ...] | None = None
     present_prefix: bool = False
+    # Private semantic certificates.  They are derived from the modeled plan
+    # and deliberately never enter the snapshot wire format.
+    null_safe_unique_key: frozenset[str] | None = None
+    task_partition_key: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         _require_relation_rows(len(self.rows), "relation")
+        column_names = frozenset(column.name for column in self.columns)
+        for name, key in (
+            ("null-safe unique key", self.null_safe_unique_key),
+            ("task partition key", self.task_partition_key),
+        ):
+            if key is None:
+                continue
+            if (
+                type(key) is not frozenset
+                or not key
+                or any(type(column) is not str or not column for column in key)
+            ):
+                raise ValueError(
+                    f"relation {name} must be a non-empty frozenset of column names"
+                )
+            missing = key - column_names
+            if missing:
+                raise ValueError(
+                    f"relation {name} columns are absent: "
+                    f"{', '.join(sorted(missing))}"
+                )
         if self.ordinals is not None:
             if len(self.ordinals) != len(self.rows):
                 raise ValueError("relation ordinals must align with rows")
@@ -608,6 +633,14 @@ class Evaluator:
                 order=_retained_order(relation.order, output),
                 ordinals=relation.ordinals,
                 present_prefix=relation.present_prefix,
+                null_safe_unique_key=_retained_key(
+                    relation.null_safe_unique_key,
+                    output,
+                ),
+                task_partition_key=_retained_key(
+                    relation.task_partition_key,
+                    output,
+                ),
             ),
         )
 
@@ -788,6 +821,14 @@ class Evaluator:
                     order=_projected_order(relation.order, node),
                     ordinals=relation.ordinals,
                     present_prefix=relation.present_prefix,
+                    null_safe_unique_key=_projected_key(
+                        relation.null_safe_unique_key,
+                        node,
+                    ),
+                    task_partition_key=_projected_key(
+                        relation.task_partition_key,
+                        node,
+                    ),
                 )
 
             marked_sources = tuple(
@@ -918,6 +959,8 @@ class Evaluator:
                     sequence=relation.sequence,
                     order=relation.order,
                     ordinals=relation.ordinals,
+                    null_safe_unique_key=relation.null_safe_unique_key,
+                    task_partition_key=relation.task_partition_key,
                 ),
             )
 
@@ -1139,6 +1182,8 @@ class Evaluator:
                 order=None,
                 ordinals=None,
                 present_prefix=False,
+                null_safe_unique_key=source.null_safe_unique_key,
+                task_partition_key=source.task_partition_key,
             ),
             tuple(relational_values),
             smt.and_(*enabled),
@@ -1261,6 +1306,8 @@ class Evaluator:
                 order=None,
                 ordinals=None,
                 present_prefix=False,
+                null_safe_unique_key=source.null_safe_unique_key,
+                task_partition_key=source.task_partition_key,
             ),
             tuple(relational_values),
             smt.and_(*enabled),
@@ -1362,7 +1409,15 @@ class Evaluator:
             )
         else:
             rows.extend(self._grouped_aggregate_rows(node, source))
-        return Relation(self._columns(node.id), tuple(rows))
+        return Relation(
+            self._columns(node.id),
+            tuple(rows),
+            null_safe_unique_key=_aggregate_unique_key(node),
+            task_partition_key=_aggregate_partition_key(
+                node,
+                source.task_partition_key,
+            ),
+        )
 
     def _grouped_aggregate_rows(
         self,
@@ -2001,6 +2056,8 @@ class Evaluator:
                     )
                     for row in relation.rows
                 ),
+                null_safe_unique_key=None,
+                task_partition_key=None,
             ),
         )
 
@@ -2072,6 +2129,8 @@ class Evaluator:
                     if relation.ordinals is None
                     else tuple(relation.ordinals[index] for index in indices)
                 ),
+                null_safe_unique_key=relation.null_safe_unique_key,
+                task_partition_key=relation.task_partition_key,
             )
 
         return map_family(source, prune), changed
@@ -3264,6 +3323,72 @@ def _retained_order(
     return order if all(item.column in available for item in order) else None
 
 
+def _retained_key(
+    key: frozenset[str] | None,
+    output: tuple[str, ...],
+) -> frozenset[str] | None:
+    """Retain a certificate only when its complete key remains observable."""
+
+    if key is None:
+        return None
+    return key if key <= frozenset(output) else None
+
+
+def _projected_key(
+    key: frozenset[str] | None,
+    project: Project,
+) -> frozenset[str] | None:
+    """Map a certificate through exact, null-preserving column aliases."""
+
+    if key is None:
+        return None
+    aliases: dict[str, list[str]] = {}
+    for projection in project.columns:
+        expression = projection.expression
+        if (
+            expression.kind == "column"
+            and expression.column is not None
+            and not projection.error_on_null
+        ):
+            aliases.setdefault(expression.column, []).append(projection.output)
+
+    result: list[str] = []
+    for source in sorted(key):
+        outputs = aliases.get(source, ())
+        if not outputs:
+            return None
+        result.append(source if source in outputs else outputs[0])
+    projected = frozenset(result)
+    return projected if len(projected) == len(key) else None
+
+
+def _aggregate_unique_key(node: Aggregate) -> frozenset[str] | None:
+    """Mint the complete null-safe grouping key in the output schema."""
+
+    if not node.keys:
+        return None
+    if node.distinct_all:
+        return frozenset(trait.output for trait in node.aggregates)
+    return frozenset(node.keys)
+
+
+def _aggregate_partition_key(
+    node: Aggregate,
+    key: frozenset[str] | None,
+) -> frozenset[str] | None:
+    """Retain task disjointness only when grouping cannot combine its key."""
+
+    if key is None or not key <= frozenset(node.keys):
+        return None
+    if not node.distinct_all:
+        return key
+    aliases = {
+        source: trait.output
+        for source, trait in zip(node.keys, node.aggregates)
+    }
+    return frozenset(aliases[source] for source in key)
+
+
 def _projected_order(
     order: tuple[SortOrder, ...] | None,
     project: Project,
@@ -3444,6 +3569,8 @@ def _strip_integral_average_certificates(
                 )
                 for row in relation.rows
             ),
+            null_safe_unique_key=relation.null_safe_unique_key,
+            task_partition_key=relation.task_partition_key,
         ),
     )
 
@@ -3531,16 +3658,21 @@ def sort_family(
 
     A single-outcome family with at most three candidate rows stays
     quantifier-free for solver performance.  Moderate full sorts use bounded
-    ordinal choices.  Larger sorts, and TopSort inputs whose selected prefix
-    must be compacted before a downstream Merge, use a fixed compare-exchange
-    network with finite tie ranks.  Each representation denotes the same exact
-    tie-respecting sequence language and is selected under explicit
+    ordinal choices.  A certified complete unique key makes the SQL order
+    total, so predecessor counts provide its sole sequence without choices.
+    Larger sorts, and TopSort inputs whose selected prefix must be compacted
+    before a downstream Merge, use a fixed compare-exchange network with
+    finite tie ranks.  Each representation is selected under explicit
     construction budgets.
     """
 
     if not order:
         raise RelationError("sort order must not be empty")
     _require_order_columns(source.columns, order, "sort")
+    unique_order = all(
+        _order_covers_unique_key(outcome.relation, order)
+        for outcome in source.outcomes
+    )
     if all(_live_row_count(outcome.relation) <= 1 for outcome in source.outcomes):
         outcomes: list[Outcome] = []
         for source_outcome in source.outcomes:
@@ -3559,6 +3691,8 @@ def sort_family(
                         relation.rows,
                         sequence=True,
                         order=order,
+                        null_safe_unique_key=relation.null_safe_unique_key,
+                        task_partition_key=relation.task_partition_key,
                     ),
                     source_outcome.error,
                     source_outcome.decisions,
@@ -3607,6 +3741,7 @@ def sort_family(
             order,
             script,
             decision,
+            deterministic_ties=unique_order,
         )
     _require_sort_construction_capacity(
         pair_count,
@@ -3614,6 +3749,8 @@ def sort_family(
         payload_cells,
         len(order),
     )
+    if unique_order:
+        return _unique_order_family(source, order)
     if len(source.outcomes) == 1 and _use_enumerated_sequences(source):
         return _enumerated_sort_family(source, order, decision)
     outcomes: list[Outcome] = []
@@ -3640,6 +3777,8 @@ def sort_family(
                     sequence=True,
                     order=order,
                     ordinals=ordinals,
+                    null_safe_unique_key=relation.null_safe_unique_key,
+                    task_partition_key=relation.task_partition_key,
                 ),
                 source_outcome.error,
                 source_outcome.decisions,
@@ -3648,6 +3787,70 @@ def sort_family(
         )
     if not outcomes:
         raise RelationError("sort produced no outcomes")
+    return RelationFamily(tuple(outcomes))
+
+
+def _order_covers_unique_key(
+    relation: Relation,
+    order: tuple[SortOrder, ...],
+) -> bool:
+    key = relation.null_safe_unique_key
+    return key is not None and key <= frozenset(item.column for item in order)
+
+
+def _unique_order_family(
+    source: RelationFamily,
+    order: tuple[SortOrder, ...],
+) -> RelationFamily:
+    """Use exact predecessor counts for a certificate-backed total order."""
+
+    outcomes: list[Outcome] = []
+    for source_outcome in source.outcomes:
+        relation = source_outcome.relation
+        if not _order_covers_unique_key(relation, order):
+            raise RelationError("unique order does not cover its certified key")
+        live_indices = _live_row_indices(relation.rows)
+        ordinals = [smt.ZERO] * len(relation.rows)
+        for index in live_indices:
+            row = relation.rows[index]
+            predecessor_count = smt.add(
+                *(
+                    smt.ite(
+                        smt.and_(
+                            relation.rows[other].present,
+                            _row_less(relation.rows[other], row, order),
+                        ),
+                        smt.ONE,
+                        smt.ZERO,
+                    )
+                    for other in live_indices
+                    if other != index
+                )
+            )
+            ordinals[index] = smt.ite(
+                row.present,
+                predecessor_count,
+                smt.ZERO,
+            )
+        outcomes.append(
+            Outcome(
+                source_outcome.enabled,
+                Relation(
+                    relation.columns,
+                    relation.rows,
+                    sequence=True,
+                    order=order,
+                    ordinals=tuple(ordinals),
+                    null_safe_unique_key=relation.null_safe_unique_key,
+                    task_partition_key=relation.task_partition_key,
+                ),
+                source_outcome.error,
+                source_outcome.decisions,
+                source_outcome.choices,
+            )
+        )
+    if not outcomes:
+        raise RelationError("unique sort produced no outcomes")
     return RelationFamily(tuple(outcomes))
 
 
@@ -3689,6 +3892,8 @@ def _enumerated_sort_family(
                         rows,
                         sequence=True,
                         order=order,
+                        null_safe_unique_key=relation.null_safe_unique_key,
+                        task_partition_key=relation.task_partition_key,
                     ),
                     source_outcome.error,
                     tuple(sorted(
@@ -4036,14 +4241,17 @@ def _sorting_network_family(
     script: smt.Script,
     decision: str,
     producer_groups: tuple[tuple[int, ...], ...] | None = None,
+    *,
+    deterministic_ties: bool = False,
 ) -> RelationFamily:
     """Sort exactly with a compact, fixed-topology compare-exchange network.
 
     One finite permutation rank travels with each candidate row. SQL keys
-    dominate that rank; the rank only chooses among exact ties. Therefore all
-    and only tie-respecting sequences are represented. Present rows dominate
-    absent rows, so the fixed output slots form a present prefix that ordered
-    Limit can slice without constructing every row pair.
+    dominate that rank; the rank only chooses among exact ties. A certified
+    complete unique key permits fixed concrete ranks because present rows
+    cannot tie. Otherwise all and only tie-respecting sequences are represented.
+    Present rows dominate absent rows, so the fixed output slots form a present
+    prefix that ordered Limit can slice without constructing every row pair.
 
     Merge additionally orders the ranks along each producer's semantic
     sequence. Fixed producer orders use a chain; symbolic producer orders use
@@ -4052,6 +4260,13 @@ def _sorting_network_family(
     """
 
     _require_order_columns(source.columns, order, "sort")
+    if deterministic_ties and any(
+        not _order_covers_unique_key(outcome.relation, order)
+        for outcome in source.outcomes
+    ):
+        raise RelationError(
+            "deterministic sorting-network ties require a unique key"
+        )
     outcomes: list[Outcome] = []
     for outcome_index, source_outcome in enumerate(source.outcomes):
         relation = source_outcome.relation
@@ -4072,6 +4287,8 @@ def _sorting_network_family(
                         sequence=True,
                         order=order,
                         present_prefix=True,
+                        null_safe_unique_key=relation.null_safe_unique_key,
+                        task_partition_key=relation.task_partition_key,
                     ),
                     source_outcome.error,
                     source_outcome.decisions,
@@ -4089,6 +4306,8 @@ def _sorting_network_family(
                         sequence=True,
                         order=order,
                         present_prefix=True,
+                        null_safe_unique_key=relation.null_safe_unique_key,
+                        task_partition_key=relation.task_partition_key,
                     ),
                     source_outcome.error,
                     source_outcome.decisions,
@@ -4103,20 +4322,25 @@ def _sorting_network_family(
         }
         tie_ranks: list[smt.Term] = []
         tie_choices: list[BoundedChoice] = []
-        for row_index in range(len(rows)):
-            rank = script.fresh_constant(
-                f"{decision}:network:{outcome_index}:tie:{row_index}",
-                smt.INT,
+        if deterministic_ties:
+            tie_ranks.extend(
+                smt.int_value(row_index) for row_index in range(len(rows))
             )
-            tie_ranks.append(rank)
-            tie_choices.append(BoundedChoice(rank, len(rows)))
-        script.register_quantified_choices(
-            (rank, len(rows))
-            for rank in tie_ranks
-        )
+        else:
+            for row_index in range(len(rows)):
+                rank = script.fresh_constant(
+                    f"{decision}:network:{outcome_index}:tie:{row_index}",
+                    smt.INT,
+                )
+                tie_ranks.append(rank)
+                tie_choices.append(BoundedChoice(rank, len(rows)))
+            script.register_quantified_choices(
+                (rank, len(rows))
+                for rank in tie_ranks
+            )
 
-        constraints = [smt.distinct(*tie_ranks)]
-        if producer_groups is not None:
+        constraints = [] if deterministic_ties else [smt.distinct(*tie_ranks)]
+        if producer_groups is not None and not deterministic_ties:
             input_ordinals = relation.ordinals
             for group in producer_groups:
                 members = tuple(
@@ -4258,6 +4482,8 @@ def _sorting_network_family(
                     sequence=True,
                     order=order,
                     present_prefix=True,
+                    null_safe_unique_key=relation.null_safe_unique_key,
+                    task_partition_key=relation.task_partition_key,
                 ),
                 source_outcome.error,
                 source_outcome.decisions,
@@ -4376,12 +4602,20 @@ def merge_family(
         for outcome in source.outcomes
     ):
         raise RelationError("merge outcomes have different row shapes")
+    unique_order = all(
+        _order_covers_unique_key(outcome.relation, order)
+        for outcome in source.outcomes
+    )
     pair_count = max(
         (
             _unordered_row_pairs(_live_row_count(outcome.relation))
             for outcome in source.outcomes
         ),
         default=0,
+    )
+    unique_pair_count = sum(
+        _unordered_row_pairs(_live_row_count(outcome.relation))
+        for outcome in source.outcomes
     )
     network_count = sum(
         _sorting_network_cost(_live_row_count(outcome.relation))
@@ -4396,7 +4630,10 @@ def merge_family(
         network_count <= MAX_SORT_NETWORK_COMPARATORS
         and payload_cells <= MAX_SORT_NETWORK_PAYLOAD_CELLS
         and len(order) <= MAX_SORT_NETWORK_KEY_COLUMNS
-        and producer_pair_count <= MAX_RELATION_ROW_PAIRS
+        and (
+            unique_order
+            or producer_pair_count <= MAX_RELATION_ROW_PAIRS
+        )
     )
 
     def use_network() -> RelationFamily:
@@ -4406,6 +4643,17 @@ def merge_family(
             script,
             decision,
             groups,
+            deterministic_ties=unique_order,
+        )
+
+    if unique_order:
+        if unique_pair_count <= MAX_RELATION_ROW_PAIRS:
+            return _unique_order_family(source, order)
+        if network_fits:
+            return use_network()
+        _require_relation_row_pairs(
+            unique_pair_count,
+            "merge unique-order construction",
         )
 
     if pair_count > MAX_RELATION_ROW_PAIRS:
@@ -4512,6 +4760,8 @@ def merge_family(
                     sequence=True,
                     order=order,
                     ordinals=ordinals,
+                    null_safe_unique_key=relation.null_safe_unique_key,
+                    task_partition_key=relation.task_partition_key,
                 ),
                 source_outcome.error,
                 source_outcome.decisions,
@@ -4557,6 +4807,8 @@ def _enumerated_merge_family(
                         rows,
                         sequence=True,
                         order=order,
+                        null_safe_unique_key=relation.null_safe_unique_key,
+                        task_partition_key=relation.task_partition_key,
                     ),
                     source_outcome.error,
                     tuple(sorted(
@@ -4839,6 +5091,8 @@ def limit_family(
                 relation.columns,
                 (),
                 sequence=relation.sequence,
+                null_safe_unique_key=relation.null_safe_unique_key,
+                task_partition_key=relation.task_partition_key,
             ),
         )
     elif (
@@ -4910,6 +5164,8 @@ def _ordered_limit_family(
                 sequence=True,
                 order=relation.order,
                 present_prefix=True,
+                null_safe_unique_key=relation.null_safe_unique_key,
+                task_partition_key=relation.task_partition_key,
             )
 
         if _can_compact_ordered_singleton(relation, count, offset):
@@ -4945,6 +5201,8 @@ def _ordered_limit_family(
             sequence=True,
             order=relation.order,
             ordinals=relation.ordinals,
+            null_safe_unique_key=relation.null_safe_unique_key,
+            task_partition_key=relation.task_partition_key,
         )
 
     return map_family(source, take)
@@ -5006,6 +5264,8 @@ def _compact_ordered_singleton(relation: Relation) -> Relation:
         sequence=True,
         order=relation.order,
         present_prefix=True,
+        null_safe_unique_key=relation.null_safe_unique_key,
+        task_partition_key=relation.task_partition_key,
     )
 
 
@@ -5160,6 +5420,12 @@ def _unordered_limit_family(
                             )
                             for row in rows
                         ),
+                        null_safe_unique_key=(
+                            source_outcome.relation.null_safe_unique_key
+                        ),
+                        task_partition_key=(
+                            source_outcome.relation.task_partition_key
+                        ),
                     ),
                     smt.TRUE,
                     tuple(
@@ -5210,7 +5476,16 @@ def _unordered_limit_family(
                 outcomes.append(
                     Outcome(
                         enabled,
-                        Relation(source_outcome.relation.columns, output_rows),
+                        Relation(
+                            source_outcome.relation.columns,
+                            output_rows,
+                            null_safe_unique_key=(
+                                source_outcome.relation.null_safe_unique_key
+                            ),
+                            task_partition_key=(
+                                source_outcome.relation.task_partition_key
+                            ),
+                        ),
                         source_outcome.error,
                         decisions,
                         source_outcome.choices,
@@ -5250,6 +5525,8 @@ def _symbolic_singleton_limit_family(
                     Relation(
                         relation.columns,
                         (_absent_limit_row(relation),),
+                        null_safe_unique_key=relation.null_safe_unique_key,
+                        task_partition_key=relation.task_partition_key,
                     ),
                     source_outcome.error,
                     source_outcome.decisions,
@@ -5273,6 +5550,8 @@ def _symbolic_singleton_limit_family(
                                 row.partition_facts,
                             ),
                         ),
+                        null_safe_unique_key=relation.null_safe_unique_key,
+                        task_partition_key=relation.task_partition_key,
                     ),
                     source_outcome.error,
                     source_outcome.decisions,
@@ -5334,6 +5613,8 @@ def _symbolic_singleton_limit_family(
                             _common_partition_facts(live_rows),
                         ),
                     ),
+                    null_safe_unique_key=relation.null_safe_unique_key,
+                    task_partition_key=relation.task_partition_key,
                 ),
                 source_outcome.error,
                 source_outcome.decisions,

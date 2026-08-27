@@ -1,4 +1,4 @@
-import ydb.tests.olap.load.lib.workload_manager as wm
+import ydb.tests.workload_manager.workload_manager as wm
 import yatest.common
 from ydb.tests.functional.tpc.lib.conftest import FunctionalTestBase
 

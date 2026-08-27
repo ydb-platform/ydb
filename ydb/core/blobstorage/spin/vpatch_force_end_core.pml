@@ -6,24 +6,28 @@
  *   client BSQueue -> VDisk -> TEvVDiskRequestCompleted -> SkeletonFront
  *       -> interconnect response -> client BSQueue -> DSProxy
  *
- * SkeletonFront always closes the server-side request window.  The wrapper
+ * SkeletonFront always closes the server-side request window. The wrapper
  * controls whether it also forwards TEvVPatchResult to the client BSQueue.
  *
- * FORWARD_FORCE_END_RESULT=0 models SetForceEndResponse()/DoNotResend.
- * FORWARD_FORCE_END_RESULT=1 models forwarding the result while DSProxy still
+ * FORWARD_FORCE_END_RESULT = 0 models SetForceEndResponse()/DoNotResend.
+ * FORWARD_FORCE_END_RESULT = 1 models forwarding the result while DSProxy still
  * ignores it semantically through ForceStopFlags.
  *
  * QueueEnvironment independently chooses whether another request is waiting
- * in the same queue.  Once SkeletonFront has completed the ForceEnd request,
+ * in the same queue. Once SkeletonFront has completed the ForceEnd request,
  * it may produce successful unrelated progress (which moves the real
- * watchdog barrier) or a whole quiet watchdog interval.  The abstraction
+ * watchdog barrier) or a whole quiet watchdog interval. The abstraction
  * assumes a forwarded response crosses the local queue before a fresh
  * watchdog interval can expire; only a suppressed response becomes a ghost.
+ * Loss of VDISK_REQUEST_COMPLETED and SkeletonFront restart are outside the
+ * model.
  */
 
 #ifndef FORWARD_FORCE_END_RESULT
 #error "wrapper must define FORWARD_FORCE_END_RESULT"
 #endif
+
+#define BUFFERED_CHANNEL_CAPACITY 1
 
 mtype = {
     FORCE_END_REQUEST,
@@ -35,40 +39,66 @@ mtype = {
     RESET_QUEUE
 };
 
-chan dsproxy_to_queue = [1] of { mtype };
-chan queue_to_vdisk = [1] of { mtype };
-chan vdisk_to_skeleton_front = [1] of { mtype };
-chan skeleton_front_to_queue = [1] of { mtype };
-/* Rendezvous prevents a progress event from being queued after watchdog exit. */
+/* Request path: DSProxy -> ClientBSQueue -> VDisk -> SkeletonFront. */
+chan dsproxy_to_queue = [BUFFERED_CHANNEL_CAPACITY] of { mtype };
+chan queue_to_vdisk = [BUFFERED_CHANNEL_CAPACITY] of { mtype };
+chan vdisk_to_skeleton_front = [BUFFERED_CHANNEL_CAPACITY] of { mtype };
+
+/* Result path: SkeletonFront -> ClientBSQueue -> DSProxyResultHandler. */
+chan skeleton_front_to_queue = [BUFFERED_CHANNEL_CAPACITY] of { mtype };
+chan queue_to_dsproxy = [BUFFERED_CHANNEL_CAPACITY] of { mtype };
+
+/*
+ * QueueEnvironment sends watchdog events and waits for QueueWatchdog's ack.
+ * Rendezvous prevents an event from being queued after watchdog exit.
+ */
 chan watchdog_events = [0] of { mtype };
 chan watchdog_ack = [0] of { mtype };
-chan watchdog_to_queue = [1] of { mtype };
-chan queue_to_dsproxy = [1] of { mtype };
 
+/* QueueWatchdog alone sends reset notifications to ClientBSQueue. */
+chan watchdog_to_queue = [BUFFERED_CHANNEL_CAPACITY] of { mtype };
+
+/* DSProxy owns the ForceEnd request and client-visible Patch lifecycle. */
 bool force_stop_flag;
 bool force_end_sent;
+bool patch_request_replied;
+
+/* ClientBSQueue owns transport completion and reset state. */
 bool force_end_inflight;
+bool response_received_by_queue;
+bool force_end_terminal;
+bool force_end_error;
+bool watchdog_reset;
+
+/* VDisk and SkeletonFront publish server-side completion independently. */
 bool remote_actor_stopped;
 bool server_window_completed;
 bool response_forwarded;
-bool response_received_by_queue;
 bool response_suppressed;
-bool force_end_terminal;
-bool force_end_error;
-bool watchdog_fired;
-bool watchdog_reset;
+
+/* QueueEnvironment alone publishes readiness. */
 bool environment_ready;
+
+/* QueueWatchdog owns firing and barrier-movement state. */
+bool watchdog_fired;
+/* Toggling the epoch represents movement of the real watchdog barrier. */
+byte progress_epoch;
+
+/* QueueEnvironment, ClientBSQueue, and UnrelatedRequest share waiting state. */
 bool unrelated_request_waiting;
+
+/* UnrelatedRequest alone records successful completion. */
 bool unrelated_request_completed;
+
+/* ClientBSQueue alone records collateral failure during reset. */
 bool unrelated_request_failed;
-bool patch_request_replied;
+
+/* DSProxyResultHandler owns transport-result accounting. */
 bool transport_result_observed_by_dsproxy;
 bool force_stop_result_ignored;
-byte progress_epoch;
 byte semantic_patch_results;
 
-proctype DSProxy()
-{
+proctype DSProxy() {
     /* SendStopDiffs sets ForceStopFlags before sending through BSQueue. */
     force_stop_flag = true;
     force_end_sent = true;
@@ -78,12 +108,13 @@ proctype DSProxy()
     patch_request_replied = true
 }
 
-proctype DSProxyResultHandler()
-{
+proctype DSProxyResultHandler() {
     mtype result;
 
 end_wait_for_transport_result:
+    /* Suppressed responses intentionally leave this process validly blocked. */
     queue_to_dsproxy?result;
+    /* One delivered actor event updates all DSProxy result accounting. */
     atomic {
         assert(result == FORCE_END_OK || result == FORCE_END_ERROR);
         if
@@ -98,8 +129,7 @@ end_wait_for_transport_result:
     }
 }
 
-proctype ClientBSQueue()
-{
+proctype ClientBSQueue() {
     mtype request;
     mtype result;
 
@@ -118,6 +148,7 @@ proctype ClientBSQueue()
         queue_to_dsproxy!result
 
     :: watchdog_to_queue?RESET_QUEUE ->
+        /* A queue reset terminalizes the related queue items in one transition. */
         atomic {
             watchdog_reset = true;
             force_end_error = true;
@@ -135,8 +166,7 @@ proctype ClientBSQueue()
     fi
 }
 
-proctype VDisk()
-{
+proctype VDisk() {
     mtype request;
 
     queue_to_vdisk?request;
@@ -147,8 +177,7 @@ proctype VDisk()
     vdisk_to_skeleton_front!VDISK_REQUEST_COMPLETED
 }
 
-proctype SkeletonFront()
-{
+proctype SkeletonFront() {
     mtype completion;
 
     vdisk_to_skeleton_front?completion;
@@ -166,11 +195,12 @@ proctype SkeletonFront()
 #endif
 }
 
-proctype QueueEnvironment()
-{
+proctype QueueEnvironment() {
     do
-    :: force_end_inflight -> break
-    :: force_end_terminal -> goto done
+    :: force_end_inflight ->
+        break
+    :: force_end_terminal ->
+        goto done
     od;
 
     /* An independent request may already share this queue. */
@@ -180,6 +210,7 @@ proctype QueueEnvironment()
     fi;
     environment_ready = true;
 
+    /* Blocking stutter abstraction of waiting for local server completion. */
     (server_window_completed);
     do
     :: !force_end_inflight || watchdog_fired ->
@@ -197,13 +228,14 @@ done:
     skip
 }
 
-proctype QueueWatchdog()
-{
+proctype QueueWatchdog() {
     mtype event;
 
     do
-    :: server_window_completed && environment_ready -> break
-    :: force_end_terminal -> goto done
+    :: server_window_completed && environment_ready ->
+        break
+    :: force_end_terminal ->
+        goto done
     od;
     do
     :: !force_end_inflight ->
@@ -213,8 +245,10 @@ proctype QueueWatchdog()
         :: event == QUEUE_PROGRESS ->
             /* Any successful queue progress moves the watchdog barrier. */
             if
-            :: progress_epoch == 0 -> progress_epoch = 1
-            :: progress_epoch == 1 -> progress_epoch = 0
+            :: progress_epoch == 0 ->
+                progress_epoch = 1
+            :: progress_epoch == 1 ->
+                progress_epoch = 0
             fi;
             watchdog_ack!QUEUE_PROGRESS
         :: event == QUIET_WATCHDOG_INTERVAL ->
@@ -229,11 +263,12 @@ done:
     skip
 }
 
-proctype UnrelatedRequest()
-{
+proctype UnrelatedRequest() {
     do
-    :: environment_ready -> break
-    :: force_end_terminal -> goto done
+    :: environment_ready ->
+        break
+    :: force_end_terminal ->
+        goto done
     od;
     if
     :: unrelated_request_waiting ->
@@ -253,20 +288,6 @@ done:
     skip
 }
 
-init
-{
-    atomic {
-        run DSProxy();
-        run DSProxyResultHandler();
-        run ClientBSQueue();
-        run VDisk();
-        run SkeletonFront();
-        run QueueEnvironment();
-        run QueueWatchdog();
-        run UnrelatedRequest()
-    }
-}
-
 ltl safe_force_end_stops_remote_actor {
     [] (server_window_completed -> remote_actor_stopped)
 }
@@ -277,16 +298,34 @@ ltl safe_force_end_not_counted_for_quorum {
 }
 
 ltl safe_no_completed_request_left_inflight {
-    [] (!(server_window_completed && response_suppressed
-        && force_end_inflight))
+    [] (!(server_window_completed &&
+        response_suppressed &&
+        force_end_inflight))
 }
 
 ltl safe_no_collateral_queue_error {
     [] (!unrelated_request_failed)
 }
 
+/* Weak fairness requires -DNOREDUCE with the rendezvous; see README.md. */
 ltl live_force_end_cleanly_releases_queue {
-    [] (force_end_sent -> <>
-        (force_end_terminal && response_received_by_queue
-            && !watchdog_reset && !force_end_error))
+    [] (force_end_sent ->
+        <> (force_end_terminal &&
+            response_received_by_queue &&
+            !watchdog_reset &&
+            !force_end_error))
+}
+
+init {
+    /* Publish the complete initial actor set without startup interleaving. */
+    atomic {
+        run DSProxy();
+        run DSProxyResultHandler();
+        run ClientBSQueue();
+        run VDisk();
+        run SkeletonFront();
+        run QueueEnvironment();
+        run QueueWatchdog();
+        run UnrelatedRequest()
+    }
 }

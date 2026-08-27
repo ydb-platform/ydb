@@ -1,30 +1,38 @@
 /*
  * Reliable-network baseline for block-erasure VPatch.
  *
- * DATA_PARTS and PARITY_PARTS are supplied by a wrapper model. Each part has
- * one actor. Blob bytes are abstracted away; patched[id] means the local VPut
- * completed successfully. The model preserves the data->parity XOR fan-out
- * and permits DIFF/XOR delivery in either order at parity actors.
+ * DATA_PARTS and PARITY_PARTS are supplied by a wrapper model. One logical
+ * Patch request has one actor per part. Blob bytes are abstracted away;
+ * patched[id] means that the local VPut completed in one transition. The model
+ * preserves the data-to-parity XOR fan-out and permits DIFF/XOR delivery in
+ * either order at parity actors. It excludes disconnects, retries, timeouts,
+ * fallback, and queue accounting.
  */
 
 #define TOTAL_PARTS (DATA_PARTS + PARITY_PARTS)
 #define CHANNEL_CAPACITY (TOTAL_PARTS + DATA_PARTS)
+#define NO_PAYLOAD 0
 
 mtype = { VPATCH_START, FOUND, VPATCH_DIFF, XOR_DIFF, PART_OK };
 
+/* DSProxy and data VDisks write disk_in; each element has one VDisk reader. */
 chan disk_in[TOTAL_PARTS] = [CHANNEL_CAPACITY] of { mtype, byte };
+
+/* Every VDisk writes proxy_in; DSProxy is its sole reader. */
 chan proxy_in = [CHANNEL_CAPACITY] of { mtype, byte };
 
+/* DSProxy owns the client-visible request lifecycle. */
 bool request_started;
 bool client_replied;
 bool client_ok;
+
+/* Each VDisk owns patched[id] and atomically updates the shared exact count. */
 byte patched_count;
 byte patched[TOTAL_PARTS];
 
-#define all_parts_patched (patched_count == TOTAL_PARTS)
+#define ALL_PARTS_PATCHED (patched_count == TOTAL_PARTS)
 
-proctype VDisk(byte id)
-{
+proctype VDisk(byte id) {
     byte payload;
     byte parity;
     byte xor_count = 0;
@@ -89,8 +97,7 @@ proctype VDisk(byte id)
     fi
 }
 
-proctype DSProxy()
-{
+proctype DSProxy() {
     byte i = 0;
     byte sender;
     byte found_count = 0;
@@ -100,7 +107,7 @@ proctype DSProxy()
 
     do
     :: i < TOTAL_PARTS ->
-        disk_in[i]!VPATCH_START,0;
+        disk_in[i]!VPATCH_START,NO_PAYLOAD;
         i++
     :: else ->
         break
@@ -118,7 +125,7 @@ proctype DSProxy()
     i = 0;
     do
     :: i < TOTAL_PARTS ->
-        disk_in[i]!VPATCH_DIFF,0;
+        disk_in[i]!VPATCH_DIFF,NO_PAYLOAD;
         i++
     :: else ->
         break
@@ -135,11 +142,15 @@ proctype DSProxy()
 
     client_ok = true;
     client_replied = true;
-    assert(all_parts_patched)
+    assert(ALL_PARTS_PATCHED)
 }
 
-init
-{
+ltl safe_ok_requires_all_parts { [] (client_ok -> ALL_PARTS_PATCHED) }
+
+/* Verified with weak process fairness; see the run manifest in README.md. */
+ltl live_eventual_reply { [] (request_started -> <> client_replied) }
+
+init {
     byte i = 0;
 
     atomic {
@@ -153,6 +164,3 @@ init
         od
     }
 }
-
-ltl safe_ok_requires_all_parts { [] (client_ok -> all_parts_patched) }
-ltl live_eventual_reply { [] (request_started -> <> client_replied) }

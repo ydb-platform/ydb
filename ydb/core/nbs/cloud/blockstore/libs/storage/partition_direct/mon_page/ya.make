@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/nbs/cloud/blockstore/libs/diagnostics
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/resources
     ydb/core/nbs/cloud/storage/core/libs/common

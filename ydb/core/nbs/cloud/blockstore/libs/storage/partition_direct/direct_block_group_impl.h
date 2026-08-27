@@ -157,6 +157,9 @@ public:
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
+    NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -265,6 +268,9 @@ private:
     [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
 
     [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
+
+    [[nodiscard]] TVChunkStatsGatherResult DoGatherVChunkStats(
+        EVChunkStatsDetail detail) const;
 
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;

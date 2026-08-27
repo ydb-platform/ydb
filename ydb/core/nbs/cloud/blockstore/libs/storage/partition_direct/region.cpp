@@ -34,8 +34,7 @@ TRegion::TRegion(
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
     ui32 syncRequestsBatchSize,
-    ui64 vChunkSize,
-    NMonitoring::TDynamicCounterPtr counters)
+    ui64 vChunkSize)
     : ActorSystem(actorSystem)
     , DiskDescription(diskDescription)
 {
@@ -43,9 +42,6 @@ TRegion::TRegion(
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
         const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
-
-        NMonitoring::TDynamicCounterPtr vChunkCounters =
-            counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
         auto vChunkConfig = persisted ? *persisted
@@ -67,8 +63,7 @@ TRegion::TRegion(
             dirtyMapState ? *dirtyMapState : TDirtyMapStateProto(),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
-            vChunkSize,
-            vChunkCounters);
+            vChunkSize);
         VChunks.push_back(std::move(vChunk));
     }
 }

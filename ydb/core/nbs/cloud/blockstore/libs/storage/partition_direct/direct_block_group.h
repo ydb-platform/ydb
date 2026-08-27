@@ -239,6 +239,10 @@ public:
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
     virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
+
+    // Sums (and optionally lists) vchunk stats on the executor thread.
+    virtual NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

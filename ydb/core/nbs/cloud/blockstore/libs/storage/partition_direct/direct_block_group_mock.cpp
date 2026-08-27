@@ -423,6 +423,13 @@ TDirectBlockGroupMock::BuildMonSnapshot() const
     return NThreading::MakeFuture(TDbgSnapshot{});
 }
 
+NThreading::TFuture<TVChunkStatsGatherResult>
+TDirectBlockGroupMock::GatherVChunkStats(EVChunkStatsDetail detail) const
+{
+    Y_UNUSED(detail);
+    return NThreading::MakeFuture(TVChunkStatsGatherResult{});
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

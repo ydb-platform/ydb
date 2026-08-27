@@ -13,8 +13,6 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,8 +30,7 @@ public:
         const TVChunkConfigs& vChunkConfigs,
         const TDirtyMapStateProtos& dirtyMapStates,
         ui32 syncRequestsBatchSize,
-        ui64 vChunkSize,
-        NMonitoring::TDynamicCounterPtr counters);
+        ui64 vChunkSize);
 
     void Run();
 

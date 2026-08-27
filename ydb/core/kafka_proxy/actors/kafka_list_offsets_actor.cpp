@@ -132,7 +132,9 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
                 ErrorCode = INVALID_REQUEST;
             }
         } else {
-            responsePartition.ErrorCode = ConvertErrorCode(ev->Get()->Status);
+            auto error = ConvertErrorCode(ev->Get()->Status);
+            responsePartition.ErrorCode = error;
+            ErrorCode = error;
         }
 
         responseTopic.Partitions.emplace_back(std::move(responsePartition));

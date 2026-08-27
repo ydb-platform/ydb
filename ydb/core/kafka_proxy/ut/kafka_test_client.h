@@ -133,6 +133,8 @@ class TKafkaTestClient {
 
         TMessagePtr<TDescribeGroupsResponseData> DescribeGroups(const std::vector<std::optional<TString>>& groups);
 
+        TMessagePtr<TFindCoordinatorResponseData> FindCoordinator(const TString& key, i8 keyType = 0);
+
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset = 0);
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
         void ValidateNoDataInTopics(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);

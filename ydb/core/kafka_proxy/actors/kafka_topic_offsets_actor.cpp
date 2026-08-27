@@ -2,6 +2,7 @@
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 
 namespace NKafka {
@@ -22,11 +23,21 @@ void TTopicOffsetsActor::Bootstrap(const NActors::TActorContext&)
 }
 
 void TTopicOffsetsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
-    switch (ev->GetTypeRewrite()) {
-        default:
-        if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
-            TBase::StateWork(ev);
-        };
+    if (ev->GetTypeRewrite() == NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
+        auto* result = ev->Get<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
+        if (result && result->Request && result->Request->ResultSet.size() == 1 &&
+            result->Request->ResultSet[0].Status == NKikimr::NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied)
+        {
+            return RaiseError(
+                "access denied",
+                Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                Ydb::StatusIds::UNAUTHORIZED,
+                ActorContext()
+            );
+        }
+    }
+    if (!TDescribeTopicActorImpl::StateWork(ev, ActorContext())) {
+        TBase::StateWork(ev);
     }
 }
 
@@ -36,6 +47,20 @@ void TTopicOffsetsActor::HandleCacheNavigateResponse(
     if (!TBase::HandleCacheNavigateResponseBase(ev)) {
         return;
     }
+
+    auto& item = ev->Get()->Request->ResultSet[0];
+    if (!this->GetRequest().Token.empty() && item.SecurityObject) {
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(this->GetRequest().Token);
+        if (!item.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
+            return RaiseError(
+                "access denied",
+                Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                Ydb::StatusIds::UNAUTHORIZED,
+                ActorContext()
+            );
+        }
+    }
+
     std::unordered_set<ui32> partititons;
     for (ui32 i = 0; i < PQGroupInfo->Description.PartitionsSize(); i++) {
         auto part = PQGroupInfo->Description.GetPartitions(i).GetPartitionId();

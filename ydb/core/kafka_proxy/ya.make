@@ -35,6 +35,7 @@ SRCS(
     kafka_connection.cpp
     kafka_connection.h
     kafka_constants.h
+    kafka_error_response.cpp
     kafka_listener.h
     kafka_messages.cpp
     kafka_messages.h

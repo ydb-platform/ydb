@@ -155,7 +155,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
         ctx.RegisterWithSameMailbox(NKikimr::NPQ::NSchema::CreateCreateTopicActor(SelfId(), NKikimr::NPQ::NSchema::TCreateTopicSettings{
             .Database = Context->DatabasePath,
             .Request = std::move(request),
-            .UserToken = Context->UserToken,
+            .UserToken = Context->Token.UserToken,
             .IfNotExists = false,
         }));
 

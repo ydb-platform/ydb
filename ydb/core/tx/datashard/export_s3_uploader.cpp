@@ -665,9 +665,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        EXPORT_LOG_D("Handle TEvExternalStorage::TEvHeadObjectResponse"
-            << ": self# " << this->SelfId()
-            << ", result# " << result);
+        YDB_LOG_DEBUG("Handle TEvExternalStorage::TEvHeadObjectResponse",
+            {"selfId", this->SelfId()},
+            {"result", result});
 
         if (result.IsSuccess()) {
             return PassAway();

@@ -12,7 +12,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TVChunkConfig
 {
 public:
-    enum class EHostValue
+    enum class EHostHumanReadableState
     {
         Primary,    // DDisk-OK and PBuffer-OK
         Fresh,      // DDisk-Fresh and PBuffer-OK
@@ -32,7 +32,8 @@ public:
         THostMask enabledHosts,
         TVector<std::optional<ui64>> watermarks);
 
-    [[nodiscard]] EHostValue GetHostValue(THostIndex hostIndex) const;
+    [[nodiscard]] EHostHumanReadableState GetHostHumanReadableState(
+        THostIndex hostIndex) const;
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;

@@ -10,7 +10,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
-TVChunkConfig::EHostValue CalcHostValue(
+TVChunkConfig::EHostHumanReadableState CalcHostHumanReadableState(
     EHostRole ddisk,
     EHostRole pbuffer,
     bool enabled,
@@ -20,43 +20,46 @@ TVChunkConfig::EHostValue CalcHostValue(
 
     if (ddisk == EHostRole::Primary && enabled) {
         Y_ABORT_UNLESS(pbuffer == EHostRole::Primary);
-        return watermark.has_value() ? TVChunkConfig::EHostValue::Fresh
-                                     : TVChunkConfig::EHostValue::Primary;
+        return watermark.has_value()
+                   ? TVChunkConfig::EHostHumanReadableState::Fresh
+                   : TVChunkConfig::EHostHumanReadableState::Primary;
     }
     if (ddisk == EHostRole::Primary && !enabled) {
         Y_ABORT_UNLESS(pbuffer == EHostRole::Primary);
-        return TVChunkConfig::EHostValue::Rotten;
+        return TVChunkConfig::EHostHumanReadableState::Rotten;
     }
 
     Y_ABORT_UNLESS(pbuffer != EHostRole::Primary);
 
     if (pbuffer == EHostRole::HandOff) {
-        return enabled ? TVChunkConfig::EHostValue::HandOff
-                       : TVChunkConfig::EHostValue::Disabled;
+        return enabled ? TVChunkConfig::EHostHumanReadableState::HandOff
+                       : TVChunkConfig::EHostHumanReadableState::Disabled;
     }
-    return TVChunkConfig::EHostValue::Demoted;
+    return TVChunkConfig::EHostHumanReadableState::Demoted;
 }
 
-TString PrintHostValue(TVChunkConfig::EHostValue meaning, bool brief)
+TString PrintHostHumanReadableState(
+    TVChunkConfig::EHostHumanReadableState state,
+    bool brief)
 {
     TStringBuilder result;
-    switch (meaning) {
-        case TVChunkConfig::EHostValue::Primary:
+    switch (state) {
+        case TVChunkConfig::EHostHumanReadableState::Primary:
             result << (brief ? "P" : "Primary");
             break;
-        case TVChunkConfig::EHostValue::Fresh:
+        case TVChunkConfig::EHostHumanReadableState::Fresh:
             result << (brief ? "F" : "Fresh");
             break;
-        case TVChunkConfig::EHostValue::HandOff:
+        case TVChunkConfig::EHostHumanReadableState::HandOff:
             result << (brief ? "H" : "HandOff");
             break;
-        case TVChunkConfig::EHostValue::Rotten:
+        case TVChunkConfig::EHostHumanReadableState::Rotten:
             result << (brief ? "R" : "Rotten");
             break;
-        case TVChunkConfig::EHostValue::Disabled:
+        case TVChunkConfig::EHostHumanReadableState::Disabled:
             result << (brief ? "-" : "Disabled");
             break;
-        case TVChunkConfig::EHostValue::Demoted:
+        case TVChunkConfig::EHostHumanReadableState::Demoted:
             result << (brief ? "_" : "Demoted");
             break;
     }
@@ -132,10 +135,10 @@ TVChunkConfig TVChunkConfig::Make(
     return result;
 }
 
-TVChunkConfig::EHostValue TVChunkConfig::GetHostValue(
+TVChunkConfig::EHostHumanReadableState TVChunkConfig::GetHostHumanReadableState(
     THostIndex hostIndex) const
 {
-    return CalcHostValue(
+    return CalcHostHumanReadableState(
         DDiskHosts.GetRole(hostIndex),
         PBufferHosts.GetRole(hostIndex),
         EnabledHosts.Get(hostIndex),
@@ -403,8 +406,8 @@ TString TVChunkConfig::DebugPrint() const
         if (i) {
             result << ",";
         }
-        const auto meaning = GetHostValue(i);
-        result << PrintHostValue(meaning, false);
+        const auto state = GetHostHumanReadableState(i);
+        result << PrintHostHumanReadableState(state, false);
     }
     result << "}";
 

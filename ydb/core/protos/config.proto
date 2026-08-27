@@ -2204,7 +2204,7 @@ message TImmediateControlsConfig {
             Description: "Upper bound for the chunk reserve of the static group VDisks, in permille of the user chunk pool of the PDisk. 0 disables the reserve",
             MinValue: 0,
             MaxValue: 1000,
-            DefaultValue: 500 }];
+            DefaultValue: 25 }];
         optional uint64 UseDeviceOverestimationRatioMerged = 9 [(ControlOptions) = {
             Description: "If enabled (default), PDisk's DeviceOverestimationRatio/DeviceNonperformanceMs "
                           "sensors report the merged (cross-source, e.g. shared with DDisk/PersistentBuffer) "
@@ -3292,6 +3292,9 @@ message TKafkaProxyConfig {
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
     optional string PublicHost = 16;
+    // How often an authenticated Kafka connection re-validates the SASL ticket via TicketParser.
+    // Zero disables periodic rechecks.
+    optional uint32 TokenRecheckIntervalMs = 21 [default = 300000];
 }
 
 message TAwsCompatibilityConfig {

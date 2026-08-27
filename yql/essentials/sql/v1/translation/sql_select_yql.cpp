@@ -595,7 +595,7 @@ private:
             return Unsupported("STREAM");
         }
 
-        if (auto q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
+        if (const auto& q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
             const auto& token = q.GetBlock1().GetToken1();
 
             if (IS_TOKEN(token.GetId(), ALL)) {

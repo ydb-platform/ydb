@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     2,   // Coordinator
                     hosts,
-                    100,   // lsn
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -446,8 +446,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -509,8 +510,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -592,7 +594,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     coordinatorHost,
                     hosts,
-                    100,   // lsn
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -672,7 +674,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,   // VChunkIndex
                     coordinatorHost,
                     hosts,
-                    100,   // lsn
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -888,8 +890,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             [&]
             {
                 TVector<TPBufferSegment> segments;
-                segments.push_back(
-                    TPBufferSegment(100, TBlockRange64::WithLength(0, 3)));
+                segments.push_back(TPBufferSegment(
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    TBlockRange64::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,
@@ -1234,7 +1237,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     2,
                     hosts,
-                    100,
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
@@ -1309,8 +1312,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         WaitReady(executor, initialReady);
 
         // A vchunk that still only knows the pre-add host count.
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters(
-            new ::NMonitoring::TDynamicCounters());
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
             TraceService.get(),
@@ -1323,8 +1324,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             TDirtyMapStateProto(),
             dbg,
             3,
-            vChunkSize,
-            counters);
+            vChunkSize);
 
         TString oracleDump;
         TString configBefore;
@@ -1346,10 +1346,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // The grown host slot (H5) is absent in the vchunk before registering
         // and present after - the DBG caught it up at registration.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None} "
-            "Enabled{+++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff}",
             configBefore);
 
         // Reply UpdateConfig request.
@@ -1374,10 +1371,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // VChunk config contains six enabled hosts
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None;None} "
-            "Enabled{++++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff,HandOff}",
             configAfter);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"

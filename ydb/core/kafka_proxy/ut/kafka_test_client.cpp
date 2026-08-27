@@ -579,6 +579,15 @@ TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(const 
     return WriteAndRead<TDescribeGroupsResponseData>(header, request);
 }
 
+TMessagePtr<TFindCoordinatorResponseData> TKafkaTestClient::FindCoordinator(const TString& key, i8 keyType) {
+    Cerr << ">>>>> TFindCoordinatorRequestData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::FIND_COORDINATOR, 3);
+    TFindCoordinatorRequestData request;
+    request.Key = key;
+    request.KeyType = keyType;
+    return WriteAndRead<TFindCoordinatorResponseData>(header, request);
+}
+
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
     Cerr << ">>>>> TFetchRequestData\n";
 

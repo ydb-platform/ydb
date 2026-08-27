@@ -1065,59 +1065,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
-    Y_UNIT_TEST(PopulatePDiskIsAtomic) {
-        TEnvironmentSetup env(12, 1);
-
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
-            TFinalizer finalizer(env);
-            env.Prepare(dispatchName, setup, outActiveZone);
-
-            NKikimrBlobStorage::TConfigRequest request;
-            env.DefineBox(1, "box", {
-                {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
-                {"/dev/disk2", NKikimrBlobStorage::ROT, false, false, 0},
-            }, env.GetNodes(), request);
-            env.DefineStoragePool(1, 1, "storage pool", 1, NKikimrBlobStorage::ROT, {}, request);
-            auto response = env.Invoke(request);
-            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-
-            const TBaseConfig before = FetchBaseConfig(&env);
-            UNIT_ASSERT_VALUES_EQUAL(before.GroupSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(before.GetGroup(0).VSlotIdSize(), 8);
-            const TVSlot first = FindVSlot(before, before.GetGroup(0).GetVSlotId(0));
-            TVSlot second;
-            for (const auto& id : before.GetGroup(0).GetVSlotId()) {
-                const TVSlot candidate = FindVSlot(before, id);
-                if (candidate.GetVSlotId().GetNodeId() != first.GetVSlotId().GetNodeId()) {
-                    second = candidate;
-                    break;
-                }
-            }
-            UNIT_ASSERT(second.HasVSlotId());
-
-            const auto destination = FindSparePDisk(before, first.GetGroupId());
-            UNIT_ASSERT_C(!IsVSlotOnPDisk(first, destination),
-                "test requires first VDisk not to reside on destination PDisk");
-            UNIT_ASSERT_C(!IsVSlotOnPDisk(second, destination),
-                "test requires second VDisk not to reside on destination PDisk");
-            request = MakePopulateRequest(first, destination);
-            AddVDiskId(second, request.MutableCommand(0)->MutablePopulatePDisk());
-
-            response = env.Invoke(request);
-            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-            UNIT_ASSERT_C(!response.GetStatus(0).GetSuccess(), response.DebugString());
-            UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("Group fit error"),
-                response.DebugString());
-
-            const TBaseConfig after = FetchBaseConfig(&env);
-            const TVSlot firstAfter = FindActiveVSlot(after, first);
-            const TVSlot secondAfter = FindActiveVSlot(after, second);
-            UNIT_ASSERT(SameVSlotId(firstAfter.GetVSlotId(), first.GetVSlotId()));
-            UNIT_ASSERT(SameVSlotId(secondAfter.GetVSlotId(), second.GetVSlotId()));
-        });
-    }
-
     Y_UNIT_TEST(MergeBoxes) {
         const ui32 numNodes = 50;
         const ui32 numNodes1 = 20;

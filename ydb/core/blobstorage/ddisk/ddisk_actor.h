@@ -629,6 +629,7 @@ namespace NKikimr::NDDisk {
         void InitPDiskInterface();
         void Handle(NPDisk::TEvYardInitResult::TPtr ev);
         void Handle(NPDisk::TEvReadLogResult::TPtr ev);
+        void ValidateChecksumsModeAfterLogReplay();
         void StartHandlingQueries();
         void HandleSingleQuery();
 
@@ -693,6 +694,7 @@ namespace NKikimr::NDDisk {
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
         void HandleChunkReserved();
+        size_t CountPendingPersistentBufferChunkAllocations() const;
         void IssueNextChunkFormatWrite(TChunkIdx chunkIdx);
         void Handle(TEvPrivate::TEvChunkFormatIoResult::TPtr ev);
         void Handle(NPDisk::TEvLogResult::TPtr ev);
@@ -749,11 +751,6 @@ namespace NKikimr::NDDisk {
         // concurrently written snapshot already includes the chunk - by the time that snapshot is
         // read back the commit has landed.
         std::vector<TIntegrityManager::TMappingSnapshot::TIntegrityChunkEntry> CommittedIntegrityChunks;
-
-        // Integrity chunks inherited during the supported checksums-on -> checksums-off
-        // transition. Disabled mode keeps them owned forever and repeats them in snapshots.
-        absl::flat_hash_map<TChunkIdx, ui64> InheritedIntegrityChunks;
-        bool LegacyChecksumsTransitionWarningLogged = false;
 
         // DataChunk -> IntegrityExtent mapping accumulated from the chunk-map snapshot and log
         // increments during boot; fed to IntegrityManager->ApplyMappingSnapshot at end-of-log.

@@ -236,7 +236,7 @@ private:
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::InitResponse& message) {
-        YDB_LOG_INFO("Session initialized with used",
+        YDB_LOG_INFO("Session initialized",
             {"logPrefix", LogPrefix()},
             {"id", message.session_id()},
             {"partition", message.partition_id()});
@@ -344,7 +344,7 @@ private:
             return;
         }
 
-        YDB_LOG_TRACE("Adding continuation event,",
+        YDB_LOG_TRACE("Adding continuation token",
             {"logPrefix", LogPrefix()},
             {"inflightMemory", InflightMemory},
             {"inflightMessages", InflightMessages.size()});

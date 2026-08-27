@@ -355,6 +355,7 @@ public:
         ), IEventHandle::FlagTrackDelivery);
 
         QueryState->PoolHandlerActor = NWorkloadManager::MakeServiceId(SelfId().NodeId());
+        QueryState->WaitingForWmAdmission = true;
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -657,6 +658,9 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NWorkloadManager::TWorkloadManagerEvents::EvPlaceRequestIntoPool) {
+            if (!AcceptWmAdmissionReply("TEvUndelivered")) {
+                return;
+            }
             YDB_LOG_WARN("Failed to deliver request to workload service, bypassing WLM",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
@@ -680,8 +684,26 @@ public:
         }
     }
 
+    // Replies are addressed to the session, not to the query,
+    // so a duplicated or late one would otherwise re-enter the
+    // pipeline of the query that is running now and execute it a second time.
+    bool AcceptWmAdmissionReply(TStringBuf eventName) {
+        if (!QueryState || !QueryState->WaitingForWmAdmission) {
+            YDB_LOG_WARN("Ignoring stale workload manager reply",
+                {"marker", "KQPSA"},
+                {"logPrefix", LogPrefix()},
+                {"event", eventName},
+                {"traceId", TraceId()});
+            return false;
+        }
+        QueryState->WaitingForWmAdmission = false;
+        return true;
+    }
+
     void Handle(NWorkloadManager::TEvContinueRequest::TPtr& ev) {
-        YQL_ENSURE(QueryState);
+        if (!AcceptWmAdmissionReply("TEvContinueRequest")) {
+            return;
+        }
         QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
@@ -1468,7 +1490,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl && QueryState->TxId.GetValue() == TTxId()) {
+                    if (hasTxControl && !QueryState->TxId.HasValue()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;

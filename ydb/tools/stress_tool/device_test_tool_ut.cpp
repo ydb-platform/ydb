@@ -64,7 +64,8 @@ Y_UNIT_TEST_SUITE(TDeviceTestTool) {
 template<typename P, typename T>
 void ProbeTest(const TString &testDescription, bool expectResults,
         TMaybe<NKikimr::TResultPrinter::EOutputFormat> format = {},
-        bool disableDDiskChecksums = false) {
+        bool disableDDiskChecksums = false,
+        TVector<std::pair<TString, TString>>* outResults = nullptr) {
     UNIT_ASSERT(!(expectResults && format));
     TTempFileHandle file;
     file.Resize(FileSize);
@@ -76,15 +77,20 @@ void ProbeTest(const TString &testDescription, bool expectResults,
 
     THolder<NKikimr::TPerfTest> test(new T(config, testProto));
     TIntrusivePtr<NKikimr::IResultPrinter> printer;
+    TPrinterStub* stub = nullptr;
     if (format) {
         printer = new NKikimr::TResultPrinter(*format);
     } else {
-        printer = new TPrinterStub(expectResults);
+        stub = new TPrinterStub(expectResults);
+        printer = stub;
     }
 
     test->SetPrinter(printer);
     test->RunTest();
     printer->EndTest();
+    if (outResults && stub) {
+        *outResults = stub->Results;
+    }
 }
 
 Y_UNIT_TEST(AioTestRead) {
@@ -276,7 +282,8 @@ Y_UNIT_TEST(DDiskTestWriteChecksumsDisabled) {
     ProbeDDiskWrite(true);
 }
 
-void ProbeDDiskRead(bool disableDDiskChecksums) {
+void ProbeDDiskRead(bool disableDDiskChecksums, float backgroundWriteRatio = 0,
+        ui32 backgroundWriteSizeKiB = 0, TVector<std::pair<TString, TString>>* outResults = nullptr) {
     TStringStream perfCfg;
     perfCfg << R"___(
         DDiskTestList: {
@@ -295,12 +302,20 @@ void ProbeDDiskRead(bool disableDDiskChecksums) {
                 IoSizeBytes: 4096
                 ExpectedChunkSize: 10485760
                 IsReadLoad: true
+    )___";
+    if (backgroundWriteRatio > 0) {
+        perfCfg << "BackgroundWriteRatio: " << backgroundWriteRatio << Endl;
+        if (backgroundWriteSizeKiB) {
+            perfCfg << "BackgroundWriteSizeKiB: " << backgroundWriteSizeKiB << Endl;
+        }
+    }
+    perfCfg << R"___(
             }
         }
     )___";
 
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(
-        perfCfg.Str(), true, {}, disableDDiskChecksums);
+        perfCfg.Str(), true, {}, disableDDiskChecksums, outResults);
 }
 
 Y_UNIT_TEST(DDiskTestRead) {
@@ -309,6 +324,28 @@ Y_UNIT_TEST(DDiskTestRead) {
 
 Y_UNIT_TEST(DDiskTestReadChecksumsDisabled) {
     ProbeDDiskRead(true);
+}
+
+Y_UNIT_TEST(DDiskTestReadWithBackgroundWrites) {
+    TVector<std::pair<TString, TString>> results;
+    ProbeDDiskRead(false, 0.5, 8, &results);
+
+    ui64 measuredReads = 0;
+    ui64 backgroundWrites = 0;
+    for (const auto& [name, value] : results) {
+        if (name == "MeasuredReads") {
+            measuredReads = FromString<ui64>(value);
+        } else if (name == "BackgroundWrites") {
+            backgroundWrites = FromString<ui64>(value);
+        }
+    }
+    UNIT_ASSERT_C(measuredReads > 0, "expected measured reads with background writes enabled");
+    UNIT_ASSERT_C(backgroundWrites > 0, "expected unmeasured background writes to be issued");
+    const double observedRatio = static_cast<double>(backgroundWrites) / static_cast<double>(measuredReads);
+    UNIT_ASSERT_C(observedRatio > 0.4 && observedRatio < 0.6,
+        TStringBuilder() << "background write ratio " << observedRatio
+            << " from " << backgroundWrites << " writes / " << measuredReads
+            << " reads, expected ~0.5");
 }
 
 Y_UNIT_TEST(DDiskTestWriteLargeIo) {

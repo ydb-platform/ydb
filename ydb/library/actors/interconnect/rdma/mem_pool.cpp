@@ -116,6 +116,8 @@ namespace NInterconnect::NRdma {
     TChunk(std::vector<ibv_mr*>&& mrs, IMemPool* pool) noexcept
         : MRs(std::move(mrs))
         , MemPool(pool)
+        , SlotSize(0)
+        , MaxUseCount(0)
     {
     }
 
@@ -151,7 +153,9 @@ namespace NInterconnect::NRdma {
     }
 
     bool TryAcquire(ui64 expGeneration) noexcept {
-        return ReclaimSemaphore.TryAcquire(expGeneration);
+        ui32 useCount = ReclaimSemaphore.TryAcquire(expGeneration);
+        TrackMaxUseCount(useCount);
+        return useCount;
     }
 
     ui64 GetGeneration() const noexcept {
@@ -163,9 +167,22 @@ namespace NInterconnect::NRdma {
         return MRs[0]->length;
     }
 
+    void SetSlotSize(ui32 sz) noexcept {
+        SlotSize.store(sz, std::memory_order_relaxed);
+    }
+
+    //Only for monitoring purpose
+    ui64 ExtractMaxAllocatedSz() noexcept {
+        ui32 curUseCount = ReclaimSemaphore.GetUseCount();
+        ui32 useCnt = MaxUseCount.exchange(curUseCount, std::memory_order_acq_rel);
+        return useCnt * SlotSize.load(std::memory_order_relaxed);
+    }
+
     private:
         std::vector<ibv_mr*> MRs;
         IMemPool* MemPool;
+        std::atomic<ui32> SlotSize;
+        std::atomic<ui32> MaxUseCount; //For monitoring and stats
         class TChunkUseLock {
             // Prevent reclaming just after new chunk allocation
             std::atomic<ui64> Lock = ReclaimingBitMask;
@@ -181,7 +198,8 @@ namespace NInterconnect::NRdma {
                 Lock.fetch_sub(1, std::memory_order_relaxed);
             }
 
-            bool TryAcquire(ui64 expectedGeneration) noexcept {
+            //Return 0 in case of failure or last UseCount
+            ui32 TryAcquire(ui64 expectedGeneration) noexcept {
                 ui64 x = Lock.fetch_add(1, std::memory_order_acq_rel);
                 Y_ABORT_UNLESS((x & UseCountMask) < UseCountMask);
                 if (Y_LIKELY(((x & (~ReclaimingBitMask)) >> UseCountBits) == expectedGeneration)) {
@@ -205,10 +223,10 @@ namespace NInterconnect::NRdma {
                                 x = (x & (~UseCountMask)) | 1ul; // It is what we expect in the memory
                             }
                     }
-                    return true;
+                    return (x & UseCountMask) + 1;
                 } else {
                     Lock.fetch_sub(1, std::memory_order_release);
-                    return false;
+                    return 0;
                 }
             }
 
@@ -240,7 +258,18 @@ namespace NInterconnect::NRdma {
             ui64 GetGeneration() const noexcept {
                 return (Lock.load(std::memory_order_relaxed) & ~ReclaimingBitMask) >> UseCountBits;
             }
-        } ReclaimSemaphore;
+
+            ui32 GetUseCount() const noexcept {
+                return Lock.load(std::memory_order_relaxed) & UseCountMask;
+            }
+        } __attribute__((aligned(64))) ReclaimSemaphore;
+    private:
+        void TrackMaxUseCount(ui32 newUseCount) noexcept {
+            ui32 maxUseCount = MaxUseCount.load(std::memory_order_relaxed);
+            while (maxUseCount < newUseCount && !MaxUseCount.compare_exchange_weak(maxUseCount, newUseCount,
+                std::memory_order_relaxed, std::memory_order_relaxed))
+            {}
+        }
     };
 
     TMemRegion::TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept
@@ -485,7 +514,6 @@ namespace NInterconnect::NRdma {
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
-            AllocatedCounter = counter->GetCounter("RdmaPoolAllocatedUserBytes", false);
             AllocatedChunksCounter = counter->GetCounter("RdmaPoolAllocatedChunks", false);
             MaxAllocated.Counter = counter->GetCounter("RdmaPoolAllocatedUserMaxBytes", false);
             ReclaimationRunCounter = counter->GetCounter("RdmaPoolReclaimationRunCounter", true);
@@ -563,19 +591,17 @@ namespace NInterconnect::NRdma {
             freeMemory(addr);
             mrs.clear();
         }
-
-        void TrackPeakAlloc(i64 newVal) noexcept {
-            i64 curVal = MaxAllocated.Val.load(std::memory_order_relaxed);
-            while (newVal > curVal) {
-                if (MaxAllocated.Val.compare_exchange_weak(curVal, newVal,
-                    std::memory_order_release, std::memory_order_relaxed)) {
-                    break;
-                }
-            }
-        }
     private:
+        // must be called with lock
         TChunkPtr TryReclaim(size_t size) noexcept {
             ReclaimationRunCounter->Inc();
+
+            {
+                // Updated monitoring before chunk reclaim. Oterwice we can lost last max
+                ui64 prevMax = MaxAllocated.Counter->Val();
+                ui64 maxAllocated = ExtractMaxAllocatedForAllChunks();
+                MaxAllocated.Counter->Set(std::max(maxAllocated, prevMax));
+            }
 
             auto it = ReclaimIt;
 
@@ -600,18 +626,43 @@ namespace NInterconnect::NRdma {
             return nullptr;
         }
 
+        // must be called with lock
+        ui64 ExtractMaxAllocatedForAllChunks() {
+            ui64 maxAllocated = 0;
+            for (TChunk& chunk : Chunks) {
+                maxAllocated += chunk.ExtractMaxAllocatedSz();
+            }
+            return maxAllocated;
+        }
+
+        void Tick(NMonotonic::TMonotonic time) noexcept override {
+            constexpr TDuration holdTime = TDuration::Seconds(15);
+
+            ui64 prevMax = MaxAllocated.Counter->Val();
+            ui64 maxAllocated = 0;
+
+            {
+                const std::lock_guard<std::mutex> lock(Mutex);
+                maxAllocated = ExtractMaxAllocatedForAllChunks();
+            }
+
+            if (time - MaxAllocated.Time > holdTime) {
+                MaxAllocated.Counter->Set(maxAllocated);
+                MaxAllocated.Time = time;
+            } else {
+                MaxAllocated.Counter->Set(std::max(maxAllocated, prevMax));
+            }
+        }
     protected:
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
         const size_t MaxChunk;
         const size_t Alignment;
-        ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunksCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr ReclaimationRunCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr ReclaimationFailCounter;
         struct {
            NMonotonic::TMonotonic Time;
-           std::atomic<i64> Val = 0;
            ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
         } MaxAllocated;
         std::atomic<size_t> AllocatedChunks = 0;
@@ -619,16 +670,6 @@ namespace NInterconnect::NRdma {
         std::mutex Mutex;
         TIntrusiveList<TChunk> Chunks;
         TIntrusiveList<TChunk>::TIterator ReclaimIt;
-
-        void Tick(NMonotonic::TMonotonic time) noexcept override {
-            constexpr TDuration holdTime = TDuration::Seconds(15);
-
-            if (time - MaxAllocated.Time > holdTime) {
-                MaxAllocated.Counter->Set(MaxAllocated.Val.load());
-                MaxAllocated.Val.store(AllocatedCounter->Val());
-                MaxAllocated.Time = time;
-            }
-        }
     };
 
     class TDummyMemPool: public TMemPoolBase {
@@ -818,6 +859,7 @@ namespace NInterconnect::NRdma {
                     return false;
                 }
                 TChain::TMemRegcontainer::iterator it = chain.FindHint(chunk);
+                chunk->SetSlotSize(chain.SlotSize);
                 const ui64 generation = chunk->GetGeneration();
                 for (ui32 i = 0; i < chain.SlotsInBatch; ++i) {
                     auto x = MakeIntrusive<TMemRegion>(chunk, i * chain.SlotSize, chain.SlotSize);
@@ -841,8 +883,8 @@ namespace NInterconnect::NRdma {
                 Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 // Try to get slot from local cache
                 auto& localChain = Chains[chainIndex];
-                TMemRegionPtr slot = localChain.TryGetSlot();
-                if (slot) {
+
+                if (auto slot= localChain.TryGetSlot()) {
                     return slot;
                 }
 
@@ -853,8 +895,9 @@ namespace NInterconnect::NRdma {
                     auto batch = pool.Chains[chainIndex].GetSlotsBatch(allChunksAllocated);
                     if (batch) {
                         localChain.PutSlotsBatch(std::move(*batch));
-                        if (auto memRegion = localChain.TryGetSlot()) {
-                            return memRegion;
+                        auto slot = localChain.TryGetSlot();
+                        if (slot) {
+                            return slot;
                         }
                     } else {
                         break;
@@ -865,7 +908,11 @@ namespace NInterconnect::NRdma {
                     return nullptr;
                 }
 
-                return localChain.TryGetSlot();
+                auto slot = localChain.TryGetSlot();
+                if (slot) {
+                    return slot;
+                }
+                return nullptr;
             }
 
             void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
@@ -943,16 +990,11 @@ namespace NInterconnect::NRdma {
         TMemRegionPtr AllocImpl(int size, ui32 flags) noexcept override {
             if (auto memReg = LocalCache.AllocImpl(size, flags, *this)) {
                 memReg->Resize(size);
-                i64 newVal = AllocatedCounter->Add(size);
-
-                TrackPeakAlloc(newVal);
-
                 return memReg;
             }
             return nullptr;
         }
         void Free(TMemRegion&& mr, TChunk&) noexcept override {
-            AllocatedCounter->Sub(mr.GetSize());
             LocalCache.Free(std::move(mr), *this);
         }
 

@@ -1,8 +1,9 @@
-SET(YDB_REPLAY_SRCS
-    query_compiler.cpp
-    query_replay.cpp
-    query_replay.h
-    main.cpp
+SET(YDB_REPLAY_LIB_SRCS
+    ../query_compiler.cpp
+    ../query_replay.cpp
+    ../plan_check.cpp
+    ../metadata.cpp
+    ../replay_runner.cpp
 )
 
 SET(YDB_REPLAY_PEERDIRS

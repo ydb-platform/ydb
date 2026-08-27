@@ -5,8 +5,12 @@ ALLOCATOR(LF)
 YQL_LAST_ABI_VERSION()
 INCLUDE(${ARCADIA_ROOT}/ydb/tools/query_replay_yt/common_deps.inc)
 
-SRCS(${YDB_REPLAY_SRCS})
+SRCS(
+    main.cpp
+)
 
-PEERDIR(${YDB_REPLAY_PEERDIRS})
+PEERDIR(
+    ydb/tools/query_replay_yt/lib
+)
 
 END()

@@ -2147,7 +2147,7 @@ message TImmediateControlsConfig {
             Description: "Upper bound for the chunk reserve of the static group VDisks, in permille of the user chunk pool of the PDisk. 0 disables the reserve",
             MinValue: 0,
             MaxValue: 1000,
-            DefaultValue: 500 }];
+            DefaultValue: 25 }];
     }
 
     message TBlobStorageControllerControls {

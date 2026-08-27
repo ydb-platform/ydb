@@ -1758,9 +1758,6 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                             .VDiskId = OwnerData[ownerId].VDiskId,
                             .Weight = GetOwnerWeight(OwnerData[ownerId].GroupSizeInUnits),
                         };
-                        if (OwnerData[ownerId].IsStaticGroupOwner()) {
-                            params.HasStaticGroups = true;
-                        }
                     }
                 }
 

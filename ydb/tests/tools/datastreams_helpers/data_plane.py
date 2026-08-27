@@ -53,8 +53,8 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
 
     driver_config = ydb.DriverConfig(endpoint, database, disable_discovery=True)
     driver = ydb.Driver(driver_config)
-    driver.wait(timeout=max(timeout, plain_or_under_sanitizer(10, 30)))
     try:
+        driver.wait(timeout=max(timeout, plain_or_under_sanitizer(10, 30)))
         ret = []
         with driver.topic_client.reader(path, consumer=consumer_name) as reader:
             while len(ret) < messages_count:

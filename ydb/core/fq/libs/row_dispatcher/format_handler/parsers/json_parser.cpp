@@ -227,7 +227,7 @@ public:
                 auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
                 auto elementsCount = tupleType->GetElementsCount();
                 NYql::NUdf::TUnboxedValue *resultValues;
-                auto tuple = HolderFactory->CreateDirectArrayHolder(elementsCount, resultValues);
+                NYql::NUdf::TUnboxedValue tuple = HolderFactory->CreateDirectArrayHolder(elementsCount, resultValues);
                 size_t idx = 0;
                 array.reset();
                 for (auto elt : array) {
@@ -270,7 +270,7 @@ public:
                 Y_ENSURE(memberNames.size() == membersCount);
 
                 NYql::NUdf::TUnboxedValue *resultValues;
-                auto structValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
+                NYql::NUdf::TUnboxedValue structValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
                 object.reset();
                 for (auto elt : object) {
                     std::string_view name;
@@ -338,7 +338,7 @@ public:
                 GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded, useIHash);
                 Y_ENSURE(!(isTuple || encoded || useIHash));
                 status = TStatus::Success();
-                auto dictValue = HolderFactory->CreateDirectHashedDictHolder(
+                NYql::NUdf::TUnboxedValue dictValue = HolderFactory->CreateDirectHashedDictHolder(
                     [&, this](auto& map) {
                         for (auto elt : jsonObject) {
                             std::string_view name;

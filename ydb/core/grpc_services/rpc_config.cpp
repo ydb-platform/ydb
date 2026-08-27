@@ -134,6 +134,12 @@ bool ConvertGetConfigToFetchConfigResult(
     return true;
 }
 
+bool IsDomainDatabaseOrEmpty(const TMaybe<TString>& databaseName) {
+    return !databaseName || databaseName->empty()
+        || NKikimr::CanonizePath(*databaseName)
+            == NKikimr::CanonizePath(NKikimr::AppData()->DomainsInfo->Domain->Name);
+}
+
 } // namespace
 
 namespace NKikimr::NGRpcService {
@@ -293,6 +299,13 @@ public:
         if (!NKikimr::IsAdministrator(AppData(), Request_->GetInternalToken().Get())) {
             self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
+            return;
+        }
+        if (!IsDomainDatabaseOrEmpty(Request_->GetDatabaseName())) {
+            self->Reply(Ydb::StatusIds::BAD_REQUEST,
+                "Cluster configuration replacement cannot be performed on a tenant database. "
+                "Specify the domain database or omit the database.",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
         self->Become(&TReplaceStorageConfigRequest::StateFunc);
@@ -684,6 +697,14 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
             if (!CheckAccess()) {
                 Request().RaiseIssue(NYql::TIssue("Access denied"));
                 Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
+                return;
+            }
+
+            if (!IsDomainDatabaseOrEmpty(Request().GetDatabaseName())) {
+                Reply(Ydb::StatusIds::BAD_REQUEST,
+                    "Cluster bootstrap cannot be performed on a tenant database. "
+                    "Specify the domain database or omit the database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
 

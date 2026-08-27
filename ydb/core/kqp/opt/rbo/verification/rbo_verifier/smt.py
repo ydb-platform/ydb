@@ -136,86 +136,160 @@ class _RenderContext:
 
 
 def _render_scope(root: Term, context: _RenderContext) -> str:
-    """Linearize shared term identities without lifting bound expressions.
+    """Linearize structurally equal terms without lifting bound expressions.
 
     Quantifier bodies start fresh scopes because their symbol names deliberately
-    shadow global witness constants.  Within one scope, repeated compound terms
-    become let aliases.  Dependency levels use nested, parallel-binding lets, so
-    every alias is defined outside the aliases that refer to it.
+    shadow global witness constants.  Within one scope, structurally equal
+    compound terms become let aliases.  Dependency levels use nested,
+    parallel-binding lets, so every alias is defined outside the aliases that
+    refer to it.
     """
 
-    terms: dict[int, Term] = {}
-    references: dict[int, int] = {}
-    discovery: list[int] = []
-
+    identity_discovery: list[Term] = []
+    seen_identities: set[int] = set()
     pending = [root]
     while pending:
         term = pending.pop()
         identity = id(term)
-        references[identity] = references.get(identity, 0) + 1
-        if identity in terms:
+        if identity in seen_identities:
             continue
-        terms[identity] = term
-        discovery.append(identity)
+        seen_identities.add(identity)
+        identity_discovery.append(term)
         if term.operation in {"forall", "exists"}:
             continue
         pending.extend(reversed(term.arguments))
+
+    # Give every exact structure a small scope-local identity.  Keys contain
+    # only scalar metadata and already-computed child identities, so even deep
+    # Terms with colliding cached hashes never trigger recursive equality here.
+    # Quantifiers are opaque in their containing scope; their bodies are
+    # independently interned by the nested _render_scope call below.
+    structural_ids: dict[int, int] = {}
+    structures: dict[tuple[object, ...], int] = {}
+    next_structural_id = 0
+    pending_structure = [(root, False)]
+    while pending_structure:
+        term, expanded = pending_structure.pop()
+        identity = id(term)
+        if identity in structural_ids:
+            continue
+        if term.operation in {"forall", "exists"}:
+            structural_ids[identity] = next_structural_id
+            next_structural_id += 1
+            continue
+        if not expanded:
+            pending_structure.append((term, True))
+            pending_structure.extend(
+                (argument, False)
+                for argument in reversed(term.arguments)
+                if id(argument) not in structural_ids
+            )
+            continue
+        structure = (
+            term.__class__,
+            term.sort,
+            term.operation,
+            term.atom,
+            tuple(structural_ids[id(argument)] for argument in term.arguments),
+        )
+        structural_id = structures.get(structure)
+        if structural_id is None:
+            structural_id = next_structural_id
+            next_structural_id += 1
+            structures[structure] = structural_id
+        structural_ids[identity] = structural_id
+
+    terms: dict[int, Term] = {}
+    discovery: list[int] = []
+    children: dict[int, tuple[int, ...]] = {}
+    for term in identity_discovery:
+        structural_id = structural_ids[id(term)]
+        if structural_id in terms:
+            continue
+        terms[structural_id] = term
+        discovery.append(structural_id)
+        children[structural_id] = (
+            ()
+            if term.operation in {"forall", "exists"}
+            else tuple(
+                structural_ids[id(argument)]
+                for argument in term.arguments
+            )
+        )
+
+    references = {structural_id: 0 for structural_id in discovery}
+    references[structural_ids[id(root)]] = 1
+    for structural_id in discovery:
+        for child in children[structural_id]:
+            references[child] += 1
     candidates = {
-        identity
-        for identity in discovery
-        if references[identity] > 1 and terms[identity].arguments
+        structural_id
+        for structural_id in discovery
+        if (
+            references[structural_id] > 1
+            and terms[structural_id].arguments
+        )
     }
     if not candidates:
         return _render_unshared(root, context)
 
     levels: dict[int, int] = {}
     maximum_below: dict[int, int] = {}
-    pending_levels = [(root, False)]
+    pending_levels = [(structural_ids[id(root)], False)]
     while pending_levels:
-        term, expanded = pending_levels.pop()
-        identity = id(term)
-        if identity in maximum_below:
+        structural_id, expanded = pending_levels.pop()
+        if structural_id in maximum_below:
             continue
         if not expanded:
-            pending_levels.append((term, True))
-            if term.operation not in {"forall", "exists"}:
-                pending_levels.extend(
-                    (argument, False)
-                    for argument in reversed(term.arguments)
-                    if id(argument) not in maximum_below
-                )
-            continue
-        child_level = 0
-        if term.operation not in {"forall", "exists"}:
-            child_level = max(
-                (maximum_below[id(argument)] for argument in term.arguments),
-                default=0,
+            pending_levels.append((structural_id, True))
+            pending_levels.extend(
+                (child, False)
+                for child in reversed(children[structural_id])
+                if child not in maximum_below
             )
-        if identity in candidates:
-            levels[identity] = child_level + 1
+            continue
+        child_level = max(
+            (maximum_below[child] for child in children[structural_id]),
+            default=0,
+        )
+        if structural_id in candidates:
+            levels[structural_id] = child_level + 1
             child_level += 1
-        maximum_below[identity] = child_level
+        maximum_below[structural_id] = child_level
 
-    positions = {identity: index for index, identity in enumerate(discovery)}
+    positions = {
+        structural_id: index
+        for index, structural_id in enumerate(discovery)
+    }
     aliases = {
-        identity: context.fresh_alias()
-        for identity in sorted(
+        structural_id: context.fresh_alias()
+        for structural_id in sorted(
             (item for item in discovery if item in candidates),
             key=lambda item: (levels[item], positions[item]),
         )
     }
 
-    body = _render_term(root, context, aliases)
+    body = _render_term(root, context, aliases, structural_ids)
     by_level: dict[int, list[int]] = {}
-    for identity in discovery:
-        if identity in candidates:
-            by_level.setdefault(levels[identity], []).append(identity)
+    for structural_id in discovery:
+        if structural_id in candidates:
+            by_level.setdefault(levels[structural_id], []).append(
+                structural_id
+            )
     for level in sorted(by_level, reverse=True):
-        bindings = " ".join(
-            f"({aliases[identity]} "
-            f"{_render_term(terms[identity], context, aliases, identity)})"
-            for identity in by_level[level]
-        )
+        rendered_bindings = []
+        for structural_id in by_level[level]:
+            definition = _render_term(
+                terms[structural_id],
+                context,
+                aliases,
+                structural_ids,
+                structural_id,
+            )
+            rendered_bindings.append(
+                f"({aliases[structural_id]} {definition})"
+            )
+        bindings = " ".join(rendered_bindings)
         body = f"(let ({bindings}) {body})"
     return body
 
@@ -230,6 +304,7 @@ def _render_term(
     root: Term,
     context: _RenderContext,
     aliases: dict[int, str],
+    structural_ids: dict[int, int] | None = None,
     defining: int | None = None,
 ) -> str:
     """Render one scope with an explicit stack and optional let aliases."""
@@ -246,9 +321,17 @@ def _render_term(
             continue
 
         assert isinstance(item, Term)
-        identity = id(item)
-        alias = aliases.get(identity)
-        if alias is not None and identity != bypass:
+        structural_id = (
+            None
+            if structural_ids is None
+            else structural_ids[id(item)]
+        )
+        alias = (
+            None
+            if structural_id is None
+            else aliases.get(structural_id)
+        )
+        if alias is not None and structural_id != bypass:
             pieces.append(alias)
             continue
         if item.operation == "symbol":

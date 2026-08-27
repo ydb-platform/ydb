@@ -64,5 +64,43 @@ namespace NKikimr {
             LatencyMsMax.Update();
         }
 
+        TInFlightLatencyGuard::TInFlightLatencyGuard(TLtcHistoPtr histogram, ui64 requestId, TInstant receivedTime)
+            : Histogram(std::move(histogram))
+            , RequestId(requestId)
+        {
+            if (Histogram) {
+                Histogram->AddInFlightRequest(RequestId, receivedTime);
+            }
+        }
+
+        TInFlightLatencyGuard::~TInFlightLatencyGuard() {
+            Reset();
+        }
+
+        TInFlightLatencyGuard::TInFlightLatencyGuard(TInFlightLatencyGuard&& other) noexcept
+            : Histogram(std::move(other.Histogram))
+            , RequestId(other.RequestId)
+        {
+            other.RequestId = 0;
+        }
+
+        TInFlightLatencyGuard& TInFlightLatencyGuard::operator=(TInFlightLatencyGuard&& other) noexcept {
+            if (this != &other) {
+                Reset();
+                Histogram = std::move(other.Histogram);
+                RequestId = other.RequestId;
+                other.RequestId = 0;
+            }
+            return *this;
+        }
+
+        void TInFlightLatencyGuard::Reset() {
+            if (Histogram) {
+                Histogram->RemoveInFlightRequest(RequestId);
+                Histogram.reset();
+            }
+            RequestId = 0;
+        }
+
     } // namespace NVDiskMon
 } // namespace NKikimr

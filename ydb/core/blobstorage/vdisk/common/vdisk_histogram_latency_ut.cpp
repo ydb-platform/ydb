@@ -48,6 +48,68 @@ namespace NKikimr::NVDiskMon {
             UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
         }
 
+        Y_UNIT_TEST(InFlightLatencyGuardRemovesRequestOnDestruction) {
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            auto histo = std::make_shared<TLtcHisto>(counters, "handleclass", "GetFast", NPDisk::DEVICE_TYPE_ROT);
+
+            auto handleClassGroup = counters->FindSubgroup("handleclass", "GetFast");
+            UNIT_ASSERT(handleClassGroup);
+            auto latencyGroup = handleClassGroup->FindSubgroup("subsystem", "latency_histo");
+            UNIT_ASSERT(latencyGroup);
+
+            auto inFlightSum = latencyGroup->FindCounter("InFlightLatencyMsSum");
+            auto inFlightCount = latencyGroup->FindCounter("InFlightCount");
+            UNIT_ASSERT(inFlightSum);
+            UNIT_ASSERT(inFlightCount);
+
+            {
+                TInFlightLatencyGuard guard(histo, 42, TInstant::MilliSeconds(1'000));
+                UNIT_ASSERT_VALUES_EQUAL(guard.GetRequestId(), 42);
+
+                histo->UpdateCounters(TInstant::MilliSeconds(2'500));
+
+                UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 1'500);
+                UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+            }
+
+            histo->UpdateCounters(TInstant::MilliSeconds(3'000));
+            UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 0);
+        }
+
+        Y_UNIT_TEST(InFlightLatencyGuardMoveTransfersOwnership) {
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            auto histo = std::make_shared<TLtcHisto>(counters, "handleclass", "GetFast", NPDisk::DEVICE_TYPE_ROT);
+
+            auto handleClassGroup = counters->FindSubgroup("handleclass", "GetFast");
+            UNIT_ASSERT(handleClassGroup);
+            auto latencyGroup = handleClassGroup->FindSubgroup("subsystem", "latency_histo");
+            UNIT_ASSERT(latencyGroup);
+
+            auto inFlightSum = latencyGroup->FindCounter("InFlightLatencyMsSum");
+            auto inFlightCount = latencyGroup->FindCounter("InFlightCount");
+            UNIT_ASSERT(inFlightSum);
+            UNIT_ASSERT(inFlightCount);
+
+            {
+                TInFlightLatencyGuard movedGuard;
+                {
+                    TInFlightLatencyGuard guard(histo, 42, TInstant::MilliSeconds(1'000));
+                    movedGuard = std::move(guard);
+                    UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetRequestId(), 42);
+                }
+
+                histo->UpdateCounters(TInstant::MilliSeconds(2'500));
+
+                UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 1'500);
+                UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+            }
+
+            histo->UpdateCounters(TInstant::MilliSeconds(3'000));
+            UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 0);
+        }
+
     } // Y_UNIT_TEST_SUITE(TVDiskLatencyCounters)
 
 } // namespace NKikimr::NVDiskMon

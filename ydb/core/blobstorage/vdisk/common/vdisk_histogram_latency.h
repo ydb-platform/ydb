@@ -47,5 +47,31 @@ namespace NKikimr {
 
         using TLtcHistoPtr = std::shared_ptr<TLtcHisto>;
 
+        // Owns one in-flight latency record. Construction/destruction updates the tracked
+        // request set immediately; visible monitoring counters are snapshot-published by
+        // TLtcHisto::UpdateCounters().
+        class TInFlightLatencyGuard {
+        public:
+            TInFlightLatencyGuard() = default;
+            TInFlightLatencyGuard(TLtcHistoPtr histogram, ui64 requestId, TInstant receivedTime);
+            ~TInFlightLatencyGuard();
+
+            TInFlightLatencyGuard(const TInFlightLatencyGuard&) = delete;
+            TInFlightLatencyGuard& operator=(const TInFlightLatencyGuard&) = delete;
+
+            TInFlightLatencyGuard(TInFlightLatencyGuard&& other) noexcept;
+            TInFlightLatencyGuard& operator=(TInFlightLatencyGuard&& other) noexcept;
+
+            ui64 GetRequestId() const {
+                return RequestId;
+            }
+
+            void Reset();
+
+        private:
+            TLtcHistoPtr Histogram;
+            ui64 RequestId = 0;
+        };
+
     } // namespace NVDiskMon
 } // namespace NKikimr

@@ -108,15 +108,14 @@ namespace NKikimr {
             TActorId ActorId;
             NWilson::TSpan Span;
             std::shared_ptr<TVDiskSkeletonTrace> Trace;
-            ui64 InternalMessageId;
-            NVDiskMon::TLtcHistoPtr LatencyHistogram;
+            NVDiskMon::TInFlightLatencyGuard InFlightLatency;
 
             TRecord() = default;
 
             TRecord(std::unique_ptr<IEventHandle> ev, TInstant now, ui32 recByteSize, const NBackpressure::TMessageId &msgId,
                     ui64 cost, TInstant deadline, NKikimrBlobStorage::EVDiskQueueId extQueueId,
                     const NBackpressure::TQueueClientId& clientId, TString name, std::shared_ptr<TVDiskSkeletonTrace> &&trace,
-                    ui64 internalMessageId, NVDiskMon::TLtcHistoPtr latencyHistogram)
+                    NVDiskMon::TInFlightLatencyGuard inFlightLatency)
                 : Ev(std::move(ev))
                 , ReceivedTime(now)
                 , Deadline(deadline)
@@ -128,8 +127,7 @@ namespace NKikimr {
                 , ActorId(Ev->Sender)
                 , Span(TWilson::VDiskTopLevel, std::move(Ev->TraceId), "VDisk.SkeletonFront.Queue")
                 , Trace(std::move(trace))
-                , InternalMessageId(internalMessageId)
-                , LatencyHistogram(std::move(latencyHistogram))
+                , InFlightLatency(std::move(inFlightLatency))
             {
                 Span.Attribute("QueueName", std::move(name));
                 Ev->TraceId = Span.GetTraceId();
@@ -155,15 +153,15 @@ namespace NKikimr {
                 ui64 MsgId;
                 TInstant ReceivedTime;
                 TInstant SentToSkeletonTime;
-                NVDiskMon::TLtcHistoPtr LatencyHistogram;
+                NVDiskMon::TInFlightLatencyGuard InFlightLatency;
                 std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
 
                 TMsgInfo(ui64 msgId, TInstant receivedTime, TInstant sentToSkeletonTime,
-                        NVDiskMon::TLtcHistoPtr latencyHistogram, std::shared_ptr<TVDiskSkeletonTrace> &&trace)
+                        NVDiskMon::TInFlightLatencyGuard inFlightLatency, std::shared_ptr<TVDiskSkeletonTrace> &&trace)
                     : MsgId(msgId)
                     , ReceivedTime(receivedTime)
                     , SentToSkeletonTime(sentToSkeletonTime)
-                    , LatencyHistogram(std::move(latencyHistogram))
+                    , InFlightLatency(std::move(inFlightLatency))
                     , VDiskSkeletonTrace(std::move(trace))
                 {}
             };
@@ -252,6 +250,7 @@ namespace NKikimr {
                          NKikimrBlobStorage::EVDiskQueueId extQueueId, TFront& /*front*/,
                          const NBackpressure::TQueueClientId& clientId, std::shared_ptr<TVDiskSkeletonTrace> &&trace,
                          ui64 internalMessageId, TInstant receivedTime, NVDiskMon::TLtcHistoPtr latencyHistogram) {
+                NVDiskMon::TInFlightLatencyGuard inFlightLatency(std::move(latencyHistogram), internalMessageId, receivedTime);
                 if (!Queue->Head() && CanSendToSkeleton(cost)) {
                     // send to Skeleton for further processing
                     ctx.Send(converted.release());
@@ -265,11 +264,8 @@ namespace NKikimr {
                     *SkeletonFrontInFlightCost += cost;
                     *SkeletonFrontInFlightBytes += recByteSize;
 
-                    if (latencyHistogram) {
-                        latencyHistogram->AddInFlightRequest(internalMessageId, receivedTime);
-                    }
                     Msgs.emplace(internalMessageId, TMsgInfo(msgId.MsgId, receivedTime, receivedTime,
-                        std::move(latencyHistogram), std::move(trace)));
+                        std::move(inFlightLatency), std::move(trace)));
                     UpdateState();
                 } else {
                     // enqueue
@@ -279,11 +275,8 @@ namespace NKikimr {
                     ++*SkeletonFrontDelayedCount;
                     *SkeletonFrontDelayedBytes += recByteSize;
 
-                    if (latencyHistogram) {
-                        latencyHistogram->AddInFlightRequest(internalMessageId, receivedTime);
-                    }
                     Queue->Push(TRecord(std::move(converted), receivedTime, recByteSize, msgId, cost, deadline, extQueueId,
-                        clientId, Name, std::move(trace), internalMessageId, std::move(latencyHistogram)));
+                        clientId, Name, std::move(trace), std::move(inFlightLatency)));
                 }
             }
 
@@ -295,11 +288,6 @@ namespace NKikimr {
 
         private:
             void DropInFlightOnError() {
-                for (const auto& [internalMessageId, msgInfo] : Msgs) {
-                    if (msgInfo.LatencyHistogram) {
-                        msgInfo.LatencyHistogram->RemoveInFlightRequest(internalMessageId);
-                    }
-                }
                 Msgs.clear();
 
                 InFlightCount = 0;
@@ -335,15 +323,9 @@ namespace NKikimr {
                         rec->Span.EndOk();
 
                         if (forceError) {
-                            if (rec->LatencyHistogram) {
-                                rec->LatencyHistogram->RemoveInFlightRequest(rec->InternalMessageId);
-                            }
                             front.GetExtQueue(rec->ExtQueueId).DroppedWithError(ctx, rec, now, front);
                         } else if (now >= rec->Deadline) {
                             ++Deadlines;
-                            if (rec->LatencyHistogram) {
-                                rec->LatencyHistogram->RemoveInFlightRequest(rec->InternalMessageId);
-                            }
                             front.GetExtQueue(rec->ExtQueueId).DeadlineHappened(ctx, rec, now, front);
                         } else {
                             ctx.Send(rec->Ev.release());
@@ -358,8 +340,9 @@ namespace NKikimr {
                             *SkeletonFrontInFlightCost += cost;
                             *SkeletonFrontInFlightBytes += recByteSize;
 
-                            Msgs.emplace(rec->InternalMessageId, TMsgInfo(rec->MsgId.MsgId, rec->ReceivedTime, now,
-                                std::move(rec->LatencyHistogram), std::move(rec->Trace)));
+                            const ui64 internalMessageId = rec->InFlightLatency.GetRequestId();
+                            Msgs.emplace(internalMessageId, TMsgInfo(rec->MsgId.MsgId, rec->ReceivedTime, now,
+                                std::move(rec->InFlightLatency), std::move(rec->Trace)));
                             UpdateState();
                         }
                         Queue->Pop();
@@ -394,9 +377,6 @@ namespace NKikimr {
                 *SkeletonFrontInFlightBytes -= msgCtx.RecByteSize;
                 *SkeletonFrontCostProcessed += msgCtx.Cost;
 
-                if (msgIt->second.LatencyHistogram) {
-                    msgIt->second.LatencyHistogram->RemoveInFlightRequest(msgCtx.InternalMessageId);
-                }
                 Msgs.erase(msgIt);
 
                 UpdateState();

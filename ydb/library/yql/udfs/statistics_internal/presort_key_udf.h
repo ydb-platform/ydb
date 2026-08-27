@@ -4,6 +4,8 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 
+#include <util/system/yassert.h>
+
 namespace NKikimr::NStat::NAggFuncs {
 
 // Scalar UDF: StatisticsInternal::PresortKey(AsTuple(a, b, ...)) -> String
@@ -19,11 +21,17 @@ class TPresortKeyFunc : public NYql::NUdf::TBoxedValue {
     TVector<TElementDesc> Elements_;
     bool IsTuple_ = false;
     NYql::NUdf::TSourcePosition Pos_;
+    mutable NMiniKQL::TPresortEncoder Encoder_;
 
 public:
     explicit TPresortKeyFunc(TVector<TElementDesc> elements, bool isTuple,
                              NYql::NUdf::TSourcePosition pos)
-        : Elements_(std::move(elements)), IsTuple_(isTuple), Pos_(pos) {}
+        : Elements_(std::move(elements)), IsTuple_(isTuple), Pos_(pos)
+    {
+        for (const auto& e : Elements_) {
+            Encoder_.AddType(e.Slot, e.IsOptional, /*isDesc=*/false);
+        }
+    }
 
     static NYql::NUdf::TStringRef Name() {
         static const TString name = "PresortKey";
@@ -133,31 +141,18 @@ private:
     Run(const NYql::NUdf::IValueBuilder *valueBuilder,
         const NYql::NUdf::TUnboxedValuePod *args) const override {
         try {
-            // Build the encoder per call. AddType just appends to a small vector, so
-            // this is cheap, and it avoids the stale-encoder hazard of a thread_local
-            // cache keyed by `this`: the implementation object is owned by the
-            // function registry and dies when the query ends, so a later query can
-            // allocate a new TPresortKeyFunc at the same address with a different
-            // Elements_ list and silently reuse the wrong encoder.
-            NMiniKQL::TPresortEncoder encoder;
-            for (const auto &e : Elements_) {
-                encoder.AddType(e.Slot, e.IsOptional, /*isDesc=*/false);
-            }
+            Y_DEBUG_ABORT_UNLESS(!Elements_.empty());
+            Y_DEBUG_ABORT_UNLESS(IsTuple_ || Elements_.size() == 1);
 
-            encoder.Start();
+            Encoder_.Start();
             for (size_t i = 0; i < Elements_.size(); ++i) {
-                // Encode() takes const TUnboxedValuePod& and handles the optional
-                // itself: it writes the has-value byte inline and returns early when
-                // the value is empty, so no unwrapping is needed here.  TUnboxedValue
-                // derives from TUnboxedValuePod, so both branches bind directly to the
-                // base reference without any explicit cast.
                 if (IsTuple_) {
-                    encoder.Encode(args[0].GetElement(i));
+                    Encoder_.Encode(args[0].GetElement(i));
                 } else {
-                    encoder.Encode(args[0]);
+                    Encoder_.Encode(args[0]);
                 }
             }
-            const TStringBuf encoded = encoder.Finish(); // borrowed -- copy before next Start()
+            const TStringBuf encoded = Encoder_.Finish();
             return valueBuilder->NewString(
                 NYql::NUdf::TStringRef(encoded.data(), encoded.size()));
         } catch (const std::exception &ex) {

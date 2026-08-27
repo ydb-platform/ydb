@@ -11,6 +11,8 @@
 #include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
+#include <algorithm>
+#include <cmath>
 #include <numbers>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
@@ -342,6 +344,8 @@ constexpr ui32 MIN_BUCKETS = 1;
 // Buckets for a column with n rows and ndv distinct values. Shared by equi-width and equi-height.
 // Preserves the existing MIN_BUCKETS / MAX_BUCKETS - 24 clamping.
 static ui32 EstimateBucketCount(double n, double ndv) {
+    n = std::max(n, 0.0);
+    ndv = std::max(ndv, 1.0);
     const double cbrtN = std::cbrt(n);
     const double numBucketsEstimate = std::ceil(
         std::min(std::sqrt(n), cbrtN * n / ndv));
@@ -609,12 +613,14 @@ public:
     EStatType GetType() const final { return EStatType::EQ_HEIGHT_HISTOGRAM; }
     const std::vector<ui32>& GetColumnIds() const final { return ColumnIds; }
 
-    // Bounds the intermediate state crossing the scan result row (what
-    // MAX_STATISTICS_SIZE_IN_SINGLE_SCAN budgets).  Add/Merge compact to
-    // MaxStateBytes/2, and Finalize further trims, but Serialize() adds a
-    // small header plus MinKey.  Returning MaxStateBytes is a conservative
-    // estimate rather than a key-width guess.
-    size_t EstimateSize() const final { return Params.MaxStateBytes; }
+    // Scan-batch budget: typical serialized summary is ~EmissionRate entries.
+    // Cap at MaxStateBytes (Compact's hard ceiling).
+    size_t EstimateSize() const final {
+        constexpr size_t assumedAverageKeyWidth = 128;
+        const size_t typical =
+            static_cast<size_t>(std::max(Params.NumBuckets, Params.EmissionRate)) * assumedAverageKeyWidth;
+        return std::min(typical, static_cast<size_t>(Params.MaxStateBytes));
+    }
 
     void AddAggregations(TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregationTuple(ColumnNames, ETupleEncoding::PresortKey, "EQH",

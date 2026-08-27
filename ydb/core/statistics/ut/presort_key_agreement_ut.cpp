@@ -53,6 +53,11 @@ struct TTypedValue {
 
 using TTypedTuple = std::vector<TTypedValue>;
 
+struct TColDesc {
+    NScheme::TTypeId TypeId;
+    bool IsOptional = false;
+};
+
 // Cell bytes → TUnboxedValuePod for TPresortEncoder::Encode().
 TUnboxedValue MakePod(const TTypedValue& v) {
     if (v.IsNull) {

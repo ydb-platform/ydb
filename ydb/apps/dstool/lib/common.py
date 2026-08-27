@@ -279,6 +279,10 @@ class ConnectionParams:
 connection_params = ConnectionParams()
 
 
+def has_explicit_grpc_endpoints():
+    return bool(connection_params.grpc_endpoints)
+
+
 def set_connection_params_type(connection_params_type: type):
     global connection_params
     connection_params = connection_params_type()

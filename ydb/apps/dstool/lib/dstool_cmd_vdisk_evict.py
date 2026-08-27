@@ -146,6 +146,10 @@ def _do_distributed_storage(args):
 
 
 def do(args):
+    if not common.has_explicit_grpc_endpoints():
+        _do_legacy(args)
+        return
+
     try:
         _do_distributed_storage(args)
     except common.DistributedStorageUnavailable as error:

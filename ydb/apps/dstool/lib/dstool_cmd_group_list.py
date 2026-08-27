@@ -112,13 +112,20 @@ def _convert_legacy_storage_state(data):
     return result
 
 
+def _fetch_legacy_storage(args):
+    data = common.fetch_base_config_and_storage_pools(virtualGroupsOnly=args.virtual_groups_only)
+    return _convert_legacy_storage_state(data)
+
+
 def _fetch_storage(args):
+    if not common.has_explicit_grpc_endpoints():
+        return _fetch_legacy_storage(args)
+
     try:
         return common.fetch_storage_state(storage_pools=True, groups=True, vdisks=True, pdisks=True)
     except common.DistributedStorageUnavailable as error:
         common.print_if_verbose(args, 'INFO: %s; falling back to BlobStorageConfig' % error)
-        data = common.fetch_base_config_and_storage_pools(virtualGroupsOnly=args.virtual_groups_only)
-        return _convert_legacy_storage_state(data)
+        return _fetch_legacy_storage(args)
 
 
 def add_options(p):

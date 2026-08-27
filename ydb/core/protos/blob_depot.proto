@@ -298,4 +298,6 @@ message TEvPushS3RouterMetrics {
     repeated uint64 BalancerLatencyHistogram = 14;
     repeated uint64 NonBalancerLatencyHistogram = 15;
     repeated uint64 BalancerResolveLatencyHistogram = 16;
+    optional uint64 PendingRejects = 17;
+    repeated uint64 PendingLatencyHistogram = 18;
 }

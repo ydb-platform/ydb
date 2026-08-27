@@ -1226,22 +1226,26 @@ namespace NKikimr {
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"tabletId", tabletId},
                 {"gen", gen},
+                {"version", record.GetVersion()},
                 {"marker", "BSVS00"});
 
             TLsnSeg seg;
             ui32 actGen = 0;
-            auto checkStatus = Hull->CheckBlockCmdAndAllocLsn(tabletId, gen, issuerGuid, &actGen, &seg);
-            NKikimrProto::EReplyStatus status = checkStatus.Status;
-            bool postponed = checkStatus.Postponed;
-            bool postponeUntilLsn = checkStatus.Lsn;
+            bool versionChanged = false;
+            const auto writeSource = WriteSourceFromProto(record.GetWriteSourceOp());
+            auto checkStatus = Hull->CheckBlockCmdAndAllocLsn(tabletId, gen, issuerGuid, record.GetVersion(),
+                writeSource, &actGen, &seg, &versionChanged);
             TEvBlobStorage::TEvVBlockResult::TTabletActGen act(tabletId, actGen);
-            std::unique_ptr<TEvBlobStorage::TEvVBlockResult> result(CreateResult(VCtx, status, checkStatus.ErrorReason, &act,
-                ev, now, SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid()));
+            std::unique_ptr<TEvBlobStorage::TEvVBlockResult> result(CreateResult(VCtx, checkStatus.Status,
+                checkStatus.ErrorReason, &act, ev, now, SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid()));
+            if (checkStatus.ObsoleteVersion) {
+                result->Record.SetIsTabletStorageInfoVersionObsolete(true);
+            }
 
-            if (status != NKikimrProto::OK) {
-                if (postponed) {
+            if (checkStatus.Status != NKikimrProto::OK) {
+                if (checkStatus.Postponed) {
                     Hull->PostponeReplyUntilCommitted(result.release(), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                        postponeUntilLsn);
+                        checkStatus.Lsn);
                 } else {
                     YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_BLOCK, "Dump VDiskLogPrefix, TEvVBlockResult, marker",
                         {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
@@ -1254,20 +1258,47 @@ namespace NKikimr {
             }
 
             OverloadHandler->ActualizeWeights(ctx, Mask(EHullDbType::Blocks));
+
+            std::unique_ptr<NPDisk::TEvLog> versionLogMsg;
+
+            if (versionChanged) {
+                NKikimrBlobStorage::TEvVBlock versionRecord;
+                versionRecord.SetTabletId(~tabletId);
+                versionRecord.SetGeneration(record.GetVersion());
+
+                const TLsnSeg vSeg(seg.First, seg.First);
+                auto versionSyncLogMsg = std::make_unique<NSyncLog::TEvSyncLogPut>(vSeg.Point(), ~tabletId,
+                    record.GetVersion(), 0);
+                intptr_t versionLoggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(vSeg, true, ~tabletId,
+                    record.GetVersion(), 0, nullptr, TActorId(), 0));
+                versionLogMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock,
+                    versionRecord.SerializeAsString(), vSeg, reinterpret_cast<void *>(versionLoggedRecId),
+                    std::move(versionSyncLogMsg), nullptr, writeSource);
+
+                seg = {seg.Last, seg.Last};
+            }
+
             // prepare synclog msg in advance
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, gen,
                 record.GetIssuerGuid()));
 
-            bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(seg, confirmSyncLogAlso, tabletId, gen,
-                issuerGuid, std::move(result), ev->Sender, ev->Cookie));
+            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(seg, true, tabletId, gen, issuerGuid,
+                std::move(result), ev->Sender, ev->Cookie));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
+
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock,
-                    ev->GetChainBuffer()->GetString(), seg, loggedRecCookie, std::move(syncLogMsg), nullptr,
-                    WriteSourceFromProto(record.GetWriteSourceOp()));
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock, ev->GetChainBuffer()->GetString(),
+                seg, loggedRecCookie, std::move(syncLogMsg), nullptr, writeSource);
+
             // send prepared message to recovery log
-            ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(ev->TraceId));
+            if (versionLogMsg) {
+                auto multiLog = std::make_unique<NPDisk::TEvMultiLog>();
+                multiLog->AddLog(THolder<NPDisk::TEvLog>(versionLogMsg.release()));
+                multiLog->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()), std::move(ev->TraceId));
+                ctx.Send(Db->LoggerID, multiLog.release());
+            } else {
+                ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(ev->TraceId));
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////

@@ -1462,6 +1462,7 @@ struct TEvBlobStorage {
         const TInstant Deadline;
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
+        const ui32 Version;
         bool IsMonitored = true;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
@@ -1470,24 +1471,27 @@ struct TEvBlobStorage {
             , Deadline(origin.Deadline)
             , IssuerGuid(origin.IssuerGuid)
             , WriteSource(origin.WriteSource)
+            , Version(origin.Version)
             , IsMonitored(origin.IsMonitored)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource())
+                TWriteSource writeSource = UnknownWriteSource(), ui32 version = 0)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
             , WriteSource(writeSource)
+            , Version(version)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid,
-                TWriteSource writeSource = UnknownWriteSource())
+                TWriteSource writeSource = UnknownWriteSource(), ui32 version = 0)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
             , IssuerGuid(issuerGuid)
             , WriteSource(writeSource)
+            , Version(version)
         {}
 
         TString Print(bool isFull) const {
@@ -1495,6 +1499,7 @@ struct TEvBlobStorage {
             TStringStream str;
             str << "TEvBlock {TabletId# " << TabletId
                 << " Generation# " << Generation
+                << " Version# " << Version
                 << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
                 << "}";
@@ -1519,14 +1524,19 @@ struct TEvBlobStorage {
         : TEventLocal<TEvBlockResult, EvBlockResult>
         , TEvResultCommon
     {
-        TEvBlockResult(NKikimrProto::EReplyStatus status)
+        bool IsTabletStorageInfoVersionObsolete = false;
+
+        TEvBlockResult(NKikimrProto::EReplyStatus status,
+                bool isTabletStorageInfoVersionObsolete = false)
             : TEvResultCommon(status)
+            , IsTabletStorageInfoVersionObsolete(isTabletStorageInfoVersionObsolete)
         {}
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+            str << " IsTabletStorageInfoVersionObsolete# " << IsTabletStorageInfoVersionObsolete;
             if (ErrorReason.size()) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }

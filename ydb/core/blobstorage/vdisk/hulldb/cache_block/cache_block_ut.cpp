@@ -10,6 +10,32 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageBlocksCacheTest) {
 
+        Y_UNIT_TEST(FindMaxPersistentAndInFlight) {
+            TBlocksCache c;
+            c.Build(nullptr);
+
+            ui32 generation = 0;
+            ui64 lsn = 0;
+            std::tie(generation, lsn) = c.FindMax(17);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 0);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
+
+            c.UpdatePersistent(17, {2, 0});
+            std::tie(generation, lsn) = c.FindMax(17);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 2);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
+
+            c.UpdateInFlight(17, {3, 0}, 500);
+            std::tie(generation, lsn) = c.FindMax(17);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 3);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 500);
+
+            c.CommitInFlight(17, {3, 0}, 500);
+            std::tie(generation, lsn) = c.FindMax(17);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 3);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
+        }
+
         Y_UNIT_TEST(LegacyAndModern) {
             TBlocksCache c;
             c.Build(nullptr);

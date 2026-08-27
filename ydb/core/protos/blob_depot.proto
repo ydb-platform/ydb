@@ -114,12 +114,15 @@ message TEvBlock {
     optional fixed64 TabletId = 1;
     optional uint32 BlockedGeneration = 2;
     optional uint64 IssuerGuid = 3;
+    optional uint32 Version = 4;
+    optional uint32 WriteSourceOp = 5;
 }
 
 message TEvBlockResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
     optional uint32 TimeToLiveMs = 3;
+    optional bool IsTabletStorageInfoVersionObsolete = 4 [default = false];
 }
 
 message TEvPushNotify {

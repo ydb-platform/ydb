@@ -152,6 +152,61 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicBlock(tenv, 100, tenv.BlobDepot);
     }
 
+    Y_UNIT_TEST(StorageInfoVersion) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1);
+        const ui64 tabletId = 100;
+        const ui64 issuerGuid = 1;
+
+        auto block = [&](ui32 generation, ui32 version) {
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(tabletId, generation,
+                    TInstant::Max(), issuerGuid, TWriteSource::Unknown, version));
+            });
+            return CaptureTEvBlockResult(env, sender, false);
+        };
+
+        auto result = block(10, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(20, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        result = block(11, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(10, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(!result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        // The rejected version bump must not mutate either value.
+        result = block(12, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(13, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(~tabletId, 4, TInstant::Max(),
+                TWriteSource::SyncerMergeBlock));
+        });
+        result = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        const std::optional<ui64> blobDepotTabletId = TryGetBlobDepotTabletId(env, tenv.BlobDepot);
+        UNIT_ASSERT(blobDepotTabletId);
+        RebootBlobDepotTablet(env, *blobDepotTabletId);
+
+        result = block(14, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+    }
+
     Y_UNIT_TEST(BasicCollectGarbage) {
         ui32 seed;
         LoadSeed(seed);

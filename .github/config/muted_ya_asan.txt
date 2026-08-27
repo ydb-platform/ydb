@@ -376,6 +376,7 @@ ydb/tests/fq/control_plane_storage TYdbControlPlaneStoragePipeline.ShouldCheckRe
 ydb/tests/fq/generic/streaming py3test.sole chunk
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

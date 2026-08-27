@@ -509,6 +509,9 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateTestShardSet = 149      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
     COUNTER_FINISHED_OPS_TxDropTestShardSet = 150        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
+
+    // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
+    COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
 }
 
 enum EPercentileCounters {

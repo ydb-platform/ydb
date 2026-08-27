@@ -784,12 +784,14 @@ IActor* CreateStatsParserActor(const TActorId& selfActorId) {
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
+    const auto start = AppData()->MonotonicTimeProvider->Now();
     if (AppData()->FeatureFlags.GetEnablePeriodicTableStatsParseOffload()) {
         ctx.Send(ev->Forward(StatsParserActorId));
-        return;
+    } else {
+        HandlePeriodicTableStats(ev, ctx);
     }
-
-    HandlePeriodicTableStats(ev, ctx);
+    const auto elapsed = AppData()->MonotonicTimeProvider->Now() - start;
+    TabletCounters->Cumulative()[COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS].Increment(elapsed.NanoSeconds());
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvPeriodicTableStatsParsed::TPtr& ev, const TActorContext& ctx) {

@@ -42,6 +42,8 @@
 
 #include <util/string/join.h>
 
+#include <algorithm>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -87,6 +89,11 @@ struct TTaskDistribution {
     // How many scan stages actually saved a ColumnShardHashV1 mapping - guards the check above from passing vacuously
     // on a query the optimizer decided not to shuffle-eliminate.
     ui32 ShuffleEliminationMappings = 0;
+
+    // Of those, how many were checked in a configuration where the two node orderings involved actually differ (see
+    // CheckShuffleEliminationHashMapping). When they coincide the check holds trivially and proves nothing, so a
+    // test that means to cover the mapping must require this to be non-zero.
+    ui32 ShuffleEliminationOrderSensitiveMappings = 0;
 
     ui32 Count(ui32 txIdx = 0, ui32 stageIdx = 0) const {
         auto it = TasksPerStage.find(TStageId(txIdx, stageIdx));
@@ -161,6 +168,16 @@ struct TBuildConfig {
 
     ui64 NodeTotalMemoryBytes = 0;
     ui32 NodeComputeActors = 0;
+
+    // Emit the resource snapshot in descending node-id order instead of ascending.
+    //
+    // The snapshot order becomes TMaxTasksGraph::NodeIdByIdx (AddNodes), which is the order PlaceTasks() lays tasks
+    // into stageInfo.Tasks. By default this test builds the snapshot by walking ShardToNode - a TMap - so nodes come
+    // out ascending, which happens to coincide with the THashMap<nodeId> traversal order used inside
+    // BuildScanTasksFromShards, and any dependency on the difference between the two orders stays invisible. In
+    // production the RM board delivers the snapshot in arbitrary order, so reversing it here is a legitimate
+    // scenario - and the only way to make that difference observable.
+    bool ReverseSnapshotNodeOrder = false;
 };
 
 namespace {
@@ -334,6 +351,10 @@ public:
             }
         }
 
+        if (Config.ReverseSnapshotNodeOrder) {
+            std::reverse(snapshot.begin(), snapshot.end());
+        }
+
         Graph->BuildAllTasks({}, snapshot, nullptr);
 
         // Mirror the executer's placement phase. On revisions where BuildAllTasks() does not assign nodes itself,
@@ -358,7 +379,7 @@ public:
             }
         }
         CheckCrossNodeCopyChannels(reply->Result.CrossNodeCopyChannels);
-        CheckShuffleEliminationHashMapping(reply->Result.ShuffleEliminationHashErrors, reply->Result.ShuffleEliminationMappings);
+        CheckShuffleEliminationHashMapping(reply->Result);
         ctx.Send(Owner, reply.Release());
         Die(ctx);
     }
@@ -475,7 +496,17 @@ private:
     // position i of the stage and every shard it reads, TaskIndexByHash[hashOf(shard)] must be i. When it is not,
     // rows hash to a task that does not hold the matching shard - the value still fits the channel vector, so
     // nothing fires at runtime and the join silently returns wrong results.
-    void CheckShuffleEliminationHashMapping(TVector<TString>& errors, ui32& mappingsFound) const {
+    //
+    // A caveat the first version of this check walked straight into: the invariant is only observable when the two
+    // orderings involved actually differ. BuildScanTasksFromShards walks nodes through a THashMap<nodeId>, while
+    // stageInfo.Tasks is node-major in TMaxTasksGraph::NodeIdByIdx order (the resource-snapshot order). With the
+    // default test setup both come out ascending by node id and every enumeration of the tasks coincides, so the
+    // check passes no matter what the mapping does. Hence OrderSensitive below: the stage counts as covered only
+    // when the placed node order really differs from the hash-map traversal order, and the test asserts that at
+    // least one such stage was seen (TBuildConfig::ReverseSnapshotNodeOrder arranges it).
+    void CheckShuffleEliminationHashMapping(TTaskDistribution& result) const {
+        auto& errors = result.ShuffleEliminationHashErrors;
+
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {
             const auto& params = stageInfo.Meta.ColumnShardHashV1Params;
             if (!stageInfo.Meta.ColumnTableInfoPtr || !params.TaskIndexByHash) {
@@ -505,7 +536,30 @@ private:
             if (expected.empty()) {
                 continue; // stage reads nothing from this table (fully pruned): nothing to compare against.
             }
-            ++mappingsFound;
+            ++result.ShuffleEliminationMappings;
+
+            // Node order as the tasks are laid out in the stage (first appearance) vs the order the same node ids
+            // come out of a THashMap - the container BuildScanTasksFromShards groups shards by. Equal orders mean
+            // the comparison below cannot tell a positional mapping from a traversal-order one.
+            TVector<ui64> placedNodeOrder;
+            THashMap<ui64 /* nodeId */, ui32> nodesProbe;
+            for (ui64 taskId : stageInfo.Tasks) {
+                const auto& node = Graph->GetTask(taskId).Meta.ExpectedNodeId;
+                if (!node) {
+                    continue;
+                }
+                if (nodesProbe[*node]++ == 0) {
+                    placedNodeOrder.push_back(*node);
+                }
+            }
+            TVector<ui64> hashedNodeOrder;
+            hashedNodeOrder.reserve(nodesProbe.size());
+            for (const auto& [nodeId, _] : nodesProbe) {
+                hashedNodeOrder.push_back(nodeId);
+            }
+            if (placedNodeOrder != hashedNodeOrder) {
+                ++result.ShuffleEliminationOrderSensitiveMappings;
+            }
 
             const auto nodeOf = [&](ui64 position) -> TString {
                 if (position >= stageInfo.Tasks.size()) {
@@ -711,11 +765,12 @@ public:
         Execute(TString(CreateTables));
     }
 
-    TTaskDistribution BuildTasks(const TString& query) {
+    TTaskDistribution BuildTasks(const TString& query, bool reverseSnapshotNodeOrder = false) {
         TBuildConfig cfg;
         cfg.NodeCount = NODE_COUNT;
         cfg.NodeComputeActors = 1u << 20;
         cfg.NodeTotalMemoryBytes = 256ULL << 30;
+        cfg.ReverseSnapshotNodeOrder = reverseSnapshotNodeOrder;
 
         return TKqpTasksGraphBuildFixture::BuildTasks(OptimizerHints + query, cfg);
     }
@@ -797,6 +852,11 @@ inline void AssertShuffleEliminationHashMapping(const TTaskDistribution& dist, u
     UNIT_ASSERT_C(dist.ShuffleEliminationMappings >= minMappings,
         "expected at least " << minMappings << " shuffle-eliminated scan stage(s) with a ColumnShardHashV1 mapping, got "
             << dist.ShuffleEliminationMappings << ": the query no longer covers the invariant");
+    // Without this the check below is satisfied by any mapping at all - see CheckShuffleEliminationHashMapping.
+    UNIT_ASSERT_C(dist.ShuffleEliminationOrderSensitiveMappings >= minMappings,
+        "expected at least " << minMappings << " shuffle-eliminated scan stage(s) placed in a node order that differs"
+            " from the THashMap<nodeId> traversal order, got " << dist.ShuffleEliminationOrderSensitiveMappings
+            << " (of " << dist.ShuffleEliminationMappings << " mapping(s)): the scenario cannot observe the invariant");
     UNIT_ASSERT_C(dist.ShuffleEliminationHashErrors.empty(),
         "\n" << JoinSeq("\n", dist.ShuffleEliminationHashErrors));
 }
@@ -2852,8 +2912,12 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
     // Two column tables joined on the sharding key of the probe side: the optimizer eliminates the shuffle on
     // `lineitem` and shuffles `orders` into lineitem's shards with ColumnShardHashV1. The mapping saved by the scan
     // stage must address tasks by their position in the placed stageInfo.Tasks vector - the same order the shuffle's
-    // output channels are created in. Needs >= 2 nodes to be meaningful: on a single node every enumeration of the
-    // stage's tasks coincides.
+    // output channels are created in.
+    //
+    // The resource snapshot is reversed on purpose: it is what fixes NodeIdByIdx and therefore the order PlaceTasks()
+    // lays the tasks out in, and with the default (ascending) snapshot that order coincides with the THashMap<nodeId>
+    // traversal inside BuildScanTasksFromShards, leaving the mapping untestable. AssertShuffleEliminationHashMapping
+    // re-checks that the two orders really did diverge, so the test cannot go quietly vacuous again.
     Y_UNIT_TEST_F(ShuffleEliminationHashMapping, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
             select
@@ -2869,7 +2933,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
                 o.o_orderdate >= Date('1995-01-01');
         )";
 
-        auto dist = BuildTasks(queryText);
+        auto dist = BuildTasks(queryText, /* reverseSnapshotNodeOrder */ true);
         AssertNoCrossNodeCopyChannels(dist);
         AssertShuffleEliminationHashMapping(dist);
 

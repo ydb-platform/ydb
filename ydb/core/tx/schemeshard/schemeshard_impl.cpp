@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
 
@@ -53,15 +54,6 @@ namespace NSchemeShard {
 const ui64 NEW_TABLE_ALTER_VERSION = 1;
 
 namespace {
-
-bool IsVirtualGeneratedColumn(const TTableInfo::TColumn& column) {
-    if (column.DefaultKind != ETableColumnDefaultKind::FromExpression) {
-        return false;
-    }
-
-    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
-    return generatedDesc.ParseFromString(column.DefaultValue) && !generatedDesc.GetStored();
-}
 
 bool ResolvePoolNames(
     const ui32 channelCount,

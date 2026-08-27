@@ -1,5 +1,6 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
 #include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
@@ -31,15 +32,6 @@ using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
 using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
 using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
-
-bool IsVirtualGeneratedColumn(const TTableInfo::TColumn& column) {
-    if (column.DefaultKind != ETableColumnDefaultKind::FromExpression) {
-        return false;
-    }
-
-    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
-    return generatedDesc.ParseFromString(column.DefaultValue) && !generatedDesc.GetStored();
-}
 
 EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas

@@ -14,9 +14,13 @@ TIntrusivePtr<IOperator> TPullUpMapOverCBORule::SimpleMatchAndApply(const TIntru
             auto map = CastOperator<TOpMap>(child);
 
             // We can always pull up a map above the join, unless we try to pull up from a right side of a non-inner join
+            // But we need to check that the join doesn't depend on the map
             if (input->Kind == EOperator::Join) {
                 auto join = CastOperator<TOpJoin>(input);
                 if (join->JoinKind != "Inner" && join->GetLeftInput().Get() != map.Get()) {
+                    continue;
+                }
+                if (!IUIsSubset(join->GetUsedIUs(props), map->GetInput()->GetOutputIUs())) {
                     continue;
                 }
             }

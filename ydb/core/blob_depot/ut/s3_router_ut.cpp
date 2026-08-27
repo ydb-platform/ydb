@@ -430,6 +430,7 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         runtime.SetUseRealInterconnect();
         runtime.Initialize(TAppPrepare().Unwrap());
         runtime.GetAppData(0).AwsClientConfig.SetRequestTimeoutMs(TDuration::Hours(1).MilliSeconds());
+        runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) { return false; });
 
         const ui16 balancerPort = PickFreePort();
         auto* proxy = NHttp::CreateHttpProxy();
@@ -477,7 +478,8 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         WaitReal(runtime, [&] { return s3Server.GetRequestsReceived() >= 1; });
 
         balancer->SetHostname("127.0.0.1:1");
-        WaitReal(runtime, [&] { return balancer->GetReplies() >= 2; });
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_C(balancer->GetReplies() >= 2, "balancer did not refresh after the hostname change");
 
         WaitReal(runtime, [&] { return result->Done.load(); }, holdDuration * 3);
         UNIT_ASSERT_C(result->Ok.load(), result->Error);

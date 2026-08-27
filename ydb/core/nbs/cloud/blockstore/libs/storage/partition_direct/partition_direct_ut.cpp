@@ -1580,7 +1580,6 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
-#if 0   // Temporarily disabled until restore is working correctly
     Y_UNIT_TEST(ShouldRestorePartitionAfterRestart)
     {
         TEnvironmentSetup env{{
@@ -1671,7 +1670,6 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 expectedData);
         }
     }
-#endif
 
     // PBuffer cleanup: once the write LSN advances by PBufferCleanupLsnStep the
     // tablet barrier-erases PBuffer records up to the cleanup bound. Drive two

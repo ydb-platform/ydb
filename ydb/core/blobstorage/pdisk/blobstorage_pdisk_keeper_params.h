@@ -42,9 +42,6 @@ struct TKeeperParams {
     // Special reserve of log chunks for disks with static groups
     i64 CommonStaticLogChunks = (i64)NPDisk::CommonStaticLogChunks;
 
-    // Should be true for disks that have one or more static group
-    bool HasStaticGroups = false;
-
     // Initially owned chunk count for each owner, must be present for all currently present owners
     TMap<TOwner, TOwnerInfo> OwnersInfo;
 

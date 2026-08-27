@@ -176,6 +176,75 @@ void DropIndex(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+Y_UNIT_TEST(SelectWithAnalyzerPresets) {
+    auto kikimr = Kikimr(false);
+    auto db = kikimr.GetQueryClient();
+
+    auto execute = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return result;
+    };
+
+    execute(R"sql(
+        CREATE TABLE `/Root/StandardTexts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (analyzer="standard")
+        );
+    )sql");
+    execute(R"sql(
+        UPSERT INTO `/Root/StandardTexts` (Key, Text) VALUES (1, "Quick brown fox"), (2, "Lazy dog");
+    )sql");
+    {
+        auto result = execute(R"sql(
+            SELECT Key FROM `/Root/StandardTexts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "the FOX") ORDER BY Key;
+        )sql");
+        CompareYson("[[[1u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    execute(R"sql(
+        CREATE TABLE `/Root/SnowballTexts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text)
+                WITH (analyzer="snowball", language="russian")
+        );
+    )sql");
+    execute(R"sql(
+        UPSERT INTO `/Root/SnowballTexts` (Key, Text) VALUES (1, "Машины едут"), (2, "Кошки спят");
+    )sql");
+    {
+        auto result = execute(R"sql(
+            SELECT Key FROM `/Root/SnowballTexts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "и машина") ORDER BY Key;
+        )sql");
+        CompareYson("[[[1u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    execute(R"sql(
+        CREATE TABLE `/Root/KeywordTexts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (analyzer="keyword")
+        );
+    )sql");
+    execute(R"sql(
+        UPSERT INTO `/Root/KeywordTexts` (Key, Text) VALUES (1, "Hello World"), (2, "Hello");
+    )sql");
+    {
+        auto result = execute(R"sql(
+            SELECT Key FROM `/Root/KeywordTexts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "Hello World") ORDER BY Key;
+        )sql");
+        CompareYson("[[[1u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST_QUAD(SelectWithFulltextMatch, UTF8, EnableIndexStreamWrite) {
     auto kikimr = Kikimr(EnableIndexStreamWrite);
     auto db = kikimr.GetQueryClient();
@@ -612,8 +681,8 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, Text, FulltextScore(Text, "%s", 0.75 as K1, 1.2 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextScore(Text, "%s", 0.75 as K1, 1.2 as B) > 0
+            SELECT Key, Text, FulltextScore(Text, "%s", 0.75f as K1, 1.2f as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", 0.75f as K1, 1.2f as B) > 0
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.839970958}, } } });
@@ -644,6 +713,17 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
             LIMIT 10
         )sql", { {"собаки любят ", { {12, 2.839970958}, } } },
         std::move(NYdb::TParamsBuilder().AddParam("$bfactor").Double(1.2).Build().AddParam("$k1factor").Double(0.75).Build()));
+
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            DECLARE $bfactor as Float;
+            DECLARE $k1factor as Float;
+            SELECT Key, Text, FulltextScore(Text, "собаки любят", $bfactor as B, $k1factor as K1) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "собаки любят", $bfactor as B, $k1factor as K1) > 0
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", { {"собаки любят ", { {12, 2.839970958}, } } },
+        std::move(NYdb::TParamsBuilder().AddParam("$bfactor").Float(1.2f).Build().AddParam("$k1factor").Float(0.75f).Build()));
 
 }
 

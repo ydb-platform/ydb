@@ -36,6 +36,9 @@ enum ESimpleCounters {
     COUNTER_SPACE_COLOR_RED = 28 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Red"}];
     COUNTER_SPACE_COLOR_BLACK = 29 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Black"}];
     COUNTER_S3_ROUTER_IS_USING_PROXY = 30 [(NKikimr.CounterOpts) = {Name: "S3/Router/IsUsingProxy"}];
+    COUNTER_S3_GET_READS_IN_FLIGHT = 31 [(NKikimr.CounterOpts) = {Name: "S3/Get/ReadsInFlight"}];
+    COUNTER_S3_GET_MAX_READS_IN_FLIGHT = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/MaxReadsInFlight"}];
+    COUNTER_S3_GET_PENDING_QUEUE_SIZE = 33 [(NKikimr.CounterOpts) = {Name: "S3/Get/PendingQueueSize"}];
 }
 
 enum ECumulativeCounters {
@@ -66,6 +69,12 @@ enum ECumulativeCounters {
     COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES = 24 [(NKikimr.CounterOpts) = {Name: "S3/Router/BalancerResolve/Failures"}];
     COUNTER_S3_ROUTER_ENDPOINT_SWITCHES = 25 [(NKikimr.CounterOpts) = {Name: "S3/Router/EndpointSwitches"}];
     COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS = 26 [(NKikimr.CounterOpts) = {Name: "S3/Router/FiveXxRefreshTriggers"}];
+    COUNTER_S3_ROUTER_PENDING_REJECTS = 27 [(NKikimr.CounterOpts) = {Name: "S3/Router/Pending/Rejects"}];
+    COUNTER_S3_GETS_OK = 28 [(NKikimr.CounterOpts) = {Name: "S3/Gets/Ok"}];
+    COUNTER_S3_GETS_ERROR = 29 [(NKikimr.CounterOpts) = {Name: "S3/Gets/Error"}];
+    COUNTER_S3_GETS_BYTES = 30 [(NKikimr.CounterOpts) = {Name: "S3/Gets/OkBytes"}];
+    COUNTER_S3_GETS_SLOW_DOWN = 31 [(NKikimr.CounterOpts) = {Name: "S3/Gets/SlowDown"}];
+    COUNTER_S3_GET_THROTTLE_ACTIVATIONS = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/ThrottleActivations"}];
 }
 
 enum EPercentileCounters {
@@ -131,6 +140,25 @@ enum EPercentileCounters {
 
     COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS = 3 [(NKikimr.CounterOpts) = {
         Name: "S3/Router/BalancerResolve/LatencyMs",
+        Ranges: { Value: 1        Name: "1"      }
+        Ranges: { Value: 2        Name: "2"      }
+        Ranges: { Value: 5        Name: "5"      }
+        Ranges: { Value: 10       Name: "10"     }
+        Ranges: { Value: 25       Name: "25"     }
+        Ranges: { Value: 50       Name: "50"     }
+        Ranges: { Value: 100      Name: "100"    }
+        Ranges: { Value: 250      Name: "250"    }
+        Ranges: { Value: 500      Name: "500"    }
+        Ranges: { Value: 1000     Name: "1000"   }
+        Ranges: { Value: 2500     Name: "2500"   }
+        Ranges: { Value: 5000     Name: "5000"   }
+        Ranges: { Value: 10000    Name: "10000"  }
+        Ranges: { Value: 30000    Name: "30000"  }
+        Ranges: { Value: 60000    Name: "60000"  }
+    }];
+
+    COUNTER_S3_ROUTER_PENDING_LATENCY_MS = 4 [(NKikimr.CounterOpts) = {
+        Name: "S3/Router/Pending/LatencyMs",
         Ranges: { Value: 1        Name: "1"      }
         Ranges: { Value: 2        Name: "2"      }
         Ranges: { Value: 5        Name: "5"      }

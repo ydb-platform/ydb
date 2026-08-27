@@ -117,7 +117,41 @@ namespace NKikimr::NBlobDepot {
         if (Config.HasVirtualGroupId()) {
             MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
         }
+
+        auto inc = [&](NKikimrBlobDepot::ECumulativeCounters counter, ui64 value) {
+            if (value) {
+                TabletCounters->Cumulative()[counter] += value;
+            }
+        };
+
+        inc(NKikimrBlobDepot::COUNTER_S3_GETS_OK, record.GetS3GetsOk());
+        inc(NKikimrBlobDepot::COUNTER_S3_GETS_ERROR, record.GetS3GetsError());
+        inc(NKikimrBlobDepot::COUNTER_S3_GETS_BYTES, record.GetS3GetsBytes());
+        inc(NKikimrBlobDepot::COUNTER_S3_GETS_SLOW_DOWN, record.GetS3GetsSlowDown());
+        inc(NKikimrBlobDepot::COUNTER_S3_GET_THROTTLE_ACTIVATIONS, record.GetS3GetThrottleActivations());
+
+        if (record.HasNodeId()) {
+            if (const auto it = Agents.find(record.GetNodeId()); it != Agents.end()) {
+                ApplyAgentS3GetGauges(it->second,
+                    record.GetS3GetsInFlight(),
+                    record.GetS3GetsMaxInFlight(),
+                    record.GetS3GetsPendingQueueSize());
+            }
+        }
+
         UpdateThroughputs(false);
+    }
+
+    void TBlobDepot::ApplyAgentS3GetGauges(TAgent& agent, ui64 inFlight, ui64 maxInFlight, ui64 pendingQueueSize) {
+        S3GetsInFlightTotal = S3GetsInFlightTotal - agent.S3GetsInFlight + inFlight;
+        S3GetsMaxInFlightTotal = S3GetsMaxInFlightTotal - agent.S3GetsMaxInFlight + maxInFlight;
+        S3GetsPendingQueueSizeTotal = S3GetsPendingQueueSizeTotal - agent.S3GetsPendingQueueSize + pendingQueueSize;
+        agent.S3GetsInFlight = inFlight;
+        agent.S3GetsMaxInFlight = maxInFlight;
+        agent.S3GetsPendingQueueSize = pendingQueueSize;
+        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_GET_READS_IN_FLIGHT] = S3GetsInFlightTotal;
+        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_GET_MAX_READS_IN_FLIGHT] = S3GetsMaxInFlightTotal;
+        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_GET_PENDING_QUEUE_SIZE] = S3GetsPendingQueueSizeTotal;
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev) {
@@ -140,6 +174,7 @@ namespace NKikimr::NBlobDepot {
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES, record.GetBalancerResolveFailures());
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_ENDPOINT_SWITCHES, record.GetEndpointSwitches());
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS, record.GetFiveXxRefreshTriggers());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_PENDING_REJECTS, record.GetPendingRejects());
 
         auto applyLatencyHistogram = [&](NKikimrBlobDepot::EPercentileCounters counter, const auto& buckets) {
             if (buckets.empty()) {
@@ -158,6 +193,7 @@ namespace NKikimr::NBlobDepot {
         applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_LATENCY_MS, record.GetBalancerLatencyHistogram());
         applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS, record.GetNonBalancerLatencyHistogram());
         applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS, record.GetBalancerResolveLatencyHistogram());
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_PENDING_LATENCY_MS, record.GetPendingLatencyHistogram());
 
         if (record.HasIsUsingProxy()) {
             const ui32 nodeId = record.GetNodeId();

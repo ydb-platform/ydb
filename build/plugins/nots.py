@@ -13,7 +13,6 @@ from _common import (
     rootrel_arc_src,
     sort_uniq,
     to_yesno,
-    split_list_by_value,
 )
 from _dart_fields import create_dart_record
 
@@ -45,6 +44,7 @@ TS_LINT_DART_FIELDS = (
     df.TsResources.value,
     df.TsCheckType.value,
     df.TsCheckHasCoverage.value,
+    df.TsCheckCommand.value,
     df.Requirements.from_unit_with_cpu,  # from macro REQUIREMENTS()
 )
 
@@ -1091,7 +1091,15 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     if unit.enabled('TS_COVERAGE'):
         unit.on_peerdir_ts_resource("nyc")
 
-    ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
+    checks_raw = unit.get("_TS_CHECK_LIST").removeprefix("$_TS_CHECK_LIST")
+    check_separator = unit.get("_TS_CHECK_SEPARATOR")
+    ts_check_list = []
+    for check in checks_raw.split(check_separator):
+        fields = check.strip().split(maxsplit=2)
+        if fields:
+            if len(fields) == 2:
+                fields.append("")
+            ts_check_list.append(fields)
     if not ts_check_list:
         if validation_mode == "TS_TEST_FOR":
             ymake.report_configure_error(
@@ -1126,16 +1134,18 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 
-    for script_name, is_medium, check_type in ts_check_list:
+    for check in ts_check_list:
+        script_name, check_type, command = check
         cov_script_name = f"{script_name}:coverage"
         flat_args = ("ts_check",)
         spec_args = dict(
             NAME=[script_name],  # df.TestName.name_from_macro_args expects array
             TS_CHECK_TYPE=check_type,
-            TS_CHECK_HAS_COVERAGE="yes" if cov_script_name in pj_scripts else "no",
+            TS_CHECK_HAS_COVERAGE="yes" if not command and cov_script_name in pj_scripts else "no",
+            TS_CHECK_COMMAND=command,
             erm_json=_create_erm_json(unit),
         )
-        if is_medium == "yes":
+        if check_type == "lint":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
 
         dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS

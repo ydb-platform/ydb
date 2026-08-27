@@ -1255,6 +1255,14 @@ class TsCheckHasCoverage:
         return spec_args.get("TS_CHECK_HAS_COVERAGE", "no")
 
 
+class TsCheckCommand:
+    KEY = 'TS-CHECK-COMMAND'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return spec_args.get("TS_CHECK_COMMAND", "")
+
+
 class TestedProjectFilename:
     KEY = 'TESTED-PROJECT-FILENAME'
 

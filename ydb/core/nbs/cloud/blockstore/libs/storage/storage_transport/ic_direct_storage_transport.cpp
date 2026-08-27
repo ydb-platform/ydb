@@ -530,7 +530,7 @@ TICDirectStorageTransport::WriteToDDisk(
 TFuture<IStorageTransport::TEvErasePersistentBufferResult>
 TICDirectStorageTransport::BatchEraseFromPBuffer(
     const THostConnection& connection,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
@@ -539,14 +539,14 @@ TICDirectStorageTransport::BatchEraseFromPBuffer(
     if (!entry) {
         return TICStorageTransport::BatchEraseFromPBuffer(
             connection,
-            std::move(lsns),
+            std::move(pBufferKeys),
             span);
     }
 
     auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
         connection.Credentials);
-    for (auto lsn: lsns) {
-        request->AddErase(lsn, connection.Credentials.Generation);
+    for (const auto& pBufferKey: pBufferKeys) {
+        request->AddErase(pBufferKey.Lsn, pBufferKey.Generation);
     }
 
     auto promise = NewPromise<TEvErasePersistentBufferResult>();
@@ -623,7 +623,7 @@ TFuture<IStorageTransport::TEvReadPersistentBufferResult>
 TICDirectStorageTransport::ReadFromPBuffer(
     const THostConnection& connection,
     const NDDisk::TBlockSelector& selector,
-    const ui64 lsn,
+    const TPBufferKey pBufferKey,
     const NDDisk::TReadInstruction instruction,
     const TGuardedSgList& data,
     NWilson::TSpan* span)
@@ -635,7 +635,7 @@ TICDirectStorageTransport::ReadFromPBuffer(
         return TICStorageTransport::ReadFromPBuffer(
             connection,
             selector,
-            lsn,
+            pBufferKey,
             instruction,
             data,
             span);
@@ -644,8 +644,8 @@ TICDirectStorageTransport::ReadFromPBuffer(
     auto request = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
         connection.Credentials,
         selector,
-        lsn,
-        connection.Credentials.Generation,
+        pBufferKey.Lsn,
+        pBufferKey.Generation,
         instruction);
 
     auto promise = NewPromise<TEvReadPersistentBufferResult>();
@@ -729,7 +729,7 @@ TICDirectStorageTransport::SyncWithPBuffer(
     const THostConnection& pbufferConnection,
     const THostConnection& ddiskConnection,
     TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(
@@ -743,7 +743,7 @@ TICDirectStorageTransport::SyncWithPBuffer(
             pbufferConnection,
             ddiskConnection,
             std::move(selectors),
-            std::move(lsns),
+            std::move(pBufferKeys),
             span);
     }
 
@@ -754,14 +754,14 @@ TICDirectStorageTransport::SyncWithPBuffer(
         pbufferConnection.DDiskId.PDiskId,
         pbufferConnection.DDiskId.DDiskSlotId);
 
-    Y_ABORT_UNLESS(selectors.size() == lsns.size());
+    Y_ABORT_UNLESS(selectors.size() == pBufferKeys.size());
     for (size_t i = 0; i < selectors.size(); ++i) {
         request->AddSegmentFromPB(
             pBufferId,
             *pbufferConnection.Credentials.DDiskInstanceGuid,
             selectors[i],
-            lsns[i],
-            ddiskConnection.Credentials.Generation);
+            pBufferKeys[i].Lsn,
+            pBufferKeys[i].Generation);
     }
 
     auto promise = NewPromise<TEvSyncResult>();

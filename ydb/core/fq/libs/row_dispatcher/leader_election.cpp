@@ -247,7 +247,7 @@ void TLeaderElection::Bootstrap() {
     ActorSystemPtr->store(TActivationContext::ActorSystem(), std::memory_order_release);
 
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
-    YDB_LOG_DEBUG("Successfully bootstrapped, local coordinator id tenant id local mode coordination node path endpoint",
+    YDB_LOG_DEBUG("Successfully bootstrapped",
         {"logPrefix", LogPrefix},
         {"coordinatorId", CoordinatorId},
         {"tenantId", TenantId},
@@ -526,12 +526,12 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     }
 
     NActors::TActorId id = ActorIdFromProto(protoId);
-    YDB_LOG_DEBUG("Semaphore successfully described: coordinator id generation",
+    YDB_LOG_DEBUG("Semaphore successfully described",
         {"logPrefix", LogPrefix},
         {"id", id},
         {"generation", generation});
     if (!LeaderActorId || (*LeaderActorId != id)) {
-        YDB_LOG_INFO("Send TEvCoordinatorChanged to new coordinator id previous coordinator id",
+        YDB_LOG_INFO("Send TEvCoordinatorChanged to new coordinator",
             {"logPrefix", LogPrefix},
             {"parentId", ParentId},
             {"id", id},

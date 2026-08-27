@@ -25,7 +25,7 @@ from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
-from .conftest import BaseConfigBuilder, FakeReassignGroupDiskHandler
+from .conftest import BaseConfigBuilder, FakePopulatePDiskHandler, FakeReassignGroupDiskHandler
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
@@ -269,6 +269,60 @@ class Test(TestBase):
             self._trace('pdisk', 'set', '--status=INACTIVE', '--pdisk-ids', '[1:1000]', '[2:1]', with_grpc_calls=True),
             self._trace('pdisk', 'list', '--columns', 'NodeId:PDiskId', 'Status', with_grpc_calls=True),
         ]
+
+    def test_pdisk_populate(self, monkeypatch):
+        snapshot_file = 'pdisk-populate-snapshot.json'
+        snapshot_dir = yatest.common.test_output_path()
+        snapshot_path = os.path.join(snapshot_dir, snapshot_file)
+        monkeypatch.chdir(snapshot_dir)
+        group_id = 0x80000001
+        group_nodes = range(1, 9)
+        destination_node_id = 9
+        destination_pdisk_id = 1000 + destination_node_id
+        vslot_id = 1000
+
+        builder = BaseConfigBuilder()
+        for node_id in range(1, destination_node_id + 1):
+            builder.add_node(node_id=node_id)
+            builder.add_pdisk(node_id=node_id, pdisk_id=1000 + node_id, expected_slot_count=8)
+        builder.add_group(
+            group_id=group_id,
+            erasure_species='block-4-2',
+            vslot_ids=[(node_id, 1000 + node_id, vslot_id) for node_id in group_nodes],
+        )
+        for fail_domain_idx, node_id in enumerate(group_nodes):
+            builder.add_vslot(
+                node_id=node_id,
+                pdisk_id=1000 + node_id,
+                vslot_id=vslot_id,
+                group_id=group_id,
+                group_generation=1,
+                fail_realm_idx=0,
+                fail_domain_idx=fail_domain_idx,
+                vdisk_idx=0,
+            )
+        base_config = builder.build()
+
+        snapshot_trace = self._trace(
+            'pdisk',
+            'populate',
+            '--snapshot-from-pdisk=[1:1001]',
+            '--snapshot-file=' + snapshot_file,
+            mock_base_config=base_config,
+        )
+        snapshot_canonical = yatest.common.canonical_file(snapshot_path, local=True, universal_lines=True)
+        populate_trace = self._trace(
+            '--dry-run',
+            'pdisk',
+            'populate',
+            f'--destination-pdisk=[{destination_node_id}:{destination_pdisk_id}]',
+            '--snapshot-file=' + snapshot_file,
+            '--suppress-donor-mode',
+            with_grpc_calls=True,
+            mock_base_config=base_config,
+            fake_grpc_handler=FakePopulatePDiskHandler(),
+        )
+        return [snapshot_trace, snapshot_canonical, populate_trace]
 
     def test_cluster_get_set(self):
         return [

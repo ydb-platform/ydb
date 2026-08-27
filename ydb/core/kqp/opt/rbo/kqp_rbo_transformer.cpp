@@ -517,6 +517,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // CBO stages.
     TVector<std::unique_ptr<IRule>> initialCBOStageRules;
+    initialCBOStageRules.emplace_back(std::make_unique<TPullUpMapOverCBORule>());
     initialCBOStageRules.emplace_back(std::make_unique<TBuildInitialCBOTreeRule>());
     initialCBOStageRules.emplace_back(std::make_unique<TExpandCBOTreeRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Prepare for CBO", std::move(initialCBOStageRules)));

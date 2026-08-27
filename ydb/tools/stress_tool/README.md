@@ -67,6 +67,11 @@ These describe the load applied through the YDB storage layer code (DDisk).
 
 Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
 
+DDisk and Persistent Buffer checksums are enabled by default. Pass
+`--disable-ddisk-checksums` to disable both checksum generation in the load
+actors and checksum handling in DDisk. For client/server DDisk tests, pass the
+option to both processes so the client and server use the same mode.
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.
@@ -77,6 +82,7 @@ Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
 - `ExpectedChunkSize` - expected chunk size in bytes; must be divisible by `IoSizeBytes`.
 - `IoSizeBytes` - request size for DDisk read/write I/O in bytes (default `4096`).
 - `Areas` - the set of DDisk areas used by the load source; each `AreaSize` must be divisible by `IoSizeBytes`.
+  Per-area `InitType` defaults to `INIT_ZEROES_FULL` (every slot is written before the measured load). Use `INIT_ZEROES_FIRST_BLOCK` only to preallocate chunks; with checksums enabled, unread blocks are then served from RAM as zeros and do not hit the device. `INIT_NONE` is rejected for read load.
 - `IsReadLoad` - if `true`, run read load; if `false`, run write load.
 - `SQPoll` / `IOPoll` - enable io_uring SQPOLL / IOPOLL for direct I/O.
 

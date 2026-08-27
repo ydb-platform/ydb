@@ -7,8 +7,7 @@
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/core/wrappers/events/common.h>
-#include <ydb/core/wrappers/events/get_object.h>
+#include <ydb/core/wrappers/abstract.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -215,6 +214,32 @@ private:
     }
 };
 
+// Receives S3 error replies that the router sends back to the original requester.
+class TErrorResponseCounter : public TActor<TErrorResponseCounter> {
+    size_t& ErrorResponses;
+    TString& LastExceptionName;
+    TString& LastMessage;
+
+public:
+    TErrorResponseCounter(size_t& errorResponses, TString& lastExceptionName, TString& lastMessage)
+        : TActor(&TThis::StateWork)
+        , ErrorResponses(errorResponses)
+        , LastExceptionName(lastExceptionName)
+        , LastMessage(lastMessage)
+    {}
+
+    STATEFN(StateWork) {
+        using TEvPutObjectResponse = NWrappers::NExternalStorage::TEvPutObjectResponse;
+        if (ev->GetTypeRewrite() == TEvPutObjectResponse::EventType &&
+                !ev->Get<TEvPutObjectResponse>()->IsSuccess()) {
+            const auto& error = ev->Get<TEvPutObjectResponse>()->GetError();
+            LastExceptionName = TString(error.GetExceptionName());
+            LastMessage = TString(error.GetMessage());
+            ++ErrorResponses;
+        }
+    }
+};
+
 ui16 PickFreePort() {
     TInetStreamSocket sock;
     TSockAddrInet addr("127.0.0.1", 0);
@@ -352,6 +377,51 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
             new TEvents::TEvPoison()), 0, true);
     }
 
+    Y_UNIT_TEST(RejectedRequestGetsErrorResponse) {
+        size_t errorResponses = 0;
+        TString lastExceptionName;
+        TString lastMessage;
+
+        TTestActorRuntime runtime;
+        runtime.SetUseRealInterconnect();
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        // nobody listens on this port, so the router never gets an endpoint to route to
+        const ui16 balancerPort = PickFreePort();
+
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        settings.MutableSettings()->SetEndpoint("initial-endpoint.example.com");
+        settings.MutableSettings()->SetBucket("test-bucket");
+        settings.SetBalancerHost(TStringBuilder() << "127.0.0.1:" << balancerPort);
+        settings.SetBalancerRefreshSecMin(60);
+        settings.SetBalancerRefreshSecMax(60);
+
+        TActorId senderId = runtime.Register(new TErrorResponseCounter(
+            errorResponses, lastExceptionName, lastMessage));
+        TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+
+        static constexpr size_t maxPendingRequests = 256;
+        for (size_t i = 0; i <= maxPendingRequests; ++i) {
+            auto request = Aws::S3::Model::PutObjectRequest()
+                .WithBucket("test-bucket")
+                .WithKey(TStringBuilder() << "key-" << i);
+            runtime.Send(new IEventHandle(routerId, senderId,
+                new NWrappers::NExternalStorage::TEvPutObjectRequest(request, TString("data"))), 0, true);
+        }
+
+        // the pending queue holds maxPendingRequests requests, the one above that is answered right away
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(errorResponses, 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastExceptionName, "ServiceUnavailable");
+        UNIT_ASSERT(lastMessage.Contains("S3 endpoint is not resolved yet"));
+
+        // the queued ones are answered when the router goes away without ever resolving the endpoint
+        runtime.Send(new IEventHandle(routerId, senderId, new TEvents::TEvPoison()), 0, true);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(errorResponses, maxPendingRequests + 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastExceptionName, "ServiceUnavailable");
+    }
+
     Y_UNIT_TEST(EndpointSwitchDoesNotAbortRequestsInFlight) {
         const TDuration holdDuration = TDuration::Seconds(10);
         TStallingS3Server s3Server(/*bodySize=*/4096, holdDuration);
@@ -370,15 +440,15 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        auto* balancer = new TFakeBalancer({}, TString());
-        balancer->SetHoldResponses(true);
+        const TString initialProxy = TStringBuilder() << "127.0.0.1:" << s3Server.GetPort();
+        auto* balancer = new TFakeBalancer({}, initialProxy);
         TActorId balancerId = runtime.Register(balancer);
         runtime.Send(new IEventHandle(proxyId, balancerId,
             new NHttp::TEvHttpProxy::TEvRegisterHandler("/", balancerId)), 0, true);
 
         NKikimrBlobDepot::TS3BackendSettings settings;
         auto* s3 = settings.MutableSettings();
-        s3->SetEndpoint(TStringBuilder() << "127.0.0.1:" << s3Server.GetPort());
+        s3->SetEndpoint("s3.example.com");
         s3->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
         s3->SetBucket("test-bucket");
         s3->SetAccessKey("access-key");
@@ -390,6 +460,9 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.SetBalancerRefreshSecMax(1);
 
         TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        Y_UNUSED(routerId);
+
+        WaitReal(runtime, [&] { return balancer->GetReplies() >= 1; });
 
         auto result = MakeIntrusive<TGetResult>();
         TActorId collectorId = runtime.Register(new TGetCollector(result));
@@ -403,9 +476,8 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
 
         WaitReal(runtime, [&] { return s3Server.GetRequestsReceived() >= 1; });
 
-        runtime.Send(new IEventHandle(balancerId, edgeId,
-            new TEvReleaseHeldResponses("127.0.0.1:1")), 0, true);
-        WaitReal(runtime, [&] { return balancer->GetReplies() >= 1; });
+        balancer->SetHostname("127.0.0.1:1");
+        WaitReal(runtime, [&] { return balancer->GetReplies() >= 2; });
 
         WaitReal(runtime, [&] { return result->Done.load(); }, holdDuration * 3);
         UNIT_ASSERT_C(result->Ok.load(), result->Error);

@@ -195,7 +195,7 @@ public:
                     auto alternativeType = variantType->GetAlternativeType(index);
                     status = TStatus::Success();
                     if (ParseNestedValue(jsonValue, resultValue, status, alternativeType, false, index + 1 != alternativesCount || isQuiet)) {
-                        resultValue = HolderFactory->CreateVariantHolder(resultValue, index);
+                        resultValue = HolderFactory->CreateVariantHolder(std::move(resultValue.Release()), index);
                         return true;
                     }
                     resultValue = NYql::NUdf::TUnboxedValue();

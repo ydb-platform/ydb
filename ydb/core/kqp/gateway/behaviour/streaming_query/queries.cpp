@@ -1274,15 +1274,10 @@ public:
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender});
         } else {
-<<<<<<< HEAD
-            LOG_I("Previous query owner " << ev->Sender << " is alive");
-            FatalError(Ydb::StatusIds::PRECONDITION_FAILED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", please retry later")});
-=======
             YDB_LOG_INFO("[StreamingQueries] Previous query owner is alive",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender});
-            FatalError(Ydb::StatusIds::ABORTED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", try repeat request later")});
->>>>>>> cb471d1db77 ([YDB_LOG] Migrate ydb/core/kqp/gateway...proxy_service (#47494))
+            FatalError(Ydb::StatusIds::PRECONDITION_FAILED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", please retry later")});
         }
     }
 
@@ -1448,27 +1443,17 @@ public:
             }
 
             if (OperationOwner != currentOperationOwner) {
-<<<<<<< HEAD
-                LOG_E("Streaming query was locked by " << currentOperationOwner << " during operation (expected owner: " << OperationOwner << ")");
-                Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
-                return;
-            }
-        } else {
-            LOG_E("Streaming query lock was lost");
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
-=======
                 YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
                     {"logPrefix", LogPrefix()},
                     {"currentOperationOwner", currentOperationOwner},
                     {"owner", OperationOwner});
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+                Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
                 return;
             }
         } else {
             YDB_LOG_ERROR("[StreamingQueries] Streaming query lock was lost",
                 {"logPrefix", LogPrefix()});
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
->>>>>>> cb471d1db77 ([YDB_LOG] Migrate ydb/core/kqp/gateway...proxy_service (#47494))
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
 
@@ -1558,16 +1543,12 @@ public:
         const auto previousOwner = State.GetOperationActorId();
         const auto currentOwner = result.GetResult().GetOperationActorId();
         if (currentOwner != previousOwner) {
-<<<<<<< HEAD
-            LOG_E("Streaming query was locked by " << currentOwner << " during operation (expected owner: " << previousOwner << ")");
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
-=======
-            YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
+            YDB_LOG_ERROR("[StreamingQueries] Streaming query was locked during operation",
                 {"logPrefix", LogPrefix()},
                 {"currentOwner", currentOwner},
-                {"owner", previousOwner});
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
->>>>>>> cb471d1db77 ([YDB_LOG] Migrate ydb/core/kqp/gateway...proxy_service (#47494))
+                {"expectedOwner", previousOwner});
+
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
 

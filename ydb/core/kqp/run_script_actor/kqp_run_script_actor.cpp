@@ -258,17 +258,14 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
             const auto& issues = ev->Get()->Issues;
-<<<<<<< HEAD
-            LOG_E("Got lease watcher finished: " << ev->Sender << " with status " << status << ", issues: " << issues.ToOneLineString());
-            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
-=======
+
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher with status",
                 {"logPrefix", LogPrefix()},
                 {"finished", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
-            Finish(status, AddRootIssue("Script lease watcher error", issues));
->>>>>>> cd21a36d5ae ([YDB_LOG] Migrate ydb/core/kqp/query_compiler...runtime (#47496))
+            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
+
         } else {
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher",
                 {"logPrefix", LogPrefix()},
@@ -454,14 +451,12 @@ private:
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             WaitFinalizationRequest = true;
         } else {
-<<<<<<< HEAD
-            LOG_N("Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString() << ", already waiting finalization");
-=======
-            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skipping finish with error because finalization is already in progress",
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skipping finish with error, already waiting finalization",
                 {"logPrefix", LogPrefix()},
                 {"finishStatus", *FinishInfo.Status},
-                {"issues", FinishInfo.Issues.ToOneLineString()});
->>>>>>> cd21a36d5ae ([YDB_LOG] Migrate ydb/core/kqp/query_compiler...runtime (#47496))
+                {"issues", FinishInfo.Issues.ToOneLineString()},
+                {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()},
+            );
         }
     }
 

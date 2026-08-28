@@ -281,23 +281,17 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
             PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         } else {
-<<<<<<< HEAD
-            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
-                << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+            YDB_LOG_ERROR("Describe topic location finishied with error",
+                {LogPrefix()},
+                {"topicName", topic.Name},
+                {"code", locationResponse->Status},
+                {"issues", locationResponse->Issues.ToOneLineString()});
             // Transient location failures (pipe retries exhausted / locations backoff) → retriable timeout.
             const EKafkaErrors kafkaError =
                 (status == Ydb::StatusIds::UNAVAILABLE || status == Ydb::StatusIds::INTERNAL_ERROR)
                     ? EKafkaErrors::REQUEST_TIMED_OUT
                     : ConvertErrorCode(status);
             AddTopicError(topic, kafkaError);
-=======
-            YDB_LOG_ERROR("Describe topic location finishied with error",
-                {LogPrefix()},
-                {"topicName", topic.Name},
-                {"code", locationResponse->Status},
-                {"issues", locationResponse->Issues.ToOneLineString()});
-            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
->>>>>>> c0bf532526b ([YDB_LOG] Migrate ydb/core/kafka_proxy (#43285))
         }
     }
     if (InflyCreateTopics == 0) {
@@ -430,39 +424,10 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         return;
     }
 
-<<<<<<< HEAD
     ApplyPendingTopicResponses();
-=======
-    while (!PendingTopicResponses.empty()) {
-        auto& [index, ev] = *PendingTopicResponses.begin();
-        auto& topic = Response->Topics[index];
-        if (!WithProxy) {
-            auto topicNodes = CheckTopicNodes(ev.Get());
-            if (topicNodes.empty()) {
-                    // Already tried YDB discovery. Throw error
-                    YDB_LOG_ERROR("Could not discovery kafka port for topic",
-                        {LogPrefix()},
-                        {"topicName", topic.Name});
-                    AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
-            } else {
-                AddTopicResponse(topic, ev.Get(), topicNodes);
-            }
-        } else {
-            AddTopicResponse(topic, ev.Get(), {});
-        }
-        PendingTopicResponses.erase(PendingTopicResponses.begin());
-    }
-
-    if (NeedAllNodes) {
-        for (const auto& [id, nodeInfo] : Nodes)
-            AddBroker(id, nodeInfo.Host, nodeInfo.Port);
-    }
->>>>>>> c0bf532526b ([YDB_LOG] Migrate ydb/core/kafka_proxy (#43285))
-
     Respond();
 }
 
-<<<<<<< HEAD
 void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
     TimeoutTimerActorId = {};
     KAFKA_LOG_ERROR("Metadata request timed out, correlationId=" << CorrelationId
@@ -494,14 +459,10 @@ void TKafkaMetadataActor::CancelRequestTimeout() {
     }
 }
 
-TString TKafkaMetadataActor::LogPrefix() const {
-    return TStringBuilder() << "TKafkaMetadataActor " << SelfId() << " ";
-=======
 NStructuredLog::TStructuredMessage TKafkaMetadataActor::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"actorClassName", "TKafkaMetadataActor"},
         {"selfId", SelfId()});
->>>>>>> c0bf532526b ([YDB_LOG] Migrate ydb/core/kafka_proxy (#43285))
 }
 
 } // namespace NKafka

@@ -59,17 +59,7 @@ namespace {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const TString& path,
         bool addRoot) {
-<<<<<<< HEAD
-=======
-        if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database with endpoint",
-                {"path", path},
-                {"database", database},
-                {"endpoint", endpoint});
-            return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
-        }
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson);
->>>>>>> 5c416f4cda9 ([YDB_LOG] Migrate ydb/core/kqp/e.. -f... (#47493))
+
         auto driver = federatedQuerySetup->Driver;
 
         NYdb::TCommonClientSettings opts;

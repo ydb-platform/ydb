@@ -830,17 +830,12 @@ private:
             return;
         }
 
-<<<<<<< HEAD
-        LOG_I("Exit, send response"
-            << ", finish status: " << *FinishInfo.Status
-            << ", issues: " << FinishInfo.Issues.ToOneLineString()
-            << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
-
-=======
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit, send response",
             {"logPrefix", LogPrefix()},
-            {"owner", Owner});
->>>>>>> cd21a36d5ae ([YDB_LOG] Migrate ydb/core/kqp/query_compiler...runtime (#47496))
+            {"finishStatus", *FinishInfo.Status},
+            {"issues", FinishInfo.Issues.ToOneLineString()},
+            {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()};
+
         Send(Owner, new TEvRunScriptPrivate::TEvScriptResultHandlerFinished(*FinishInfo.Status, std::move(ExecutionInfo), std::move(FinishInfo.Issues)));
         PassAway();
     }

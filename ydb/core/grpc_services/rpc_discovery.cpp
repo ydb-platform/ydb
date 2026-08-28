@@ -44,8 +44,11 @@ public:
 
     void Bootstrap() {
         // request endpoints
+        const auto databaseName = Request->GetDatabaseName();
+        const TString database = databaseName && !databaseName->empty()
+            ? *databaseName : Request->GetProtoRequest()->database();
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
-            Request->GetProtoRequest()->database(), Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
+            database, Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
             SelfId(), CacheId));
 
         // request self node info

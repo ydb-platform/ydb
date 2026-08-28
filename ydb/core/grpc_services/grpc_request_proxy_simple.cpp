@@ -107,6 +107,10 @@ private:
     template <typename TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        const auto providedDatabaseName = requestBaseCtx->GetDatabaseName();
+        if (providedDatabaseName && !providedDatabaseName->empty()) {
+            requestBaseCtx->UseDatabase(ResolveDatabaseName(*providedDatabaseName, RootDatabase));
+        }
 
         LogRequest(event);
 
@@ -153,6 +157,7 @@ private:
 
     const NKikimrConfig::TAppConfig AppConfig;
     std::atomic<ui64> ChannelBufferSize;
+    TString RootDatabase;
     IGRpcProxyCounters::TPtr Counters;
 };
 
@@ -164,6 +169,9 @@ void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
 
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
     InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
+
+    RootDatabase = DatabaseFromDomain(AppData());
+    Y_ABORT_UNLESS(!RootDatabase.empty());
 
     Become(&TThis::StateFunc);
 }

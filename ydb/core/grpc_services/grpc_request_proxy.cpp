@@ -34,6 +34,13 @@ TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
     return TString("/") + dinfo->GetDomain()->Name;
 }
 
+TString ResolveDatabaseName(const TString& databaseName, const TString& rootDatabase) {
+    const TString canonizedDatabaseName = CanonizePath(databaseName);
+    return IsStartWithSlash(databaseName)
+        ? canonizedDatabaseName
+        : NormalizePath(rootDatabase, canonizedDatabaseName);
+}
+
 struct TDatabaseInfo {
     THolder<TSchemeBoardEvents::TEvNotifyUpdate> SchemeBoardResult;
     TIntrusivePtr<TSecurityObject> SecurityObject;
@@ -137,9 +144,14 @@ private:
 
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
+        IRequestProxyCtx* requestBaseCtx = event->Get();
+        const auto providedDatabaseName = requestBaseCtx->GetDatabaseName();
+        if (providedDatabaseName && !providedDatabaseName->empty()) {
+            requestBaseCtx->UseDatabase(ResolveDatabaseName(*providedDatabaseName, RootDatabase));
+        }
+
         LogRequest(event);
 
-        IRequestProxyCtx* requestBaseCtx = event->Get();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);
@@ -189,7 +201,7 @@ private:
             }
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
-                databaseName = CanonizePath(maybeDatabaseName.GetRef());
+                databaseName = ResolveDatabaseName(maybeDatabaseName.GetRef(), RootDatabase);
             } else {
                 if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();

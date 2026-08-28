@@ -951,6 +951,9 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
+        if (DatabaseName_) {
+            return DatabaseName_;
+        }
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1018,6 +1021,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
+        DatabaseName_ = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1154,6 +1158,7 @@ public:
 
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
+    TMaybe<TString> DatabaseName_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
@@ -1302,6 +1307,9 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
+        if (DatabaseName) {
+            return DatabaseName;
+        }
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1389,6 +1397,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
+        DatabaseName = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1637,6 +1646,7 @@ protected:
     NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
+    TMaybe<TString> DatabaseName;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;

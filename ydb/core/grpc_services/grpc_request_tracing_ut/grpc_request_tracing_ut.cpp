@@ -253,6 +253,10 @@ private:
 
 class TTestGrpcRequestContext : public NYdbGrpc::IRequestContextBase {
 public:
+    explicit TTestGrpcRequestContext(TString database = {})
+        : Database_(std::move(database))
+    {}
+
     const NProtoBuf::Message* GetRequest() const override {
         return &Request_;
     }
@@ -285,7 +289,10 @@ public:
         return {};
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf) const override {
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == NYdb::YDB_DATABASE_HEADER && !Database_.empty()) {
+            return {Database_};
+        }
         return {};
     }
 
@@ -304,7 +311,8 @@ public:
     void AddTrailingMetadata(const TString&, const TString&) override {
     }
 
-    void UseDatabase(const TString&) override {
+    void UseDatabase(const TString& database) override {
+        UsedDatabase = database;
     }
 
     void SetNextReplyCallback(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
@@ -348,8 +356,10 @@ public:
     ui32 ReplyUnauthenticatedCount = 0;
     ui32 ReplyErrorCount = 0;
     ui32 FinishStreamingOkCount = 0;
+    TString UsedDatabase;
 
 private:
+    TString Database_;
     Ydb::Operations::CancelOperationRequest Request_;
     NYdbGrpc::TAuthState AuthState_{true};
     google::protobuf::Arena Arena_;
@@ -359,6 +369,10 @@ class TTestBiStreamContext
     : public NGRpcServer::IGRpcStreamingContext<Draft::Dummy::PingRequest, Draft::Dummy::PingResponse>
 {
 public:
+    explicit TTestBiStreamContext(TString database = {})
+        : Database_(std::move(database))
+    {}
+
     void Cancel() override {
     }
 
@@ -383,7 +397,10 @@ public:
         return "127.0.0.1";
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf) const override {
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == NYdb::YDB_DATABASE_HEADER && !Database_.empty()) {
+            return {Database_};
+        }
         return {};
     }
 
@@ -391,7 +408,8 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
-    void UseDatabase(const TString&) override {
+    void UseDatabase(const TString& database) override {
+        UsedDatabase = database;
     }
 
     TString GetRpcMethodName() const override {
@@ -417,8 +435,10 @@ public:
     ui32 FinishCount = 0;
     ui32 WriteAndFinishCount = 0;
     ui32 WriteAndFinishWithOptionsCount = 0;
+    TString UsedDatabase;
 
 private:
+    TString Database_;
     mutable NYdbGrpc::TAuthState AuthState_{true};
 };
 
@@ -615,6 +635,16 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBaseTracing) {
 
+Y_UNIT_TEST(UsesValidatedDatabaseName) {
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>("mydb");
+    TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "mydb");
+    request.UseDatabase("/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/Root/mydb");
+}
+
 Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnFinalReply) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
@@ -789,6 +819,16 @@ Y_UNIT_TEST(RespHookDelaysGrpcRequestProxySpanUntilPass) {
 } // TGrpcRequestBaseTracing
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBiStreamTracing) {
+
+Y_UNIT_TEST(UsesValidatedDatabaseName) {
+    auto ctx = MakeIntrusive<TTestBiStreamContext>("mydb");
+    NGRpcService::TEvBiStreamPingRequest request(ctx);
+
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "mydb");
+    request.UseDatabase("/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/Root/mydb");
+}
 
 Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnValidationErrorReply) {
     TTestActorRuntime runtime;

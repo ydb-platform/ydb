@@ -264,6 +264,7 @@ YDB_LOG_CTX(env, PRI_ERROR, "Unable to open file",
     {"path", filename},
     {"errorCode", err});
 ```
+
 {% note info %}
 
 Построение имени макроса `YDB_LOG_CTX` полностью укладывается в базовый принцип именования макросов, рассмотренный в [ядре логирования]{#extended-logging}

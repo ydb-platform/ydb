@@ -13,18 +13,18 @@ To remove a dynamic node without affecting query processing:
 1. [Drain the tablets](../../../maintenance/manual/node_restarting.md#replace-hardware) from the node and wait for the operation to complete.
 1. Stop the {{ ydb-short-name }} process on the node. [Check first that the process can be stopped safely, then stop it](../../../maintenance/manual/node_restarting.md#restart_process).
 
-After stopping the process, check the **Nodes** tab on the [cluster monitoring page](../../../reference/embedded-ui/ydb-monitoring.md#node_list_page): the removed node must no longer be present in the list. If the node is still shown there (possibly with a **Disconnected** status), make sure the process was stopped on the correct host and that it is not configured to restart automatically (for example, by a `systemd` unit or a supervisor), and stop it there as well.
+After stopping the process, check the **Nodes** tab on the [cluster monitoring page](../../../reference/ydb-ui/ydb-monitoring.md#node_list_page): the removed node must no longer be present in the list. If the node is still shown there (possibly with a **Disconnected** status), make sure the process was stopped on the correct host and that it is not configured to restart automatically (for example, by a `systemd` unit or a supervisor), and stop it there as well.
 
 ## Removing a static node {#remove-static-node}
 
 Static nodes serve the storage system and are listed in the `hosts` section. A static node can contain VDisks of dynamic and static groups, as well as State Storage, Board, and SchemeBoard replicas. These resources must be moved before the node is removed from the configuration.
 
-Before starting the procedure, use the [Embedded UI](../../../reference/embedded-ui/ydb-monitoring.md#node_storage_page) to check that the affected storage groups are healthy, that is, all VDisks of these groups are shown in the `Ok` state (highlighted in green), with none in `Error` or `Degraded` state. The cluster must also have enough free slots to move the VDisks from the node while preserving the fault model: the remaining nodes must have free PDisk space and slots to accommodate the relocated VDisks without exceeding the number of failed fail domains/fail realms the configured erasure coding scheme can tolerate. For details on calculating the required capacity margin, see [{#T}](../../concepts/capacity-planning.md#hardware-estimation).
+Before starting the procedure, use the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page) to check that the affected storage groups are healthy, that is, all VDisks of these groups are shown in the `Ok` state (highlighted in green), with none in `Error` or `Degraded` state. The cluster must also have enough free slots to move the VDisks from the node while preserving the fault model: the remaining nodes must have free PDisk space and slots to accommodate the relocated VDisks without exceeding the number of failed fail domains/fail realms the configured erasure coding scheme can tolerate. For details on calculating the required capacity margin, see [{#T}](../../concepts/capacity-planning.md#hardware-estimation).
 
 [SelfHeal](../../../maintenance/manual/selfheal.md) is enabled for dynamic groups by default. Before removing the node, make sure it is also enabled for any resources hosted on this node:
 
 * If the node contains a static group VDisk, [enable static group SelfHeal](static-group-self-heal.md#on-off). Alternatively, you can move the static group VDisk off the node manually, see [{#T}](static-group-move.md).
-* If the node contains State Storage, Board, or SchemeBoard replicas, enable [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md#on-off). Alternatively, you can move these replicas off the node manually, see [{#T}](state-storage-move.md).
+* If the node contains State Storage, Board, or SchemeBoard replicas, enable [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md#on-off). Alternatively, you can move these replicas off the node manually, see [{#T}](state-storage-reconfiguration.md).
 
 To remove a static node:
 
@@ -38,7 +38,7 @@ To remove a static node:
 
     This immediately triggers VDisk relocation from the specified PDisks instead of waiting for CMS Sentinel to detect the node as faulty. For details, see [Move VDisks from a broken/missing block store volume](../../../maintenance/manual/moving_vdisks.md#removal_from_a_broken_device).
 
-1. In the [Embedded UI](../../../reference/embedded-ui/ydb-monitoring.md#node_storage_page), check that no VDisks remain on the node and that the affected storage groups are healthy (all VDisks are in the `Ok` state). If State Storage, Board, or SchemeBoard replicas were moved from the node, [check that the relocation is complete](../../../maintenance/manual/selfheal_statestorage.md#verify-result).
+1. In the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page), check that no VDisks remain on the node and that the affected storage groups are healthy (all VDisks are in the `Ok` state). If State Storage, Board, or SchemeBoard replicas were moved from the node, [check that the relocation is complete](../../../maintenance/manual/selfheal_statestorage.md#verify-result).
 1. Fetch the current cluster configuration using the [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
     ```bash
@@ -91,7 +91,7 @@ To remove a static node:
     failed to remove PDisk# 1:1 as it has active VSlots
     ```
 
-    In this case, wait for SelfHeal to move the remaining VDisks. Relocation time depends on the amount of data and disk performance. Monitor the relocation on the **Storage** tab of the node being removed in the [Embedded UI](../../../reference/embedded-ui/ydb-monitoring.md#node_storage_page). When no VDisks remain on the node, rerun the `config replace` command with the same file.
+    In this case, wait for SelfHeal to move the remaining VDisks. Relocation time depends on the amount of data and disk performance. Monitor the relocation on the **Storage** tab of the node being removed in the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page). When no VDisks remain on the node, rerun the `config replace` command with the same file.
 
     If the VDisk list is not shrinking and replication is not in progress, [move the remaining VDisks manually](../../../maintenance/manual/moving_vdisks.md#removal_from_a_broken_device).
 

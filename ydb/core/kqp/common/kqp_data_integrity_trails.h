@@ -101,6 +101,37 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         {"issues", record.GetResponse().GetQueryIssues()});
 }
 
+// template <typename TLockInfo>
+// inline TStructuredMessage ToStructuredLog(const TLockInfo& lock) {
+
+inline TStructuredMessage ToStructuredLog(const NKikimrDataEvents::TLock& lock) {
+    TStructuredMessage result;
+    if (lock.HasLockId()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"lockId", lock.GetLockId()});
+    }
+
+    if (lock.HasDataShard()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"dataShard", lock.GetDataShard()});
+    }
+
+    if (lock.HasGeneration()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"generation", lock.GetGeneration()});
+    }
+
+    if (lock.HasCounter()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"counter", lock.GetCounter()});
+    }
+
+    if (lock.HasSchemeShard()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetCounter()});
+    }
+
+    if (lock.HasPathId()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetPathId()});
+    }
+    return result;
+}
+
 // DataExecuter
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
@@ -130,7 +161,7 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
     for (const auto& lock : record.GetTxLocks()) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             message,
-            {"lock", lock.ShortDebugString()});
+            {"lock", ToStructuredLog(lock)});
     }
 }
 
@@ -155,7 +186,7 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
     for (const auto& lock : record.GetTxLocks()) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             message,
-            {"lock", lock.ShortDebugString()});
+            {"lock", ToStructuredLog(lock)});
         }
 }
 
@@ -175,7 +206,7 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
     for (const auto& lock : info.GetLocks()) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             message,
-            {"lock", lock.ShortDebugString()});
+            {"lock", ToStructuredLog(lock)});
     }
 }
 

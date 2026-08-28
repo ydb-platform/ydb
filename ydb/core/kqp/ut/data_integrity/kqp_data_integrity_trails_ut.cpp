@@ -85,9 +85,6 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         };
 
         CheckRegexMatch(ss.Str(), regexToMatchCount);
-
-        Cerr << "LOG:" << Endl;
-        Cerr << ss.Str() << Endl;
     }
 
     Y_UNIT_TEST_TWIN(UpsertEvWriteQueryService, isOlap) {
@@ -263,7 +260,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         for (const auto& row : logRows) {
             // we need to find row with info about read physical tx and extract lock id
             if (row.Contains("component=Executer") && row.Contains("type=InputActorResult")) {
-                std::regex lockIdRegex(R"(LockId:\s*(\d+))");
+                std::regex lockIdRegex(R"(lockId=\s*(\d+))");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
                 readLock = lockIdMatch[1].str();

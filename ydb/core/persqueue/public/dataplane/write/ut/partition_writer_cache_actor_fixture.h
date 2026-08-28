@@ -4,6 +4,7 @@
 
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,12 +18,14 @@ struct TCreatePartitionWriterCacheActorParams {
     TString SourceId = "source_id";
     bool WithDeduplication = true;
     TString Database = "database";
+    bool WaitForInitResult = true;
 };
 
 struct TSendTxWriteRequestParams {
     TString SessionId;
     TString TxId;
     ui64 Cookie;
+    NWilson::TTraceId TraceId;
 };
 
 struct TEnsurePartitionWriterExistParams {
@@ -56,6 +59,8 @@ protected:
     void EnsurePartitionWriterExist(const TEnsurePartitionWriterExistParams& params);
     void EnsurePartitionWriterNotExist(const TEnsurePartitionWriterExistParams& params);
     void EnsureWriteSessionClosed(EErrorCode errorCode);
+    void EnsureNoDisconnected();
+    void CompleteDelayedGetOwnership();
 
     void WaitForPartitionWriterOps(const TWaitForPartitionWriterOpsParams& params);
 
@@ -70,6 +75,7 @@ protected:
     TPQTabletMock* PQTablet = nullptr;
 
     THashMap<ui64, TTxId> CookieToTxId;
+    THashMap<ui64, NWilson::TTraceId> CookieToWriteRequestTraceId;
     THashMap<TTxId, TActorId> TxIdToPartitionWriter;
     THashMap<TActorId, TTxId> PartitionWriterToTxId;
 

@@ -3804,7 +3804,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvSubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
@@ -3814,7 +3814,7 @@ void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvUnsubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
@@ -4044,7 +4044,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         TDistributedTransaction& tx = p->second;
 
         // таблетка координатора могла перезапуститься надо обновить информацию
-        tx.SendPlanStepAcksAfterCompletion(sender, std::move(ev));
+        tx.AddPlanStepSender(sender, std::move(ev));
 
         if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
             // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
@@ -4079,11 +4079,13 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
                                   const TDistributedTransaction& tx)
 {
-    if (!tx.PlanStepSender) {
+    if (tx.PlanStepSenders.empty()) {
         return;
     }
 
-    SendPlanStepAcks(ctx, tx.PlanStepSender, *tx.PlanStepEvent);
+    for (const auto& [receiver, event] : tx.PlanStepSenders) {
+        SendPlanStepAcks(ctx, receiver, *event);
+    }
 }
 
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,

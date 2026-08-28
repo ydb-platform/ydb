@@ -89,7 +89,7 @@ public:
         YDB_LOG_DEBUG("TMoveTableUnit Execute changeRecords",
             {"schemeTx", schemeTx.DebugString()},
             {"size", op->ChangeRecords().size()},
-            {"tablet", DataShard.TabletID()});
+            {"tabletId", DataShard.TabletID()});
 
         DataShard.SuspendChangeSender(ctx);
 

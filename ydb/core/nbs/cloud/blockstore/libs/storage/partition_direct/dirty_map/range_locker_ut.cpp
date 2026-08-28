@@ -2,6 +2,8 @@
 
 #include "pbuffer_key_test_helpers.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/testlib/range_locker_access.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <utility>
@@ -10,26 +12,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRangeLockAccess
-{
-public:
-    static TRangeLock Make(
-        ILockableRangesWeakPtr lockableRanges,
-        TPBufferKey pBufferKey)
-    {
-        return TRangeLock(std::move(lockableRanges), pBufferKey);
-    }
-
-    static TRangeLock Make(
-        ILockableRangesWeakPtr lockableRanges,
-        TBlockRange64 range,
-        THostMask mask)
-    {
-        return TRangeLock(std::move(lockableRanges), range, mask);
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
+namespace {
 
 class TMockLockableRanges
     : public ILockableRanges
@@ -75,6 +58,8 @@ public:
 private:
     TLockRangeHandle NextHandle = 1000;
 };
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 

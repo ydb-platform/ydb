@@ -208,7 +208,8 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpsertQuery(const TStrin
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
     sb << "UPSERT INTO `" + tablePath + "`" << Endl;
     sb << "SELECT " << JoinSeq(",", GetColumnIds()) << " FROM AS_TABLE($objects)" << Endl;
-    ALS_DEBUG(NKikimrServices::METADATA_PROVIDER) << sb;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::METADATA_PROVIDER, "",
+        {"sb", sb});
     result.mutable_query()->set_yql_text(sb);
     (*result.mutable_parameters())["$objects"] = BuildVariableStructRecords();
     return result;
@@ -221,7 +222,8 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildInsertQuery(const TStrin
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
     sb << "INSERT INTO `" + tablePath + "`" << Endl;
     sb << "SELECT " << JoinSeq(",", GetColumnIds()) << " FROM AS_TABLE($objects)" << Endl;
-    ALS_DEBUG(NKikimrServices::METADATA_PROVIDER) << sb;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::METADATA_PROVIDER, "",
+        {"sb", sb});
     result.mutable_query()->set_yql_text(sb);
     (*result.mutable_parameters())["$objects"] = BuildVariableStructRecords();
     return result;
@@ -239,7 +241,8 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildSelectQuery(const TStrin
     } else if (GetColumnIds().size() == 1) {
         sb << "WHERE " << GetColumnIds()[0] << " IN $ids" << Endl;
     }
-    ALS_DEBUG(NKikimrServices::METADATA_PROVIDER) << sb;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::METADATA_PROVIDER, "",
+        {"sb", sb});
     result.mutable_query()->set_yql_text(sb);
     (*result.mutable_parameters())["$ids"] = BuildVariableTupleRecords();
     return result;
@@ -252,7 +255,8 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildDeleteQuery(const TStrin
     sb << "DECLARE $ids AS List<" << BuildColumnsSchemaTuple() << ">;" << Endl;
     sb << "DELETE FROM `" + tablePath + "`" << Endl;
     sb << "WHERE (" << JoinSeq(", ", GetColumnIds()) << ") IN $ids" << Endl;
-    ALS_DEBUG(NKikimrServices::METADATA_PROVIDER) << sb;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::METADATA_PROVIDER, "",
+        {"sb", sb});
     result.mutable_query()->set_yql_text(sb);
     (*result.mutable_parameters())["$ids"] = BuildVariableTupleRecords();
     return result;
@@ -265,7 +269,8 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpdateQuery(const TStrin
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
     sb << "UPDATE `" + tablePath + "` ON" << Endl;
     sb << "SELECT " << JoinSeq(",", GetColumnIds()) << " FROM AS_TABLE($objects)" << Endl;
-    ALS_DEBUG(NKikimrServices::METADATA_PROVIDER) << sb;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::METADATA_PROVIDER, "",
+        {"sb", sb});
     result.mutable_query()->set_yql_text(sb);
     (*result.mutable_parameters())["$objects"] = BuildVariableStructRecords();
     return result;

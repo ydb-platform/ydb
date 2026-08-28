@@ -15,6 +15,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/src/client/ss_tasks/task.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
@@ -45,18 +47,26 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
         virtual void DoProposeSuccess(const TString& sessionId) const override {
             CSTransferStatus->SetProposed(true);
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_proposed")("session_id", sessionId);
+            YDB_LOG_NOTICE("Column shard sharing proposed",
+                {"event", "sharing_proposed"},
+                {"sessionId", sessionId});
         }
         virtual void DoConfirmSuccess(const TString& sessionId) const override {
             CSTransferStatus->SetConfirmed(true);
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_confirmed")("session_id", sessionId);
+            YDB_LOG_NOTICE("Column shard sharing confirmed",
+                {"event", "sharing_confirmed"},
+                {"sessionId", sessionId});
         }
         virtual void DoFinished(const TString& sessionId) const override {
             CSTransferStatus->SetFinished(true);
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "sharing_finished")("session_id", sessionId);
+            YDB_LOG_NOTICE("Column shard sharing finished",
+                {"event", "sharing_finished"},
+                {"sessionId", sessionId});
         }
         virtual void DoStatus(const NOlap::NDataSharing::TStatusContainer& status) const override {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "status")("info", status.SerializeToProto().DebugString());
+            YDB_LOG_NOTICE("Column shard sharing status updated",
+                {"event", "status"},
+                {"info", status.SerializeToProto().DebugString()});
         }
         virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardDataSharingProto::TInitiator::TController& /*proto*/) override {
             return TConclusionStatus::Success();

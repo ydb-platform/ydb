@@ -5537,6 +5537,54 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a_plus")) != mapOutput.end());
     }
 
+    Y_UNIT_TEST(CBOTreeRecomputesPackedOutputIUs) {
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("left")}, pos);
+        auto staleRightRead = MakeTestRead({TInfoUnit("stale")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            leftRead,
+            staleRightRead,
+            pos,
+            "Inner",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+
+        // Cache the join output, then change its input before packaging it.
+        UNIT_ASSERT_VALUES_EQUAL(join->GetOutputIUs().size(), 2);
+        auto currentRightRead = MakeTestRead({TInfoUnit("current")}, pos);
+        join->SetRightInput(currentRightRead);
+
+        auto cboTree = MakeIntrusive<TOpCBOTree>(join, pos);
+        TOpRoot root(cboTree, pos, {"left", "current"});
+        root.RecomputeOutputIUsSubtree();
+
+        const auto& outputIUs = cboTree->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(outputIUs.size(), 2);
+        UNIT_ASSERT(outputIUs[0] == TInfoUnit("left"));
+        UNIT_ASSERT(outputIUs[1] == TInfoUnit("current"));
+    }
+
+    Y_UNIT_TEST(CopiedOperatorPropsDoNotReuseOutputIUs) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("input")}, pos);
+        auto oldMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("old", pos, testContext.ExprCtx),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(oldMap->GetOutputIUs().size(), 2);
+
+        auto newMap = MakeIntrusive<TOpMap>(read, pos, oldMap->Props, TVector<TMapElement>{
+            MakeTestConstantAppend("new", pos, testContext.ExprCtx),
+        }, false);
+
+        const auto& outputIUs = newMap->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(outputIUs.size(), 2);
+        UNIT_ASSERT(outputIUs[0] == TInfoUnit("input"));
+        UNIT_ASSERT(outputIUs[1] == TInfoUnit("new"));
+    }
+
     Y_UNIT_TEST(MapOutputPruningKeepsLocalHidesForKeptOutputs) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();

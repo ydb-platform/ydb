@@ -1358,8 +1358,13 @@ TOpCBOTree::TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TVector<TIntrusivePtr<
     RebuildChildren();
 }
 
-// Recompute output IUs for now
 void TOpCBOTree::ComputeOutputIUs() {
+    // TreeNodes are stored in post-order, so boundary inputs have already been
+    // computed and every packed node can be refreshed before its parent.
+    for (const auto& node : TreeNodes) {
+        node->ComputeOutputIUs();
+    }
+
     Props.OutputIUs = TreeRoot->GetOutputIUs();
 }
 

@@ -1,3 +1,6 @@
+#ifndef NDEBUG
+#define SIMDJSON_DEVELOPMENT_CHECKS 1
+#endif
 #include "json_parser.h"
 
 #include "parser_base.h"

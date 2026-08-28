@@ -575,7 +575,7 @@ public:
                 YDB_LOG_WARN_CTX(ctx, "Source has no split key predecessor for range, skipping left split key, MaxOffset stays -1 (dedup reset for this range)",
                     {"tabletId", Self->TabletID()},
                     {"sourceName", EscapeC(sourceName)},
-                    {"ragneFrom", EscapeC(range.From.GetBuffer())});
+                    {"rangeFrom", EscapeC(range.From.GetBuffer())});
             }
 
             // Dump final split keys and offsets for debugging

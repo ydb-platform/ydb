@@ -110,7 +110,8 @@ private:
             {"scanId", ScanId},
             {"table", TablePath},
             {"gen", ev->Get()->Generation},
-            {"tabletId", DatashardActorId},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
             {"freeSpace", ev->Get()->FreeSpace},
             {"chunksLimiter", ChunksLimiter.DebugString()});
 
@@ -152,7 +153,8 @@ private:
         auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         YDB_LOG(prio, "Got AbortExecution",
             {"at", ScanActorId},
-            {"tabletId", DatashardActorId},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
             {"scanId", ScanId},
             {"table", TablePath},
             {"code", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
@@ -171,7 +173,8 @@ private:
         YDB_LOG_ERROR("Undelivered",
             {"event", ev->GetTypeRewrite()},
             {"at", ScanActorId},
-            {"tabletId", DatashardActorId},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
             {"scanId", ScanId},
             {"table", TablePath});
 
@@ -225,7 +228,8 @@ private:
 
         YDB_LOG_INFO("Start scan",
             {"at", ScanActorId},
-            {"tabletId", DatashardActorId},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
             {"scanId", ScanId},
             {"table", TablePath},
             {"gen", Generation},

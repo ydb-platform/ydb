@@ -273,7 +273,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 {
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "GetNextActiveOp",
         {"tabletId", Self->TabletID()},
-        {"dryRun", (dryRun ? " (dry run)" : "")},
+        {"dryRun", dryRun},
         {"activeOpsCount", ActiveOps.size()},
         {"activePlannedOpsCount", ActivePlannedOps.size()},
         {"immediateOpsCount", ImmediateOps.size()},

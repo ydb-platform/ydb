@@ -162,8 +162,8 @@ private:
             {"tableId", TableId},
             {"stats", ev->Stats},
             {"partCount", ev->PartCount},
-            {"hasBorrowedParts", (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")},
-            {"hasSchemaChanges", (ev->HasSchemaChanges ? ", with schema changes" : "")},
+            {"hasBorrowedParts", (ev->PartOwners.size() > 1 || (ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId))},
+            {"hasSchemaChanges", ev->HasSchemaChanges},
             {"loadedSize", PagesSize},
             {"spent", NFmt::Do(*Spent)});
 

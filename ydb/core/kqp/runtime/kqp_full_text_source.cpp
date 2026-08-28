@@ -1176,7 +1176,7 @@ public:
     IMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : Streams(std::move(streams))
         , TokenCount(Streams.size())
-        , MinShouldMatch(minShouldMatch)
+        , MinShouldMatch(minShouldMatch > Streams.size() ? Streams.size() : minShouldMatch)
         , DocIdEquals(typename THeapEntry::TEquals(keyColumnTypes))
         , DocIdCompare(typename THeapEntry::TCompare(keyColumnTypes))
         , WithFrequencies(withFrequencies)
@@ -1259,7 +1259,7 @@ class TAndOptimizedMergeAlgorithm : public IMergeAlgorithm<TDocId> {
 
 public:
     TAndOptimizedMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
-        : TBase(std::move(streams), streams.size(), withFrequencies, keyColumnTypes)
+        : TBase(std::move(streams), std::numeric_limits<ui64>::max(), withFrequencies, keyColumnTypes)
     {
     }
 

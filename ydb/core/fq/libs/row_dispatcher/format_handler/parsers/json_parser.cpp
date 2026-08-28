@@ -162,6 +162,78 @@ public:
         }
     }
 
+    static bool ValidateJsonType(const NKikimr::NMiniKQL::TType* type, simdjson::builtin::ondemand::json_type cellType, simdjson::builtin::ondemand::value& jsonValue) {
+        switch(type->GetKind()) {
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Optional:
+                // null are handled separately
+                return ValidateJsonType(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), cellType, jsonValue);
+
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
+                auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
+                const auto alternativesCount = variantType->GetAlternativesCount();
+                for (ui32 index = 0; index != alternativesCount; ++index) {
+                    if (ValidateJsonType(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), cellType, jsonValue)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
+                auto maybeDataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
+                Y_ENSURE(maybeDataSlot);
+                auto dataSlot = *maybeDataSlot;
+                switch (dataSlot) {
+                    case NYql::NUdf::EDataSlot::Int8:
+                    case NYql::NUdf::EDataSlot::Int16:
+                    case NYql::NUdf::EDataSlot::Int32:
+                    case NYql::NUdf::EDataSlot::Int64:
+                        if (cellType != simdjson::builtin::ondemand::json_type::number) {
+                            return false;
+                        }
+                        return jsonValue.is_integer();
+                    case NYql::NUdf::EDataSlot::Uint8:
+                    case NYql::NUdf::EDataSlot::Uint16:
+                    case NYql::NUdf::EDataSlot::Uint32:
+                    case NYql::NUdf::EDataSlot::Uint64:
+                        if (cellType != simdjson::builtin::ondemand::json_type::number) {
+                            return false;
+                        }
+                        if (jsonValue.is_negative()) {
+                            return false;
+                        }
+                        return jsonValue.is_integer();
+                    case NYql::NUdf::EDataSlot::Double:
+                    case NYql::NUdf::EDataSlot::Float:
+                        return cellType == simdjson::builtin::ondemand::json_type::number;
+                    case NYql::NUdf::EDataSlot::String:
+                    case NYql::NUdf::EDataSlot::Utf8:
+                        return cellType == simdjson::builtin::ondemand::json_type::string;
+                    case NYql::NUdf::EDataSlot::Bool:
+                        return cellType == simdjson::builtin::ondemand::json_type::boolean;
+                    case NYql::NUdf::EDataSlot::Json:
+                        return true;
+                    default:
+                        // Note: we cannot distinguish between various subtypes
+                        // E.g. string may be parsable as Datetime, but first alternative
+                        // is Interval; parsing will fail as a result
+                        return cellType == simdjson::builtin::ondemand::json_type::string;
+                }
+            }
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Struct:
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Dict:
+                return cellType == simdjson::builtin::ondemand::json_type::object;
+
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple:
+            case NKikimr::NMiniKQL::TTypeBase::EKind::List:
+                return cellType == simdjson::builtin::ondemand::json_type::array;
+
+            default:
+                Y_DEBUG_ABORT();
+                return true;
+        }
+    }
+
     bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isOptional, bool isQuiet = false) const {
         Y_ENSURE(HolderFactory); // should be already verified by ParseNestedType
         simdjson::builtin::ondemand::json_type cellType;
@@ -191,16 +263,44 @@ public:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
                 auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
                 const auto alternativesCount = variantType->GetAlternativesCount();
+                simdjson::ondemand::parser parser;
+                simdjson::simdjson_result<simdjson::ondemand::document> doc;
                 for (ui32 index = 0; index != alternativesCount; ++index) {
                     auto alternativeType = variantType->GetAlternativeType(index);
                     status = TStatus::Success();
+                    if (!ValidateJsonType(alternativeType, cellType, jsonValue)) {
+                        continue;
+                    }
+                    if (doc.error() == simdjson::error_code::UNINITIALIZED && !jsonValue.is_scalar()) {
+                        // With non-scalar types we must use re-parsing
+                        // With scalar types, we cannot do reparsing (and it would be inefficient)
+                        // Note that scalar case relies on repeated calls `value.get_string(consumer)`, which is not exactly documented (and, on the contrary, `sv = value.get_string()` does NOT work, in a very nasty way -- it triggers OOB writes)
+                        // Also note that we cannot just (easily) reparse scalar values, as
+                        // we cannot .get(value) from scalar document
+                        std::string_view rawJson;
+                        CHECK_JSON_ERROR(jsonValue.raw_json().get(rawJson)) {
+                            SetParsingError(error, jsonValue, "reparse as json", status, isQuiet);
+                            return false;
+                        }
+                        doc = parser.iterate(simdjson::padded_string_view(rawJson, rawJson.size() + simdjson::SIMDJSON_PADDING)); // as rawJson points to original document, we *know* padding is present
+                    }
+                    if (doc.error() != simdjson::error_code::UNINITIALIZED) {
+                        CHECK_JSON_ERROR(doc.get(jsonValue)) {
+                            SetParsingError(error, jsonValue, "reparse as json", status, isQuiet);
+                            return false;
+                        }
+                    }
                     if (ParseNestedValue(jsonValue, resultValue, status, alternativeType, false, index + 1 != alternativesCount || isQuiet)) {
                         resultValue = HolderFactory->CreateVariantHolder(std::move(resultValue.Release()), index);
                         return true;
                     }
+                    if (doc.error() != simdjson::error_code::UNINITIALIZED) {
+                        doc.rewind();
+                    }
                     resultValue = NYql::NUdf::TUnboxedValue();
                 }
                 if (status.IsSuccess()) {
+                    // Note: we try to keep error from last alternative, but this won't work if tail is rejected by early json type mismatch check. So, just ensure some error is reported
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse Variant type");
                 }
                 return false;
@@ -343,7 +443,6 @@ public:
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
                     return false;
                 }
-                jsonObject.reset();
                 {
                     bool isEmpty;
                     CHECK_JSON_ERROR(jsonObject.is_empty().get(isEmpty)) {
@@ -355,6 +454,7 @@ public:
                         return true;
                     }
                 }
+                jsonObject.reset();
                 auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
                 auto keyType = dictType->GetKeyType();
                 Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data); // should be already verified, not user-data-error

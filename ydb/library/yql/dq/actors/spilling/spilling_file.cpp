@@ -189,7 +189,6 @@ private:
             ui64 BlobId = 0;
             THolder<TFileHandle> NewFileHandle;
             TMaybe<TString> Error;
-            ESpillingType SpillingType;
         };
 
         struct TEvReadFileResponse : public TEventLocal<TEvReadFileResponse, EvReadFileResponse> {
@@ -200,7 +199,6 @@ private:
             TBuffer Blob;
             bool Removed = false;
             TMaybe<TString> Error;
-            ESpillingType SpillingType;
         };
 
         struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
@@ -258,33 +256,9 @@ protected:
     }
 
 private:
-    void IncError(TSpillingCounters::TTypeCounters& tc) {
-        tc.Errors->Inc();
-    }
-
-    void ReplyError(const TActorId& to, const TString& message) {
-        Send(to, new TEvDqSpilling::TEvError(message));
-    }
-
     void ReplyError(const TActorId& to, const TString& message, TSpillingCounters::TTypeCounters& tc) {
-        ReplyError(to, message);
-        IncError(tc);
-    }
-
-    TSpillingCounters::TTypeCounters* FindTypeCounters(const TActorId& client) {
-        auto it = Files_.find(client);
-        if (it == Files_.end()) {
-            return nullptr;
-        }
-        return &Counters_->GetTypeCounters(it->second.SpillingType);
-    }
-
-    void ReplyServiceNotStarted(const TActorId& to, TSpillingCounters::TTypeCounters* tc) {
-        Send(to, new TEvDqSpilling::TEvError("Spilling service is not started"));
-        if (tc) {
-            IncError(*tc);
-            tc->ServiceNotStarted->Inc();
-        }
+        Send(to, new TEvDqSpilling::TEvError(message));
+        tc.Errors->Inc();
     }
 
     void CreateSessionRoot(ui32 retriesLeft) {
@@ -322,15 +296,10 @@ private:
             case TEvPrivate::TEvRetryStart::EventType:
                 CreateSessionRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
                 break;
-            case TEvDqSpillingLocalFile::TEvOpenFile::EventType: {
-                auto* msg = ev->Get<TEvDqSpillingLocalFile::TEvOpenFile>();
-                LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
-                ReplyServiceNotStarted(ev->Sender, &Counters_->GetTypeCounters(msg->SpillingType));
-                break;
-            }
             default:
                 LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
-                ReplyServiceNotStarted(ev->Sender, FindTypeCounters(ev->Sender));
+                Send(ev->Sender, new TEvDqSpilling::TEvError("Spilling service is not started"));
+                Counters_->ServiceNotStarted->Inc();
         }
     }
 
@@ -446,7 +415,7 @@ private:
             LOG_E("[Write] File not found. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            ReplyError(ev->Sender, "File not found");
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
         }
 
@@ -522,7 +491,6 @@ private:
         writeOp->CreateFile = newFile;
         writeOp->BlobId = msg.BlobId;
         writeOp->Blob = std::move(msg.Blob);
-        writeOp->SpillingType = fd.SpillingType;
 
         if (!RunOp("Write", std::move(writeOp), fd)) {
             TString error = "[Write] Can not run operation";
@@ -542,7 +510,7 @@ private:
             LOG_E("[WriteFileResponse] Can not write file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            ReplyError(ev->Sender, "Internal error", Counters_->GetTypeCounters(msg.SpillingType));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
@@ -579,7 +547,7 @@ private:
         }
 
         if (fd.Error) {
-            IncError(tc);
+            tc.Errors->Inc();
             if (ioError) {
                 tc.IoErrors->Inc();
             }
@@ -613,7 +581,7 @@ private:
         if (it == Files_.end()) {
             LOG_E("[Read] Can not read file: not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            ReplyError(ev->Sender, "File not found");
+            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
         }
 
@@ -674,7 +642,6 @@ private:
         readOp->BlobId = msg.BlobId;
         readOp->Offset = blobIt->second.Offset;
         readOp->Size = blobIt->second.Size;
-        readOp->SpillingType = fd.SpillingType;
         if (remove) {
             readOp->RemoveFile = std::move(fp->FileHandle);
         }
@@ -698,7 +665,7 @@ private:
             LOG_E("[ReadFileResponse] Can not read file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            ReplyError(ev->Sender, "Internal error", Counters_->GetTypeCounters(msg.SpillingType));
+            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
@@ -737,7 +704,7 @@ private:
         }
 
         if (fd.Error) {
-            IncError(tc);
+            tc.Errors->Inc();
             if (ioError) {
                 tc.IoErrors->Inc();
             }
@@ -1003,7 +970,6 @@ private:
         bool CreateFile = false;
         ui64 BlobId = 0;
         TChunkedBuffer Blob;
-        ESpillingType SpillingType;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
@@ -1015,7 +981,6 @@ private:
             resp->Client = Client;
             resp->WaitTime = now - Ts;
             resp->BlobId = BlobId;
-            resp->SpillingType = SpillingType;
 
             try {
                 TFile file;
@@ -1046,7 +1011,6 @@ private:
         ui64 Offset;
         ui64 Size;
         THolder<TFileHandle> RemoveFile;
-        ESpillingType SpillingType;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
@@ -1058,7 +1022,6 @@ private:
             resp->Client = Client;
             resp->WaitTime = TInstant::Now() - now;
             resp->BlobId = BlobId;
-            resp->SpillingType = SpillingType;
 
             try {
                 resp->Blob.Resize(Size);

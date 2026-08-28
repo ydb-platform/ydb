@@ -772,9 +772,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester, TDuration::Seconds(1));
             UNIT_ASSERT_VALUES_EQUAL("Spilling service is not started", resp->Get()->Message);
             UNIT_ASSERT(CounterVal(runtime, "Spilling/StartupErrors") >= 1);
-            UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/ServiceNotStarted"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Channel/ServiceNotStarted"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/Compute/Errors"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, "Spilling/ServiceNotStarted"), 1);
         }
 
         // Unblock the root: the service creates only its own directory inside an existing root.

@@ -23,7 +23,6 @@ struct TSpillingCounters : public TThrRefBase {
         ::NMonitoring::TDynamicCounters::TCounterPtr NoSpaceErrors;
         ::NMonitoring::TDynamicCounters::TCounterPtr IoErrors;
         ::NMonitoring::TDynamicCounters::TCounterPtr QueueOverflowErrors;
-        ::NMonitoring::TDynamicCounters::TCounterPtr ServiceNotStarted;
         ::NMonitoring::TDynamicCounters::TCounterPtr FileDescriptors;
     };
 
@@ -37,6 +36,7 @@ struct TSpillingCounters : public TThrRefBase {
     TTypeCounters ChannelSpilling;
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIOQueueSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr StartupErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ServiceNotStarted;
 };
 
 struct TSpillingTaskCounters : public TThrRefBase {

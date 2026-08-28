@@ -14,7 +14,6 @@ static void InitTypeCounters(TSpillingCounters::TTypeCounters& tc,
     tc.NoSpaceErrors = counters->GetCounter(prefix + "/NoSpaceErrors", true);
     tc.IoErrors = counters->GetCounter(prefix + "/IoErrors", true);
     tc.QueueOverflowErrors = counters->GetCounter(prefix + "/QueueOverflowErrors", true);
-    tc.ServiceNotStarted = counters->GetCounter(prefix + "/ServiceNotStarted", true);
     tc.FileDescriptors = counters->GetCounter(prefix + "/FileDescriptors", false);
 }
 
@@ -23,6 +22,7 @@ TSpillingCounters::TSpillingCounters(const TIntrusivePtr<::NMonitoring::TDynamic
     InitTypeCounters(ChannelSpilling, counters, "Spilling/Channel");
     SpillingIOQueueSize = counters->GetCounter("Spilling/IOQueueSize", false);
     StartupErrors = counters->GetCounter("Spilling/StartupErrors", true);
+    ServiceNotStarted = counters->GetCounter("Spilling/ServiceNotStarted", true);
 }
 
 } // namespace NYql::NDq

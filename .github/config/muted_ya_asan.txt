@@ -1,4 +1,5 @@
 ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotLogUnknownSync
+ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_16Segments
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_1Segment
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
@@ -389,6 +390,7 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
+ydb/tests/fq/streaming/generic py3test.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

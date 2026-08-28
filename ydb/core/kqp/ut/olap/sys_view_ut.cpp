@@ -9,6 +9,8 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSysView) {
@@ -501,7 +503,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
-//                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
+//                    YDB_LOG_INFO("",
+//                          {"json", i});
 //                }
             }
         }
@@ -534,7 +537,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5)("json", i);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
-//                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
+//                    YDB_LOG_INFO("",
+//                          {"json", i});
 //                }
             }
         }

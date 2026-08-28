@@ -42,6 +42,7 @@ def _command_environment(**overrides):
         'YDB_PQ_CLIENT_SERVICE_TYPES',
         'YDB_REPORT_MONITORING_INFO',
         'YDB_TEST_FIXED_PORT',
+        'YDB_USE_IN_MEMORY_PDISKS',
     ):
         environment.pop(name, None)
     environment.update(overrides)
@@ -171,17 +172,29 @@ class LocalYdb:
     def recipe(self):
         return json.loads(self.recipe_path.read_text())
 
-    def pid(self):
+    def _first_node(self):
         nodes = self.recipe()['nodes']
-        return int(nodes[sorted(nodes)[0]]['pid'])
+        return nodes[sorted(nodes)[0]]
 
-    def _connection(self):
+    def pid(self):
+        return int(self._first_node()['pid'])
+
+    def _connection(self, tls=False):
         endpoint = (self.working_directory / 'ydb_endpoint.txt').read_text().strip()
         database = (self.working_directory / 'ydb_database.txt').read_text().strip()
+        if tls:
+            prefix = '--grpcs-port='
+            tls_ports = [
+                argument[len(prefix):]
+                for argument in self._first_node()['command']
+                if argument.startswith(prefix)
+            ]
+            assert len(tls_ports) == 1, 'Unable to determine the local YDB TLS port'
+            endpoint = '{}:{}'.format(endpoint.rsplit(':', 1)[0], tls_ports[0])
         return endpoint, '/' + database.lstrip('/')
 
     def query(self, statement, tls_ca=None, output_format=None, check=True):
-        endpoint, database = self._connection()
+        endpoint, database = self._connection(tls=tls_ca is not None)
         command = [
             _binary_path('YDB_CLI_BINARY'),
             '--endpoint',

@@ -719,6 +719,31 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
 };
 
+Y_UNIT_TEST_SUITE(TStatsParseOffloadTest) {
+    // Stats must round-trip through persist + restart the same regardless of the offload flag.
+    Y_UNIT_TEST_FLAG(StatsPersistRegardlessOfOffload, EnablePeriodicTableStatsParseOffload) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+        TTestEnv env(runtime, opts);
+
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnablePersistentPartitionStats(true);
+        appData.FeatureFlags.SetEnablePeriodicTableStatsParseOffload(EnablePeriodicTableStatsParseOffload);
+
+        auto eventAction = TTestActorRuntime::EEventAction::PROCESS;
+        SetStatsObserver(runtime, [&]() {
+                return eventAction;
+            }
+        );
+
+        ui64 txId = 1000;
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        WaitAndCheckStatPersisted(runtime, env, INITIAL_ROWS_COUNT, TDuration::Zero(), eventAction);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
     Y_UNIT_TEST(SameAggregatedStatsAfterRestart) {
         TTestBasicRuntime runtime;

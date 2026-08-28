@@ -369,5 +369,8 @@ message TFeatureFlags {
     optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
     optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
     optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 316 [default = false];
-    optional bool EnableSysViewOrderByLimitPushdown = 317 [default = false];
+    // Offloads TEvDataShard::TEvPeriodicTableStats parsing to a dedicated aux actor to reduce
+    // SchemeShard's single-threaded load.
+    optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
+    optional bool EnableSysViewOrderByLimitPushdown = 318 [default = false];
 }

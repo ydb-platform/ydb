@@ -2160,6 +2160,7 @@ private:
     // sub-tables for the relevance variant).
     void FillFulltextIndexSettings(size_t index, const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns) {
+        YQL_ENSURE(indexDescription.KeyColumns.size() > 0);
         if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact) {
             indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact);
             *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
@@ -2189,8 +2190,14 @@ private:
             }
             FillTableId(*statsTable, *indexSettings->MutableStatsTable());
             FillTablesMap(statsTable->Name, tablesMap);
-            for (const auto& columnName: {NTableIndex::NFulltext::IdColumn,
-                NTableIndex::NFulltext::DocCountColumn, NTableIndex::NFulltext::SumDocLengthColumn}) {
+            TVector<TString> statsCols = {indexDescription.KeyColumns.begin(),
+                indexDescription.KeyColumns.end()-1};
+            if (!statsCols.size()) {
+                statsCols.push_back(NTableIndex::NFulltext::IdColumn);
+            }
+            statsCols.push_back(NTableIndex::NFulltext::DocCountColumn);
+            statsCols.push_back(NTableIndex::NFulltext::SumDocLengthColumn);
+            for (const auto& columnName: statsCols) {
                 const auto& columnMeta = statsTable->Columns.at(columnName);
                 FillColumnProto(columnName, &columnMeta, indexSettings->AddStatsColumns());
                 tablesMap[statsTable->Name].emplace(columnName);
@@ -2214,7 +2221,7 @@ private:
         }
 
         FillTablesMap(implTable->Name, tablesMap);
-        for (size_t i = 0; i+1 < indexDescription.KeyColumns.size(); i++) {
+        for (size_t i = 0; i < indexDescription.KeyColumns.size()-1; i++) {
             // Add prefix columns
             const auto& columnName = indexDescription.KeyColumns[i];
             const auto& columnMeta = implTable->Columns.at(columnName);

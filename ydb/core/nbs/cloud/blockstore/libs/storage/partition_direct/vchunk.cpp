@@ -434,6 +434,68 @@ void TVChunk::OnBelatedWriteBlocksResponse(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+std::optional<TBlockRange64> TVChunk::GetFreshRange(THostIndex host) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetFreshRange(host);
+}
+
+TReadHint TVChunk::MakeReadHint(TBlockRange64 range)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->MakeReadHint(range);
+}
+
+TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange64 range, THostMask mask)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return TRangeLock(BlocksDirtyMap, range, mask);
+}
+
+TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange64 range)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->BeginRangeSync(host, range);
+}
+
+void TVChunk::EndRangeSync(ui64 syncId, bool success)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    BlocksDirtyMap->EndRangeSync(syncId, success);
+}
+
+void TVChunk::OnCopyProgress(ui64 totalBytes)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto prepare = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            auto newConfig = self->VChunkConfig;
+            for (const auto& [hostIndex, _]: self->Copiers) {
+                const auto freshRange = self->GetFreshRange(hostIndex);
+                newConfig.SetWatermark(
+                    hostIndex,
+                    freshRange ? std::optional<ui64>(
+                                     freshRange->Start * self->BlockSize)
+                               : std::nullopt);
+            }
+            return newConfig;
+        }
+        return TVChunkConfig{};
+    };
+    UpdateConfig(
+        std::move(prepare),
+        TStringBuilder() << "copy progress " << totalBytes << " bytes");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -990,14 +1052,16 @@ void TVChunk::UpdateConfig(TPrepareConfigFunc prepareConfig, TString message)
     PendingVChunkConfigs.push_back(TPendingVChunkConfig{
         .PrepareConfig = std::move(prepareConfig),
         .Message = std::move(message)});
-    PersistNextPendingConfig();
+    if (PendingVChunkConfigs.size() == 1) {
+        PersistNextPendingConfig();
+    }
 }
 
 void TVChunk::PersistNextPendingConfig()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (PendingVChunkConfigs.size() != 1) {
+    if (PendingVChunkConfigs.empty()) {
         return;
     }
 
@@ -1052,7 +1116,7 @@ void TVChunk::OnConfigPersisted()
 
     ApplyConfig(std::move(persisted.Config), persisted.Message);
     PersistNextPendingConfig();
-    DemoteUnavailbleHostsIfNeeded();
+    DemoteUnavailableHostsIfNeeded();
 }
 
 void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
@@ -1097,7 +1161,7 @@ void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
                     DiskDescription,
                     VChunkConfig,
                     DirectBlockGroup,
-                    BlocksDirtyMap,
+                    this,
                     hostIndex);
 
             newCopier->Start().Subscribe(
@@ -1200,7 +1264,8 @@ void TVChunk::OnCopyComplete(
         ToString(result).c_str());
 
     if (result != TDDiskDataCopier::EResult::Ok) {
-        // TODO (drbasic). Decide what to do in case of a coping error.
+        // TODO (drbasic). Decide what to do in case of a copying error.
+        Copiers.erase(hostIndex);
         return;
     }
 
@@ -1218,7 +1283,7 @@ void TVChunk::OnCopyComplete(
         TStringBuilder() << PrintHostAndNode(hostIndex) << " copy finished");
 }
 
-void TVChunk::DemoteUnavailbleHostsIfNeeded()
+void TVChunk::DemoteUnavailableHostsIfNeeded()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 

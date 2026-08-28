@@ -159,15 +159,14 @@ class TestNbs(NbsTestBase):
 
     def test_nbs_500gb_disk_read_write(self):
         """
-        Create a multi-chunk disk, write random data at chunk edges, and verify
-        reads. 8 GiB fits the 9-node in-memory pool (10 DDisk groups, 32 MiB
-        chunks); first/middle/last of the first and last chunk are enough to
-        exercise routing.
+        Create a 500 GiB disk, write random data at chunk edges, and verify
+        reads. In-memory PDisks use 32 MiB chunks; first/middle/last block of
+        the first, middle, and last chunk exercise routing.
         """
         disk_id = self.generate_disk_id()
         block_size = 4096
-        # 8 GiB = 2_097_152 blocks of 4096 bytes.
-        blocks_count = 2097152
+        # 500 GiB = 131_072_000 blocks of 4096 bytes.
+        blocks_count = 131072000
 
         # In-memory PDisks use 32 MiB chunks = 8192 blocks of 4096 bytes.
         chunk_size_blocks = 8192
@@ -178,7 +177,7 @@ class TestNbs(NbsTestBase):
         actor_id = self.get_load_actor_adapter_actor_id(disk_id)
 
         test_locations = []
-        for chunk_idx in [0, num_chunks - 1]:
+        for chunk_idx in [0, num_chunks // 2, num_chunks - 1]:
             chunk_start = chunk_idx * chunk_size_blocks
             chunk_middle = chunk_start + (chunk_size_blocks // 2)
             chunk_end = chunk_start + chunk_size_blocks - 1

@@ -15,6 +15,7 @@ class TestF4_06CleaningupForceFlush(NbsCase):
         pb_ids = self.collect_pbuffer_service_ids(disk.tablet_id, indexes[: min(3, len(indexes))])
         html_before = self.fetch_pbuffer_page(pb_ids)
         before = parse_pbuffer_occupancy(html_before)
+        # Fallback only checks that the page lists some tablet, not this one.
         assert disk.tablet_id in html_before or before['tablet_ids']
 
         def still_serving():

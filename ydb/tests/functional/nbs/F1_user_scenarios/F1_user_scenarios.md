@@ -58,7 +58,7 @@ Geometry to keep in mind when picking offsets:
 | F1.15 | Vhost after partition tablet kill + recovery | same vhost session keeps working across the restart; generation increases; previously written data readable | `F1_15_vhost_after_tablet_restart.py` |
 | F1.16 | Two disks, independent IO | no cross-talk | `test_nbs_multiple_disks_creation` |
 | F1.17 | Noisy neighbour: load-actor on disk A while doing verified IO on disk B | disk B read-after-write holds; disk A `RequestsFailed == 0` | none |
-| F1.18 | 500 GiB disk, first / middle / last block of first / middle / last 128 MiB chunk | each 4 KiB read matches | `test_nbs_500gb_disk_read_write` |
+| F1.18 | 500 GiB disk, first / middle / last block of first / middle / last 32 MiB chunk (in-memory PDisk chunk size) | each 4 KiB read matches | `test_nbs_500gb_disk_read_write` |
 | F1.25 | Max disk size at every supported block size (`2³¹` blocks) | 4 KiB: create, first / middle / last block read-after-write exact, write past the last block rejected. Sizes > 4 KiB are known_bug xfail and are not created (eager vchunk metadata + 4 KiB IO path) | `F1_25_max_disk_size.py` (known_bug xfail, not run, per size >4 KiB) |
 
 Extend F1.18 with a self-describing payload (LBA + sequence) so a misplaced

@@ -338,9 +338,7 @@ class NbsCase(NbsTestBase):
                                         errors.append(
                                             'read-after-write mismatch at block {}'.format(index)
                                         )
-                                        if verify:
-                                            return
-                                        break
+                                        return
                                 writes[0] += 1
                                 index = start_index + (
                                     (index - start_index + 1) % range_blocks

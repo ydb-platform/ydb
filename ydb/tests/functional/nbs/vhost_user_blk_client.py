@@ -88,6 +88,9 @@ _MEM_REGION = struct.Struct("<QQQQ")
 # virtio_blk_outhdr: type(u32) ioprio(u32) sector(u64).
 _VIRTIO_BLK_OUTHDR = struct.Struct("<IIQ")
 
+# virtio_blk_discard_write_zeroes: sector(u64) num_sectors(u32) flags(u32).
+_VIRTIO_BLK_DISCARD_WRITE_ZEROES = struct.Struct("<QII")
+
 # virtq_desc: addr(u64) len(u32) flags(u16) next(u16). 16 bytes total.
 _VIRTQ_DESC = struct.Struct("<QIHH")
 _VIRTQ_DESC_SIZE = _VIRTQ_DESC.size
@@ -343,8 +346,13 @@ class VhostUserBlkClient(object):
 
     def write_zeroes(self, byte_offset, length, timeout=5.0):
         """
-        Issues a virtio-blk WRITE_ZEROES request. The NBS vhost server maps
-        this (and DISCARD) onto ZeroBlocksLocal, which currently aborts.
+        Issues a virtio-blk WRITE_ZEROES request.
+
+        The OUT data descriptor is a 16-byte virtio_blk_discard_write_zeroes
+        segment, not the zeroed payload. The NBS vhost server advertises
+        VIRTIO_BLK_F_WRITE_ZEROES only when DiscardEnabled is set, which
+        the functional harness does not; otherwise the device answers
+        VIRTIO_BLK_S_UNSUPP before ZeroBlocksLocal is reached.
         """
         if byte_offset % VIRTIO_BLK_SECTOR_SIZE != 0:
             raise ValueError(
@@ -355,8 +363,12 @@ class VhostUserBlkClient(object):
             raise ValueError(
                 "WRITE_ZEROES length {} is not a multiple of {}".format(
                     length, VIRTIO_BLK_SECTOR_SIZE))
+        sector = byte_offset // VIRTIO_BLK_SECTOR_SIZE
+        num_sectors = length // VIRTIO_BLK_SECTOR_SIZE
+        segment = _VIRTIO_BLK_DISCARD_WRITE_ZEROES.pack(sector, num_sectors, 0)
         return self._do_request(
-            VIRTIO_BLK_T_WRITE_ZEROES, byte_offset, b"", length, timeout)
+            VIRTIO_BLK_T_WRITE_ZEROES, byte_offset, segment, len(segment),
+            timeout)
 
     def read(self, byte_offset, length, timeout=5.0):
         """
@@ -385,8 +397,8 @@ class VhostUserBlkClient(object):
         self._mem.seek(outhdr_off)
         self._mem.write(_VIRTIO_BLK_OUTHDR.pack(request_type, 0, sector))
 
-        # Write payload (only for VIRTIO_BLK_T_OUT).
-        if request_type == VIRTIO_BLK_T_OUT and payload_len:
+        # Write payload (VIRTIO_BLK_T_OUT data or WRITE_ZEROES segment).
+        if payload and payload_len:
             self._mem.seek(data_off)
             self._mem.write(payload)
 

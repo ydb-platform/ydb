@@ -5,9 +5,12 @@ from ydb.tests.functional.nbs.lib.vhost_user_blk_client import VIRTIO_BLK_S_OK
 
 
 class TestF1_23ZeroBlocks(NbsCase):
-    """F1.23 — ZeroBlocks / discard. Currently Y_ABORT in ZeroBlocksLocal."""
+    """F1.23 — ZeroBlocks / discard. VIRTIO_BLK_F_WRITE_ZEROES is not advertised."""
 
-    @known_bug('ZeroBlocksLocal aborts in TFastPathService')
+    @known_bug(
+        'vhost does not advertise VIRTIO_BLK_F_WRITE_ZEROES '
+        '(DiscardEnabled defaults to false)'
+    )
     def test_zero_blocks(self):
         disk = self.make_disk()
         payload = self.as_bytes(self.generate_random_data(4096))

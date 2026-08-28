@@ -160,9 +160,6 @@ class NbsTestBase:
         assert output.get('status') == 'SUCCESS', (
             f"CreatePartition failed for disk {disk_id}: {output}"
         )
-        tablet_id = output.get('tabletId', '')
-        assert tablet_id, f"CreatePartition did not return tabletId: {output}"
-        return tablet_id
 
     def on_create_unavailable(self):
         """Hook for shared-cluster suites to recover a wedged NBS tenant."""

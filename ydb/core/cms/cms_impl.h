@@ -277,8 +277,14 @@ private:
             // public api begin
             HFunc(TEvCms::TEvDDiskInfoListRequest, Handle);
             HFunc(TEvCms::TEvDDiskInfoGetRequest, Handle);
-            HFunc(TEvCms::TEvDDiskTabletListRequest, Handle);
-            HFunc(TEvCms::TEvDDiskDiskListRequest, Handle);
+            // Route through EnqueueRequest (like EvClusterStateRequest) so that
+            // a fresh ClusterInfo collection is triggered before the request is
+            // actually processed -- otherwise the DDisk viewer (which relies on
+            // ClusterInfo for availability/state via IsDDiskAvailable() /
+            // GetDDiskStateName()) could serve up to a minute of stale PDisk
+            // state on every page load.
+            FFunc(TEvCms::EvDDiskTabletListRequest, EnqueueRequest);
+            FFunc(TEvCms::EvDDiskDiskListRequest, EnqueueRequest);
             HFunc(TEvCms::TEvListClusterNodesRequest, Handle);
             HFunc(TEvCms::TEvCreateMaintenanceTaskRequest, Handle);
             HFunc(TEvCms::TEvRefreshMaintenanceTaskRequest, Handle);

@@ -517,7 +517,6 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
     // 2.0 DDisk availability check) should use IsPDiskStateUp(RawState)
     // instead, see IsDDiskAvailable()/GetDDiskStateName().
     pdisk.State = info.GetState() == NKikimrBlobStorage::TPDiskState::Normal ? UP : DOWN;
-    pdisk.StateKnown = true;
     pdisk.RawState = info.GetState();
 }
 

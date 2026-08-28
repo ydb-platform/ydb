@@ -1978,6 +1978,8 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
         HFuncTraced(TEvCms::TEvResetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvSetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvGetClusterInfoRequest, Handle);
+        HFuncTraced(TEvCms::TEvDDiskTabletListRequest, Handle);
+        HFuncTraced(TEvCms::TEvDDiskDiskListRequest, Handle);
 
     default:
         Y_ABORT("Unexpected request type");
@@ -2102,10 +2104,10 @@ bool TCms::IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId& id) cons
         }
     }
     const auto& pdisk = ClusterInfo->PDisk(pdiskId);
-    if (!pdisk.StateKnown) {
+    if (!pdisk.RawState) {
         return true;
     }
-    return IsPDiskStateUp(pdisk.RawState);
+    return IsPDiskStateUp(*pdisk.RawState);
 }
 
 TString TCms::GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId& id) const {
@@ -2130,13 +2132,25 @@ TString TCms::GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId& id) 
         }
     }
     const auto& pdisk = ClusterInfo->PDisk(pdiskId);
-    if (!pdisk.StateKnown) {
+    if (!pdisk.RawState) {
         return "Unknown";
     }
-    return NKikimrBlobStorage::TPDiskState::E_Name(pdisk.RawState);
+    return NKikimrBlobStorage::TPDiskState::E_Name(*pdisk.RawState);
 }
 
 void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorContext& ctx) {
+    // This request is routed through EnqueueRequest (see StateWork's
+    // FFunc(EvDDiskTabletListRequest, EnqueueRequest)), which triggers a
+    // fresh ClusterInfo collection before ProcessRequest() calls this
+    // handler -- consistent with how TEvClusterStateRequest/TEvPermissionRequest
+    // ensure up-to-date PDisk/node state for IsDDiskAvailable()/
+    // GetDDiskStateName(). If collection failed, bail out instead of
+    // reporting availability computed from stale/missing ClusterInfo.
+    if (ClusterInfo->IsOutdated()) {
+        return ReplyWithError<TEvCms::TEvDDiskTabletListResponse>(
+            ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
+    }
+
     const auto& request = ev->Get()->Record;
     const TString filter = request.GetFilterTabletId();
     const auto sortBy = request.GetSortBy();
@@ -2224,7 +2238,9 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
 
     const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
     const ui32 limit = request.GetLimit();
-    const ui32 end = limit == 0 ? items.size() : Min<ui32>(offset + limit, items.size());
+    // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
+    // the ui32 range (e.g. both close to Max<ui32>()).
+    const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
     for (ui32 i = offset; i < end; ++i) {
         const auto* kv = items[i];
         auto* tablet = response->Record.AddTablets();
@@ -2244,6 +2260,14 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
 }
 
 void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext& ctx) {
+    // See the comment in the TEvDDiskTabletListRequest handler above: this
+    // request is routed through EnqueueRequest so ClusterInfo is freshly
+    // collected before we get here.
+    if (ClusterInfo->IsOutdated()) {
+        return ReplyWithError<TEvCms::TEvDDiskDiskListResponse>(
+            ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
+    }
+
     const auto& request = ev->Get()->Record;
     const TString diskFilter = request.GetFilterDiskId();
     const TString tabletFilter = request.GetFilterTabletId();
@@ -2354,7 +2378,9 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
 
     const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
     const ui32 limit = request.GetLimit();
-    const ui32 end = limit == 0 ? items.size() : Min<ui32>(offset + limit, items.size());
+    // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
+    // the ui32 range (e.g. both close to Max<ui32>()).
+    const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
     for (ui32 i = offset; i < end; ++i) {
         const auto* usage = items[i];
         auto* disk = response->Record.AddDisks();
@@ -2495,16 +2521,9 @@ void TCms::Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx)
 
 void TCms::Handle(TEvPrivate::TEvUpdateClusterInfo::TPtr &/*ev*/, const TActorContext &ctx)
 {
-    // Always reschedule the periodic cluster info refresh (once a minute),
-    // not only when the current info is outdated. Otherwise, once a
-    // collection succeeds, ClusterInfo is never refreshed again unless some
-    // unrelated CMS management request happens to come in (e.g. a permission
-    // or notification request, which goes through EnqueueRequest/
-    // StartCollecting). Without periodic refreshing, PDisk/node states used
-    // e.g. by the NBS 2.0 DDisk viewer (IsDDiskAvailable/GetDDiskStateName)
-    // can become arbitrarily stale -- for example, still showing a disk's
-    // last known state (like "Initial") from before its node went down.
-    ScheduleUpdateClusterInfo(ctx);
+    if (State->ClusterInfo->IsOutdated()) {
+        ScheduleUpdateClusterInfo(ctx);
+    }
 }
 
 void TCms::Handle(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx)

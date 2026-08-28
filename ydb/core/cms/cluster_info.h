@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <optional>
+
 #include "config.h"
 #include "downtime.h"
 #include "node_checkers.h"
@@ -440,21 +442,20 @@ public:
     TSet<TVDiskID> VDisks;
     // SlotIdx -> VDiskID
     THashMap<ui32, TVDiskID> VSlots;
-    // Set to true once TClusterInfo::UpdatePDiskState() has actually applied
-    // a real Whiteboard-reported state for this PDisk. Newly registered
-    // PDisks (via AddPDisk, from BSC base config) default their State to
-    // DOWN for maintenance-safety reasons even before any real state is
-    // known; consumers that need to tell "confirmed down" apart from
-    // "state was never reported" (e.g. because this PDisk id isn't covered
-    // by Whiteboard PDisk state collection at all) should check this flag
-    // rather than relying on State alone.
-    bool StateKnown = false;
     // The raw Whiteboard-reported PDisk state (e.g. Normal, Missing, Timeout,
     // NodeDisconnected, one of the Initial*/*Error states, etc.), as opposed
-    // to the coarse UP/DOWN State above. Only meaningful when StateKnown is
-    // true; kept so that UI/diagnostics can surface the actual underlying
-    // reason a disk is considered unavailable instead of just "down".
-    EPDiskState RawState = NKikimrBlobStorage::TPDiskState::Unknown;
+    // to the coarse UP/DOWN State above. Empty until
+    // TClusterInfo::UpdatePDiskState() has actually applied a real
+    // Whiteboard-reported state for this PDisk. Newly registered PDisks (via
+    // AddPDisk, from BSC base config) default their State to DOWN for
+    // maintenance-safety reasons even before any real state is known;
+    // consumers that need to tell "confirmed down" apart from "state was
+    // never reported" (e.g. because this PDisk id isn't covered by
+    // Whiteboard PDisk state collection at all) should check this field
+    // rather than relying on State alone. Kept so that UI/diagnostics can
+    // surface the actual underlying reason a disk is considered unavailable
+    // instead of just "down".
+    std::optional<EPDiskState> RawState;
 
 private:
     static bool NameToId(const TString &name, TPDiskID &id);

@@ -311,8 +311,6 @@ auth_config:
 ```yaml
 auth_config:
   #...
-  use_access_service: false
-  external_idp_authentication_domain: "sso"
   external_idp_config:
     issuer: "https://idp.example.com"
     audience: "ydb-cluster"
@@ -331,16 +329,13 @@ auth_config:
       request_timeout: "15s"
     jwks_cache_settings:
       timeout: "2h"
+  external_idp_authentication_domain: "sso"
+  use_access_service: false
   #...
 ```
 
 #|
 || Параметр | Описание ||
-|| external_idp_authentication_domain
-| Суффикс [SID](../../concepts/glossary.md#access-sid) пользователей и групп, полученных от внешнего IdP.
-
-Значение по умолчанию: `sso`
-    ||
 || external_idp_config.issuer
 | Ожидаемое значение поля `iss` JWT-токена и базовый URL для OIDC Discovery. Обязательный параметр; должен начинаться с `https://` и не должен заканчиваться символом `/`. Значения `issuer` в Discovery-документе и `iss` в JWT должны в точности совпадать с указанным значением.
 
@@ -410,6 +405,11 @@ auth_config:
 | Максимальный возраст кеша JWKS. Если обновить JWKS не удалось, после истечения этого периода ключи удаляются.
 
 Значение по умолчанию: `2h`
+    ||
+|| external_idp_authentication_domain
+| Суффикс имени пользователя, позволяющий отличать пользователей внешнего IdP от пользователей, аутентифицируемых с помощью других провайдеров. Такой же суффикс добавляется к именам групп, полученным из JWT-токена.
+
+Значение по умолчанию: `sso`
     ||
 |#
 

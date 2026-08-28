@@ -39,6 +39,15 @@ def _best_throughput(attempts):
     return max(candidates, key=lambda item: (item["throughput"], -item["load"]))["load"]
 
 
+def _lowest_saturated_plateau_load(attempts, tolerance_percent):
+    candidates = [item for item in attempts if item["passed"] and item.get("target_cpu_saturated")]
+    if not candidates:
+        return None
+    best_throughput = max(item["throughput"] for item in candidates)
+    minimum_throughput = best_throughput * (1.0 - tolerance_percent / 100.0)
+    return min(item["load"] for item in candidates if item["throughput"] >= minimum_throughput)
+
+
 def _throughput_gain(lower, upper):
     if lower > 0:
         return 100.0 * (upper - lower) / lower
@@ -90,7 +99,7 @@ def _run_throughput(config, measure, on_attempt):
     plateau = 0
     plateau_confirmed = False
 
-    def sample(load, reason, baseline=None):
+    def sample(load, reason, baseline=None, search_low=None, search_high=None):
         nonlocal failing_load
         if load in measured:
             return measured[load]
@@ -109,8 +118,18 @@ def _run_throughput(config, measure, on_attempt):
                 decision += "; throughput gain {:.3f}%".format(gain)
             if metrics["errors"]:
                 decision += "; {} workload errors allowed".format(metrics["errors"])
+        search_interval = {}
+        if search_low is not None:
+            search_interval["search_low"] = search_low
+        if search_high is not None:
+            search_interval["search_high"] = search_high
         record = _with_decision(
-            {**metrics, "throughput_gain_percent": gain, "target_cpu_saturated": saturated},
+            {
+                **metrics,
+                **search_interval,
+                "throughput_gain_percent": gain,
+                "target_cpu_saturated": saturated,
+            },
             load,
             passed,
             decision,
@@ -120,7 +139,7 @@ def _run_throughput(config, measure, on_attempt):
 
     start = search["start"]
     maximum = search["maximum"]
-    first = sample(start, "minimum ternary-search load")
+    first = sample(start, "minimum ternary-search load", search_low=start, search_high=maximum)
     if not first["passed"]:
         return LoadSearchResult(
             tuple(attempts),
@@ -139,19 +158,25 @@ def _run_throughput(config, measure, on_attempt):
         upper_load = high - third
         if lower_load >= upper_load:
             break
-        lower = sample(lower_load, "lower ternary probe")
+        lower = sample(lower_load, "lower ternary probe", search_low=low, search_high=high)
         if not lower["passed"]:
             plateau = 0
             high = lower_load - 1
             continue
-        upper = sample(upper_load, "upper ternary probe", baseline=lower)
+        upper = sample(
+            upper_load,
+            "upper ternary probe",
+            baseline=lower,
+            search_low=low,
+            search_high=high,
+        )
         if not upper["passed"]:
             plateau = 0
             high = upper_load - 1
             continue
         gain = _throughput_gain(lower["throughput"], upper["throughput"])
         saturated_plateau = (
-            gain is not None and gain < objective["plateau_gain_percent"] and upper["target_cpu_saturated"]
+            gain is not None and abs(gain) <= objective["plateau_gain_percent"] and upper["target_cpu_saturated"]
         )
         if saturated_plateau:
             plateau += 1
@@ -165,8 +190,12 @@ def _run_throughput(config, measure, on_attempt):
             low = lower_load + 1
 
     for load in sorted({low, (low + high) // 2, high}):
-        sample(load, "final ternary candidate")
-    selected = _best_throughput(attempts)
+        sample(load, "final ternary candidate", search_low=low, search_high=high)
+    selected = (
+        _lowest_saturated_plateau_load(attempts, objective["plateau_gain_percent"])
+        if plateau_confirmed
+        else _best_throughput(attempts)
+    )
     if selected is None:
         outcome = "no-feasible-point"
         stop_reason = "ternary search found no feasible load"

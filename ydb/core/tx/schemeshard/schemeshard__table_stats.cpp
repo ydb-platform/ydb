@@ -744,7 +744,61 @@ void TTxStoreTableStats::ScheduleNextBatch(const TActorContext& ctx) {
     Self->ExecuteTableStatsBatch(ctx);
 }
 
+namespace {
+
+// Triggers the lazy deserialization of a raw TEvDataShard::TEvPeriodicTableStats on this actor's
+// thread (off the schemeshard's), then bounces the same handle back wrapped as
+// TEvPrivate::TEvPeriodicTableStatsParsed. TEventPBBase caches the parsed record after the first
+// Get()/Load() (event_pb.h), so the schemeshard's own Get() is a cache hit, not a second parse.
+class TStatsParserActor : public TActor<TStatsParserActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::SCHEMESHARD_STATS_PARSER;
+    }
+
+    explicit TStatsParserActor(const TActorId& selfActorId)
+        : TActor(&TThis::StateWork)
+        , SelfActorId(selfActorId)
+    {}
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvDataShard::TEvPeriodicTableStats, Handle);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+private:
+    void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
+        ev->Get();
+        ctx.Send(SelfActorId, new TEvPrivate::TEvPeriodicTableStatsParsed(std::move(ev)));
+    }
+
+    const TActorId SelfActorId;
+};
+
+} // anonymous namespace
+
+IActor* CreateStatsParserActor(const TActorId& selfActorId) {
+    return new TStatsParserActor(selfActorId);
+}
+
 void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
+    const auto start = AppData()->MonotonicTimeProvider->Now();
+    if (AppData()->FeatureFlags.GetEnablePeriodicTableStatsParseOffload()) {
+        ctx.Send(ev->Forward(StatsParserActorId));
+    } else {
+        HandlePeriodicTableStats(ev, ctx);
+    }
+    const auto elapsed = AppData()->MonotonicTimeProvider->Now() - start;
+    TabletCounters->Cumulative()[COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS].Increment(elapsed.NanoSeconds());
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvPeriodicTableStatsParsed::TPtr& ev, const TActorContext& ctx) {
+    HandlePeriodicTableStats(ev->Get()->Ev, ctx);
+}
+
+void TSchemeShard::HandlePeriodicTableStats(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     const auto& rec = msg->Record;
 

@@ -5677,6 +5677,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
 
+    ctx.Send(StatsParserActorId, new TEvents::TEvPoisonPill());
+
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
@@ -5809,6 +5811,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
+
+    StatsParserActorId = Register(CreateStatsParserActor(SelfId()));
 
     SplitSettings.Register(appData->Icb);
 
@@ -6128,6 +6132,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         IgnoreFunc(TEvPrivate::TEvTestNotifySubdomainCleanup);
 
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
+        HFuncTraced(TEvPrivate::TEvPeriodicTableStatsParsed, Handle);
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);

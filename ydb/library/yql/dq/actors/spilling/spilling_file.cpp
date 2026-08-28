@@ -189,6 +189,7 @@ private:
             ui64 BlobId = 0;
             THolder<TFileHandle> NewFileHandle;
             TMaybe<TString> Error;
+            ESpillingType SpillingType = ESpillingType::Compute;
         };
 
         struct TEvReadFileResponse : public TEventLocal<TEvReadFileResponse, EvReadFileResponse> {
@@ -199,6 +200,7 @@ private:
             TBuffer Blob;
             bool Removed = false;
             TMaybe<TString> Error;
+            ESpillingType SpillingType = ESpillingType::Compute;
         };
 
         struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
@@ -256,6 +258,35 @@ protected:
     }
 
 private:
+    void IncError(TSpillingCounters::TTypeCounters& tc) {
+        tc.Errors->Inc();
+    }
+
+    void ReplyError(const TActorId& to, const TString& message) {
+        Send(to, new TEvDqSpilling::TEvError(message));
+    }
+
+    void ReplyError(const TActorId& to, const TString& message, TSpillingCounters::TTypeCounters& tc) {
+        ReplyError(to, message);
+        IncError(tc);
+    }
+
+    TSpillingCounters::TTypeCounters* FindTypeCounters(const TActorId& client) {
+        auto it = Files_.find(client);
+        if (it == Files_.end()) {
+            return nullptr;
+        }
+        return &Counters_->GetTypeCounters(it->second.SpillingType);
+    }
+
+    void ReplyServiceNotStarted(const TActorId& to, TSpillingCounters::TTypeCounters* tc) {
+        Send(to, new TEvDqSpilling::TEvError("Spilling service is not started"));
+        if (tc) {
+            IncError(*tc);
+            tc->ServiceNotStarted->Inc();
+        }
+    }
+
     void CreateSessionRoot(ui32 retriesLeft) {
         try {
             if (SessionRoot_.IsSymlink()) {
@@ -266,6 +297,7 @@ private:
             SessionRoot_.MkDir(DIR_MODE);
         } catch (const yexception& e) {
             const TString root = SessionRoot_.GetPath();
+            Counters_->StartupErrors->Inc();
             if (retriesLeft > 0) {
                 LOG_E("Cannot start DQ local file spilling service at " << root << ": " << e.what() << ". Retry "
                     << (MaxStartupRetries - retriesLeft + 1) << "/" << MaxStartupRetries
@@ -290,9 +322,15 @@ private:
             case TEvPrivate::TEvRetryStart::EventType:
                 CreateSessionRoot(ev->Get<TEvPrivate::TEvRetryStart>()->RetriesLeft);
                 break;
+            case TEvDqSpillingLocalFile::TEvOpenFile::EventType: {
+                auto* msg = ev->Get<TEvDqSpillingLocalFile::TEvOpenFile>();
+                LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
+                ReplyServiceNotStarted(ev->Sender, &Counters_->GetTypeCounters(msg->SpillingType));
+                break;
+            }
             default:
                 LOG_E("DQ local file spilling service is not started, send error to client " << ev->Sender);
-                Send(ev->Sender, new TEvDqSpilling::TEvError("Spilling service is not started"));
+                ReplyServiceNotStarted(ev->Sender, FindTypeCounters(ev->Sender));
         }
     }
 
@@ -318,7 +356,8 @@ private:
         if (it != Files_.end()) {
             LOG_E("[OpenFile] Can not open file: already exists. TxId: " << msg.TxId << ", desc: " << msg.Description);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File already exists"));
+            auto& tc = Counters_->GetTypeCounters(it->second.SpillingType);
+            ReplyError(ev->Sender, "File already exists", tc);
             return;
         }
 
@@ -407,21 +446,20 @@ private:
             LOG_E("[Write] File not found. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
+            ReplyError(ev->Sender, "File not found");
             return;
         }
 
         auto& fd = it->second;
+        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
 
         if (fd.CloseAt) {
             LOG_E("[Write] File already closed. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
+            ReplyError(ev->Sender, "File already closed", tc);
             return;
         }
-
-        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
 
         if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.Size() > Config_.MaxFileSize) {
             LOG_E("[Write] File size limit exceeded. "
@@ -430,8 +468,7 @@ private:
             const auto usedMb = (fd.TotalSize + msg.Blob.Size()) / 1024 / 1024;
             const auto limitMb = Config_.MaxFileSize / 1024 / 1024;
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb)));
-
+            ReplyError(ev->Sender, std::format("File size limit exceeded: {}/{}Mb", usedMb, limitMb), tc);
             tc.TooBigFileErrors->Inc();
             return;
         }
@@ -442,8 +479,7 @@ private:
 
             const auto usedMb = (TotalSize_ + msg.Blob.Size()) / 1024 / 1024;
             const auto limitMb = Config_.MaxTotalSize / 1024 / 1024;
-            Send(ev->Sender, new TEvDqSpilling::TEvError(std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb)));
-
+            ReplyError(ev->Sender, std::format("Total size limit exceeded: {}/{}Mb", usedMb, limitMb), tc);
             tc.NoSpaceErrors->Inc();
             return;
         }
@@ -486,12 +522,14 @@ private:
         writeOp->CreateFile = newFile;
         writeOp->BlobId = msg.BlobId;
         writeOp->Blob = std::move(msg.Blob);
+        writeOp->SpillingType = fd.SpillingType;
 
         if (!RunOp("Write", std::move(writeOp), fd)) {
             TString error = "[Write] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(ev->Sender, error, tc);
+            tc.QueueOverflowErrors->Inc();
         }
     }
 
@@ -504,12 +542,13 @@ private:
             LOG_E("[WriteFileResponse] Can not write file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
+            ReplyError(ev->Sender, "Internal error", Counters_->GetTypeCounters(msg.SpillingType));
             return;
         }
 
         auto& fd = it->second;
 
+        const bool ioError = bool(msg.Error);
         fd.Error = std::move(msg.Error);
         fd.TotalWaitTime += msg.WaitTime;
         fd.TotalWorkTime += msg.WorkTime;
@@ -537,11 +576,13 @@ private:
             if (!fd.Error) {
                 fd.Error = "File part not found";
             }
-
-            tc.IoErrors->Inc();
         }
 
         if (fd.Error) {
+            IncError(tc);
+            if (ioError) {
+                tc.IoErrors->Inc();
+            }
             Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
 
             fd.Ops.clear();
@@ -558,7 +599,8 @@ private:
             TString error = "[WriteFileResponse] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(ev->Sender, error, tc);
+            tc.QueueOverflowErrors->Inc();
             return;
         }
     }
@@ -571,16 +613,17 @@ private:
         if (it == Files_.end()) {
             LOG_E("[Read] Can not read file: not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
+            ReplyError(ev->Sender, "File not found");
             return;
         }
 
         auto& fd = it->second;
+        auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
 
         if (fd.CloseAt) {
             LOG_E("[Read] Can not read file: closed. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Closed"));
+            ReplyError(ev->Sender, "Closed", tc);
             return;
         }
 
@@ -588,7 +631,7 @@ private:
         if (partIt == fd.Parts.end()) {
             LOG_E("[Read] Can not read file: part not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("File part not found"));
+            ReplyError(ev->Sender, "File part not found", tc);
 
             fd.Ops.clear();
             TMaybe<TString> err = "Part not found";
@@ -602,7 +645,7 @@ private:
         if (blobIt == fp->Blobs.end()) {
             LOG_E("[Read] Can not read file: blob not found in the part. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Blob not found in the file part"));
+            ReplyError(ev->Sender, "Blob not found in the file part", tc);
 
             fd.Ops.clear();
             TMaybe<TString> err = "Blob not found in the file part";
@@ -631,6 +674,7 @@ private:
         readOp->BlobId = msg.BlobId;
         readOp->Offset = blobIt->second.Offset;
         readOp->Size = blobIt->second.Size;
+        readOp->SpillingType = fd.SpillingType;
         if (remove) {
             readOp->RemoveFile = std::move(fp->FileHandle);
         }
@@ -639,7 +683,8 @@ private:
             TString error = "[Read] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(ev->Sender, error, tc);
+            tc.QueueOverflowErrors->Inc();
         }
     }
 
@@ -653,12 +698,13 @@ private:
             LOG_E("[ReadFileResponse] Can not read file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
+            ReplyError(ev->Sender, "Internal error", Counters_->GetTypeCounters(msg.SpillingType));
             return;
         }
 
         auto& fd = it->second;
 
+        const bool ioError = bool(msg.Error);
         fd.Error = std::move(msg.Error);
         fd.TotalWaitTime += msg.WaitTime;
         fd.TotalWorkTime += msg.WorkTime;
@@ -691,6 +737,10 @@ private:
         }
 
         if (fd.Error) {
+            IncError(tc);
+            if (ioError) {
+                tc.IoErrors->Inc();
+            }
             Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
 
             fd.Ops.clear();
@@ -707,7 +757,8 @@ private:
             TString error = "[ReadFileResponse] Can not run operation";
             LOG_E(error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            ReplyError(ev->Sender, error, tc);
+            tc.QueueOverflowErrors->Inc();
             return;
         }
     }
@@ -952,6 +1003,7 @@ private:
         bool CreateFile = false;
         ui64 BlobId = 0;
         TChunkedBuffer Blob;
+        ESpillingType SpillingType = ESpillingType::Compute;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
@@ -963,6 +1015,7 @@ private:
             resp->Client = Client;
             resp->WaitTime = now - Ts;
             resp->BlobId = BlobId;
+            resp->SpillingType = SpillingType;
 
             try {
                 TFile file;
@@ -993,6 +1046,7 @@ private:
         ui64 Offset;
         ui64 Size;
         THolder<TFileHandle> RemoveFile;
+        ESpillingType SpillingType = ESpillingType::Compute;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
@@ -1004,6 +1058,7 @@ private:
             resp->Client = Client;
             resp->WaitTime = TInstant::Now() - now;
             resp->BlobId = BlobId;
+            resp->SpillingType = SpillingType;
 
             try {
                 resp->Blob.Resize(Size);

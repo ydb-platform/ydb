@@ -162,6 +162,12 @@ STFUNC(TDbsControllerActor::StateWork)
         HFunc(
             TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest,
             HandleGetPartitionsForNodeRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvNodeMaintenancePermissionRequest,
+            HandleNodeMaintenancePermissionRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvDiskMaintenancePermissionRequest,
+            HandleDiskMaintenancePermissionRequest);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

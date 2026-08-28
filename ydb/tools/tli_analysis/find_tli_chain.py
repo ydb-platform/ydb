@@ -79,6 +79,7 @@ def unescape_and_format_query_text(s: Optional[str]) -> str:
     s2 = "\n".join(line.rstrip() for line in s2.splitlines()).strip()
     return s2
 
+
 def extract_field(line: str, field: str) -> Optional[str]:
     """Extract and field value from log line.
 
@@ -96,9 +97,9 @@ def extract_field(line: str, field: str) -> Optional[str]:
     if pos >= len(line):
         return None
 
-    if line[pos]!='"':
+    if line[pos] != '"':
         found = line.find(' ', pos)
-        if found<0:
+        if found < 0:
             return line[pos:]
         else:
             return line[pos:found]
@@ -106,13 +107,13 @@ def extract_field(line: str, field: str) -> Optional[str]:
     result = ""
     pos = pos + 1
     while pos < len(line):
-        if line[pos]=='"':
+        if line[pos] == '"':
             return result
-        if line[pos]=='\\':
+        if line[pos] == '\\':
             pos = pos + 1
-            if line[pos]=='"':
+            if line[pos] == '"':
                 result = result + '"'
-            elif line[pos]=='\\':
+            elif line[pos] == '\\':
                 result = result + '\\'
             else:
                 return None
@@ -121,10 +122,10 @@ def extract_field(line: str, field: str) -> Optional[str]:
             result += line[pos]
             pos = pos + 1
 
-    return None;
+    return None
+
 
 # ==================== Regex Patterns ====================
-
 RE_ISO = re.compile(r"\b(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z\b")
 
 # ==================== Timestamp Parsing ====================
@@ -164,6 +165,7 @@ def extract_breaker_id(line: str) -> Optional[str]:
     """Extract BreakerQuerySpanId from line."""
 
     return extract_field(line, "breakerQuerySpanId")
+
 
 def check_victim_id_in_line(line: str, victim_id: str) -> bool:
     """Check if victim_id appears as victimQuerySpanId or otherVictimQuerySpanId."""
@@ -275,9 +277,7 @@ def main():
         line = line.rstrip("\n")
 
         # Victim SessionActor line: "was a victim of broken locks" + component=SessionActor
-        if ("was a victim of broken locks" in line) and \
-            ("component=SessionActor" in line) and \
-            check_victim_id_in_line(line, victim_id):
+        if ("was a victim of broken locks" in line) and ("component=SessionActor" in line) and check_victim_id_in_line(line, victim_id):
 
             line_victim_id = extract_field(line, "victimQuerySpanId")
             line_victim_query_text = unescape_and_format_query_text(extract_field(line, "victimQueryText"))
@@ -309,7 +309,7 @@ def main():
                     breaker_tx_items.append((bid, breaker_query_text))
 
     if breaker_id:
-        breaker_query_text = breaker_sa_with_text_by_id[breaker_id];
+        breaker_query_text = breaker_sa_with_text_by_id[breaker_id]
 
     # Output results
     print_section_header("TLI Chain", use_color)

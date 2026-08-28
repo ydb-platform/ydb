@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.SetBalancerRefreshSecMin(1);
         settings.SetBalancerRefreshSecMax(1);
 
-        TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings)));
         Y_UNUSED(routerId);
 
         // Give the router a chance to issue its first balancer GET and process the reply.
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         settings.SetBalancerRefreshSecMin(60);
         settings.SetBalancerRefreshSecMax(60);
 
-        TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings)));
 
         // Simulate a 5xx hint that an external code path would normally raise from
         // the IReplyAdapter when an S3 response carries HTTP 500-599. We use the

@@ -2290,6 +2290,7 @@ public:
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kNormalizedOccupancyFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kGroupSizeInUnitsFieldNumber);
         }
     }
 
@@ -2300,6 +2301,8 @@ public:
         } else {
             request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
             request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskUsageFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kSlotSizeInUnitsFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskCapacityAlertFieldNumber);
         }
     }
 

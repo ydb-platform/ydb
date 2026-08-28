@@ -752,14 +752,44 @@ public:
 class TChunkReserve : public TRequestBase {
 public:
     ui32 SizeChunks;
+    NPDisk::TEvChunkReserve::EMode Mode;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , SizeChunks(ev.SizeChunks)
+        , Mode(ev.Mode)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkReserve;
+    }
+};
+
+class TChunkCreditReserve : public TRequestBase {
+public:
+    ui32 SizeChunks;
+
+    TChunkCreditReserve(const NPDisk::TEvChunkCreditReserve& ev, const TActorId& sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
     {}
 
     ERequestType GetType() const override {
-        return ERequestType::RequestChunkReserve;
+        return ERequestType::RequestChunkCreditReserve;
+    }
+};
+
+class TChunkCreditRelease : public TRequestBase {
+public:
+    ui32 SizeChunks;
+
+    TChunkCreditRelease(const NPDisk::TEvChunkCreditRelease& ev, const TActorId& sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , SizeChunks(ev.SizeChunks)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkCreditRelease;
     }
 };
 

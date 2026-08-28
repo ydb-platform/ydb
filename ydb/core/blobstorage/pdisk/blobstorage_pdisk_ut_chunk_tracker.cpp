@@ -710,6 +710,66 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 25);
     }
+
+    Y_UNIT_TEST(EphemeralChunkCreditsChargeConvertAndRelease) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 100,
+            .ExpectedOwnerCount = 1,
+            .SpaceColorBorder = TColor::BLACK,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeChunkLimits(params.ChunkBaseLimit), errorReason),
+            errorReason);
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+
+        const ui32 granted = chunkTracker.ReserveCredit(owner, 100, 100, errorReason);
+        UNIT_ASSERT(granted > 0);
+        UNIT_ASSERT(granted < 100);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerCreditChunks(owner), granted);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalCreditChunks(), granted);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(owner), granted);
+
+        double occupancy = 0;
+        UNIT_ASSERT(chunkTracker.GetSpaceColor(owner, &occupancy) < TColor::BLACK);
+        UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, 1, &occupancy) >= TColor::BLACK);
+
+        const ui32 converted = granted / 2;
+        chunkTracker.ConsumeCredit(owner, converted);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerCreditChunks(owner), granted - converted);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(owner), granted); // conversion is not charged twice
+
+        chunkTracker.ReleaseCredit(owner, granted - converted);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerCreditChunks(owner), 0);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalCreditChunks(), 0);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(owner), converted);
+
+        // Simulate deletion of converted physical chunks.
+        chunkTracker.Release(owner, converted);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(owner), 0);
+    }
+
+    Y_UNIT_TEST(RemovingOwnerReleasesOutstandingChunkCredits) {
+        using namespace NPDisk;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 100,
+            .ExpectedOwnerCount = 1,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+        UNIT_ASSERT_EQUAL_X(chunkTracker.ReserveCredit(owner, 10, 10, errorReason), 10);
+        chunkTracker.RemoveOwner(owner);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalCreditChunks(), 0);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(owner), 0);
+    }
 }
 
 #undef UNIT_ASSERT_EQUAL_X

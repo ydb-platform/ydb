@@ -296,6 +296,14 @@ namespace NKikimr {
             return Fresh.GetFreeInPlaceSizeApproximation();
         }
 
+        ui64 GetFreshSpaceDebtChunks() const {
+            return Fresh.GetSpaceDebtChunks();
+        }
+
+        ui64 GetNextFreshCompactionSegmentDebtChunks() const {
+            return Fresh.GetNextCompactionSegmentDebtChunks();
+        }
+
         TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {
             return Fresh.FindSegmentForCompaction();
         }
@@ -309,6 +317,10 @@ namespace NKikimr {
         }
         void FreshCompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
             Fresh.CompactionSstCreated(std::move(freshSegment));
+        }
+
+        void FreshCompactionAborted(TIntrusivePtr<TFreshSegment> &&freshSegment) {
+            Fresh.CompactionAborted(std::move(freshSegment));
         }
 
         // Fresh Appendix Compaction

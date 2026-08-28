@@ -223,6 +223,8 @@ namespace NKikimr {
         ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
         ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
 
+        ui64 GetFreshSpaceDebtChunks() const;
+
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);
 
@@ -239,6 +241,7 @@ namespace NKikimr {
         void ApplyHugeBlobSize(ui32 minHugeBlobInBytes, const TActorContext& ctx);
 
         void CompactFreshLogoBlobsIfRequired(const TActorContext& ctx);
+        void CompactFreshIfRequired(const TActorContext& ctx);
     };
 
     // FIXME:

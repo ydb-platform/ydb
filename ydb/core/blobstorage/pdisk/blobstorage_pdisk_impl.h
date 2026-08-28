@@ -365,6 +365,8 @@ public:
     // Chunk reservation
     TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason);
     void ChunkReserve(TChunkReserve &evChunkReserve);
+    void ChunkCreditReserve(TChunkCreditReserve& ev);
+    void ChunkCreditRelease(TChunkCreditRelease& ev);
     bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

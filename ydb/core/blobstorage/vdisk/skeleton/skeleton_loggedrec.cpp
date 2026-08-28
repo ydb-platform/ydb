@@ -309,8 +309,8 @@ namespace NKikimr {
     void TLoggedRecPhantoms::Replay(THull &hull, const TActorContext &ctx) {
         TEvDetectedPhantomBlob *msg = OrigEv->Get();
         hull.CollectPhantoms(ctx, msg->Phantoms, Seg);
-        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvDetectedPhantomBlobCommitted, 0, OrigEv->Sender, {},
-            nullptr, OrigEv->Cookie));
+        TActivationContext::Send(new IEventHandle(OrigEv->Sender, {},
+            new TEvDetectedPhantomBlobCommitted, 0, OrigEv->Cookie));
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

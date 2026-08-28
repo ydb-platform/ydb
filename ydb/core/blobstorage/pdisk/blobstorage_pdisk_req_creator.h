@@ -157,6 +157,8 @@ private:
         CASE_COUNT_REQUEST(Harakiri);
         CASE_COUNT_REQUEST(YardSlay);
         CASE_COUNT_REQUEST(ChunkReserve);
+        CASE_COUNT_REQUEST(ChunkCreditReserve);
+        CASE_COUNT_REQUEST(ChunkCreditRelease);
         CASE_COUNT_REQUEST(YardControl);
         CASE_COUNT_REQUEST(LogRead);
         CASE_COUNT_REQUEST(ShredPDisk);

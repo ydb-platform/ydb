@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/fresh_space_tracker.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -27,6 +28,7 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        TFreshSpaceAdmission FreshSpaceAdmission;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -41,7 +43,8 @@ namespace NKikimr {
                              std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                              NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                              TWriteSource writeSource = UnknownWriteSource(),
-                             bool rewriteBlob = false)
+                             bool rewriteBlob = false,
+                             TFreshSpaceAdmission freshSpaceAdmission = {})
             : SenderId(senderId)
             , Cookie(cookie)
             , LogoBlobId(logoBlobId)
@@ -53,6 +56,7 @@ namespace NKikimr {
             , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
+            , FreshSpaceAdmission(std::move(freshSpaceAdmission))
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -89,6 +93,7 @@ namespace NKikimr {
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
         const bool IsStripe;
+        TFreshSpaceAdmission FreshSpaceAdmission;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -103,7 +108,8 @@ namespace NKikimr {
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                            TWriteSource writeSource,
                            bool rewriteBlob = false,
-                           bool isStripe = false)
+                           bool isStripe = false,
+                           TFreshSpaceAdmission freshSpaceAdmission = {})
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
@@ -117,6 +123,7 @@ namespace NKikimr {
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
             , IsStripe(isStripe)
+            , FreshSpaceAdmission(std::move(freshSpaceAdmission))
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -237,9 +244,15 @@ namespace NKikimr {
 
     struct TEvHugeAllocateSlots : TEventLocal<TEvHugeAllocateSlots, TEvBlobStorage::EvHugeAllocateSlots> {
         std::vector<ui32> BlobSizes;
+        // Fresh Blocks/Barriers SSTs are prepaid with chunk credits. A new
+        // PDisk chunk for such an SST must convert a credit rather than
+        // charging quota a second time (the shared huge-keeper allocator
+        // would otherwise go OUT_OF_SPACE while credits are still held).
+        bool ConsumeCredit = false;
 
-        TEvHugeAllocateSlots(std::vector<ui32> blobSizes)
+        TEvHugeAllocateSlots(std::vector<ui32> blobSizes, bool consumeCredit = false)
             : BlobSizes(std::move(blobSizes))
+            , ConsumeCredit(consumeCredit)
         {}
     };
 
@@ -249,10 +262,13 @@ namespace NKikimr {
         // EnableVDiskHeapAllocator is RequireRestart, but tests (and a missed restart) can still
         // disagree with the heap that actually produced the location.
         std::vector<bool> IsStripe;
+        bool Success = true;
 
-        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)
+        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe,
+                bool success = true)
             : Locations(std::move(locations))
             , IsStripe(std::move(isStripe))
+            , Success(success)
         {}
     };
 
@@ -297,6 +313,7 @@ namespace NKikimr {
         NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
         const bool IsReadOnlyVDisk;
         THugeBlobCtxPtr HugeBlobCtx;
+        const std::shared_ptr<TFreshSpaceTracker> FreshSpaceTracker;
 
         THugeKeeperCtx(
                 TIntrusivePtr<TVDiskContext> vctx,
@@ -306,7 +323,8 @@ namespace NKikimr {
                 TActorId loggerId,
                 TActorId logCutterId,
                 const TString &localRecoveryInfoDbg,
-                bool isReadOnlyVDisk);
+                bool isReadOnlyVDisk,
+                std::shared_ptr<TFreshSpaceTracker> freshSpaceTracker = nullptr);
         ~THugeKeeperCtx();
     };
 

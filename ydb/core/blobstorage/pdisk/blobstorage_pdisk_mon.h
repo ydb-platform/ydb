@@ -266,12 +266,19 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr LockedChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr QuarantineChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr QuarantineOwners;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutstandingChunkCredits;
 
     // statistics subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> StatsGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr FreeSpacePerMile;
     ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpacePerMile; // reflects PDiskUsage
     ::NMonitoring::TDynamicCounters::TCounterPtr SplicedLogChunks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ChunkCreditsRequested;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ChunkCreditsGranted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ChunkCreditsReleased;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ChunkCreditsConverted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ChunkCreditPartialGrants;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ChunkCreditZeroGrants;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr TotalSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr FreeSpaceBytes;
@@ -537,6 +544,8 @@ struct TPDiskMon {
     TReqCounters CheckSpace;
     TReqCounters YardConfigureScheduler;
     TReqCounters ChunkReserve;
+    TReqCounters ChunkCreditReserve;
+    TReqCounters ChunkCreditRelease;
     TReqCounters ChunkForget;
     TReqCounters Harakiri;
     TReqCounters YardSlay;

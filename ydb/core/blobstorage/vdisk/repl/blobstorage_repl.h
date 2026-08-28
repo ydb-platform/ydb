@@ -249,6 +249,19 @@ namespace NKikimr {
         }
     };
 
+    struct TEvDetectedPhantomBlobCommitted
+        : public TEventLocal<TEvDetectedPhantomBlobCommitted, TEvBlobStorage::EvDetectedPhantomBlobCommitted>
+    {
+        NKikimrProto::EReplyStatus Status;
+        TDeque<TLogoBlobID> Phantoms;
+
+        explicit TEvDetectedPhantomBlobCommitted(NKikimrProto::EReplyStatus status = NKikimrProto::OK,
+                TDeque<TLogoBlobID>&& phantoms = {})
+            : Status(status)
+            , Phantoms(std::move(phantoms))
+        {}
+    };
+
     struct TEvReplCheckProgress : TEventLocal<TEvReplCheckProgress, TEvBlobStorage::EvReplCheckProgress> {};
 
     struct TDonorQueueActors {

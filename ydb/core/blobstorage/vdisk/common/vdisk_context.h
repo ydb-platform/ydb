@@ -116,12 +116,13 @@ namespace NKikimr {
             // check status
             switch (ev.Status) {
                 case NKikimrProto::OK:
-                    if constexpr (T::EventType != TEvBlobStorage::EvLogResult) {
-                        // we have different semantics for TEvLogResult StatusFlags
-                        OutOfSpaceState.UpdateLocalChunk(ev.StatusFlags);
-                    } else {
-                        // update log space flags
-                        OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
+                    if constexpr (T::EventType == TEvBlobStorage::EvLogResult) {
+                        // We have different semantics for TEvLogResult StatusFlags.
+                        OutOfSpaceState.ObserveLocalLog(ev.StatusFlags);
+                    } else if constexpr (T::EventType != TEvBlobStorage::EvCheckSpaceResult) {
+                        // TEvCheckSpaceResult carries both chunk and log flags and
+                        // is applied authoritatively by the polling actor.
+                        OutOfSpaceState.ObserveLocalChunk(ev.StatusFlags);
                     }
                     return true;
                 case NKikimrProto::INVALID_OWNER:

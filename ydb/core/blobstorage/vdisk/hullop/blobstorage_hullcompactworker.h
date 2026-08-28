@@ -581,6 +581,14 @@ namespace NKikimr {
         const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
         const TDeque<TChunkIdx>& GetAllocatedChunks() const { return AllocatedChunks; }
 
+        // Fresh Blocks/Barriers SSTs go to the stripe heap. A new PDisk chunk
+        // for that SST must consume a prepaid credit; huge-blob slot
+        // allocation (LogoBlobs) must not.
+        bool PendingSlotAllocationConsumesCredit() const {
+            return IsFresh && HullCtx->FreshSpaceTracker->IsEnabled() && !LogoBlobs
+                && State == EState::WaitForSlotAllocation;
+        }
+
     private:
         void CollectRemovedHugeBlobs(const std::vector<TDiskPart>& hugeBlobs) {
             for (const TDiskPart& p : hugeBlobs) {
@@ -847,7 +855,11 @@ namespace NKikimr {
             }
             const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
-            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num);
+            const auto mode = IsFresh && HullCtx->FreshSpaceTracker->IsEnabled()
+                ? NPDisk::TEvChunkReserve::EMode::ConsumeCredit
+                : NPDisk::TEvChunkReserve::EMode::Normal;
+            return std::make_unique<NPDisk::TEvChunkReserve>(
+                PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num, mode);
         }
 
         ui32 GetMaxInFlightWrites() {

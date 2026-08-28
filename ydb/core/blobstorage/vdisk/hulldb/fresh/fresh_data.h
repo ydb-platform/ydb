@@ -31,6 +31,7 @@ namespace NKikimr {
         TIntrusivePtr<TFreshSegment> Cur;
         ui64 OldSegLastKeepLsn = ui64(-1);
         bool WaitForCommit = false;
+        bool RetryOld = false;
         const bool UseDreg;
         std::shared_ptr<TRopeArena> Arena;
 
@@ -58,11 +59,14 @@ namespace NKikimr {
         // Compaction
         bool NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const;
         ui64 GetFreeInPlaceSizeApproximation() const;
+        ui64 GetSpaceDebtChunks() const;
+        ui64 GetNextCompactionSegmentDebtChunks() const;
 
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
         void CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment);
         void CompactionFinished();
-        bool CompactionInProgress() const { return Old.Get() || WaitForCommit; }
+        void CompactionAborted(TIntrusivePtr<TFreshSegment> &&freshSegment);
+        bool CompactionInProgress() const { return (Old.Get() && !RetryOld) || WaitForCommit; }
 
         // Appendix Compact/ApplyCompactionResult
         TCompactionJob CompactAppendix();
@@ -119,7 +123,9 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     bool TFreshData<TKey, TMemRec>::NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const {
-        if (CompactionInProgress()) {
+        if (RetryOld) {
+            return true;
+        } else if (CompactionInProgress()) {
             return false;
         } else if (force) {
             return true;
@@ -145,8 +151,30 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
+    ui64 TFreshData<TKey, TMemRec>::GetSpaceDebtChunks() const {
+        return (Old ? Old->GetSpaceDebtChunks() : 0)
+            + (Dreg ? Dreg->GetSpaceDebtChunks() : 0)
+            + (Cur ? Cur->GetSpaceDebtChunks() : 0);
+    }
+
+    template <class TKey, class TMemRec>
+    ui64 TFreshData<TKey, TMemRec>::GetNextCompactionSegmentDebtChunks() const {
+        if (RetryOld) {
+            return Old ? Old->GetSpaceDebtChunks() : 0;
+        }
+        if (Dreg) {
+            return Dreg->GetSpaceDebtChunks();
+        }
+        return Cur ? Cur->GetSpaceDebtChunks() : 0;
+    }
+
+    template <class TKey, class TMemRec>
     TIntrusivePtr<TFreshSegment<TKey, TMemRec>> TFreshData<TKey, TMemRec>::FindSegmentForCompaction() {
         Y_VERIFY_S(!CompactionInProgress(), HullCtx->VCtx->VDiskLogPrefix);
+        if (RetryOld) {
+            RetryOld = false;
+            return Old;
+        }
         if (Dreg) {
             Old.Swap(Dreg);
             Dreg.Swap(Cur);
@@ -166,6 +194,15 @@ namespace NKikimr {
         freshSegment.Drop();
         Old.Drop();
         WaitForCommit = true;
+        RetryOld = false;
+    }
+
+    template <class TKey, class TMemRec>
+    void TFreshData<TKey, TMemRec>::CompactionAborted(TIntrusivePtr<TFreshSegment> &&freshSegment) {
+        Y_VERIFY_S(Old && Old.Get() == freshSegment.Get() && !WaitForCommit,
+            HullCtx->VCtx->VDiskLogPrefix);
+        freshSegment.Drop();
+        RetryOld = true;
     }
 
     template <class TKey, class TMemRec>

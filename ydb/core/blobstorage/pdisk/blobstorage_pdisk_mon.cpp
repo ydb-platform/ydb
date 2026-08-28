@@ -57,6 +57,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(ChunksGroup, LockedChunks, false);
     COUNTER_INIT(ChunksGroup, QuarantineChunks, false);
     COUNTER_INIT(ChunksGroup, QuarantineOwners, false);
+    COUNTER_INIT(ChunksGroup, OutstandingChunkCredits, false);
 
     // stats subgroup
     StatsGroup = (cfg && cfg->PDiskCategory.IsSolidState())
@@ -67,6 +68,12 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(StatsGroup, FreeSpacePerMile, false);
     COUNTER_INIT_IF_EXTENDED(StatsGroup, UsedSpacePerMile, false);
     COUNTER_INIT_IF_EXTENDED(StatsGroup, SplicedLogChunks, true);
+    COUNTER_INIT(StatsGroup, ChunkCreditsRequested, true);
+    COUNTER_INIT(StatsGroup, ChunkCreditsGranted, true);
+    COUNTER_INIT(StatsGroup, ChunkCreditsReleased, true);
+    COUNTER_INIT(StatsGroup, ChunkCreditsConverted, true);
+    COUNTER_INIT(StatsGroup, ChunkCreditPartialGrants, true);
+    COUNTER_INIT(StatsGroup, ChunkCreditZeroGrants, true);
 
     COUNTER_INIT(StatsGroup, TotalSpaceBytes, false);
     COUNTER_INIT(StatsGroup, FreeSpaceBytes, false);
@@ -244,6 +251,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, CheckSpace, YardCheckSpace);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardConfigureScheduler, YardConfigureScheduler);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChunkReserve, YardChunkReserve);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChunkCreditReserve, YardChunkCreditReserve);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChunkCreditRelease, YardChunkCreditRelease);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChunkForget, YardChunkForget);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, Harakiri, YardHarakiri);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);

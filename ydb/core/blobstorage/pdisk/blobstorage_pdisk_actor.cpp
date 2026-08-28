@@ -904,6 +904,20 @@ public:
         PDisk->Mon.ChunkReserve.CountResponse();
     }
 
+    void ErrorHandle(NPDisk::TEvChunkCreditReserve::TPtr& ev) {
+        PDisk->Mon.ChunkCreditReserve.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChunkCreditReserveResult(NKikimrProto::CORRUPTED,
+            0, 0, 0, 0, StateErrorReason), 0, ev->Cookie);
+        PDisk->Mon.ChunkCreditReserve.CountResponse();
+    }
+
+    void ErrorHandle(NPDisk::TEvChunkCreditRelease::TPtr& ev) {
+        PDisk->Mon.ChunkCreditRelease.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChunkCreditReleaseResult(NKikimrProto::CORRUPTED,
+            0, 0, 0, 0, StateErrorReason), 0, ev->Cookie);
+        PDisk->Mon.ChunkCreditRelease.CountResponse();
+    }
+
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
         PDisk->Mon.ChunkForget.CountRequest();
         Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, StateErrorReason));
@@ -1075,6 +1089,16 @@ public:
 
     void Handle(NPDisk::TEvChunkReserve::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender, ev->Cookie);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvChunkCreditReserve::TPtr& ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkCreditReserve>(*ev->Get(), ev->Sender, ev->Cookie);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvChunkCreditRelease::TPtr& ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkCreditRelease>(*ev->Get(), ev->Sender, ev->Cookie);
         PDisk->InputRequest(request);
     }
 
@@ -1565,6 +1589,8 @@ public:
             hFunc(NPDisk::TEvHarakiri, ErrorHandle);
             hFunc(NPDisk::TEvSlay, InitHandle);
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
+            hFunc(NPDisk::TEvChunkCreditReserve, ErrorHandle);
+            hFunc(NPDisk::TEvChunkCreditRelease, ErrorHandle);
             hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, InitHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
@@ -1610,6 +1636,8 @@ public:
             hFunc(NPDisk::TEvHarakiri, Handle);
             hFunc(NPDisk::TEvSlay, Handle);
             hFunc(NPDisk::TEvChunkReserve, Handle);
+            hFunc(NPDisk::TEvChunkCreditReserve, Handle);
+            hFunc(NPDisk::TEvChunkCreditRelease, Handle);
             hFunc(NPDisk::TEvChunkForget, Handle);
             hFunc(NPDisk::TEvChunkLock, Handle);
             hFunc(NPDisk::TEvChunkUnlock, Handle);
@@ -1652,6 +1680,8 @@ public:
             hFunc(NPDisk::TEvHarakiri, ErrorHandle);
             hFunc(NPDisk::TEvSlay, ErrorHandle);
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
+            hFunc(NPDisk::TEvChunkCreditReserve, ErrorHandle);
+            hFunc(NPDisk::TEvChunkCreditRelease, ErrorHandle);
             hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, ErrorHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);

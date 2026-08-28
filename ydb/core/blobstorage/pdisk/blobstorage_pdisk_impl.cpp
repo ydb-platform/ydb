@@ -1481,7 +1481,9 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     double occupancy;
-    auto color = Keeper.EstimateSpaceColor(req->Owner, count, &occupancy);
+    const auto* reserve = dynamic_cast<const TChunkReserve*>(req);
+    const bool consumeCredit = reserve && reserve->Mode == NPDisk::TEvChunkReserve::EMode::ConsumeCredit;
+    auto color = Keeper.EstimateSpaceColor(req->Owner, consumeCredit ? 0 : count, &occupancy);
 
     auto makeError = [&](TString info) {
         guard.Release();
@@ -1500,12 +1502,14 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             {"marker", "BPD01"});
     };
 
-    if (sharedFree <= count || color == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) {
+    if (!consumeCredit && (sharedFree <= count || color == NKikimrBlobStorage::TPDiskSpaceColor::BLACK)) {
         makeError("");
         return {};
     }
 
-    TVector<TChunkIdx> chunks = Keeper.PopOwnerFreeChunks(req->Owner, count, errorReason);
+    TVector<TChunkIdx> chunks = consumeCredit
+        ? Keeper.PopOwnerFreeChunksFromCredit(req->Owner, count, errorReason)
+        : Keeper.PopOwnerFreeChunks(req->Owner, count, errorReason);
     if (chunks.empty()) {
         makeError("PopOwnerFreeChunks failed");
         return {};
@@ -1555,12 +1559,61 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
         result = MakeHolder<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
         result->ChunkIds = std::move(chunks);
         result->StatusFlags = GetStatusFlags(evChunkReserve.Owner, evChunkReserve.OwnerGroupType);
+        if (evChunkReserve.Mode == NPDisk::TEvChunkReserve::EMode::ConsumeCredit) {
+            result->ConsumedCreditChunks = evChunkReserve.SizeChunks;
+            Mon.ChunkCreditsConverted->Add(evChunkReserve.SizeChunks);
+        }
     }
+    result->OwnerCreditChunks = Keeper.GetOwnerCreditChunks(evChunkReserve.Owner);
+    result->TotalCreditChunks = Keeper.GetTotalCreditChunks();
+    *Mon.OutstandingChunkCredits = result->TotalCreditChunks;
 
     guard.Release();
     PCtx->ActorSystem->Send(evChunkReserve.Sender, result.Release(), 0, evChunkReserve.Cookie);
     Mon.ChunkReserve.CountResponse();
 
+}
+
+void TPDisk::ChunkCreditReserve(TChunkCreditReserve& ev) {
+    TGuard<TMutex> guard(StateMutex);
+    TString errorReason;
+    Mon.ChunkCreditsRequested->Add(ev.SizeChunks);
+    const ui32 granted = Keeper.ReserveOwnerCredit(ev.Owner, ev.SizeChunks, errorReason);
+    Mon.ChunkCreditsGranted->Add(granted);
+    if (!granted && ev.SizeChunks) {
+        Mon.ChunkCreditZeroGrants->Inc();
+    } else if (granted < ev.SizeChunks) {
+        Mon.ChunkCreditPartialGrants->Inc();
+    }
+    const ui32 ownerCredits = Keeper.GetOwnerCreditChunks(ev.Owner);
+    const ui32 totalCredits = Keeper.GetTotalCreditChunks();
+    *Mon.OutstandingChunkCredits = totalCredits;
+    const auto flags = GetStatusFlags(ev.Owner, ev.OwnerGroupType);
+    guard.Release();
+
+    PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvChunkCreditReserveResult(NKikimrProto::OK,
+        granted, ownerCredits, totalCredits, flags, std::move(errorReason)), 0, ev.Cookie);
+    Mon.ChunkCreditReserve.CountResponse();
+}
+
+void TPDisk::ChunkCreditRelease(TChunkCreditRelease& ev) {
+    TGuard<TMutex> guard(StateMutex);
+    // Over-release indicates broken VDisk accounting; continuing would make
+    // quota usage smaller than the physical/credit obligation.
+    Y_VERIFY_S(ev.SizeChunks <= Keeper.GetOwnerCreditChunks(ev.Owner), PCtx->PDiskLogPrefix
+        << "owner# " << ui32(ev.Owner) << " release# " << ev.SizeChunks
+        << " credits# " << Keeper.GetOwnerCreditChunks(ev.Owner));
+    Keeper.ReleaseOwnerCredit(ev.Owner, ev.SizeChunks);
+    Mon.ChunkCreditsReleased->Add(ev.SizeChunks);
+    const ui32 ownerCredits = Keeper.GetOwnerCreditChunks(ev.Owner);
+    const ui32 totalCredits = Keeper.GetTotalCreditChunks();
+    *Mon.OutstandingChunkCredits = totalCredits;
+    const auto flags = GetStatusFlags(ev.Owner, ev.OwnerGroupType);
+    guard.Release();
+
+    PCtx->ActorSystem->Send(ev.Sender, new NPDisk::TEvChunkCreditReleaseResult(NKikimrProto::OK,
+        ev.SizeChunks, ownerCredits, totalCredits, flags), 0, ev.Cookie);
+    Mon.ChunkCreditRelease.CountResponse();
 }
 bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason) {
     TGuard<TMutex> guard(StateMutex);
@@ -2073,6 +2126,12 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
 
     ownerData.OwnerRound = evYardInit.OwnerRound;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
+    {
+        const ui32 credits = Keeper.GetOwnerCreditChunks(owner);
+        Keeper.ReleaseAllOwnerCredit(owner);
+        Mon.ChunkCreditsReleased->Add(credits);
+        *Mon.OutstandingChunkCredits = Keeper.GetTotalCreditChunks();
+    }
     TVector<TChunkIdx> ownedChunks;
     ownedChunks.reserve(ChunkState.size());
     for (TChunkIdx chunkId = 0; chunkId < ChunkState.size(); ++chunkId) {
@@ -2195,6 +2254,14 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     // Update round and wait for all pending requests of old owner to finish
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitStart, OwnerId# "
             << owner << ", new OwnerRound# " << evYardInit.OwnerRound);
+    // Credits belong to an incarnation. They are deliberately not persisted
+    // and must not survive an owner-round change.
+    if (ownerData.VDiskId != TVDiskID::InvalidId) {
+        const ui32 credits = Keeper.GetOwnerCreditChunks(owner);
+        Keeper.ReleaseAllOwnerCredit(owner);
+        Mon.ChunkCreditsReleased->Add(credits);
+        *Mon.OutstandingChunkCredits = Keeper.GetTotalCreditChunks();
+    }
     ownerData.OwnerRound = evYardInit.OwnerRound;
     ownerData.GroupSizeInUnits = evYardInit.GroupSizeInUnits;
     return true;
@@ -2425,6 +2492,10 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
     Y_UNUSED(killOwnerRound);
     {
         TGuard<TMutex> guard(StateMutex);
+        const ui32 credits = Keeper.GetOwnerCreditChunks(owner);
+        Keeper.ReleaseAllOwnerCredit(owner);
+        Mon.ChunkCreditsReleased->Add(credits);
+        *Mon.OutstandingChunkCredits = Keeper.GetTotalCreditChunks();
         bool pushedOwnerIntoQuarantine = false;
         for (ui32 i = 0; i < ChunkState.size(); ++i) {
             TChunkState &state = ChunkState[i];
@@ -2941,6 +3012,12 @@ void TPDisk::ProcessFastOperationsQueue() {
                 break;
             case ERequestType::RequestChunkReserve:
                 ChunkReserve(static_cast<TChunkReserve&>(*req));
+                break;
+            case ERequestType::RequestChunkCreditReserve:
+                ChunkCreditReserve(static_cast<TChunkCreditReserve&>(*req));
+                break;
+            case ERequestType::RequestChunkCreditRelease:
+                ChunkCreditRelease(static_cast<TChunkCreditRelease&>(*req));
                 break;
             case ERequestType::RequestChunkLock:
                 ChunkLock(static_cast<TChunkLock&>(*req));
@@ -3734,6 +3811,34 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             ev.SetOwnerGroupType(OwnerData[ev.Owner].IsStaticGroupOwner());
             break;
         }
+        case ERequestType::RequestChunkCreditReserve:
+        {
+            TChunkCreditReserve& ev = *static_cast<TChunkCreditReserve*>(request);
+            if (errStatus != NKikimrProto::OK) {
+                auto result = MakeHolder<NPDisk::TEvChunkCreditReserveResult>(errStatus, 0, 0,
+                    Keeper.GetTotalCreditChunks(), GetStatusFlags(ev.Owner, ev.OwnerGroupType), err.Str());
+                PCtx->ActorSystem->Send(ev.Sender, result.Release(), 0, ev.Cookie);
+                Mon.ChunkCreditReserve.CountResponse();
+                delete request;
+                return false;
+            }
+            ev.SetOwnerGroupType(OwnerData[ev.Owner].IsStaticGroupOwner());
+            break;
+        }
+        case ERequestType::RequestChunkCreditRelease:
+        {
+            TChunkCreditRelease& ev = *static_cast<TChunkCreditRelease*>(request);
+            if (errStatus != NKikimrProto::OK) {
+                auto result = MakeHolder<NPDisk::TEvChunkCreditReleaseResult>(errStatus, 0, 0,
+                    Keeper.GetTotalCreditChunks(), GetStatusFlags(ev.Owner, ev.OwnerGroupType), err.Str());
+                PCtx->ActorSystem->Send(ev.Sender, result.Release(), 0, ev.Cookie);
+                Mon.ChunkCreditRelease.CountResponse();
+                delete request;
+                return false;
+            }
+            ev.SetOwnerGroupType(OwnerData[ev.Owner].IsStaticGroupOwner());
+            break;
+        }
         case ERequestType::RequestChunkLock:
             break;
         case ERequestType::RequestChunkUnlock:
@@ -4486,6 +4591,14 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         }
         case ERequestType::RequestChunkReserve:
             PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, errorReason), 0, request->Cookie);
+            return true;
+        case ERequestType::RequestChunkCreditReserve:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkCreditReserveResult(NKikimrProto::CORRUPTED,
+                0, 0, Keeper.GetTotalCreditChunks(), 0, errorReason), 0, request->Cookie);
+            return true;
+        case ERequestType::RequestChunkCreditRelease:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkCreditReleaseResult(NKikimrProto::CORRUPTED,
+                0, 0, Keeper.GetTotalCreditChunks(), 0, errorReason), 0, request->Cookie);
             return true;
         case ERequestType::RequestChunkLock:
             PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkLockResult(NKikimrProto::CORRUPTED, {}, 0, errorReason));

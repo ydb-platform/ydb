@@ -261,34 +261,6 @@ message TEvPushMetrics {
     optional uint64 BytesRead = 1; // since last update
     optional uint64 BytesWritten = 2; // since last update
     optional uint32 NodeId = 3;
-    optional uint64 S3GetsOk = 4; // since last update
-    optional uint64 S3GetsError = 5; // since last update
-    optional uint64 S3GetsBytes = 6; // since last update
-    optional uint64 S3GetsSlowDown = 7; // since last update
-    optional uint64 S3GetThrottleActivations = 8; // since last update
-    optional uint64 S3GetsInFlight = 9;
-    optional uint64 S3GetsMaxInFlight = 10;
-    optional uint64 S3GetsPendingQueueSize = 11;
-    // S3 router metrics. Optional so an old tablet can parse this message
-    // and ignore unknown fields instead of aborting on a new event type.
-    optional uint64 BalancerRequests = 12;
-    optional uint64 BalancerErrors = 13;
-    optional uint64 NonBalancerRequests = 14;
-    optional uint64 NonBalancerErrors = 15;
-    optional uint64 NonBalancerBytesRead = 16;
-    optional uint64 NonBalancerBytesWritten = 17;
-    optional uint64 BalancerResolveRequests = 18;
-    optional uint64 BalancerResolveSuccesses = 19;
-    optional uint64 BalancerResolveFailures = 20;
-    optional uint64 EndpointSwitches = 21;
-    optional uint64 FiveXxRefreshTriggers = 22;
-    optional bool IsUsingProxy = 23;
-    repeated uint64 BalancerLatencyHistogram = 24;
-    repeated uint64 NonBalancerLatencyHistogram = 25;
-    repeated uint64 BalancerResolveLatencyHistogram = 26;
-    optional uint64 PendingRejects = 27;
-    repeated uint64 PendingLatencyHistogram = 28;
-    optional uint64 RetiringWrappersAborted = 29;
 }
 
 message TEvPrepareWriteS3 {

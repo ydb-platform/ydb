@@ -154,7 +154,6 @@ class KvVolumeS3TestMixin:
     def _setup_blob_depot_over_s3(self):
         s3_endpoint = self._setup_s3()
         self._configure_blob_depot_over_s3(s3_endpoint)
-        # Router creates a pipe and pushes TEvPushMetrics on this interval.
         time.sleep(METRICS_PUSH_INTERVAL_SEC)
 
     def _create_volume(self):

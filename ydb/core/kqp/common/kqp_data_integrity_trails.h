@@ -101,10 +101,7 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         {"issues", record.GetResponse().GetQueryIssues()});
 }
 
-// template <typename TLockInfo>
-// inline TStructuredMessage ToStructuredLog(const TLockInfo& lock) {
-
-inline TStructuredMessage ToStructuredLog(const NKikimrDataEvents::TLock& lock) {
+inline TStructuredMessage ToStructuredMessage(const NKikimrDataEvents::TLock& lock) {
     TStructuredMessage result;
     if (lock.HasLockId()) {
         YDB_LOG_UPDATE_MESSAGE(result , {"lockId", lock.GetLockId()});
@@ -161,7 +158,7 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
     for (const auto& lock : record.GetTxLocks()) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             message,
-            {"lock", ToStructuredLog(lock)});
+            {"lock", ToStructuredMessage(lock)});
     }
 }
 
@@ -186,7 +183,7 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
     for (const auto& lock : record.GetTxLocks()) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             message,
-            {"lock", ToStructuredLog(lock)});
+            {"lock", ToStructuredMessage(lock)});
         }
 }
 
@@ -206,7 +203,7 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
     for (const auto& lock : info.GetLocks()) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
             message,
-            {"lock", ToStructuredLog(lock)});
+            {"lock", ToStructuredMessage(lock)});
     }
 }
 

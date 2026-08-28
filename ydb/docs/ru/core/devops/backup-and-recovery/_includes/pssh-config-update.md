@@ -1,15 +1,11 @@
 Скопируйте обновлённую конфигурацию во временный файл на каждом хосте:
 
 ```bash
-pssh scp config.yaml L@hosts.txt:/tmp/config.yaml.new
+pscp -h hosts.txt config.yaml /tmp/config.yaml.new
 ```
 
 Сделайте резервную копию текущей конфигурации, замените её новой версией и защитите от случайных изменений:
 
 ```bash
-pssh run $'
-sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/config.yaml.bak &&
-sudo mv /tmp/config.yaml.new /Berkanavt/kikimr/cfg/config.yaml &&
-sudo chattr +i /Berkanavt/kikimr/cfg/config.yaml
-' L@hosts.txt
+pssh -h hosts.txt 'sudo cp /opt/ydb/cfg/config.yaml /opt/ydb/cfg/config.yaml.bak && sudo mv /tmp/config.yaml.new /opt/ydb/cfg/config.yaml && sudo chattr +i /opt/ydb/cfg/config.yaml'
 ```

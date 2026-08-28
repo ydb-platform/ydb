@@ -76,7 +76,7 @@ Y_UNIT_TEST(InitialDiscoveryResolvesDatabaseAgainstClusterRoot) {
         .SetEndpoint(TStringBuilder() << "localhost:" << tenantGrpcPort)
         .SetDatabase("mydb")
         .SetDiscoveryMode(EDiscoveryMode::Sync));
-    NTable::TTableClient tableClient(driver);
+    NYdb::NTable::TTableClient tableClient(driver);
     const auto session = tableClient.CreateSession().GetValueSync();
     UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
 }

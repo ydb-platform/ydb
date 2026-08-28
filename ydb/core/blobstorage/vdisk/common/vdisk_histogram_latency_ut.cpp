@@ -63,8 +63,8 @@ namespace NKikimr::NVDiskMon {
             UNIT_ASSERT(inFlightCount);
 
             {
-                TInFlightLatencyGuard guard(histo, 42, TInstant::MilliSeconds(1'000));
-                UNIT_ASSERT_VALUES_EQUAL(guard.GetRequestId(), 42);
+                const ui64 requestId = 42;
+                TInFlightLatencyGuard guard(histo, requestId, TInstant::MilliSeconds(1'000));
 
                 histo->UpdateCounters(TInstant::MilliSeconds(2'500));
 
@@ -94,9 +94,9 @@ namespace NKikimr::NVDiskMon {
             {
                 TInFlightLatencyGuard movedGuard;
                 {
-                    TInFlightLatencyGuard guard(histo, 42, TInstant::MilliSeconds(1'000));
+                    const ui64 requestId = 42;
+                    TInFlightLatencyGuard guard(histo, requestId, TInstant::MilliSeconds(1'000));
                     movedGuard = std::move(guard);
-                    UNIT_ASSERT_VALUES_EQUAL(movedGuard.GetRequestId(), 42);
                 }
 
                 histo->UpdateCounters(TInstant::MilliSeconds(2'500));

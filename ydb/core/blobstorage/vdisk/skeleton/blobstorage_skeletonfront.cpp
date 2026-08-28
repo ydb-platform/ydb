@@ -108,6 +108,7 @@ namespace NKikimr {
             TActorId ActorId;
             NWilson::TSpan Span;
             std::shared_ptr<TVDiskSkeletonTrace> Trace;
+            ui64 InternalMessageId;
             NVDiskMon::TInFlightLatencyGuard InFlightLatency;
 
             TRecord() = default;
@@ -115,7 +116,7 @@ namespace NKikimr {
             TRecord(std::unique_ptr<IEventHandle> ev, TInstant now, ui32 recByteSize, const NBackpressure::TMessageId &msgId,
                     ui64 cost, TInstant deadline, NKikimrBlobStorage::EVDiskQueueId extQueueId,
                     const NBackpressure::TQueueClientId& clientId, TString name, std::shared_ptr<TVDiskSkeletonTrace> &&trace,
-                    NVDiskMon::TInFlightLatencyGuard inFlightLatency)
+                    ui64 internalMessageId, NVDiskMon::TInFlightLatencyGuard inFlightLatency)
                 : Ev(std::move(ev))
                 , ReceivedTime(now)
                 , Deadline(deadline)
@@ -127,6 +128,7 @@ namespace NKikimr {
                 , ActorId(Ev->Sender)
                 , Span(TWilson::VDiskTopLevel, std::move(Ev->TraceId), "VDisk.SkeletonFront.Queue")
                 , Trace(std::move(trace))
+                , InternalMessageId(internalMessageId)
                 , InFlightLatency(std::move(inFlightLatency))
             {
                 Span.Attribute("QueueName", std::move(name));
@@ -275,7 +277,7 @@ namespace NKikimr {
 
                     TInstant now = TAppData::TimeProvider->Now();
                     Queue->Push(TRecord(std::move(converted), now, recByteSize, msgId, cost, deadline, extQueueId,
-                        clientId, Name, std::move(trace), std::move(inFlightLatency)));
+                        clientId, Name, std::move(trace), internalMessageId, std::move(inFlightLatency)));
                 }
             }
 
@@ -339,8 +341,7 @@ namespace NKikimr {
                             *SkeletonFrontInFlightCost += cost;
                             *SkeletonFrontInFlightBytes += recByteSize;
 
-                            const ui64 internalMessageId = rec->InFlightLatency.GetRequestId();
-                            Msgs.emplace(internalMessageId, TMsgInfo(rec->MsgId.MsgId, ctx.Now(),
+                            Msgs.emplace(rec->InternalMessageId, TMsgInfo(rec->MsgId.MsgId, ctx.Now(),
                                 std::move(rec->InFlightLatency), std::move(rec->Trace)));
                             UpdateState();
                         }
@@ -354,8 +355,7 @@ namespace NKikimr {
         public:
             template <class TFront>
             void Completed(const TActorContext &ctx, const TVMsgContext &msgCtx, TFront &front) {
-                auto msgIt = Msgs.find(msgCtx.InternalMessageId);
-                if (msgIt == Msgs.end()) {
+                if (!Msgs.contains(msgCtx.InternalMessageId)) {
                     // Completed request after resetting queue
                     return;
                 }
@@ -376,7 +376,8 @@ namespace NKikimr {
                 *SkeletonFrontInFlightBytes -= msgCtx.RecByteSize;
                 *SkeletonFrontCostProcessed += msgCtx.Cost;
 
-                Msgs.erase(msgIt);
+                const size_t numErased = Msgs.erase(msgCtx.InternalMessageId);
+                Y_ABORT_UNLESS(numErased == 1);
 
                 UpdateState();
                 ProcessNext(ctx, front, false);
@@ -1803,7 +1804,7 @@ namespace NKikimr {
 
         void Handle(TEvPDiskErrorStateChange::TPtr &ev, const TActorContext &ctx) {
             auto errorStateChange = ev->Get();
-            
+
             PDiskErrorState.Set(errorStateChange->Status, errorStateChange->PDiskFlags, errorStateChange->ErrorReason);
 
             LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix

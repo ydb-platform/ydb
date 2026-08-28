@@ -62,10 +62,6 @@ namespace NKikimr {
             TInFlightLatencyGuard(TInFlightLatencyGuard&& other) noexcept;
             TInFlightLatencyGuard& operator=(TInFlightLatencyGuard&& other) noexcept;
 
-            ui64 GetRequestId() const {
-                return RequestId;
-            }
-
             void Reset();
 
         private:

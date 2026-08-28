@@ -691,3 +691,5 @@ void TEngineBay::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
 
 } // NDataShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

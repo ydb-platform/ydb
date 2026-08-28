@@ -388,3 +388,5 @@ void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev) {
 }
 
 } // namespace NKikimr::NDataShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

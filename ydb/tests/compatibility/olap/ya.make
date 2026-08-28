@@ -18,9 +18,12 @@ TEST_SRCS(
 SIZE(LARGE)
 REQUIREMENTS(cpu:4)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
+ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")
 
 DEPENDS(
+    ydb/apps/dstool
     ydb/tests/library/compatibility/binaries
 )
 

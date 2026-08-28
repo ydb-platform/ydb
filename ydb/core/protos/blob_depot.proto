@@ -269,6 +269,26 @@ message TEvPushMetrics {
     optional uint64 S3GetsInFlight = 9;
     optional uint64 S3GetsMaxInFlight = 10;
     optional uint64 S3GetsPendingQueueSize = 11;
+    // S3 router metrics. Optional so an old tablet can parse this message
+    // and ignore unknown fields instead of aborting on a new event type.
+    optional uint64 BalancerRequests = 12;
+    optional uint64 BalancerErrors = 13;
+    optional uint64 NonBalancerRequests = 14;
+    optional uint64 NonBalancerErrors = 15;
+    optional uint64 NonBalancerBytesRead = 16;
+    optional uint64 NonBalancerBytesWritten = 17;
+    optional uint64 BalancerResolveRequests = 18;
+    optional uint64 BalancerResolveSuccesses = 19;
+    optional uint64 BalancerResolveFailures = 20;
+    optional uint64 EndpointSwitches = 21;
+    optional uint64 FiveXxRefreshTriggers = 22;
+    optional bool IsUsingProxy = 23;
+    repeated uint64 BalancerLatencyHistogram = 24;
+    repeated uint64 NonBalancerLatencyHistogram = 25;
+    repeated uint64 BalancerResolveLatencyHistogram = 26;
+    optional uint64 PendingRejects = 27;
+    repeated uint64 PendingLatencyHistogram = 28;
+    optional uint64 RetiringWrappersAborted = 29;
 }
 
 message TEvPrepareWriteS3 {
@@ -294,26 +314,4 @@ message TEvPrepareWriteS3Result {
     }
 
     repeated TItem Items = 1;
-}
-
-message TEvPushS3RouterMetrics {
-    optional uint32 NodeId = 1;
-    optional uint64 BalancerRequests = 2;
-    optional uint64 BalancerErrors = 3;
-    optional uint64 NonBalancerRequests = 4;
-    optional uint64 NonBalancerErrors = 5;
-    optional uint64 NonBalancerBytesRead = 6;
-    optional uint64 NonBalancerBytesWritten = 7;
-    optional uint64 BalancerResolveRequests = 8;
-    optional uint64 BalancerResolveSuccesses = 9;
-    optional uint64 BalancerResolveFailures = 10;
-    optional uint64 EndpointSwitches = 11;
-    optional uint64 FiveXxRefreshTriggers = 12;
-    optional bool IsUsingProxy = 13;
-    repeated uint64 BalancerLatencyHistogram = 14;
-    repeated uint64 NonBalancerLatencyHistogram = 15;
-    repeated uint64 BalancerResolveLatencyHistogram = 16;
-    optional uint64 PendingRejects = 17;
-    repeated uint64 PendingLatencyHistogram = 18;
-    optional uint64 RetiringWrappersAborted = 19;
 }

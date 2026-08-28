@@ -459,7 +459,7 @@ namespace NKikimr::NBlobDepot {
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
-        void Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev);
+        void ApplyS3RouterMetrics(const NKikimrBlobDepot::TEvPushMetrics& record);
         void UpdateThroughputs(bool reschedule = true);
 
         THashMap<ui32, bool> S3RouterIsUsingProxyByNode;

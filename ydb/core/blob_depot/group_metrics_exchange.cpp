@@ -112,9 +112,15 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        BytesRead += record.GetBytesRead();
-        BytesWritten += record.GetBytesWritten();
-        if (Config.HasVirtualGroupId()) {
+        if (record.HasBytesRead()) {
+            BytesRead += record.GetBytesRead();
+        }
+
+        if (record.HasBytesWritten()) {
+            BytesWritten += record.GetBytesWritten();
+        }
+
+        if (Config.HasVirtualGroupId() && (record.HasBytesRead() || record.HasBytesWritten())) {
             MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
         }
 
@@ -130,7 +136,7 @@ namespace NKikimr::NBlobDepot {
         inc(NKikimrBlobDepot::COUNTER_S3_GETS_SLOW_DOWN, record.GetS3GetsSlowDown());
         inc(NKikimrBlobDepot::COUNTER_S3_GET_THROTTLE_ACTIVATIONS, record.GetS3GetThrottleActivations());
 
-        if (record.HasNodeId()) {
+        if (record.HasNodeId() && record.HasS3GetsInFlight()) {
             if (const auto it = Agents.find(record.GetNodeId()); it != Agents.end()) {
                 ApplyAgentS3GetGauges(it->second,
                     record.GetS3GetsInFlight(),
@@ -139,6 +145,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        ApplyS3RouterMetrics(record);
         UpdateThroughputs(false);
     }
 
@@ -154,9 +161,7 @@ namespace NKikimr::NBlobDepot {
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_GET_PENDING_QUEUE_SIZE] = S3GetsPendingQueueSizeTotal;
     }
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev) {
-        const auto& record = ev->Get()->Record;
-
+    void TBlobDepot::ApplyS3RouterMetrics(const NKikimrBlobDepot::TEvPushMetrics& record) {
         auto inc = [&](NKikimrBlobDepot::ECumulativeCounters counter, ui64 value) {
             if (value) {
                 TabletCounters->Cumulative()[counter] += value;

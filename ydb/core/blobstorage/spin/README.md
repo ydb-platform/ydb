@@ -3,8 +3,8 @@
 These models describe the distributed `VPatch` path implemented by
 `dsproxy_patch.cpp` and `skeleton_vpatch_actor.cpp`.
 
-The reliable-network baseline models intentionally omit blob bytes,
-encryption, metrics, queue accounting, and the implementation of local
+The reliable-network Block and Mirror baseline models intentionally omit blob
+bytes, encryption, metrics, queue accounting, and the implementation of local
 `VGet`/`VPut`. A part write is a single state transition. Channels still model
 the important message ordering:
 
@@ -21,11 +21,15 @@ Models:
 - `vpatch_mirror3dc.pml`: current placement-aware Mirror-3-DC completion logic.
 - `vpatch_mirror3dc_legacy.pml`: pre-fix regression model using only the
   successful-result count.
-- `vpatch_erasure_none.pml`: one-part ErasureNone baseline.
+- `vpatch_erasure_none.pml`: one-part, failure-aware ErasureNone model.
 
-The baseline models use a reliable network. Two additional models isolate the
-failure semantics without multiplying the production Block-4+2 state space:
+The failure-aware models isolate queue and connection semantics without
+multiplying the production Block-4+2 state space:
 
+- `vpatch_erasure_none.pml`: one DIFF after successful `FoundParts`, with
+  pre-accept rejection, application ERROR before or after a write,
+  post-accept disconnect, lost or stale results, BSQueue watchdog, DSProxy
+  `NeverTag`, and fallback.
 - `vpatch_block_2plus1_failures.pml`: reduced model starting after successful
   `FoundParts`, with BSQueue disconnect before/after VDisk acceptance,
   synthetic errors, stale late results, parity timeout, and fallback. A finite
@@ -34,8 +38,24 @@ failure semantics without multiplying the production Block-4+2 state space:
 - `vpatch_force_end_fixed.pml`: comparison model that forwards the ForceEnd
   result through BSQueue while DSProxy ignores it for quorum accounting.
 
-The failure model applies an assumed BSQueue request/result contract to three
-`VPATCH_DIFF` and two `XOR_DIFF` requests. It checks VPatch against that
+The ErasureNone model keeps DSProxy, ClientBSQueue, remote SkeletonFront, and
+the VDisk application as separate actors. SkeletonFront opens its request
+window and closes it on the local `TEvVDiskRequestCompleted` before the result
+can enter transport. A queue watchdog and the VPatch `NeverTag` independently
+prevent the client-side request from waiting for the remote result forever.
+Terminal actors do not wait for late events; buffered leftovers represent dead
+letters. Normal verification assumes reliable local actor delivery and a live
+SkeletonFront incarnation. It also assumes one logical request and an eventual
+full quiet watchdog interval; unrelated traffic that repeatedly moves the
+watchdog barrier is covered by the focused ForceEnd model instead.
+
+Defining `INJECT_LOCAL_COMPLETION_LOSS` adds a fault branch that drops the
+local completion after the VDisk operation has finished. This is a sensitivity
+check, not a supported production outcome: client and BSQueue liveness must
+still hold, while SkeletonFront accounting and complete cleanup must fail.
+
+The Block failure model applies an assumed BSQueue request/result contract to
+three `VPATCH_DIFF` and two `XOR_DIFF` requests. It checks VPatch against that
 contract; it does not derive the contract from the queue retry/session
 automaton. `START/FOUND` is composed out to keep exhaustive verification
 small. The model assumes a finite VPatch deadline and a terminating fallback.
@@ -69,6 +89,22 @@ Spin 6.5.2 selects an inline named claim at `pan` runtime. Generate once, then
 check safety and liveness separately:
 
 ```bash
+# Failure-aware ErasureNone model.
+spin -a vpatch_erasure_none.pml
+cc -O2 -DMEMLIM=1024 -DSAFETY -DNOCLAIM -o pan_safety pan.c
+./pan_safety -m100000
+cc -O2 -DMEMLIM=1024 -DNFAIR=16 -o pan pan.c
+./pan -a -N safe_vpatch_success_requires_accounted_write -m100000
+./pan -a -f -N live_accepted_request_accounted -m100000
+./pan -a -f -N live_eventual_cleanup -m100000
+
+# Expected accounting counterexample when local completion is lost.
+spin -DINJECT_LOCAL_COMPLETION_LOSS -a vpatch_erasure_none.pml
+cc -O2 -DMEMLIM=1024 -DNFAIR=16 -o pan_injected pan.c
+./pan_injected -a -f -N live_accepted_request_accounted -m100000
+spin -DINJECT_LOCAL_COMPLETION_LOSS -t -p -g -l \
+    vpatch_erasure_none.pml
+
 spin -a vpatch_block_2plus1_failures.pml
 cc -O2 -DMEMLIM=2048 -DNFAIR=16 -o pan pan.c
 ./pan -a -N safe_ok_requires_correct_target -m500000
@@ -116,8 +152,6 @@ error; `unknown` means that the search was stopped by its memory limit.
 | Mirror-3-DC, legacy result count | safety | violated | 2,433 before trail | 0.01 s |
 | Mirror-3-DC, current placement quorum | safety | holds | 17,130 | 0.02 s |
 | Mirror-3-DC, current placement quorum | fair liveness | holds | 34,237 (183,390 visited) | 0.31 s |
-| ErasureNone | safety | holds | 18 | <0.01 s |
-| ErasureNone | fair liveness | holds | 30 | <0.01 s |
 
 ## Failure verification results
 
@@ -126,6 +160,17 @@ an exhaustive run with `errors: 0`; fair liveness uses weak process fairness.
 
 | Model | Check | Result | Stored states | Time |
 | --- | --- | --- | ---: | ---: |
+| ErasureNone failures | assertions/deadlocks | holds | 47,382 | 0.07 s |
+| ErasureNone failures | each safety LTL claim | holds | 47,382 | 0.08 s |
+| ErasureNone failures | client eventually replies | holds | 28,330 (311,883 visited) | 0.56 s |
+| ErasureNone failures | accepted DIFF is accounted | holds | 65,911 (249,440 visited) | 0.51 s |
+| ErasureNone failures | BSQueue item terminates | holds | 63,402 (232,827 visited) | 0.44 s |
+| ErasureNone failures | complete cleanup | holds | 44,045 (510,965 visited) | 0.99 s |
+| ErasureNone, completion loss | assertions/deadlocks | violated | 1,354 before trail | <0.01 s |
+| ErasureNone, completion loss | client eventually replies | holds | 30,806 (340,321 visited) | 0.61 s |
+| ErasureNone, completion loss | BSQueue item terminates | holds | 68,789 (254,692 visited) | 0.48 s |
+| ErasureNone, completion loss | accepted DIFF is accounted | violated | 544 (2,252 visited) before trail | 0.03 s |
+| ErasureNone, completion loss | complete cleanup | violated | 1,230 (9,868 visited) before trail | 0.01 s |
 | Block 2+1 failures | assertions/deadlocks | holds | 1,406,757 | 1.51 s |
 | Block 2+1 failures | each safety LTL claim | holds | 1,406,757 | <=1.98 s |
 | Block 2+1 failures | client eventually replies | holds | 2,200,669 (~10.9M visited) | 17.0 s |
@@ -147,6 +192,14 @@ and leave that item as a ghost indefinitely. After a complete quiet watchdog
 interval, queue reset drains the item and may return a collateral error to an
 unrelated waiting request. Forwarding the result closes the queue item while
 `ForceStopFlags` still prevents it from counting toward VPatch quorum.
+
+The injected ErasureNone trail separates client completion from server-side
+accounting. `NeverTag` starts fallback and the queue watchdog returns the sole
+BSQueue item, so the client has one reply and `queue_item_outstanding == 0`.
+The VDisk application has nevertheless dropped its local completion, leaving
+`front_accept_count == 1`, `front_complete_count == 0`, and
+`front_outstanding == 1` forever. The normal model excludes that local-message
+loss and exhaustively proves that every accepted DIFF is accounted.
 
 The legacy Mirror-3-DC counterexample has `mode=2`, four selected writers,
 but returns success after acknowledgements distributed as DC0=2, DC1=1,

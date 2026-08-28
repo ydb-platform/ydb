@@ -188,18 +188,19 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
     Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
     {
+        constexpr ui32 BlockSize = 4096;
         auto dbg = MakeDbg(0);
         auto config = TVChunkConfig::MakeDefault(
             /*vChunkIndex*/ 17,
             /*hostCount*/ 5,
             /*primaryCount*/ 3);
         config.PromoteHost(3);
-        config.SetWatermark(3, 42);
+        config.SetWatermark(3, 42 * BlockSize);
         dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
 
         const TMonPageData data{
             .Page = EMonPage::Dbg,
-            .TabletInfo = {.TabletId = 42},
+            .TabletInfo = {.TabletId = 42, .BlockSize = BlockSize},
             .Dbgs = {std::move(dbg)},
         };
 

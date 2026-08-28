@@ -43,8 +43,8 @@ public:
 
 private:
     friend class TBlocksDirtyMap;
+    friend class TVChunk;
     friend class TRangeLockAccess;
-    friend class TDDiskDataCopier;
 
     // Lock the PBuffer record with the given id.
     TRangeLock(ILockableRangesWeakPtr lockableRanges, TPBufferKey pBufferKey);

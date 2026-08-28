@@ -268,18 +268,21 @@ void RenderOverview(IOutputStream& str, const TFastPathServiceInfo& info)
     }
 }
 
-void RenderFreshPercentage(IOutputStream& str, const TDbgSnapshot& dbg)
+void RenderFreshPercentage(
+    IOutputStream& str,
+    const TDbgSnapshot& dbg,
+    ui32 blockSize)
 {
     for (const auto& [vChunkId, vChunkConfig]: dbg.VChunkConfigs) {
         TStringBuilder w;
         for (auto host: vChunkConfig.GetDDisks()) {
             if (auto watermark = vChunkConfig.GetWatermark(host)) {
-                w << PrintHostIndex(host) << ":" << *watermark;
+                w << PrintHostIndex(host) << ":" << *watermark / blockSize;
             }
         }
 
         if (w) {
-            str << vChunkId << "[" << w << "] ";
+            str << PrintVChunkId(vChunkId) << "[" << w << "] ";
         }
     }
 }
@@ -383,7 +386,10 @@ void RenderDbgList(
                             str << behindBlocks.Print(true);
                         }
                         TABLED () {
-                            RenderFreshPercentage(str, dbg);
+                            RenderFreshPercentage(
+                                str,
+                                dbg,
+                                tabletInfo.BlockSize);
                         }
                     }
                 }

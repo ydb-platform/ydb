@@ -135,6 +135,7 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
+        .BlockSize = VolumeConfig.GetBlockSize(),
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };

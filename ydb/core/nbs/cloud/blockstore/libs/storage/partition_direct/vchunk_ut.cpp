@@ -717,6 +717,22 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         // Waiting for the copying to be completed.
         {
             DrainExecutor(DirectBlockGroup->GetExecutor());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                PartitionDirectService->UpdateConfigRequests.size());
+            UNIT_ASSERT_VALUES_EQUAL(
+                CopyProgressSaveInterval,
+                *PartitionDirectService->UpdateConfigRequests.front()
+                     .Config.GetWatermark(3));
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                PartitionDirectService->UpdateConfigRequests.size());
+            UNIT_ASSERT(!PartitionDirectService->UpdateConfigRequests.front()
+                             .Config.GetWatermark(3)
+                             .has_value());
             UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
             DrainExecutor(DirectBlockGroup->GetExecutor());
         }

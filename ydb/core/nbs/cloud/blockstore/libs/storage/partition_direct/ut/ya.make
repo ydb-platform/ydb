@@ -20,6 +20,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/ut_blobstorage/lib
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/testlib
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib
     ydb/core/nbs/cloud/blockstore/libs/storage/testlib
     ydb/core/protos

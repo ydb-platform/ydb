@@ -915,9 +915,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
 
-        // Nothing tracked before the flush.
+        // The unsynced tail is tracked as Behind before the flush.
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [5..32767]\n",
+            dirtyMap->DebugPrintBehind());
 
         // Write above the fresh watermark to all four DDisks.
         const THostMask requested = MakeHostMask(true, true, true, true, false);
@@ -940,7 +942,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "  H3: [10..19]\n",
             dirtyMap->DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [5..9][20..32767]\n",
+            dirtyMap->DebugPrintBehind());
 
         // Drain erases so the inflight map ends clean.
         auto eraseHints = dirtyMap->MakeEraseHint(1);
@@ -2670,7 +2674,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Only Behind blocks erase; Ahead does not.
         UNIT_ASSERT_VALUES_EQUAL(
-            "  H1: [10..19]\n",
+            "  H1: [10..19]\n"
+            "  H3: [5..9][20..32767]\n",
             dirtyMap->DebugPrintBehind());
         eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2714,7 +2719,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         UNIT_ASSERT_VALUES_EQUAL("  H3: [10..19]\n", source->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(
-            "  H1: [10..19]\n",
+            "  H1: [10..19]\n"
+            "  H3: [5..9][20..32767]\n",
             source->DebugPrintBehind());
 
         const auto persisted = source->GetStateForPersist();
@@ -2726,9 +2732,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
-        // Before load the target has no tracked ranges.
+        // Before load the target contains the unsynced fresh tail.
         UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [5..32767]\n",
+            target->DebugPrintBehind());
 
         target->Load(persisted);
 
@@ -2767,6 +2775,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Promote hand-off H3 to a primary DDisk so we have 4 desired DDisks.
         vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(3, std::nullopt);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
             vchunkConfig,

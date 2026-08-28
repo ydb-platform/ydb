@@ -163,15 +163,15 @@ void TBaseFixture::Init()
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
+        const ui64 sizeBytes = range.Size() * BlockSize;
         TString copiedData;
-        copiedData.resize(CopyRangeSize);
+        copiedData.resize(sizeBytes);
         SgListCopy(
             guardedSglist.Acquire().Get(),
             TBlockDataRef{copiedData.data(), copiedData.size()});
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
         const ui64 offsetBytes = offsetBlocks * BlockSize;
-        const ui64 sizeBytes = range.Size() * BlockSize;
         TString expectedData =
             TString(RangeData.data() + offsetBytes, sizeBytes);
         UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);

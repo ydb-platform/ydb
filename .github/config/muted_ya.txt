@@ -76,4 +76,5 @@ ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
+ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWriteChecksumsDisabled
 ydb/tools/stress_tool/ut unittest.sole chunk

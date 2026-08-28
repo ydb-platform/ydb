@@ -31,6 +31,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TVChunk
     : public IWriteClient
+    , public IRangeSyncClient
     , public std::enable_shared_from_this<TVChunk>
 {
 public:
@@ -95,6 +96,17 @@ public:
     void OnBelatedWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
         THostMask completedWrites) override;
+
+    // IRangeSyncClient implementation
+    [[nodiscard]] std::optional<TBlockRange64> GetFreshRange(
+        THostIndex host) const override;
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range) override;
+    [[nodiscard]] TRangeLock MakeDDiskRangeLock(
+        TBlockRange64 range,
+        THostMask mask) override;
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range) override;
+    void EndRangeSync(ui64 syncId, bool success) override;
+    void OnCopyProgress(ui64 totalBytes) override;
 
 private:
     friend struct TBaseFixture;

@@ -18,7 +18,7 @@ namespace NKikimr::NStorage {
 
         if (!rec.Router) {
             rec.Settings = msg.Settings;
-            IActor* routerActor = NBlobDepot::CreateBlobDepotS3Router(msg.Settings, tabletId);
+            IActor* routerActor = NBlobDepot::CreateBlobDepotS3Router(msg.Settings);
             rec.Router = Register(routerActor, TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
             as->RegisterLocalService(MakeBlobDepotS3RouterID(tabletId), rec.Router);
             STLOG(PRI_INFO, BS_NODE, NW71, "BlobDepotS3Router created",

@@ -17,7 +17,6 @@ Main topics:
 * [{#T}](virtual_storage_groups_decommit.md)
 * [{#T}](failure_model.md)
 * [{#T}](node_restarting.md)
-* [{#T}](dynamic-config.md)
 * [{#T}](cluster_expansion.md)
 * [{#T}](config-overview.md)
 * [{#T}](dynamic-config-volatile-config.md)

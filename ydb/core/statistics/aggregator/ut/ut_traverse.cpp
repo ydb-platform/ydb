@@ -366,15 +366,20 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         });
         assertNoMetadataInSnapshots();
 
-        // Empty snapshot after the last user table is dropped so SA can
-        // remove the stale path from ScheduleTraversals.
+        // After the last user table is dropped, SchemeShard sends an empty
+        // snapshot. Metadata tables stay omitted.
         DropTable(env, "Database", "Table");
-        runtime.WaitFor("user table dropped from SchemeShard stats", [&] {
-            return !snapshots.empty() && !snapshots.back().contains(tableInfo.PathId);
+        runtime.WaitFor("empty SchemeShard stats after drop", [&] {
+            return !snapshots.empty() && snapshots.back().empty();
         });
-        UNIT_ASSERT_C(
-            !snapshots.back().contains(metadataPathId),
-            "empty snapshot after drop still included .metadata/statistics_v2");
+
+        // ANALYZE of a dropped table must fail rather than remain pending.
+        auto result = Analyze(
+            runtime, tableInfo.SaTabletId, {tableInfo.PathId},
+            "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(result.GetIssues(), issues);
+        UNIT_ASSERT_C(issues.ToString().Contains("Could not find table"), issues.ToString());
     }
 
     Y_UNIT_TEST_TWIN(Counters, ColumnShard) {

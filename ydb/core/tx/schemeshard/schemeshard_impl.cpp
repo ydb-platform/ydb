@@ -9475,17 +9475,13 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         }
     }
 
-    // ANALYZE writes into .metadata/statistics_v2. Including that table in the
-    // blob schedules it for background ANALYZE, which writes more rows and
-    // retriggers itself.
-
     int count = 0;
     int incompleteCount = 0;
     bool hasUserTables = false;
 
     NKikimrStat::TSchemeShardStats record;
     for (const auto& [pathId, tableInfo] : Tables) {
-        if (TPath::Init(pathId, this).IsInsideMetadataDirectory()) {
+        if (TPath::IsInsideMetadataDirectory(pathId, this)) {
             continue;
         }
         hasUserTables = true;
@@ -9512,7 +9508,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
 
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
     for (const auto& pathId : columnTablesPathIds) {
-        if (TPath::Init(pathId, this).IsInsideMetadataDirectory()) {
+        if (TPath::IsInsideMetadataDirectory(pathId, this)) {
             continue;
         }
         hasUserTables = true;
@@ -9552,9 +9548,6 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
 
     if (!count) {
         if (hasUserTables) {
-            // User tables exist but none have reportable stats yet (e.g. a
-            // non-standalone column table before TableStats arrives). Sending
-            // an empty AreAllStatsFull snapshot would drop those paths from SA.
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
                 "SendBaseStatsToSA() No tables to send"
                 << ", at schemeshard: " << TabletID());

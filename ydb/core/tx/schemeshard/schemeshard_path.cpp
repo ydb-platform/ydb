@@ -611,19 +611,6 @@ const TPath::TChecker& TPath::TChecker::IsSystemDirectory(EStatus status) const 
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-const TPath::TChecker& TPath::TChecker::IsMetadataDirectory(EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    if (Path.Base()->IsMetadataDirectory()) {
-        return *this;
-    }
-
-    return Fail(status, TStringBuilder() << "path is not a .metadata directory"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
-}
-
 const TPath::TChecker& TPath::TChecker::IsRtmrVolume(EStatus status) const {
     if (Failed) {
         return *this;
@@ -1802,18 +1789,6 @@ bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
     return true;
 }
 
-bool TPath::IsInsideMetadataDirectory() const {
-    if (!IsResolved()) {
-        return false;
-    }
-    for (const auto& element : Elements) {
-        if (element->IsMetadataDirectory()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool TPath::IsInsideCdcStreamPath() const {
     Y_ABORT_UNLESS(IsResolved());
 
@@ -1839,6 +1814,28 @@ bool TPath::IsInsideCdcStreamPath() const {
     }
 
     return true;
+}
+
+bool TPath::IsInsideMetadataDirectory() const {
+    Y_ABORT_UNLESS(IsResolved());
+    return IsInsideMetadataDirectory(Base()->PathId, SS);
+}
+
+bool TPath::IsInsideMetadataDirectory(const TPathId& pathId, TSchemeShard* ss) {
+    TPathId cur = pathId;
+    while (true) {
+        auto* elem = ss->PathsById.FindPtr(cur);
+        if (!elem) {
+            return false;
+        }
+        if ((*elem)->IsMetadataDirectory()) {
+            return true;
+        }
+        if ((*elem)->IsRoot()) {
+            return false;
+        }
+        cur = (*elem)->ParentPathId;
+    }
 }
 
 bool TPath::IsTableIndex(

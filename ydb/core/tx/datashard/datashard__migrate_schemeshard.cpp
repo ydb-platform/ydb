@@ -75,5 +75,3 @@ void TDataShard::TTxMigrateSchemeShard::Complete(const TActorContext& ctx) {
 
 }   // namespace NDataShard
 }   // namespace NKikimr
-
-#undef YDB_LOG_THIS_FILE_COMPONENT

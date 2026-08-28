@@ -1122,5 +1122,3 @@ IActor* CreateDistributedEraser(const TActorId& replyTo, const TString& database
 
 } // NDataShard
 } // NKikimr
-
-#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -1829,8 +1829,10 @@ FROM `{table_name}`"""
                             bum: Variant<
                                 a: Tuple<Int, String>?,
                                 b: List<Int>,
-                                c: Bool,
-                                d: Int8,
+                                cd: Variant<
+                                    c: Bool,
+                                    d: Int8
+                                >,
                                 e: Int64,
                                 f: Dict<String,Int?>
                             >
@@ -1844,7 +1846,7 @@ FROM `{table_name}`"""
                 $in = SELECT * FROM $in FLATTEN COLUMNS; -- expand foo
                 $in = SELECT
                         i.*,
-                        bum.a AS ua, bum.b AS ub, bum.c AS uc, bum.d AS ud, bum.e AS ue, bum.f AS uf
+                        bum.a AS ua, bum.b AS ub, bum.cd.c AS uc, bum.cd.d AS ud, bum.e AS ue, bum.f AS uf
                       WITHOUT bum
                       FROM $in AS i;
                 -- $in = SELECT * FROM $in FLATTEN LIST BY baz; -- prevents pushdown

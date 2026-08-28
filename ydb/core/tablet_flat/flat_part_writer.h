@@ -19,8 +19,6 @@
 #include <ydb/core/util/intrusive_heap.h>
 #include <util/system/sanitizers.h>
 
-#include <optional>
-
 namespace NKikimr {
 namespace NTable {
 
@@ -213,7 +211,7 @@ namespace NTable {
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId);
                 g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
-                g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
+                g.NextBTreeIndexSize = WriteBTreeIndex ? (WriteBTreeIndexV2 ? g.BTreeIndexV2.CalcSize(groupKey) : g.BTreeIndexV1.CalcSize(groupKey)) : 0;
                 overheadBytes += (
                     g.NextDataSize.DataPageSize +
                     g.NextDataSize.SmallSize +
@@ -288,7 +286,7 @@ namespace NTable {
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, minVersion, maxVersion, /* txId */ 0, KeyState.LockMode, KeyState.LockTxId);
                 g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
-                g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
+                g.NextBTreeIndexSize = WriteBTreeIndex ? (WriteBTreeIndexV2 ? g.BTreeIndexV2.CalcSize(groupKey) : g.BTreeIndexV1.CalcSize(groupKey)) : 0;
 
                 // FIXME: not each row produces index row so overhead bytes shouldn't add index size
                 overheadBytes += (
@@ -419,7 +417,7 @@ namespace NTable {
                 TCellsRef groupKey = groupIdx == 0 ? syntheticKey : TCellsRef{ };
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), maxVersion, /* txId */ 0);
                 g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
-                g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
+                g.NextBTreeIndexSize = WriteBTreeIndex ? (WriteBTreeIndexV2 ? g.BTreeIndexV2.CalcSize(groupKey) : g.BTreeIndexV1.CalcSize(groupKey)) : 0;
 
                 // FIXME: not each row produces index row so overhead bytes shouldn't add index size
                 overheadBytes += (
@@ -496,7 +494,7 @@ namespace NTable {
                             indexSize += g.FlatIndex.BytesUsed() + g.FirstKeyIndexSize;
                         }
                         if (WriteBTreeIndex) {
-                            indexSize += g.BTreeIndex.EstimateBytesUsed() + g.FirstKeyBTreeIndexSize;
+                            indexSize += (WriteBTreeIndexV2 ? g.BTreeIndexV2.EstimateBytesUsed() : g.BTreeIndexV1.EstimateBytesUsed()) + g.FirstKeyBTreeIndexSize;
                         }
                         if (g.NextDataSize.Overflow) {
                             // On overflow we would have to start a new data page
@@ -569,9 +567,9 @@ namespace NTable {
                 if (WriteBTreeIndex) {
                     /* When dual-write is active, also finish the V1 shadow */
                     auto finishBTree = [&](TGroupState& g) -> NPage::TBtreeIndexMeta {
-                        auto meta = g.BTreeIndex.Finish(Pager);
-                        if (g.BTreeIndexV1Shadow) {
-                            auto v1ShadowMeta = g.BTreeIndexV1Shadow->Finish(Pager);
+                        auto meta = WriteBTreeIndexV2 ? g.BTreeIndexV2.Finish(Pager) : g.BTreeIndexV1.Finish(Pager);
+                        if (WriteBTreeIndexV2 && g.WriteBTreeIndexV1) {
+                            auto v1ShadowMeta = g.BTreeIndexV1.Finish(Pager);
                             meta.RootV1 = v1ShadowMeta.RootV1PageId();
                             meta.LevelCountV1 = v1ShadowMeta.LevelCountV1;
                             meta.IndexSize += v1ShadowMeta.IndexSize;
@@ -643,17 +641,21 @@ namespace NTable {
                 for (auto& g : Groups) {
                     g.Data.Reset();
                     g.FlatIndex.Reset();
-                    g.BTreeIndex.Reset();
-                    if (g.BTreeIndexV1Shadow) {
-                        g.BTreeIndexV1Shadow->Reset();
+                    if (WriteBTreeIndexV2) {
+                        g.BTreeIndexV2.Reset();
+                    }
+                    if (g.WriteBTreeIndexV1) {
+                        g.BTreeIndexV1.Reset();
                     }
                 }
                 for (auto& g : Histories) {
                     g.Data.Reset();
                     g.FlatIndex.Reset();
-                    g.BTreeIndex.Reset();
-                    if (g.BTreeIndexV1Shadow) {
-                        g.BTreeIndexV1Shadow->Reset();
+                    if (WriteBTreeIndexV2) {
+                        g.BTreeIndexV2.Reset();
+                    }
+                    if (g.WriteBTreeIndexV1) {
+                        g.BTreeIndexV1.Reset();
                     }
                 }
                 FrameL.Reset();
@@ -906,42 +908,44 @@ namespace NTable {
 
                 if (WriteBTreeIndex) {
                     if (dataPage.BaseRow()) {
-                        g.BTreeIndex.AddKey(Key);
-                        if (g.BTreeIndexV1Shadow) {
-                            g.BTreeIndexV1Shadow->AddKey(Key);
+                        if (WriteBTreeIndexV2) {
+                            g.BTreeIndexV2.AddKey(Key);
+                        }
+                        if (g.WriteBTreeIndexV1) {
+                            g.BTreeIndexV1.AddKey(Key);
                         }
                     }
                     if (groupId.IsMain()) {
                         if (WriteBTreeIndexV2) {
-                            g.BTreeIndex.AddChild(NPage::TBtreeIndexNode::TChildV2{
-                                location.Offset, location.Size, location.Crc32, dataPage->Count, raw.size(),
-                                Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
-                            if (g.BTreeIndexV1Shadow) {
-                                g.BTreeIndexV1Shadow->AddChild({page, dataPage->Count, raw.size(),
-                                          Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
-                            }
-                        } else {
-                            g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeGroupDataSize,
-                                                   Current.BTreeIndexErasedRowCount});
+                            g.BTreeIndexV2.AddChild(
+                                NPage::TBtreeIndexNode::TChildV2{
+                                    location.Offset, location.Size, location.Crc32, dataPage->Count, raw.size(),
+                                    Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
+                        }
+                        if (g.WriteBTreeIndexV1) {
+                            g.BTreeIndexV1.AddChild(
+                                {page, dataPage->Count, raw.size(), Current.BTreeGroupDataSize,
+                                 Current.BTreeIndexErasedRowCount});
                         }
                         Current.BTreeGroupDataSize = 0;
                         Current.BTreeIndexErasedRowCount = 0;
                     } else {
                         if (WriteBTreeIndexV2) {
-                            g.BTreeIndex.AddShortChild(NPage::TBtreeIndexNode::TShortChildV2{
-                                location.Offset, location.Size, location.Crc32, dataPage->Count, raw.size()});
-                            if (g.BTreeIndexV1Shadow) {
-                                g.BTreeIndexV1Shadow->AddShortChild({page, dataPage->Count, raw.size()});
-                            }
-                        } else {
-                            g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
+                            g.BTreeIndexV2.AddShortChild(
+                                NPage::TBtreeIndexNode::TShortChildV2{
+                                    location.Offset, location.Size, location.Crc32, dataPage->Count, raw.size()});
+                        }
+                        if (g.WriteBTreeIndexV1) {
+                            g.BTreeIndexV1.AddShortChild({page, dataPage->Count, raw.size()});
                         }
                         // Note: group data size is approximate, includes only finished pages
                         Current.BTreeGroupDataSize += raw.size();
                     }
-                    g.BTreeIndex.Flush(Pager);
-                    if (g.BTreeIndexV1Shadow) {
-                        g.BTreeIndexV1Shadow->Flush(Pager);
+                    if (WriteBTreeIndexV2) {
+                        g.BTreeIndexV2.Flush(Pager);
+                    }
+                    if (g.WriteBTreeIndexV1) {
+                        g.BTreeIndexV1.Flush(Pager);
                     }
                 }
 
@@ -1210,8 +1214,13 @@ namespace NTable {
 
             NPage::TDataPageWriter Data;
             NPage::TFlatIndexWriter FlatIndex;
-            NPage::TBtreeIndexBuilder BTreeIndex;
-            std::optional<NPage::TBtreeIndexBuilder> BTreeIndexV1Shadow;
+
+            using TBtreeIndexBuilderV1 = NPage::TBtreeIndexBuilder<NPage::TBtreeIndexNode::TChild>;
+            using TBtreeIndexBuilderV2 = NPage::TBtreeIndexBuilder<NPage::TBtreeIndexNode::TChildV2>;
+
+            TBtreeIndexBuilderV1 BTreeIndexV1;
+            TBtreeIndexBuilderV2 BTreeIndexV2;
+            const bool WriteBTreeIndexV1; // V1 is written: as primary (V1 mode) or shadow (V2 mode)
 
             NPage::TDataPageWriter::TSizeInfo NextDataSize;
             TPgSize NextIndexSize;
@@ -1227,15 +1236,14 @@ namespace NTable {
                 , Codec(conf.Groups[groupId.Index].Codec)
                 , Data(scheme, conf, tags, groupId)
                 , FlatIndex(scheme, conf, groupId)
-                , BTreeIndex(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize,
-                             conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
-                             conf.Groups[groupId.Index].BTreeIndexNodeKeysMax, conf.WriteBTreeIndexV2)
+                , BTreeIndexV1(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize,
+                               conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
+                               conf.Groups[groupId.Index].BTreeIndexNodeKeysMax)
+                , BTreeIndexV2(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize,
+                               conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
+                               conf.Groups[groupId.Index].BTreeIndexNodeKeysMax)
+                , WriteBTreeIndexV1(!conf.WriteBTreeIndexV2 || conf.BTreeIndexV2KeepV1Shadow)
             {
-                if (conf.BTreeIndexV2KeepV1Shadow && conf.WriteBTreeIndexV2) {
-                    BTreeIndexV1Shadow.emplace(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize,
-                                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
-                                              conf.Groups[groupId.Index].BTreeIndexNodeKeysMax, /*writeV2=*/false);
-                }
             }
         };
 

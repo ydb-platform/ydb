@@ -331,13 +331,14 @@ namespace NKikimr::NTable::NPage {
         const char* End = 0;
     };
 
+    template <typename TChildT = TBtreeIndexNode::TChild>
     class TBtreeIndexBuilder {
     public:
         using TShortChild = TBtreeIndexNode::TShortChild;
         using TChild = TBtreeIndexNode::TChild;
         using TShortChildV2 = TBtreeIndexNode::TShortChildV2;
         using TChildV2 = TBtreeIndexNode::TChildV2;
-        using TChildVariant = std::variant<TChild, TChildV2>;
+        static constexpr bool WriteV2 = std::is_same_v<TChildT, TChildV2>;
 
     private:
         struct TLevel {
@@ -354,13 +355,13 @@ namespace NKikimr::NTable::NPage {
                 return std::move(key);
             }
 
-            void PushChild(TChildVariant child) {
+            void PushChild(TChildT child) {
                 Children.push_back(std::move(child));
             }
 
-            TChildVariant PopChild() {
+            TChildT PopChild() {
                 Y_ENSURE(Children);
-                TChildVariant result = std::move(Children.front());
+                TChildT result = std::move(Children.front());
                 Children.pop_front();
                 return result;
             }
@@ -380,16 +381,16 @@ namespace NKikimr::NTable::NPage {
         private:
             size_t KeysSize = 0;
             TDeque<TString> Keys;
-            TDeque<TChildVariant> Children;
+            TDeque<TChildT> Children;
         };
 
     public:
         TBtreeIndexBuilder(TIntrusiveConstPtr<TPartScheme> scheme, TGroupId groupId, ui32 nodeTargetSize,
-                           ui32 nodeKeysMin, ui32 nodeKeysMax, bool writeV2 = false)
+                           ui32 nodeKeysMin, ui32 nodeKeysMax)
             : Scheme(std::move(scheme))
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
-            , Writer(Scheme, groupId, writeV2)
+            , Writer(Scheme, groupId, WriteV2)
             , Levels(1)
             , NodeTargetSize(nodeTargetSize)
             , NodeKeysMin(nodeKeysMin)
@@ -418,32 +419,24 @@ namespace NKikimr::NTable::NPage {
         }
 
         void AddShortChild(TShortChild child) {
+            static_assert(std::is_same_v<TChildT, TChild>, "V1 short child requires V1 builder");
             AddChild(TChild{child.GetPageId(), child.GetRowCount(), child.GetDataSize(), 0, 0});
         }
 
         void AddShortChild(TShortChildV2 child) {
+            static_assert(std::is_same_v<TChildT, TChildV2>, "V2 short child requires V2 builder");
             AddChild(
                 TChildV2{child.Offset_, child.Size_, child.Crc32_, child.GetRowCount(), child.GetDataSize(), 0, 0});
         }
 
-        void AddChild(TChild child) {
+        void AddChild(TChildT child) {
             // aggregate in order to perform search by row id from any leaf node
             child.RowCount_ = (ChildRowCount += child.GetRowCount());
             child.DataSize_ = (ChildDataSize += child.GetDataSize());
             child.GroupDataSize_ = (ChildGroupDataSize += child.GetGroupDataSize());
             child.ErasedRowCount_ = (ChildErasedRowCount += child.GetErasedRowCount());
 
-            Levels[0].PushChild(child);
-        }
-
-        void AddChild(TChildV2 child) {
-            // aggregate in order to perform search by row id from any leaf node
-            child.RowCount_ = (ChildRowCount += child.GetRowCount());
-            child.DataSize_ = (ChildDataSize += child.GetDataSize());
-            child.GroupDataSize_ = (ChildGroupDataSize += child.GetGroupDataSize());
-            child.ErasedRowCount_ = (ChildErasedRowCount += child.GetErasedRowCount());
-
-            Levels[0].PushChild(child);
+            Levels[0].PushChild(std::move(child));
         }
 
         void Flush(IPageWriter &pager) {
@@ -469,7 +462,7 @@ namespace NKikimr::NTable::NPage {
                     Y_ENSURE(levelIndex + 1 == Levels.size(), "Should be root");
 
                     auto rootChild = Levels[levelIndex].PopChild();
-                    return std::visit([&](const auto& c) { return MakeMeta(c, levelIndex, IndexSize); }, rootChild);
+                    return MakeMeta(rootChild, levelIndex, IndexSize);
                 }
 
                 DoFlush(levelIndex, pager, true);
@@ -537,10 +530,10 @@ namespace NKikimr::NTable::NPage {
                 Levels.emplace_back();
                 Y_ENSURE(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
             }
-            if (auto* v1 = std::get_if<TChild>(&lastChild)) {
-                FillChildLocation(*v1, pageId);
+            if constexpr (WriteV2) {
+                FillChildLocation(lastChild, location);
             } else {
-                FillChildLocation(std::get<TChildV2>(lastChild), location);
+                FillChildLocation(lastChild, pageId);
             }
             Levels[levelIndex + 1].PushChild(std::move(lastChild));
             if (!last) {
@@ -556,12 +549,12 @@ namespace NKikimr::NTable::NPage {
             }
         }
 
-        void AddChildToWriter(const TChildVariant& child) {
-            std::visit([this](const auto& c) { Writer.AddChild(c); }, child);
+        void AddChildToWriter(const TChildT& child) {
+            Writer.AddChild(child);
         }
 
-        void AddChildToWriter(TChildVariant&& child) {
-            std::visit([this](auto&& c) { Writer.AddChild(std::move(c)); }, std::move(child));
+        void AddChildToWriter(TChildT&& child) {
+            Writer.AddChild(std::move(child));
         }
 
         static void FillChildLocation(TChild& child, TPageId pageId) {

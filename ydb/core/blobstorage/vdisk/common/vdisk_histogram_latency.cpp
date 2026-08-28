@@ -6,10 +6,10 @@ namespace NKikimr {
     namespace NVDiskMon {
 
         TLtcHisto::TLtcHisto(
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-            const TString& name,
-            const TString& value,
-            NPDisk::EDeviceType type)
+                const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+                const TString &name,
+                const TString &value,
+                NPDisk::EDeviceType type)
         {
             auto group = counters->GetSubgroup(name, value);
             ThroughputBytes = group->GetCounter("requestBytes", true);
@@ -102,5 +102,5 @@ namespace NKikimr {
             RequestId = 0;
         }
 
-    } // namespace NVDiskMon
-} // namespace NKikimr
+    } // NKikimr
+} // NKikimr

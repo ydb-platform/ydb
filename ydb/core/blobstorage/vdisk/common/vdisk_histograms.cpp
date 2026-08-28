@@ -4,22 +4,23 @@ namespace NKikimr {
     namespace NVDiskMon {
 
         THistograms::THistograms(
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-            NPDisk::EDeviceType type)
+                const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+                NPDisk::EDeviceType type)
         {
             for (const auto& item : {
-                     std::make_pair(&VGetAsyncLatencyHistogram, "GetAsync"),
-                     std::make_pair(&VGetFastLatencyHistogram, "GetFast"),
-                     std::make_pair(&VGetDiscoverLatencyHistogram, "GetDiscover"),
-                     std::make_pair(&VGetLowLatencyHistogram, "GetLow"),
-                     std::make_pair(&VPutTabletLogLatencyHistogram, "PutTabletLog"),
-                     std::make_pair(&VPutUserDataLatencyHistogram, "PutUserData"),
-                     std::make_pair(&VPutAsyncBlobLatencyHistogram, "PutAsyncBlob")}) {
+                    std::make_pair(&VGetAsyncLatencyHistogram,     "GetAsync"    ),
+                    std::make_pair(&VGetFastLatencyHistogram,      "GetFast"     ),
+                    std::make_pair(&VGetDiscoverLatencyHistogram,  "GetDiscover" ),
+                    std::make_pair(&VGetLowLatencyHistogram,       "GetLow" ),
+                    std::make_pair(&VPutTabletLogLatencyHistogram, "PutTabletLog"),
+                    std::make_pair(&VPutUserDataLatencyHistogram,  "PutUserData" ),
+                    std::make_pair(&VPutAsyncBlobLatencyHistogram, "PutAsyncBlob")
+                    }) {
                 *item.first = std::make_shared<NVDiskMon::TLtcHisto>(counters, "handleclass", item.second, type);
             }
         }
 
-        const NVDiskMon::TLtcHistoPtr& THistograms::GetHistogram(NKikimrBlobStorage::EGetHandleClass handleClass) const {
+        const NVDiskMon::TLtcHistoPtr &THistograms::GetHistogram(NKikimrBlobStorage::EGetHandleClass handleClass) const {
             switch (handleClass) {
                 case NKikimrBlobStorage::AsyncRead:
                     return VGetAsyncLatencyHistogram;
@@ -32,7 +33,7 @@ namespace NKikimr {
             }
         }
 
-        const NVDiskMon::TLtcHistoPtr& THistograms::GetHistogram(NKikimrBlobStorage::EPutHandleClass handleClass) const {
+        const NVDiskMon::TLtcHistoPtr &THistograms::GetHistogram(NKikimrBlobStorage::EPutHandleClass handleClass) const {
             switch (handleClass) {
                 case NKikimrBlobStorage::TabletLog:
                     return VPutTabletLogLatencyHistogram;
@@ -56,5 +57,5 @@ namespace NKikimr {
             }
         }
 
-    } // namespace NVDiskMon
-} // namespace NKikimr
+    } // NVDiskMon
+} // NKikimr

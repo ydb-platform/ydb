@@ -24,9 +24,9 @@ namespace NKikimr {
         class TLtcHisto {
         public:
             TLtcHisto(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-                      const TString& name,
-                      const TString& value,
-                      NPDisk::EDeviceType type);
+                    const TString &name,
+                    const TString &value,
+                    NPDisk::EDeviceType type);
 
             // update histogram with with an operation with duration 'd'
             void Collect(TDuration d, ui64 size = 0);
@@ -73,5 +73,5 @@ namespace NKikimr {
             ui64 RequestId = 0;
         };
 
-    } // namespace NVDiskMon
-} // namespace NKikimr
+    } // NVDiskMon
+} // NKikimr

@@ -152,15 +152,13 @@ namespace NKikimr {
             struct TMsgInfo {
                 ui64 MsgId;
                 TInstant ReceivedTime;
-                TInstant SentToSkeletonTime;
                 NVDiskMon::TInFlightLatencyGuard InFlightLatency;
                 std::shared_ptr<TVDiskSkeletonTrace> VDiskSkeletonTrace;
 
-                TMsgInfo(ui64 msgId, TInstant receivedTime, TInstant sentToSkeletonTime,
+                TMsgInfo(ui64 msgId, TInstant receivedTime,
                         NVDiskMon::TInFlightLatencyGuard inFlightLatency, std::shared_ptr<TVDiskSkeletonTrace> &&trace)
                     : MsgId(msgId)
                     , ReceivedTime(receivedTime)
-                    , SentToSkeletonTime(sentToSkeletonTime)
                     , InFlightLatency(std::move(inFlightLatency))
                     , VDiskSkeletonTrace(std::move(trace))
                 {}
@@ -264,8 +262,8 @@ namespace NKikimr {
                     *SkeletonFrontInFlightCost += cost;
                     *SkeletonFrontInFlightBytes += recByteSize;
 
-                    Msgs.emplace(internalMessageId, TMsgInfo(msgId.MsgId, receivedTime, receivedTime,
-                        std::move(inFlightLatency), std::move(trace)));
+                    Msgs.emplace(internalMessageId, TMsgInfo(msgId.MsgId, ctx.Now(), std::move(inFlightLatency),
+                        std::move(trace)));
                     UpdateState();
                 } else {
                     // enqueue
@@ -275,7 +273,8 @@ namespace NKikimr {
                     ++*SkeletonFrontDelayedCount;
                     *SkeletonFrontDelayedBytes += recByteSize;
 
-                    Queue->Push(TRecord(std::move(converted), receivedTime, recByteSize, msgId, cost, deadline, extQueueId,
+                    TInstant now = TAppData::TimeProvider->Now();
+                    Queue->Push(TRecord(std::move(converted), now, recByteSize, msgId, cost, deadline, extQueueId,
                         clientId, Name, std::move(trace), std::move(inFlightLatency)));
                 }
             }
@@ -341,7 +340,7 @@ namespace NKikimr {
                             *SkeletonFrontInFlightBytes += recByteSize;
 
                             const ui64 internalMessageId = rec->InFlightLatency.GetRequestId();
-                            Msgs.emplace(internalMessageId, TMsgInfo(rec->MsgId.MsgId, rec->ReceivedTime, now,
+                            Msgs.emplace(internalMessageId, TMsgInfo(rec->MsgId.MsgId, ctx.Now(),
                                 std::move(rec->InFlightLatency), std::move(rec->Trace)));
                             UpdateState();
                         }
@@ -387,7 +386,7 @@ namespace NKikimr {
                 bool hasError = false;
                 TInstant now = ctx.Now();
                 for (const auto& [internalMessageId, msgInfo] : Msgs) {
-                    TDuration passedTime = now - msgInfo.SentToSkeletonTime;
+                    TDuration passedTime = now - msgInfo.ReceivedTime;
                     if (passedTime > TDuration::Minutes(5)) {
                         hasError = true;
                         STLOG(PRI_ERROR, NKikimrServices::BS_SKELETON, BSVSF04,
@@ -1813,6 +1812,7 @@ namespace NKikimr {
                     << " Marker# BSVSF03");
 
             // switch skeleton state to PDiskError
+            SkeletonFrontGroup->ResetCounters();
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::PDiskError);
             // send poison pill to Skeleton to shutdown it
             ctx.Send(SkeletonId, new TEvents::TEvPoisonPill());
@@ -1829,7 +1829,6 @@ namespace NKikimr {
                     &IntQueueHugePutsForeground, &IntQueueHugePutsBackground}) {
                 (*q)->DropWithError(ctx, *this);
             }
-            SkeletonFrontGroup->ResetCounters();
             // drop external queues
             DisconnectClients(ctx);
         }

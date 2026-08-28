@@ -44,17 +44,19 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "Handle TEvLdapAuthProvider::TEvAuthenticateResponse",
             {"actorName", ActorName},
-            {"selfId", ctx.SelfID},
+            {"actorId", ctx.SelfID},
             {"status", static_cast<ui64>(response.Status)},
-            {"error", response.Error});
+            {"error", response.Error}
+        );
 
         if (response.Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
             ResolveSchemeShard(ctx);
         } else {
-            YDB_LOG_INFO_CTX(ctx, "LDAP authentication",
+            YDB_LOG_INFO_CTX(ctx, "LDAP authentication failed",
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID},
-                {"failed", response.Error});
+                {"actorId", ctx.SelfID},
+                {"error", response.Error}
+            );
             SendError(ConvertLdapStatus(response.Status), response.Error.Message,
                 NLogin::NSasl::EScramServerError::OtherError, response.Error.LogMessage);
             return CleanupAndDie(ctx);

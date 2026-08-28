@@ -41,8 +41,6 @@ void TVmMetadataTokenProviderHandler::StateWork(TAutoPtr<NActors::IEventHandle>&
 
 void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
     NHttp::THttpOutgoingRequestPtr request(ev->Get()->Request);
-    TStringBuilder requestInfo;
-    requestInfo << "host " << request->Host << ", url: " << request->URL;
     TString token;
     TDuration refreshPeriod = Settings.MaxErrorRefreshPeriod;
     TDuration tokenExpiresIn = Max(Settings.MaxErrorRefreshPeriod, Settings.SuccessRefreshPeriod);
@@ -56,11 +54,15 @@ void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomin
                 auto jsonValueMap = jsonValue.GetMap();
                 if (auto it = jsonValueMap.find("access_token"); it == jsonValueMap.end()) {
                     YDB_LOG_ERROR("Result doesn't contain access_token",
-                        {"request", requestInfo});
+                        {"host", request->Host},
+                        {"url", request->URL}
+                    );
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Result doesn't contain access_token"};
                 } else if (token = it->second.GetStringSafe(); token.empty()) {
                     YDB_LOG_ERROR("Got empty token",
-                        {"request", requestInfo});
+                        {"host", request->Host},
+                        {"url", request->URL}
+                    );
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Got empty token"};
                 } else {
                     YDB_LOG_DEBUG("Updating vm metadata token");
@@ -68,7 +70,9 @@ void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomin
                 }
                 if (auto it = jsonValueMap.find("expires_in"); it == jsonValueMap.end()) {
                     YDB_LOG_ERROR("Result doesn't contain expires_in",
-                        {"request", requestInfo});
+                        {"host", request->Host},
+                        {"url", request->URL}
+                    );
                 } else {
                     tokenExpiresIn = TDuration::Seconds(it->second.GetUInteger());
                 }
@@ -77,14 +81,16 @@ void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomin
                 status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Can not read json"};
             }
         } else {
-            YDB_LOG_ERROR("Error refreshing metadata token,",
+            YDB_LOG_ERROR("Error refreshing metadata token",
                 {"status", response->Status},
-                {"error", response->Message});
+                {"error", response->Message}
+            );
             status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = TString(response->Message)};
         }
     } else {
-        YDB_LOG_ERROR("Error refreshing metadata token,",
-            {"error", ev->Get()->Error});
+        YDB_LOG_ERROR("Error refreshing metadata token",
+            {"error", ev->Get()->Error}
+        );
         status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = ev->Get()->Error};
     }
     refreshPeriod = Min(tokenExpiresIn, refreshPeriod);

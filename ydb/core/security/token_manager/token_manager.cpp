@@ -47,7 +47,8 @@ void TTokenManager::BootstrapTokenProviders() {
         };
         for (const auto& vmMetadataInfo : vmMetadataProvider.GetProvidersInfo()) {
             YDB_LOG_TRACE("Initialize token",
-                {"provider", vmMetadataInfo.GetId()});
+                {"provider", vmMetadataInfo.GetId()}
+            );
             TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this->SelfId(),
                                                         VmMetadataProviderSettings,
                                                         httpProxyId,
@@ -71,7 +72,8 @@ void TTokenManager::HandleRefreshCheck() {
         std::shared_ptr<NTokenManager::TTokenProvider> provider = RefreshQueue.top().Provider;
         RefreshQueue.pop();
         YDB_LOG_DEBUG("Refresh token",
-            {"provider", provider->GetId()});
+            {"provider", provider->GetId()}
+        );
         Register(provider->CreateTokenProviderHandler());
     }
     Schedule(RefreshCheckPeriod, new NActors::TEvents::TEvWakeup());
@@ -91,14 +93,16 @@ void TTokenManager::NotifySubscribers(const std::shared_ptr<NTokenManager::TToke
     YDB_LOG_TRACE("Handle NotifySubscribers");
     auto it = Subscribers.find(provider->GetId());
     if (it != Subscribers.end()) {
-        YDB_LOG_DEBUG("Notify",
-            {"subscribers", provider->GetId()});
+        YDB_LOG_DEBUG("Notify subscribers",
+            {"provider", provider->GetId()}
+        );
         for (const auto& subscriber : it->second) {
             Send(subscriber, new TEvTokenManager::TEvUpdateToken(provider->GetId(), provider->GetToken(), provider->GetStatus()));
         }
     } else {
-        YDB_LOG_ERROR("Can not find",
-            {"subscribers", provider->GetId()});
+        YDB_LOG_ERROR("Can not find subscribers",
+            {"provider", provider->GetId()}
+        );
     }
 }
 
@@ -108,13 +112,15 @@ void TTokenManager::Handle(NTokenManager::TEvPrivate::TEvUpdateToken::TPtr& ev) 
     auto it = TokenProviders.find(tokenProviderId);
     if (it != TokenProviders.end()) {
         if (ev->Get()->Status.Code == TEvTokenManager::TStatus::ECode::SUCCESS) {
-            YDB_LOG_DEBUG("Update token",
-                {"provider", tokenProviderId});
+            YDB_LOG_DEBUG("Update token for provider",
+                {"provider", tokenProviderId}
+            );
             it->second->UpdateToken(ev->Get()->Token, ev->Get()->RefreshPeriod);
         } else {
-            YDB_LOG_DEBUG("Can not update token",
+            YDB_LOG_DEBUG("Can not update token for provider",
                 {"provider", tokenProviderId},
-                {"statusMessage", ev->Get()->Status.Message});
+                {"statusMessage", ev->Get()->Status.Message}
+            );
             it->second->SetError(ev->Get()->Status, ev->Get()->RefreshPeriod);
         }
         RefreshQueue.push({.RefreshTime = it->second->GetRefreshTime(), .Provider = it->second});
@@ -126,16 +132,18 @@ void TTokenManager::Handle(NTokenManager::TEvPrivate::TEvUpdateToken::TPtr& ev) 
 
 void TTokenManager::Handle(TEvTokenManager::TEvSubscribeUpdateToken::TPtr& ev) {
     TString id = ev->Get()->Id;
-    YDB_LOG_DEBUG("Handle TEvTokenManager::TEvSubscribeUpdateToken to token",
-        {"provider", id});
+    YDB_LOG_DEBUG("Handle TEvTokenManager::TEvSubscribeUpdateToken to token provider",
+        {"provider", id}
+    );
     auto it = TokenProviders.find(id);
     if (it != TokenProviders.end()) {
         Subscribers[id].insert(ev->Sender);
         Send(ev->Sender, new TEvTokenManager::TEvUpdateToken(id, it->second->GetToken(), it->second->GetStatus()));
     } else {
         const TString errorMessage = "Token provider " + id + " was not found";
-        YDB_LOG_ERROR("Handle",
-            {"errorMessage", errorMessage});
+        YDB_LOG_ERROR("Handle TEvTokenManager::TEvSubscribeUpdateToken: token provider not found",
+            {"provider", id}
+        );
         Send(ev->Sender, new TEvTokenManager::TEvUpdateToken(id, "", {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = errorMessage}));
     }
 }

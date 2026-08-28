@@ -43,12 +43,14 @@ public:
         if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
             response->Error = "Unsupported characters in username";
             YDB_LOG_ERROR_CTX(ctx, "Username check failed",
-                {"hasher", ctx.SelfID},
-                {"reason", response->Error});
+                {"actorId", ctx.SelfID},
+                {"reason", response->Error}
+            );
 
             YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
-                {"hasher", ctx.SelfID},
-                {"error", response->Error});
+                {"actorId", ctx.SelfID},
+                {"error", response->Error}
+            );
 
             Send(Sender, response.release());
             return Die(ctx);
@@ -61,12 +63,14 @@ public:
             response->Error = passwordCheckResult.Error;
 
             YDB_LOG_ERROR_CTX(ctx, "Password check failed",
-                {"hasher", ctx.SelfID},
-                {"reason", response->Error});
+                {"actorId", ctx.SelfID},
+                {"reason", response->Error}
+            );
 
             YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
-                {"hasher", ctx.SelfID},
-                {"error", response->Error});
+                {"actorId", ctx.SelfID},
+                {"error", response->Error}
+            );
 
             Send(Sender, response.release());
             return Die(ctx);
@@ -109,7 +113,8 @@ public:
 
         if (!response->Error.empty()) {
             YDB_LOG_ERROR_CTX(ctx, response->Error,
-                {"hasher", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
 
             hashes = NJson::TJsonValue();
         }
@@ -120,7 +125,7 @@ public:
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
-            {"hasher", ctx.SelfID},
+            {"actorId", ctx.SelfID},
             {"error", response->Error},
             {"username", response->PreparedUsername},
             {"hashes", Base64StrictDecode(response->Hashes)}

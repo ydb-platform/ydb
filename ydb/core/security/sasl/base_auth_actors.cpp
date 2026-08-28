@@ -21,9 +21,10 @@ TAuthActorBase::TAuthActorBase(TActorId sender, const std::string& database, con
 
 void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext &ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-        {"derivedActorName", DerivedActorName},
-        {"selfId", ctx.SelfID},
-        {"errors", ev->Get()->Request.Get()->ErrorCount});
+        {"actorName", DerivedActorName},
+        {"actorId", ctx.SelfID},
+        {"errorCount", ev->Get()->Request.Get()->ErrorCount}
+    );
 
     const auto& resultSet = ev->Get()->Request.Get()->ResultSet;
     if (resultSet.size() == 1 && resultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -37,10 +38,11 @@ void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     }
 
     std::string error = "Unknown database";
-    YDB_LOG_INFO_CTX(ctx, "Authentication",
-        {"derivedActorName", DerivedActorName},
-        {"selfId", ctx.SelfID},
-        {"failed", error});
+    YDB_LOG_INFO_CTX(ctx, "Authentication failed",
+        {"actorName", DerivedActorName},
+        {"actorId", ctx.SelfID},
+        {"error", error}
+    );
     SendError(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, error);
     return CleanupAndDie(ctx);
 }
@@ -48,8 +50,9 @@ void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResu
 void TAuthActorBase::HandleUndelivered(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) {
     std::string error = "SchemeShard is unreachable";
     YDB_LOG_ERROR_CTX(ctx, error,
-        {"derivedActorName", DerivedActorName},
-        {"selfId", ctx.SelfID});
+        {"actorName", DerivedActorName},
+        {"actorId", ctx.SelfID}
+    );
     SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
     return CleanupAndDie(ctx);
 }
@@ -57,8 +60,9 @@ void TAuthActorBase::HandleUndelivered(TEvents::TEvUndelivered::TPtr&, const TAc
 void TAuthActorBase::HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext &ctx) {
     std::string error = "SchemeShard is unreachable";
     YDB_LOG_ERROR_CTX(ctx, error,
-        {"derivedActorName", DerivedActorName},
-        {"selfId", ctx.SelfID});
+        {"actorName", DerivedActorName},
+        {"actorId", ctx.SelfID}
+    );
     SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
     return CleanupAndDie(ctx);
 }
@@ -67,8 +71,9 @@ void TAuthActorBase::HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev, 
     if (ev->Get()->Status != NKikimrProto::OK) {
         std::string error = "SchemeShard is unreachable";
         YDB_LOG_ERROR_CTX(ctx, error,
-            {"derivedActorName", DerivedActorName},
-            {"selfId", ctx.SelfID});
+            {"actorName", DerivedActorName},
+            {"actorId", ctx.SelfID}
+        );
         SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
         return CleanupAndDie(ctx);
     }
@@ -76,28 +81,32 @@ void TAuthActorBase::HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev, 
 
 void TAuthActorBase::HandleLoginResult(TEvSchemeShard::TEvLoginResult::TPtr& ev, const TActorContext &ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Handle TEvSchemeShard::TEvLoginResult",
-        {"derivedActorName", DerivedActorName},
-        {"selfId", ctx.SelfID},
-        {"recordDebugString", ev->Get()->Record.DebugString()});
+        {"actorName", DerivedActorName},
+        {"actorId", ctx.SelfID},
+        {"recordDebugString", ev->Get()->Record.DebugString()}
+    );
 
     const NKikimrScheme::TEvLoginResult& loginResult = ev->Get()->Record;
     if (loginResult.HasError()) { // explicit error takes precedence
-        YDB_LOG_INFO_CTX(ctx, "Authentication",
-            {"derivedActorName", DerivedActorName},
-            {"selfId", ctx.SelfID},
-            {"failed", loginResult.GetError()});
+        YDB_LOG_INFO_CTX(ctx, "Authentication failed",
+            {"actorName", DerivedActorName},
+            {"actorId", ctx.SelfID},
+            {"error", loginResult.GetError()}
+        );
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, loginResult.GetError(), EScramServerError::InvalidProof);
     } else if (!loginResult.HasToken()) { // empty token is still an error
         std::string error = "Failed to produce a token";
         YDB_LOG_ERROR_CTX(ctx, error,
-            {"derivedActorName", DerivedActorName},
-            {"selfId", ctx.SelfID});
+            {"actorName", DerivedActorName},
+            {"actorId", ctx.SelfID}
+        );
         SendError(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, error);
     } else { // success = token + no errors
         YDB_LOG_DEBUG_CTX(ctx, "Authentication completed",
-            {"derivedActorName", DerivedActorName},
-            {"selfId", ctx.SelfID},
-            {"authcId", AuthcId});
+            {"actorName", DerivedActorName},
+            {"actorId", ctx.SelfID},
+            {"user", AuthcId}
+        );
 
         SendIssuedToken(loginResult);
     }
@@ -108,8 +117,9 @@ void TAuthActorBase::HandleLoginResult(TEvSchemeShard::TEvLoginResult::TPtr& ev,
 void TAuthActorBase::HandleTimeout(const TActorContext &ctx) {
     std::string error = "SchemeShard response timeout";
     YDB_LOG_ERROR_CTX(ctx, error,
-        {"derivedActorName", DerivedActorName},
-        {"selfId", ctx.SelfID});
+        {"actorName", DerivedActorName},
+        {"actorId", ctx.SelfID}
+    );
     SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
     return CleanupAndDie(ctx);
 }
@@ -165,8 +175,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
     if (authMsgParts.size() != 3) {
         std::string error = "Wrong SASL PLAIN auth message format";
         YDB_LOG_WARN_CTX(ctx, error,
-            {"derivedActorName", DerivedActorName},
-            {"selfId", ctx.SelfID});
+            {"actorName", DerivedActorName},
+            {"actorId", ctx.SelfID}
+        );
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
         CleanupAndDie(ctx);
         return false;
@@ -182,8 +193,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
         if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authorization identity";
             YDB_LOG_INFO_CTX(ctx, error,
-                {"derivedActorName", DerivedActorName},
-                {"selfId", ctx.SelfID});
+                {"actorName", DerivedActorName},
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             CleanupAndDie(ctx);
             return false;
@@ -195,8 +207,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
     if (AuthcId.empty()) {
         std::string error = "Empty authentication identity";
         YDB_LOG_INFO_CTX(ctx, error,
-            {"derivedActorName", DerivedActorName},
-            {"selfId", ctx.SelfID});
+            {"actorName", DerivedActorName},
+            {"actorId", ctx.SelfID}
+        );
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
         CleanupAndDie(ctx);
         return false;
@@ -206,8 +219,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
         if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authentication identity";
             YDB_LOG_INFO_CTX(ctx, error,
-                {"derivedActorName", DerivedActorName},
-                {"selfId", ctx.SelfID});
+                {"actorName", DerivedActorName},
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             CleanupAndDie(ctx);
             return false;

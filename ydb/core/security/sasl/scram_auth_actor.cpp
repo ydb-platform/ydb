@@ -43,7 +43,8 @@ public:
             std::string error = "Login authentication is disabled";
             YDB_LOG_INFO_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
@@ -54,7 +55,8 @@ public:
             std::string error = "Malformed SASL SCRAM first client message";
             YDB_LOG_WARN_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
 
             EScramServerError serverError;
             switch (parsingRes) {
@@ -77,7 +79,8 @@ public:
             std::string error = "Channel binding isn't supported by server";
             YDB_LOG_WARN_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::ChannelBindingNotSupported);
             return CleanupAndDie(ctx);
         }
@@ -94,7 +97,8 @@ public:
                 std::string error = "Unsupported characters in the authorization identity";
                 YDB_LOG_INFO_CTX(ctx, error,
                     {"actorName", ActorName},
-                    {"selfId", ctx.SelfID});
+                    {"actorId", ctx.SelfID}
+                );
                 SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::InvalidUsernameEncoding);
                 return CleanupAndDie(ctx);
             }
@@ -106,7 +110,8 @@ public:
             std::string error = "Unsupported extensions in SASL SCRAM first client message";
             YDB_LOG_INFO_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::ExtensionsNoSupported);
             return CleanupAndDie(ctx);
         }
@@ -117,7 +122,8 @@ public:
             std::string error = "Unsupported characters in the authentication identity";
             YDB_LOG_INFO_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::InvalidUsernameEncoding);
             return CleanupAndDie(ctx);
         }
@@ -133,7 +139,8 @@ public:
             std::string error = "Malformed SASL SCRAM final client message";
             YDB_LOG_WARN_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
 
             EScramServerError serverError;
             switch (parsingRes) {
@@ -157,7 +164,8 @@ public:
             std::string error = "Client channel bindings don't match";
             YDB_LOG_WARN_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::ChannelBindingsDontMatch);
             return CleanupAndDie(ctx);
         }
@@ -169,7 +177,8 @@ public:
                 std::string error = "Unsupported characters in the authorization identity";
                 YDB_LOG_INFO_CTX(ctx, error,
                     {"actorName", ActorName},
-                    {"selfId", ctx.SelfID});
+                    {"actorId", ctx.SelfID}
+                );
                 SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::InvalidUsernameEncoding);
                 return CleanupAndDie(ctx);
             }
@@ -181,7 +190,8 @@ public:
             std::string error = "Authorization identities don't match";
             YDB_LOG_WARN_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
@@ -190,7 +200,8 @@ public:
             std::string error = "Nonces don't match";
             YDB_LOG_WARN_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
@@ -209,10 +220,11 @@ private:
         if (itUser == domainInfo->Users.end()) {
             std::stringstream error;
             error << "Cannot find user '" << AuthcId << "'";
-            YDB_LOG_INFO_CTX(ctx, "Authentication",
+            YDB_LOG_INFO_CTX(ctx, "Authentication failed: cannot find user",
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID},
-                {"failed", error.str()});
+                {"actorId", ctx.SelfID},
+                {"user", AuthcId}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str(), EScramServerError::UnknownUser);
             return CleanupAndDie(ctx);
         }
@@ -225,7 +237,8 @@ private:
             std::string error = "SchemeShard works on old version and doesn't support SASL SCRAM";
             YDB_LOG_WARN_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             return CleanupAndDie(ctx);
         }
@@ -234,10 +247,11 @@ private:
         if (itHashesInitParams == userHashInitParams.end()) {
             std::stringstream error;
             error << "Missing hash value for specified hash type";
-            YDB_LOG_INFO_CTX(ctx, "Authentication",
+            YDB_LOG_INFO_CTX(ctx, "Authentication failed",
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID},
-                {"failed", error.str()});
+                {"actorId", ctx.SelfID},
+                {"error", error.str()}
+            );
             error << ". Needed password change to use SASL SCRAM";
             SendError(NKikimrIssues::TIssuesIds::WARNING, error.str());
             return CleanupAndDie(ctx);
@@ -245,11 +259,11 @@ private:
 
         const auto scramInitParams = NLogin::ParseScramHashInitParams(itHashesInitParams->second);
         if (scramInitParams.IterationsCount.empty() || scramInitParams.Salt.empty()) {
-            YDB_LOG_ERROR_CTX(ctx, "Authentication failed",
+            YDB_LOG_ERROR_CTX(ctx, "Authentication failed: user has broken Scram hash",
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID},
-                {"authcId", AuthcId},
-                {"failureReason", "' has broken Scram hash"});
+                {"actorId", ctx.SelfID},
+                {"user", AuthcId}
+            );
             SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
             return CleanupAndDie(ctx);
         }

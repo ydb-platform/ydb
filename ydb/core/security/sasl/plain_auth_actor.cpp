@@ -54,7 +54,8 @@ public:
             std::string error = "Login authentication is disabled";
             YDB_LOG_INFO_CTX(ctx, error,
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID});
+                {"actorId", ctx.SelfID}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
@@ -80,10 +81,11 @@ private:
         if (itUser == domainInfo->Users.end()) {
             std::stringstream error;
             error << "Cannot find user '" << AuthcId << "'";
-            YDB_LOG_INFO_CTX(ctx, "Authentication",
+            YDB_LOG_INFO_CTX(ctx, "Authentication failed: cannot find user",
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID},
-                {"failed", error.str()});
+                {"actorId", ctx.SelfID},
+                {"user", AuthcId}
+            );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str());
             return CleanupAndDie(ctx);
         }
@@ -155,11 +157,11 @@ private:
             switch (hashTypeDescr.Class) {
             case EHashClass::Argon: {
                 if (!IsBase64(itHashesInitParams->second)) {
-                    YDB_LOG_ERROR_CTX(ctx, "Authentication failed",
+                    YDB_LOG_ERROR_CTX(ctx, "Authentication failed: user has broken Argon hash",
                         {"actorName", ActorName},
-                        {"selfId", ctx.SelfID},
-                        {"authcId", AuthcId},
-                        {"failureReason", "has broken Argon hash"});
+                        {"actorId", ctx.SelfID},
+                        {"user", AuthcId}
+                    );
                     SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
                     CleanupAndDie(ctx);
                     return false;
@@ -175,7 +177,8 @@ private:
                     std::string error = "Empty password";
                     YDB_LOG_INFO_CTX(ctx, error,
                         {"actorName", ActorName},
-                        {"selfId", ctx.SelfID});
+                        {"actorId", ctx.SelfID}
+                    );
                     SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                     CleanupAndDie(ctx);
                     return false;
@@ -185,11 +188,11 @@ private:
                 ui32 iterationsCount;
                 if (!TryFromString(scramInitParams.IterationsCount, iterationsCount)
                     || (iterationsCount == 0) || !IsBase64(scramInitParams.Salt)) {
-                    YDB_LOG_ERROR_CTX(ctx, "Authentication failed",
+                    YDB_LOG_ERROR_CTX(ctx, "Authentication failed: user has broken Scram hash",
                         {"actorName", ActorName},
-                        {"selfId", ctx.SelfID},
-                        {"authcId", AuthcId},
-                        {"failureReason", "has broken Scram hash"});
+                        {"actorId", ctx.SelfID},
+                        {"user", AuthcId}
+                    );
                     SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
                     CleanupAndDie(ctx);
                     return false;
@@ -203,7 +206,8 @@ private:
                     std::string error = "Unsupported characters in the password";
                     YDB_LOG_INFO_CTX(ctx, error,
                         {"actorName", ActorName},
-                        {"selfId", ctx.SelfID});
+                        {"actorId", ctx.SelfID}
+                    );
                     SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                     CleanupAndDie(ctx);
                     return false;
@@ -218,11 +222,10 @@ private:
         }
 
         if (ChosenAuthHashType == EHashType::Unknown) {
-            YDB_LOG_ERROR_CTX(ctx, "Authentication failed",
+            YDB_LOG_ERROR_CTX(ctx, "Authentication failed: user has no allowed hashes",
                 {"actorName", ActorName},
-                {"selfId", ctx.SelfID},
-                {"authcId", AuthcId},
-                {"failureReason", "has no allowed hashes"}
+                {"actorId", ctx.SelfID},
+                {"user", AuthcId}
             );
             SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
             CleanupAndDie(ctx);

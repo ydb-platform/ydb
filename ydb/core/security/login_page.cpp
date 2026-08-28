@@ -104,7 +104,8 @@ public:
         YDB_LOG_WARN("Web UI login request",
             {"address", Request->Address},
             {"method", Request->Method},
-            {"uri", Request->GetURI()});
+            {"uri", Request->GetURI()}
+        );
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -202,7 +203,8 @@ public:
 
     void ReplyCookieAndPassAway(const TString& cookie) {
         YDB_LOG_DEBUG("Login success",
-            {"user", User});
+            {"user", User}
+        );
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         TDuration maxAge = ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now();
@@ -214,7 +216,8 @@ public:
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
         YDB_LOG_ERROR("Login fail",
             {"user", User},
-            {"error", error});
+            {"error", error}
+        );
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Content-Type", "application/json");
@@ -256,7 +259,8 @@ public:
         YDB_LOG_WARN("Web UI logout request",
             {"address", Request->Address},
             {"method", Request->Method},
-            {"uri", Request->GetURI()});
+            {"uri", Request->GetURI()}
+        );
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -301,7 +305,8 @@ public:
         YDB_LOG_ERROR("Timeout",
             {"address", Request->Address},
             {"method", Request->Method},
-            {"uri", Request->GetURI()});
+            {"uri", Request->GetURI()}
+        );
         ReplyErrorAndPassAway("504", "Gateway Timeout", "Timeout");
     }
 
@@ -337,7 +342,9 @@ public:
     }
 
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
-        YDB_LOG_ERROR(error);
+        YDB_LOG_ERROR("Logout failed",
+            {"error", error}
+        );
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Content-Type", "application/json");

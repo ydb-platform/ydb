@@ -133,12 +133,6 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
             }
         } else {
             auto error = ConvertErrorCode(ev->Get()->Status);
-            // Scheme cache hid topics without DescribeSchema as PathErrorUnknown.
-            // ListOffsets must stay UNKNOWN_TOPIC (not AUTH) so mixed-version /
-            // auto-create still work. OffsetFetch maps unknown→AUTH via HadTopicAclOk.
-            if (error == EKafkaErrors::TOPIC_AUTHORIZATION_FAILED) {
-                error = EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
-            }
             responsePartition.ErrorCode = error;
             ErrorCode = error;
         }

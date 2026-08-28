@@ -210,10 +210,10 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
         WaitUntil([&] {
             return FetchPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
         });
-        // Scheme cache hides topics without DescribeSchema as PathErrorUnknown.
-        // ListOffsets must keep UNKNOWN_TOPIC_OR_PARTITION for missing topics (mixed-version / auto-create).
+        // Apache Kafka ListOffsets: Describe is checked before existence
+        // (KAFKA-5547), so ACL deny is TOPIC_AUTHORIZATION_FAILED, not UNKNOWN.
         WaitUntil([&] {
-            return ListOffsetsPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            return ListOffsetsPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
         });
         WaitUntil([&] {
             return OffsetFetchPartitionError(client, topicName, groupId) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
@@ -361,6 +361,24 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
         UNIT_ASSERT_VALUES_EQUAL(
             ListOffsetsPartitionError(client, "/Root/topic-does-not-exist"),
             static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
+    }
+
+    // Apache Kafka ListOffsets: no Describe → TOPIC_AUTHORIZATION_FAILED (KAFKA-5547).
+    Y_UNIT_TEST(ListOffsetsWithoutDescribeIsAuth) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TString topicName = "/Root/topic-listoffsets-no-describe";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        UNIT_ASSERT_VALUES_EQUAL(
+            ListOffsetsPartitionError(client, topicName),
+            static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
     }
 
     // Matches Apache Kafka OffsetFetch v1+: missing topic → NONE + committedOffset -1,

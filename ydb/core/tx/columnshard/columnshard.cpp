@@ -668,7 +668,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     const auto& record = ev->Get()->Record;
 
     if (MoveDataState.Active) {
-        // Hive retry or re-assignment: merge groups and update sender.
+        // Hive retry or re-assignment.
         MoveDataState.HiveSender = ev->Sender;
         bool newGroupsAdded = false;
         for (const auto groupId : record.GetGroups()) {
@@ -708,8 +708,8 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
     }
-    // Start vacuum in parallel with rewriting (F5). TEvMoveDataResponse is gated on
-    // VacuumCompleted && GetMoveDataPortionsCount()==0 && !HasBlobsForGroups().
+    // Start vacuum in parallel with rewriting (F5). TEvMoveDataResponse is gated by
+    // ClassifyMoveDataGate.
     Executor()->StartMoveDataVacuumFromOwner();
 }
 

@@ -544,7 +544,6 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
-    // State for the Hive-initiated MoveData operation.
     // Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
     struct TMoveDataState {
         TActorId HiveSender;

@@ -4,6 +4,8 @@ PEERDIR(
     library/cpp/streams/bzip2
     ydb/core/base
     ydb/core/blobstorage/base
+    ydb/core/blobstorage/groupinfo
+    ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/hulldb/barriers
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/util
@@ -24,6 +26,8 @@ SRCS(
     query_readactor.h
     query_readbatch.cpp
     query_readbatch.h
+    query_spacereport_scan.cpp
+    query_spacereport_scan.h
     query_spacetracker.h
     query_statalgo.h
     query_stat_yield.h

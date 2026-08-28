@@ -44,6 +44,39 @@ class BackgroundProcess:
         )
 
 
+class ManagedProcess:
+    def __init__(self, command, process, stdout_file, stderr_file, started_at, started_monotonic):
+        self.command = tuple(command)
+        self.process = process
+        self.stdout_file = stdout_file
+        self.stderr_file = stderr_file
+        self.started_at = started_at
+        self.started_monotonic = started_monotonic
+
+    @property
+    def pid(self):
+        return self.process.pid
+
+    def poll(self):
+        return self.process.poll()
+
+    def stop(self, grace_seconds=10.0):
+        try:
+            _stop_process_group(self.process, signal.SIGINT, grace_seconds)
+        finally:
+            self.stdout_file.close()
+            self.stderr_file.close()
+        return CommandResult(
+            command=self.command,
+            stdout="",
+            stderr="",
+            exit_code=self.process.returncode,
+            started_at=self.started_at,
+            finished_at=_utc_now(),
+            duration_seconds=time.monotonic() - self.started_monotonic,
+        )
+
+
 def _utc_now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -121,6 +154,41 @@ def start_background_process(command, ready_timeout=10.0):
     return BackgroundProcess(command, process, started_at, started_monotonic)
 
 
+def start_managed_process(
+    command,
+    stdout_path,
+    stderr_path,
+    cwd=None,
+    cpu_affinity=None,
+    parent_death_wrapper=None,
+):
+    command = tuple(str(part) for part in command)
+    guarded_command = (
+        command if parent_death_wrapper is None else (str(parent_death_wrapper), str(os.getpid())) + command
+    )
+    launch_command = _command_with_affinity(guarded_command, cpu_affinity)
+    stdout_file = open(stdout_path, "w", encoding="utf-8")
+    stderr_file = open(stderr_path, "w", encoding="utf-8")
+    started_at = _utc_now()
+    started_monotonic = time.monotonic()
+    try:
+        process = subprocess.Popen(
+            launch_command,
+            cwd=None if cwd is None else str(cwd),
+            stdout=stdout_file,
+            stderr=stderr_file,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            start_new_session=True,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        stdout_file.close()
+        stderr_file.close()
+        raise BenchmarkError("cannot start managed process {}: {}".format(command[0], error)) from error
+    return ManagedProcess(command, process, stdout_file, stderr_file, started_at, started_monotonic)
+
+
 def run_command(
     command,
     env_overrides,
@@ -130,6 +198,7 @@ def run_command(
     grace_seconds=2.0,
     cpu_affinity=None,
     cancel_event=None,
+    on_process_started=None,
 ):
     command = tuple(str(part) for part in command)
     environment = os.environ.copy()
@@ -164,6 +233,9 @@ def run_command(
         raise BenchmarkError("cannot start {}: {}".format(command[0], error)) from error
     except subprocess.SubprocessError as error:
         raise BenchmarkError("cannot start {} with CPU affinity: {}".format(command[0], error)) from error
+
+    if on_process_started is not None:
+        on_process_started(process)
 
     timed_out = False
     interrupted = False

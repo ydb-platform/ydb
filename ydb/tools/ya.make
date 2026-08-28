@@ -6,6 +6,7 @@ RECURSE(
     mnc
     include_sanitizer
     partcheck
+    tli_analysis
     ydb_bench
     query_replay
     query_replay_yt

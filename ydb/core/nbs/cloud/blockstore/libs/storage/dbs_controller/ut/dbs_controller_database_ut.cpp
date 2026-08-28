@@ -569,6 +569,105 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
                 }
             });
     }
+
+    Y_UNIT_TEST(ShouldReturnAffectedDBGsWithNodeCounts)
+    {
+        TTestExecutor executor;
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TDbsControllerDatabase dbsControllerDb(db);
+                dbsControllerDb.InitSchema();
+                for (const auto& [id, record]: MakeDirectPayload()) {
+                    dbsControllerDb.StoreDirectRecord(id, record);
+                }
+                for (const auto& [id, record]: MakeInversePayload()) {
+                    dbsControllerDb.StoreInverseRecord(id, record);
+                }
+            });
+
+        auto testNodesSubset =
+            [&](const TVector<ui32>& nodes,
+                const THashMap<TDbsControllerDatabase::TDirectKey, ui64>&
+                    expected,
+                const TString& note)
+        {
+            const auto comm = TStringBuilder()
+                              << "nodes = " << nodes << ", note = " << note;
+            executor.ReadTx(
+                [&](NKikimr::NTable::TDatabase& db)
+                {
+                    TDbsControllerDatabase dbsControllerDb(db);
+
+                    THashMap<TDbsControllerDatabase::TDirectKey, ui64> actual;
+
+                    const bool ok =
+                        dbsControllerDb.GetAffectedDBGsWithNodeCounts(
+                            nodes,
+                            actual);
+                    UNIT_ASSERT_C(ok, comm);
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        expected.size(),
+                        actual.size(),
+                        comm);
+                    for (const auto& [key, nodesCount]: expected) {
+                        UNIT_ASSERT_C(
+                            actual.contains(key),
+                            comm << ", key = " << key);
+                        UNIT_ASSERT_VALUES_EQUAL_C(
+                            nodesCount,
+                            actual.at(key),
+                            comm << ", key = " << key);
+                    }
+                });
+        };
+
+        testNodesSubset(
+            {5},
+            {
+                {{0, 1}, 1},
+                {{1, 0}, 1},
+            },
+            "Node with 2 tablets");
+
+        testNodesSubset(
+            {8, 9},
+            {
+                {{1, 1}, 0},
+            },
+            "Fully covered DBG");
+
+        testNodesSubset(
+            {3, 9},
+            {
+                {{0, 0}, 1},
+                {{1, 1}, 1},
+            },
+            "Two half-covered DBG");
+
+        testNodesSubset(
+            {1, 2},
+            {
+                {{0, 0}, 1},
+            },
+            "Two different nodes in one logical node");
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NDbsController
+
+template <>
+inline void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32>& vec)
+{
+    o << "[ ";
+    bool isFirst = true;
+    for (const auto& x: vec) {
+        if (!isFirst) {
+            o << ", ";
+        }
+        isFirst = false;
+        o << x;
+    }
+    o << "]";
+}

@@ -20,7 +20,7 @@ TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResul
             importIndex.emplace(m, i);
         }
 
-        const TString package = import.GetModules(0);
+        const TString& package = import.GetModules(0);
         packageIndex.emplace(package, i);
         functionIndex.emplace(package, TVector<TFunctionInfo>());
     }
@@ -28,7 +28,7 @@ TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResul
     for (auto& udf : resolveResult.GetUdfs()) {
         const TString module = TString(NKikimr::NMiniKQL::ModuleName(TStringBuf(udf.GetName())));
         const auto& import = resolveResult.GetImports(importIndex.at(module));
-        const TString package = import.GetModules(0);
+        const TString& package = import.GetModules(0);
 
         TFunctionInfo newFunction;
         newFunction.Name = udf.GetName();

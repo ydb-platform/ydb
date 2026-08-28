@@ -3892,7 +3892,9 @@ public:
                     writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor->Open(
                         writeCookie,
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT,
-                        {indexSettings.StatsColumns.at(0)},
+                        // key is zero id or prefix, 2 data columns
+                        TVector<NKikimrKqp::TKqpColumnMetadataProto>(indexSettings.StatsColumns.begin(),
+                            indexSettings.StatsColumns.end() - 2),
                         indexSettings.StatsColumns,
                         0,
                         settings.Priority);

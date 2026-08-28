@@ -93,6 +93,8 @@ IOutputStream& operator<<(IOutputStream& out, THostAndNodeId value);
 TString PrintHostIndex(THostIndex hostIndex);
 TString PrintNodeId(ui32 nodeId);
 TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId);
+TString PrintDbgId(ui32 dbgId);
+TString PrintVChunkId(ui32 vChunkId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

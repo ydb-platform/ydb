@@ -5,6 +5,7 @@
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
@@ -41,6 +42,7 @@ using namespace NYql::NNodes;
 namespace NYql::NDq {
 
 namespace {
+
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
 static const bool TESTS_LARGE = getenv("TESTS_LARGE") != nullptr;
 
@@ -199,10 +201,13 @@ private:
     }
 
     void Handle(TEvMockSinkPrivate::TEvAckCommitState::TPtr) {
-        Y_ABORT_UNLESS(DeferredCheckpoint, "sink[%lu] has no deferred commit to acknowledge", OutputIndex);
-        const auto checkpoint = *DeferredCheckpoint;
-        DeferredCheckpoint.Clear();
-        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+        Y_ABORT_UNLESS(!DeferredCheckpoints.empty(), "sink[%lu] has no deferred commit to acknowledge", OutputIndex);
+
+        for (const auto& checkpoint : DeferredCheckpoints) {
+            Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+        }
+
+        DeferredCheckpoints.clear();
     }
 
 private:
@@ -235,8 +240,7 @@ private:
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         if (State->DeferCommit.load()) {
-            Y_ABORT_UNLESS(!DeferredCheckpoint, "sink[%lu] already has a deferred commit", OutputIndex);
-            DeferredCheckpoint = checkpoint;
+            DeferredCheckpoints.push_back(checkpoint);
         } else {
             Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
         }
@@ -255,7 +259,7 @@ private:
     IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
     const TMockSinkState::TPtr State;
     TDqAsyncStats EgressStats;
-    TMaybe<NDqProto::TCheckpoint> DeferredCheckpoint;
+    std::vector<NDqProto::TCheckpoint> DeferredCheckpoints;
 };
 
 struct TCheckpointCommit {
@@ -384,6 +388,8 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         , IsWide(isWide)
         , TransportVersion(transportVersion)
     {
+        NKikimr::EnableYDBBacktraceFormat();
+
         auto keyType = TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv);
         auto tsType = TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv);
         RowType = TStructTypeBuilder(TypeEnv)
@@ -1000,10 +1006,10 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             TStringBuilder() << "compute actor did not acknowledge checkpoint coordinator generation " << generation);
     }
 
-    void SendCommitState(NActors::TActorId syncCA, ui64 checkpointId, ui64 generation) {
+    void SendCommitState(NActors::TActorId syncCA, ui64 checkpointId, ui64 generation, std::optional<ui64> checkpointGeneration = std::nullopt) {
         LOG_D("Sending TEvCommitState " << generation << "." << checkpointId);
         ActorSystem.Send(syncCA, CheckpointCoordinator,
-            new TEvDqCompute::TEvCommitState(checkpointId, generation, generation));
+            new TEvDqCompute::TEvCommitState(checkpointId, checkpointGeneration.value_or(generation), generation));
     }
 
     void ExpectStateCommitted(ui64 checkpointId, ui64 generation) {
@@ -1379,7 +1385,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 };
 
-} //namespace anonymous
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TSyncComputeActorTestFixture) { }
@@ -1529,7 +1535,9 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
         ActorSystem.EnableScheduleForActor(syncCA, true);
         ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
     }
+}
 
+Y_UNIT_TEST_SUITE(TSyncComputeActorCheckpointsTest) {
     Y_UNIT_TEST_F(CheckpointCommitAcknowledgedBySink, TSyncComputeActorTestFixture) {
         LogPrefix = "Checkpoint commit (sync sink): ";
         NDqProto::TDqTask task;
@@ -1617,7 +1625,46 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
         WaitForSinkCommitCalls(2);
         ExpectStateCommitted(CheckpointId + 1, CoordinatorGeneration + 1);
     }
+
+    Y_UNIT_TEST_F(ChangeCheckpointCoordinatorAndStartNewCommit, TSyncComputeActorTestFixture) {
+        LogPrefix = "Change coordinator + commit during stale checkpoint commit (async sink): ";
+        SinkState->DeferCommit.store(true);
+
+        NDqProto::TDqTask task;
+        auto syncCA = StartCAForCheckpointing(task, /* withSink */ true);
+
+        RegisterCheckpointCoordinator(syncCA, CoordinatorGeneration);
+        SendCommitState(syncCA, CheckpointId, CoordinatorGeneration);
+
+        WaitForSinkCommitCalls(1);
+        ExpectNoStateCommitted();
+
+        RegisterCheckpointCoordinator(syncCA, CoordinatorGeneration + 1);
+
+        // Test that state commit under new coordinator (while previous is inflight) works
+        SendCommitState(syncCA, CheckpointId, CoordinatorGeneration + 1);
+        WaitForSinkCommitCalls(2);
+
+        AckDeferredSinkCommits();
+        ExpectStateCommitted(CheckpointId, CoordinatorGeneration + 1);
+    }
+
+    Y_UNIT_TEST_F(StaleCheckpointCommitForAsyncSink, TSyncComputeActorTestFixture) {
+        LogPrefix = "Stale checkpoint commit (async sink): ";
+        SinkState->DeferCommit.store(true);
+
+        NDqProto::TDqTask task;
+        auto syncCA = StartCAForCheckpointing(task, /* withSink */ true);
+
+        RegisterCheckpointCoordinator(syncCA, CoordinatorGeneration);
+        SendCommitState(syncCA, CheckpointId, CoordinatorGeneration, CoordinatorGeneration - 1); // Emulate restoring from pending commit checkpoint
+
+        WaitForSinkCommitCalls(1);
+        ExpectNoStateCommitted();
+
+        AckDeferredSinkCommits();
+        ExpectStateCommitted(CheckpointId, CoordinatorGeneration - 1);
+    }
 }
 
 } //namespace NYql::NDq
-

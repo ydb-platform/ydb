@@ -480,7 +480,7 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
                 case NUdf::TDataType<NUdf::TUtf8>::Id:
                 case NUdf::TDataType<char*>::Id: {
                     YQL_ENSURE(json.IsString(), "Unexpected json type (expected string, but got " << jsonType << ")");
-                    auto value = json.GetString();
+                    const auto& value = json.GetString();
                     return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(value)));
                 }
                 case NUdf::TDataType<NUdf::TDecimal>::Id: {

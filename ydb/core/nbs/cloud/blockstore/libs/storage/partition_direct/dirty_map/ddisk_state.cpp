@@ -17,11 +17,20 @@ void TDDiskState::Init(
     BehindAheadMonitor = behindAheadMonitor;
     TotalBlockCount = totalBlockCount;
     OperationalBlockCount = operationalBlockCount;
+
+    // Mark all blocks over watermark as behind.
+    if (OperationalBlockCount < TotalBlockCount) {
+        BehindField.Add(TBlockRange64::MakeClosedInterval(
+            OperationalBlockCount,
+            TotalBlockCount - 1));
+    }
     UpdateState(true);
+    CheckInvariants();
 }
 
 void TDDiskState::Save(TDDiskStateProto* proto) const
 {
+    CheckInvariants();
     SaveBlockField(AheadField, TotalBlockCount, proto->MutableAhead());
     SaveBlockField(BehindField, TotalBlockCount, proto->MutableBehind());
 }
@@ -29,13 +38,30 @@ void TDDiskState::Save(TDDiskStateProto* proto) const
 void TDDiskState::Load(const TDDiskStateProto& proto)
 {
     LoadBlockField(proto.GetAhead(), &AheadField);
-    LoadBlockField(proto.GetBehind(), &BehindField);
+    BehindField.Remove(AheadField);
+
+    TBlockRangeField loadedBehind;
+    LoadBlockField(proto.GetBehind(), &loadedBehind);
+
+    // A non-empty persisted map is more accurate than the initial map
+    // reconstructed from the watermark. An empty persisted map may belong to
+    // an older state that did not store the initial fresh range, so keep the
+    // map prepared by Init in that case.
+    if (!loadedBehind.Empty()) {
+        BehindField.Clear();
+        BehindField.Add(loadedBehind);
+    }
+
+    CheckInvariants();
 }
 
 void TDDiskState::SwitchOffline()
 {
     State = EState::Disabled;
     OperationalBlockCount = 0;
+    AheadField.Clear();
+    BehindField.Clear();
+    CheckInvariants();
 }
 
 bool TDDiskState::IsLagging() const
@@ -153,6 +179,7 @@ void TDDiskState::RangeSynced(TBlockRange64 range)
         OperationalBlockCount = newWatermark;
     }
     UpdateState(false);
+    CheckInvariants();
 }
 
 TCountAndSize TDDiskState::GetAheadSegmentsStat() const
@@ -175,6 +202,11 @@ void TDDiskState::UpdateWatermarkDebugOnly(ui64 blockCount)
 
     OperationalBlockCount = blockCount;
     UpdateState(false);
+}
+
+void TDDiskState::CheckInvariants() const
+{
+    Y_DEBUG_ABORT_UNLESS(!BehindField.Overlaps(AheadField));
 }
 
 TString TDDiskState::DebugPrint() const
@@ -239,14 +271,17 @@ void TDDiskState::AddAhead(TBlockRange64 range)
     if (OperationalBlockCount) {
         AheadField.Remove(TBlockRange64::WithLength(0, OperationalBlockCount));
     }
+    CheckInvariants();
 }
 
 void TDDiskState::AddBehind(TBlockRange64 range)
 {
+    const bool aheadChanged = AheadField.Remove(range);
     const bool behindChanged = BehindField.Add(range);
-    if (behindChanged) {
+    if (aheadChanged || behindChanged) {
         BehindAheadMonitor->OnBehindAheadChanged();
     }
+    CheckInvariants();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

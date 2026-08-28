@@ -15,8 +15,8 @@ void TDSAccessorBase::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& /*qRe
 }
 
 void TDSAccessorBase::OnConstructSnapshotError(const TString& errorMessage) {
-    YDB_LOG_ERROR("Cannot construct",
-        {"snapshot", errorMessage});
+    YDB_LOG_ERROR("Cannot construct snapshot",
+        {"error", errorMessage});
 }
 
 void TDSAccessorBase::Handle(NRequest::TEvRequestFailed::TPtr& ev) {
@@ -58,7 +58,7 @@ void TDSAccessorBase::Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequ
 
     Y_ABORT_UNLESS((int)replyIdx == qResult.result_sets().size());
     Y_ABORT_UNLESS((size_t)qResultFull.result_sets().size() == SnapshotConstructor->GetManagers().size());
-    
+
     auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(qResultFull, RequestedActuality);
 
     if (!parsedSnapshot) {

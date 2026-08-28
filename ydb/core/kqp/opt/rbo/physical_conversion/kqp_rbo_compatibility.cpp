@@ -20,6 +20,75 @@ TExprNode::TPtr TupleItem(const TExprNode::TPtr& tuple, size_t index, TExprConte
         {tuple, ctx.NewAtom(tuple->Pos(), ToString(index), TNodeFlags::Default)});
 }
 
+bool CanExpandTupleComparison(const TExprNode::TPtr& node) {
+    const auto leftType = node->Head().GetTypeAnn();
+    const auto rightType = node->Tail().GetTypeAnn();
+    if (!leftType || !rightType ||
+        leftType->GetKind() != ETypeAnnotationKind::Tuple ||
+        rightType->GetKind() != ETypeAnnotationKind::Tuple) {
+        return false;
+    }
+
+    const auto leftItems = leftType->Cast<TTupleExprType>()->GetItems();
+    const auto rightItems = rightType->Cast<TTupleExprType>()->GetItems();
+    if (leftItems.size() != rightItems.size()) {
+        return false;
+    }
+    for (size_t index = 0; index < leftItems.size(); ++index) {
+        if (!IsSqlScalar(leftItems[index]) || !IsSqlScalar(rightItems[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TExprNode::TPtr BuildTupleItemComparison(
+    const TExprNode::TPtr& node,
+    size_t index,
+    TStringBuf callable,
+    TExprContext& ctx) {
+    return ctx.NewCallable(
+        node->Pos(), callable,
+        {TupleItem(node->HeadPtr(), index, ctx), TupleItem(node->TailPtr(), index, ctx)});
+}
+
+TExprNode::TPtr ExpandTupleComparison(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!CanExpandTupleComparison(node)) {
+        return node;
+    }
+
+    const size_t size = node->Head().GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
+    const auto callable = node->Content();
+    if (!size) {
+        return MakeBool(node->Pos(), callable == "==" || callable == "<=" || callable == ">=", ctx);
+    }
+
+    if (callable == "==" || callable == "!=") {
+        TExprNode::TListType items;
+        items.reserve(size);
+        for (size_t index = 0; index < size; ++index) {
+            items.push_back(BuildTupleItemComparison(node, index, callable, ctx));
+        }
+        return ctx.NewCallable(node->Pos(), callable == "==" ? "And" : "Or", std::move(items));
+    }
+
+    const TStringBuf strictCallable = callable.StartsWith('<') ? "<" : ">";
+    auto result = BuildTupleItemComparison(node, size - 1, callable, ctx);
+    for (size_t index = size - 1; index-- > 0;) {
+        result = ctx.Builder(node->Pos())
+            .Callable("If")
+                .Callable(0, "Coalesce")
+                    .Add(0, BuildTupleItemComparison(node, index, "==", ctx))
+                    .Add(1, MakeBool(node->Pos(), false, ctx))
+                .Seal()
+                .Add(1, std::move(result))
+                .Add(2, BuildTupleItemComparison(node, index, strictCallable, ctx))
+            .Seal()
+            .Build();
+    }
+    return result;
+}
+
 bool CanExpandFiniteSqlIn(const TExprNode::TPtr& node) {
     if (HasSetting(*node->Child(2), "tableSource")) {
         return false;
@@ -91,6 +160,12 @@ bool IsSupportedHasNullType(const TTypeAnnotationNode* type) {
                     type->GetKind() == ETypeAnnotationKind::Null);
 }
 
+bool IsComplexComparison(const TExprNode::TPtr& node) {
+    return node->IsCallable({"==", ">", "<", ">=", "<=", "!="}) &&
+        (!IsDataOrOptionalOfData(node->Head().GetTypeAnn()) ||
+         !IsDataOrOptionalOfData(node->Tail().GetTypeAnn()));
+}
+
 TExprNode::TPtr ExpandScalarHasNull(
     const TExprNode::TPtr& node,
     TExprContext& ctx,
@@ -132,7 +207,7 @@ TExprNode::TPtr ExpandScalarHasNull(
 
 TExprNode::TPtr FindCompatibilityNode(const TExprNode::TPtr& root) {
     return FindNode(root, [](const TExprNode::TPtr& node) {
-        return node->IsCallable({"StrictCast", "HasNull", "SqlIn"});
+        return node->IsCallable({"StrictCast", "HasNull", "SqlIn"}) || IsComplexComparison(node);
     });
 }
 
@@ -154,6 +229,15 @@ NYql::TExprNode::TPtr RewriteRboCompatibilityNode(
     }
     if (node->IsCallable("SqlIn")) {
         return ExpandFiniteSqlIn(node, ctx);
+    }
+    if (IsComplexComparison(node)) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null ||
+            node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+            auto result = KeepWorld(MakeBoolNothing(node->Pos(), ctx), *node, ctx, types);
+            result = KeepSideEffects(std::move(result), node->TailPtr(), ctx);
+            return KeepSideEffects(std::move(result), node->HeadPtr(), ctx);
+        }
+        return ExpandTupleComparison(node, ctx);
     }
     return node;
 }

@@ -120,4 +120,32 @@ Y_UNIT_TEST(GetServicePoolsWith4AndMoreCPUs) {
     }
 }
 
+Y_UNIT_TEST(SharedAndUnitedAutoConfigMatrix) {
+    for (ui32 cpuCount = 1; cpuCount <= 4; ++cpuCount) {
+        for (const bool useSharedThreads : {false, true}) {
+            for (const bool useUnitedPool : {false, true}) {
+                NKikimrConfig::TActorSystemConfig config;
+                config.SetCpuCount(cpuCount);
+                config.SetUseSharedThreads(useSharedThreads);
+                config.SetUseUnitedPool(useUnitedPool);
+
+                ApplyAutoConfig(&config, false, false);
+
+                bool hasBasicPool = false;
+                for (const auto& executor : config.GetExecutor()) {
+                    if (executor.GetType() != NKikimrConfig::TActorSystemConfig::TExecutor::BASIC) {
+                        continue;
+                    }
+                    hasBasicPool = true;
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        executor.GetAllThreadsAreShared(), useUnitedPool,
+                        "cpu# " << cpuCount << " shared# " << useSharedThreads
+                        << " united# " << useUnitedPool << " pool# " << executor.GetName());
+                }
+                UNIT_ASSERT_C(hasBasicPool, "cpu# " << cpuCount << " produced no BASIC pools");
+            }
+        }
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(AutoConfig)

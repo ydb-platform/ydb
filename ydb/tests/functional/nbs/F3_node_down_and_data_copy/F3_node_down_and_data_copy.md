@@ -9,6 +9,14 @@ Depends on harness prerequisites in [README.md](../README.md) §6:
 * `nbs_config` override, or TemporaryOffline is unobservable
 * `use_in_memory_pdisks=False` for any "host returns with its data" case
 
+Every executing F3 case is `known_bug` (NOTRUN). Stopping a Primary DDisk
+host and driving IO so `Think` can demote it segfaults the NBS slot
+(`exit_code=-11`) while `direct_block_group_impl` applies
+`Online -> TemporaryOffline` / `vchunk.cpp` ApplyConfig. The partition
+tablet and its vhost endpoint disappear; later cases then time out on
+`wait_host_offline` or fail `write_pattern` with `ConnectionRefused` /
+`ConnectionReset`. Re-enable the markers when that crash is fixed.
+
 ---
 
 ## 1. Transition rules (assert these, do not re-derive them)
@@ -81,7 +89,7 @@ specifically aimed at TemporaryOffline.
 | F3.2 | TemporaryOffline recovery | F3.1, then `SIGCONT` / `node.start()` (needs on-disk PDisks if the process was stopped) | errors clear on success; next `Think` returns the host to `Online`; Behind ranges catch up or stay lagging without promotion |
 | F3.3 | Offline promotes a HandOff | Default thresholds, or shorten Offline duration. Keep a primary down past Offline | an enabled HandOff becomes Primary DDisk with **watermark 0**; copier appears (F3.6) |
 | F3.4 | Offline requests AddHost | Same as F3.3 | `QueryAddHost` repeats until a host is appended; new host is HandOff / None when 3 DDisks (including the disabled one) already exist |
-| F3.5 | `OnDDiskBroken` | F2.6 (`pdisk set --status BROKEN`) | host is `Broken` / `Offline`; later `Think` does not bring it back; AddHost requested |
+| F3.5 | `OnDDiskBroken` | no functional fault exists: CMS `pdisk set --status BROKEN` is metadata only and never yields `TReplyStatus::BROKEN` / `IsDeviceBrokenError` | covered by `oracle_ut` `OnDDiskBrokenForcesHostOfflineAndRequestsReplacement` / `ThinkNeverBringsBrokenHostBackOnline`. The pytest case stays `known_bug` until a DDisk error hook exists |
 
 ---
 
@@ -120,8 +128,8 @@ a ticket rather than weakening the test.
 
 | # | Fact | Case |
 | --- | --- | --- |
-| F3.15 | `OperationalBlockCount` is RAM-only. Dirty-map persist saves Ahead/Behind only. Config watermark stays 0 until `OnCopyComplete` | Kill the tablet mid-copy. After recovery the watermark is still 0, so the whole vchunk is Fresh again. Incremental progress is lost. Assert this **documented** behaviour, or assert resume if the code is fixed |
-| F3.16 | `DoStart` does not start copiers. They start only on the next `ApplyConfig` | After F3.15, copy does not resume until another host-state change. Assert: either a follow-up `ApplyConfig` (e.g. a no-op host-count catch-up) restarts the copier, or the copy is stuck — and if stuck, that is a bug |
+| F3.15 | Incremental watermark persist (NBS-7656). `OnCopyProgress` writes the operational prefix every 8 MiB | Kill the tablet after a promoted host is Fresh / has a rising watermark, or after the 32 MiB vchunk already finished. After recovery the promoted host's watermark is unchanged or further ahead, never rewound. Track only the promoted host |
+| F3.16 | `DoStart` does not start copiers. They start only on the next `ApplyConfig` | After F3.15, several Think ticks must not advance the promoted host's watermark or `operational_block_count`. If the copy is already complete, it stays complete |
 | F3.17 | `FilterLocations` falls back to `DesiredDDisks` including disabled when the enabled mask is empty | Construct a range whose only replica is the disabled host. The read must not return stale or torn data. If it reads the disabled replica, that must be explicit and safe |
 | F3.18 | `AheadField` is not readable, but `GetFreshRange` still copies those offsets | A user write flushed to the fresh DDisk above the watermark is Ahead; the copier may rewrite it. Assert no user-visible mismatch |
 
@@ -132,14 +140,15 @@ a ticket rather than weakening the test.
 | Item | Status |
 | --- | --- |
 | Move a vchunk to another DBG | absent |
-| Offline → `EvacuateHost` + demote + rebalance | `EvacuateHost` / `DemoteHost` are **unit-test only**. Offline leaves the failed host in `GetDDisks()` as a disabled primary |
+| Offline → `EvacuateHost` + demote + rebalance | `EvacuateHost` is still unit-test only. `DemoteUnavailableHostsIfNeeded` **does** run after every config persist: once healthy DDisks are back to quorum, the disabled replica is demoted to DDisk None (F3.19) |
 | RFC 001 per-block handoff chunks, drop handoff after sync | RFC only |
-| Incremental watermark persist / copier auto-resume | absent (F3.15) |
+| Incremental watermark persist | present since NBS-7656 (F3.15 asserts it survives tablet kill) |
+| Copier auto-resume on `DoStart` | absent (F3.16) |
 | Hedge to TemporaryOffline | comment only |
 
 "Permanently down" in this plan therefore means: disable + maybe promote
-an existing HandOff + copy from watermark 0 + append a spare as HandOff.
-It is not a true replacement of the failed replica.
+an existing HandOff + copy from watermark 0 + append a spare as HandOff,
+then demote the disabled replica once a healthy quorum is back.
 
 F3.19 is a documentation case: after Offline + AddHost, count DDisks and
 roles on the mon page and assert they match the paragraph above.

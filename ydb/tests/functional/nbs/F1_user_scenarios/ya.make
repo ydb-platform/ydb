@@ -2,6 +2,9 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/nbs/suite.inc)
 
+# F1.13 (six block sizes) plus a max-size 4 KiB disk exceed the shared 600s chunk.
+TIMEOUT(1800)
+
 TEST_SRCS(
     conftest.py
     F1_07_delete_during_io.py

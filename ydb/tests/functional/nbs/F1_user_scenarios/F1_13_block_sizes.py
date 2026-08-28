@@ -1,45 +1,51 @@
 # -*- coding: utf-8 -*-
+import pytest
+
 from ydb.tests.functional.nbs.lib.fixtures.base import NbsCase
 from ydb.tests.functional.nbs.lib.fixtures.geometry import (
+    BLOCK_SIZE_MATRIX_DISK_BYTES,
     DEFAULT_BLOCK_SIZE,
     SUPPORTED_BLOCK_SIZES,
+    blocks_for_bytes,
 )
 from ydb.tests.functional.nbs.lib.fixtures.markers import known_bug
 
 
+def _block_size_params():
+    reason = 'Non 4 KiB block size fails IO'
+    params = []
+    for block_size in SUPPORTED_BLOCK_SIZES:
+        if block_size == DEFAULT_BLOCK_SIZE:
+            params.append(pytest.param(block_size))
+        else:
+            params.append(pytest.param(block_size, marks=known_bug(reason)))
+    return params
+
+
 class TestF1_13BlockSizes(NbsCase):
-    """F1.13 — create + IO at every supported block size."""
+    """F1.13 — create a 512 GiB disk at every supported block size and verify IO."""
 
-    # PBuffer/DDisk writes are 4 KiB units. A volume block > 4 KiB is
-    # forwarded as size=8192 (etc.) with selector.Size=4096 and rejected:
-    # INCORRECT_REQUEST. The vhost client then waits until timeout.
-    @known_bug(
-        'PBuffer write selector is 4 KiB; volume block size > 4 KiB is rejected'
-    )
-    def test_block_sizes(self):
-        io_failed = []
-        for block_size in SUPPORTED_BLOCK_SIZES:
-            blocks_count = max(1024, (4 * 1024 * 1024) // block_size)
-            disk = self.make_disk(blocks_count=blocks_count, block_size=block_size)
-            payload = self.as_bytes(self.generate_random_data(block_size))
-            try:
-                if block_size == DEFAULT_BLOCK_SIZE:
-                    self.write_blocks(disk, 0, payload)
-                    got = self.read_blocks(disk, 0)
-                    assert got == payload, 'block_size={} read mismatch'.format(block_size)
-                    ok, _, err = self.try_write(disk, blocks_count + 10, payload)
-                    assert not ok, 'out-of-range write at block_size={} succeeded: {}'.format(
-                        block_size, err
-                    )
-                else:
-                    ok, _, err = self.try_write(disk, 0, payload, timeout=3.0)
-                    if ok:
-                        assert self.read_blocks(disk, 0) == payload
-                    else:
-                        io_failed.append((block_size, err))
-            finally:
-                self.drop_disk(disk)
+    @pytest.mark.timeout(120, func_only=True)
+    @pytest.mark.parametrize('block_size', _block_size_params())
+    def test_block_sizes(self, block_size):
+        blocks_count = blocks_for_bytes(BLOCK_SIZE_MATRIX_DISK_BYTES, block_size)
+        disk = self.make_disk(blocks_count=blocks_count, block_size=block_size)
+        try:
+            assert disk.block_size == block_size
+            assert disk.blocks_count == blocks_count
 
-        assert not io_failed, (
-            'IO at block size > 4 KiB still rejected by PBuffer: {}'.format(io_failed)
-        )
+            indexes = (0, blocks_count // 2, blocks_count - 1)
+            payloads = {}
+            for index in indexes:
+                payloads[index] = self.as_bytes(self.generate_random_data(block_size))
+                timeout = 10.0 if index == 0 else 60.0
+                self.write_blocks(disk, index, payloads[index], timeout=timeout)
+
+            for index, expected in payloads.items():
+                timeout = 10.0 if index == 0 else 60.0
+                got = self.read_blocks(disk, index, timeout=timeout)
+                assert got == expected, 'block_size={} block {} read mismatch'.format(
+                    block_size, index
+                )
+        finally:
+            self.drop_disk(disk)

@@ -17,6 +17,6 @@ class TestF2_01TabletKillUnderLoad(NbsCase):
 
         self.faults.tablet_kill(disk.tablet_id)
         io.stop_and_join()
-        self.wait_io_ok(disk, timeout_seconds=90)
+        self.wait_io_ok(disk, timeout_seconds=8)
         self.assert_pattern(disk, payloads)
         self.write_and_verify(disk, 8, 4)

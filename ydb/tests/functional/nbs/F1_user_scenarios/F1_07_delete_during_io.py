@@ -25,4 +25,4 @@ class TestF1_07DeleteDuringIo(NbsCase):
             html = self.fetch_partition_dbg_page(disk.tablet_id, allow_missing=True)
             return html == '' or not self.parse_dbg_indexes(html)
 
-        self.wait_until(tablet_dbg_cleared, timeout_seconds=90, description='tablet DBG mon cleared')
+        self.wait_until(tablet_dbg_cleared, timeout_seconds=30, description='tablet DBG mon cleared')

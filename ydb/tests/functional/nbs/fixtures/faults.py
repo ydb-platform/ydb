@@ -10,6 +10,7 @@ import logging
 import signal
 
 from ydb.tests.library.common.msgbus_types import EDriveStatus
+from ydb.tests.library.harness.daemon import DaemonError
 from ydb.tests.functional.nbs.lib.helpers import execute_dstool_grpc
 
 logger = logging.getLogger(__name__)
@@ -44,14 +45,17 @@ class FaultScope:
     def tablet_kill(self, tablet_id):
         """Kill the partition tablet. Hive restarts it; no undo needed.
 
-        ``RestartTablet`` can time out after vhost or a stuck partition; the
-        kill is still delivered, so a deadline is treated as success.
+        A second kill while the tablet is already dying can return
+        UNAVAILABLE; the first poison is what Hive acts on.
         """
         logger.info('tablet_kill %s', tablet_id)
-        try:
-            self._cluster.client.tablet_kill(int(tablet_id))
-        except Exception as e:
-            logger.warning('tablet_kill %s raised %s; assuming kill was delivered', tablet_id, e)
+        result = self._cluster.client.tablet_kill(int(tablet_id))
+        logger.info(
+            'tablet_kill %s status=%s issues=%s',
+            tablet_id,
+            getattr(result, 'status', None),
+            getattr(result, 'issues', None),
+        )
 
     def stop_node(self, node_id):
         """Stop a static storage node. Undo restarts it."""
@@ -78,10 +82,18 @@ class FaultScope:
         self._drop_undo_containing('SIGCONT node {}'.format(node_id))
 
     def stop_slot(self, slot=None):
-        """Stop the NBS dynamic slot. Undo restarts it."""
+        """Stop the NBS dynamic slot. Undo restarts it.
+
+        A SIGTERM during vhost IO can SIGSEGV the slot. The process is
+        still gone, which is the fault, so a bad exit code is logged and
+        ignored the same way ``recycle_nbs_slot`` swallows ``stop()``.
+        """
         slot = slot or self._first_slot()
         logger.info('stop slot %s', slot.node_id)
-        slot.stop()
+        try:
+            slot.stop()
+        except DaemonError as e:
+            logger.warning('stop slot %s raised %s; treating as stopped', slot.node_id, e)
         self.push_undo(lambda: self._safe_start_slot(slot), 'start slot {}'.format(slot.node_id))
         return slot
 
@@ -89,6 +101,7 @@ class FaultScope:
         """Start the NBS dynamic slot and drop the matching undo."""
         slot = slot or self._first_slot()
         self._safe_start_slot(slot)
+        self._nbs_cluster.wait_tenant_ready(timeout_seconds=20)
         self._drop_undo_containing('start slot {}'.format(slot.node_id))
 
     def set_pdisk_broken(self, node_id, pdisk_id=None, path=None):
@@ -113,6 +126,7 @@ class FaultScope:
             self._cluster,
             'token',
             ['pdisk', 'stop', '--node-id={}'.format(node_id), '--pdisk-id={}'.format(pdisk_id)],
+            check_exit_code=False,
         )
         self.push_undo(
             lambda: self._pdisk_restart(node_id, pdisk_id),
@@ -134,11 +148,13 @@ class FaultScope:
         if not node.is_alive():
             logger.info('start node %s', node_id)
             node.start()
+            self._nbs_cluster.mark_restarted()
 
     def _safe_start_slot(self, slot):
         if not slot.is_alive():
             logger.info('start slot %s', slot.node_id)
             slot.start()
+            self._nbs_cluster.mark_restarted()
 
     def _safe_cont(self, node_id):
         node = self._cluster.nodes[node_id]

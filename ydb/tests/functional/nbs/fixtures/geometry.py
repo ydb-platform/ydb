@@ -26,6 +26,16 @@ def max_disk_bytes(block_size):
     return MAX_BLOCKS_PER_DISK * block_size
 
 
+# Disk size used by the block-size matrix: large enough to span many
+# regions at every block size, small enough for the 9-node pool.
+BLOCK_SIZE_MATRIX_DISK_BYTES = 512 * 1024 * 1024 * 1024
+
+
+def blocks_for_bytes(size_bytes, block_size):
+    """Block count of a ``size_bytes`` disk at ``block_size``."""
+    return size_bytes // block_size
+
+
 # Stripe size (TStorageServiceConfig.StripeSize).
 STRIPE_SIZE = 512 * 1024
 

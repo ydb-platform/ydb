@@ -18,6 +18,7 @@ PY_SRCS(
     fixtures/geometry.py
     fixtures/markers.py
     fixtures/mon.py
+    fixtures/pytest_timeout_conf.py
 )
 
 END()

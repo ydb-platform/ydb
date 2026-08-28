@@ -10,11 +10,13 @@ PY_SRCS (
     vhost_user_blk_client.py
 )
 TEST_SRCS(
+    conftest.py
     test_nbs.py
     test_nbs_load_actor.py
 )
 
 SIZE(MEDIUM)
+TIMEOUT(600)
 REQUIREMENTS(cpu:4)
 
 REQUIREMENTS(ram:16)
@@ -24,9 +26,12 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/pytest-timeout
     ydb/tests/library
     ydb/tests/library/test_meta
 )
+
+ENV(PYTEST_TIMEOUT=60)
 
 END()
 

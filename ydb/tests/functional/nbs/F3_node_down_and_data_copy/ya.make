@@ -2,6 +2,10 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/nbs/suite.inc)
 
+# Host-loss cases plus tablet-kill cases run longer than the shared 600s
+# chunk when the machine is also running F1/F2.
+TIMEOUT(900)
+
 TEST_SRCS(
     conftest.py
     F3_03_offline_promotes_handoff.py

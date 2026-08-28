@@ -48,7 +48,7 @@ tighten later.
 
 | # | Case | Fault | Assertion |
 | --- | --- | --- | --- |
-| F2.6 | PDisk `BROKEN` | `dstool pdisk set --status BROKEN` (or `update_drive_status`) on a PDisk backing a DBG DDisk | `OnDDiskBroken` path: host goes `Broken` / `Offline` and stays there (F3.5); write-and-verify continues on the remaining quorum; seed still matches |
+| F2.6 | PDisk `BROKEN` | `dstool pdisk set --status BROKEN` (or `update_drive_status`) on the isolated SSD PDisk backing a DBG DDisk | CMS status is metadata only and does not fail DDisk IO, so `OnDDiskBroken` never runs (see F3.5). Assert write-and-verify still succeeds and the seed matches |
 | F2.7 | PDisk restart after `stop` | `dstool pdisk stop` then `restart` (or ACTIVE) | sessions reconnect; seed re-read matches; a new write-and-verify succeeds |
 
 In-memory PDisks make F2.7 "return with data" meaningless — the content

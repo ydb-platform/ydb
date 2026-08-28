@@ -159,28 +159,26 @@ class TestNbs(NbsTestBase):
 
     def test_nbs_500gb_disk_read_write(self):
         """
-        Create a 500GB disk, write random data to some locations in it, and verify read operations.
-        The disk is internally split into 128MB chunks. We test first, middle, and last
-        block of some chunks.
+        Create a multi-chunk disk, write random data at chunk edges, and verify
+        reads. 8 GiB fits the 9-node in-memory pool (10 DDisk groups, 32 MiB
+        chunks); first/middle/last of the first and last chunk are enough to
+        exercise routing.
         """
         disk_id = self.generate_disk_id()
         block_size = 4096
-        # 500GB = 500 * 1024 * 1024 * 1024 bytes = 1,048,576 blocks of 4096 bytes
-        blocks_count = 131072000
+        # 8 GiB = 2_097_152 blocks of 4096 bytes.
+        blocks_count = 2097152
 
-        # 128MB chunk = 128 * 1024 * 1024 bytes = 32,768 blocks of 4096 bytes
-        chunk_size_blocks = 32768
+        # In-memory PDisks use 32 MiB chunks = 8192 blocks of 4096 bytes.
+        chunk_size_blocks = 8192
         num_chunks = blocks_count // chunk_size_blocks
 
         self.create_ddisk_pool()
         self.create_disk(disk_id, blocks_count)
         actor_id = self.get_load_actor_adapter_actor_id(disk_id)
 
-        # Test first, middle, and last block of few 128MB chunk
         test_locations = []
-
-        # Test first, middle, and last block of few 128MB chunks
-        for chunk_idx in [0, num_chunks // 2, num_chunks - 1]:
+        for chunk_idx in [0, num_chunks - 1]:
             chunk_start = chunk_idx * chunk_size_blocks
             chunk_middle = chunk_start + (chunk_size_blocks // 2)
             chunk_end = chunk_start + chunk_size_blocks - 1

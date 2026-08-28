@@ -9,6 +9,6 @@ class TestF2_10KillMidErase(NbsCase):
         disk = self.make_disk()
         payloads = self.write_and_verify(disk, 0, 128)
         self.faults.tablet_kill(disk.tablet_id)
-        self.wait_io_ok(disk, timeout_seconds=90)
+        self.wait_io_ok(disk, timeout_seconds=8)
         self.assert_pattern(disk, payloads)
         self.write_and_verify(disk, 128, 4)

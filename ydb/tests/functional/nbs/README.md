@@ -53,8 +53,14 @@ From `ydb_main`, no `-j`, no force rebuild:
 `PEERDIR(ydb/tests/library)`. No `FORK_SUBTESTS`, no `SPLIT_FACTOR`.
 
 As the suite grows, add `FORK_SUBTESTS()` and `SPLIT_FACTOR` so cases do not
-share a process after a killed node. Mark 500 GiB and multi-fault cases
-`SIZE(LARGE)`.
+share a process after a killed node. F1–F5 use `SIZE(LARGE)` with
+`TIMEOUT(600)` as the chunk budget. Fail-fast is the per-call 60s
+dstool/ydbd/vhost timeout plus `PYTEST_TIMEOUT=60` (test function only);
+a hung case fails in a minute, not the whole chunk.
+
+A host-loss case must drive IO while waiting for Offline: `TOracle::Think`
+demotes a host from consecutive request failures, and `OnDDiskDisconnected`
+is a no-op. Use `wait_host_offline`.
 
 ---
 

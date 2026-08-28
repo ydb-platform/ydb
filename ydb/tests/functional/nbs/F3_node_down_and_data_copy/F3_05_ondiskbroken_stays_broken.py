@@ -1,31 +1,51 @@
 # -*- coding: utf-8 -*-
 from ydb.tests.functional.nbs.lib.fixtures.base import NbsCase
+from ydb.tests.functional.nbs.lib.fixtures.markers import known_bug
 
 
 class TestF3_05OndiskbrokenStaysBroken(NbsCase):
-    """F3.5 — OnDDiskBroken sets Broken/Offline and Think does not un-break it."""
+    """F3.5 — OnDDiskBroken sets Broken/Offline and Think does not un-break it.
 
+    The oracle unit test
+    ``OnDDiskBrokenForcesHostOfflineAndRequestsReplacement`` /
+    ``ThinkNeverBringsBrokenHostBackOnline`` covers the state machine.
+    This case stays non-executing: ``dstool pdisk set --status BROKEN``
+    only writes BSC metadata. Nothing produces ``TReplyStatus::BROKEN``
+    / ``IsDeviceBrokenError``, so ``TOracle::OnDDiskBroken`` never runs.
+    """
+
+    @known_bug(
+        'TReplyStatus::BROKEN is never produced; CMS PDisk BROKEN does not '
+        'reach OnDDiskBroken. Covered by oracle_ut '
+        'OnDDiskBrokenForcesHostOfflineAndRequestsReplacement'
+    )
     def test_ondiskbroken_stays_broken(self):
         disk = self.make_disk()
         self.write_pattern(disk, 0, 4)
         host = self.pick_dbg_storage_node(disk.tablet_id)
         assert host.pdisk_id is not None
+        self.assert_ddisk_on_isolated_pdisk(disk)
         self.faults.set_pdisk_broken(host.node_id, pdisk_id=host.pdisk_id)
 
-        self.wait_until(
-            lambda: any(
-                h.node_id == host.node_id
-                and (
-                    h.health.lower() in ('broken', 'offline')
-                    or h.state.lower() in ('offline',)
-                    or h.health in ('4', '3')
-                    or h.state in ('2',)
-                )
-                for h in self.dbg_hosts(disk.tablet_id)
-            ),
-            timeout_seconds=45,
-            description='host becomes Broken/Offline',
-        )
+        # OnDDiskBroken is raised from a failed I/O, not from CMS status alone.
+        io = self.start_vhost_io(disk, verify=False)
+        try:
+            self.wait_until(
+                lambda: any(
+                    h.node_id == host.node_id
+                    and (
+                        h.health.lower() in ('broken', 'offline')
+                        or h.state.lower() in ('offline',)
+                        or h.health in ('4', '3')
+                        or h.state in ('2',)
+                    )
+                    for h in self.dbg_hosts(disk.tablet_id)
+                ),
+                timeout_seconds=8,
+                description='host becomes Broken/Offline',
+            )
+        finally:
+            io.stop_and_join()
 
         # A later Think tick must not bring it back.
         def still_broken():

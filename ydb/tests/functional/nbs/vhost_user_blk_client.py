@@ -124,6 +124,14 @@ class VhostUserBlkError(Exception):
     """Raised on vhost-user protocol or virtio-blk failures."""
 
 
+class VhostUserBlkDisconnected(VhostUserBlkError):
+    """Raised when the vhost-user unix socket is closed by the slave.
+
+    Distinct from a request timeout so callers can reconnect and resubmit,
+    the way qemu's vhost-user-blk ``reconnect=`` path does.
+    """
+
+
 class VhostUserBlkClient(object):
     """
     Minimal synchronous vhost-user-blk master.
@@ -175,6 +183,10 @@ class VhostUserBlkClient(object):
         wait_for_socket(self._socket_path, self._socket_timeout)
 
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        # Bound the handshake (GET_FEATURES / SET_VRING_KICK REPLY_ACK).
+        # Without this, _recv_exact blocks forever when the vhost thread is
+        # wedged after a lost quorum.
+        self._sock.settimeout(self._socket_timeout)
         self._sock.connect(self._socket_path)
 
         # 1. Take ownership of the vhost device.
@@ -297,6 +309,21 @@ class VhostUserBlkClient(object):
             except OSError:
                 pass
             self._sock = None
+
+    def reconnect(self):
+        """Tear down the session and handshake again on the same socket path.
+
+        Mirrors qemu's vhost-user-blk ``reconnect=``: a fresh handshake, a
+        fresh memfd, and SET_VRING_BASE(0, 0) matching the reset ring
+        indices. Callers reissue the request after this returns. The
+        client itself never reconnects silently so F1.15 can still assert
+        that the same session survives a tablet restart.
+        """
+        self.close()
+        self._avail_idx = 0
+        self._used_idx = 0
+        self._reply_ack_negotiated = False
+        self.connect()
 
     # ----- public IO -----
 
@@ -436,8 +463,10 @@ class VhostUserBlkClient(object):
         # Kick the slave. Any non-zero write to the eventfd is sufficient.
         os.eventfd_write(self._kickfd, 1)
 
-        # Wait for the slave to mark the request as used.
+        # Wait for the slave to mark the request as used. Watch the
+        # vhost-user socket too: a closed connection is not a hang.
         deadline = time.monotonic() + timeout
+        watch_sock = self._sock is not None
         while True:
             self._mem.seek(_USED_OFFSET + 2)
             used_idx = struct.unpack("<H", self._mem.read(2))[0]
@@ -449,17 +478,39 @@ class VhostUserBlkClient(object):
                 raise VhostUserBlkError(
                     "virtio-blk request did not complete within"
                     " {} seconds".format(timeout))
-            # Block on the call eventfd. The slave writes to it whenever
-            # it advances used_idx.
-            self._wait_callfd(remaining)
+            if not self._wait_completion(remaining, watch_sock):
+                watch_sock = False
 
-    def _wait_callfd(self, timeout):
-        rlist, _, _ = select.select([self._callfd], [], [], timeout)
-        if rlist:
+    def _wait_completion(self, timeout, watch_sock):
+        """Block until the call eventfd fires or the socket is closed.
+
+        Returns False if the socket became readable with leftover data
+        (an unsolicited slave message). The caller then stops watching
+        the socket for this request so select does not spin.
+        """
+        fds = [self._callfd]
+        if watch_sock and self._sock is not None:
+            fds.append(self._sock)
+        rlist, _, _ = select.select(fds, [], [], timeout)
+        if self._sock is not None and self._sock in rlist:
+            try:
+                peek = self._sock.recv(1, socket.MSG_PEEK)
+            except OSError:
+                peek = b""
+            if not peek:
+                raise VhostUserBlkDisconnected(
+                    "vhost-user connection closed while waiting for"
+                    " virtio-blk completion")
+            # Unsolicited slave message: leave it in the buffer for
+            # the protocol layer and stop watching the socket.
+            if self._callfd not in rlist:
+                return False
+        if self._callfd in rlist:
             try:
                 os.eventfd_read(self._callfd)
             except (BlockingIOError, OSError):
                 pass
+        return True
 
     # ----- vhost-user low-level send/recv -----
 

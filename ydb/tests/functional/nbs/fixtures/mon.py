@@ -168,6 +168,81 @@ def merge_hosts_with_connections(hosts, connections):
     return hosts
 
 
+@dataclass
+class DDiskStateSnapshot:
+    """One host from the dirty-map ``DDiskStates:`` line."""
+
+    host_index: int
+    membership: str = ''
+    state: str = ''
+    lagging: object = None
+    operational_block_count: int = 0
+
+
+@dataclass
+class InflightDDiskSync:
+    """One in-flight copy range from the dirty-map ``DDiskSyncs:`` line."""
+
+    destination_host: int
+    start: int = 0
+    end: int = 0
+    ready: bool = False
+
+
+# H0*{Operational,32768};H1*{Fresh+,8704};H2-{Disabled,0};
+_DDISK_STATE_RE = re.compile(
+    r'H(\d+)([-*+])\{([A-Za-z]+)([+-]?),(\d+)\}'
+)
+# H0[0..255]ready;H1[256..511]wait;
+_DDISK_SYNC_RE = re.compile(
+    r'H(\d+)\[(\d+)\.\.(\d+)\](ready|wait)'
+)
+
+
+def parse_ddisk_states(html):
+    """Parse ``DDiskStates:`` from the VChunk dirty-map dump.
+
+    Returns a dict keyed by host index. ``membership`` is ``-`` disabled,
+    ``*`` desired, or ``+`` other. ``lagging`` is set only for ``Fresh``
+    (``Fresh-`` / ``Fresh+``).
+    """
+    states = {}
+    for match in _DDISK_STATE_RE.finditer(html):
+        host_index = int(match.group(1))
+        state = match.group(3)
+        suffix = match.group(4)
+        lagging = None
+        if state == 'Fresh':
+            lagging = suffix == '-'
+        states[host_index] = DDiskStateSnapshot(
+            host_index=host_index,
+            membership=match.group(2),
+            state=state,
+            lagging=lagging,
+            operational_block_count=int(match.group(5)),
+        )
+    return states
+
+
+def parse_inflight_ddisk_syncs(html):
+    """Parse ``DDiskSyncs:`` from the VChunk dirty-map dump."""
+    syncs = []
+    # Restrict to the DDiskSyncs line so Ahead/Behind ranges are not matched.
+    match = re.search(r'DDiskSyncs:\s*(.*)', html)
+    if not match:
+        return syncs
+    for item in _DDISK_SYNC_RE.finditer(match.group(1)):
+        syncs.append(
+            InflightDDiskSync(
+                destination_host=int(item.group(1)),
+                start=int(item.group(2)),
+                end=int(item.group(3)),
+                ready=item.group(4) == 'ready',
+            )
+        )
+    return syncs
+
+
 def parse_vchunk_hosts(html):
     """Parse the VChunk 'Host roles' table (watermark, Primary / HandOff)."""
     headers, rows = find_table(html, 'Watermark')

@@ -863,11 +863,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                                 "ExpectedSlotCount": 16,
-                                "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -975,11 +971,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                                 "ExpectedSlotCount": 16,
-                                "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1087,11 +1079,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                                 "ExpectedSlotCount": 16,
-                                "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1200,11 +1188,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                                 "ExpectedSlotCount": 16,
-                                "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -1313,11 +1297,7 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                                 "ExpectedSlotCount": 16,
-                                "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
@@ -9924,11 +9904,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                             "ExpectedSlotCount": 16,
-                            "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -10958,11 +10934,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                             "ExpectedSlotCount": 16,
-                            "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -12286,11 +12258,7 @@
                 "ChangeTime": "not-zero-number-text",
                 "Device": 1,
                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                 "ExpectedSlotCount": 16,
-                "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                 "Guid": "1",
                 "LogTotalSize": "not-zero-number-text",
                 "LogUsedSize": "not-zero-number-text",
@@ -14270,11 +14238,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                             "ExpectedSlotCount": 16,
-                            "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -14678,11 +14642,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                             "ExpectedSlotCount": 16,
-                            "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -15086,11 +15046,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                             "ExpectedSlotCount": 16,
-                            "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -15494,11 +15450,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                             "ExpectedSlotCount": 16,
-                            "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
@@ -15902,11 +15854,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-<<<<<<< HEAD
-=======
                             "ExpectedSlotCount": 16,
-                            "ExpectedSlotSize": "0",
->>>>>>> f44801cae37 (Fix missing viewer fields (#51296))
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",

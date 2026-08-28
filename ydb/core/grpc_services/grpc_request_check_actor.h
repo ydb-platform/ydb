@@ -12,13 +12,13 @@
 
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/database_kind.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/security/secure_request.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -702,6 +702,59 @@ private:
         PassAway();
     }
 
+    // Checks whether the user is allowed to connect to the database of the request.
+    // Shared by the gRPC enforcement path (CheckConnectRight) and by the HTTP monitoring observe mode
+    // (EvaluateHttpDatabaseAccessVerdict), so that both judge the access by exactly the same rules.
+    // The optional reason is filled in with a human readable explanation of the verdict for logging.
+    EHttpDatabaseAccessVerdict EvaluateConnectRightVerdict(TStringBuf* reason = nullptr) const {
+        const auto setReason = [reason](TStringBuf value) {
+            if (reason) {
+                *reason = value;
+            }
+        };
+
+        // An empty token at this point means that anonymous access is allowed by the system configuration,
+        // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
+        // validated earlier in the request processing pipeline.
+        const auto& parsedToken = TBase::GetParsedToken();
+        if (!parsedToken) {
+            setReason("anonymous requests allowed");
+            return EHttpDatabaseAccessVerdict::Ok;
+        }
+
+        if (!SecurityObject_) {
+            setReason("no SecurityObject_");
+            return EHttpDatabaseAccessVerdict::NoSecurityObject;
+        }
+
+        // admins can connect to databases without having connect rights:
+        // - cluster admin -- to any database
+        // - database admin -- to their database
+        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
+        const bool isAdmin = TBase::IsUserAdmin() || IsDatabaseAdministrator(parsedToken.Get(), databaseOwner);
+        if (isAdmin) {
+            setReason("user is a admin");
+            return EHttpDatabaseAccessVerdict::Ok;
+        }
+
+        // The user-level connect right cannot limit node registration: registration is a
+        // cluster-wide system action (via the discovery service), not a per-database/tenant
+        // one. Requiring here the root database as a cluster alias would add no value and
+        // introduce technical issues.
+        if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
+            setReason("user is a special subject for node registration");
+            return EHttpDatabaseAccessVerdict::Ok;
+        }
+
+        if (SecurityObject_->CheckAccess(NACLib::ConnectDatabase, *parsedToken)) {
+            setReason("user has connect right");
+            return EHttpDatabaseAccessVerdict::Ok;
+        }
+
+        setReason("user has no connect right");
+        return EHttpDatabaseAccessVerdict::NoConnectRight;
+    }
+
     std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
         if (!AppData()->FeatureFlags.GetCheckDatabaseAccessPermission()) {
             return {false, std::nullopt};
@@ -715,59 +768,17 @@ private:
             return {false, std::nullopt};
         }
 
-        // An empty token at this point means that anonymous access is allowed by the system configuration,
-        // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
-        // validated earlier in the request processing pipeline.
-        if (!TBase::GetParsedToken()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, anonymous requests allowed",
+        TStringBuf reason;
+        // A missing SecurityObject leaves nothing to check the access against, so the request is let through.
+        if (EvaluateConnectRightVerdict(&reason) != EHttpDatabaseAccessVerdict::NoConnectRight) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, TStringBuilder() << "Skip check permission connect db, " << reason,
                 {"database", CheckedDatabaseName_},
                 {"user", TBase::GetUserSID()},
                 {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
-        }
-
-        if (!SecurityObject_) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, no SecurityObject_",
-                {"database", CheckedDatabaseName_},
-                {"user", TBase::GetUserSID()},
-                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
-        }
-
-        const auto& parsedToken = TBase::GetParsedToken();
-        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
-
-        // admins can connect to databases without having connect rights:
-        // - cluster admin -- to any database
-        // - database admin -- to their database
-        const bool isAdmin = TBase::IsUserAdmin() || (parsedToken && IsDatabaseAdministrator(parsedToken.Get(), databaseOwner));
-        if (isAdmin) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a admin",
-                {"database", CheckedDatabaseName_},
-                {"user", TBase::GetUserSID()},
-                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
-        }
-
-        // The user-level connect right cannot limit node registration: registration is a
-        // cluster-wide system action (via the discovery service), not a per-database/tenant
-        // one. Requiring here the root database as a cluster alias would add no value and
-        // introduce technical issues.
-        if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a special subject for node registration",
-                {"database", CheckedDatabaseName_},
-                {"user", TBase::GetUserSID()},
-                {"ip", GrpcRequestBaseCtx_->GetPeerName()});
-            return {false, std::nullopt};
-        }
-
-        const ui32 access = NACLib::ConnectDatabase;
-        if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
             return {false, std::nullopt};
         }
 
         Counters_->IncDatabaseAccessDenyCounter();
-
 
         const TString error = "No permission to connect to the database";
         YDB_LOG_INFO_COMP(NKikimrServices::GRPC_SERVER, error,
@@ -785,43 +796,13 @@ private:
             return EHttpDatabaseAccessVerdict::EmptyDatabase;
         }
 
-        const auto& domainDescription = RequestSchemeData_->GetPathDescription().GetDomainDescription();
-        const auto domainKey = TPathId::FromDomainKey(domainDescription.GetDomainKey());
-        const auto schemePathType = RequestSchemeData_->GetPathDescription().GetSelf().GetPathType();
-        const auto& self = RequestSchemeData_->GetPathDescription().GetSelf();
-        const auto selfPathId = TPathId(self.GetSchemeshardId(), self.GetPathId());
-        const bool isDatabaseRootPath = domainKey == selfPathId;
-        const bool isDatabasePathType =
-            schemePathType == NKikimrSchemeOp::EPathTypeSubDomain ||
-            schemePathType == NKikimrSchemeOp::EPathTypeExtSubDomain;
-        if (!isDatabasePathType || !isDatabaseRootPath) {
+        // The connect right is defined for a database only, so a request that points to any other
+        // path (a table or a topic inside a database, for example) is not a database-scoped one.
+        if (!IsDatabase(*RequestSchemeData_)) {
             return EHttpDatabaseAccessVerdict::NotADatabase;
         }
 
-        if (!SecurityObject_) {
-            return EHttpDatabaseAccessVerdict::NoSecurityObject;
-        }
-
-        const auto& parsedToken = TBase::GetParsedToken();
-        if (!parsedToken) {
-            // An empty token at this point means that anonymous access is allowed by the system configuration,
-            // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
-            // validated earlier in the request processing pipeline.
-            return EHttpDatabaseAccessVerdict::Ok;
-        }
-
-        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
-        const bool isAdmin = TBase::IsUserAdmin() || IsDatabaseAdministrator(parsedToken.Get(), databaseOwner);
-        if (isAdmin) {
-            return EHttpDatabaseAccessVerdict::Ok;
-        }
-
-        const ui32 access = NACLib::ConnectDatabase;
-        if (SecurityObject_->CheckAccess(access, *parsedToken)) {
-            return EHttpDatabaseAccessVerdict::Ok;
-        }
-
-        return EHttpDatabaseAccessVerdict::NoConnectRight;
+        return EvaluateConnectRightVerdict();
     }
 
     const TActorId Owner_;

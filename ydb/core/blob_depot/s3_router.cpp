@@ -3,6 +3,7 @@
 #include "events.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -493,10 +494,14 @@ namespace NKikimr::NBlobDepot {
                 SelfId(), {}, nullptr, 0));
         }
 
+        bool MetricsPushEnabled() const {
+            return AppData()->FeatureFlags.GetEnableBlobDepotS3RouterMetrics();
+        }
+
         void HandlePushMetrics() {
             SweepRetiringWrappers();
 
-            if (PipeConnected) {
+            if (PipeConnected && MetricsPushEnabled()) {
                 auto event = std::make_unique<TEvBlobDepot::TEvPushS3RouterMetrics>();
                 auto& record = event->Record;
                 record.SetNodeId(SelfId().NodeId());
@@ -681,7 +686,8 @@ namespace NKikimr::NBlobDepot {
                 {"id", LogId},
                 {"endpoint", OriginalEndpoint},
                 {"balancerEnabled", BalancerEnabled()},
-                {"balancerHost", BalancerEnabled() ? Settings.GetBalancerHost() : TString()});
+                {"balancerHost", BalancerEnabled() ? Settings.GetBalancerHost() : TString()},
+                {"metricsEnabled", MetricsPushEnabled()});
 
             if (BalancerEnabled()) {
                 IssueBalancerRequest();

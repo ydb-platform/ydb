@@ -12,6 +12,7 @@ TEST_SRCS(
     test_rename_table.py
     test_compression.py
     test_encoding.py
+    test_s3_router_metrics.py
 )
 
 SIZE(LARGE)

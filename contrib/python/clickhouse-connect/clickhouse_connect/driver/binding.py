@@ -3,7 +3,7 @@ import re
 import uuid
 import zoneinfo
 from collections.abc import Sequence
-from datetime import date, datetime, timezone, tzinfo
+from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from enum import Enum
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -19,13 +19,24 @@ must_escape = (BS, "'", "`", "\t", "\n")
 external_bind_re = re.compile(r"\{(\w+):([^}]+)\}")
 
 
+def _datetime_is_aware(value: datetime) -> bool:
+    return value.utcoffset() is not None
+
+
+def _legacy_naive_datetime_binding() -> bool:
+    return common.get_setting("naive_datetime_binding") == "legacy"
+
+
 class DT64Param:
     def __init__(self, value: datetime):
         self.value = value
 
     def format(self, tz: tzinfo | None, top_level: bool) -> str:
         value = self.value
-        if tz:
+        if _legacy_naive_datetime_binding():
+            if tz:
+                value = value.astimezone(tz)
+        elif tz is not None and _datetime_is_aware(value):
             value = value.astimezone(tz)
         s = value.strftime("%Y-%m-%d %H:%M:%S.%f")
         if top_level:
@@ -222,6 +233,26 @@ def use_form_encoding(query: str | bytes, bind_params: dict[str, str], force_for
     return len(urlencode(bind_params, quote_via=quote)) > MAX_URL_BIND_PARAM_LENGTH
 
 
+def _format_time_of_day(value: time | timedelta) -> str:
+    """Format a time or timedelta as the [-]HH:MM:SS[.ffffff|.fffffffff] literal used by Time/Time64."""
+
+    if isinstance(value, time):
+        base = f"{value.hour:02d}:{value.minute:02d}:{value.second:02d}"
+        nanos = value.microsecond * 1_000
+    else:
+        total_nanos = (value.days * 86400 + value.seconds) * 1_000_000_000 + value.microseconds * 1_000 + getattr(value, "nanoseconds", 0)
+        sign = "-" if total_nanos < 0 else ""
+        total_seconds, nanos = divmod(abs(total_nanos), 1_000_000_000)
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        base = f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}"
+    if nanos % 1_000:
+        return f"{base}.{nanos:09d}"
+    if nanos:
+        return f"{base}.{nanos // 1_000:06d}"
+    return base
+
+
 def format_str(value: str):
     return f"'{escape_str(value)}'"
 
@@ -250,11 +281,16 @@ def format_query_value(value: Any, server_tz: tzinfo | None = timezone.utc):
     if isinstance(value, DT64Param):
         return value.format(server_tz, False)
     if isinstance(value, datetime):
-        if value.tzinfo is not None or not tzutil.is_utc_timezone(server_tz):
+        if _legacy_naive_datetime_binding():
+            if value.tzinfo is not None or not tzutil.is_utc_timezone(server_tz):
+                value = value.astimezone(server_tz)
+        elif _datetime_is_aware(value):
             value = value.astimezone(server_tz)
         return f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'"
     if isinstance(value, date):
         return f"'{value.isoformat()}'"
+    if isinstance(value, (time, timedelta)):
+        return f"'{_format_time_of_day(value)}'"
     if isinstance(value, list):
         return f"[{', '.join(str_query_value(x, server_tz) for x in value)}]"
     if isinstance(value, tuple):
@@ -288,7 +324,9 @@ def format_bind_value(value: Any, server_tz: tzinfo | None = timezone.utc, top_l
         return format_bind_value(x, server_tz, False)
 
     if value is None:
-        return "\\N"
+        # Top-level NULL bind parameters use the escaped-text sentinel. Nested
+        # container elements are parsed as SQL literals and must use NULL.
+        return "\\N" if top_level else "NULL"
     if isinstance(value, str):
         if top_level:
             # At the top levels, strings must not be surrounded by quotes
@@ -301,7 +339,8 @@ def format_bind_value(value: Any, server_tz: tzinfo | None = timezone.utc, top_l
     if isinstance(value, DT64Param):
         return value.format(server_tz, top_level)
     if isinstance(value, datetime):
-        value = value.astimezone(server_tz)
+        if _legacy_naive_datetime_binding() or _datetime_is_aware(value):
+            value = value.astimezone(server_tz)
         val = value.strftime("%Y-%m-%d %H:%M:%S")
         if top_level:
             return val
@@ -310,6 +349,11 @@ def format_bind_value(value: Any, server_tz: tzinfo | None = timezone.utc, top_l
         if top_level:
             return value.isoformat()
         return f"'{value.isoformat()}'"
+    if isinstance(value, (time, timedelta)):
+        val = _format_time_of_day(value)
+        if top_level:
+            return val
+        return f"'{val}'"
     if isinstance(value, list):
         return f"[{', '.join(recurse(x) for x in value)}]"
     if isinstance(value, tuple):

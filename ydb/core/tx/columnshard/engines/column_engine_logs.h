@@ -196,10 +196,6 @@ public:
         return result;
     }
 
-    ui64 GetMoveDataPortionsCount() const {
-        return GetMoveDataQueueSizes().GetTotal();
-    }
-
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
     virtual bool ApplyChangesOnExecute(
         IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;

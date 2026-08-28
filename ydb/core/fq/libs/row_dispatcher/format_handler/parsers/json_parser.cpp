@@ -266,13 +266,24 @@ public:
                 const auto alternativesCount = variantType->GetAlternativesCount();
                 simdjson::ondemand::parser parser;
                 simdjson::simdjson_result<simdjson::ondemand::document> doc;
-                for (ui32 index = 0; index != alternativesCount; ++index) {
+                // we need to know validAlternativesLimit to
+                // 1) check if non-scalar alternative is last possible (then we can avoid re-parsing);
+                // 2) return error from last failed alternative;
+                // tc is O(sum alternativesCount) anyway
+                ui32 validAlternativesLimit = alternativesCount;
+                while (validAlternativesLimit > 0) {
+                    auto alternativeType = variantType->GetAlternativeType(validAlternativesLimit - 1);
+                    if (ValidateJsonType(alternativeType, cellType, jsonValue)) {
+                        break;
+                    }
+                    --validAlternativesLimit;
+                }
+                for (ui32 index = 0; index != validAlternativesLimit; ++index) {
                     auto alternativeType = variantType->GetAlternativeType(index);
-                    status = TStatus::Success();
                     if (!ValidateJsonType(alternativeType, cellType, jsonValue)) {
                         continue;
                     }
-                    if (doc.error() == simdjson::error_code::UNINITIALIZED && !jsonValue.is_scalar()) {
+                    if (doc.error() == simdjson::error_code::UNINITIALIZED && !jsonValue.is_scalar() && index + 1 != validAlternativesLimit) {
                         // With non-scalar types we must use re-parsing
                         // With scalar types, we cannot do reparsing (and it would be inefficient)
                         // Note that scalar case relies on repeated calls `value.get_string(consumer)`, which is not exactly documented (and, on the contrary, `sv = value.get_string()` does NOT work, in a very nasty way -- it triggers OOB writes)
@@ -291,7 +302,8 @@ public:
                             return false;
                         }
                     }
-                    if (ParseNestedValue(jsonValue, resultValue, status, alternativeType, false, index + 1 != alternativesCount || isQuiet)) {
+                    status = TStatus::Success();
+                    if (ParseNestedValue(jsonValue, resultValue, status, alternativeType, false, index + 1 != validAlternativesLimit || isQuiet)) {
                         resultValue = HolderFactory->CreateVariantHolder(std::move(resultValue.Release()), index);
                         return true;
                     }
@@ -302,7 +314,9 @@ public:
                 }
                 if (status.IsSuccess()) {
                     // Note: we try to keep error from last alternative, but this won't work if tail is rejected by early json type mismatch check. So, just ensure some error is reported
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse Variant type");
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse as Variant type");
+                } else if (!isQuiet) {
+                    status.AddParentIssue(TStringBuilder() << "Failed to parse as Variant type");
                 }
                 return false;
             }

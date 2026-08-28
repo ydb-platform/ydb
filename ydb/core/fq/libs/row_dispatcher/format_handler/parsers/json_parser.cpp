@@ -140,6 +140,28 @@ public:
         return Status;
     }
 
+    bool IsNullableType(const NKikimr::NMiniKQL::TType* type, NYql::NUdf::TUnboxedValue& resultValue) const {
+        Y_DEBUG_ABORT_UNLESS(!resultValue);
+        switch(type->GetKind()) {
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Optional:
+                return true;
+            case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
+                auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
+                auto alternativeCount = variantType->GetAlternativesCount();
+                for (ui32 index = 0; index != alternativeCount; ++index) {
+                    if (IsNullableType(variantType->GetAlternativeType(index), resultValue)) {
+                        // nullable alternative found, wrap in holder
+                        resultValue = HolderFactory->CreateVariantHolder(std::move(resultValue.Release()), index);
+                        return true;
+                    }
+                }
+                [[fallthrough]];
+            }
+            default:
+                return false;
+        }
+    }
+
     bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isOptional, bool isQuiet = false) const {
         Y_ENSURE(HolderFactory); // should be already verified by ParseNestedType
         simdjson::builtin::ondemand::json_type cellType;
@@ -149,15 +171,20 @@ public:
         }
 
         if (cellType == simdjson::builtin::ondemand::json_type::null) {
-            if (isOptional || type->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
+            bool isNull;
+            CHECK_JSON_ERROR(jsonValue.is_null().get(isNull)) {
+                SetParsingError(error, jsonValue, "parse as null", status, isQuiet);
+                return false;
+            }
+            if (isOptional) {
                 resultValue = NYql::NUdf::TUnboxedValuePod();
                 return true;
             }
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
-            if (type->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Variant) {
-                return false;
+            if (IsNullableType(type, resultValue)) {
+                return true;
             }
-            // if Variant type has optional component, json null may be accepted
+            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
+            return false;
         }
 
         switch (type->GetKind()) {

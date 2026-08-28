@@ -510,7 +510,7 @@ private:
             LOG_E("[WriteFileResponse] Can not write file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
+            Send(msg.Client, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
@@ -567,7 +567,7 @@ private:
             TString error = "[WriteFileResponse] Can not run operation";
             LOG_E(error);
 
-            ReplyError(ev->Sender, error, tc);
+            ReplyError(msg.Client, error, tc);
             tc.QueueOverflowErrors->Inc();
             return;
         }
@@ -665,7 +665,7 @@ private:
             LOG_E("[ReadFileResponse] Can not read file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
-            Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
+            Send(msg.Client, new TEvDqSpilling::TEvError("Internal error"));
             return;
         }
 
@@ -724,7 +724,7 @@ private:
             TString error = "[ReadFileResponse] Can not run operation";
             LOG_E(error);
 
-            ReplyError(ev->Sender, error, tc);
+            ReplyError(msg.Client, error, tc);
             tc.QueueOverflowErrors->Inc();
             return;
         }
@@ -1020,7 +1020,7 @@ private:
 
             auto resp = MakeHolder<TEvPrivate::TEvReadFileResponse>();
             resp->Client = Client;
-            resp->WaitTime = TInstant::Now() - now;
+            resp->WaitTime = now - Ts;
             resp->BlobId = BlobId;
 
             try {

@@ -1089,6 +1089,17 @@
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "Types", "Type": "TExprList"}
             ]
+        },
+        {
+            "Name" : "TKqpOpTableEffect",
+            "Base" : "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpTableEffect"},
+            "Children" : [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "OriginalCallable", "Type": "TExprBase"}
+            ]
         }
     ]
 }

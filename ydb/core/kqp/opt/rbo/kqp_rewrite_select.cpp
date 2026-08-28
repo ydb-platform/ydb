@@ -1015,21 +1015,37 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
 } // anonymous namespace
 
 TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    Y_UNUSED(kqpCtx);
+
     TExprNode::TPtr tableEffectInput;
+    TExprNode::TPtr columns;
+
+    TKqlTableEffect tableEffect(node);
 
     if (TKqlInsertRows::Match(node.Get())) {
         TKqlInsertRows insert(node);
         tableEffectInput = insert.Input().Ptr();
         if (auto constraint = insert.Input().Maybe<TKqpWriteConstraint>()) {
-            tableEffectInput = constraint.Input().Ptr();
+            tableEffectInput = constraint.Cast().Input().Ptr();
         }
+        columns = insert.Columns().Ptr();
     } else {
         Y_ENSURE("Unsupported table effects operation");
     }
 
     Y_ENSURE(TKqpOpRoot::Match(tableEffectInput.Get()), "Only support subqueries as input to table effects operation");
 
-    TKqpOpRoot root(tableEffectsInput);
+    TKqpOpRoot root(tableEffectInput);
+    return Build<TKqpOpRoot>(ctx, node->Pos())
+        .Input<TKqpOpTableEffect>()
+            .Input(root.Input())
+            .Table(tableEffect.Table())
+            .Columns(columns)
+            .OriginalCallable(node)
+        .Build()
+        // FIXME: temporary hack
+        .ColumnOrder(columns)
+        .Done().Ptr();
     
 }
 

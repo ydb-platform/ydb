@@ -49,7 +49,7 @@ jobs:
           path: workflow
           persist-credentials: false
           sparse-checkout: |
-            ydb/ci/local-ydb/tests
+            .github/docker/tests
 
       - name: Checkout repository for build ydbd
         uses: actions/checkout@v5
@@ -124,7 +124,7 @@ jobs:
           ACCEPTANCE_ARTIFACTS: ${{ runner.temp }}/local-ydb-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
           EXPECTED_REVISION: ${{ steps.get-sha.outputs.SHA }}
           IMAGE: ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
-        run: bash workflow/ydb/ci/local-ydb/tests/run_acceptance_tests.sh
+        run: bash workflow/.github/docker/tests/run_acceptance_tests.sh
 
       - name: Upload Docker acceptance diagnostics
         if: failure()

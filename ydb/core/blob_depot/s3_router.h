@@ -16,6 +16,6 @@ namespace NKikimr::NBlobDepot {
     //
     // Created/destroyed by Node Warden based on TEvNodeWardenAcquire/ReleaseBlobDepotS3Router
     // messages from clients (tablet + agents that talk to that tablet on this node).
-    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId);
+    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings);
 
 } // NKikimr::NBlobDepot

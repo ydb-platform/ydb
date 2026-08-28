@@ -905,8 +905,26 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextRelevance, UTF8, EnableIndexStreamWrite) {
     }
 }
 
+// Shared setup for prefixed-index tests: fulltext + prefix feature flags on.
+static TKikimrRunner KikimrPrefix() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(false);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    return Kikimr(std::move(featureFlags));
+}
+
+// Same as KikimrPrefix() but also enables the compact (delta-segment) fulltext format.
+static TKikimrRunner KikimrPrefixCompact() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    return Kikimr(std::move(featureFlags));
+}
+
 void DoTestLuceneRelevanceComparison(bool Compact, bool AfterBuild, bool Prefixed) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = Compact ? (Prefixed ? KikimrPrefixCompact() : KikimrWithCompact()) : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     // Create table with fulltext index using relevance layout
@@ -3676,24 +3694,6 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
         UNIT_ASSERT(parser.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(TString{parser.ColumnParser("Pk").GetUtf8()}, "pk-300");
     }
-}
-
-// Shared setup for prefixed-index tests: fulltext + prefix feature flags on.
-static TKikimrRunner KikimrPrefix() {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableCompactFulltextIndex(false);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    return Kikimr(std::move(featureFlags));
-}
-
-// Same as KikimrPrefix() but also enables the compact (delta-segment) fulltext format.
-static TKikimrRunner KikimrPrefixCompact() {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableCompactFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    return Kikimr(std::move(featureFlags));
 }
 
 Y_UNIT_TEST(SelectWithFulltextMatchPrefixed) {

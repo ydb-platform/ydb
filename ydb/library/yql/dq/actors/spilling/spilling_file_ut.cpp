@@ -353,7 +353,8 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         TTestActorRuntime runtime;
         runtime.Initialize();
 
-        runtime.StartSpillingService(100, 1000, 1000);
+        const ui64 sizeLimit = 100;
+        runtime.StartSpillingService(sizeLimit, 1000, 1000);
         auto tester = runtime.AllocateEdgeActor();
         auto compute = runtime.StartSpillingActor(tester, true, ESpillingType::Compute, 1);
         auto channel = runtime.StartSpillingActor(tester, true, ESpillingType::Channel, 2);
@@ -365,16 +366,16 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Channel, "NoSpaceErrors"), 0);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Compute, "IoErrors"), 0);
 
-        WriteOk(runtime, compute, tester, 1, 40);
-        WriteOk(runtime, channel, tester, 1, 40);
+        WriteOk(runtime, compute, tester, 1, sizeLimit / 2 - 10);
+        WriteOk(runtime, channel, tester, 1, sizeLimit / 2 - 10);
 
-        WriteFails(runtime, compute, tester, 2, 30);
+        WriteFails(runtime, compute, tester, 2, sizeLimit / 2 + 10);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Compute, "NoSpaceErrors"), 1);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Compute, "Errors"), 1);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Channel, "NoSpaceErrors"), 0);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Channel, "Errors"), 0);
 
-        WriteFails(runtime, channel, tester, 2, 30);
+        WriteFails(runtime, channel, tester, 2, sizeLimit / 2 + 10);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Channel, "NoSpaceErrors"), 1);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Channel, "Errors"), 1);
         UNIT_ASSERT_VALUES_EQUAL(CounterVal(runtime, ESpillingType::Compute, "NoSpaceErrors"), 1);

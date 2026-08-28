@@ -3392,6 +3392,12 @@ message TStatisticsConfig {
     // Column tables smaller than or equal to this size are scanned as a whole table
     // rather than per shard. 0 disables the optimization (always per-shard).
     optional uint64 AnalyzeWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
+
+    // Initial delay (in seconds) before SchemeShard sends the first base stats
+    // batch to the StatisticsAggregator after initialization. This gives table
+    // shards time to report their statistics. Not required for correctness,
+    // but avoids sending incomplete stats on the very first cycle.
+    optional uint32 BaseStatsSendInitialDelaySeconds = 10 [default = 30];
 };
 
 message TSystemTabletBackupConfig {

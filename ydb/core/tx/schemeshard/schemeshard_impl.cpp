@@ -9406,7 +9406,8 @@ void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     // Give table shards some time to report statistics. This is not required for correctness,
     // but if we tried to send the statistics right away, info for all paths would probably
     // be incomplete.
-    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
+    const auto initialDelay = AppData()->StatisticsConfig.GetBaseStatsSendInitialDelaySeconds();
+    ctx.Schedule(TDuration::Seconds(initialDelay), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {

@@ -277,6 +277,14 @@ private:
             // public api begin
             HFunc(TEvCms::TEvDDiskInfoListRequest, Handle);
             HFunc(TEvCms::TEvDDiskInfoGetRequest, Handle);
+            // Route through EnqueueRequest (like EvClusterStateRequest) so that
+            // a fresh ClusterInfo collection is triggered before the request is
+            // actually processed -- otherwise the DDisk viewer (which relies on
+            // ClusterInfo for availability/state via IsDDiskAvailable() /
+            // GetDDiskStateName()) could serve up to a minute of stale PDisk
+            // state on every page load.
+            FFunc(TEvCms::EvDDiskTabletListRequest, EnqueueRequest);
+            FFunc(TEvCms::EvDDiskDiskListRequest, EnqueueRequest);
             HFunc(TEvCms::TEvListClusterNodesRequest, Handle);
             HFunc(TEvCms::TEvCreateMaintenanceTaskRequest, Handle);
             HFunc(TEvCms::TEvRefreshMaintenanceTaskRequest, Handle);
@@ -442,6 +450,10 @@ private:
 
     void Handle(TEvCms::TEvDDiskInfoListRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskTabletListRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskDiskListRequest::TPtr &ev, const TActorContext &ctx);
+    bool IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
+    TString GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);

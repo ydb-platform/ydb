@@ -16,6 +16,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config_units.pb.h>
 #include <ydb/core/protos/counters_cms.pb.h>
@@ -35,6 +36,7 @@
 #include <util/system/hostname.h>
 
 #include <algorithm>
+#include <numeric>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
@@ -1976,6 +1978,8 @@ void TCms::ProcessRequest(TAutoPtr<IEventHandle> &ev)
         HFuncTraced(TEvCms::TEvResetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvSetMarkerRequest, Handle);
         HFuncTraced(TEvCms::TEvGetClusterInfoRequest, Handle);
+        HFuncTraced(TEvCms::TEvDDiskTabletListRequest, Handle);
+        HFuncTraced(TEvCms::TEvDDiskDiskListRequest, Handle);
 
     default:
         Y_ABORT("Unexpected request type");
@@ -2066,6 +2070,331 @@ void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext&
         response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
         response->Record.SetErrorReason("failed to parse persisted DDisk snapshot");
     }
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+bool TCms::IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId& id) const {
+    // We treat a DDisk as available unless the underlying PDisk is known to
+    // CMS and is definitely in a state that indicates the disk or its node is
+    // genuinely unreachable/broken (see IsPDiskStateUp() for the exact split;
+    // notably, the initial-startup states are still considered available). If
+    // CMS has no information about this PDisk, or it is registered but its
+    // state has never actually been reported by Whiteboard (e.g. because this
+    // PDisk id isn't covered by Whiteboard PDisk state collection at all), we
+    // conservatively assume it's available to avoid false-positive "problem"
+    // reports.
+    if (!ClusterInfo) {
+        return true;
+    }
+    const TPDiskID pdiskId(id.GetNodeId(), id.GetPDiskId());
+    if (!ClusterInfo->HasPDisk(pdiskId)) {
+        return true;
+    }
+    // The PDisk's own reported state (RawState) is only updated while its
+    // node is actually connected and reporting Whiteboard data; once a node
+    // disconnects, TClusterInfo::ClearNode() marks the node itself DOWN but
+    // leaves any previously reported PDisk state untouched (it may be stale,
+    // e.g. still "Initial" from before the node went down). So a disk on a
+    // known-down/restarting node must be treated as unavailable regardless of
+    // its last reported RawState.
+    if (ClusterInfo->HasNode(id.GetNodeId())) {
+        const auto& node = ClusterInfo->Node(id.GetNodeId());
+        if (node.State == NKikimrCms::DOWN || node.State == NKikimrCms::RESTART) {
+            return false;
+        }
+    }
+    const auto& pdisk = ClusterInfo->PDisk(pdiskId);
+    if (!pdisk.RawState) {
+        return true;
+    }
+    return IsPDiskStateUp(*pdisk.RawState);
+}
+
+TString TCms::GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId& id) const {
+    // Returns the full underlying PDisk state name, as opposed to the coarse
+    // available/unavailable flag from IsDDiskAvailable(). Mirrors the same
+    // node-reachability and "unknown state means available/no info" logic so
+    // the reported name is consistent with IsDDiskAvailable()'s verdict.
+    if (!ClusterInfo) {
+        return "Unknown";
+    }
+    const TPDiskID pdiskId(id.GetNodeId(), id.GetPDiskId());
+    if (!ClusterInfo->HasPDisk(pdiskId)) {
+        return "Unknown";
+    }
+    if (ClusterInfo->HasNode(id.GetNodeId())) {
+        const auto& node = ClusterInfo->Node(id.GetNodeId());
+        if (node.State == NKikimrCms::DOWN) {
+            return "NodeDown";
+        }
+        if (node.State == NKikimrCms::RESTART) {
+            return "NodeRestarting";
+        }
+    }
+    const auto& pdisk = ClusterInfo->PDisk(pdiskId);
+    if (!pdisk.RawState) {
+        return "Unknown";
+    }
+    return NKikimrBlobStorage::TPDiskState::E_Name(*pdisk.RawState);
+}
+
+void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorContext& ctx) {
+    // This request is routed through EnqueueRequest (see StateWork's
+    // FFunc(EvDDiskTabletListRequest, EnqueueRequest)), which triggers a
+    // fresh ClusterInfo collection before ProcessRequest() calls this
+    // handler -- consistent with how TEvClusterStateRequest/TEvPermissionRequest
+    // ensure up-to-date PDisk/node state for IsDDiskAvailable()/
+    // GetDDiskStateName(). If collection failed, bail out instead of
+    // reporting availability computed from stale/missing ClusterInfo.
+    if (ClusterInfo->IsOutdated()) {
+        return ReplyWithError<TEvCms::TEvDDiskTabletListResponse>(
+            ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
+    }
+
+    const auto& request = ev->Get()->Record;
+    const TString filter = request.GetFilterTabletId();
+    const auto sortBy = request.GetSortBy();
+    const bool sortDescending = request.GetSortDescending();
+    const bool onlyProblems = request.GetOnlyProblems();
+
+    auto countUnavailable = [&](const NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult& state, bool persistentBuffer) {
+        ui32 count = 0;
+        for (const auto& group : state.GetGroups()) {
+            const auto& ids = persistentBuffer ? group.GetPersistentBufferDDiskId() : group.GetDDiskId();
+            for (const auto& id : ids) {
+                // An unallocated DDisk slot is represented by an empty TDDiskId
+                // (NodeId == 0 && PDiskId == 0, see ddisk_info.cpp), not a real
+                // disk; skip it so it isn't counted as an unavailable disk.
+                if (id.GetNodeId() == 0 && id.GetPDiskId() == 0) {
+                    continue;
+                }
+                if (!IsDDiskAvailable(id)) {
+                    ++count;
+                }
+            }
+        }
+        return count;
+    };
+
+    TVector<const std::pair<const ui64, TCmsDDiskInfo>*> items;
+    items.reserve(State->DDiskInfo.size());
+    for (const auto& kv : State->DDiskInfo) {
+        if (!filter.empty() && !ToString(kv.first).Contains(filter)) {
+            continue;
+        }
+        if (onlyProblems) {
+            NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+            if (!state.ParseFromString(kv.second.State) ||
+                (countUnavailable(state, false) == 0 && countUnavailable(state, true) == 0))
+            {
+                continue;
+            }
+        }
+        items.push_back(&kv);
+    }
+
+    using TItemPtr = const std::pair<const ui64, TCmsDDiskInfo>*;
+    // Precompute the sort key for each item exactly once: computing it inside
+    // the comparator would call ParseFromString() O(N log N) times for
+    // DDISK_TABLET_SORT_BY_GROUPS_COUNT, which is expensive for large
+    // clusters. Use ui64 (rather than i64) for the primary key component so
+    // that tablet ids with the high bit set (e.g. produced by MakeTabletID())
+    // don't wrap to negative values and sort incorrectly.
+    TVector<std::pair<ui64, ui64>> keys;
+    keys.reserve(items.size());
+    for (const auto* item : items) {
+        switch (sortBy) {
+            case NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT:
+                keys.emplace_back(static_cast<ui64>(item->second.LastChangedAt.MicroSeconds()), item->first);
+                break;
+            case NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT: {
+                NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+                Y_PROTOBUF_SUPPRESS_NODISCARD state.ParseFromString(item->second.State);
+                keys.emplace_back(static_cast<ui64>(state.GroupsSize()), item->first);
+                break;
+            }
+            case NKikimrCms::DDISK_TABLET_SORT_BY_TABLET_ID:
+            default:
+                keys.emplace_back(item->first, item->first);
+                break;
+        }
+    }
+    TVector<ui32> order(items.size());
+    std::iota(order.begin(), order.end(), 0);
+    // Sort by the requested key with tablet id as a deterministic tiebreaker.
+    std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
+        return sortDescending ? keys[b] < keys[a] : keys[a] < keys[b];
+    });
+    TVector<TItemPtr> sortedItems;
+    sortedItems.reserve(items.size());
+    for (ui32 i : order) {
+        sortedItems.push_back(items[i]);
+    }
+    items = std::move(sortedItems);
+
+    auto response = MakeHolder<TEvCms::TEvDDiskTabletListResponse>();
+    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+    response->Record.SetTotalCount(items.size());
+
+    const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
+    const ui32 limit = request.GetLimit();
+    // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
+    // the ui32 range (e.g. both close to Max<ui32>()).
+    const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
+    for (ui32 i = offset; i < end; ++i) {
+        const auto* kv = items[i];
+        auto* tablet = response->Record.AddTablets();
+        tablet->SetTabletId(kv->first);
+        tablet->SetRevision(kv->second.Revision);
+        tablet->SetLastChangedAt(kv->second.LastChangedAt.MicroSeconds());
+
+        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+        if (state.ParseFromString(kv->second.State)) {
+            tablet->SetGroupsCount(state.GroupsSize());
+            tablet->SetUnavailableDDiskCount(countUnavailable(state, false));
+            tablet->SetUnavailablePersistentBufferCount(countUnavailable(state, true));
+        }
+    }
+
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext& ctx) {
+    // See the comment in the TEvDDiskTabletListRequest handler above: this
+    // request is routed through EnqueueRequest so ClusterInfo is freshly
+    // collected before we get here.
+    if (ClusterInfo->IsOutdated()) {
+        return ReplyWithError<TEvCms::TEvDDiskDiskListResponse>(
+            ev, TStatus::ERROR_TEMP, "Cannot collect cluster state", ctx);
+    }
+
+    const auto& request = ev->Get()->Record;
+    const TString diskFilter = request.GetFilterDiskId();
+    const TString tabletFilter = request.GetFilterTabletId();
+    const auto sortBy = request.GetSortBy();
+    const bool sortDescending = request.GetSortDescending();
+    const bool onlyProblems = request.GetOnlyProblems();
+
+    struct TDiskUsage {
+        NKikimrBlobStorage::NDDisk::TDDiskId DiskId;
+        TVector<ui64> DDiskTabletIds;
+        TVector<ui64> PersistentBufferTabletIds;
+    };
+
+    auto diskKey = [](const NKikimrBlobStorage::NDDisk::TDDiskId& id) {
+        return TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":" << id.GetDDiskSlotId();
+    };
+
+    THashMap<TString, TDiskUsage> disks;
+    auto addUsage = [&](const NKikimrBlobStorage::NDDisk::TDDiskId& id, ui64 tabletId, bool isPersistentBuffer) {
+        // An unallocated DDisk/PersistentBuffer slot is represented by an
+        // empty TDDiskId (NodeId == 0 && PDiskId == 0, see ddisk_info.cpp's
+        // AddDDiskId() fallback for items without HasDDiskId()); it does not
+        // correspond to a real disk. Without this check, every tablet with an
+        // unallocated slot would be aggregated into a single phantom "0:0:0"
+        // disk row, inflating/corrupting its reported Tablets count.
+        if (id.GetNodeId() == 0 && id.GetPDiskId() == 0) {
+            return;
+        }
+        const TString key = diskKey(id);
+        auto& usage = disks[key];
+        usage.DiskId = id;
+        auto& target = isPersistentBuffer ? usage.PersistentBufferTabletIds : usage.DDiskTabletIds;
+        if (Find(target, tabletId) == target.end()) {
+            target.push_back(tabletId);
+        }
+    };
+
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        if (!tabletFilter.empty() && !ToString(tabletId).Contains(tabletFilter)) {
+            continue;
+        }
+        NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult state;
+        if (!state.ParseFromString(info.State)) {
+            continue;
+        }
+        for (const auto& group : state.GetGroups()) {
+            for (const auto& id : group.GetDDiskId()) {
+                addUsage(id, tabletId, false);
+            }
+            for (const auto& id : group.GetPersistentBufferDDiskId()) {
+                addUsage(id, tabletId, true);
+            }
+        }
+    }
+
+    TVector<const TDiskUsage*> items;
+    items.reserve(disks.size());
+    for (const auto& [key, usage] : disks) {
+        if (!diskFilter.empty() && !key.Contains(diskFilter)) {
+            continue;
+        }
+        if (onlyProblems && IsDDiskAvailable(usage.DiskId)) {
+            continue;
+        }
+        items.push_back(&usage);
+    }
+
+    auto idKey = [](const TDiskUsage* usage) -> std::tuple<ui32, ui32, ui32> {
+        return std::make_tuple(usage->DiskId.GetNodeId(), usage->DiskId.GetPDiskId(), usage->DiskId.GetDDiskSlotId());
+    };
+    // Precompute the unique-tablet count for each disk exactly once: computing
+    // it inside the comparator would build a THashSet and scan both tablet-id
+    // vectors O(N log N) times, which is expensive for large clusters.
+    TVector<size_t> tabletsCounts;
+    tabletsCounts.reserve(items.size());
+    for (const auto* usage : items) {
+        THashSet<ui64> unique;
+        for (auto id : usage->DDiskTabletIds) unique.insert(id);
+        for (auto id : usage->PersistentBufferTabletIds) unique.insert(id);
+        tabletsCounts.push_back(unique.size());
+    }
+    TVector<ui32> order(items.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
+        bool less;
+        if (sortBy == NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT) {
+            const size_t ca = tabletsCounts[a];
+            const size_t cb = tabletsCounts[b];
+            less = ca != cb ? ca < cb : idKey(items[a]) < idKey(items[b]);
+        } else {
+            less = idKey(items[a]) < idKey(items[b]);
+        }
+        if (!sortDescending) {
+            return less;
+        }
+        return idKey(items[a]) != idKey(items[b]) && !less;
+    });
+    TVector<const TDiskUsage*> sortedItems;
+    sortedItems.reserve(items.size());
+    for (ui32 i : order) {
+        sortedItems.push_back(items[i]);
+    }
+    items = std::move(sortedItems);
+
+    auto response = MakeHolder<TEvCms::TEvDDiskDiskListResponse>();
+    response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
+    response->Record.SetTotalCount(items.size());
+
+    const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
+    const ui32 limit = request.GetLimit();
+    // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
+    // the ui32 range (e.g. both close to Max<ui32>()).
+    const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
+    for (ui32 i = offset; i < end; ++i) {
+        const auto* usage = items[i];
+        auto* disk = response->Record.AddDisks();
+        disk->MutableDiskId()->CopyFrom(usage->DiskId);
+        for (auto id : usage->DDiskTabletIds) {
+            disk->AddDDiskTabletIds(id);
+        }
+        for (auto id : usage->PersistentBufferTabletIds) {
+            disk->AddPersistentBufferTabletIds(id);
+        }
+        disk->SetAvailable(IsDDiskAvailable(usage->DiskId));
+        disk->SetState(GetDDiskStateName(usage->DiskId));
+    }
+
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 

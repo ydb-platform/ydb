@@ -76,18 +76,6 @@ protected:
     }
 
     void IncrementCounters(const typename TEvResponse::TOutcome& outcome) const {
-        const TDuration latency = TInstant::Now() - Start;
-        const bool success = outcome.IsSuccess();
-
-        ReplyAdapter.CollectStats({
-            .RequestName = TEvRequest::RequestName,
-            .Latency = latency,
-            .Success = success,
-            .HttpResponseCode = success ? 0 : static_cast<int>(outcome.GetError().GetResponseCode()),
-            .BytesRead = success ? BytesRead.value_or(0) : 0,
-            .BytesWritten = success ? BytesWritten.value_or(0) : 0,
-        });
-
         if (!Counters) {
             return;
         }
@@ -108,7 +96,7 @@ protected:
 
         // Latency
         if (auto* hist = Counters->GetLatency()) {
-            hist->Collect(latency.MilliSeconds());
+            hist->Collect((TInstant::Now() - Start).MilliSeconds());
         }
 
         if (outcome.IsSuccess() && BytesWritten) {

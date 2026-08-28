@@ -3,6 +3,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_range.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp {
@@ -207,7 +208,8 @@ TExprNode::TPtr ExpandScalarHasNull(
 
 TExprNode::TPtr FindCompatibilityNode(const TExprNode::TPtr& root) {
     return FindNode(root, [](const TExprNode::TPtr& node) {
-        return node->IsCallable({"StrictCast", "HasNull", "SqlIn"}) || IsComplexComparison(node);
+        return node->IsCallable({"StrictCast", "HasNull", "SqlIn", "RangeEmpty", "AsRange", "RangeFor"}) ||
+            IsComplexComparison(node);
     });
 }
 
@@ -238,6 +240,15 @@ NYql::TExprNode::TPtr RewriteRboCompatibilityNode(
             return KeepSideEffects(std::move(result), node->HeadPtr(), ctx);
         }
         return ExpandTupleComparison(node, ctx);
+    }
+    if (node->IsCallable("RangeEmpty")) {
+        return ExpandRangeEmpty(node, ctx);
+    }
+    if (node->IsCallable("AsRange")) {
+        return ExpandAsRange(node, ctx);
+    }
+    if (node->IsCallable("RangeFor")) {
+        return ExpandRangeFor(node, ctx);
     }
     return node;
 }

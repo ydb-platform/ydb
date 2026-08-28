@@ -1,5 +1,7 @@
 #include "partition_writer_cache_actor_fixture.h"
 
+#include <ydb/core/base/tablet_pipe.h>
+
 #include <memory>
 
 namespace NKikimr::NPersQueueTests {
@@ -31,7 +33,7 @@ Y_UNIT_TEST_F(WriteReplyOrder, TPartitionWriterCacheActorFixture)
     //
     ui64 expectCookie[2] = {1, 1};
 
-    while ((expectCookie[0] != 4) && (expectCookie[1] != 4)) {
+    while (expectCookie[0] < 5 || expectCookie[1] < 5) {
         TAutoPtr<IEventHandle> handle;
         auto events =
             Ctx->Runtime->GrabEdgeEvents<NPQ::TEvPartitionWriter::TEvWriteAccepted, NPQ::TEvPartitionWriter::TEvWriteResponse>(handle);
@@ -44,7 +46,7 @@ Y_UNIT_TEST_F(WriteReplyOrder, TPartitionWriterCacheActorFixture)
             ++expectCookie[0];
         } else if (auto complete = get<1>(events); complete) {
             UNIT_ASSERT_VALUES_EQUAL(complete->SessionId, "sessionId");
-            UNIT_ASSERT((accepted->TxId == "txId-A") || (accepted->TxId == "txId-B"));
+            UNIT_ASSERT((complete->TxId == "txId-A") || (complete->TxId == "txId-B"));
             UNIT_ASSERT(complete->IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(complete->Record.GetPartitionResponse().GetCookie(), expectCookie[1]);
 
@@ -92,6 +94,7 @@ Y_UNIT_TEST_F(DropOldWriter, TPartitionWriterCacheActorFixture)
     AdvanceCurrentTime(TDuration::Seconds(1));
     SendTxWriteRequest(partitionWriterCache, {.SessionId="sessionId", .TxId="txId-E", .Cookie=5});
     WaitForPartitionWriterOps({.CreateCount=1, .DeleteCount=1});
+    EnsureNoDisconnected();
 
     //
     // this is the new actor for the txId-E transaction
@@ -134,6 +137,133 @@ Y_UNIT_TEST_F(DropOldWriter, TPartitionWriterCacheActorFixture)
     // the writing session will end with an error
     //
     EnsureWriteSessionClosed(EErrorCode::OverloadError);
+}
+
+Y_UNIT_TEST_F(DefaultWriterInitErrorDoesNotSendWriteResponse, TPartitionWriterCacheActorFixture)
+{
+    PQTablet->FailGetOwnership();
+    CreatePartitionWriterCacheActor({.WaitForInitResult = false});
+
+    TAutoPtr<IEventHandle> handle;
+    auto events = Ctx->Runtime->GrabEdgeEvents<
+        NPQ::TEvPartitionWriter::TEvInitResult,
+        NPQ::TEvPartitionWriter::TEvWriteResponse>(handle);
+
+    auto* init = std::get<0>(events);
+    UNIT_ASSERT(init);
+    UNIT_ASSERT(!init->IsSuccess());
+    UNIT_ASSERT(init->SessionId.empty());
+    UNIT_ASSERT(init->TxId.empty());
+
+    auto extra = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvWriteResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(!extra);
+}
+
+Y_UNIT_TEST_F(TxWriterInitErrorSendsWriteResponse, TPartitionWriterCacheActorFixture)
+{
+    TActorId partitionWriterCache = CreatePartitionWriterCacheActor();
+    PQTablet->FailGetOwnership();
+
+    SendTxWriteRequest(partitionWriterCache, {.SessionId="sessionId", .TxId="txId-A", .Cookie=1});
+
+    TAutoPtr<IEventHandle> handle;
+    auto events = Ctx->Runtime->GrabEdgeEvents<
+        NPQ::TEvPartitionWriter::TEvInitResult,
+        NPQ::TEvPartitionWriter::TEvWriteResponse>(handle);
+
+    UNIT_ASSERT(!std::get<0>(events));
+    auto* write = std::get<1>(events);
+    UNIT_ASSERT(write);
+    UNIT_ASSERT(!write->IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(write->SessionId, "sessionId");
+    UNIT_ASSERT_VALUES_EQUAL(write->TxId, "txId-A");
+    UNIT_ASSERT_VALUES_EQUAL(write->Record.GetPartitionResponse().GetCookie(), 1);
+    UNIT_ASSERT_EQUAL(write->Record.GetErrorCode(), NPersQueue::NErrorCode::INITIALIZING);
+
+    auto extraInit = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>(TDuration::Seconds(1));
+    UNIT_ASSERT(!extraInit);
+
+    auto extraWrite = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvWriteResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(!extraWrite);
+}
+
+Y_UNIT_TEST_F(WriteBeforeInitResultIsHeld, TPartitionWriterCacheActorFixture)
+{
+    PQTablet->DelayGetOwnership();
+    TActorId partitionWriterCache = CreatePartitionWriterCacheActor({.WaitForInitResult = false});
+
+    SendTxWriteRequest(partitionWriterCache, {.Cookie=1});
+    PQTablet->AppendWriteReply(1);
+
+    auto tooEarly = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>(TDuration::MilliSeconds(100));
+    UNIT_ASSERT(!tooEarly);
+
+    CompleteDelayedGetOwnership();
+
+    auto init = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>();
+    UNIT_ASSERT(init);
+    UNIT_ASSERT(init->IsSuccess());
+
+    auto accepted = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvWriteAccepted>();
+    UNIT_ASSERT(accepted);
+    UNIT_ASSERT_VALUES_EQUAL(accepted->Cookie, 1);
+
+    auto complete = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvWriteResponse>();
+    UNIT_ASSERT(complete);
+    UNIT_ASSERT(complete->IsSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(complete->Record.GetPartitionResponse().GetCookie(), 1);
+}
+
+Y_UNIT_TEST_F(PipeDisconnectForwardsDisconnected, TPartitionWriterCacheActorFixture)
+{
+    TActorId partitionWriterCache = CreatePartitionWriterCacheActor();
+
+    SendTxWriteRequest(partitionWriterCache, {.Cookie=1});
+    WaitForPartitionWriterOps({.CreateCount=1});
+
+    const TActorId writer = TxIdToPartitionWriter.at(MakeTxId("", ""));
+    Ctx->Runtime->Send(
+        writer,
+        Ctx->Edge,
+        new TEvTabletPipe::TEvClientDestroyed(PQTabletId, writer, TActorId()),
+        0,
+        true);
+
+    auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvDisconnected>();
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_EQUAL(event->ErrorCode, EErrorCode::PartitionDisconnected);
+}
+
+Y_UNIT_TEST_F(QuotedWriteKeepsTraceId, TPartitionWriterCacheActorFixture)
+{
+    TActorId partitionWriterCache = CreatePartitionWriterCacheActor();
+
+    THashMap<ui64, NWilson::TTraceId> expectedTraceId;
+    for (ui64 cookie = 1; cookie <= 6; ++cookie) {
+        auto traceId = NWilson::TTraceId::NewTraceId(15, NWilson::TTraceId::MAX_TIME_TO_LIVE);
+        expectedTraceId.emplace(cookie, NWilson::TTraceId(traceId));
+        SendTxWriteRequest(partitionWriterCache, {
+            .SessionId = "sessionId",
+            .TxId = "txId-A",
+            .Cookie = cookie,
+            .TraceId = std::move(traceId),
+        });
+    }
+
+    PQTablet->AppendWriteReply(1);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [this]() {
+        return CookieToWriteRequestTraceId.contains(6);
+    };
+    Ctx->Runtime->DispatchEvents(options);
+
+    UNIT_ASSERT(CookieToWriteRequestTraceId.contains(6));
+    UNIT_ASSERT(CookieToWriteRequestTraceId.at(6) == expectedTraceId.at(6));
+    for (ui64 cookie = 1; cookie <= 5; ++cookie) {
+        UNIT_ASSERT(CookieToWriteRequestTraceId.contains(cookie));
+        UNIT_ASSERT(CookieToWriteRequestTraceId.at(cookie) == expectedTraceId.at(cookie));
+    }
 }
 
 }

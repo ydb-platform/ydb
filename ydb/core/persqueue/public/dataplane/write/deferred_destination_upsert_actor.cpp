@@ -8,11 +8,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-namespace NKikimr::NGRpcProxy::V1 {
+namespace NKikimr::NPQ {
 
 namespace {
 
-using namespace NPQ::NDeferredPublish;
+using namespace NDeferredPublish;
 
 class TDeferredDestinationUpsertActor : public NActors::TActorBootstrapped<TDeferredDestinationUpsertActor> {
 public:
@@ -64,14 +64,14 @@ private:
     }
 
     void ReplySuccess() {
-        auto* event = new NPQ::TEvPartitionWriter::TEvDeferredDestinationUpsertResult;
+        auto* event = new TEvPartitionWriter::TEvDeferredDestinationUpsertResult;
         event->Success = true;
         Send(Writer, event);
         PassAway();
     }
 
     void ReplyFailure(const TString& reason) {
-        auto* event = new NPQ::TEvPartitionWriter::TEvDeferredDestinationUpsertResult;
+        auto* event = new TEvPartitionWriter::TEvDeferredDestinationUpsertResult;
         event->Success = false;
         event->Reason = reason;
         Send(Writer, event);
@@ -150,4 +150,4 @@ NActors::IActor* CreateDeferredDestinationUpsertActor(
     return new TDeferredDestinationUpsertActor(writer, std::move(params));
 }
 
-} // namespace NKikimr::NGRpcProxy::V1
+} // namespace NKikimr::NPQ

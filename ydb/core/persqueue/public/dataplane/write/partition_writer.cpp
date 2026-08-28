@@ -1,10 +1,10 @@
 #include "partition_writer.h"
 
-namespace NKikimr::NGRpcProxy::V1 {
+namespace NKikimr::NPQ {
 
 const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
-void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev)
+void TCachedPartitionWriter::OnEvInitResult(const TEvPartitionWriter::TEvInitResult::TPtr& ev)
 {
     const auto& result = *ev->Get();
     AFL_ENSURE(result.IsSuccess());
@@ -13,8 +13,8 @@ void TPartitionWriter::OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResu
     MaxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
 }
 
-void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
-                                      const TActorContext& ctx)
+void TCachedPartitionWriter::OnWriteRequest(THolder<TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId,
+                                            const TActorContext& ctx)
 {
     AFL_ENSURE(ev->Record.HasPartitionRequest());
 
@@ -23,11 +23,14 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
 
         ctx.Send(Actor, ev.Release(), 0, 0, std::move(traceId));
     } else {
-        QuotedRequests.emplace_back(std::move(ev));
+        QuotedRequests.push_back(TUserWriteRequest{
+            .Write = std::move(ev),
+            .TraceId = std::move(traceId),
+        });
     }
 }
 
-void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
+void TCachedPartitionWriter::OnWriteAccepted(const TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
     AFL_ENSURE(!SentRequests.empty());
     AFL_ENSURE(ev.Cookie == SentRequests.front().Cookie);
@@ -47,11 +50,11 @@ void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAc
 
         SentRequests.emplace_back(next.Write->Record.GetPartitionRequest().GetCookie());
 
-        ctx.Send(Actor, next.Write.Release());
+        ctx.Send(Actor, next.Write.Release(), 0, 0, std::move(next.TraceId));
     }
 }
 
-void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev)
+void TCachedPartitionWriter::OnWriteResponse(const TEvPartitionWriter::TEvWriteResponse& ev)
 {
     AFL_ENSURE(ev.IsSuccess());
 
@@ -61,9 +64,20 @@ void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteRe
     AcceptedRequests.pop_front();
 }
 
-bool TPartitionWriter::HasPendingRequests() const
+bool TCachedPartitionWriter::HasPendingRequests() const
 {
     return !QuotedRequests.empty() || !SentRequests.empty() || !AcceptedRequests.empty();
 }
 
+ui64 TCachedPartitionWriter::FrontPendingCookie() const
+{
+    if (!SentRequests.empty()) {
+        return SentRequests.front().Cookie;
+    }
+    if (!QuotedRequests.empty()) {
+        return QuotedRequests.front().Write->Record.GetPartitionRequest().GetCookie();
+    }
+    return 0;
 }
+
+} // namespace NKikimr::NPQ

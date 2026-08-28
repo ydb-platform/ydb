@@ -2,7 +2,7 @@
 #include "kqp_mock.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/services/persqueue_v1/actors/partition_writer_cache_actor.h>
+#include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/public/write_id.h>
 
 namespace NKikimr::NPersQueueTests {
@@ -62,22 +62,22 @@ void TPartitionWriterCacheActorFixture::CleanupContext()
 
 TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(const TCreatePartitionWriterCacheActorParams& params)
 {
-    using TPartitionWriterCacheActor = NKikimr::NGRpcProxy::V1::TPartitionWriterCacheActor;
-
     NPQ::TPartitionWriterOpts options;
     options.WithDeduplication(params.WithDeduplication);
     options.WithDatabase(params.Database);
     options.WithExpectedGeneration(params.Generation);
     options.WithSourceId(params.SourceId);
 
-    auto actor = std::make_unique<TPartitionWriterCacheActor>(Ctx->Edge,
-                                                              params.Partition,
-                                                              PQTabletId,
-                                                              options);
-    TActorId actorId = Ctx->Runtime->Register(actor.release());
+    TActorId actorId = Ctx->Runtime->Register(NPQ::CreatePartitionWriterCacheActor(
+        Ctx->Edge,
+        params.Partition,
+        PQTabletId,
+        options));
 
-    auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>();
-    UNIT_ASSERT(event != nullptr);
+    if (params.WaitForInitResult) {
+        auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvInitResult>();
+        UNIT_ASSERT(event != nullptr);
+    }
 
     return actorId;
 }
@@ -95,6 +95,8 @@ void TPartitionWriterCacheActorFixture::SetupEventObserver()
         } else if (auto event = ev->CastAsLocal<NPQ::TEvPartitionWriter::TEvWriteRequest>(); event) {
             auto p = CookieToTxId.find(event->GetCookie());
             UNIT_ASSERT(p != CookieToTxId.end());
+
+            CookieToWriteRequestTraceId.emplace(event->GetCookie(), NWilson::TTraceId(ev->TraceId));
 
             if (!TxIdToPartitionWriter.contains(p->second)) {
                 TxIdToPartitionWriter[p->second] = ev->Recipient;
@@ -140,7 +142,14 @@ void TPartitionWriterCacheActorFixture::SendTxWriteRequest(const TActorId& recip
     auto* w = write->Request->Record.MutablePartitionRequest()->AddCmdWrite();
     Y_UNUSED(w);
 
-    Ctx->Runtime->Send(recipient, Ctx->Edge, write.release(), 0, true);
+    Ctx->Runtime->Send(new IEventHandle(
+        recipient,
+        Ctx->Edge,
+        write.release(),
+        0,
+        0,
+        nullptr,
+        NWilson::TTraceId(params.TraceId)), 0, true);
 }
 
 void TPartitionWriterCacheActorFixture::EnsurePartitionWriterExist(const TEnsurePartitionWriterExistParams& params)
@@ -165,6 +174,17 @@ void TPartitionWriterCacheActorFixture::EnsureWriteSessionClosed(EErrorCode erro
             break;
         }
     }
+}
+
+void TPartitionWriterCacheActorFixture::EnsureNoDisconnected()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<NPQ::TEvPartitionWriter::TEvDisconnected>(TDuration::Seconds(1));
+    UNIT_ASSERT(!event);
+}
+
+void TPartitionWriterCacheActorFixture::CompleteDelayedGetOwnership()
+{
+    Ctx->Runtime->Send(PQTablet->SelfId(), Ctx->Edge, new TPQTabletMock::TEvCompleteDelayedGetOwnership(), 0, true);
 }
 
 void TPartitionWriterCacheActorFixture::WaitForPartitionWriterOps(const TWaitForPartitionWriterOpsParams& params)

@@ -5,7 +5,7 @@
 
 #include <util/generic/string.h>
 
-namespace NKikimr::NGRpcProxy::V1 {
+namespace NKikimr::NPQ {
 
 struct TDeferredDestinationUpsertParams {
     ui64 IntPublicationId = 0;
@@ -19,4 +19,4 @@ NActors::IActor* CreateDeferredDestinationUpsertActor(
     const NActors::TActorId& writer,
     TDeferredDestinationUpsertParams params);
 
-} // namespace NKikimr::NGRpcProxy::V1
+} // namespace NKikimr::NPQ

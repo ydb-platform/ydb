@@ -121,7 +121,7 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else if (TKqlTableEffect::Match(node.Get())) {
-                return RewriteTableEffect(node, ctx, TypeCtx);
+                return RewriteTableEffect(node, ctx, KqpCtx);
             } else {
                 return node;
             }

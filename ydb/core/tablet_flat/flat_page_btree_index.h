@@ -531,20 +531,20 @@ namespace NKikimr::NTable::NPage {
 
         const TShortChildV2& GetShortChildV2(TRecIdx pos) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(IsV2Format,"GetShortChildV2 called on v1 node");
+            Y_DEBUG_ABORT_UNLESS(IsV2Format, "GetShortChildV2 called on v1 node");
             return *TDeref<const TShortChildV2>::At(Children, pos * ChildStructSize());
         }
 
         const TChildV2& GetChildV2(TRecIdx pos) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(IsV2Format,"GetChildV2 called on v1 node");
+            Y_DEBUG_ABORT_UNLESS(IsV2Format, "GetChildV2 called on v1 node");
             Y_DEBUG_ABORT_UNLESS(!Header->IsShortChildFormat, "GetShortChildV2 should be used instead");
             return *TDeref<const TChildV2>::At(Children, pos * ChildStructSize());
         }
 
         TPageId GetChildV1PageId(TRecIdx pos) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(!IsV2Format,"GetChildV1PageId called on v2 node");
+            Y_DEBUG_ABORT_UNLESS(!IsV2Format, "GetChildV1PageId called on v2 node");
             return IsShortChildFormat() ? GetShortChildV1(pos).GetPageId()
                                         : GetChildV1(pos).GetPageId();
         }
@@ -552,7 +552,7 @@ namespace NKikimr::NTable::NPage {
         /// Returns the child's inline TPageLocation (v2 only).
         TPageLocation GetChildV2Location(TRecIdx pos, EPage type) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(IsV2Format,"GetChildV2Location called on V1 node");
+            Y_DEBUG_ABORT_UNLESS(IsV2Format, "GetChildV2Location called on V1 node");
             return IsShortChildFormat() ? GetShortChildV2(pos).GetLocation(type)
                                         : GetChildV2(pos).GetLocation(type);
         }

@@ -26,7 +26,7 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
         std::optional<TBtreeIndexNode> Node;
         std::optional<TRecIdx> Pos;
 
-        TNodeState(TPageLocation location, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
+        TNodeState(const TPageLocation& location, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
             : Location(location)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)

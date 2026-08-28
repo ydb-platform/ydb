@@ -264,10 +264,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     // hit `Y_ENSURE(buildInfo.IndexColumns.size() == 1)` because IndexColumns is [lang, text].
     Y_UNIT_TEST(PrefixedRelevanceBuilds) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexPrefix(true);
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true).EnableFulltextIndexPrefix(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1072,19 +1069,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         NKikimr::ShutdownAwsAPI();
     }
 
-    // TTestEnv already enables EnableFulltextIndex / EnableAddUniqueIndex by default; we only need the
-    // compact-index flag so a fulltext_plain build proto is materialized as a compact (rowid-mode) index.
-    // The schemeshard caches EnableCompactFulltextIndex at activation (it read appData before this runs),
-    // so reboot it to pick up the updated value.
-    void EnableCompactAutoProvisionFlags(TTestActorRuntime& runtime) {
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableFulltextIndex(true);
-        appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
-        appData.FeatureFlags.SetEnableAddUniqueIndex(true);
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-    }
-
     TString RowIdSrcTablePath(const TString& indexPath) {
         return TStringBuilder() << indexPath << "/"
             << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;
@@ -1094,8 +1078,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         // Compact rowid-mode build over a custom (Utf8) PK: it runs the row-id source prepass, builds the
         // compact posting tables and, on completion, the transient "rowidsrc" build table is dropped.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        EnableCompactAutoProvisionFlags(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
@@ -1148,8 +1131,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         // The compact build adds a new prepass step (FulltextRowIdSrc substate). Reboot the schemeshard
         // while it is running the prepass and verify the persisted state lets the build resume and finish.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        EnableCompactAutoProvisionFlags(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);

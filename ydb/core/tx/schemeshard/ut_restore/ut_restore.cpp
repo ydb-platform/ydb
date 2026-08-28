@@ -7584,11 +7584,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         bool enableCompact)
     {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(enableIndexMaterialization));
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(enableCompact);
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableIndexMaterialization(enableIndexMaterialization)
+            .EnableCompactFulltextIndex(enableCompact));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+        if (enableCompact) {
             if (expectedIndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain) {
                 expectedIndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact;
             } else if (expectedIndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
@@ -7840,10 +7840,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonRowIdAutoProvisionAfterRestore, EnableDataShardDirectPartImport, Compact) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(Compact));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 200;
 
         auto& ff = runtime.GetAppData().FeatureFlags;
@@ -7934,10 +7932,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonRowIdManualInfraAfterRestore, EnableDataShardDirectPartImport, Compact) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(Compact));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 200;
 
         auto& ff = runtime.GetAppData().FeatureFlags;

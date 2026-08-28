@@ -121,6 +121,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Prefixed, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCompactFulltextIndex(true);
         // speed up the test:
         // only check scheme shard reboots
         t.TabletIds.clear();
@@ -135,9 +136,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
         t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientDestroyed);
         t.NoRebootEventTypes.insert(TEvDataShard::EvBuildIndexProgressResponse);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
             {
                 TInactiveZone inactive(activeZone);
 

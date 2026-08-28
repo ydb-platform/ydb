@@ -2,8 +2,9 @@
 #include <util/generic/yexception.h>
 
 namespace NKikimr {
-    void ApplySuperLemmerInplace(TString& key) {
-        Y_UNUSED(key);
+    void ApplySuperLemmerInplace(const TString& language, TString& word) {
+        Y_UNUSED(language);
+        Y_UNUSED(word);
         throw yexception() << "Superlemmer can't be enabled in opensource ydb build";
     }
 

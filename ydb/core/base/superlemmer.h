@@ -1,6 +1,6 @@
 #pragma once
 
 namespace NKikimr {
-    void ApplySuperLemmerInplace(TString& key);
+    void ApplySuperLemmerInplace(const TString& language, TString& word);
     bool IsSuperLemmerSupportedLanguage(const TString& language);
 }

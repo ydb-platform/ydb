@@ -713,7 +713,7 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
 
     if (settings.use_filter_superlemmer()) {
         for (auto& token : tokens) {
-            ApplySuperLemmerInplace(token);
+            ApplySuperLemmerInplace(settings.language(), token);
         }
     }
 

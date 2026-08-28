@@ -7,13 +7,14 @@ namespace NKikimr {
 
 enum class EDatabaseKind {
     NotDatabase /* "NotDatabase" */,
-    // The root database of the whole cluster (the root path of the domain schemeshard).
+    // The root database of the whole cluster (the root path of the root schemeshard).
     Root /* "Root" */,
-    // An old-style lightweight database that lives inside another database's schemeshard.
+    // An old-style lightweight database that has no tenant schemeshard of its own
+    // and is served by the root schemeshard.
     SubDomain /* "SubDomain" */,
-    // A database with its own schemeshard and its own storage resources.
+    // A database with a tenant schemeshard of its own and its own compute and storage resources.
     Dedicated /* "Dedicated" */,
-    // A database with its own schemeshard that uses resources of a shared database.
+    // A database with a tenant schemeshard of its own that uses compute and storage resources of a shared database.
     Serverless /* "Serverless" */,
 
     // Note that there is no separate kind for a shared database: from the scheme point of view

@@ -41,7 +41,7 @@ namespace NTable {
             , CutIndexKeys(conf.CutIndexKeys)
             , WriteBTreeIndex(conf.WriteBTreeIndex)
             , WriteBTreeIndexV2(conf.WriteBTreeIndexV2)
-            , WriteFlatIndex(!conf.WriteBTreeIndexV2 && (conf.WriteFlatIndex || !conf.WriteBTreeIndex))
+            , WriteFlatIndex(conf.WriteFlatIndex || (!conf.WriteBTreeIndex && !conf.WriteBTreeIndexV2))
             , SmallEdge(conf.SmallEdge)
             , LargeEdge(conf.LargeEdge)
             , MaxLargeBlob(conf.MaxLargeBlob)
@@ -59,6 +59,8 @@ namespace NTable {
             , EraseRowState(tags.size())
             , SchemeData(scheme->Serialize())
         {
+            Y_ENSURE(!(conf.WriteFlatIndex && conf.WriteBTreeIndexV2),
+                     "V2 b-tree index replaces the flat index, can't write both");
             for (ui32 group : xrange(conf.Groups.size())) {
                 Groups.emplace_back(scheme, conf, tags, NPage::TGroupId(group));
                 Histories.emplace_back(scheme, conf, tags, NPage::TGroupId(group, true));

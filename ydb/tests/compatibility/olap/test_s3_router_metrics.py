@@ -81,9 +81,10 @@ class KvVolumeS3TestMixin:
             endpoint_url=s3_endpoint,
             aws_access_key_id=S3_ACCESS_KEY,
             aws_secret_access_key=S3_SECRET_KEY,
+            region_name="ru-central1",
         )
         bucket = resource.Bucket(self.s3_bucket)
-        bucket.create()
+        bucket.create(CreateBucketConfiguration={"LocationConstraint": "ru-central1"})
         bucket.objects.all().delete()
         self.s3_bucket_handle = bucket
         return s3_endpoint

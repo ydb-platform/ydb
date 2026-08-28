@@ -1058,14 +1058,28 @@ function localChart(title,metric,xName,xValues,series){
     svgChart(metric,xName,xValues,series,chartColors)+'</section>'
 }
 function localBestRows(attempts,objective,xField='attempt'){
-  let bestLoad=null,bestThroughput=-Infinity,currentStage=null;const rows=new Map;
+  let bestLoad=null,currentStage=null,stageAttempts=[];const rows=new Map;
   for(const item of attempts){
-    if(currentStage!==item.search_stage){currentStage=item.search_stage;bestLoad=null;bestThroughput=-Infinity}
+    if(currentStage!==item.search_stage){currentStage=item.search_stage;bestLoad=null;stageAttempts=[]}
+    stageAttempts.push(item);
     if(item.passed){
-      if(objective==='latency-slo'){if(bestLoad===null||item.load>bestLoad)bestLoad=item.load}
-      else if(Number(item.throughput)>bestThroughput){bestThroughput=Number(item.throughput);bestLoad=item.load}
+      if(objective?.type==='latency-slo'){
+        if(bestLoad===null||item.load>bestLoad)bestLoad=item.load
+      }else if(objective?.type==='maximize-throughput'){
+        const saturated=stageAttempts.filter(value=>value.passed&&value.target_cpu_saturated);
+        if(saturated.length){
+          const bestThroughput=Math.max(...saturated.map(value=>Number(value.throughput)));
+          const minimumThroughput=bestThroughput*(1-Number(objective.plateau_gain_percent||0)/100);
+          bestLoad=Math.min(...saturated.filter(value=>Number(value.throughput)>=minimumThroughput).map(value=>value.load))
+        }
+      }else{
+        const best=stageAttempts.filter(value=>value.passed).sort(
+          (left,right)=>Number(right.throughput)-Number(left.throughput)||left.load-right.load
+        )[0];
+        bestLoad=best?.load??null
+      }
     }
-    rows.set(String(item[xField]),{...item,current_best:bestLoad,passed_load:item.passed?item.load:null,failed_load:item.passed?null:item.load})
+    rows.set(String(item[xField]),{...item,current_best:bestLoad,failed_load:item.passed?null:item.load})
   }
   return rows
 }
@@ -1079,7 +1093,7 @@ function renderLocalYdbProfile(container,data){
   const profileConfigOpen=container.querySelector('[data-local-profile-config][open]')!==null;
   const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[];
   const result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{};
-  const objective=loadConfig.objective?.type||'points';
+  const objective=loadConfig.objective||{type:'points'};
   const phaseElapsed=localElapsed(progress.phase_started_at);
   const phaseDuration=Number(progress.phase_duration_seconds);
   const profileElapsed=localElapsed(data.started_at,data.finished_at);
@@ -1170,10 +1184,13 @@ function renderLocalYdbProfile(container,data){
       suffix:xAxis==='parameter'&&stages.length>1?
         ' · stage '+item.search_stage+' · '+item.dynamic_nodes+' dynamic':''
     }));
+    const bestLabel=objective.type==='latency-slo'?'Highest passing':
+      (objective.type==='maximize-throughput'?'Plateau candidate':'Best observed');
     const candidateSeries=groups.flatMap(group=>[
       {rows:group.bestRows,metric:'load',label:'Candidate'+group.suffix,colorIndex:7},
-      {rows:group.bestRows,metric:'current_best',label:'Current best'+group.suffix,colorIndex:0},
-      {rows:group.bestRows,metric:'passed_load',label:'Passed'+group.suffix,colorIndex:10},
+      {rows:group.bestRows,metric:'current_best',label:bestLabel+group.suffix,colorIndex:0},
+      {rows:group.bestRows,metric:'search_low',label:'Search low'+group.suffix,colorIndex:10},
+      {rows:group.bestRows,metric:'search_high',label:'Search high'+group.suffix,colorIndex:9},
       {rows:group.bestRows,metric:'failed_load',label:'Failed'+group.suffix,colorIndex:8}
     ]);
     const throughputSeries=groups.flatMap(group=>{
@@ -1205,12 +1222,14 @@ function renderLocalYdbProfile(container,data){
       {rows:group.rows,metric:'errors',label:'Errors'+group.suffix,colorIndex:8},
       {rows:group.rows,metric:'retries',label:'Retries'+group.suffix,colorIndex:1}
     ]);
+    const showSearchProgress=xAxis==='attempt';
+    const chartSeries={
+      throughput:throughputSeries,latency_ms:latencySeries,cpu_percent:cpuSeries,errors:errorSeries
+    };
+    if(showSearchProgress)chartSeries.load=candidateSeries;
     chartBinding={
       xName,xValues,
-      series:{
-        load:candidateSeries,throughput:throughputSeries,latency_ms:latencySeries,
-        cpu_percent:cpuSeries,errors:errorSeries
-      }
+      series:chartSeries
     };
     const axisHelp=xAxis==='parameter'?
       'Points are ordered by the searched parameter; geometry stages remain separate.':
@@ -1221,7 +1240,10 @@ function renderLocalYdbProfile(container,data){
       '<button type=button data-local-chart-x=parameter class="'+(xAxis==='parameter'?'primary':'')+
       '" aria-pressed="'+(xAxis==='parameter')+'">'+esc(searchAxisLabel)+'</button></div></div>'+
       '<p class=muted>'+esc(axisHelp)+'</p><div class=local-charts>'+
-      localChart('Candidate and current best','load',xName,xValues,candidateSeries)+
+      (showSearchProgress?localChart(
+        objective.type==='maximize-throughput'?'Ternary search progress':'Load search progress',
+        'load',xName,xValues,candidateSeries
+      ):'')+
       localChart('Offered and achieved throughput','throughput',xName,xValues,throughputSeries)+
       localChart('Latency','latency_ms',xName,xValues,latencySeries)+
       localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+

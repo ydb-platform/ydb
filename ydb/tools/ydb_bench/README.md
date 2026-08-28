@@ -124,9 +124,10 @@ block device.
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
 benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. A
 `values` list measures exact points. For adaptive runs, `search` defines the
-range and resolution. `maximize-throughput` uses a discrete ternary search and
-prefers the lowest load with the best observed throughput; a plateau is
-confirmed only when the selected role's CPU is saturated. `latency-slo` uses
+range and resolution. `maximize-throughput` uses a discrete ternary search and,
+after confirming a plateau, selects the lowest CPU-saturated load within the
+configured throughput tolerance of the best saturated measurement. A plateau
+is confirmed only when the selected role's CPU is saturated. `latency-slo` uses
 the configured `multiplier` to find the first failing point, then a binary
 search to find the highest load whose millisecond percentile, error count, and
 achieved-rate ratio satisfy the SLO. For example:

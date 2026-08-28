@@ -576,7 +576,7 @@ class YdbBenchTest(unittest.TestCase):
             },
             on_attempt=lambda attempt: throughput_attempts.append(attempt["load"]),
         )
-        self.assertEqual(throughput.selected_load, 40)
+        self.assertEqual(throughput.selected_load, 38)
         self.assertEqual(throughput.outcome, "plateau-found")
         self.assertEqual(throughput_attempts[0], 10)
         self.assertEqual(len(throughput_attempts), len(set(throughput_attempts)))
@@ -631,6 +631,45 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(no_feasible_latency.outcome, "no-feasible-point")
         self.assertEqual(no_feasible_latency.failing_load, 10)
         self.assertEqual(below_start_attempts, [10])
+
+    def test_throughput_plateau_uses_absolute_gain_and_stable_lowest_load(self):
+        result = load_control.search_load(
+            {
+                "parameter": "rate",
+                "search": {"start": 10, "maximum": 100, "multiplier": 2, "resolution_percent": 40},
+                "objective": {
+                    "type": "maximize-throughput",
+                    "target_role": "dynamic",
+                    "cpu_saturation_percent": 80,
+                    "plateau_gain_percent": 2,
+                    "plateau_points": 2,
+                },
+            },
+            lambda load: {
+                "throughput": 1000 - load,
+                "errors": 0,
+                "dynamic_cpu_mean": 90,
+                "static_cpu_mean": 10,
+                "host_cpu_mean": 20,
+            },
+        )
+        self.assertEqual(result.outcome, "best-observed")
+        self.assertEqual(result.selected_load, 10)
+        self.assertEqual((result.attempts[0]["search_low"], result.attempts[0]["search_high"]), (10, 100))
+        self.assertTrue(
+            any(item["search_high"] - item["search_low"] < 90 for item in result.attempts if "search_low" in item)
+        )
+
+        selected = load_control._lowest_saturated_plateau_load(
+            [
+                {"load": 30, "throughput": 5600, "passed": True, "target_cpu_saturated": False},
+                {"load": 54, "throughput": 5500, "passed": True, "target_cpu_saturated": True},
+                {"load": 61, "throughput": 5637.45, "passed": True, "target_cpu_saturated": True},
+                {"load": 340, "throughput": 5694.58, "passed": True, "target_cpu_saturated": True},
+            ],
+            2,
+        )
+        self.assertEqual(selected, 61)
 
     def test_throughput_controller_uses_ternary_search_and_error_bounds(self):
         config = {
@@ -3358,6 +3397,12 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"Failed workload requests are allowed", script)
                 self.assertIn(b"function localElapsed(started,finished=null)", script)
                 self.assertIn(b"Search process", script)
+                self.assertIn(b"Ternary search progress", script)
+                self.assertIn(b"Plateau candidate", script)
+                self.assertIn(b"Search low", script)
+                self.assertIn(b"Search high", script)
+                self.assertNotIn(b"Candidate and current best", script)
+                self.assertNotIn(b"label:'Passed'", script)
                 self.assertIn(b"function localSearchAxisLabel", script)
                 self.assertIn(b"data-local-chart-x", script)
                 self.assertIn(b"Attempts (search order)", script)

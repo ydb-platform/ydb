@@ -194,3 +194,20 @@ class CanonicalCaptureAuditFileOutput:
             universal_lines=True,
             path=make_test_file_with_content('audit_log.json', self.captured)
         )
+
+
+def capture_dstool_evict_vdisk_audit(cluster, token):
+    list_result = json.loads(execute_dstool_grpc(cluster, token, ['vdisk', 'list', '--format', 'json']))
+    assert len(list_result) > 0
+    vdisk_id = list_result[0]['VDiskId']
+    assert vdisk_id
+
+    capture_audit = CanonicalCaptureAuditFileOutput(cluster.config.audit_file_path)
+    with capture_audit:
+        execute_dstool_grpc(
+            cluster,
+            token,
+            ['vdisk', 'evict', '--vdisk-ids', vdisk_id, '--ignore-degraded-group-check',
+             '--ignore-failure-model-group-check'],
+        )
+    return capture_audit.canonize()

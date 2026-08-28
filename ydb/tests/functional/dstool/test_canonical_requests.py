@@ -75,6 +75,7 @@ class TestBase:
         self.grpc_port = ydb_cluster.nodes[1].grpc_port
         self.mon_port = ydb_cluster.nodes[1].mon_port
         self.endpoint = 'grpc://%s:%s' % (self.host, self.grpc_port)
+        self.http_endpoint = 'http://%s:%s' % (self.host, self.mon_port)
 
     def _canonical_file(self, filename, content):
         path = os.path.join(yatest.common.output_path(), filename)
@@ -124,19 +125,26 @@ class TestBase:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None,
-               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None, suppress_table_dump=False):
+               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None, suppress_table_dump=False,
+               endpoint=None, expected_storage_api=None):
         random.seed(42)
         common.cache.clear()
         common.name_cache.clear()
         results = []
         results.append(' '.join(['dstool -e <endpoint> --mon-port <mon_port>', *args]))
-        args = ['-e', self.endpoint, '--mon-port', self.mon_port, *args]
+        args = ['-e', endpoint or self.endpoint, '--mon-port', self.mon_port, *args]
 
         grpc_calls = []
         http_calls = []
+        storage_api_calls = []
         original_invoke_grpc = common.invoke_grpc
 
         def mock_invoke_grpc(func, *params, **kwargs):
+            if func in ('StreamStorageState', 'ReassignVDisk'):
+                storage_api_calls.append('distributed_storage')
+            elif func == 'BlobStorageConfig':
+                storage_api_calls.append('blob_storage_config')
+
             if fake_grpc_handler is not None:
                 response = fake_grpc_handler.handle(func, *params)
             else:
@@ -206,6 +214,8 @@ class TestBase:
                 params['sessionId'] = 'SESSION_ID'
             query_string = urllib.parse.urlencode(params, doseq=True)
             http_calls.append(f'{method} {path}?{query_string}')
+            if method == 'POST' and path == 'tablets/app':
+                storage_api_calls.append('blob_storage_config')
 
             return response
 
@@ -233,6 +243,12 @@ class TestBase:
                 dstool_main(args)
             except SystemExit as e:
                 exit_status = e.code
+
+        if expected_storage_api is not None:
+            assert storage_api_calls, 'Expected %s API call, got none' % expected_storage_api
+            assert set(storage_api_calls) == {expected_storage_api}, (
+                'Expected only %s API calls, got %s' % (expected_storage_api, storage_api_calls)
+            )
 
         results.append(f'Exit Status: {exit_status}')
 
@@ -266,13 +282,19 @@ class Test(TestBase):
             self._trace('--unknown-arg'),
             self._trace('device', 'list', '-AH'),
             self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
-            self._trace('group', 'list', '-AH'),
+            self._trace('group', 'list', '-AH', expected_storage_api='distributed_storage'),
             self._trace('pdisk', 'list', '-AH'),
             self._trace('pool', 'list', '-AH'),
             self._trace('box', 'list', '-AH'),
             self._trace('node', 'list', '-A'),
             self._trace('cluster', 'list', '-A'),
         ]
+
+    def test_group_list_legacy_api(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+        return self._trace('group', 'list', '-AH', endpoint=self.http_endpoint, allow_http_fetch=True,
+                           expected_storage_api='blob_storage_config')
 
     def test_pdisk_set_status_inactive(self):
         return [
@@ -492,14 +514,14 @@ class Test(TestBase):
 
         return [trace1, trace2]
 
-    def test_pdisk_check_leaked_slots(self):
+    def _run_pdisk_check_leaked_slots(self, endpoint, storage_api):
         retry_assertions(self.check_pdisk_metrics_collected)
 
         # Initialize dstool connection params to allow common.fetch_json_info
         import argparse
         p = argparse.ArgumentParser()
         common.add_host_access_options(p)
-        common.apply_args(p.parse_args(['-e', self.endpoint, '--mon-port', str(self.mon_port), '-q']))
+        common.apply_args(p.parse_args(['-e', endpoint, '--mon-port', str(self.mon_port), '-q']))
 
         base_config = self.cluster.client.query_base_config().BaseConfig
         pdisk_node_ids = sorted({pdisk.NodeId for pdisk in base_config.PDisk})
@@ -534,14 +556,26 @@ class Test(TestBase):
             'NodeId:PDiskId',
             'LeakedSlots',
         ]
+        use_http = storage_api == 'blob_storage_config'
 
         return [
-            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),
-            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode', with_grpc_calls=True),
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', endpoint=endpoint,
+                        with_grpc_calls=not use_http, allow_http_fetch=use_http,
+                        expected_storage_api=storage_api),
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode',
+                        endpoint=endpoint, with_grpc_calls=not use_http, allow_http_fetch=use_http,
+                        expected_storage_api=storage_api),
             retry_assertions(check_donors_dropped),
             retry_assertions(check_no_leaked_slots),
-            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', '--columns', *pdisk_columns, allow_http_fetch=True),
+            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', '--columns', *pdisk_columns,
+                        endpoint=endpoint, allow_http_fetch=True),
         ]
+
+    def test_pdisk_check_leaked_slots(self):
+        return self._run_pdisk_check_leaked_slots(self.endpoint, 'distributed_storage')
+
+    def test_pdisk_check_leaked_slots_legacy_api(self):
+        return self._run_pdisk_check_leaked_slots(self.http_endpoint, 'blob_storage_config')
 
     def test_pool_estimated_usage(self):
         builder = (

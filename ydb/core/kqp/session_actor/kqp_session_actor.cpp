@@ -595,6 +595,13 @@ public:
         CompileQuery();
     }
 
+    void NotifyWmClassification(const TString& poolId,
+                                const NWorkloadManager::TResolver& resolver = NWorkloadManager::TResolver::Default()) {
+        if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+            updater->SetPoolContext(poolId, resolver.ToSysViewString());
+        }
+    }
+
     bool WmPreCompileClassify() {
         auto classifier = QueryState->QueryClassifier;
 
@@ -617,6 +624,7 @@ public:
                     {"traceId", TraceId()});
 
                 QueryState->UserRequestContext->PoolId = s.PoolId;
+                NotifyWmClassification(s.PoolId, s.Resolver);
                 if (s.SkipAdmission) {
                     QueryState->UserRequestContext->PoolConfig = s.PoolConfig;
                     return std::nullopt;
@@ -638,6 +646,7 @@ public:
                     {"logPrefix", LogPrefix()},
                     {"traceId", TraceId()});
                 QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+                NotifyWmClassification(NResourcePool::DEFAULT_POOL_ID);
                 return std::nullopt;
             },
             [this](const NWorkloadManager::IQueryClassifier::TPendingCompilation&) -> TError {
@@ -1082,6 +1091,7 @@ public:
                     {"skipAdmission", r.SkipAdmission},
                     {"traceId", TraceId()});
                 QueryState->UserRequestContext->PoolId = r.PoolId;
+                NotifyWmClassification(r.PoolId, r.Resolver);
                 if (r.SkipAdmission) {
                     QueryState->UserRequestContext->PoolConfig = r.PoolConfig;
                     return std::nullopt;
@@ -1095,6 +1105,7 @@ public:
                     {"marker", "KQPSA"},
                     {"logPrefix", LogPrefix()},
                     {"traceId", TraceId()});
+                NotifyWmClassification(NResourcePool::DEFAULT_POOL_ID);
                 return std::nullopt;
             },
             [this](const NWorkloadManager::IQueryClassifier::TReject& r) -> TError {

@@ -35,6 +35,13 @@ enum ESimpleCounters {
     COUNTER_SPACE_COLOR_ORANGE = 27 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Orange"}];
     COUNTER_SPACE_COLOR_RED = 28 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Red"}];
     COUNTER_SPACE_COLOR_BLACK = 29 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Black"}];
+<<<<<<< HEAD
+=======
+    COUNTER_S3_ROUTER_IS_USING_PROXY = 30 [(NKikimr.CounterOpts) = {Name: "S3/Router/IsUsingProxy"}];
+    COUNTER_S3_GET_READS_IN_FLIGHT = 31 [(NKikimr.CounterOpts) = {Name: "S3/Get/ReadsInFlight"}];
+    COUNTER_S3_GET_MAX_READS_IN_FLIGHT = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/MaxReadsInFlight"}];
+    COUNTER_S3_GET_PENDING_QUEUE_SIZE = 33 [(NKikimr.CounterOpts) = {Name: "S3/Get/PendingQueueSize"}];
+>>>>>>> 523288465c8 (Fixed router switch (#51236))
 }
 
 enum ECumulativeCounters {
@@ -68,7 +75,16 @@ enum ECumulativeCounters {
     COUNTER_S3_ROUTER_ENDPOINT_SWITCHES = 25 [(NKikimr.CounterOpts) = {Name: "S3/Router/EndpointSwitches"}];
     COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS = 26 [(NKikimr.CounterOpts) = {Name: "S3/Router/FiveXxRefreshTriggers"}];
     COUNTER_S3_ROUTER_PENDING_REJECTS = 27 [(NKikimr.CounterOpts) = {Name: "S3/Router/Pending/Rejects"}];
+<<<<<<< HEAD
 >>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
+=======
+    COUNTER_S3_GETS_OK = 28 [(NKikimr.CounterOpts) = {Name: "S3/Gets/Ok"}];
+    COUNTER_S3_GETS_ERROR = 29 [(NKikimr.CounterOpts) = {Name: "S3/Gets/Error"}];
+    COUNTER_S3_GETS_BYTES = 30 [(NKikimr.CounterOpts) = {Name: "S3/Gets/OkBytes"}];
+    COUNTER_S3_GETS_SLOW_DOWN = 31 [(NKikimr.CounterOpts) = {Name: "S3/Gets/SlowDown"}];
+    COUNTER_S3_GET_THROTTLE_ACTIVATIONS = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/ThrottleActivations"}];
+    COUNTER_S3_ROUTER_RETIRING_WRAPPERS_ABORTED = 33 [(NKikimr.CounterOpts) = {Name: "S3/Router/RetiringWrappersAborted"}];
+>>>>>>> 523288465c8 (Fixed router switch (#51236))
 }
 
 enum EPercentileCounters {

@@ -389,9 +389,13 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
 
     TMaybe<TVector<TResolvedSchemeChangeTarget>> targets = ResolveSchemeChangeTargets(requestTx, this);
 
-    // Not redacted yet: the body carries whatever the request carried. Inert only because the flag is off.
-    const NKikimrSchemeOp::TModifyScheme& redacted = requestTx;
+    // Redact every (Ydb.sensitive) field before persisting: passwords, access keys
+    // and secret values must never reach subscribers unless config disables this.
+    NKikimrSchemeOp::TModifyScheme redacted = requestTx;
     TVector<TString> redactedFields;
+    if (RedactSchemeChangeSensitiveFields) {
+        ClearSensitiveFields(&redacted, redactedFields);
+    }
 
     TString body;
     {

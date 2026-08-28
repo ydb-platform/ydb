@@ -827,6 +827,11 @@ private:
             }
 
             case simdjson::builtin::ondemand::json_type::null: {
+                bool isNull;
+                CHECK_JSON_ERROR(jsonValue.is_null().get(isNull)) {
+                    SetParsingError(error, jsonValue, "parse as null", status, isQuiet);
+                    return false;
+                }
                 if (Y_UNLIKELY(!isOptional)) {
                     status =  TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Found unexpected null value, expected non optional data type " << dataTypeName);
                     return false;

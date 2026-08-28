@@ -1,8 +1,8 @@
-ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_PermutedWrite_PermutedRead_PDiskFallback
-ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_PermutedWrite_SeqRead_PDiskFallback
-ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_SeqWrite_PermutedRead_PDiskFallback
-ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskLargeTest.Batch10K_SeqWrite_SeqRead_PDiskFallback
+ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferWithRestarts
 ydb/core/blobstorage/ut_blobstorage/ut_race GroupReconfigurationRace.Test_block42
+ydb/core/blobstorage/ut_blobstorage/ut_race unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
+ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeStrings
 ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
@@ -16,10 +16,12 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/persqueue/public/schema/ut SchemaOps.CannotChangeConsumerType
 ydb/core/persqueue/public/schema/ut SchemaOps.CreateAlterDropSmoke
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
-ydb/core/tx/schemeshard/ut_set_column_constraint_reboots SetNotNullReboots.SetNotNullOnSingleColumn[TabletReboots]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
+ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_set_column_constraint_reboots unittest.[*/*] chunk
-ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresActorSystemDelivery
+ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdleSessions
+ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
@@ -27,18 +29,25 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconn
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
-ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
-ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-3-1_to_prestable-26-4]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-False]
+ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-lax]
+ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-strict]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-False]
-ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_plain_and_batched_messages_survive_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
-ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_written_messages_are_read_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
-ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-2-1_to_stable-26-3-1]
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/fq/s3 test_s3_0.py.TestS3.test_checkpoints_on_join_s3_with_yds[v1-mvp_external_ydb_endpoint0-client0]
 ydb/tests/fq/s3 test_s3_0.py.TestS3.test_csv[v1-false-client0]
 ydb/tests/fq/streaming py3test.[*/*] chunk
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[mr-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[multi_output-False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[multi_output-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[hop-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[join-False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/yds py3test.[*/*] chunk
 ydb/tests/fq/yds test_big_state.py.TestBigState.test_gt_8mb[v1]
@@ -58,14 +67,14 @@ ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/config test_distconf_static_group.py.TestStaticGroupSelfHealPlacementPolicy.test_local_policy_relocates_to_spare_pdisk_on_same_node
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
-ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_tab_navigation_matches_state_machine_for_core_command_sequences
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
+ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWriteChecksumsDisabled
 ydb/tools/stress_tool/ut unittest.sole chunk

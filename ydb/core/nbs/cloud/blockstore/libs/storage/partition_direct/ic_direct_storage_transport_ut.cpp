@@ -1,6 +1,7 @@
 #include "direct_block_group_test_fixture.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/fake_direct_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
@@ -79,11 +80,15 @@ TGuardedSgList MakeSgList(TString& buffer)
     return result;
 }
 
-void CheckDirectWriteChecksums(TDBGFixture& fixture, bool directSession)
+void CheckDirectWriteChecksums(
+    TDBGFixture& fixture,
+    bool directSession,
+    bool enableChecksums)
 {
     auto executor = fixture.MakeExecutor();
-    auto transport =
-        std::make_unique<TICStorageTransportTestAdapter>(fixture.Runtime.get());
+    auto transport = std::make_unique<TICStorageTransportTestAdapter>(
+        fixture.Runtime.get(),
+        enableChecksums);
     if (directSession) {
         transport->EnableFakeDirectSession();
     }
@@ -135,11 +140,17 @@ void CheckDirectWriteChecksums(TDBGFixture& fixture, bool directSession)
         NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
     UNIT_ASSERT_VALUES_EQUAL(writeRequests, 1u);
     UNIT_ASSERT_VALUES_EQUAL(observedPayload, writeBuf);
-    UNIT_ASSERT_VALUES_EQUAL(
-        observedChecksums.size(),
-        expectedChecksums.size());
-    for (size_t i = 0; i < expectedChecksums.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(observedChecksums[i], expectedChecksums[i]);
+    if (enableChecksums) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            observedChecksums.size(),
+            expectedChecksums.size());
+        for (size_t i = 0; i < expectedChecksums.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                observedChecksums[i],
+                expectedChecksums[i]);
+        }
+    } else {
+        UNIT_ASSERT(observedChecksums.empty());
     }
     UNIT_ASSERT_VALUES_EQUAL(
         transport->GetFakeDirectSessionSentEventCount(),
@@ -186,12 +197,34 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
     Y_UNIT_TEST_F(ActorPathDirectWriteCarriesPerBlockChecksums, TDBGFixture)
     {
-        CheckDirectWriteChecksums(*this, /*directSession=*/false);
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/false,
+            /*enableChecksums=*/true);
     }
 
     Y_UNIT_TEST_F(DirectSessionWriteCarriesPerBlockChecksums, TDBGFixture)
     {
-        CheckDirectWriteChecksums(*this, /*directSession=*/true);
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/true,
+            /*enableChecksums=*/true);
+    }
+
+    Y_UNIT_TEST_F(ActorPathCanDisableWriteChecksums, TDBGFixture)
+    {
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/false,
+            /*enableChecksums=*/false);
+    }
+
+    Y_UNIT_TEST_F(DirectSessionCanDisableWriteChecksums, TDBGFixture)
+    {
+        CheckDirectWriteChecksums(
+            *this,
+            /*directSession=*/true,
+            /*enableChecksums=*/false);
     }
 
     // With a fake IDirectSession injected, WriteToDDisk / ReadFromDDisk go
@@ -302,7 +335,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto readFuture = transport->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{1, 0, DefaultBlockSize},
-            /*lsn=*/42,
+            MakeKey(42),
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -510,7 +543,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto future = transportPtr->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
-            /*lsn=*/1,
+            MakeKey(1),
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -554,7 +587,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
         auto batch = transport->BatchEraseFromPBuffer(
             pbConnection,
-            TVector<ui64>{1, 2, 3},
+            TVector<TPBufferKey>{MakeKey(1), MakeKey(2), MakeKey(3)},
             nullptr);
         WaitFuture(executor, batch, WaitTimeout);
         UNIT_ASSERT(
@@ -574,7 +607,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             pbConnection,
             ddConnection,
             TVector{NDDisk::TBlockSelector{0, 0, DefaultBlockSize}},
-            TVector<ui64>{1},
+            TVector<TPBufferKey>{MakeKey(1)},
             nullptr);
         WaitFuture(executor, sync, WaitTimeout);
         UNIT_ASSERT(

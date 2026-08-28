@@ -340,7 +340,7 @@ public:
     }
 
     void Compile() override {
-        YDB_LOG_TRACE("Send compile request with id",
+        YDB_LOG_TRACE("Send compile request",
             {"logPrefix", LogPrefix},
             {"cookie", Cookie_});
 
@@ -357,7 +357,7 @@ public:
     }
 
     void AbortCompilation() override {
-        YDB_LOG_TRACE("Send abort compile request with id",
+        YDB_LOG_TRACE("Send abort compile request",
             {"logPrefix", LogPrefix},
             {"cookie", Cookie_});
         NActors::TActivationContext::ActorSystem()->Send(
@@ -379,7 +379,7 @@ public:
 
     void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
-        YDB_LOG_ERROR("Program compilation",
+        YDB_LOG_ERROR("Program compilation failed",
             {"logPrefix", LogPrefix},
             {"error", status.GetErrorMessage()});
         CompileErrors_->Inc();
@@ -473,7 +473,7 @@ private:
         "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
     );
 
-    YDB_LOG_DEBUG("Generated sql:\n",
+    YDB_LOG_DEBUG("Generated program sql",
         {"logPrefix", LogPrefix},
         {"result", result});
     return result;

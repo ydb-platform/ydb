@@ -181,4 +181,6 @@ constexpr bool DEFAULT_JOIN_COMMON_ANY_SIDE_FIRST = false;
 
 constexpr bool DEFAULT_FIX_ENDLESS_LOOP_IN_DROP_IF_EXISTS = false;
 
+constexpr bool DEFAULT_APPLY_MAX_JOB_COUNT_TO_ALL = false;
+
 } // NYql

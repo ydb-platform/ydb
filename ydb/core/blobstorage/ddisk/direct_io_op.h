@@ -34,6 +34,8 @@ public:
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept = 0;
     virtual bool IsIntegrityIo() const noexcept { return false; }
+    virtual bool IsChunkFormatIo() const noexcept { return false; }
+    bool IsCriticalDDiskIo() const noexcept { return IsIntegrityIo() || IsChunkFormatIo(); }
 
     virtual void ClearForRecycle() noexcept;
 
@@ -239,6 +241,33 @@ public:
 
 private:
     ui64 IoId = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDDiskActor::TChunkFormatIoOp
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class TDDiskActor::TChunkFormatIoOp final : public TDDiskActor::TDirectIoOpBase {
+public:
+    explicit TChunkFormatIoOp(TDDiskActor& actor)
+        : TDirectIoOpBase(actor)
+    {}
+
+    void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
+    bool IsChunkFormatIo() const noexcept override { return true; }
+
+    void SetFormatRange(TChunkIdx chunkIdx, ui32 offsetInBytes, ui32 size) {
+        ChunkIdx = chunkIdx;
+        OffsetInBytes = offsetInBytes;
+        Size = size;
+    }
+
+private:
+    TChunkIdx ChunkIdx = 0;
+    ui32 OffsetInBytes = 0;
+    ui32 Size = 0;
 };
 
 } // namespace NKikimr::NDDisk

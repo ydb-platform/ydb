@@ -220,12 +220,8 @@ CREATE RESOURCE POOL the_ceo WITH (
 - **YDB CLI ([интерактивный режим](../reference/ydb-cli/interactive-cli.md))** — [командой](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.
 - **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
 - **YDB GO SDK** — в настройках запуска запроса `ExecuteOption` через вызов [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool).
-
-{% note warning %}
-
-Текущая версия **YDB Python SDK** не позволяет определять пул ресурсов, в котором необходимо выполнить запрос.
-
-{% endnote %}
+- **YDB Java SDK** — в настройках запуска запроса `ExecuteQuerySettings` через вызов [withResourcePool](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.3.12/query/src/main/java/tech/ydb/query/settings/ExecuteQuerySettings.java#L65), начиная с версии 2.3.12.
+- **YDB Python SDK** — в параметре [pool_id](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.2/ydb/query/session.py#L478) методов `QuerySession.execute()`, `QueryTxContext.execute()` и `QuerySessionPool.execute_with_retries()`, начиная с версии 3.31.2.
 
 ## Диагностика
 

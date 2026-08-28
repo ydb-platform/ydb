@@ -7,6 +7,8 @@ import ydb
 from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.common.wait_for import retry_assertions
+from ydb.core.protos import msgbus_pb2
 import requests
 from urllib.parse import urlencode
 import time
@@ -48,6 +50,12 @@ class TestViewer(object):
             'enable_column_statistics': True,
             },
             enable_static_auth=True)
+        config.yaml_config['blob_storage_config']['infer_pdisk_slot_count_settings'] = {
+            'rot': {
+                'unit_size': 4 * 1024**3,
+                'max_slots': 16,
+            },
+        }
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
         config.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True
         config.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database']
@@ -89,6 +97,7 @@ class TestViewer(object):
             'X-CSRF-Token': cls.csrf_token,
         }
         cls.wait_for_cluster_ready()
+        cls.setup_group_size_in_units()
         yield
         cls.cluster.stop()
 
@@ -390,6 +399,34 @@ class TestViewer(object):
     @classmethod
     def test_waiting_for_cluster_ready(cls):
         return {}
+
+    @classmethod
+    def setup_group_size_in_units(cls, pool_name='dynamic_storage_pool:1', size_in_units=1):
+        "Changes group_size_in_units for all groups in pool"
+        cls.cluster.client.set_auth_token(cls.root_token)
+        storage_pool = next(p for p in cls.cluster.client.read_storage_pools() if p.Name == pool_name)
+
+        request = msgbus_pb2.TBlobStorageConfigRequest(Domain=1)
+        command = request.Request.Command.add().ChangeGroupSizeInUnits
+        command.BoxId = storage_pool.BoxId
+        command.StoragePoolId = storage_pool.StoragePoolId
+        command.ItemConfigGeneration = storage_pool.ItemConfigGeneration
+        command.SizeInUnits = size_in_units
+
+        response = cls.cluster.client._send_blob_storage_config_request(request)
+        assert response.Success, response.ErrorDescription
+        assert all(status.Success for status in response.Status), response
+
+        def get_updated_groups():
+            result = cls.get_viewer_normalized("/viewer/groups", {
+                'fields_required': 'GroupSizeInUnits,PoolName',
+                'filter_group_by': 'PoolName',
+                'filter_group': pool_name
+            })
+            assert result.get('StorageGroups'), result
+            assert all(g.get('GroupSizeInUnits') == size_in_units for g in result['StorageGroups']), result
+
+        return retry_assertions(get_updated_groups)
 
     @classmethod
     def test_whoami_root(cls):
@@ -816,9 +853,48 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_groups(cls):
-        return cls.normalize_result(cls.get_viewer("/viewer/groups", {
+        result = cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'
         }))
+
+        group_size_only = cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'GroupSizeInUnits',
+        })
+        group_size_only_groups = group_size_only.get('StorageGroups', [])
+        assert group_size_only_groups, group_size_only
+        assert all('GroupSizeInUnits' in group for group in group_size_only_groups), group_size_only
+        assert all('VDisks' not in group for group in group_size_only_groups), group_size_only
+
+        whiteboard_only = cls.get_viewer_normalized("/viewer/groups", {
+            'whiteboard_only': 'true',
+            'filter_group_by': 'PoolName',
+            'filter_group': 'dynamic_storage_pool:1',
+        })
+        whiteboard_only_groups = whiteboard_only.get('StorageGroups', [])
+        assert whiteboard_only_groups, whiteboard_only
+        assert all(
+            group.get('GroupSizeInUnits', 0) > 0
+            for group in whiteboard_only_groups
+        ), whiteboard_only
+        for group in whiteboard_only_groups:
+            vdisks = group.get('VDisks', [])
+            assert vdisks, group
+            assert all(
+                vdisk.get('Whiteboard', {}).get('GroupSizeInUnits') == group['GroupSizeInUnits']
+                for vdisk in vdisks
+            ), group
+
+        result['GroupSizeInUnitsChecks'] = {
+            'GroupSizeOnly': {
+                'AllGroupsHaveField': True,
+                'HasNestedDiskData': False,
+            },
+            'WhiteboardOnly': {
+                'AllGroupsHaveNonZeroSize': True,
+                'AllGroupsMatchVDisks': True,
+            },
+        }
+        return result
 
     # A strict database user is allowed to filter groups by group_id/node_id/pdisk_id, and every such
     # filter is validated against the storage of the database, so the handler has to fetch GroupId,

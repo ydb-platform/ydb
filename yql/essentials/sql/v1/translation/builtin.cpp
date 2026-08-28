@@ -4099,7 +4099,7 @@ TNodeResult BuildBuiltinFunc(
         return Wrap(BuildScriptUdf(pos, scriptName, name, args, nullptr));
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleType(normalizedName, ctx.FlexibleTypes, /* isPgType = */ false)) {
-            const auto type = *simpleType;
+            const auto& type = *simpleType;
             if (NUdf::FindDataSlot(type)) {
                 YQL_ENSURE(type != "Decimal");
                 return TNonNull(TNodePtr(new TYqlData(pos, type, args)));

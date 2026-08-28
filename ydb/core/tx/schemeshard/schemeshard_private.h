@@ -5,6 +5,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -56,6 +57,7 @@ namespace TEvPrivate {
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
         EvMoveShardToStoragePool,
+        EvPeriodicTableStatsParsed,
         EvEnd
     };
 
@@ -376,6 +378,18 @@ namespace TEvPrivate {
             , NewBindings(std::move(newBindings))
             , HttpSender(httpSender)
             , HiveReply(std::move(hiveReply))
+        {}
+    };
+
+    // Sent by TStatsParserActor back to the schemeshard after it parsed a raw
+    // TEvDataShard::TEvPeriodicTableStats. Carries the same handle (not just the record) so the
+    // original datashard Sender survives for VerifySplitAndRequestStats, and the schemeshard's
+    // Get() is a cache hit rather than a second parse.
+    struct TEvPeriodicTableStatsParsed : public TEventLocal<TEvPeriodicTableStatsParsed, EvPeriodicTableStatsParsed> {
+        TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
+
+        explicit TEvPeriodicTableStatsParsed(TEvDataShard::TEvPeriodicTableStats::TPtr&& ev)
+            : Ev(std::move(ev))
         {}
     };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_compact_common.h>
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_corpus.h>
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_predicate.h>
 
@@ -37,8 +38,6 @@ TKikimrRunner Kikimr(bool enableJsonIndex = true, bool enableJsonIndexAutoSelect
 TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect = false);
 
 void CreateTestTable(NYdb::NQuery::TQueryClient& db, const std::string& type = "Json", bool withIndex = false);
-
-NYdb::TResultSet ReadIndex(NYdb::NQuery::TQueryClient& db, const char* table = "indexImplTable");
 
 void TestAddJsonIndex(const std::string& type, bool nullable);
 

@@ -65,7 +65,6 @@ class CodecovSuitesTest(unittest.TestCase):
             ".github/actions/setup_ci_ydb_service_account_key_file_credentials/action.yaml",
             ".github/scripts/codecov/export_coverage_lcov.py",
             ".github/workflows/cpp_codecov.yml",
-            ".github/workflows/cpp_codecov_checks.yml",
             ".github/codecov.yml",
         ]
         for path in shared_paths:
@@ -86,10 +85,13 @@ class CodecovSuitesTest(unittest.TestCase):
         )
 
     def test_helper_unit_tests_do_not_select_product_coverage(self) -> None:
-        self.assertEqual(
-            suites_from_paths([".github/scripts/codecov/tests/test_helpers.py"]),
-            [],
-        )
+        check_only_paths = [
+            ".github/scripts/codecov/tests/test_helpers.py",
+            ".github/workflows/cpp_codecov_checks.yml",
+        ]
+        for path in check_only_paths:
+            with self.subTest(path=path):
+                self.assertEqual(suites_from_paths([path]), [])
 
     def test_suite_instrumentation_regexes_are_path_bounded(self) -> None:
         cases = {
@@ -171,6 +173,19 @@ class DetectCodecovMatrixTest(unittest.TestCase):
         )
         self.assertEqual(json.loads(values["matrix"]), ["cpp_sdk"])
         self.assertEqual(values["should_run"], "true")
+
+    def test_all_mode_selects_every_suite(self) -> None:
+        values, _ = self.run_detector("--all")
+        self.assertEqual(json.loads(values["matrix"]), sorted(SUITES))
+        self.assertEqual(values["should_run"], "true")
+
+    def test_unrelated_paths_do_not_start_coverage(self) -> None:
+        values, _ = self.run_detector(
+            "--changed-files",
+            "README.md\nydb/core/base/appdata.h",
+        )
+        self.assertEqual(json.loads(values["matrix"]), [])
+        self.assertEqual(values["should_run"], "false")
 
 
 class ExportCoverageLcovTest(unittest.TestCase):
@@ -609,6 +624,27 @@ class WorkflowContractTest(unittest.TestCase):
             capture_output=True,
         )
         config = json.loads(proc.stdout)
+        self.assertEqual(config["codecov"]["strict_yaml_branch"], "default")
+        self.assertIs(config["codecov"]["require_ci_to_pass"], True)
+        self.assertIs(config["codecov"]["notify"]["wait_for_ci"], True)
+        self.assertNotIn("after_n_builds", config["codecov"]["notify"])
+        self.assertIs(config["github_checks"], False)
+        self.assertIs(config["comment"]["hide_project_coverage"], True)
+        self.assertEqual(
+            config["comment"]["layout"],
+            "condensed_header, condensed_files, condensed_footer",
+        )
+        self.assertNotIn("component_management", config)
+        self.assertNotIn("show_carryforward_flags", config["comment"])
+        self.assertIs(config["coverage"]["status"]["project"], False)
+        self.assertIs(config["coverage"]["status"]["patch"], False)
+        self.assertIs(
+            config["flag_management"]["default_rules"]["carryforward"],
+            False,
+        )
+        for item in config["flag_management"]["individual_flags"]:
+            self.assertNotIn("carryforward", item)
+
         flags = {
             item["name"]: item["paths"]
             for item in config["flag_management"]["individual_flags"]
@@ -619,10 +655,29 @@ class WorkflowContractTest(unittest.TestCase):
         }
         self.assertEqual(flags, expected)
 
-        cli_roots = tuple(SUITES["cli"]["lcov_prefixes"])
-        for component in config["component_management"]["individual_components"]:
-            for component_path in component["paths"]:
-                self.assertTrue(component_path.startswith(cli_roots))
+        expected_project_thresholds = {
+            "cpp_sdk": "0.1%",
+            "cli": "5%",
+            "cli_workload": "5%",
+        }
+        for item in config["flag_management"]["individual_flags"]:
+            statuses = {status["type"]: status for status in item["statuses"]}
+            self.assertEqual(set(statuses), {"project", "patch"})
+            self.assertEqual(statuses["project"]["target"], "auto")
+            self.assertEqual(
+                statuses["project"]["threshold"],
+                expected_project_thresholds[item["name"]],
+            )
+            self.assertEqual(
+                statuses["project"]["flag_coverage_not_uploaded_behavior"],
+                "exclude",
+            )
+            self.assertEqual(statuses["patch"]["target"], "80%")
+            self.assertIs(statuses["patch"]["informational"], True)
+            self.assertEqual(
+                statuses["patch"]["flag_coverage_not_uploaded_behavior"],
+                "exclude",
+            )
 
     def test_only_ok_to_test_label_can_trigger_coverage(self) -> None:
         workflow = (
@@ -644,6 +699,41 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn("coverage/workload", workflow)
         self.assertNotIn("coverage/all", workflow)
         self.assertNotIn("workflow_dispatch", workflow)
+
+    def test_production_triggers_cover_only_runtime_paths(self) -> None:
+        path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        proc = subprocess.run(
+            [
+                "ruby",
+                "-rjson",
+                "-ryaml",
+                "-e",
+                "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+                str(path),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        config = json.loads(proc.stdout)
+        expected_paths = [
+            "ydb/public/sdk/cpp/**",
+            "ydb/apps/ydb/**",
+            "ydb/public/lib/ydb_cli/**",
+            "ydb/tests/functional/ydb_cli/**",
+            "ydb/library/workload/**",
+            ".github/actions/run_clang_codecov/**",
+            ".github/actions/setup_ci_ydb_service_account_key_file_credentials/**",
+            ".github/scripts/codecov/**",
+            "!.github/scripts/codecov/tests/**",
+            ".github/workflows/cpp_codecov.yml",
+            ".github/codecov.yml",
+        ]
+        triggers = config["true"]
+        self.assertEqual(triggers["pull_request_target"]["paths"], expected_paths)
+        self.assertEqual(triggers["push"]["paths"], expected_paths)
+        self.assertEqual(triggers["pull_request_target"]["branches"], ["main"])
+        self.assertEqual(triggers["push"]["branches"], ["main"])
 
     def test_pr_authorization_is_event_and_sha_scoped(self) -> None:
         workflow = (
@@ -670,6 +760,59 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("--name-only --no-renames", workflow)
         self.assertNotIn("pulls/${PR_NUMBER}/files", workflow)
 
+    def test_trusted_helpers_never_come_from_a_stale_pr_base(self) -> None:
+        workflow = (
+            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "Checkout trusted detection helpers from workflow source",
+            workflow,
+        )
+        self.assertIn(
+            "Checkout trusted coverage helpers from workflow source",
+            workflow,
+        )
+        self.assertEqual(workflow.count("ref: ${{ github.workflow_sha }}"), 3)
+        self.assertNotIn(
+            "ref: ${{ steps.pr.outputs.base_sha || github.sha }}",
+            workflow,
+        )
+        self.assertNotIn("ref: ${{ needs.detect.outputs.base_sha }}", workflow)
+        self.assertNotIn(
+            "ref: ${{ needs.detect.outputs.base_sha || needs.detect.outputs.checkout_sha }}",
+            workflow,
+        )
+        # The stale base is still the correct boundary for the PR's three-dot diff.
+        self.assertIn('"$PR_BASE_SHA...$PR_HEAD_SHA"', workflow)
+
+    def test_relevant_pr_base_requires_a_successful_full_main_run(self) -> None:
+        workflow = (
+            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("actions: read", workflow)
+        self.assertIn("Classify PR base commit", workflow)
+        self.assertIn('"${PR_BASE_SHA}^1"', workflow)
+        self.assertIn(
+            '"$base_parent" "$PR_BASE_SHA"',
+            workflow,
+        )
+        self.assertIn(
+            "BASE_CHANGE_RELEVANT: ${{ steps.base_change.outputs.should_run }}",
+            workflow,
+        )
+        self.assertIn("github.rest.actions.listWorkflowRuns", workflow)
+        self.assertIn("workflow_id: 'cpp_codecov.yml'", workflow)
+        self.assertIn("head_sha: baseSha", workflow)
+        self.assertIn("run.head_branch === 'main'", workflow)
+        self.assertIn("run.event === 'push'", workflow)
+        self.assertIn("run.status === 'completed' && run.conclusion === 'success'", workflow)
+        self.assertIn(
+            "process.env.BASE_CHANGE_RELEVANT === 'true' || runs.length > 0",
+            workflow,
+        )
+        self.assertIn("Wait for or rerun the main coverage workflow", workflow)
+        self.assertIn("then rerun this PR coverage workflow", workflow)
+
     def test_untrusted_yaml_is_loaded_safely(self) -> None:
         checks = (
             GITHUB_DIR / "workflows" / "cpp_codecov_checks.yml"
@@ -693,6 +836,19 @@ class WorkflowContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('--slug "${REPOSITORY_SLUG}"', action)
         self.assertIn('--sha "${COMMIT_SHA}"', action)
+        self.assertIn("github_token:", action)
+        self.assertIn("Verify current PR head before publication", action)
+        self.assertIn("if: ${{ inputs.pr_number != '' }}", action)
+        self.assertIn("pr.state !== 'open'", action)
+        self.assertIn("pr.head.sha !== expectedSha", action)
+        self.assertIn("steps.pr_head.outcome == 'success'", action)
+        self.assertLess(
+            action.index("Verify current PR head before publication"),
+            action.index("Upload to Codecov"),
+        )
+        self.assertNotIn("parent_sha", action)
+        self.assertNotIn("PARENT_SHA", action)
+        self.assertNotIn("--parent-sha", action)
         self.assertIn("--disable-search", action)
         self.assertIn("--plugin noop", action)
         self.assertIn('--html-input "$OUT/coverage.lcov"', action)
@@ -706,6 +862,50 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn('if [ ! -f "${report_dir}/index.html" ]', action)
         self.assertNotIn('-t "${CODECOV_TOKEN}"', action)
         self.assertNotIn("set -x", action)
+
+    def test_landing_revalidates_pr_head_before_s3_upload(self) -> None:
+        workflow = (
+            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        ).read_text(encoding="utf-8")
+        landing = workflow[workflow.index("  landing:") :]
+        self.assertIn("Verify current PR head before landing publication", landing)
+        self.assertIn("id: landing_pr_head", landing)
+        self.assertIn(
+            "EXPECTED_SHA: ${{ needs.detect.outputs.report_sha }}",
+            landing,
+        )
+        self.assertIn(
+            "PR_NUMBER: ${{ needs.detect.outputs.pr_number }}",
+            landing,
+        )
+        self.assertIn("pr.state !== 'open' || pr.head.sha !== expectedSha", landing)
+        self.assertIn("steps.landing_pr_head.outcome == 'success'", landing)
+        self.assertLess(
+            landing.index("Verify current PR head before landing publication"),
+            landing.index("- name: Upload landing page"),
+        )
+
+    def test_pr_is_selective_and_main_always_runs_every_suite(self) -> None:
+        workflow = (
+            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "python3 .github/scripts/codecov/detect_codecov_matrix.py --all",
+            workflow,
+        )
+        self.assertIn('if [ "$EVENT_NAME" = push ]', workflow)
+        self.assertIn('"$PR_BASE_SHA...$PR_HEAD_SHA"', workflow)
+        self.assertNotIn("resolve_codecov_parent", workflow)
+        self.assertNotIn("parent_sha", workflow)
+        self.assertNotIn("PARENT_SHA", workflow)
+        self.assertNotIn("FORCE_FULL_CHECKPOINT", workflow)
+        self.assertNotIn("--first-parent", workflow)
+        self.assertNotIn("--diff-merges=first-parent", workflow)
+        self.assertNotIn('".github/workflows/cpp_codecov_checks.yml"', workflow)
+        self.assertIn("|| format('{0}-main', github.workflow)", workflow)
+        self.assertEqual(workflow.count("concurrency:"), 1)
+        self.assertIn("github_token: ${{ github.token }}", workflow)
+        self.assertNotIn("suites=(cpp_sdk cli cli_workload)", workflow)
 
 
 if __name__ == "__main__":

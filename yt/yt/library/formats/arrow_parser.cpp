@@ -1944,7 +1944,8 @@ void PrepareArray(
                     columnId);
 
             case ELogicalMetatype::Tagged:
-                // Denullified type should not contain tagged type.
+            case ELogicalMetatype::AggregateState:
+                // Denullified type should not contain tagged types.
                 YT_ABORT();
                 break;
         }

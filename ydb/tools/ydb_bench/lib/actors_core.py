@@ -18,7 +18,6 @@ from ydb.tools.ydb_bench.lib.topology import discover_topology, plan_affinity, p
 from ydb.tools.ydb_bench.benchmarks import PING_BENCHMARK, STAR_PING_BENCHMARK
 from ydb.tools.ydb_bench.benchmarks.registry import BenchmarkDefinition
 
-
 __all__ = (
     "PING_BENCHMARK",
     "STAR_PING_BENCHMARK",
@@ -50,11 +49,15 @@ class RunConfiguration:
         values = dict(self.parameters or {})
         if "actor-pairs" in (item.name for item in self.benchmark.parameters):
             values["actor-pairs"] = self.actor_pairs or values.get("actor-pairs") or (512,)
-            values[self.benchmark.parameter_name] = self.parameter_values or values.get(self.benchmark.parameter_name) or self.benchmark.parameter(self.benchmark.parameter_name).default
+            values[self.benchmark.parameter_name] = (
+                self.parameter_values
+                or values.get(self.benchmark.parameter_name)
+                or self.benchmark.parameter(self.benchmark.parameter_name).default
+            )
         object.__setattr__(self, "parameters", values)
         if not self.actor_pairs and "actor-pairs" in self.parameters:
             object.__setattr__(self, "actor_pairs", tuple(self.parameters["actor-pairs"]))
-        if not self.parameter_values and self.benchmark.parameter_name in self.parameters:
+        if self.benchmark.parameters and not self.parameter_values and self.benchmark.parameter_name in self.parameters:
             object.__setattr__(self, "parameter_values", tuple(self.parameters[self.benchmark.parameter_name]))
 
 
@@ -523,7 +526,14 @@ def run_benchmark(
                 else:
                     repetition_rows.append((placement.mode, background_mode, metrics))
                     for metric_row in metrics:
-                        measurement_rows.append({"affinity_mode": placement.mode, "background_load": background_mode, "repeat": index, **metric_row})
+                        measurement_rows.append(
+                            {
+                                "affinity_mode": placement.mode,
+                                "background_load": background_mode,
+                                "repeat": index,
+                                **metric_row,
+                            }
+                        )
 
             if failure is not None:
                 run_record["error"] = failure
@@ -575,7 +585,17 @@ def run_benchmark(
                             str(relative_directory / record["stderr"]),
                         )
                     )
-                event_sink({"type": "step-artifacts", "affinity": placement.mode, "background_load": background_mode, "threads": threads, "case": case_index, "repeat": index, "artifacts": artifacts})
+                event_sink(
+                    {
+                        "type": "step-artifacts",
+                        "affinity": placement.mode,
+                        "background_load": background_mode,
+                        "threads": threads,
+                        "case": case_index,
+                        "repeat": index,
+                        "artifacts": artifacts,
+                    }
+                )
                 event_sink(
                     {
                         "type": "step-finished",

@@ -1620,7 +1620,7 @@ UuidNotNullValue:   [
 
     /**
      * More tests for different types with correctness and convertations between Arrow and UV :
-     * ydb/core/kqp/common/result_set_format/ut/kqp_formats_arrow_ut.cpp
+     * ydb/library/formats/arrow/minikql/ut/minikql_ut.cpp
     */
 
     // Optional<T>

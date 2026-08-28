@@ -371,6 +371,7 @@ namespace NKikimr::NDDisk {
         header.DirectBlockGroupIndex = directBlockGroupIndex;
         header.Header.RecordIdx = 0;
         header.Header.Version = 0;
+        header.Header.HeaderDataSize = sizeof(TPersistentBufferFastErases);
 
         return std::make_optional(TFastErase{oldChunkIdx, oldSectorIdx, erase.ChunkIdx, erase.SectorIdx, std::move(header)});
     }

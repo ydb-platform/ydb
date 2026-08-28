@@ -1212,7 +1212,10 @@ namespace NKikimr {
             const ui32 gen = record.GetGeneration();
             const ui64 issuerGuid = record.GetIssuerGuid();
 
-            if (!OutOfSpaceLogic->Allow(ctx, ev)) {
+            ui32 currentGen = 0;
+            bool hasExistingEntry = Hull->GetBlocked(tabletId, &currentGen);
+
+            if (!OutOfSpaceLogic->Allow(ctx, ev, hasExistingEntry)) {
                 ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
                 return;
             }

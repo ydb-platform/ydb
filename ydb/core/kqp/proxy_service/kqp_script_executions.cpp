@@ -801,20 +801,15 @@ public:
             disposition = nullptr; // Do not save disposition if state already saved
         }
 
-<<<<<<< HEAD
         const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(
             SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(),
             ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation,
             ev.StreamingQueryPath, ev.StreamingQueryOperationId
         ));
-        KQP_PROXY_LOG_D("Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
-=======
-        const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
         YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCreateScriptOperationQuery",
             {"logPrefix", LogPrefix()},
             {"creatorId", creatorId},
             {"runScriptActorId", RunScriptActorId});
->>>>>>> cb471d1db77 ([YDB_LOG] Migrate ydb/core/kqp/gateway...proxy_service (#47494))
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
@@ -1897,19 +1892,18 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-<<<<<<< HEAD
         if (status == Ydb::StatusIds::SUCCESS) {
-            KQP_PROXY_LOG_D("Reply success, issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Reply success",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
         } else {
-            KQP_PROXY_LOG_W("Reply " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Reply",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
         }
 
-=======
-        YDB_LOG_WARN("[ScriptExecutions] Reply failed",
-            {"logPrefix", LogPrefix()},
-            {"status", status},
-            {"issues", issues.ToOneLineString()});
->>>>>>> cb471d1db77 ([YDB_LOG] Migrate ydb/core/kqp/gateway...proxy_service (#47494))
         Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(status, {
             .LeaseVerified = LeaseVerified,
             .ExecutionEntryExists = EntryExists,

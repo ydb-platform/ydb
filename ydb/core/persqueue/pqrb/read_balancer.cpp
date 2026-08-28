@@ -430,30 +430,23 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         it->second.Generation = ev->Get()->Generation;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
 
-<<<<<<< HEAD
         if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
             it->second.Ready = true;
             ++ReadyPartitionTablets;
         }
 
-        PQ_LOG_D("TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
-    } else {
-        PQ_LOG_I("TEvClientConnected Pipe is not found, TabletId " << tabletId);
-    }
-
-    ProcessPartitionsLocationQueue(ctx);
-=======
-        YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
+        YDB_LOG_DEBUG("TEvClientConnected",
             {"logPrefix", LogPrefix()},
             {"tabletId", tabletId},
             {"nodeId", ev->Get()->ServerId.NodeId()},
             {"generation", ev->Get()->Generation});
-    }
-    else
+    } else {
         YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",
             {"logPrefix", LogPrefix()},
             {"tabletId", tabletId});
->>>>>>> e560084e95c ([YDB_LOG] Migrate ydb/core/persqueue/prqb (#45807))
+    }
+
+    ProcessPartitionsLocationQueue(ctx);
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
@@ -655,79 +648,6 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
     }
 }
 
-<<<<<<< HEAD
-=======
-void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
-    evResponse->Record.SetStatus(false);
-    ctx.Send(ev->Sender, evResponse);
-}
-
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    const auto& request = ev->Get()->Record;
-    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-
-    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
-        if (PipesRequested.contains(tabletId)) {
-            return false;
-        }
-        auto iter = TabletPipes.find(tabletId);
-        if (iter == TabletPipes.end()) {
-            GetPipeClient(tabletId, ctx);
-            return false;
-        }
-
-        auto* pResponse = evResponse->Record.AddLocations();
-        pResponse->SetPartitionId(partitionId);
-        pResponse->SetNodeId(iter->second.NodeId.GetRef());
-        pResponse->SetGeneration(iter->second.Generation.GetRef());
-
-        YDB_LOG_DEBUG("The partition location was added to response: TabletId PartitionId NodeId Generation",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
-            {"partitionId", partitionId},
-            {"pResponseNodeId", pResponse->GetNodeId()},
-            {"pResponseGeneration", pResponse->GetGeneration()});
-
-        return true;
-    };
-
-    auto sendError = [&]() {
-        auto response = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-        response->Record.SetStatus(false);
-        ctx.Send(ev->Sender, response.release());
-    };
-
-    if (request.PartitionsSize() == 0) {
-        if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
-            // Do not have all pipes connected.
-            return sendError();
-        }
-        for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
-            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
-                return sendError();
-            }
-        }
-    } else {
-        for (const auto& partitionInRequest : request.GetPartitions()) {
-            auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
-            if (partitionInfoIter == PartitionsInfo.end()) {
-                return sendError();
-            }
-            if (!addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId)) {
-                return sendError();
-            }
-        }
-    }
-
-    evResponse->Record.SetStatus(true);
-    ctx.Send(ev->Sender, evResponse.release());
-}
-
-
-
-
->>>>>>> e560084e95c ([YDB_LOG] Migrate ydb/core/persqueue/prqb (#45807))
 //
 // Watching PQConfig
 //

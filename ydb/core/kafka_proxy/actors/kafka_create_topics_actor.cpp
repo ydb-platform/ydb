@@ -172,14 +172,11 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
 
-<<<<<<< HEAD
-KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status) << " " << eventPtr->ErrorMessage);
-=======
     YDB_LOG_DEBUG("Create topics actor. Topic's response received",
         {LogPrefix()},
         {"path", eventPtr->Path},
-        {"status", std::to_string(eventPtr->Status)});
->>>>>>> c0bf532526b ([YDB_LOG] Migrate ydb/core/kafka_proxy (#43285))
+        {"status", std::to_string(eventPtr->Status)},
+        {"errorMessage", eventPtr->ErrorMessage});
 
     EKafkaErrors status;
     switch(eventPtr->Status) {

@@ -306,6 +306,77 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(observer.GetSaveCount(), 0);
     }
 
+    // SchemeShard must omit .metadata tables from TEvSchemeShardStats.
+    // ANALYZE writes into .metadata/statistics_v2; sending that path to SA
+    // schedules background ANALYZE of it, which writes more rows and
+    // retriggers itself — especially with a low change-ratio threshold.
+    Y_UNIT_TEST_TWIN(SkipMetadataFromBackgroundAnalyze, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            auto* stats = settings.AppConfig->MutableStatisticsConfig();
+            stats->SetEnableBackgroundColumnStatsCollection(true);
+            stats->SetBaseStatsSendIntervalSecondsDedicated(1);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "Table", ColumnShard);
+        const ui64 ssTabletId = tableInfo.PathId.OwnerId;
+
+        TVector<THashSet<TPathId>> snapshots;
+        auto statsObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>(
+            [&](auto& ev) {
+                if (ev->Get()->Record.GetSchemeShardId() != ssTabletId) {
+                    return;
+                }
+                NKikimrStat::TSchemeShardStats record;
+                if (!record.ParseFromString(ev->Get()->Record.GetStats())) {
+                    return;
+                }
+                THashSet<TPathId> pathIds;
+                for (const auto& entry : record.GetEntries()) {
+                    pathIds.insert(TPathId::FromProto(entry.GetPathId()));
+                }
+                snapshots.push_back(std::move(pathIds));
+            });
+
+        WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
+
+        const auto metadataPathId = ResolvePathId(runtime, "/Root/Database/.metadata/statistics_v2");
+        UNIT_ASSERT(metadataPathId);
+        UNIT_ASSERT_VALUES_UNEQUAL(metadataPathId, tableInfo.PathId);
+
+        auto assertNoMetadataInSnapshots = [&] {
+            bool userTableSeen = false;
+            for (const auto& pathIds : snapshots) {
+                UNIT_ASSERT_C(
+                    !pathIds.contains(metadataPathId),
+                    "SchemeShard stats blob included .metadata/statistics_v2");
+                userTableSeen |= pathIds.contains(tableInfo.PathId);
+            }
+            UNIT_ASSERT_C(userTableSeen, "SchemeShard never sent the user table");
+        };
+        assertNoMetadataInSnapshots();
+
+        // statistics_v2 is created during the first ANALYZE. Wait for SS blobs
+        // sent after that so a leak cannot hide in a snapshot taken before the
+        // table existed.
+        const size_t snapshotsAfterCollection = snapshots.size();
+        runtime.WaitFor("SchemeShard stats after .metadata/statistics_v2 exists", [&] {
+            return snapshots.size() >= snapshotsAfterCollection + 2;
+        });
+        assertNoMetadataInSnapshots();
+
+        // Empty snapshot after the last user table is dropped so SA can
+        // remove the stale path from ScheduleTraversals.
+        DropTable(env, "Database", "Table");
+        runtime.WaitFor("user table dropped from SchemeShard stats", [&] {
+            return !snapshots.empty() && !snapshots.back().contains(tableInfo.PathId);
+        });
+        UNIT_ASSERT_C(
+            !snapshots.back().contains(metadataPathId),
+            "empty snapshot after drop still included .metadata/statistics_v2");
+    }
+
     Y_UNIT_TEST_TWIN(Counters, ColumnShard) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();

@@ -30,22 +30,17 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
             return true;
         }
 
-        if (Self->ScheduleTraversals.empty()) {
-            YDB_LOG_TRACE("TTxScheduleTraversal. No info from schemeshard",
-                {"tabletId", Self->TabletID()});
-            return true;
-        }
-
         YDB_LOG_TRACE("TTxScheduleTraversal::Execute",
             {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
 
-        // First try to dispatch a table analyze operation.
+        // Force ANALYZE must run even when no user tables are scheduled
+        // (database has only .metadata tables, or all user tables were dropped).
         Self->ScheduleNextAnalyze(db, ctx);
 
-        // Next, if there is no analyze operation, try to schedule background traversal.
         if (!Self->TraversalPathId
+                && !Self->ScheduleTraversals.empty()
                 && Self->StatisticsConfig.GetEnableBackgroundColumnStatsCollection()) {
             Self->ScheduleNextBackgroundTraversal(db, ctx);
         }

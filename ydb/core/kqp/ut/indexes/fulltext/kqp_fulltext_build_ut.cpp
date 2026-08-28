@@ -2975,7 +2975,7 @@ Y_UNIT_TEST(FulltextIndexCreateTableNonIntegerPkRequiresUniqueIndexFeature) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithUint32Key, Compact) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3021,7 +3021,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithUint32Key, Compact) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithInt32Key, Compact) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3070,7 +3070,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithInt32Key, Compact) {
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithSerialKey, Compact) {
     // Serial / Serial4 -> Int32 backend
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3117,7 +3117,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithSerialKey, Compact) {
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithBigSerialKey, Compact) {
     // Serial8 / BigSerial -> Int64 backend
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {

@@ -22,4 +22,9 @@ TString LogHttpRequestResponseCommonInfoString(const THttpRequestContext& httpCo
 TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headers, bool tlsSecure);
 TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext);
 
+// HTTP request path used as the SQS/Kinesis database endpoint.
+// Query string is ignored; a trailing slash is treated as equivalent to no slash.
+// "/" and empty path mean "no database".
+TString ParseDatabasePathFromRequestUrl(TStringBuf url);
+
 } // namespace NKikimr::NHttpProxy

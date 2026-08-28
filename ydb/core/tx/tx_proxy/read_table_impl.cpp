@@ -2830,13 +2830,9 @@ private:
                     shardRange.To.GetCells(), shardRange.ToInclusive,
                     oldShard->Ranges.front().From.GetCells(), oldShard->Ranges.front().FromInclusive))
             {
-<<<<<<< HEAD
-                TXLOG_T("Ignoring new shard ShardId# " << (oldShard ? oldShard->ShardId : 0) << " (nothing to read)");
-=======
                 YDB_LOG_TRACE("Ignoring new shard (nothing to read)",
                     {"logPrefix", LogPrefix},
-                    {"shardId", state.ShardId});
->>>>>>> 08bb7d1ace9 ([YDB_LOG] Migrate ydb/core/tx/tx_proxy (#44900))
+                    {"shardId", (oldShard ? oldShard->ShardId : 0)});
 
                 // We don't want to read anything from current shard
                 state.ShardPosition = ShardList.end();

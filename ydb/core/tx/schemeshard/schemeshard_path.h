@@ -87,6 +87,7 @@ public:
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsSystemDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsMetadataDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsRtmrVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const;
@@ -184,6 +185,7 @@ public:
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
+    bool IsInsideMetadataDirectory() const;
     bool IsTableIndex(
         const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
         bool failOnUnresolved = true) const;

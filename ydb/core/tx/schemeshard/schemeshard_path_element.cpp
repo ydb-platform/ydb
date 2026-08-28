@@ -168,6 +168,10 @@ bool TPathElement::IsSystemDirectory() const {
     return IsDirectory() && Name == NSysView::SysPathName;
 }
 
+bool TPathElement::IsMetadataDirectory() const {
+    return IsDirectory() && Name == ".metadata";
+}
+
 bool TPathElement::IsTableIndex() const {
     return PathType == EPathType::EPathTypeTableIndex;
 }

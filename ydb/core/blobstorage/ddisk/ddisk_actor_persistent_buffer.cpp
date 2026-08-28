@@ -313,6 +313,10 @@ namespace NKikimr::NDDisk {
             sectors[i].Checksum = loc.Checksum;
         }
 
+        ui32 headerDataSize = sizeof(TPersistentBufferHeader)
+            + sizeof(TPersistentBufferLsnRecordHeader)
+            + (sectors.size() - 1) * sizeof(TPersistentBufferSectorInfo);
+
         if (hasPayloadChecksums) {
             Y_ABORT_UNLESS(payloadChecksums.size() == sectors.size() - 1);
             auto* checksums = reinterpret_cast<ui64*>(fullData.Begin().UnsafeContiguousDataMut()
@@ -321,9 +325,13 @@ namespace NKikimr::NDDisk {
                 + (sectors.size() - 1) * sizeof(TPersistentBufferSectorInfo)
             );
             memcpy(checksums, payloadChecksums.data(), payloadChecksums.size() * sizeof(ui64));
+            headerDataSize += payloadChecksums.size() * sizeof(ui64);
         }
 
-        header->Checksum = CalculateChecksum(fullData.Begin(), SectorSize);
+        // Only the meaningful prefix of the header sector is checksummed - the rest is unused
+        // padding, never read back, so hashing it would waste CPU with no integrity benefit.
+        header->HeaderDataSize = headerDataSize;
+        header->Checksum = CalculateChecksum(fullData.Begin(), headerDataSize);
 
         // Slice fullData ([header | payload], a single contiguous, SectorSize-aligned buffer) into one part
         // per run of physically adjacent on-disk sectors. This is zero-copy: TRope::ExtractFront moves whole
@@ -567,7 +575,11 @@ namespace NKikimr::NDDisk {
                 TPersistentBufferHeader* header = reinterpret_cast<TPersistentBufferHeader*>(headerRope.Begin().ContiguousDataMut());
                 ui64 headerChecksum = header->Checksum;
                 header->Checksum = 0;
-                ui64 sectorChecksum = CalculateChecksum(headerRope.Begin());
+                // HeaderDataSize comes from disk and is not yet trusted at this point - clamp it to
+                // the sector size so a corrupted value can never cause an out-of-bounds hash read.
+                // A bogus (but in-range) value simply fails the checksum comparison below.
+                const ui32 headerDataSize = Min<ui32>(header->HeaderDataSize, SectorSize);
+                ui64 sectorChecksum = CalculateChecksum(headerRope.Begin(), headerDataSize);
                 if (headerChecksum != sectorChecksum || header->PersistentBufferUniqueId != PersistentBufferUniqueId
                     || (header->NodeId != BaseInfo.PDiskActorID.NodeId()) || header->PDiskId != BaseInfo.PDiskId
                     || header->SlotId != BaseInfo.VDiskSlotId) {
@@ -946,7 +958,10 @@ namespace NKikimr::NDDisk {
         if (instr.PayloadId) {
             payload = ev->Get()->GetPayload(*instr.PayloadId);
         }
-        std::vector<ui64> payloadChecksums(record.GetChecksums().begin(), record.GetChecksums().end());
+        std::vector<ui64> payloadChecksums;
+        if (Config.EnableChecksums) {
+            payloadChecksums.assign(record.GetChecksums().begin(), record.GetChecksums().end());
+        }
         YDB_LOG_TRACE_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::ProcessPersistentBufferWrite",
             {"marker", "BSPB"},
             {"PBufferId", SelfId()},
@@ -1074,7 +1089,10 @@ namespace NKikimr::NDDisk {
         const TWriteInstruction instr(record.GetInstruction());
         Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
         TRope payload = ev->Get()->GetPayload(*instr.PayloadId);
-        std::vector<ui64> payloadChecksums(record.GetChecksums().begin(), record.GetChecksums().end());
+        std::vector<ui64> payloadChecksums;
+        if (Config.EnableChecksums) {
+            payloadChecksums.assign(record.GetChecksums().begin(), record.GetChecksums().end());
+        }
         const ui32 sectorsCnt = selector.Size / SectorSize;
         Y_ABORT_UNLESS(sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord && sectorsCnt > 0);
 
@@ -1232,10 +1250,14 @@ namespace NKikimr::NDDisk {
                 pos += record.PayloadChecksums.size() * sizeof(ui64);
             }
         }
-        Y_ABORT_UNLESS(static_cast<size_t>(pos - inflight.DataToWrite.Begin().UnsafeContiguousDataMut()) <= SectorSize,
+        const ui32 headerDataSize = static_cast<ui32>(pos - inflight.DataToWrite.Begin().UnsafeContiguousDataMut());
+        Y_ABORT_UNLESS(headerDataSize <= SectorSize,
             "persistent buffer batch header overflow");
         header->Version = anyPayloadChecksums ? 1 : 0;
-        header->Checksum = CalculateChecksum(inflight.DataToWrite.Begin(), SectorSize);
+        // Only the meaningful prefix of the header sector is checksummed - the rest is unused
+        // padding, never read back, so hashing it would waste CPU with no integrity benefit.
+        header->HeaderDataSize = headerDataSize;
+        header->Checksum = CalculateChecksum(inflight.DataToWrite.Begin(), headerDataSize);
 
         auto parts = SlicePersistentBufferData(inflight.DataToWrite, inflight.OccupiedSectors);
         for(auto& [chunkIdx, offset, data] : parts) {
@@ -1261,16 +1283,27 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
-        if (!HasRequiredBlockChecksums(record.ChecksumsSize(), selector.OffsetInBytes, selector.Size)) {
-            if (record.ChecksumsSize() == 0) {
-                Counters.Checksums.WritesWithoutChecksums->Inc();
-            }
+        if (selector.OffsetInBytes % SectorSize != 0 || selector.Size == 0 || selector.Size % SectorSize != 0) {
             Counters.Interface.WritePersistentBuffer.Request(selector.Size);
             Counters.Interface.WritePersistentBuffer.Reply(false, selector.Size);
             SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                "one checksum per aligned 4 KiB block is required"));
+                TStringBuilder() << "persistent buffer write selector must be aligned to "
+                    << SectorSize << "-byte sectors"));
             return;
+        }
+        if (Config.EnableChecksums) {
+            if (!HasRequiredBlockChecksums(record.ChecksumsSize(), selector.OffsetInBytes, selector.Size)) {
+                if (record.ChecksumsSize() == 0) {
+                    Counters.Checksums.WritesWithoutChecksums->Inc();
+                }
+                Counters.Interface.WritePersistentBuffer.Request(selector.Size);
+                Counters.Interface.WritePersistentBuffer.Reply(false, selector.Size);
+                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                    "one checksum per aligned 4 KiB block is required"));
+                return;
+            }
         }
         if (selector.Size > TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord * SectorSize) {
             Counters.Interface.WritePersistentBuffer.Request(selector.Size);
@@ -1287,31 +1320,33 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        // Checksums are validated here, before any sector allocation or disk I/O.
-        const TWriteInstruction instr(record.GetInstruction());
-        Y_ABORT_UNLESS(instr.PayloadId, "TEvWritePersistentBuffer without a payload, but with checksums");
-        const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
-        if (const auto result = ValidatePayloadChecksums(record, payload)) {
-            const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
-            Counters.Interface.WritePersistentBuffer.Request(selector.Size);
-            Counters.Interface.WritePersistentBuffer.Reply(false, selector.Size);
-            if (isCorrupted) {
-                Counters.Checksums.ChecksumMismatch->Inc();
+        if (Config.EnableChecksums) {
+            // Checksums are validated here, before any sector allocation or disk I/O.
+            const TWriteInstruction instr(record.GetInstruction());
+            Y_ABORT_UNLESS(instr.PayloadId, "TEvWritePersistentBuffer without a payload, but with checksums");
+            const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
+            if (const auto result = ValidatePayloadChecksums(record, payload)) {
+                const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
+                Counters.Interface.WritePersistentBuffer.Request(selector.Size);
+                Counters.Interface.WritePersistentBuffer.Reply(false, selector.Size);
+                if (isCorrupted) {
+                    Counters.Checksums.ChecksumMismatch->Inc();
+                }
+                YDB_LOG_ERROR_COMP(NKikimrServices::BS_PERSISTENT_BUFFER,
+                    (isCorrupted
+                        ? "TDDiskActor::Handle(TEvWritePersistentBuffer) checksum mismatch"
+                        : "TDDiskActor::Handle(TEvWritePersistentBuffer) checksum count mismatch"),
+                    {"marker", "BSPB"},
+                    {"PBufferId", SelfId()},
+                    {"tabletId", creds.TabletId},
+                    {"generation", creds.Generation},
+                    {"lsn", lsn},
+                    {"checksumCount", result->ChecksumCount},
+                    {"selectorSize", selector.Size},
+                    {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
+                SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(result->Status, result->ErrorReason));
+                return;
             }
-            YDB_LOG_ERROR_COMP(NKikimrServices::BS_PERSISTENT_BUFFER,
-                (isCorrupted
-                    ? "TDDiskActor::Handle(TEvWritePersistentBuffer) checksum mismatch"
-                    : "TDDiskActor::Handle(TEvWritePersistentBuffer) checksum count mismatch"),
-                {"marker", "BSPB"},
-                {"PBufferId", SelfId()},
-                {"tabletId", creds.TabletId},
-                {"generation", creds.Generation},
-                {"lsn", lsn},
-                {"checksumCount", result->ChecksumCount},
-                {"selectorSize", selector.Size},
-                {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
-            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(result->Status, result->ErrorReason));
-            return;
         }
         if (!PersistentBufferReady) {
             if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
@@ -1504,7 +1539,7 @@ namespace NKikimr::NDDisk {
             std::vector<ui64> checksums;
             if (pr.Data) {
                 data = std::move(TrimData(pr.Data, pr.OffsetInBytes, pr.Size, inflightRecord.OffsetInBytes, inflightRecord.Size));
-                if (!pr.PayloadChecksums.empty()) {
+                if (Config.EnableChecksums && !pr.PayloadChecksums.empty()) {
                     // Persisted checksums cover [pr.OffsetInBytes, pr.OffsetInBytes + pr.Size) one entry
                     // per MinSectorSize block, same order as the trimmed data above - slice out the
                     // sub-range the selector actually asked for. Returned as-is (never recomputed from
@@ -1659,10 +1694,16 @@ namespace NKikimr::NDDisk {
         inflightRecord->second.Erases[cookie] = erases;
         auto headerData = TRcBuf::UninitializedPageAligned(SectorSize);
         barrier.Header.Header.Checksum = 0;
+        // The full fixed-size Barriers[] array is always meaningful (entries are addressed by
+        // slot position, not by a running "used count"), so only the trailing padding after
+        // sizeof(TPersistentBufferBarriers) - left over from MaxBarriersPerHeader's integer
+        // division - can be excluded from the checksum.
+        barrier.Header.Header.HeaderDataSize = sizeof(TPersistentBufferBarriers);
         memcpy(headerData.GetDataMut(), &barrier.Header, sizeof(TPersistentBufferBarriers));
         memset(headerData.GetDataMut() + sizeof(TPersistentBufferBarriers), 0, SectorSize - sizeof(TPersistentBufferBarriers));
         TRope headerRope(std::move(headerData));
-        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum = CalculateChecksum(headerRope.Begin());
+        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
+            CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferBarriers));
         inflightRecord->second.OccupiedSectors.emplace_back(TPersistentBufferSectorInfo{barrier.ChunkIdx, barrier.SectorIdx, 0, 0, 0});
 
         auto chunkOffset = barrier.SectorIdx * SectorSize;
@@ -1780,10 +1821,15 @@ namespace NKikimr::NDDisk {
         inflightRecord->second.OperationCookies.insert(cookie);
         inflightRecord->second.Erases[cookie] = erases;
         auto fastEraseData = TRcBuf::UninitializedPageAligned(SectorSize);
+        // Like TPersistentBufferBarriers, the fixed-size CompactLsns[] buffer is addressed by
+        // position (LEB128/raw entries scanned from the start, terminated by a zero entry), so
+        // only the trailing padding after sizeof(TPersistentBufferFastErases) - left over from the
+        // sector's remaining bytes - can be excluded from the checksum.
         memcpy(fastEraseData.GetDataMut(), &fastErase.Header, sizeof(TPersistentBufferFastErases));
         memset(fastEraseData.GetDataMut() + sizeof(TPersistentBufferFastErases), 0, SectorSize - sizeof(TPersistentBufferFastErases));
         TRope headerRope(std::move(fastEraseData));
-        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum = CalculateChecksum(headerRope.Begin());
+        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
+            CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferFastErases));
 
         inflightRecord->second.OccupiedSectors.emplace_back(TPersistentBufferSectorInfo{fastErase.ChunkIdx, fastErase.SectorIdx, 0, 0, 0});
         auto chunkOffset = fastErase.SectorIdx * SectorSize;

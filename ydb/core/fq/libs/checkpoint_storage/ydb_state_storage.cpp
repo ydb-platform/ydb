@@ -424,7 +424,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState, task id, blob size",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -734,7 +734,7 @@ TFuture<TStatus> TStateStorage::ListStatesForGeneration(const TContextPtr& conte
                             }
                             taskIt->ListOfStatesForReading.push_back(stateInfo);
 
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration: task row count and type",
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
@@ -822,11 +822,11 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt, {}});
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "TaskId checkpoint, rows",
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListOfStates result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
-                                {"id", checkpointId},
+                                {"listedCheckpointId", checkpointId},
                                 {"count", cnt});
                         }
                     }
@@ -953,7 +953,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState: task_id, seq_no, blob_seq_num",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},

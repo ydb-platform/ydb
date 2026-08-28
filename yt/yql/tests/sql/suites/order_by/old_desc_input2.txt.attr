@@ -1,0 +1,48 @@
+{
+    "_yql_row_spec" = {
+        "Constraints" = {
+            "Sorted" = [
+                [
+                    [
+                        "cnt";
+                    ];
+                    %false;
+                ];
+            ];
+        };
+        "SortDirections" = [
+            0;
+        ];
+        "SortMembers" = [
+            "cnt";
+        ];
+        "SortedBy" = [
+            "_yql_column_0";
+        ];
+        "SortedByTypes" = [
+            [
+                "DataType";
+                "String";
+            ];
+        ];
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "cnt";
+                    [
+                        "DataType";
+                        "Uint64";
+                    ];
+                ];
+                [
+                    "planner_type";
+                    [
+                        "DataType";
+                        "String"
+                    ];
+                ];
+            ];
+        ];
+    };
+}

@@ -25,7 +25,7 @@ THostMask MakePrimariesMask()
 void FinishFlushes(TBlocksDirtyMap& dirtyMap, const TFlushHints& hints)
 {
     for (const auto& [route, flush]: hints.GetAllHints()) {
-        dirtyMap.FlushFinished(route, {MakeLsnVector(flush.Segments)}, {});
+        dirtyMap.FlushFinished(route, {MakePBufferKeys(flush.Segments)}, {});
     }
 }
 
@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // Mark DDisk#1 completely fresh.
         DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
-        // Start data coping
+        // Start data copying
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
         auto complete = Copier->Start();
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
 
-        // Start data coping again
+        // Start data copying again
         ExpectedRange = TBlockRange64::WithLength(256, BlocksPerCopy);
         complete = Copier->Start();
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
@@ -688,25 +688,27 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // Mark DDisk#1 completely fresh.
         DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
-        DirtyMap->RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(123),
+            TBlockRange64::WithLength(10, 10));
         DirtyMap->WriteFinished(
-            123,
+            MakeKey(123),
             overlapped_0,
             MakePrimariesMask(),
             MakePrimariesMask());
         DirtyMap->RegisterInflightWrite(
-            124,
+            MakeKey(124),
             TBlockRange64::WithLength(250, 10));
         DirtyMap->WriteFinished(
-            124,
+            MakeKey(124),
             overlapped_01,
             MakePrimariesMask(),
             MakePrimariesMask());
         DirtyMap->RegisterInflightWrite(
-            125,
+            MakeKey(125),
             TBlockRange64::WithLength(260, 10));
         DirtyMap->WriteFinished(
-            125,
+            MakeKey(125),
             overlapped_1,
             MakePrimariesMask(),
             MakePrimariesMask());
@@ -724,10 +726,10 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // range #0
         auto flushHints = DirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:125[260..269];"
-            "H0->H3:125[260..269];"
-            "H1->H1:125[260..269];"
-            "H2->H2:125[260..269];",
+            "H0->H0:1:125[260..269];"
+            "H0->H3:1:125[260..269];"
+            "H1->H1:1:125[260..269];"
+            "H2->H2:1:125[260..269];",
             flushHints.DebugPrint());
 
         // Read range #0 - OK.
@@ -747,7 +749,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             "H1[256..511]wait;",
             DirtyMap->DebugPrintInflightSync());
 
-        // Complete flushes to start coping range #1.
+        // Complete flushes to start copying range #1.
         FinishFlushes(*DirtyMap, flushHints);
 
         // Coping range #1 in progress.
@@ -759,10 +761,10 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // but contains #0
         flushHints = DirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:123[10..19];"
-            "H0->H3:123[10..19];"
-            "H1->H1:123[10..19];"
-            "H2->H2:123[10..19];",
+            "H0->H0:1:123[10..19];"
+            "H0->H3:1:123[10..19];"
+            "H1->H1:1:123[10..19];"
+            "H2->H2:1:123[10..19];",
             flushHints.DebugPrint());
 
         // Read range #1 - OK.
@@ -785,10 +787,10 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // Flush hints should contains writes overlapped with range #1
         flushHints = DirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:124[250..259];"
-            "H0->H3:124[250..259];"
-            "H1->H1:124[250..259];"
-            "H2->H2:124[250..259];",
+            "H0->H0:1:124[250..259];"
+            "H0->H3:1:124[250..259];"
+            "H1->H1:1:124[250..259];"
+            "H2->H2:1:124[250..259];",
             flushHints.DebugPrint());
 
         // Read range #2 - OK.

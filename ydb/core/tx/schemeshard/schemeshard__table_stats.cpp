@@ -745,7 +745,10 @@ void TTxStoreTableStats::ScheduleNextBatch(const TActorContext& ctx) {
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx) {
-    const auto& rec = ev->Get()->Record;
+    auto* msg = ev->Get();
+    const auto& rec = msg->Record;
+
+    TabletCounters->Percentile()[COUNTER_PERIODIC_TABLE_STATS_ARENA_SPACE_USED].IncrementFor(msg->Arena->Get()->SpaceUsed());
 
     auto datashardId = TTabletId(rec.GetDatashardId());
     const ui32 followerId = rec.GetFollowerId();

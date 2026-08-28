@@ -106,6 +106,8 @@ protected:
 
     const TConnection::TConnectionOptions ConnectionOptions_;
 
+    std::optional<TCluster> FindCluster(const std::string& name) const;
+
     virtual TConnectionPtr CreateConnection(const std::string& name, const NYTree::INodePtr& connectionConfig) = 0;
     virtual NObjectClient::TCellTagList GetCellTags(const TCluster& cluster);
 

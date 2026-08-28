@@ -30,7 +30,8 @@ public:
     using TDDiskId = NKikimr::NBsController::TDDiskId;
 
     explicit TICStorageTransportTestAdapter(
-        NActors::TTestActorRuntime* runtime);
+        NActors::TTestActorRuntime* runtime,
+        bool enableChecksums = true);
     ~TICStorageTransportTestAdapter() override = default;
 
     [[nodiscard]] const TVector<TDDiskId>& GetDDiskIds() const
@@ -114,7 +115,8 @@ private:
 
     TICStorageTransportTestAdapter(
         NActors::TTestActorRuntime* runtime,
-        TBootstrap bootstrap);
+        TBootstrap bootstrap,
+        bool enableChecksums);
 
     [[nodiscard]] static TKey MakeKey(
         EConnectionType type,

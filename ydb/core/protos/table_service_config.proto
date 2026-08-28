@@ -566,4 +566,6 @@ message TTableServiceConfig {
 
     // Prune key columns
     optional bool EnablePruneKeyColumns = 144 [default = true];
+
+    optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
 };

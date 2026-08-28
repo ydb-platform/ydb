@@ -1654,10 +1654,10 @@ private:
         if (event.RetryRequired) {
             if (Settings.AllowRestart) {
                 const auto& restartActorId = Register(TRestartScriptOperationQuery::MakeRetry(SelfId(), Database, ExecutionId, event.LeaseGeneration, QueryServiceConfig, Counters));
-                YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution lease",
+                YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution",
                     {"logPrefix", LogPrefix()},
                     {"restartActorId", restartActorId},
-                    {"generation", event.LeaseGeneration});
+                    {"leaseGeneration", event.LeaseGeneration});
             } else {
                 YDB_LOG_NOTICE("[ScriptExecutions] Lease finalization skipped because script execution is waiting for retry",
                     {"logPrefix", LogPrefix()});
@@ -4319,7 +4319,7 @@ private:
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (!Response->FinalStatusAlreadySaved) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Finished saving script execution operation status",
+            YDB_LOG_DEBUG("[ScriptExecutions] Finished saving script execution operation final status",
                 {"logPrefix", LogPrefix()},
                 {"status", Ydb::StatusIds::StatusCode_Name(Request.OperationStatus)},
                 {"issues", Request.Issues.ToOneLineString()});
@@ -4806,7 +4806,7 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
+            YDB_LOG_WARN("[ScriptExecutions] Lease finalization failed",
                 {"logPrefix", LogPrefix()},
                 {"cookie", ev->Cookie},
                 {"sender", ev->Sender},
@@ -4815,9 +4815,9 @@ private:
                 {"operationsToCheck", OperationsToCheck});
 
             Success = false;
-            Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease check failed #" << ev->Cookie << " (" << status << ")", issues, true));
+            Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease finalization failed #" << ev->Cookie << " (" << status << ")", issues, true));
         } else {
-            YDB_LOG_DEBUG("[ScriptExecutions] Lease check successfully completed",
+            YDB_LOG_DEBUG("[ScriptExecutions] Lease finalization successfully completed",
                 {"logPrefix", LogPrefix()},
                 {"cookie", ev->Cookie},
                 {"sender", ev->Sender},

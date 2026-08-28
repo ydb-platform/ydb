@@ -281,6 +281,16 @@ template <typename TEvent>
     return false;
 }
 
+template <typename TRequest>
+void AttachPayload(TRequest& request, TRope rope, bool enableChecksums)
+{
+    if (enableChecksums) {
+        request.AddPayloadThenChecksum(std::move(rope));
+    } else {
+        request.AddPayload(std::move(rope));
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -288,9 +298,11 @@ template <typename TEvent>
 TICDirectStorageTransport::TICDirectStorageTransport(
     TActorSystem* actorSystem,
     TActorId icStorageTransportActorId,
-    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry,
+    bool enableChecksums)
     : TICStorageTransport(actorSystem, icStorageTransportActorId)
     , DirectSessionRegistry(std::move(directSessionRegistry))
+    , EnableChecksums(enableChecksums)
 {
     Y_ABORT_UNLESS(DirectSessionRegistry);
 }
@@ -343,7 +355,7 @@ TICDirectStorageTransport::WriteToPBuffer(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    request->AddPayloadThenChecksum(std::move(rope));
+    AttachPayload(*request, std::move(rope), EnableChecksums);
 
     auto promise = NewPromise<TEvWritePersistentBufferResult>();
     auto future = promise.GetFuture();
@@ -428,7 +440,7 @@ void TICDirectStorageTransport::WriteToManyPBuffers(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    request->AddPayloadThenChecksum(std::move(rope));
+    AttachPayload(*request, std::move(rope), EnableChecksums);
 
     auto handler = MakeIntrusive<TWriteToManyReplyHandler>(
         std::move(wrappedCallback),
@@ -488,7 +500,7 @@ TICDirectStorageTransport::WriteToDDisk(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    request->AddPayloadThenChecksum(std::move(rope));
+    AttachPayload(*request, std::move(rope), EnableChecksums);
 
     auto promise = NewPromise<TEvWriteResult>();
     auto future = promise.GetFuture();
@@ -518,7 +530,7 @@ TICDirectStorageTransport::WriteToDDisk(
 TFuture<IStorageTransport::TEvErasePersistentBufferResult>
 TICDirectStorageTransport::BatchEraseFromPBuffer(
     const THostConnection& connection,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
@@ -527,14 +539,14 @@ TICDirectStorageTransport::BatchEraseFromPBuffer(
     if (!entry) {
         return TICStorageTransport::BatchEraseFromPBuffer(
             connection,
-            std::move(lsns),
+            std::move(pBufferKeys),
             span);
     }
 
     auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
         connection.Credentials);
-    for (auto lsn: lsns) {
-        request->AddErase(lsn, connection.Credentials.Generation);
+    for (const auto& pBufferKey: pBufferKeys) {
+        request->AddErase(pBufferKey.Lsn, pBufferKey.Generation);
     }
 
     auto promise = NewPromise<TEvErasePersistentBufferResult>();
@@ -611,7 +623,7 @@ TFuture<IStorageTransport::TEvReadPersistentBufferResult>
 TICDirectStorageTransport::ReadFromPBuffer(
     const THostConnection& connection,
     const NDDisk::TBlockSelector& selector,
-    const ui64 lsn,
+    const TPBufferKey pBufferKey,
     const NDDisk::TReadInstruction instruction,
     const TGuardedSgList& data,
     NWilson::TSpan* span)
@@ -623,7 +635,7 @@ TICDirectStorageTransport::ReadFromPBuffer(
         return TICStorageTransport::ReadFromPBuffer(
             connection,
             selector,
-            lsn,
+            pBufferKey,
             instruction,
             data,
             span);
@@ -632,8 +644,8 @@ TICDirectStorageTransport::ReadFromPBuffer(
     auto request = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
         connection.Credentials,
         selector,
-        lsn,
-        connection.Credentials.Generation,
+        pBufferKey.Lsn,
+        pBufferKey.Generation,
         instruction);
 
     auto promise = NewPromise<TEvReadPersistentBufferResult>();
@@ -717,7 +729,7 @@ TICDirectStorageTransport::SyncWithPBuffer(
     const THostConnection& pbufferConnection,
     const THostConnection& ddiskConnection,
     TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(
@@ -731,7 +743,7 @@ TICDirectStorageTransport::SyncWithPBuffer(
             pbufferConnection,
             ddiskConnection,
             std::move(selectors),
-            std::move(lsns),
+            std::move(pBufferKeys),
             span);
     }
 
@@ -742,14 +754,14 @@ TICDirectStorageTransport::SyncWithPBuffer(
         pbufferConnection.DDiskId.PDiskId,
         pbufferConnection.DDiskId.DDiskSlotId);
 
-    Y_ABORT_UNLESS(selectors.size() == lsns.size());
+    Y_ABORT_UNLESS(selectors.size() == pBufferKeys.size());
     for (size_t i = 0; i < selectors.size(); ++i) {
         request->AddSegmentFromPB(
             pBufferId,
             *pbufferConnection.Credentials.DDiskInstanceGuid,
             selectors[i],
-            lsns[i],
-            ddiskConnection.Credentials.Generation);
+            pBufferKeys[i].Lsn,
+            pBufferKeys[i].Generation);
     }
 
     auto promise = NewPromise<TEvSyncResult>();
@@ -816,14 +828,20 @@ TICDirectStorageTransport::ListPBufferEntries(const THostConnection& connection)
 std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
     TActorSystem* actorSystem,
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex)
+    ui32 dbgIndex,
+    bool enableChecksums)
 {
     auto registry = std::make_shared<TDirectSessionRegistry>();
-    auto actorId = CreateTransportActor(diskDescription, dbgIndex, registry);
+    auto actorId = CreateTransportActor(
+        diskDescription,
+        dbgIndex,
+        enableChecksums,
+        registry);
     return std::make_unique<TICDirectStorageTransport>(
         actorSystem,
         actorId,
-        std::move(registry));
+        std::move(registry),
+        enableChecksums);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

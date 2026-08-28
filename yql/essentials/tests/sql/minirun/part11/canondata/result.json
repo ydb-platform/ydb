@@ -548,6 +548,20 @@
             "uri": "https://{canondata_backend}/1847551/c9103bf55cc11afa84471242d8aeba02b20d6dea/resource.tar.gz#test.test_expr-as_tuple_syntax-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[expr-cast_decimal_integral_implicit-default.txt-Debug]": [
+        {
+            "checksum": "c2586036f30d161b1365d334942d9e3a",
+            "size": 366,
+            "uri": "https://{canondata_backend}/1925821/81aefcf6afc3e284a6972a70ca153d0dea5b9ed2/resource.tar.gz#test.test_expr-cast_decimal_integral_implicit-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-cast_decimal_integral_implicit-default.txt-Results]": [
+        {
+            "checksum": "5a3171ea37f92f1459730228e2f24ab9",
+            "size": 782,
+            "uri": "https://{canondata_backend}/1925821/81aefcf6afc3e284a6972a70ca153d0dea5b9ed2/resource.tar.gz#test.test_expr-cast_decimal_integral_implicit-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-current_tz-default.txt-Debug]": [
         {
             "checksum": "8ec725465e5dea178d3bf19a128cef19",
@@ -812,6 +826,20 @@
             "checksum": "7e212c87ef05438f20747e4ea1be20b9",
             "size": 842,
             "uri": "https://{canondata_backend}/1925821/f74e5c11f53c40f453267898a51d4ae8e4eb72ff/resource.tar.gz#test.test_linear-mutdict_scope--Results_/results.txt"
+        }
+    ],
+    "test.test[list_from_range_decimal-different_types-default.txt-Debug]": [
+        {
+            "checksum": "e6cb6f31b74f127c6e92016dbae4cd17",
+            "size": 1558,
+            "uri": "https://{canondata_backend}/995452/729ad136f3e79b4deca8b619169c8cc70a99a0ed/resource.tar.gz#test.test_list_from_range_decimal-different_types-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[list_from_range_decimal-different_types-default.txt-Results]": [
+        {
+            "checksum": "de9d5d17e32ab0dae755a91768892927",
+            "size": 5340,
+            "uri": "https://{canondata_backend}/995452/729ad136f3e79b4deca8b619169c8cc70a99a0ed/resource.tar.gz#test.test_list_from_range_decimal-different_types-default.txt-Results_/results.txt"
         }
     ],
     "test.test[optimizers-yql-20126-default.txt-Debug]": [

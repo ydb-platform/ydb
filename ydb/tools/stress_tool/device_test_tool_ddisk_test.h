@@ -76,6 +76,39 @@ struct TDDiskDeviceInfo {
     ui32 DDiskSlotId;
 };
 
+inline NDDisk::TDDiskConfig MakeDDiskConfig(
+        const NDevicePerfTest::TDDiskTest& testProto,
+        bool enableChecksums) {
+    NDDisk::TDDiskConfig config;
+    config.EnableChecksums = enableChecksums;
+    bool initialized = false;
+
+    for (ui32 i = 0; i < testProto.DDiskTestListSize(); ++i) {
+        const auto& record = testProto.GetDDiskTestList(i);
+        if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
+            continue;
+        }
+
+        const auto& load = record.GetDDiskLoad();
+        const bool useSQPoll = load.GetSQPoll();
+        const bool useIOPoll = load.GetIOPoll();
+
+        if (!initialized) {
+            config.UseSQPoll = useSQPoll;
+            config.UseIOPoll = useIOPoll;
+            initialized = true;
+            continue;
+        }
+
+        if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
+            ythrow TWithBackTrace<yexception>()
+                << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
+        }
+    }
+
+    return config;
+}
+
 class TDDiskPerfTestActor : public TActor<TDDiskPerfTestActor> {
     TVector<TDDiskDeviceInfo> Devices;
     ui64 CurrentTest = 0;
@@ -106,6 +139,10 @@ protected:
         Printer->AddResult("Load", report->LoadTypeName());
         Printer->AddResult("Size", ToString(HumanReadableSize(report->Size, SF_BYTES)));
         Printer->AddResult("InFlight", report->InFlight);
+        if (report->BackgroundWritesSent) {
+            Printer->AddResult("MeasuredReads", report->MeasuredReadsSent);
+            Printer->AddResult("BackgroundWrites", report->BackgroundWritesSent);
+        }
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
         if (report->Size) {
             Printer->AddResult("IOPS", Sprintf("%.0f", iops));
@@ -123,11 +160,15 @@ protected:
     void FillPrinterWithAggregate() {
         double totalSpeed = 0.0;
         double totalIops = 0.0;
+        ui64 totalMeasuredReads = 0;
+        ui64 totalBackgroundWrites = 0;
         NMonitoring::TPercentileTrackerLg<10, 4, 1> mergedLatency;
         for (const auto& r : PendingResults) {
             if (r.Report) {
                 totalSpeed += r.Report->GetAverageSpeed() / 1e6;
                 totalIops += r.Report->Size ? (r.Report->GetAverageSpeed() / r.Report->Size) : 0.0;
+                totalMeasuredReads += r.Report->MeasuredReadsSent;
+                totalBackgroundWrites += r.Report->BackgroundWritesSent;
                 for (size_t i = 0; i < mergedLatency.ITEMS_COUNT; ++i) {
                     mergedLatency.Items[i].fetch_add(
                         r.Report->LatencyUs.Items[i].load(std::memory_order_relaxed),
@@ -146,6 +187,10 @@ protected:
         Printer->AddResult("Load", firstReport ? firstReport->LoadTypeName() : TString("-"));
         Printer->AddResult("Size", firstReport ? ToString(HumanReadableSize(firstReport->Size, SF_BYTES)) : TString("-"));
         Printer->AddResult("InFlight", firstReport ? firstReport->InFlight : 0u);
+        if (totalBackgroundWrites) {
+            Printer->AddResult("MeasuredReads", totalMeasuredReads);
+            Printer->AddResult("BackgroundWrites", totalBackgroundWrites);
+        }
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", totalSpeed));
         Printer->AddResult("IOPS", Sprintf("%.0f", totalIops));
         Printer->AddSpeedAndIops(TSpeedAndIops(totalSpeed, totalIops));
@@ -165,11 +210,14 @@ protected:
             const auto& cmd = baseRecord.GetDDiskLoad();
             if (cmd.GetIsReadLoad()) {
                 for (const auto& area : cmd.GetAreas()) {
-                    if (area.GetInitType() == TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
-                        Cerr << "Error: read load requires area initialization"
-                             << " (InitType != INIT_NONE) to allocate chunks before reading" << Endl;
+                    if (area.HasInitType() &&
+                            area.GetInitType() != TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FULL) {
+                        Cerr << "Error: read load requires InitType INIT_ZEROES_FULL"
+                             << " (omit InitType to use it automatically);"
+                             << " INIT_NONE and INIT_ZEROES_FIRST_BLOCK skip device I/O for unread blocks"
+                             << Endl;
                         ASSERT_YTHROW(false,
-                            "Invalid configuration: read load requires area initialization (InitType != INIT_NONE)");
+                            "Invalid configuration: read load requires InitType INIT_ZEROES_FULL");
                     }
                 }
             }
@@ -194,7 +242,8 @@ protected:
                 ddiskId->SetNodeId(Devices[d].NodeId);
                 ddiskId->SetPDiskId(Devices[d].PDiskIdNum);
                 ddiskId->SetDDiskSlotId(Devices[d].DDiskSlotId);
-                ctx.Register(CreateDDiskLoadTest(record.GetDDiskLoad(), ctx.SelfID, Counters, d, d));
+                ctx.Register(CreateDDiskLoadTest(record.GetDDiskLoad(), ctx.SelfID, Counters, d, d,
+                    !Cfg.DisableDDiskChecksums));
                 break;
             }
             default:
@@ -243,7 +292,10 @@ protected:
 
         ui32 deviceIdx = static_cast<ui32>(ev->Get()->Tag);
         Y_ABORT_UNLESS(deviceIdx < Devices.size());
-        PendingResults[deviceIdx] = {ev->Get()->Report, ev->Get()->ErrorReason};
+        PendingResults[deviceIdx] = {
+            ev->Get()->ErrorReason == "OK" ? ev->Get()->Report : nullptr,
+            ev->Get()->ErrorReason
+        };
         ++ReceivedResults;
 
         if (ReceivedResults == Devices.size()) {
@@ -293,42 +345,14 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
         return proto;
     }
 
-    NDDisk::TDDiskConfig ExtractDDiskConfig() const {
-        NDDisk::TDDiskConfig config;
-        bool initialized = false;
-
-        for (ui32 i = 0; i < TestProto.DDiskTestListSize(); ++i) {
-            const auto& record = TestProto.GetDDiskTestList(i);
-            if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
-                continue;
-            }
-
-            const auto& load = record.GetDDiskLoad();
-            const bool useSQPoll = load.GetSQPoll();
-            const bool useIOPoll = load.GetIOPoll();
-
-            if (!initialized) {
-                config.UseSQPoll = useSQPoll;
-                config.UseIOPoll = useIOPoll;
-                initialized = true;
-                continue;
-            }
-
-            if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
-                ythrow TWithBackTrace<yexception>()
-                    << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
-            }
-        }
-
-        return config;
-    }
-
     void Init() override {
         try {
             TBase::DoBasicSetup();
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
-            const NDDisk::TDDiskConfig ddiskConfig = ExtractDDiskConfig();
+            const NDDisk::TDDiskConfig ddiskConfig =
+                MakeDDiskConfig(TestProto, !TBase::Cfg.DisableDDiskChecksums);
+            TBase::Printer->AddGlobalParam("DDiskChecksums", ddiskConfig.EnableChecksums ? "on" : "off");
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(1, i + 1, DDiskSlotId);

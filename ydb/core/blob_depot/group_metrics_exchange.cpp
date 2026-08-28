@@ -140,6 +140,7 @@ namespace NKikimr::NBlobDepot {
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES, record.GetBalancerResolveFailures());
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_ENDPOINT_SWITCHES, record.GetEndpointSwitches());
         inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS, record.GetFiveXxRefreshTriggers());
+        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_PENDING_REJECTS, record.GetPendingRejects());
 
         auto applyLatencyHistogram = [&](NKikimrBlobDepot::EPercentileCounters counter, const auto& buckets) {
             if (buckets.empty()) {
@@ -158,6 +159,7 @@ namespace NKikimr::NBlobDepot {
         applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_LATENCY_MS, record.GetBalancerLatencyHistogram());
         applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS, record.GetNonBalancerLatencyHistogram());
         applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS, record.GetBalancerResolveLatencyHistogram());
+        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_PENDING_LATENCY_MS, record.GetPendingLatencyHistogram());
 
         if (record.HasIsUsingProxy()) {
             const ui32 nodeId = record.GetNodeId();

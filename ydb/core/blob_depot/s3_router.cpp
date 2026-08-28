@@ -246,11 +246,8 @@ namespace NKikimr::NBlobDepot {
         }
 
         void RejectRequest(std::unique_ptr<IEventHandle> ev) {
-            YDB_LOG_DEBUG("S3Router has no endpoint yet, rejecting request",
-                {"marker", "BDTS32"},
-                {"id", LogId},
-                {"type", ev->GetTypeRewrite()},
-                {"pending", PendingRequests.size()});
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS32, "S3Router has no endpoint yet, rejecting request",
+                (Id, LogId), (Type, ev->GetTypeRewrite()), (Pending, PendingRequests.size()));
 
             ++Stats.PendingRejects;
 
@@ -278,11 +275,8 @@ namespace NKikimr::NBlobDepot {
                 return;
             }
 
-            YDB_LOG_DEBUG("S3Router flushing pending requests",
-                {"marker", "BDTS33"},
-                {"id", LogId},
-                {"count", PendingRequests.size()},
-                {"endpoint", CurrentEndpoint});
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS33, "S3Router flushing pending requests",
+                (Id, LogId), (Count, PendingRequests.size()), (Endpoint, CurrentEndpoint));
 
             const TMonotonic now = TActivationContext::Monotonic();
             while (!PendingRequests.empty()) {
@@ -491,11 +485,8 @@ namespace NKikimr::NBlobDepot {
             }
 
             if (PendingRequests.size() < MaxPendingRequests) {
-                YDB_LOG_DEBUG("S3Router queueing request until balancer resolves",
-                    {"marker", "BDTS34"},
-                    {"id", LogId},
-                    {"type", ev->GetTypeRewrite()},
-                    {"pending", PendingRequests.size() + 1});
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS34, "S3Router queueing request until balancer resolves",
+                    (Id, LogId), (Type, ev->GetTypeRewrite()), (Pending, PendingRequests.size() + 1));
                 PendingRequests.push_back(TPendingRequest{
                     .EnqueuedAt = TActivationContext::Monotonic(),
                     .Ev = std::unique_ptr<IEventHandle>(ev.Release()),
@@ -539,21 +530,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         void PassAway() override {
-<<<<<<< HEAD
             STLOG(PRI_INFO, BLOB_DEPOT, BDTS31, "S3Router shutting down",
-                (Id, LogId), (CurrentEndpoint, CurrentEndpoint));
-=======
-            YDB_LOG_INFO("S3Router shutting down",
-                {"marker", "BDTS31"},
-                {"id", LogId},
-                {"currentEndpoint", CurrentEndpoint},
-                {"pending", PendingRequests.size()});
+                (Id, LogId), (CurrentEndpoint, CurrentEndpoint), (Pending, PendingRequests.size()));
 
             while (!PendingRequests.empty()) {
                 RejectPendingRequest(std::move(PendingRequests.front()));
                 PendingRequests.pop_front();
             }
->>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
 
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());

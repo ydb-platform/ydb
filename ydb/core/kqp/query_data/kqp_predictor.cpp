@@ -15,6 +15,8 @@
 
 #include <cmath>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr::NKqp {
 
 using namespace NActors;
@@ -151,7 +153,7 @@ ui32 TStagePredictor::GetUsableThreads() {
         userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
     }
     if (!userPoolSize) {
-        ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
+        YDB_LOG_INFO("User pool is undefined for executer tasks construction");
         userPoolSize = NSystemInfo::NumberOfCpus();
     }
     return Max<ui32>(1, *userPoolSize);
@@ -173,7 +175,7 @@ ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {
     ui32 result = 0;
     if (!LevelDataPrediction || *LevelDataPrediction == 0) {
-        ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "level difficulty not defined for correct calculation";
+        YDB_LOG_ERROR("Level difficulty not defined for correct calculation");
         result = availableThreadsCount;
     } else {
         result = (availableThreadsCount - previousStageTasksCount.value_or(0) * 0.25) * (InputDataPrediction / *LevelDataPrediction);

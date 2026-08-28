@@ -491,6 +491,7 @@ namespace NKikimr::NBlobDepot {
                 ui64 Tag = 0;
                 std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
                 TString Key; // the key we are reading -- this is used for retries when we are getting NODATA
+                NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             };
             struct TCheckContext;
 

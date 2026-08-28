@@ -640,6 +640,7 @@ public:
         out << "<th>Read</th>";
         out << "<th>Write</th>";
         out << "<th>Usage impact</th>";
+        out << "<th>Isolation</th>";
         out << "</tr>";
         out << "</thead>";
 
@@ -652,7 +653,8 @@ public:
             out << "<tr>";
             out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
             out << GetResourceValuesHtml(tablet.GetResourceValues());
-            out << "<td>" << tablet.UsageImpact << "</td>";
+            out << "<td>" << tablet.GetUsageImpact() << "</td>";
+            out << "<td>" << (tablet.IsPinnedToNode() ? "pinned" : (tablet.IsHighImpact() ? "high-impact" : "")) << "</td>";
             out << "</tr>";
         }
         out <<"</tbody>";
@@ -2814,7 +2816,19 @@ public:
                     jsonNode["Types"] = types;
                 }
                 double nodeUsage = node.GetNodeUsage();
-                jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.3f", nodeUsage), nodeUsage >= 1);
+                TStringBuilder usage;
+                usage << GetConditionalRedString(Sprintf("%.3f", nodeUsage), nodeUsage >= 1);
+                double reservedImpact = node.GetMaxTabletImpact();
+                if (reservedImpact > 0) {
+                    TStringBuilder title;
+                    title << "Reserved for a high-impact tablet: " << Sprintf("%.3f", reservedImpact);
+                    const TTabletInfo* pinned = node.GetPinnedTablet();
+                    if (pinned != nullptr) {
+                        title << ", " << pinned->ToString() << " is pinned here";
+                    }
+                    usage << " <span class='glyphicon glyphicon-pushpin' title='" << title << "'></span>";
+                }
+                jsonNode["Usage"] = usage;
                 jsonNode["ResourceValues"] = GetResourceValuesJson(node.ResourceValues, node.ResourceMaximumValues);
                 jsonNode["StDevResourceValues"] = GetResourceValuesText(node.GetStDevResourceValues());
             }
@@ -4210,7 +4224,9 @@ public:
         result["ResourceMetricsAggregates"] = MakeFrom(tablet.ResourceMetricsAggregates);
         result["ActorsToNotify"] = MakeFrom(tablet.ActorsToNotify);
         result["ActorsToNotifyOnRestart"] = MakeFrom(tablet.ActorsToNotifyOnRestart);
-        result["UsageImpact"] = tablet.UsageImpact;
+        result["UsageImpact"] = tablet.GetUsageImpact();
+        result["HighImpact"] = tablet.IsHighImpact();
+        result["PinnedToNode"] = tablet.IsPinnedToNode();
         return result;
     }
 

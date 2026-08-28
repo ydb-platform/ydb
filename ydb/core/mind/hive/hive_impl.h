@@ -1064,6 +1064,14 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetUseTabletUsageEstimate();
     }
 
+    double GetTabletImpactToIsolate() const {
+        return CurrentConfig.GetTabletImpactToIsolate();
+    }
+
+    double GetTabletImpactShareToPin() const {
+        return CurrentConfig.GetTabletImpactShareToPin();
+    }
+
     TDuration GetBalanceCountersRefreshFrequency() const {
         return TDuration::MilliSeconds(CurrentConfig.GetBalanceCountersRefreshFrequency());
     }

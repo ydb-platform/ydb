@@ -2786,6 +2786,8 @@ message THiveConfig {
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
     optional uint64 DataCenterChangeReactionPeriod = 91 [default = 300]; // seconds
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
+    optional double TabletImpactToIsolate = 93 [default = 0.3]; // UsageImpact at which a tablet is treated as high-impact; above 1.0 disables isolation
+    optional double TabletImpactShareToPin = 94 [default = 0.8]; // share of its node's usage a high-impact tablet must account for to be pinned there
 }
 
 message THealthCheckConfig {

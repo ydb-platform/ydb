@@ -220,6 +220,25 @@ bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
             && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
+void TTabletInfo::SetUsageImpact(double usageImpact) {
+    UsageImpact = usageImpact;
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateHighImpactTablet(this);
+    }
+}
+
+bool TTabletInfo::IsHighImpact() const {
+    return Hive.GetUseTabletUsageEstimate() && UsageImpact >= Hive.GetTabletImpactToIsolate();
+}
+
+bool TTabletInfo::IsPinnedToNode() const {
+    // The IsHighImpact() check is what keeps a negligible tablet on a nearly idle node from
+    // satisfying the share test and pinning itself there forever.
+    return IsHighImpact()
+            && Node != nullptr
+            && UsageImpact >= Hive.GetTabletImpactShareToPin() * Node->GetNodeUsage();
+}
+
 bool TTabletInfo::InitiateBoot(TNodeId node) {
     if (IsStopped()) {
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_BOOTING);

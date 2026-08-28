@@ -189,7 +189,7 @@ private:
             ui64 BlobId = 0;
             THolder<TFileHandle> NewFileHandle;
             TMaybe<TString> Error;
-            ESpillingType SpillingType = ESpillingType::Compute;
+            ESpillingType SpillingType;
         };
 
         struct TEvReadFileResponse : public TEventLocal<TEvReadFileResponse, EvReadFileResponse> {
@@ -200,7 +200,7 @@ private:
             TBuffer Blob;
             bool Removed = false;
             TMaybe<TString> Error;
-            ESpillingType SpillingType = ESpillingType::Compute;
+            ESpillingType SpillingType;
         };
 
         struct TEvRemoveOldTmp : public TEventLocal<TEvRemoveOldTmp, EvRemoveOldTmp> {
@@ -1003,7 +1003,7 @@ private:
         bool CreateFile = false;
         ui64 BlobId = 0;
         TChunkedBuffer Blob;
-        ESpillingType SpillingType = ESpillingType::Compute;
+        ESpillingType SpillingType;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
@@ -1046,7 +1046,7 @@ private:
         ui64 Offset;
         ui64 Size;
         THolder<TFileHandle> RemoveFile;
-        ESpillingType SpillingType = ESpillingType::Compute;
+        ESpillingType SpillingType;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {

@@ -4133,6 +4133,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvSubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
+
     ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }

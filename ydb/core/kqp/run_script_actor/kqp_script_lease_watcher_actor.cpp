@@ -149,10 +149,12 @@ private:
         FinishInfo.Update(status, std::move(issues));
 
         if (!LeaseUpdateStartTime) {
-            LOG_I("Exit, send response"
-                << ", finish status: " << *FinishInfo.Status
-                << ", issues: " << FinishInfo.Issues.ToOneLineString()
-                << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
+
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit, send response",
+                {"logPrefix", LogPrefix()},
+                {"finishStatus", FinishInfo.Status},
+                {"issues", FinishInfo.Issues.ToOneLineString()},
+                {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
 
             Send(Owner, new TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished(*FinishInfo.Status, std::move(FinishInfo.Issues)));
             PassAway();

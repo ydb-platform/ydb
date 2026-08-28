@@ -1,0 +1,150 @@
+name: YDBDoc Review NG real YDB acceptance (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-ydb-state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out accepted NG integration
+        uses: actions/checkout@v4
+        with:
+          repository: ydb-platform/ydbdoc-review
+          ref: ecc83ecf7209c7219e6a626bf70da58612c34a1c
+          path: ydbdoc-review-ng
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ydbdoc-review-ng/ng/pyproject.toml
+
+      - name: Install accepted NG and test runner
+        run: python -m pip install ./ydbdoc-review-ng/ng pytest==8.3.5
+
+      - name: Validate configuration and prepare isolated scope
+        env:
+          YDBDOC_YDB_ENDPOINT: ${{ vars.YDBDOC_YDB_ENDPOINT }}
+          YDBDOC_YDB_DATABASE: ${{ vars.YDBDOC_YDB_DATABASE }}
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$YDBDOC_YDB_ENDPOINT"
+          test -n "$YDBDOC_YDB_DATABASE"
+          test -n "$YDB_SA_KEY"
+          suffix=$(openssl rand -hex 8)
+          [[ "$suffix" =~ ^[a-f0-9]{8,16}$ ]]
+          prefix="m0_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}_${suffix}"
+          [[ ${#prefix} -lt 80 ]]
+          [[ "$prefix" =~ ^m0_[0-9]+_[0-9]+_[a-f0-9]{8,16}$ ]]
+          echo "YDBDOC_REAL_YDB_TABLE_PREFIX=$prefix" >> "$GITHUB_ENV"
+          echo "YDBDOC_YDB_ENDPOINT=$YDBDOC_YDB_ENDPOINT" >> "$GITHUB_ENV"
+          echo "YDBDOC_YDB_DATABASE=$YDBDOC_YDB_DATABASE" >> "$GITHUB_ENV"
+          masked_key=${YDB_SA_KEY//'%'/'%25'}
+          masked_key=${masked_key//$'\r'/'%0D'}
+          masked_key=${masked_key//$'\n'/'%0A'}
+          printf '::add-mask::%s\n' "$masked_key"
+          key_file="$RUNNER_TEMP/ydbdoc-ng-sa-key-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          umask 077
+          printf '%s' "$YDB_SA_KEY" > "$key_file"
+          echo "YDBDOC_YDB_SA_KEY_FILE=$key_file" >> "$GITHUB_ENV"
+
+      - name: Run real YDB contract within 55 seconds
+        id: contract
+        working-directory: ydbdoc-review-ng/ng
+        env:
+          YDBDOC_REAL_YDB_STATE: "1"
+        run: timeout --signal=TERM --kill-after=3s 55s python -m pytest tests/test_real_ydb_state.py --junitxml="$RUNNER_TEMP/ng-real-ydb.xml" -q
+
+      - name: Validate non-empty all-green JUnit
+        if: always()
+        id: junit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+
+          path = os.path.join(os.environ["RUNNER_TEMP"], "ng-real-ydb.xml")
+          root = ET.parse(path).getroot()
+          suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+          totals = {
+              name: sum(int(suite.attrib.get(name, "0")) for suite in suites)
+              for name in ("tests", "failures", "errors", "skipped")
+          }
+          if totals["tests"] <= 0 or any(totals[name] != 0 for name in ("failures", "errors", "skipped")):
+              raise SystemExit("real-YDB JUnit is not all green")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"tests={totals['tests']}\n")
+          PY
+
+      - name: Remove only this run's four test tables
+        if: always()
+        id: cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ ${#YDBDOC_REAL_YDB_TABLE_PREFIX} -lt 80 ]]
+          [[ "$YDBDOC_REAL_YDB_TABLE_PREFIX" =~ ^m0_[0-9]+_[0-9]+_[a-f0-9]{8,16}$ ]]
+          timeout --signal=TERM --kill-after=3s 55s python - <<'PY'
+          import os
+          import ydb
+
+          prefix = os.environ["YDBDOC_REAL_YDB_TABLE_PREFIX"]
+          expected = ("command_runs", "lineages", "model_calls", "verification_results")
+          credentials = ydb.iam.ServiceAccountCredentials.from_file(os.environ["YDBDOC_YDB_SA_KEY_FILE"])
+          driver = ydb.Driver(
+              endpoint=os.environ["YDBDOC_YDB_ENDPOINT"],
+              database=os.environ["YDBDOC_YDB_DATABASE"],
+              credentials=credentials,
+          )
+          try:
+              driver.wait(timeout=10, fail_fast=True)
+              pool = ydb.SessionPool(driver)
+              for suffix in expected:
+                  table = f"{prefix}_{suffix}"
+                  try:
+                      pool.retry_operation_sync(
+                          lambda session, name=table: session.execute_scheme(f"DROP TABLE `{name}`;")
+                      )
+                  except ydb.issues.SchemeError as error:
+                      message = str(error).lower()
+                      if not any(marker in message for marker in ("does not exist", "path not found", "not found")):
+                          raise
+          finally:
+              driver.stop(timeout=5)
+          PY
+
+      - name: Delete temporary service-account key
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${YDBDOC_YDB_SA_KEY_FILE:-}" && "$YDBDOC_YDB_SA_KEY_FILE" == "$RUNNER_TEMP"/ydbdoc-ng-sa-key-* ]]; then
+            rm -f -- "$YDBDOC_YDB_SA_KEY_FILE"
+          fi
+
+      - name: Publish safe acceptance summary
+        if: always()
+        env:
+          TESTS: ${{ steps.junit.outputs.tests }}
+        shell: bash
+        run: |
+          {
+            echo "### NG real YDB acceptance"
+            echo
+            echo "- Product source SHA: \`4f713656fd4a67bbf23f7837349eae1ee51e853d\`"
+            echo "- Integration checkout SHA: \`ecc83ecf7209c7219e6a626bf70da58612c34a1c\`"
+            echo "- Workflow/default SHA: \`${GITHUB_SHA}\`"
+            echo "- Completed tests: \`${TESTS:-0}\`"
+            echo "- Cleanup: \`${{ steps.cleanup.outcome }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

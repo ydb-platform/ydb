@@ -116,7 +116,7 @@ private:
                 actorSystem->Send(event->Sender, new TEvCleanupResponse(Ydb::StatusIds::NOT_FOUND, NYql::TIssues{NYql::TIssue(TStringBuilder() << "Pool " << event->Get()->PoolId << " not found")}));
             });
             TActivationContext::Send(ev->Sender,
-                new TEvContinueRequest(ev->Get()->QueryId, status, TString{}, NResourcePool::TPoolSettings{}, issues));
+                std::make_unique<TEvContinueRequest>(ev->Get()->QueryId, status, TString{}, NResourcePool::TPoolSettings{}, issues));
         }
         PendingRequests.clear();
     }

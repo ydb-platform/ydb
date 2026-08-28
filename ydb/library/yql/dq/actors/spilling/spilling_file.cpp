@@ -516,7 +516,10 @@ private:
 
         auto& fd = it->second;
 
-        const bool ioError = bool(msg.Error);
+        if (msg.Error) {
+            Counters_->GetTypeCounters(fd.SpillingType).IoErrors->Inc();
+        }
+
         fd.Error = std::move(msg.Error);
         fd.TotalWaitTime += msg.WaitTime;
         fd.TotalWorkTime += msg.WorkTime;
@@ -547,11 +550,7 @@ private:
         }
 
         if (fd.Error) {
-            tc.Errors->Inc();
-            if (ioError) {
-                tc.IoErrors->Inc();
-            }
-            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
+            ReplyError(msg.Client, *fd.Error, tc);
 
             fd.Ops.clear();
             fd.HasActiveOp = false;
@@ -671,7 +670,10 @@ private:
 
         auto& fd = it->second;
 
-        const bool ioError = bool(msg.Error);
+        if (msg.Error) {
+            Counters_->GetTypeCounters(fd.SpillingType).IoErrors->Inc();
+        }
+
         fd.Error = std::move(msg.Error);
         fd.TotalWaitTime += msg.WaitTime;
         fd.TotalWorkTime += msg.WorkTime;
@@ -704,11 +706,7 @@ private:
         }
 
         if (fd.Error) {
-            tc.Errors->Inc();
-            if (ioError) {
-                tc.IoErrors->Inc();
-            }
-            Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
+            ReplyError(msg.Client, *fd.Error, tc);
 
             fd.Ops.clear();
             fd.HasActiveOp = false;

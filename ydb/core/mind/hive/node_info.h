@@ -125,6 +125,7 @@ public:
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
     void UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after);
     void UpdateHighImpactTablet(TTabletInfo* tablet);
+    void LowerOverestimatedImpacts(NIceDb::TNiceDb& db);
 
     // Largest UsageImpact among the node's high-impact tablets, ignoring `exclude` if given.
     // Used as a floor on the node's expected usage, see GetNodeUsageForTablet.

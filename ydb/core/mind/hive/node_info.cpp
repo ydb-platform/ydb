@@ -571,6 +571,31 @@ bool TNodeInfo::CanBeDeleted(TInstant now) const {
     }
 }
 
+void TNodeInfo::LowerOverestimatedImpacts(NIceDb::TNiceDb& db) {
+    // A tablet's impact cannot exceed the usage of the node it runs on. That bound is worth little on a
+    // crowded node, but it becomes a direct measurement once the tablet is nearly alone here - which is
+    // precisely the state a high-impact tablet is driven into, and the state in which it is no longer
+    // moved and so is never measured again. Without this, an estimate that was wrong to begin with would
+    // keep the tablet isolated forever.
+    //
+    // This can only ever lower an estimate, so it cannot promote a tablet to high-impact by itself, and
+    // a tablet that really did get heavier is corrected upwards by the usual measurement the next time
+    // it is scheduled somewhere. Only high-impact tablets are checked: they are the ones an overestimate
+    // actually harms, and there are at most a couple of them per node.
+    std::vector<TTabletInfo*> overestimated;
+    for (TTabletInfo* tablet : HighImpactTablets) {
+        if (tablet->GetUsageImpact() > NodeTotalUsage) {
+            overestimated.push_back(tablet);
+        }
+    }
+    for (TTabletInfo* tablet : overestimated) {
+        BLOG_D("Lowering impact estimate of tablet " << tablet->GetFullTabletId()
+                << " from " << tablet->GetUsageImpact() << " to usage of node " << Id << " (" << NodeTotalUsage << ")");
+        tablet->SetUsageImpact(NodeTotalUsage); // updates HighImpactTablets, hence the copy above
+        db.Table<Schema::Metrics>().Key(tablet->GetFullTabletId()).Update<Schema::Metrics::UsageImpact>(NodeTotalUsage);
+    }
+}
+
 void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db) {
     if (metrics.HasTotalResourceUsage()) {
         AveragedResourceTotalValues.Push(ResourceRawValuesFromMetrics(metrics.GetTotalResourceUsage()));
@@ -603,6 +628,9 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
             }
         }
         NodeTotalUsage = AveragedNodeTotalUsage.GetValue();
+        if (!LastScheduledTablet) {
+            LowerOverestimatedImpacts(db);
+        }
     }
     if (metrics.HasTotalNodeCpuUsage()) {
         AveragedNodeTotalCpuUsage.Push(metrics.GetTotalNodeCpuUsage());

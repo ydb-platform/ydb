@@ -454,25 +454,10 @@ namespace NActors {
             // Neither socket is registered with the epoll TPollerActor anymore (Caveat 3).
             Send(MakeUringPollerActorId(), new TEvUringRegister(Socket, XdcSocket, ReceiverId, SelfId()));
         } else {
-<<<<<<< HEAD
-            LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
+            YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Registering socket in PollerActor",
+                {"marker", "ICS11"});
             const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
-=======
-            inputSession = new TInputSessionTCP(Proxy->Common, RdmaQp, std::move(cq));
-            ReceiverId = RegisterWithSameMailbox(inputSession);
-        }
 
-        IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::StartRecieve, SelfId(), Socket, XdcSocket,
-            ReceiveContext, Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams));
-
-        // register our socket in poller actor
-        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Registering socket in PollerActor",
-            {"marker", "ICS11"});
-        const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
-        Y_ABORT_UNLESS(success);
-        if (XdcSocket) {
-            const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
->>>>>>> e5337030699 ([YDB_LOG] Migrate library/actors/interconnect (#48896))
             Y_ABORT_UNLESS(success);
             if (XdcSocket) {
                 const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));

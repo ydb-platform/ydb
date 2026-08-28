@@ -877,87 +877,10 @@ namespace NActors {
             return region;
         }
 
-<<<<<<< HEAD
+
         void PerformOutgoingHandshake() {
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH01", NLog::PRI_DEBUG,
-                "starting outgoing handshake");
-=======
-        TRdmaPreinitedSessionPtr RunRdmaIncomingHandshakePart() {
-            MainChannel.ResetPollerToken();
-            Register(NInterconnect::NRdma::CreateRdmaIncommingSyncActor(
-                Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
-
-            auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
-            MainChannel.RegisterInPoller();
-
-            if (auto err = ev->Get()->Error()) {
-                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA send/receive handshake",
-                    {"marker", "ICRDMA"},
-                    {"failed", err->data()});
-                Params.AllowRdmaSendReceive = false;
-                return {};
-            } else {
-                return std::move(ev->Get()->ExtractSession());
-            }
-        }
-
-        TRdmaPreinitedSessionPtr RunRdmaOutgoingHandshakePart(const ::NActorsInterconnect::THandshakeSuccess& success) {
-            const auto& remoteQpPrepared = success.GetQpPrepared();
-            YDB_LOG_TRACE_CTX(this->GetActorContext(), "Peer has prepared",
-                {"marker", "ICRDMA"},
-                {"qp", remoteQpPrepared.GetQpNum()});
-            NInterconnect::NRdma::THandshakeData hd {
-                .QpNum = remoteQpPrepared.GetQpNum(),
-                .SubnetPrefix = remoteQpPrepared.GetSubnetPrefix(),
-                .InterfaceId = remoteQpPrepared.GetInterfaceId(),
-                .MtuIndex = remoteQpPrepared.GetMtuIndex(),
-            };
-            int err = Rdma.Qp->ToRtsState(hd);
-            if (err) {
-                TStringBuilder sb;
-                sb << hd;
-                YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
-                    {"marker", "ICRDMA"},
-                    {"err", err},
-                    {"strerror", strerror(err)},
-                    {"data", sb.data()});
-                Rdma.HandShakeMemRegion.Reset();
-                Rdma.Clear();
-                return {};
-            } else {
-                Params.ChecksumRdmaEvent = remoteQpPrepared.GetRdmaChecksum();
-                Params.AllowRdmaSendReceive = Common->Settings.EnableRdmaSendReceive
-                    && (remoteQpPrepared.GetSendReceiveVersion() == 1);
-                if (Params.AllowRdmaSendReceive) {
-                    // QP is ready, now we need two things:
-                    // 1. make sure send and receive works
-                    // 2. perform barrier to make sure sessions are ready to handle receive
-                    MainChannel.ResetPollerToken();
-
-                    Register(NInterconnect::NRdma::CreateRdmaOutgoingSyncActor(
-                        Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
-
-                    auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
-                    MainChannel.RegisterInPoller();
-                    if (auto err = ev->Get()->Error()) {
-                        YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA send/receive handshake",
-                            {"marker", "ICRDMA"},
-                            {"failed", err->data()});
-                        Params.AllowRdmaSendReceive = false;
-                        return {};
-                    } else {
-                        return std::move(ev->Get()->ExtractSession());
-                    }
-                } else {
-                    return {};
-                }
-            }
-        }
-
-        void PerformOutgoingHandshake(TRdmaPreinitedSessionPtr& rdmaSession) {
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting outgoing handshake",
                 {"marker", "ICH01"});
->>>>>>> e5337030699 ([YDB_LOG] Migrate library/actors/interconnect (#48896))
 
             // perform connection and log its result
             MainChannel.Connect(&PeerAddr);
@@ -1257,15 +1180,9 @@ namespace NActors {
                 << " PeerAddr# " << PeerAddr << " AddressList# " << makeList(), true);
         }
 
-<<<<<<< HEAD
         void PerformIncomingHandshake(std::optional<NActorsInterconnect::TRdmaCred>& rdma) {
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH02", NLog::PRI_DEBUG,
-                "starting incoming handshake");
-=======
-        void PerformIncomingHandshake(std::optional<NActorsInterconnect::TRdmaCred>& rdma, TRdmaPreinitedSessionPtr& rdmaSession) {
             YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting incoming handshake",
                 {"marker", "ICH02"});
->>>>>>> e5337030699 ([YDB_LOG] Migrate library/actors/interconnect (#48896))
 
             // set up incoming socket
             MainChannel.SetupSocket();
@@ -1450,7 +1367,7 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
-                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady(); 
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
                 // v2 session is used only when both peers enabled it and encryption is not in effect
                 Params.UseSessionV2 = request.GetRequestSessionV2() &&
@@ -1697,18 +1614,13 @@ namespace NActors {
                 if (err) {
                     TStringBuilder sb;
                     sb << hd;
-<<<<<<< HEAD
+
                     success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
-                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                        "Unable to promote QP to RTS, err: %d (%s), handshake data: %s", err, strerror(err), sb.data());
-=======
-                    success.SetRdmaErr("Unable to promote QP to RTS on the incoming side");
                     YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to promote QP to RTS, handshake",
                         {"marker", "ICRDMA"},
                         {"err", err},
                         {"strerror", strerror(err)},
                         {"data", sb.data()});
->>>>>>> e5337030699 ([YDB_LOG] Migrate library/actors/interconnect (#48896))
                     Rdma.Clear();
                     return;
                 }

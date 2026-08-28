@@ -172,7 +172,8 @@ public:
                 auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
                 const auto alternativesCount = variantType->GetAlternativesCount();
                 for (ui32 index = 0; index != alternativesCount; ++index) {
-                    if (ValidateJsonType(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), cellType, jsonValue)) {
+                    auto alternativeType = variantType->GetAlternativeType(index);
+                    if (ValidateJsonType(alternativeType, cellType, jsonValue)) {
                         return true;
                     }
                 }

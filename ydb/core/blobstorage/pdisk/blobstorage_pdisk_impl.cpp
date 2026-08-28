@@ -1557,12 +1557,16 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
         result->ChunkIds = std::move(chunks);
         result->StatusFlags = GetStatusFlags(evChunkReserve.Owner, evChunkReserve.OwnerGroupType);
     }
+    // Reported after the allocation, so the owner learns what it has left rather
+    // than what it had before asking.
+    result->Headroom = Keeper.GetSpaceHeadroom(evChunkReserve.Owner);
 
     guard.Release();
     PCtx->ActorSystem->Send(evChunkReserve.Sender, result.Release(), 0, evChunkReserve.Cookie);
     Mon.ChunkReserve.CountResponse();
 
 }
+
 bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason) {
     TGuard<TMutex> guard(StateMutex);
     if (chunkIdx >= ChunkState.size()) {
@@ -2487,6 +2491,7 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
     result->VDiskSlotUsage = Keeper.GetVDiskSlotUsage(evCheckSpace.Owner);
     result->VDiskRawUsage = Keeper.GetVDiskRawUsage(evCheckSpace.Owner);
     result->PDiskUsage = Keeper.GetPDiskUsage();
+    result->Headroom = Keeper.GetSpaceHeadroom(evCheckSpace.Owner);
     PCtx->ActorSystem->Send(evCheckSpace.Sender, result.release());
     Mon.CheckSpace.CountResponse();
     return;
@@ -3412,6 +3417,7 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
     logWrite->Result.Reset(new NPDisk::TEvLogResult(status,
         GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str(),
         Keeper.GetLogChunkCount()));
+    logWrite->Result->Headroom = Keeper.GetSpaceHeadroom(logWrite->Owner);
     logWrite->Result->Results.push_back(NPDisk::TEvLogResult::TRecord(logWrite->Lsn, logWrite->Cookie));
 }
 
@@ -3641,6 +3647,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 
             auto result = std::make_unique<TEvChunkWriteResult>(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
                         GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
+            result->Headroom = Keeper.GetSpaceHeadroom(ev.Owner);
 
             ++state.OperationsInProgress;
             ++ownerData.InFlight->ChunkWrites;

@@ -710,6 +710,79 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 25);
     }
+
+    Y_UNIT_TEST(SpaceHeadroomMatchesEstimatedColor) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 100,
+            .ExpectedOwnerCount = 1,
+            .SpaceColorBorder = TColor::BLACK,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeChunkLimits(params.ChunkBaseLimit), errorReason),
+            errorReason);
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+
+        // The headroom is exactly the largest allocation that still estimates better
+        // than the boundary, so the two views of the disk cannot disagree.
+        double occupancy = 0;
+        for (TColor::E color : {TColor::PRE_ORANGE, TColor::ORANGE, TColor::RED, TColor::BLACK}) {
+            const i64 headroom = chunkTracker.GetHeadroomBelow(owner, color);
+            UNIT_ASSERT(headroom > 0);
+            UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, headroom, &occupancy) < color);
+            UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, headroom + 1, &occupancy) >= color);
+        }
+
+        const TSpaceHeadroom headroom = chunkTracker.GetSpaceHeadroom(owner);
+        UNIT_ASSERT(headroom.Valid);
+        UNIT_ASSERT(headroom.ToPreOrange < headroom.ToOrange);
+        UNIT_ASSERT(headroom.ToOrange < headroom.ToRed);
+        UNIT_ASSERT(headroom.ToRed < headroom.ToBlack);
+
+        // A projection is what a VDisk uses to admit writes: charging it the whole
+        // headroom must leave it just short of the boundary.
+        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToPreOrange, TColor::GREEN), TColor::GREEN);
+        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToPreOrange + 1, TColor::GREEN), TColor::PRE_ORANGE);
+        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToOrange + 1, TColor::GREEN), TColor::ORANGE);
+        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToRed + 1, TColor::GREEN), TColor::RED);
+        UNIT_ASSERT_EQUAL_X(headroom.Project(headroom.ToBlack + 1, TColor::GREEN), TColor::BLACK);
+
+        // Headroom lags behind the color it is paired with; the worse of the two wins.
+        UNIT_ASSERT_EQUAL_X(headroom.Project(0, TColor::ORANGE), TColor::ORANGE);
+
+        // A VDisk that has not heard from PDisk yet must not conclude it is full.
+        UNIT_ASSERT_EQUAL_X(TSpaceHeadroom().Project(1000, TColor::GREEN), TColor::GREEN);
+    }
+
+    Y_UNIT_TEST(SpaceHeadroomShrinksAsTheDiskFills) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 100,
+            .ExpectedOwnerCount = 1,
+            .SpaceColorBorder = TColor::BLACK,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeChunkLimits(params.ChunkBaseLimit), errorReason),
+            errorReason);
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+
+        const i64 toPreOrange = chunkTracker.GetHeadroomBelow(owner, TColor::PRE_ORANGE);
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(owner, toPreOrange, errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetHeadroomBelow(owner, TColor::PRE_ORANGE), 0);
+
+        double occupancy = 0;
+        UNIT_ASSERT(chunkTracker.GetSpaceColor(owner, &occupancy) < TColor::PRE_ORANGE);
+        UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, 1, &occupancy) >= TColor::PRE_ORANGE);
+    }
+
 }
 
 #undef UNIT_ASSERT_EQUAL_X

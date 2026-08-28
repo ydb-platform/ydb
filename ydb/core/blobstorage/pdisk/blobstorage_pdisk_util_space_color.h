@@ -8,6 +8,51 @@
 
 namespace NKikimr {
 
+// How many more chunks an owner may take while its space color stays strictly
+// better than the named boundary. PDisk reports these along with the current
+// color so that a VDisk can work out for itself what color it would be in once
+// the data it is holding in Fresh has been compacted, instead of finding out
+// only after the compaction has already spent the space.
+//
+// Boundaries better than PRE_ORANGE are not reported: no write is gated below
+// that, so the current color describes them well enough.
+struct TSpaceHeadroom {
+    // A VDisk starts out without an answer from PDisk. All-zero headroom means the
+    // disk is full, which is the opposite of what an unanswered VDisk should assume,
+    // so the two states are kept apart.
+    bool Valid = false;
+    ui64 ToPreOrange = 0;
+    ui64 ToOrange = 0;
+    ui64 ToRed = 0;
+    ui64 ToBlack = 0;
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E Project(ui64 chunks,
+            NKikimrBlobStorage::TPDiskSpaceColor::E current) const {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (!Valid) {
+            return current;
+        }
+        const TColor::E projected =
+            chunks > ToBlack ? TColor::BLACK :
+            chunks > ToRed ? TColor::RED :
+            chunks > ToOrange ? TColor::ORANGE :
+            chunks > ToPreOrange ? TColor::PRE_ORANGE :
+            current;
+        // Headroom is a snapshot and may lag behind the color, which is refreshed
+        // by every PDisk reply. Taking the worse of the two keeps a stale snapshot
+        // from letting a write through.
+        return projected < current ? current : projected;
+    }
+
+    TString ToString() const {
+        if (!Valid) {
+            return "{unknown}";
+        }
+        return TStringBuilder() << "{ToPreOrange# " << ToPreOrange << " ToOrange# " << ToOrange
+            << " ToRed# " << ToRed << " ToBlack# " << ToBlack << "}";
+    }
+};
+
 inline NKikimrBlobStorage::TPDiskSpaceColor::E StatusFlagToSpaceColor(NPDisk::TStatusFlags flags) {
     using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 

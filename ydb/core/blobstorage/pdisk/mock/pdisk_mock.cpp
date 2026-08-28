@@ -732,6 +732,10 @@ public:
         // send the results
         for (auto& msg : results) {
             auto *ev = msg->CastAsLocal<NPDisk::TEvLogResult>();
+            // Filled in here rather than where the result was created: the whole queue
+            // has been applied by now, so this describes the disk the VDisk is about to
+            // be told about, not the one it was when the batch started.
+            ev->Headroom = GetSpaceHeadroom();
             const TActorId& recipient = msg->Recipient;
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Sending TEvLogResult",
                 {"marker", "PDM12"},
@@ -833,6 +837,7 @@ public:
                     {"marker", "PDM10"},
                     {"msg", res->ToString()});
             }
+            res->Headroom = GetSpaceHeadroom();
         }
         Send(ev->Sender, res.release());
     }
@@ -983,6 +988,8 @@ public:
                 {"marker", "PDM16"},
                 {"msg", res->ToString()});
         }
+        // After the write, so that a chunk this request allocated is already counted.
+        res->Headroom = GetSpaceHeadroom();
         Send(ev->Sender, res.release());
     }
 
@@ -1126,6 +1133,7 @@ public:
             Impl.GetNumFreeChunks(), Impl.TotalChunks, Impl.TotalChunks - Impl.GetNumFreeChunks(),
             Impl.Owners.size(), 0u, 0, TString());
         res->NormalizedOccupancy = GetOccupancy();
+        res->Headroom = GetSpaceHeadroom();
         Impl.FindOwner(msg, res); // to ensure correct owner/round
         Send(ev->Sender, res.release());
     }
@@ -1238,6 +1246,24 @@ public:
         return (Impl.Occupancy == 0)
             ? ((double)(Impl.TotalChunks - Impl.GetNumFreeChunks()) / Impl.TotalChunks)
             : Impl.Occupancy;
+    }
+
+    TSpaceHeadroom GetSpaceHeadroom() {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (Impl.SpaceColorPolicy != TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
+            // Without a quota model there are no color boundaries to run into, so
+            // everything the disk physically has is headroom.
+            const ui64 free = Impl.GetNumFreeChunks();
+            return {true, free, free, free, free};
+        }
+        GetStatusFlags(); // resyncs the shared quota with the free chunk count
+        TSpaceHeadroom headroom;
+        headroom.Valid = true;
+        headroom.ToPreOrange = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::PRE_ORANGE);
+        headroom.ToOrange = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::ORANGE);
+        headroom.ToRed = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::RED);
+        headroom.ToBlack = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::BLACK);
+        return headroom;
     }
 
     void ErrorHandle(NPDisk::TEvYardInit::TPtr &ev) {

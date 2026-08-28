@@ -70,6 +70,7 @@ struct TProposeTransactionParams {
 struct TPlanStepParams {
     ui64 Step;
     TVector<ui64> TxIds;
+    TMaybe<TActorId> Sender;
 };
 
 struct TReadSetParams {
@@ -598,7 +599,8 @@ void TPQTabletFixture::SendPlanStep(const TPlanStepParams& params)
         ActorIdToProto(Ctx->Edge, tx->MutableAckTo());
     }
 
-    SendToPipe(Ctx->Edge,
+    const TActorId sender = params.Sender.GetOrElse(Ctx->Edge);
+    SendToPipe(sender,
                event.Release());
 }
 
@@ -1992,6 +1994,70 @@ Y_UNIT_TEST_F(PQTablet_Send_RS_With_Abort, TPQTabletFixture)
 
     tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
     WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+}
+
+Y_UNIT_TEST_F(PlanStep_Ack_All_Senders_After_Mediator_Restart, TPQTabletFixture)
+{
+    // The mediator tablet may restart: a TEvPlanStep from a stale mediator leader
+    // can arrive after the one from the current leader. The PQ tablet must keep
+    // all senders and ack each of them on transaction completion, not only the
+    // last one (otherwise the real mediator never gets the ack for its PlanStep).
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(22222);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    // The current mediator leader plans the step.
+    const TActorId realLeader = Ctx->Edge;
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    // The tx is now in WAIT_RS (a readset was sent to the mock tablet and not
+    // yet answered), so it is not yet EXECUTED — a window for a stale leader.
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    // A stale mediator leader (a different ActorId) replays the same PlanStep.
+    // It arrives after the real leader's message but before the tx completes.
+    const TActorId staleLeader = Ctx->Runtime->AllocateEdgeActor();
+    SendPlanStep({.Step=100, .TxIds={txId}, .Sender=staleLeader});
+
+    // The mock tablet answers the readset, completing the transaction.
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                         .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // Both leaders must receive TEvPlanStepAccepted; the coordinator (AckTo ==
+    // Ctx->Edge) must receive one TEvPlanStepAck per stored PlanStep event.
+    auto accepted1 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(realLeader);
+    UNIT_ASSERT(accepted1);
+    auto accepted2 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(staleLeader);
+    UNIT_ASSERT(accepted2);
+
+    auto ack1 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(realLeader);
+    UNIT_ASSERT(ack1);
+    UNIT_ASSERT_VALUES_EQUAL(100, ack1->Get()->Record.GetStep());
+    UNIT_ASSERT_VALUES_EQUAL(1, ack1->Get()->Record.TxIdSize());
+    UNIT_ASSERT_VALUES_EQUAL(txId, ack1->Get()->Record.GetTxId(0));
+
+    auto ack2 = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(realLeader);
+    UNIT_ASSERT(ack2);
+    UNIT_ASSERT_VALUES_EQUAL(100, ack2->Get()->Record.GetStep());
+    UNIT_ASSERT_VALUES_EQUAL(1, ack2->Get()->Record.TxIdSize());
+    UNIT_ASSERT_VALUES_EQUAL(txId, ack2->Get()->Record.GetTxId(0));
+
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
 Y_UNIT_TEST_F(Partition_Send_Predicate_With_False, TPQTabletFixture)

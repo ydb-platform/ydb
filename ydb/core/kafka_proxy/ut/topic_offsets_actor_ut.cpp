@@ -344,6 +344,34 @@ Y_UNIT_TEST(RequireSelectRowWithBadTokenIsUnauthorized) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
 }
 
+Y_UNIT_TEST(UnauthenticatedExistenceCheckMissingIsSchemeError) {
+    auto setup = CreateSetup("TopicOffsetsExistCheckMissing");
+    auto& runtime = setup->GetRuntime();
+
+    auto token = MakeIntrusive<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
+    token->SaveSerializationInfo();
+    auto settings = MakeSettings("/Root/topic_offsets_exist_check_missing");
+    settings.Token = token->GetSerializedToken();
+    settings.UnauthenticatedExistenceCheck = true;
+    auto ev = RunTopicOffsets(runtime, std::move(settings));
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SCHEME_ERROR);
+}
+
+Y_UNIT_TEST(UnauthenticatedExistenceCheckHiddenIsUnauthorized) {
+    auto setup = CreateSetup("TopicOffsetsExistCheckHidden");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_offsets_exist_check_hidden";
+    CreateTopic(runtime, path);
+
+    auto token = MakeIntrusive<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
+    token->SaveSerializationInfo();
+    auto settings = MakeSettings(path);
+    settings.Token = token->GetSerializedToken();
+    settings.UnauthenticatedExistenceCheck = true;
+    auto ev = RunTopicOffsets(runtime, std::move(settings));
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
+}
+
 Y_UNIT_TEST(SelectRowUsesDedicatedTokenWhenDescriberIsAnonymous) {
     auto setup = CreateSetup("TopicOffsetsSelectRowOptionalAuth");
     auto& runtime = setup->GetRuntime();

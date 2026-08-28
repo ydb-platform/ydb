@@ -89,6 +89,19 @@ TKafkaInt16 OffsetFetchPartitionError(TKafkaTestClient& client, const TString& t
     return msg->Groups[0].Topics[0].Partitions[0].ErrorCode;
 }
 
+void AssertOffsetFetchNoneMinusOne(TKafkaTestClient& client, const TString& topicName, const TString& groupId = "unknown-group") {
+    std::map<TString, std::vector<i32>> topicsToPartitions;
+    topicsToPartitions[topicName] = {0};
+    auto msg = client.OffsetFetch(groupId, topicsToPartitions);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        msg->Groups[0].Topics[0].Partitions[0].ErrorCode,
+        static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
+}
+
 TKafkaInt16 OffsetCommitPartitionError(TKafkaTestClient& client, const TString& topicName, const TString& groupId) {
     std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
     offsets[topicName] = {NKafka::TEvKafka::PartitionConsumerOffset(0, 0)};
@@ -360,17 +373,38 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
 
         TKafkaTestClient client(testServer.Port);
         client.PlainAuthenticateToKafka();
+        AssertOffsetFetchNoneMinusOne(client, "/Root/topic-does-not-exist");
+    }
 
-        std::map<TString, std::vector<i32>> topicsToPartitions;
-        topicsToPartitions["/Root/topic-does-not-exist"] = {0};
-        auto msg = client.OffsetFetch("unknown-group", topicsToPartitions);
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+    // Describer with a token that cannot see /Root reports UNAUTHORIZED for a missing
+    // path. OffsetFetch must still distinguish "does not exist" via an unauthenticated
+    // describe, same as the old scheme-cache existence check.
+    Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneWithoutDescribe) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        AssertOffsetFetchNoneMinusOne(client, "/Root/topic-does-not-exist-norights");
+    }
+
+    Y_UNIT_TEST(OffsetFetchHiddenTopicWithoutPriorAclIsAuth) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TString topicName = "/Root/topic-offsetfetch-hidden";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
         UNIT_ASSERT_VALUES_EQUAL(
-            msg->Groups[0].Topics[0].Partitions[0].ErrorCode,
-            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
+            OffsetFetchPartitionError(client, topicName, "hidden-group"),
+            static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
     }
 
     Y_UNIT_TEST(AclRevokeThenGrantRestoresProduceAndFetch) {

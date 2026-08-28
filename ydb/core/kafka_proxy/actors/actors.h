@@ -342,6 +342,10 @@ struct TTopicOffsetsSettings {
     TVector<TString> Consumers;
     bool RequireSelectRow = false;
     bool RequireAuthentication = false;
+    // OffsetFetch: if the authenticated describe hides the path (UNAUTHORIZED),
+    // describe again without a token. Missing topic → SCHEME_ERROR (Kafka NONE + -1);
+    // existing topic → UNAUTHORIZED (ACL deny). Matches the old scheme-cache check.
+    bool UnauthenticatedExistenceCheck = false;
 };
 
 NActors::IActor* CreateTopicOffsetsActor(

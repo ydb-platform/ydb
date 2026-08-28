@@ -463,6 +463,7 @@ void TKafkaOffsetFetchActor::RegisterOffsetsActor(const TString& topicName, cons
         .Consumers = TVector<TString>(entities.Consumers->begin(), entities.Consumers->end()),
         .RequireSelectRow = true,
         .RequireAuthentication = Context->RequireAuthentication,
+        .UnauthenticatedExistenceCheck = true,
     }));
     OffsetsActorToTopic[actorId] = topicName;
 }

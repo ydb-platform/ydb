@@ -46,20 +46,7 @@ public:
 
         RequestStart = TActivationContext::Now();
         Schedule(RequestTimeout, new TEvents::TEvWakeup(TimeoutTag));
-
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken;
-        if (!Settings.Token.empty()) {
-            userToken = new NACLib::TUserToken(Settings.Token);
-        }
-
-        DescriberId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
-            SelfId(),
-            CanonizePath(Settings.Database),
-            {Settings.Path},
-            {
-                .UserToken = userToken,
-                .AccessRights = NACLib::EAccessRights::DescribeSchema,
-            }));
+        StartDescribe(/*anonymous=*/false);
         Become(&TTopicOffsetsActor::StateWork);
     }
 
@@ -118,17 +105,33 @@ private:
         return now >= deadline ? TDuration::Zero() : deadline - now;
     }
 
+    void StartDescribe(bool anonymous) {
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken;
+        if (!anonymous && !Settings.Token.empty()) {
+            userToken = new NACLib::TUserToken(Settings.Token);
+        }
+        DescriberId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
+            SelfId(),
+            CanonizePath(Settings.Database),
+            {Settings.Path},
+            {
+                .UserToken = userToken,
+                .AccessRights = NACLib::EAccessRights::DescribeSchema,
+            }));
+    }
+
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
         const auto it = ev->Get()->Topics.find(Settings.Path);
         AFL_ENSURE(it != ev->Get()->Topics.end())("path", Settings.Path);
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
-            auto status = NDescriber::Convert(topicInfo.Status);
-            if (status == Ydb::StatusIds::NOT_FOUND) {
-                status = Ydb::StatusIds::SCHEME_ERROR;
-            }
-            return ReplyError(status, NDescriber::Description(Settings.Path, topicInfo.Status));
+            return HandleDescribeError(topicInfo);
+        }
+
+        if (DidUnauthenticatedExistenceCheck) {
+            // Anonymous describe found the topic: the user was denied by ACL.
+            return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "access denied");
         }
 
         AFL_ENSURE(topicInfo.Info);
@@ -180,6 +183,29 @@ private:
                 return;
             }
         }
+    }
+
+    void HandleDescribeError(const NDescriber::TTopicInfo& topicInfo) {
+        auto status = NDescriber::Convert(topicInfo.Status);
+        if (Settings.UnauthenticatedExistenceCheck && !Settings.Token.empty()) {
+            if (!DidUnauthenticatedExistenceCheck &&
+                topicInfo.Status == NDescriber::EStatus::UNAUTHORIZED)
+            {
+                DidUnauthenticatedExistenceCheck = true;
+                StartDescribe(/*anonymous=*/true);
+                return;
+            }
+            if (DidUnauthenticatedExistenceCheck) {
+                // Anonymous describe also failed: topic does not exist.
+                return ReplyError(
+                    Ydb::StatusIds::SCHEME_ERROR,
+                    NDescriber::Description(Settings.Path, topicInfo.Status));
+            }
+        }
+        if (status == Ydb::StatusIds::NOT_FOUND) {
+            status = Ydb::StatusIds::SCHEME_ERROR;
+        }
+        return ReplyError(status, NDescriber::Description(Settings.Path, topicInfo.Status));
     }
 
     std::unique_ptr<TEvPersQueue::TEvStatus> MakeStatusRequest() const {
@@ -311,6 +337,7 @@ private:
     TTopicOffsetsSettings Settings;
     THolder<TEvKafka::TEvTopicOffsetsResponse> Response;
     TActorId DescriberId;
+    bool DidUnauthenticatedExistenceCheck = false;
     TInstant RequestStart;
     absl::flat_hash_set<ui32> RequestedPartitions;
     absl::flat_hash_set<ui64> Tablets;

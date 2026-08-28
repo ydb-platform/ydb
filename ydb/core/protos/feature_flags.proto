@@ -373,5 +373,4 @@ message TFeatureFlags {
     // SchemeShard's single-threaded load.
     optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
     optional bool EnableSuperLemmer = 318 [default = false];
->>>>>>> 75e7f7c4875 (Added lemmer stub)
 }

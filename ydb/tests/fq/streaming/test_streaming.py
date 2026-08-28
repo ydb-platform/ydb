@@ -1930,6 +1930,80 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
+    @pytest.mark.parametrize("local_topics", [False])
+    @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_structured_json_parsing": True}], indirect=["kikimr"])
+    def test_read_topic_shared_reading_variant_parsing(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"variant_json{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        foo Struct<
+                            bar: Variant<
+                                Tuple<Bool>,
+                                Tuple<Variant<
+                                Timestamp, Timestamp, Timestamp, Timestamp, Timestamp,
+                                Timestamp, Timestamp, Timestamp, Timestamp, Interval,
+                                Interval, Interval, Interval, Interval, Interval,
+                                Interval, String>>>,
+                            baz: Variant<
+                                Dict<String, Int>,
+                                Struct<x:Variant<
+                                Timestamp, Timestamp, Timestamp, Timestamp, Timestamp,
+                                Timestamp, Timestamp, Timestamp, Timestamp, Interval,
+                                Interval, Interval, Interval, Interval, Interval,
+                                Interval, Interval, String>>>
+                        >?,
+                        t String
+                    )
+                )
+                ;
+                $in = SELECT * FROM $in FLATTEN COLUMNS; -- expand foo
+                $in = SELECT
+                        Way(bar.`1`.`0`) as barway, CAST(bar.`1`.`0`.`9` AS String) AS bar9, CAST(bar.`1`.`0`.`16` AS String) AS bar16,
+                        Way(baz.`1`.`x`) as bazway, CAST(baz.`1`.`x`.`9` AS String) AS baz9, CAST(baz.`1`.`x`.`17` AS String) AS baz17,
+                        t
+                      FROM $in AS i;
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        query_name = f"test_variant_json_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out, comment_for_pushdown='--'))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Check that streaming.query.tasks.count metric exists for both queries
+        self.wait_streaming_query_metric(kikimr, path, "streaming.query.tasks.count", expected_value=1)
+
+        longstr = '23456789876543212345678987654321'  # so that it won't fit SSO/embedded
+        data = [
+            R'{"foo":{"bar":["xa{longstr}\u0022a\"s\"d"], "baz":{"x":"PT3600S"}},"t":"1"}',
+            R'{"foo":{"bar":["PT60S"],"baz":{"x":"xa{longstr}a\u0022s\"d"}},"t":"2"}',
+        ]
+        data = [*map(lambda x: x.replace('{longstr}', longstr), data)]
+        expected_data = [
+            R'{"bar16":"xa{longstr}\"a\"s\"d","bar9":null,"barway":16,"baz17":null,"baz9":"PT1H","bazway":9,"t":"1"}',
+            R'{"bar16":null,"bar9":"PT1M","barway":9,"baz17":"xa{longstr}a\"s\"d","baz9":null,"bazway":17,"t":"2"}',
+        ]
+        expected_data = [*map(lambda x: x.replace('{longstr}', longstr), expected_data)]
+
+        self.write_stream(data, endpoint=endpoint)
+        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data)
+
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name))
+
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("kikimr", [{"enable_discovery": False, "lease_duration_sec": "30"}], indirect=["kikimr"])
     def test_streaming_query_stop_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:

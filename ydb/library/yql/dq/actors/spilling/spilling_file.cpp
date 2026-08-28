@@ -901,10 +901,14 @@ private:
             return true;
         }
 
-        fd.HasActiveOp = true;
+        if (!IoThreadPool_->AddAndOwn(std::move(op))) {
+            Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size());
+            return false;
+        }
 
-        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size() + 1);
-        return IoThreadPool_->AddAndOwn(std::move(op));
+        fd.HasActiveOp = true;
+        Counters_->SpillingIOQueueSize->Set(IoThreadPool_->Size());
+        return true;
     }
 
     bool RunNextOp(TFileDesc& fd) {

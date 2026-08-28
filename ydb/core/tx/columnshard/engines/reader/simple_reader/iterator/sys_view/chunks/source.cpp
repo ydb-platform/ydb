@@ -81,9 +81,9 @@ const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
         return *ChunksPKOrder;
     }
     ChunksPKOrder.emplace();
-    // only sorted scans consume the PK order; skip the permutation work otherwise. The flag check is
-    // belt-and-suspenders: IsSorted() already implies the flag (OrderByLimitAllowed gates it), kept explicit
-    // so the permutation never builds if the two ever diverge.
+    // the permutation is only consumed by the flag-on limit-pushdown path: the limit sync point walks each
+    // source assuming PK order to drop rows early. A flag-off sorted scan goes through TSortedFullScanCollection
+    // and KQP re-sorts on top, so within-source order is irrelevant there; skip the work.
     if (!GetContext()->GetReadMetadata()->IsSorted() || !HasAppData() ||
         !AppDataVerified().FeatureFlags.GetEnableSysViewOrderByLimitPushdown()) {
         return *ChunksPKOrder;
@@ -259,8 +259,19 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
-        // details must be filled in records-then-indexes order so GetChunksPKOrder() permutation applied below aligns
+        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        const auto& order = GetChunksPKOrder();
+        // this is the heaviest column: when the scan is unsorted the permutation is empty and every value
+        // streams straight into the builder. Only the sorted case buffers into details (filled in
+        // records-then-indexes order) so GetChunksPKOrder() can reorder it below.
         std::vector<TString> details;
+        const auto emit = [&](const TString& data) {
+            if (order.empty()) {
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+            } else {
+                details.emplace_back(data);
+            }
+        };
         const auto& records = GetPortionAccessor().GetRecordsVerified();
         for (auto it = records.begin(); it != records.end();) {
             auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(it->GetEntityId()) : nullptr;
@@ -271,16 +282,16 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                     if (it->GetMeta().HasAdditionalAccessorData()) {
                         data = it->GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust();
                     }
-                    details.emplace_back(data);
+                    emit(data);
                     ++it;
                 }
             } else {
-                const auto addChunkInfo = [&details](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
+                const auto addChunkInfo = [&emit](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
                     AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
                     const NArrow::NAccessor::TSubColumnsPartialArray* arr =
                         static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
                     const TString data = arr->GetHeader().DebugJson().GetStringRobust();
-                    details.emplace_back(data);
+                    emit(data);
                 };
 
                 AFL_VERIFY(it->GetChunkIdx() == 0);
@@ -336,14 +347,14 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                     }
                 }
             }
-            details.emplace_back(data);
+            emit(data);
         }
-        auto builder = NArrow::MakeBuilder(arrow::utf8());
-        const auto& order = GetChunksPKOrder();
-        AFL_VERIFY(order.empty() || order.size() == details.size())("order", order.size())("details", details.size());
-        for (ui32 idx = 0; idx < details.size(); ++idx) {
-            const TString& value = details[order.empty() ? idx : order[idx]];
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(value.data(), value.size()));
+        if (!order.empty()) {
+            AFL_VERIFY(order.size() == details.size())("order", order.size())("details", details.size());
+            for (ui32 idx = 0; idx < details.size(); ++idx) {
+                const TString& value = details[order[idx]];
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(value.data(), value.size()));
+            }
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

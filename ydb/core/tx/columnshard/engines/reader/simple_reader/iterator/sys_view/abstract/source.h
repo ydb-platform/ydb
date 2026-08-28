@@ -69,6 +69,14 @@ private:
         }
     }
 
+    virtual NArrow::TSimpleRow GetFinishPKRecordBatch() const override {
+        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+            return Start.GetValue();
+        } else {
+            return Finish.GetValue();
+        }
+    }
+
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
         NBlobOperations::NRead::TCompositeReadBlobs&& /*blobsOriginal*/) const override {
         AFL_VERIFY(false);

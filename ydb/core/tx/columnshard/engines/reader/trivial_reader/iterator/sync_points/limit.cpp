@@ -161,6 +161,7 @@ TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
     sb << "f=" << IsFilled() << ";";
     sb << "record=" << SortableRecord->DebugJson() << ";";
     sb << "start=" << Source->GetAs<IDataSource>()->GetStartPKRecordBatch().DebugString() << ";";
+    sb << "finish=" << Source->GetAs<IDataSource>()->GetFinishPKRecordBatch().DebugString() << ";";
     return sb;
 }
 

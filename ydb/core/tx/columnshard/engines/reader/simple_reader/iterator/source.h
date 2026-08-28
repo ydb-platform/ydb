@@ -190,6 +190,7 @@ public:
     void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
+    virtual NArrow::TSimpleRow GetFinishPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
@@ -364,6 +365,14 @@ public:
             return Portion->IndexKeyEnd();
         } else {
             return Portion->IndexKeyStart();
+        }
+    }
+
+    virtual NArrow::TSimpleRow GetFinishPKRecordBatch() const override {
+        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+            return Portion->IndexKeyStart();
+        } else {
+            return Portion->IndexKeyEnd();
         }
     }
 
@@ -582,6 +591,11 @@ public:
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
         AFL_VERIFY(false);
+        return NArrow::TSimpleRow(nullptr, 0);
+    }
+
+    virtual NArrow::TSimpleRow GetFinishPKRecordBatch() const override {
+        AFL_VERIFY(false)("error", "GetFinishPKRecordBatch not implemented");
         return NArrow::TSimpleRow(nullptr, 0);
     }
 

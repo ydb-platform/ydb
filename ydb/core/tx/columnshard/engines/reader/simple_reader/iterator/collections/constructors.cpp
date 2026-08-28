@@ -1,6 +1,5 @@
 #include "constructors.h"
 
-#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -27,13 +26,11 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
     }
 }
 
-std::vector<TInsertWriteId> TPortionsSources::GetUncommittedWriteIds() const {
-    std::vector<TInsertWriteId> result;
+std::vector<TPortionInfo::TConstPtr> TPortionsSources::GetConflictingPortions() const {
+    std::vector<TPortionInfo::TConstPtr> result;
     for (auto&& i : TBase::GetConstructors()) {
-        if (!i.GetPortion()->IsCommitted()) {
-            AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
-            auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
-            result.emplace_back(written->GetInsertWriteId());
+        if (i.IsConflicting()) {
+            result.emplace_back(i.GetPortion());
         }
     }
     return result;

@@ -24,11 +24,12 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
-from ydb.tools.ydb_bench.lib.config import build_run_plan, load_config
-from ydb.tools.ydb_bench.lib.results import ResultStore, load_manifest
+from ydb.tools.ydb_bench.lib.config import BACKGROUND_LOAD_MODES, build_run_plan, load_config
+from ydb.tools.ydb_bench.lib.results import ResultStore, _non_finite_json_as_null, load_manifest
 from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
 from ydb.tools.ydb_bench.lib.common import extract_executable
 from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, export_archive, import_archive
+from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
@@ -79,11 +80,18 @@ _CSS = (
     'monospace;overflow-wrap:anywhere}.topology-map{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap'
     ':.8rem}.numa-block{border:1px solid #c9c1ff;border-left:4px solid var(--topology-accent);border-radius:6px;background:#f'
     '8f7ff;padding:.75rem}.numa-header{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-botto'
-    'm:.5rem}.chiplet-list{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.65rem}.cpu-block{border:1px solid #c9c1ff;border'
-    '-radius:4px;background:#fff;padding:.35rem .45rem;min-width:5.5rem}.cpu-block small{display:block;color:var(--muted);fon'
-    't-size:.75rem}.topology-level{margin-top:1rem}.topology-level summary{cursor:pointer;font-weight:650}.cpu-block-grid{dis'
-    'play:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.45rem;margin-top:.65rem}.cpu-block-grid .cpu-bloc'
-    'k{border-color:#d0d5dd}.affinity-mask{min-width:12rem}.affinity-mask code{white-space:normal;overflow-wrap:anywhere}.cha'
+    'm:.5rem}.topology-tree,.topology-tree ul,.affinity-tree,.affinity-tree ul{list-style:none;margin:.45rem 0 0;padding-l'
+    'eft:1.1rem}.topology-tree>li,.affinity-tree>li{padding-left:0}.topology-tree li,.affinity-tree li{position:relative;ma'
+    'rgin:.35rem 0}.topology-tree li:before,.affinity-tree li:before{content:"";position:absolute;left:-.75rem;top:.72rem;wi'
+    'dth:.55rem;border-top:1px solid #b8b0ec}.topology-node{border:1px solid #d9d6f5;border-radius:5px;background:#fff;paddin'
+    'g:.4rem .55rem}.topology-node-header{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem}.core-list'
+    '{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.4rem}.core-item{border:1px solid #e4e7ec;bo'
+    'rder-radius:4px;padding:.35rem .45rem;background:#fff}.core-item .cpu-ranges,.core-item small{display:block}.core-item sm'
+    'all{color:var(--muted)}.affinity-tree{pa'
+    'dding-left:.25rem}.affinity-node{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}.affinity-unavailable{color:var'
+    '(--muted)}.availability-badge{font-size:.75rem;font-weight:650;color:var(--bad);b'
+    'ackground:#fff0f0;border:1px solid #fecdca;border-radius:999px;padding:.1rem .4rem}.affinity-reason{font-size:.85rem;co'
+    'lor:var(--bad)}.cha'
     'rt-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.75rem}.series-picker{max-height:1'
     '5rem;overflow:auto;border:1px solid #d0d5dd;border-radius:5px;padding:.55rem}.series-picker label{display:block;margin:.'
     '25rem 0}.series-cpus{display:block;margin-left:1.35rem;color:var(--muted);font:12px ui-monospace,SFMono-Regular,Menlo,mo'
@@ -119,7 +127,39 @@ _CSS = (
     ':flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding:.55rem;margin:.45rem 0;border:1px solid #d0d5dd;border-radius:'
     '6px;background:var(--panel)}.query-row select{max-width:15rem}.query-token{display:flex;align-items:center;gap:.3rem;pad'
     'ding:.2rem .35rem;border-radius:4px;background:#fff;border:1px solid #d0d5dd}.query-token b{color:#6941c6;font-weight:60'
-    '0}.query-actions{margin-left:auto}\n'
+    '0}.query-actions{margin-left:auto}.run-tabs{display:flex;gap:.35rem;overflow-x:auto;margin:1rem 0;border-bottom:1px solid '
+    '#d0d5dd}.run-tab{display:block;padding:.6rem .8rem;border-radius:6px 6px 0 0;color:var(--muted);text-decoration:none;whit'
+    'e-space:nowrap}.run-tab:hover{background:var(--panel)}.run-tab.active{color:var(--text);font-weight:650;background:#fff;b'
+    'order:1px solid #d0d5dd;border-bottom-color:#fff;margin-bottom:-1px}.profile-overview td:first-child{font-weight:650}.run'
+    '-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap}.downloads{display'
+    ':inline-block}.downloads summary{cursor:pointer}.downloads .actions{margin-top:.5rem}\n'
+    """
+.local-live{display:grid;grid-template-columns:minmax(16rem,1.4fr) repeat(3,minmax(9rem,1fr));gap:.8rem;align-items:stretch}
+.local-live>div,.local-kpis>div{padding:.8rem;border:1px solid #d0d5dd;border-radius:7px;background:var(--panel)}
+.local-live strong,.local-kpis strong{display:block;font-size:1.18rem;margin-top:.2rem}
+.local-phase{font-size:1.25rem;font-weight:700}.local-phase-progress{width:100%;margin-top:.65rem}
+.local-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.7rem;margin:.8rem 0}
+.local-kpis .primary-result{border-color:#84adff;background:#eff6ff}
+.local-stages{display:flex;gap:.55rem;overflow-x:auto;padding:.25rem 0 .7rem}
+.local-stage{min-width:13rem;padding:.65rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
+.local-stage.current{border-color:#84adff;background:#eff6ff}.local-stage .stage-arrow{color:var(--muted);margin-top:.35rem}
+.local-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem}
+.local-charts .chart-panel{margin:0;padding:.8rem;border:1px solid #d0d5dd;border-radius:7px}
+.local-charts .chart-panel h3{margin-top:0}
+.local-attempts-scroll{max-width:100%;overflow-x:auto}
+.local-attempts{width:max-content;min-width:100%}.local-attempts td,.local-attempts th{white-space:nowrap}
+.local-current-command{margin:.8rem 0;padding:.8rem;border:1px solid #d0d5dd;border-radius:7px;background:#101828;color:#fff}
+.local-current-command .muted{color:#d0d5dd}
+.local-command-code{margin:.45rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.local-command-cell{width:22rem;min-width:22rem;max-width:22rem;white-space:normal!important}
+.local-command-history{width:22rem}.local-command-history[open]{max-height:24rem;overflow:auto}
+.local-command-history summary,.local-profile-config summary{cursor:pointer}
+.local-command-entry{margin:.55rem 0;padding:.55rem;border:1px solid #e4e7ec;border-radius:5px;background:var(--panel)}
+.local-profile-config{margin:.8rem 0;padding:.7rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
+.local-profile-config pre{max-height:24rem;overflow:auto;white-space:pre;margin:.7rem 0 0}
+.attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
+@media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
+"""
     '.status.queued{color:var(--warn)}\n'
 )
 _JS = (
@@ -142,8 +182,14 @@ _JS = (
     'function setRoute(value){location.hash=value}\n'
     'function displayError(error){return \'<div class="notice error">\'+esc(error.message||error)+\'</div>\'}\n'
     "function secondsLabel(seconds){return Number.isFinite(Number(seconds))?Math.max(0,Number(seconds)).toFixed(1)+' s':'—'}\n"
-    "function duration(record){if(!record.started_at||!record.finished_at)return '—';return secondsLabel((Date.parse(record.f"
-    'inished_at)-Date.parse(record.started_at))/1000)}\n'
+    "function humanTime(value){if(!value)return 'Not started';const date=new Date(value);return Number.isNaN(date.getTime())"
+    "?'—':new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(date)}\n"
+    "function elapsedLabel(seconds){seconds=Math.max(0,Math.round(Number(seconds)));if(!Number.isFinite(seconds))return '—'"
+    ";const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600),minutes=Math.floor(seconds%3600/60),remain"
+    "ing=seconds%60;if(days)return days+'d '+hours+'h';if(hours)return hours+'h '+minutes+'m';if(minutes)return minutes+'m '+"
+    "remaining+'s';return remaining+'s'}\n"
+    "function duration(record){if(!record.started_at)return 'Not started';const end=record.finished_at?Date.parse(record.fin"
+    "ished_at):record.status==='running'?Date.now():NaN;return elapsedLabel((end-Date.parse(record.started_at))/1000)}\n"
     "function cpuRanges(cpus){if(!Array.isArray(cpus)||!cpus.length)return '—';const values=[...new Set(cpus.map(Number).filt"
     'er(Number.isSafeInteger))].sort((left,right)=>left-right);const ranges=[];for(let index=0;index<values.length;){let end='
     'index;while(end+1<values.length&&values[end+1]===values[end]+1)end++;ranges.push(values[index]===values[end]?String(valu'
@@ -166,12 +212,51 @@ _JS = (
     'et index=0;index<numbers.length;){let end=index;while(end+1<numbers.length&&numbers[end+1]===numbers[end]+1)end++;parts.'
     "push(index===end?String(numbers[index]):numbers[index]+'-'+numbers[end]);index=end+1}return parts.join(', ')}\n"
     "function yamlArray(values){return '['+values.map(value=>String(value)).join(', ')+']'}\n"
+    "const localYdbOperations={kv:['upsert','select','read-rows','mixed'],stock:['user-hist','rand-user-hist','add-rand-"
+    "order','put-rand-order','put-same-order']};\n"
+    "const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-"
+    "nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};\n"
+    "const localYdbSearchKeys={resolution_percent:'resolution-percent'};\n"
+    "const localYdbObjectiveKeys={target_role:'target-role',plateau_gain_percent:'plateau-gain-percent',plateau_points:'p"
+    "lateau-points',cpu_saturation_percent:'cpu-saturation-percent'};\n"
+    "const localYdbSloKeys={max_ms:'max-ms',max_errors:'max-errors',min_achieved_rate_ratio:'min-achieved-rate-ratio'};\n"
+    "const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};\n"
+    "function defaultLocalYdbWorkload(type){return type==='stock'?{type:'stock',operation:'put-rand-order',options:{'min-p"
+    "artitions':40,products:100,quantity:1000,orders:100,'auto-partition':1,limit:10}}:{type:'kv',operation:'upsert',options"
+    ":{'min-partitions':40,'max-partitions':1000,'partition-size-mb':2000,'init-upserts':0,'max-first-key':65536,'value-siz"
+    "e':64,columns:2,'rows-per-query':1}}}\n"
+    "function defaultLocalYdb(){return {workload:defaultLocalYdbWorkload('kv'),"
+    "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
+    ":{threads:64},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:10,duration:30,rep"
+    "etitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
+    ",cpus:null},dynamic_nodes:{mode:'none',cpus:null}}}}\n"
+    "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;lines.push('    work"
+    "load:','      type: '+workload.type,'      operation: '+workload.operation,'      options:');for(const [key,value] of "
+    "Object.entries(workload.options))lines.push('        '+key+': '+value);lines.push('    geometry:','      preset: '+conf"
+    "ig.geometry.preset);for(const [key,yamlKey] of Object.entries(localYdbGeometryKeys))lines.push('      '+yamlKey+': '+c"
+    "onfig.geometry[key]);lines.push('    client:','      threads: '+config.client.threads,'    load:','      parameter: '"
+    "+config.load.parameter,'      allow-errors: '+Boolean(config.load.allow_errors));if(config.load.values)lines.push('      values: '+yamlArray(config.load.values));else{lines."
+    "push('      search:','        start: '+config.load.search.start,'        maximum: '+config.load.search.maximum);if("
+    "config.load.objective.type==='latency-slo')lines.push('        multiplier: '+config.load.search.multiplier);for("
+    "const [key,yamlKey] of Object.entries(localYdbSearchKeys))lines."
+    "push('        '+yamlKey+': '+config.load.search[key]);lines.push('      objective:','        type: '+config.load.object"
+    "ive.type);if(config.load.objective.type==='maximize-throughput')for(const [key,yamlKey] of Object.entries(localYdbOb"
+    "jectiveKeys))lines.push('        '+yamlKey+': '+config.load.objective[key]);else{lines.push('        percentile: '+config.load.o"
+    "bjective.percentile);for(const [key,yamlKey] of Object.entries(localYdbSloKeys))lines.push('        '+yamlKey+': '+con"
+    "fig.load.objective[key])}}lines.push('    measurement:','      warmup: '+config.measurement.warmup,' "
+    "     duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,'    affinity:');f"
+    "or(const [key,yamlKey] of Object.entries(localYdbAffinityKeys)){const role=config.affinity[key];lines.push('      '+yam"
+    "lKey+':','        mode: '+role.mode);if(role.cpus!==null&&role.cpus!==undefined)lines.push('        cpus: '+role.cpus)}"
+    "if(profile.timeout!==null&&profile.timeout!==undefined&&profile.timeout!=='')lines.push('    timeout: '+profile.timeo"
+    "ut)}\n"
     'function serializeConfig(model){let lines=[];for(const benchmark of model.benchmarks||[]){const entries=(model.profiles|'
     "|[]).filter(profile=>profile.benchmark===benchmark.name);if(!entries.length)continue;lines.push(benchmark.name+':');for("
-    "const profile of entries){lines.push('  '+profile.name+':');lines.push('    threads: '+yamlArray(profile.threads));for(c"
+    "const profile of entries){lines.push('  '+profile.name+':');if(benchmark.profile_kind==='local-ydb'){serializeLocalYdb"
+    "(lines,profile);continue}lines.push('    threads: '+yamlArray(profile.threads));for(c"
     "onst parameter of benchmark.parameters)lines.push('    '+parameter.name+': '+yamlArray(profile.parameters[parameter.name"
     "]||parameter.default));lines.push('    duration: '+profile.duration);lines.push('    repetitions: '+profile.repetitions)"
-    ";lines.push('    affinity: '+yamlArray(profile.affinity));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
+    ";lines.push('    affinity: '+yamlArray(profile.affinity));lines.push('    background-load: '+yamlArray(profile.background_"
+    "load||['none']));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
     "e.timeout!=='')lines.push('    timeout: '+profile.timeout)}}return lines.join('\\n')+'\\n'}\n"
     "async function syncEditor(){try{const value=await api('/api/editor-config',jsonOptions({yaml:editor.yaml,perf:editor.per"
     'f}));editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].k'
@@ -182,7 +267,7 @@ _JS = (
     'function planSummary(){const profiles=editor.model?.profiles||[];let count=0,seconds=0;for(const profile of profiles){co'
     'nst benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark),cases=(benchmark?.parameters||[]).filter'
     '(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.'
-    'length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou'
+    "length*(profile.background_load||['none']).length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou"
     'nt,seconds}}\n'
     "function editorControls(){return '<div class=toolbar><button id=validate>Validate</button><button id=download-yaml>Downl"
     "oad YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'chec"
@@ -197,9 +282,9 @@ _JS = (
     "  if(editor.model&&document.querySelector('.profile-list')){\n"
     '    const queue=[];\n'
     '    for(const profile of editor.model.profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.b'
-    'enchmark);for(const affinity of profile.affinity)for(const threads of profile.threads)for(const parameters of parameterC'
+    "enchmark);for(const affinity of profile.affinity)for(const backgroundLoad of (profile.background_load||['none']))for(const threads of profile.threads)for(const parameters of parameterC"
     "ases(benchmark,profile))for(let repeat=1;repeat<=profile.repetitions;repeat++)queue.push(profile.benchmark+' / '+profile"
-    ".name+' / '+affinity+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}\n"
+    ".name+' / '+affinity+' / '+backgroundLoad+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}\n"
     "    message.insertAdjacentHTML('beforebegin','<details class=card><summary>Expected queue ('+queue.length+' processes)</"
     "summary><ol>'+queue.map(item=>'<li><code>'+esc(item)+'</code></li>').join('')+'</ol></details>');\n"
     '  }\n'
@@ -227,8 +312,245 @@ _JS = (
     "    catch(error){showMessage(error.message,'error')}\n"
     '  }\n'
     '}\n'
+    """
+function localField(id,label,value,help='',attributes=''){
+  return '<div class=field><label for="'+id+'">'+esc(label)+'</label><input id="'+id+'" value="'+esc(value)+'" '+attributes+'><small class=muted>'+esc(help)+'</small></div>'
+}
+function localSelect(id,label,value,choices,help=''){
+  return '<div class=field><label for="'+id+'">'+esc(label)+'</label><select id="'+id+'">'+
+    choices.map(choice=>'<option value="'+esc(choice)+'" '+(choice===value?'selected':'')+'>'+esc(choice)+'</option>').join('')+
+    '</select><small class=muted>'+esc(help)+'</small></div>'
+}
+function localCheck(id,label,checked,help=''){
+  return '<div class=field><label><input id="'+id+'" type=checkbox '+(checked?'checked':'')+'> '+esc(label)+'</label><small class=muted>'+esc(help)+'</small></div>'
+}
+function localYdbProfileEditor(profile){
+  const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
+  const loadMode=load.values?'points':load.objective.type;
+  const options=Object.entries(workload.options).map(([key,value])=>localField('local-option-'+key,key,value)).join('');
+  const geometryFields=Object.entries(localYdbGeometryKeys)
+    .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
+  const loadCommon=
+    localSelect('local-load-mode','Objective',loadMode,['points','maximize-throughput','latency-slo'])+
+    localSelect('local-load-parameter','Parameter',load.parameter,['rate','threads'])+
+    localCheck(
+      'local-load-allow-errors','Allow failed workload requests',Boolean(load.allow_errors),
+      'Failed requests remain visible in results but do not limit load search.'
+    );
+  const searchFields=loadMode==='points'?'':
+    localField('local-load-start','Start',load.search.start,'','type=number min=1')+
+    localField('local-load-maximum','Maximum',load.search.maximum,'','type=number min=1')+
+    (loadMode==='latency-slo'?
+      localField(
+        'local-load-multiplier','Growth multiplier',load.search.multiplier,
+        'Used to find the first failing latency point.','type=number min=1 step=any'
+      ):'')+
+    localField(
+      'local-load-search-resolution-percent',
+      loadMode==='maximize-throughput'?'Ternary resolution (%)':'Boundary resolution (%)',
+      load.search.resolution_percent,'','type=number min=0 max=100 step=any'
+    );
+  const loadFields=loadMode==='points'?
+    localField('local-load-values','Values',(load.values||[]).join(', '),'Comma-separated values and ranges'):
+    searchFields+(loadMode==='maximize-throughput'?
+      localSelect('local-load-target-role','Target role',load.objective.target_role,['static','dynamic','total'])+
+      localField(
+        'local-load-plateau-gain-percent','Plateau gain (%)',load.objective.plateau_gain_percent,
+        '','type=number min=0 step=any'
+      )+
+      localField('local-load-plateau-points','Plateau comparisons',load.objective.plateau_points,'','type=number min=1')+
+      localField(
+        'local-load-cpu-saturation-percent','CPU saturation (%)',load.objective.cpu_saturation_percent,
+        '','type=number min=0 max=100 step=any'
+      ):'');
+  const slo=loadMode==='latency-slo'?'<h3>Latency SLO</h3><div class=form-grid>'+
+    localSelect('local-slo-percentile','Percentile',load.objective.percentile,['p50','p95','p99','pmax'])+
+    localField('local-slo-max-ms','Maximum latency (ms)',load.objective.max_ms,'','type=number min=0 step=any')+
+    localField(
+      'local-slo-max-errors','Maximum errors',load.objective.max_errors,
+      load.allow_errors?'Ignored while failed requests are allowed.':'',
+      'type=number min=0 '+(load.allow_errors?'disabled':'')
+    )+
+    localField(
+      'local-slo-min-achieved-rate-ratio','Minimum achieved rate ratio',load.objective.min_achieved_rate_ratio,
+      '','type=number min=0 max=1 step=any'
+    )+'</div>':'';
+  const affinity=Object.entries(localYdbAffinityKeys).map(([key,label])=>{
+    const role=config.affinity[key],disabled=role.mode==='none'?'disabled':'';
+    return '<div class=card><strong>'+esc(label)+'</strong><div class=form-grid>'+
+      localSelect('local-affinity-'+key+'-mode','Mode',role.mode,editor.model.affinity_modes)+
+      localField(
+        'local-affinity-'+key+'-cpus','CPUs',role.cpus??'','integer, one-chiplet, or remaining',disabled
+      )+'</div></div>'
+  }).join('');
+  return '<div id=local-editor><h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+
+    '<div class=form-grid>'+localSelect(
+      'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
+    )+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div>'+
+    '<h3>Workload</h3><div class=form-grid>'+localSelect(
+      'local-workload-type','Type',workload.type,['kv','stock']
+    )+localSelect(
+      'local-workload-operation','Operation',workload.operation,localYdbOperations[workload.type]
+    )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
+    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
+    '</div><h3>Client and load</h3><div class=form-grid>'+
+    localField('local-client-threads','YDB CLI threads',config.client.threads,'','type=number min=1')+
+    loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
+    localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,'','type=number min=0')+
+    localField('local-measurement-duration','Duration (seconds)',measurement.duration,'','type=number min=1')+
+    localField('local-measurement-repetitions','Repetitions',measurement.repetitions,'','type=number min=1')+
+    localField(
+      'local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1'
+    )+'</div><h3>Role affinity</h3>'+affinity+
+    '<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
+}
+function localNumber(id,minimum=1){
+  const value=Number(document.querySelector('#'+id).value);
+  if(!Number.isFinite(value)||value<minimum)throw Error(id+' must be a number not below '+minimum+'.');
+  return value
+}
+function localInteger(id,minimum=1){const value=localNumber(id,minimum);if(!Number.isSafeInteger(value))throw Error(id+' must be an integer.');return value}
+function localCpu(id,mode){
+  if(mode==='none')return null;
+  const raw=document.querySelector('#'+id).value.trim();
+  if(raw==='one-chiplet'||raw==='remaining')return raw;
+  const value=Number(raw);
+  if(!Number.isSafeInteger(value)||value<1){
+    throw Error(id+' must be a positive integer, one-chiplet, or remaining.')
+  }
+  return value
+}
+function bindLocalYdbEditor(profile){
+  const message=()=>document.querySelector('#editor-message');
+  const update=event=>{try{
+    const benchmarkName=document.querySelector('#benchmark').value,name=document.querySelector('#profile-name').value.trim();
+    if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw Error('Profile name is unsafe.');
+    if(editor.model.profiles.some(item=>
+      item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name
+    ))throw Error('A profile with this benchmark and name already exists.');
+    if(benchmarkName!==profile.benchmark){
+      const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);
+      profile.benchmark=benchmarkName;profile.name=name;profile.key=benchmarkName+'/'+name;
+      delete profile.local_ydb;
+      profile.parameters=Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default]));
+      profile.threads=[1];profile.duration=3;profile.repetitions=1;profile.affinity=['none'];
+      profile.background_load=['none'];editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);
+      saveDraft();renderNew();return
+    }
+    profile.name=name;profile.key=benchmarkName+'/'+name;const config=profile.local_ydb;
+    if(event.target.id==='local-workload-type'){
+      config.workload=defaultLocalYdbWorkload(event.target.value);editor.selected=profile.key;
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    if(event.target.id==='local-geometry-preset'){
+      const preset=event.target.value;config.geometry.preset=preset;
+      if(preset==='single'){
+        config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1
+      }else if(preset==='storage'){
+        config.geometry.max_dynamic_nodes=Math.max(
+          8,config.geometry.dynamic_nodes,config.geometry.max_dynamic_nodes
+        )
+      }
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    if(event.target.id==='local-load-mode'){
+      const mode=event.target.value,allow_errors=Boolean(config.load.allow_errors);
+      if(mode==='points'){
+        config.load={parameter:config.load.parameter,allow_errors,values:config.load.values||[1000]}
+      }else{
+        const search=config.load.search||{start:1000,maximum:100000,multiplier:2,resolution_percent:2};
+        const old=config.load.objective||{};
+        const objective={
+          type:mode,target_role:old.target_role||'dynamic',plateau_gain_percent:old.plateau_gain_percent??2,
+          plateau_points:old.plateau_points||2,cpu_saturation_percent:old.cpu_saturation_percent||95
+        };
+        if(mode==='latency-slo')Object.assign(objective,{
+          percentile:old.percentile||'p99',max_ms:old.max_ms??10,max_errors:old.max_errors??0,
+          min_achieved_rate_ratio:old.min_achieved_rate_ratio??.98
+        });
+        config.load={parameter:config.load.parameter,allow_errors,search,objective}
+      }
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    if(event.target.id.startsWith('local-affinity-')&&event.target.id.endsWith('-mode')){
+      const key=event.target.id.slice('local-affinity-'.length,-'-mode'.length);
+      const mode=event.target.value,old=config.affinity[key].cpus;
+      config.affinity[key]={mode,cpus:mode==='none'?null:(old??(key==='ydb_cli'?'one-chiplet':1))};
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    config.workload.operation=document.querySelector('#local-workload-operation').value;
+    for(const input of document.querySelectorAll('[id^=local-option-]')){
+      const key=input.id.slice('local-option-'.length);
+      const minimum=['init-upserts','orders','auto-partition'].includes(key)?0:1;
+      config.workload.options[key]=localInteger(input.id,minimum)
+    }
+    config.geometry.preset=document.querySelector('#local-geometry-preset').value;
+    for(const key of Object.keys(localYdbGeometryKeys)){
+      config.geometry[key]=localInteger('local-geometry-'+key)
+    }
+    if(config.geometry.preset==='single'){
+      config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1
+    }
+    config.client.threads=localInteger('local-client-threads');
+    const loadMode=document.querySelector('#local-load-mode').value;
+    const parameter=document.querySelector('#local-load-parameter').value;
+    const allow_errors=document.querySelector('#local-load-allow-errors').checked;
+    if(loadMode==='points'){
+      config.load={parameter,allow_errors,values:arrayField(document.querySelector('#local-load-values').value)}
+    }else{
+      const objective={type:loadMode};
+      const multiplier=loadMode==='latency-slo'?
+        localNumber('local-load-multiplier',1):(config.load.search?.multiplier??2);
+      config.load={
+        parameter,allow_errors,
+        search:{
+          start:localInteger('local-load-start'),maximum:localInteger('local-load-maximum'),multiplier,
+          resolution_percent:localNumber('local-load-search-resolution-percent',0)
+        },
+        objective
+      };
+      if(loadMode==='maximize-throughput')Object.assign(objective,{
+        target_role:document.querySelector('#local-load-target-role').value,
+        plateau_gain_percent:localNumber('local-load-plateau-gain-percent',0),
+        plateau_points:localInteger('local-load-plateau-points'),
+        cpu_saturation_percent:localNumber('local-load-cpu-saturation-percent',0)
+      });
+      else Object.assign(objective,{
+        percentile:document.querySelector('#local-slo-percentile').value,
+        max_ms:localNumber('local-slo-max-ms',0),max_errors:localInteger('local-slo-max-errors',0),
+        min_achieved_rate_ratio:localNumber('local-slo-min-achieved-rate-ratio',0)
+      })
+    }
+    config.measurement={
+      warmup:localInteger('local-measurement-warmup',0),
+      duration:localInteger('local-measurement-duration'),
+      repetitions:localInteger('local-measurement-repetitions')
+    };
+    for(const key of Object.keys(localYdbAffinityKeys)){
+      const mode=document.querySelector('#local-affinity-'+key+'-mode').value;
+      config.affinity[key]={mode,cpus:localCpu('local-affinity-'+key+'-cpus',mode)}
+    }
+    const timeout=document.querySelector('#local-timeout').value.trim();
+    profile.timeout=timeout===''?null:localInteger('local-timeout');
+    profile.threads=[config.client.threads];profile.duration=config.measurement.duration;
+    profile.repetitions=1;profile.affinity=['roles'];profile.background_load=['none'];
+    editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();
+    if(['profile-name','local-geometry-preset','local-load-allow-errors'].includes(event.target.id))renderNew()
+  }catch(error){message().innerHTML=displayError(error)}};
+  for(const input of document.querySelectorAll('#local-editor input,#local-editor select'))input.onchange=update;
+  document.querySelector('#delete-profile').onclick=()=>{
+    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
+    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
+    saveDraft();renderNew()
+  }
+}
+"""
     'function profileEditor(profile){\n'
     '  const benchmark=(editor.model.benchmarks||[]).find(item=>item.name===profile.benchmark);\n'
+    "  if(benchmark.profile_kind==='local-ydb')return localYdbProfileEditor(profile);\n"
+    "  if(!benchmark.builder_supported)return '<h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+"
+    "'</h2><div class=notice>Edit this benchmark in the YAML tab; its nested cluster, workload, load controller, and role "
+    "affinity settings are preserved there.</div>';\n"
     '  const field=(id,label,value,help=\'\')=>\'<div class=field><label for="\'+id+\'">\'+esc(label)+\'</label><input id="\'+id+\'" v'
     'alue="\'+esc(value)+\'"><small class=muted>\'+esc(help)+\'</small></div>\';\n'
     "  const parameterFields=benchmark.parameters.map((parameter,index)=>parameter.choices.length?'<div class=field><label>'+"
@@ -248,7 +570,10 @@ _JS = (
     ".duration)+field('repetitions','Repetitions',profile.repetitions)+'</div><div class=field><label>Affinity modes</label><"
     'div class=checkboxes>\'+editor.model.affinity_modes.map(mode=>\'<label><input class=affinity type=checkbox value="\'+esc(mo'
     'de)+\'" \'+(profile.affinity.includes(mode)?\'checked\':\'\')+\'> \'+esc(mode)+\'</label>\').join(\'\')+\'</div></div><div class=tool'
-    "bar><button class=danger id=delete-profile>Delete profile</button></div>'\n"
+    "bar><div class=field><label>Background load</label><div class=checkboxes>'+editor.model.background_load_modes.map(mode=>"
+    "'<label><input class=background-load type=checkbox value=\"'+esc(mode)+'\" '+((profile.background_load||['none']).inclu"
+    "des(mode)?'checked':'')+'> '+esc(mode)+'</label>').join('')+'</div></div><button class=danger id=delete-profile>Delete pro"
+    "file</button></div>'\n"
     '}\n'
     'function arrayField(value,minimum=1){\n'
     "  const parts=value.split(',').map(part=>part.trim()).filter(Boolean),values=[],seen=new Set;\n"
@@ -268,32 +593,75 @@ _JS = (
     '  }\n'
     '  return values\n'
     '}\n'
-    "function bindProfileEditor(profile){const update=event=>{try{const name=document.querySelector('#profile-name').value.tr"
-    "im(),benchmarkName=document.querySelector('#benchmark').value,benchmark=editor.model.benchmarks.find(item=>item.name===b"
-    "enchmarkName),benchmarkChanged=event?.target?.id==='benchmark';if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw "
-    "Error('Profile name is unsafe.');if(editor.model.profiles.some(item=>item.key!==profile.key&&item.benchmark===benchmarkN"
-    "ame&&item.name===name))throw Error('A profile with this benchmark and name already exists.');updateProfile(profile.key,i"
-    "tem=>{item.benchmark=benchmarkName;item.name=name;item.key=benchmarkName+'/'+name;item.threads=arrayField(document.query"
-    "Selector('#threads').value);item.parameters={};benchmark.parameters.forEach((parameter,index)=>{if(benchmarkChanged){ite"
-    'm.parameters[parameter.name]=[...parameter.default];return}if(parameter.choices.length){const selected=[...document.quer'
-    'ySelectorAll(\'.parameter-choice[data-parameter-index="\'+index+\'"]:checked\')].map(input=>input.value);if(!selected.length'
-    ")throw Error('Select at least one value for '+parameter.name+'.');item.parameters[parameter.name]=selected;return}const "
-    "raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');item.parameters[parameter.name]=par"
-    "ameter.type==='integer'?arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)});i"
-    "tem.duration=Number(document.querySelector('#duration').value);item.repetitions=Number(document.querySelector('#repetiti"
-    "ons').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value)});editor.selected"
-    "=benchmarkName+'/'+name;if(!event?.target?.classList.contains('affinity')&&!event?.target?.classList.contains('parameter"
-    "-choice'))renderNew()}catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}};for(const i"
-    "nput of document.querySelectorAll('#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,#duration,#repet"
-    "itions,.affinity'))input.onchange=update;document.querySelector('#delete-profile').onclick=()=>{editor.model.profiles=ed"
-    'itor.model.profiles.filter(item=>item.key!==profile.key);editor.selected=editor.model.profiles[0]?.key||null;editor.yaml'
-    '=serializeConfig(editor.model);saveDraft();renderNew()}}\n'
-    "function addProfile(){const selectedBenchmark=document.querySelector('#add-benchmark')?.value;const benchmark=editor.mod"
-    "el.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];let suffix=1,name='profile';while((e"
-    "ditor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;editor."
-    "model.profiles.push({key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],parameters:Object.fromEntries"
-    "(benchmark.parameters.map(item=>[item.name,item.default])),duration:3,repetitions:1,timeout:null,affinity:['none']});edi"
-    "tor.selected=benchmark.name+'/'+name;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}\n"
+    """
+function bindProfileEditor(profile){
+  const update=event=>{try{
+    const name=document.querySelector('#profile-name').value.trim();
+    const benchmarkName=document.querySelector('#benchmark').value;
+    const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);
+    const benchmarkChanged=event?.target?.id==='benchmark';
+    if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw Error('Profile name is unsafe.');
+    if(editor.model.profiles.some(item=>
+      item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name
+    ))throw Error('A profile with this benchmark and name already exists.');
+    updateProfile(profile.key,item=>{
+      item.benchmark=benchmarkName;item.name=name;item.key=benchmarkName+'/'+name;
+      if(benchmarkChanged&&benchmark.profile_kind==='local-ydb'){
+        item.local_ydb=defaultLocalYdb();item.parameters={};item.threads=[64];item.duration=30;
+        item.repetitions=1;item.affinity=['roles'];item.background_load=['none'];return
+      }
+      delete item.local_ydb;item.threads=arrayField(document.querySelector('#threads').value);item.parameters={};
+      benchmark.parameters.forEach((parameter,index)=>{
+        if(benchmarkChanged){item.parameters[parameter.name]=[...parameter.default];return}
+        if(parameter.choices.length){
+          const selector='.parameter-choice[data-parameter-index="'+index+'"]:checked';
+          const selected=[...document.querySelectorAll(selector)].map(input=>input.value);
+          if(!selected.length)throw Error('Select at least one value for '+parameter.name+'.');
+          item.parameters[parameter.name]=selected;return
+        }
+        const raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');
+        item.parameters[parameter.name]=parameter.type==='integer'?
+          arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)
+      });
+      item.duration=Number(document.querySelector('#duration').value);
+      item.repetitions=Number(document.querySelector('#repetitions').value);
+      item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value);
+      item.background_load=[...document.querySelectorAll('.background-load:checked')].map(input=>input.value);
+      if(!item.background_load.length)throw Error('Select at least one background load mode.')
+    });
+    editor.selected=benchmarkName+'/'+name;
+    if(benchmarkChanged||(
+      !event?.target?.classList.contains('affinity')&&
+      !event?.target?.classList.contains('background-load')&&
+      !event?.target?.classList.contains('parameter-choice')
+    ))renderNew()
+  }catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}};
+  const selector=
+    '#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,'+
+    '#duration,#repetitions,.affinity,.background-load';
+  for(const input of document.querySelectorAll(selector))input.onchange=update;
+  document.querySelector('#delete-profile').onclick=()=>{
+    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
+    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
+    saveDraft();renderNew()
+  }
+}
+"""
+    """
+function addProfile(){
+  const selectedBenchmark=document.querySelector('#add-benchmark')?.value;
+  const benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];
+  let suffix=1,name='profile';
+  while((editor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;
+  const profile={
+    key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],
+    parameters:Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default])),
+    duration:3,repetitions:1,timeout:null,affinity:['none'],background_load:['none']
+  };
+  if(benchmark.profile_kind==='local-ydb'){profile.local_ydb=defaultLocalYdb();profile.threads=[64];profile.duration=30;profile.repetitions=1;profile.affinity=['roles']}
+  editor.model.profiles.push(profile);editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()
+}
+"""
     "async function renderNew(tab){clearRefresh();if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
     "e.getItem('ydb-bench-editor-tab')||'builder';await syncEditor();const summary=planSummary();let content='<h1 class=page-"
     'title>New run</h1><div class=tabs><a class="\'+(tab===\'builder\'?\'active\':\'\')+\'" href="#new">Builder</a><a class="\'+(tab=='
@@ -313,7 +681,9 @@ _JS = (
     "on><section class=card>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
     "'</section></div>';app.innerHTML=shell('new',content);bindEditorControls();document.querySelector('#add-profile').onclic"
     "k=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button."
-    'dataset.profile;renderNew()};if(selected)bindProfileEditor(selected)}\n'
+    "dataset.profile;renderNew()};if(selected){const benchmark=editor.model.benchmarks.find(item=>item.name===selected.bench"
+    "mark);if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
+    "fileEditor(selected)}}\n"
     'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}}\n'
     "function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value"
     '="">Any</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>'
@@ -333,7 +703,8 @@ _JS = (
     '<tr><th>Run</th><th>Status</th><th>Source</th><th>Started / duration</th><th>Profiles / repeats</th><th>perf</th><th>Act'
     'ions</th></tr></thead><tbody>\'+runs.map(run=>\'<tr><td><a href="#run/\'+enc(run.id)+\'">\'+esc(run.id)+\'</a><br><small class'
     "=muted>'+esc(run.config_path||'config snapshot')+'</small></td><td>'+status(run.status)+'</td><td>'+esc(run.source)+'</t"
-    "d><td>'+esc(run.started_at||'—')+'<br><small>'+duration(run)+'</small></td><td>'+run.profiles+' / '+run.repetitions+'</t"
+    "d><td><time title=\"'+esc(run.started_at||'')+'\">'+esc(humanTime(run.started_at))+'</time><br><small>'+duration(run)+"
+    "'</small></td><td>'+run.profiles+' / '+run.repetitions+'</t"
     'd><td>\'+ (run.perf?\'yes\':\'no\')+\'</td><td><div class=actions><a href="#run/\'+enc(run.id)+\'">Open</a><a data-repeat="\'+esc'
     '(run.id)+\'">Repeat</a><a href="\'+runHref(run.id,\'config\')+\'">YAML</a><a href="\'+runHref(run.id,\'manifest\')+\'">run.json</'
     'a><a href="\'+runHref(run.id,\'archive\')+\'">Archive</a></div></td></tr>\').join(\'\')+\'</tbody></table>\':\'<div class=empty>No'
@@ -351,6 +722,7 @@ _JS = (
     'function metricLabel(value){const number=Number(value);if(!Number.isFinite(number))return String(value);return Math.abs('
     "number)>=1e9?(number/1e9).toFixed(2)+'B':Math.abs(number)>=1e6?(number/1e6).toFixed(2)+'M':Math.abs(number)>=1e3?(number"
     "/1e3).toFixed(2)+'k':Number.isInteger(number)?String(number):number.toFixed(2)}\n"
+    'function chartNumber(value){return value===null||value===undefined?NaN:Number(value)}\n'
     "function chartSeriesLabel(series,compact=false){return compact?series.affinity:series.run+' / '+series.profile+' / '+ser"
     'ies.affinity}\n'
     "function seriesCpuNote(series){if(series.cpu_masks&&Object.keys(series.cpu_masks).length)return 'CPUs by threads: '+Obje"
@@ -359,7 +731,7 @@ _JS = (
     "restricted':'CPUs: '+cpuRanges(series.cpus)):'CPUs: not recorded'}\n"
     'function svgChart(metric,xName,xValues,seriesRows,colors){\n'
     '  const width=900,height=330,left=78,right=24,top=24,bottom=52,plotWidth=width-left-right,plotHeight=height-top-bottom,v'
-    'alueFor=(item,row)=>Number(row?.[item.metric||metric]);\n'
+    'alueFor=(item,row)=>chartNumber(row?.[item.metric||metric]);\n'
     '  const values=[];for(const item of seriesRows)for(const x of xValues){const value=valueFor(item,item.rows.get(String(x)'
     '));if(Number.isFinite(value))values.push(value)}\n'
     "  if(!values.length)return '<div class=empty>No numeric values for '+esc(metric)+'.</div>';\n"
@@ -379,43 +751,69 @@ _JS = (
     '  svg+=\'<line class=chart-axis x1="\'+left+\'" y1="\'+(top+plotHeight)+\'" x2="\'+(width-right)+\'" y2="\'+(top+plotHeight)+\'"/'
     '><line class=chart-axis x1="\'+left+\'" y1="\'+top+\'" x2="\'+left+\'" y2="\'+(top+plotHeight)+\'"/><text class=chart-label x="\''
     '+(left+plotWidth/2)+\'" y="\'+(height-5)+\'" text-anchor=middle>\'+esc(xName)+\'</text>\';\n'
-    '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],points=xValues.map(x=>{co'
-    "nst row=item.rows.get(String(x)),y=valueFor(item,row);return Number.isFinite(y)?{x,y,row}:null}).filter(Boolean);svg+='<"
-    'polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+\',\'+yPos(point.y)).join(\' \')+\'"/>'
-    '\';for(const point of points)svg+=\'<circle class=chart-point fill="\'+color+\'" cx="\'+xPos(point.x)+\'" cy="\'+yPos(point.y)+'
-    '\'" r="4"><title>\'+esc(item.label+\'; \'+xName+\'=\'+point.x+\'; \'+(item.metric||metric)+\'=\'+point.y)+\'</title></circle>\'});\n'
-    '  svg+=\'<line class=chart-cursor x1="0" y1="\'+top+\'" x2="0" y2="\'+(top+plotHeight)+\'" visibility=hidden/>\';\n'
+    '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],segments=[];let segment=[]'
+    ';for(const x of xValues){const row=item.rows.get(String(x)),y=valueFor(item,row);if(Number.isFinite(y)){segment.push({x'
+    ',y,row});continue}if(segment.length){segments.push(segment);segment=[]}}if(segment.length)segments.push(segment);for(con'
+    'st points of segments)svg+=\'<polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+'
+    '\',\'+yPos(point.y)).join(\' \')+\'"/>\';for(const point of segments.flat())svg+=\'<circle class=chart-point fill="\'+color+\'"'
+    ' cx="\'+xPos(point.x)+\'" cy="\'+yPos(point.y)+\'" r="4"><title>\'+esc(item.label+\'; \'+xName+\'=\'+point.x+\'; \'+(item.me'
+    'tric||metric)+\'=\'+point.y)+\'</title></circle>\'});\n'
+    '  svg+=\'<line class=chart-cursor x1="0" y1="\'+top+\'" x2="0" y2="\'+(top+plotHeight)+\'" visibility="hidden"/>\';\n'
     "  return '<div class=chart-surface>'+svg+'</svg><div class=chart-tooltip hidden></div></div>'\n"
     '}\n'
-    'function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors){\n'
-    '  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number),xMin=Math.min(...numericX),xM'
-    'ax=Math.max(...numericX),xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);\n'
-    "  for(const panel of container.querySelectorAll('.chart-panel')){\n"
-    "    const metric=panel.dataset.metric,svg=panel.querySelector('svg'),surface=panel.querySelector('.chart-surface'),toolt"
-    "ip=panel.querySelector('.chart-tooltip'),cursor=panel.querySelector('.chart-cursor');\n"
-    '    if(!svg||!surface||!tooltip||!cursor||!metrics.includes(metric))continue;\n'
-    "    const hide=()=>{tooltip.hidden=true;cursor.setAttribute('visibility','hidden')};\n"
-    '    svg.onmouseleave=hide;\n'
-    '    svg.onmousemove=event=>{\n'
-    '      const bounds=svg.getBoundingClientRect(),viewX=(event.clientX-bounds.left)*width/bounds.width;\n'
-    '      const selected=xValues.reduce((best,value)=>Math.abs(xPos(value)-viewX)<Math.abs(xPos(best)-viewX)?value:best,xVal'
-    'ues[0]),cursorX=xPos(selected);\n'
-    '      const values=seriesRows.map((item,index)=>({label:item.label,colorClass:(item.colorIndex??index)%chartColors.lengt'
-    'h,value:Number(item.rows.get(String(selected))?.[item.metric||metric])})).filter(item=>Number.isFinite(item.value)).sort'
-    '((leftItem,rightItem)=>rightItem.value-leftItem.value||leftItem.label.localeCompare(rightItem.label));\n'
-    '      if(!values.length)return hide();\n'
-    "      cursor.setAttribute('x1',cursorX);cursor.setAttribute('x2',cursorX);cursor.setAttribute('visibility','visible');\n"
-    "      tooltip.innerHTML='<strong>'+esc(xName)+' = '+esc(metricLabel(selected))+'</strong>'+values.map(item=>'<div class="
-    'tooltip-row><i class="tooltip-dot chart-bg-\'+item.colorClass+\'"></i><span class="chart-color-\'+item.colorClass+\'">\'+esc('
-    "item.label)+'</span><span class=tooltip-value>'+esc(metricLabel(item.value))+'</span></div>').join('');\n"
-    '      tooltip.hidden=false;\n'
-    '      const surfaceBounds=surface.getBoundingClientRect(),tooltipWidth=tooltip.offsetWidth,rawLeft=event.clientX-surface'
-    'Bounds.left+12;\n'
-    "      tooltip.style.left=Math.max(4,Math.min(rawLeft,surfaceBounds.width-tooltipWidth-4))+'px';tooltip.style.top=Math.ma"
-    "x(4,event.clientY-surfaceBounds.top-tooltip.offsetHeight-10)+'px'\n"
-    '    }\n'
-    '  }\n'
-    '}\n'
+    """
+function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,synchronize=false){
+  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number);
+  const xMin=Math.min(...numericX),xMax=Math.max(...numericX);
+  const xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
+  const seriesFor=metric=>Array.isArray(seriesRows)?seriesRows:(seriesRows[metric]||[]);
+  const panels=[...container.querySelectorAll('.chart-panel')].map(panel=>({
+    panel,
+    metric:panel.dataset.metric,
+    svg:panel.querySelector('svg'),
+    surface:panel.querySelector('.chart-surface'),
+    tooltip:panel.querySelector('.chart-tooltip'),
+    cursor:panel.querySelector('.chart-cursor'),
+  })).filter(item=>item.svg&&item.surface&&item.tooltip&&item.cursor&&metrics.includes(item.metric));
+  const hideAll=()=>{for(const item of panels){
+    item.tooltip.hidden=true;item.cursor.setAttribute('visibility','hidden');
+    item.cursor.removeAttribute('data-selected-x')
+  }};
+  const syncBoundary=synchronize?panels[0]?.panel.closest('.local-charts'):null;
+  if(syncBoundary)syncBoundary.onmouseleave=hideAll;
+  for(const active of panels){
+    if(!syncBoundary)active.svg.onmouseleave=hideAll;
+    active.svg.onmousemove=event=>{
+      const bounds=active.svg.getBoundingClientRect(),viewX=(event.clientX-bounds.left)*width/bounds.width;
+      const selected=xValues.reduce(
+        (best,value)=>Math.abs(xPos(value)-viewX)<Math.abs(xPos(best)-viewX)?value:best,xValues[0]
+      );
+      const cursorX=xPos(selected),targets=synchronize?panels:[active];
+      for(const item of panels)item.tooltip.hidden=true;
+      for(const item of targets){
+        item.cursor.setAttribute('x1',cursorX);item.cursor.setAttribute('x2',cursorX);
+        item.cursor.setAttribute('visibility','visible');item.cursor.setAttribute('data-selected-x',selected)
+      }
+      const values=seriesFor(active.metric).map((item,index)=>({
+        label:item.label,colorClass:(item.colorIndex??index)%chartColors.length,
+        value:chartNumber(item.rows.get(String(selected))?.[item.metric||active.metric])
+      })).filter(item=>Number.isFinite(item.value)).sort((leftItem,rightItem)=>
+        rightItem.value-leftItem.value||leftItem.label.localeCompare(rightItem.label)
+      );
+      if(!values.length)return;
+      active.tooltip.innerHTML='<strong>'+esc(xName)+' = '+esc(metricLabel(selected))+'</strong>'+
+        values.map(item=>'<div class=tooltip-row><i class="tooltip-dot chart-bg-'+item.colorClass+
+          '"></i><span class="chart-color-'+item.colorClass+'">'+esc(item.label)+
+          '</span><span class=tooltip-value>'+esc(metricLabel(item.value))+'</span></div>').join('');
+      active.tooltip.hidden=false;
+      const surfaceBounds=active.surface.getBoundingClientRect(),tooltipWidth=active.tooltip.offsetWidth;
+      const rawLeft=event.clientX-surfaceBounds.left+12;
+      active.tooltip.style.left=Math.max(4,Math.min(rawLeft,surfaceBounds.width-tooltipWidth-4))+'px';
+      active.tooltip.style.top=Math.max(4,event.clientY-surfaceBounds.top-active.tooltip.offsetHeight-10)+'px'
+    }
+  }
+}
+"""
     "async function loadChartData(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);ret"
     "urn api('/api/chart-data?'+query)}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
@@ -535,12 +933,12 @@ _JS = (
     '    const sets=indexed.map(item=>new Set([...item.rows].filter(([,row])=>Number.isFinite(Number(row[item.metric]))).map('
     '([x])=>x))),common=[...sets[0]].filter(value=>sets.every(set=>set.has(value))).sort((a,b)=>Number(a)-Number(b)),union=ne'
     'w Set(sets.flatMap(set=>[...set]));\n'
-    '    if(!common.length){warning.innerHTML=\'<div class="notice error">The selected lines have no common \'+esc(state.x)+\' v'
-    "alues for these filters.</div>';output.innerHTML='';return}\n"
-    "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+common.length+' / '+item.rows.siz"
-    "e).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> showing the intersection of '+commo"
-    "n.length+' common '+esc(state.x)+' values ('+esc(common.join(', '))+').<div class=coverage>'+coverage+'</div></div>'}els"
-    'e warning.innerHTML=\'<div class="notice good">All selected lines share \'+common.length+\' \'+esc(state.x)+\' values.</div>\''
+    "    const xValues=[...union].sort((a,b)=>Number(a)-Number(b));if(!xValues.length){warning.innerHTML='<div class=\"notice"
+    " error\">No numeric values are available.</div>';output.innerHTML='';return}\n"
+    "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+sets[indexed.indexOf(item)].size+'"
+    " / '+union.size).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> missing values are o"
+    "mitted, and internal gaps break chart lines.<div class=coverage>'+coverage+'</div></div>'}els"
+    "e warning.innerHTML='<div class=\"notice good\">All selected lines cover '+union.size+' '+esc(state.x)+' values.</div>'"
     ';\n'
     "    if(indexed.length===1)indexed[0].label=indexed[0].metric;const colors=indexed.map((_,index)=>chartColors[index%char"
     "tColors.length]);const legend=indexed.length===1?'':'<div class=chart-legend>'+i"
@@ -548,8 +946,8 @@ _JS = (
     "span>').join('')+'</div>';\n"
     "    const metricTitle=selectedMetrics.join(', '),chartTitle=scope.title?metricTitle+' — '+scope.title:metricTitle;output."
     'innerHTML=legend+\'<section class=chart-panel data-metric="combined"><h3>\'+esc(chartTitle)+\'</h3>\'+svgChart(\'combined\',s'
-    'tate.x,common,indexed,colors)+\'</section>\';bindChartTooltips(out'
-    "put,state.x,common,indexed,['combined'],colors)\n"
+    'tate.x,xValues,indexed,colors)+\'</section>\';bindChartTooltips(out'
+    "put,state.x,xValues,indexed,['combined'],colors)\n"
     '  }\n'
     '  render()\n'
     '}\n'
@@ -597,6 +995,275 @@ _JS = (
     'rt.open=false}}\n'
     '  renderBoard()\n'
     '}\n'
+    """
+const localPhaseLabels={
+  'preparing-cluster':'Preparing cluster','starting-static-nodes':'Starting static nodes','waiting-for-static-nodes':'Waiting for static nodes',
+  'bootstrapping-cluster':'Bootstrapping cluster','creating-database':'Creating database','starting-dynamic-nodes':'Starting dynamic nodes',
+  'waiting-for-database':'Waiting for database','cluster-ready':'Cluster ready','initializing-workload':'Initializing workload',
+  'warming-up':'Warming up','measuring':'Measuring','cleaning-workload':'Cleaning workload','evaluating-attempt':'Evaluating attempt',
+  'scaling-dynamic-nodes':'Scaling dynamic nodes','stopping-cluster':'Stopping cluster','finishing':'Writing results',
+  completed:'Completed',failed:'Failed',cancelled:'Cancelled'
+};
+function localPhaseLabel(phase){return localPhaseLabels[phase]||String(phase||'Preparing').replaceAll('-',' ')}
+function localShellArg(value){value=String(value);return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value)?value:"'"+value.replaceAll("'","'\\\"'\\\"'")+"'"}
+function localCommandText(record){
+  const argv=Array.isArray(record?.argv)?record.argv:[];
+  const command=argv.map(localShellArg).join(' ');
+  const cpus=Array.isArray(record?.cpu_affinity)?record.cpu_affinity:[];
+  return cpus.length?'taskset --cpu-list '+localShellArg(cpus.join(','))+' '+command:command
+}
+function localCommandDetails(item,open){
+  const commands=Array.isArray(item.commands)?item.commands:[];
+  if(!commands.length)return '—';
+  return '<details class=local-command-history data-command-attempt="'+esc(item.attempt)+'"'+
+    (open?' open':'')+'><summary>'+commands.length+' commands</summary>'+commands.map(command=>
+      '<div class=local-command-entry><strong>Repetition '+esc(command.repetition)+' · '+
+      esc(localPhaseLabel(command.phase))+'</strong><pre class=local-command-code><code>'+esc(localCommandText(command))+
+      '</code></pre></div>'
+    ).join('')+'</details>'
+}
+function localProfileDetails(data,open){
+  const configuration={
+    parameters:data.parameters||{},timeout_seconds:data.timeout_seconds??null,role_affinity:data.role_affinity||{}
+  };
+  return '<details class=local-profile-config data-local-profile-config'+(open?' open':'')+
+    '><summary><strong>Launch parameters</strong> <span class=muted>Normalized profile and effective CPU affinity; '+
+    'exact commands are listed per attempt.</span></summary><pre><code>'+esc(JSON.stringify(configuration,null,2))+
+    '</code></pre></details>'
+}
+function localElapsed(started,finished=null){
+  const value=Date.parse(started),end=finished?Date.parse(finished):Date.now();
+  return Number.isFinite(value)&&Number.isFinite(end)?Math.max(0,(end-value)/1000):0
+}
+function localKpi(label,value,help='',primary=false){
+  return '<div class="'+(primary?'primary-result':'')+'"><span class=muted>'+esc(label)+'</span><strong>'+esc(value??'—')+
+    '</strong>'+(help?'<small class=muted>'+esc(help)+'</small>':'')+'</div>'
+}
+function localOutcomeLabel(outcome){
+  return ({
+    'boundary-found':'SLO boundary found','plateau-found':'Throughput plateau found',
+    'lower-bound':'Capacity lower bound','best-observed':'Best observed point',
+    'no-feasible-point':'No feasible point','bounded-by-errors':'Bounded by workload errors',
+    'search-limit-reached':'Search limit reached'
+  })[outcome]||outcome||'Search in progress'
+}
+function localSearchAxisLabel(parameter,workload){
+  if(parameter==='threads')return 'YDB CLI threads';
+  if(parameter==='rate')return workload==='stock'?'Offered rate (transactions/s)':'Offered rate (requests/s)';
+  return parameter||'Search value'
+}
+function localAttemptRows(attempts,xField='attempt'){return new Map(attempts.map(item=>[String(item[xField]),item]))}
+function localChart(title,metric,xName,xValues,series){
+  return '<section class=chart-panel data-metric="'+esc(metric)+'"><h3>'+esc(title)+'</h3>'+
+    svgChart(metric,xName,xValues,series,chartColors)+'</section>'
+}
+function localBestRows(attempts,objective,xField='attempt'){
+  let bestLoad=null,bestThroughput=-Infinity,currentStage=null;const rows=new Map;
+  for(const item of attempts){
+    if(currentStage!==item.search_stage){currentStage=item.search_stage;bestLoad=null;bestThroughput=-Infinity}
+    if(item.passed){
+      if(objective==='latency-slo'){if(bestLoad===null||item.load>bestLoad)bestLoad=item.load}
+      else if(Number(item.throughput)>bestThroughput){bestThroughput=Number(item.throughput);bestLoad=item.load}
+    }
+    rows.set(String(item[xField]),{...item,current_best:bestLoad,passed_load:item.passed?item.load:null,failed_load:item.passed?null:item.load})
+  }
+  return rows
+}
+function renderLocalYdbProfile(container,data){
+  if(data.state==='preparing'){
+    container.innerHTML='<div class=notice>Preparing local YDB profile and extracting binaries…</div>';return
+  }
+  const openCommandAttempts=new Set(
+    [...container.querySelectorAll('[data-command-attempt][open]')].map(details=>details.dataset.commandAttempt)
+  );
+  const profileConfigOpen=container.querySelector('[data-local-profile-config][open]')!==null;
+  const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[];
+  const result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{};
+  const objective=loadConfig.objective?.type||'points';
+  const phaseElapsed=localElapsed(progress.phase_started_at);
+  const phaseDuration=Number(progress.phase_duration_seconds);
+  const profileElapsed=localElapsed(data.started_at,data.finished_at);
+  const remaining=Number.isFinite(phaseDuration)?Math.max(0,phaseDuration-phaseElapsed):null;
+  const phaseHelp=[
+    progress.attempt?'attempt #'+progress.attempt:null,
+    progress.repetition?'repetition '+progress.repetition+'/'+progress.repetitions:null,
+    Number.isFinite(remaining)?elapsedLabel(remaining)+' remaining':null
+  ].filter(Boolean).join(' · ');
+  const phaseProgress=Number.isFinite(phaseDuration)?
+    '<progress class=local-phase-progress max="'+phaseDuration+'" value="'+
+      Math.min(phaseDuration,phaseElapsed)+'"></progress>':'';
+  let html=loadConfig.allow_errors?
+    '<div class=notice>Failed workload requests are allowed for this profile and remain visible in metrics.</div>':'';
+  html+='<div class=local-live><div><span class=muted>Current phase</span><div class=local-phase>'+
+    esc(localPhaseLabel(progress.phase||data.state))+'</div><div class=muted>'+
+    esc(phaseHelp||'Waiting for the next milestone')+'</div>'+phaseProgress+'</div>';
+  const dynamicNodes=
+    progress.dynamic_nodes??result?.dynamic_nodes??parameters.geometry?.dynamic_nodes??'—';
+  const candidate=progress.load===undefined?
+    '—':(progress.parameter||loadConfig.parameter||'load')+' '+metricLabel(progress.load);
+  html+=localKpi('Profile elapsed',elapsedLabel(profileElapsed))+
+    localKpi('Geometry',(parameters.geometry?.static_nodes??'—')+' static · '+dynamicNodes+' dynamic')+
+    localKpi('Candidate',candidate)+'</div>';
+  html+=localProfileDetails(data,profileConfigOpen);
+  if(progress.current_command?.argv?.length){
+    html+='<section class=local-current-command><span class=muted>Running command</span>'+
+      '<pre class=local-command-code><code>'+esc(localCommandText(progress.current_command))+
+      '</code></pre></section>'
+  }
+  if(result){
+    const selected=result.selected_metrics||{};
+    const latencyMetric=(loadConfig.objective?.percentile||'p99')+'_ms';
+    const selectedLabel=result.selected_load===null||result.selected_load===undefined?
+      '—':metricLabel(result.selected_load);
+    html+='<div class=local-kpis>'+localKpi(
+      localOutcomeLabel(result.outcome),selectedLabel,result.parameter||loadConfig.parameter,true
+    )+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),'transactions/s')+
+      localKpi(
+        loadConfig.objective?.percentile||'p99',metricLabel(selected[latencyMetric]??'—'),'ms'
+      )+localKpi('Dynamic nodes',result.dynamic_nodes,result.stop_reason||'')+'</div>'
+  }else{
+    html+='<div class=local-kpis>'+localKpi(
+      'Completed attempts',attempts.length,'search stage '+(progress.search_stage||1),true
+    )+localKpi(
+      'Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—','transactions/s'
+    )+localKpi(
+      'Latest p99',attempts.length?metricLabel(attempts.at(-1).p99_ms):'—','ms'
+    )+'</div>'
+  }
+  const currentStage=Number(progress.search_stage||0);
+  const lastStored=searches.length?Math.max(...searches.map(item=>Number(item.stage)||0)):0;
+  const xAxis=container.dataset.localYdbXAxis==='parameter'?'parameter':'attempt';
+  const searchParameter=loadConfig.parameter||result?.parameter||'load';
+  const searchAxisLabel=localSearchAxisLabel(searchParameter,parameters.workload?.type);
+  let chartBinding=null;
+  const stageCards=searches.map(item=>
+    '<div class=local-stage><strong>Stage '+esc(item.stage)+' · '+esc(item.dynamic_nodes)+
+    ' dynamic</strong><div>'+esc(localOutcomeLabel(item.outcome))+'</div><div class=muted>selected '+
+    esc(metricLabel(item.selected_load))+' · '+esc(elapsedLabel(item.duration_seconds))+
+    '</div><div class=stage-arrow>'+esc(
+      item.next_action==='scale-dynamic-nodes'?
+        'Scale → '+item.next_dynamic_nodes+' dynamic nodes':item.stop_reason||'Finish'
+    )+'</div></div>'
+  ).join('');
+  const currentStageCard=currentStage>lastStored&&data.state==='running'?
+    '<div class="local-stage current"><strong>Stage '+esc(currentStage)+' · '+
+    esc(progress.dynamic_nodes??'—')+' dynamic</strong><div>In progress</div><div class=muted>'+
+    esc(attempts.filter(item=>Number(item.search_stage)===currentStage).length)+
+    ' completed attempts</div></div>':'';
+  html+='<h3>Geometry stages</h3><div class=local-stages>'+stageCards+currentStageCard+'</div>';
+  if(attempts.length){
+    const xField=xAxis==='parameter'?'load':'attempt';
+    const xName=xAxis==='parameter'?searchAxisLabel:'Attempt';
+    const xValues=xAxis==='parameter'?
+      [...new Set(attempts.map(item=>Number(item.load)))].sort((left,right)=>left-right):
+      attempts.map(item=>item.attempt);
+    const stages=[];
+    for(const item of attempts){
+      let stage=stages.find(value=>value.search_stage===item.search_stage);
+      if(!stage){
+        stage={search_stage:item.search_stage,dynamic_nodes:item.dynamic_nodes,attempts:[]};stages.push(stage)
+      }
+      stage.attempts.push(item)
+    }
+    const groups=(xAxis==='parameter'?stages:[{attempts}]).map(item=>({
+      rows:localAttemptRows(item.attempts,xField),bestRows:localBestRows(item.attempts,objective,xField),
+      suffix:xAxis==='parameter'&&stages.length>1?
+        ' · stage '+item.search_stage+' · '+item.dynamic_nodes+' dynamic':''
+    }));
+    const candidateSeries=groups.flatMap(group=>[
+      {rows:group.bestRows,metric:'load',label:'Candidate'+group.suffix,colorIndex:7},
+      {rows:group.bestRows,metric:'current_best',label:'Current best'+group.suffix,colorIndex:0},
+      {rows:group.bestRows,metric:'passed_load',label:'Passed'+group.suffix,colorIndex:10},
+      {rows:group.bestRows,metric:'failed_load',label:'Failed'+group.suffix,colorIndex:8}
+    ]);
+    const throughputSeries=groups.flatMap(group=>{
+      const values=[{
+        rows:group.rows,metric:'throughput',label:'Achieved throughput'+group.suffix,colorIndex:0
+      }];
+      if(loadConfig.parameter==='rate')values.push({
+        rows:group.rows,metric:'load',label:'Offered rate'+group.suffix,colorIndex:7
+      });
+      return values
+    });
+    const latencySeries=groups.flatMap(group=>
+      ['p50_ms','p95_ms','p99_ms','pmax_ms'].map((metric,index)=>({
+        rows:group.rows,metric,label:metric.replace('_ms','')+group.suffix,colorIndex:index
+      }))
+    );
+    if(loadConfig.objective?.type==='latency-slo'){
+      const sloRows=new Map(xValues.map(value=>[String(value),{slo_ms:loadConfig.objective.max_ms}]));
+      latencySeries.push({rows:sloRows,metric:'slo_ms',label:'SLO',colorIndex:8})
+    }
+    const cpuMetrics=[
+      ['static_cpu_mean','Static'],['dynamic_cpu_mean','Dynamic'],
+      ['cli_cpu_mean','YDB CLI'],['host_cpu_mean','Host']
+    ];
+    const cpuSeries=groups.flatMap(group=>cpuMetrics.map(([metric,label],index)=>({
+      rows:group.rows,metric,label:label+group.suffix,colorIndex:index
+    })));
+    const errorSeries=groups.flatMap(group=>[
+      {rows:group.rows,metric:'errors',label:'Errors'+group.suffix,colorIndex:8},
+      {rows:group.rows,metric:'retries',label:'Retries'+group.suffix,colorIndex:1}
+    ]);
+    chartBinding={
+      xName,xValues,
+      series:{
+        load:candidateSeries,throughput:throughputSeries,latency_ms:latencySeries,
+        cpu_percent:cpuSeries,errors:errorSeries
+      }
+    };
+    const axisHelp=xAxis==='parameter'?
+      'Points are ordered by the searched parameter; geometry stages remain separate.':
+      'Execution order shows how the controller moved through candidate values.';
+    html+='<div class=run-section-title><h3>Search process</h3><div class=actions><span class=muted>X axis</span>'+
+      '<button type=button data-local-chart-x=attempt class="'+(xAxis==='attempt'?'primary':'')+
+      '" aria-pressed="'+(xAxis==='attempt')+'">Attempts (search order)</button>'+
+      '<button type=button data-local-chart-x=parameter class="'+(xAxis==='parameter'?'primary':'')+
+      '" aria-pressed="'+(xAxis==='parameter')+'">'+esc(searchAxisLabel)+'</button></div></div>'+
+      '<p class=muted>'+esc(axisHelp)+'</p><div class=local-charts>'+
+      localChart('Candidate and current best','load',xName,xValues,candidateSeries)+
+      localChart('Offered and achieved throughput','throughput',xName,xValues,throughputSeries)+
+      localChart('Latency','latency_ms',xName,xValues,latencySeries)+
+      localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
+      localChart('Errors and retries','errors',xName,xValues,errorSeries)+'</div>';
+    html+='<h3>Attempts</h3><div class=local-attempts-scroll tabindex=0 role=region aria-label="Search attempts">'+
+      '<table class=local-attempts><thead><tr><th>#</th><th>Stage</th><th>Dynamic</th><th>Candidate</th>'+
+      '<th>Throughput</th><th>p99</th><th>Errors</th><th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th>'+
+      '<th>Verdict</th><th>Decision</th><th>Duration</th><th>Commands</th></tr></thead><tbody>'+
+      attempts.map(item=>'<tr><td>'+esc(item.attempt)+'</td><td>'+esc(item.search_stage)+'</td><td>'+
+        esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td><td>'+esc(metricLabel(item.throughput))+
+        '</td><td>'+esc(metricLabel(item.p99_ms))+' ms</td><td>'+esc(item.errors)+'</td><td>'+
+        esc(metricLabel(item.static_cpu_mean))+'%</td><td>'+esc(metricLabel(item.dynamic_cpu_mean))+
+        '%</td><td>'+esc(metricLabel(item.cli_cpu_mean))+'%</td><td class="'+
+        (item.passed?'attempt-pass':'attempt-fail')+'">'+(item.passed?'PASS':'FAIL')+'</td><td>'+esc(item.decision)+
+        '</td><td>'+esc(elapsedLabel(item.duration_seconds))+'</td><td class=local-command-cell>'+
+        localCommandDetails(item,openCommandAttempts.has(String(item.attempt)))+'</td></tr>'
+      ).join('')+'</tbody></table></div>';
+  }else html+='<div class=empty>No completed search attempts yet. The timeline will appear after the first measurement.</div>';
+  container.innerHTML=html;
+  for(const axisButton of container.querySelectorAll('[data-local-chart-x]'))axisButton.onclick=()=>{
+    container.dataset.localYdbXAxis=axisButton.dataset.localChartX;renderLocalYdbProfile(container,data)
+  };
+  if(chartBinding)bindChartTooltips(
+    container,chartBinding.xName,chartBinding.xValues,chartBinding.series,
+    Object.keys(chartBinding.series),chartColors,true
+  )
+}
+async function mountLocalYdbProfile(container,runId,profile,runState){
+  let loading=false,terminal=false;
+  const scheduleRunRefresh=()=>{if(['running','queued'].includes(runState)&&!refreshTimer)refreshTimer=setTimeout(()=>renderRun(runId,'local-ydb/'+profile),700)};
+  const refresh=async()=>{
+    if(loading)return;loading=true;
+    try{
+      const data=await api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile));
+      renderLocalYdbProfile(container,data);terminal=!['running','preparing'].includes(data.state);
+      if(terminal&&refreshTimer){clearInterval(refreshTimer);refreshTimer=null}
+      if(terminal)scheduleRunRefresh()
+    }catch(error){container.innerHTML=displayError(error)}finally{loading=false}
+  };
+  await refresh();if(!terminal&&['running','queued','recovery_required'].includes(runState)&&!refreshTimer)refreshTimer=setInterval(refresh,1000)
+}
+    """
     "function profileGroups(steps){const groups={};for(const step of steps){const key=step.benchmark+'/'+step.profile;(groups"
     '[key]??=[]).push(step)}return groups}\n'
     'function affinityGroups(steps){const groups={};for(const step of steps)(groups[step.affinity]??=[]).push(step);return gr'
@@ -624,78 +1291,102 @@ _JS = (
     'urrent_run_id?\'<a href="#run/\'+enc(run.current_run_id)+\'">Currently running: \'+esc(run.current_run_id)+\'</a>\':\'Waiting f'
     "or the dispatcher.')+'</div>':'';\n"
     "    sessionStorage.setItem('ydb-bench-active-run',activeRun);\n"
-    '    const groups=profileGroups(run.steps||[]);\n'
-    "    let content=breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+queueNotice+'<h1 class=page-t"
-    "itle>'+esc(id)+(selectedProfile?' / '+esc(selectedProfile):'')+'</h1><div class=toolbar><button id=refresh-run>Refresh</"
-    "button>'+(['queued','running','recovery_required'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</butto"
-    'n>\':\'\')+\'<button id=repeat-run>Repeat with this YAML</button><a href="\'+runHref(id,\'config\')+\'">Download YAML</a><a href'
-    '="\'+runHref(id,\'manifest\')+\'">run.json</a><a href="\'+runHref(id,\'archive\')+\'">Archive artifacts</a></div><div class="gri'
-    'd"><section class=card><div class=form-grid><div><div class=muted>Status</div>\'+status(run.status)+\'</div><div><div clas'
-    "s=muted>Output</div><code>'+esc(run.output_directory||id)+'</code></div><div><div class=muted>Time</div>'+esc(run.starte"
-    "d_at||'—')+' / '+duration(run)+'</div><div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' "
-    "steps</div></div></section>';\n"
-    '    const visible=selectedProfile?Object.fromEntries(Object.entries(groups).filter(([key])=>key===selectedProfile)):grou'
-    'ps;\n'
-    '    content+=\'<section class="card run-tree"><h2>Queue</h2>\'+Object.entries(visible).map(([key,steps])=>\'<details open><'
-    'summary><a href="#run/\'+enc(id)+\'/profile/\'+enc(key)+\'">\'+esc(key)+\'</a></summary><table><tr><th>Affinity</th><th>Runs</'
-    "th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details>').join('')+'</section>';\n"
-    "    if(selectedProfile)content+='<section class=card><h2>Results chart</h2><p class=muted>Affinity variants are lines. C"
-    'hoose a common X axis, one or more Y metrics, and fixed values for the remaining dimensions.</p><div id=run-chart>Loadin'
-    "g summary data…</div></section>';\n"
-    "    const running=(run.steps||[]).find(step=>step.state==='running');\n"
-    "    content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+esc(runnin"
-    "g.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repeat+', elap"
-    "sed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout</h3><pre cl"
-    "ass=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc(run.tail?.std"
-    "err||'No stderr captured yet.')+'</pre></section></div>';\n"
+    '    const groups=profileGroups(run.steps||[]),profileKeys=Object.keys(groups),activeProfile=groups[selectedProfile]?sele'
+    "ctedProfile:profileKeys.length===1?profileKeys[0]:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
+    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}];if(activeProfile&&profileKeys.length>1)cr"
+    "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
+    "    let content=breadcrumbs(crumbs)+queueNotice+'<h1 class=page-title>'+esc(id)+'</h1><div class=toolbar><button id=ref"
+    "resh-run>Refresh</button>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
+    ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
+    "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
+    "unHref(id,'archive')+'\">Artifacts</a></div></details></div><div class=grid><section class=card><div class=form-grid><d"
+    "iv><div class=muted>Status</div>'+status(run.status)+'</div><div><div class=muted>Output</div><code>'+esc(run.output_di"
+    "rectory||id)+'</code></div><div><div class=muted>Time</div>'+esc(humanTime(run.started_at))+' / '+duration(run)+'</div>"
+    "<div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' steps</div></div></section>';\n"
+    "    if(run.state==='recovery_required')content+='<div class=\"notice error\"><strong>Interrupted.</strong> The web servi"
+    "ce restarted while this run was active. Verify that the previous benchmark process stopped before repeating it.</div>'"
+    ";\n"
+    "    if(profileKeys.length>1)content+='<nav class=run-tabs><a class=\"run-tab '+(!activeProfile?'active':'')+'\" href=\"#r"
+    "un/'+enc(id)+'\">Overview</a>'+profileKeys.map(key=>'<a class=\"run-tab '+(key===activeProfile?'active':'')+'\" href=\"#"
+    "run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a>').join('')+'</nav>';\n"
+    "    if(!activeProfile)content+='<section class=\"card profile-overview\"><h2>Profiles</h2><table><tr><th>Profile</th><th"
+    ">Progress</th><th>State</th><th>Affinity modes</th></tr>'+profileKeys.map(key=>{const steps=groups[key],done=steps.fil"
+    "ter(step=>!['pending','running'].includes(step.state)).length,affinities=new Set(steps.map(step=>step.affinity)).size;re"
+    "turn '<tr><td><a href=\"#run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a></td><td>'+done+' / '+steps.length+'</td"
+    "><td>'+status(aggregateState(steps))+'</td><td>'+affinities+'</td></tr>'}).join('')+'</table></section>';\n"
+    "    if(activeProfile)content+=activeBenchmark==='local-ydb'?'<section class=card><div class=run-section-title><h2>YDB "
+    "load search</h2><strong>'+esc(activeProfile)+'</strong></div><div id=local-ydb-result>Loading live search data…</div>"
+    "</section>':'<section class=card><div class=run-section-title><h2>Results</h2><strong>'+esc(activeProfile)+'</strong>"
+    "</div><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for "
+    "the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';\n"
+    "    if(activeProfile){const steps=groups[activeProfile],open=run.state==='running'?' open':'';content+='<section class=\""
+    "card run-tree\"><details'+open+'><summary><strong>Execution details</strong> — affinity, cases and artifacts</summary><"
+    "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
+    "    const running=(run.steps||[]).find(step=>step.state==='running'),live=['running','queued','failed','recovery_requir"
+    "ed'].includes(run.state);\n"
+    "    if(live)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
+    "sc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repe"
+    "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout"
+    "</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc"
+    "(run.tail?.stderr||'No stderr captured yet.')+'</pre></section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
-    "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedProfile);\n"
+    "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,activeProfile);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
     "    const cancel=document.querySelector('#cancel-run');\n"
-    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,select"
-    'edProfile)}catch(error){alert(error.message)}};\n'
-    "    if(selectedProfile){const pieces=selectedProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');try{mo"
-    "untChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,singleProfile:true})}"
-    'catch(error){documen'
-    "t.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
+    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,acti"
+    'veProfile)}catch(error){alert(error.message)}};\n'
+    "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
+    "benchmark==='local-ydb')await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),id,profile,run.state);"
+    "else try{mountChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,"
+    "singleProfile:true})}catch(error){document.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
     "  }catch(error){app.innerHTML=shell('runs',breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+di"
     'splayError(error))}\n'
     '}\n'
-    "function cpuBlock(label,index,cpus){return '<div class=cpu-block><small>'+esc(label)+' '+(index+1)+'</small><span class="
-    "cpu-ranges>'+esc(cpuRanges(cpus))+'</span></div>'}\n"
+    'function affinityPath(mode){if(mode===\'none\')return [\'No pinning\'];const parts=mode.split(\'-\'),result=[],labels={num'
+    "a:'NUMA',chiplet:'Chiplet',core:'Core'};for(let index=0;index<parts.length;index+=2)result.push((labels[parts[index+1]]||parts[index+1])+'"
+    ": '+parts[index]);return result}\n"
+    'function affinityTree(items){const root={children:new Map};for(const item of items){let node=root;for(const label of affi'
+    'nityPath(item.mode)){if(!node.children.has(label))node.children.set(label,{children:new Map,item:null});node=node.childr'
+    "en.get(label)}node.item=item}const render=node=>'<ul class=affinity-tree>'+[...node.children.entries()].map(([label,chi"
+    "ld])=>{const item=child.item,unavailable=item&&!item.supported;return '<li><div class=\"affinity-node '+(unavailable?'af"
+    "finity-unavailable':'')+'\"><strong>'+esc(label)+'</strong>'+(item?'<code>'+esc(item.mode)+'</code>':'')+(unavailable?"
+    "'<span class=availability-badge>Unavailable</span><span class=affinity-reason>'+esc(item.reason||'Not supported by thi"
+    "s topology.')+'</span>':'')+'</div>'+(child.ch"
+    "ildren.size?render(child):'')+'</li>'}).join('')+'</ul>';return render(root)}\n"
     'async function renderTopology(){\n'
     '  clearRefresh();\n'
     '  try{\n'
     "    const value=await api('/api/system-topology'),topology=value.topology;\n"
-    '    const chipletsByNode=new Map;\n'
+    '    const chipletsByNode=new Map,coreIndex=new Map,siblingsByCpu=new Map;\n'
     '    for(const chiplet of topology.chiplets)chipletsByNode.set(chiplet.numa_node,[...(chipletsByNode.get(chiplet.numa_nod'
     'e)||[]),chiplet]);\n'
+    '    topology.physical_cores.forEach((cpus,index)=>cpus.forEach(cpu=>coreIndex.set(cpu,{index,cpus})));for(const siblings '
+    'of topology.smt_siblings)for(const cpu of siblings)siblingsByCpu.set(cpu,siblings);\n'
+    '    const coresFor=cpus=>{const allowed=new Set(cpus),seen=new Set,result=[];for(const cpu of cpus){const core=coreIndex.'
+    'get(cpu);if(!core||seen.has(core.index))continue;seen.add(core.index);const visible=core.cpus.filter(item=>allowed.has(it'
+    'em)),siblings=[...new Set(visible.flatMap(item=>siblingsByCpu.get(item)||[item]))].filter(item=>allowed.has(item));resu'
+    'lt.push({...core,cpus:visible,siblings})}return result};\n'
+    "    const coreList=cpus=>'<ul class=core-list>'+coresFor(cpus).map(core=>'<li class=core-item><strong>Core '+core.index"
+    "+'</strong><span class=cpu-ranges>vCPU '+esc(cpuRanges(core.cpus))+'</span><small>'+(core.siblings.length>1?core.si"
+    "blings.length+' SMT threads':'1 hardware thread')+'</small></li>').join('')+'</ul>';\n"
     '    const numaBlocks=topology.numa_nodes.map(node=>{\n'
     '      const chiplets=chipletsByNode.get(node.id)||[];\n'
-    "      return '<article class=numa-block><div class=numa-header><strong>NUMA '+esc(node.id)+'</strong><small class=muted>"
-    "'+node.cpus.length+' CPUs</small></div><div class=cpu-ranges>'+esc(cpuRanges(node.cpus))+'</div>'+(chiplets.length?'<div"
-    " class=chiplet-list>'+chiplets.map((chiplet,index)=>'<div class=cpu-block><small>L3 / chiplet '+(index+1)+'</small><span"
-    " class=cpu-ranges>'+esc(cpuRanges(chiplet.cpus))+'</span></div>').join('')+'</div>':'')+'</article>'\n"
+    "      const children=chiplets.length?chiplets.map((chiplet,index)=>'<li><div class=topology-node><div class=topology-no"
+    "de-header><strong>'+esc(chiplet.label||'L3 / chiplet '+(index+1))+'</strong><span class=cpu-ranges>CPU '+esc(cpuRanges(chiplet.cpus))+'</span></"
+    "div>'+coreList(chiplet.cpus)+'</div></li>').join(''):'<li><div class=topology-node>'+coreList(node.cpus)+'</div></li>';"
+    "return '<article class=numa-block><div class=numa-header><strong>NUMA '+esc(node.id)+'</strong><small class=muted>'+node"
+    ".cpus.length+' CPUs</small></div><div class=cpu-ranges>CPU '+esc(cpuRanges(node.cpus))+'</div><ul class=topology-tree>'"
+    "+children+'</ul></article>'\n"
     "    }).join('');\n"
-    "    const blocks=(label,groups)=>groups.map((cpus,index)=>cpuBlock(label,index,cpus)).join('');\n"
     "    let content='<h1 class=page-title>System topology</h1><p class=muted>Only CPUs allowed by this process cpuset are sh"
     'own. Unsupported modes are never silently substituted.</p><section class="card topology-summary"><div><div class=metric>'
     "'+topology.allowed_cpus.length+' allowed CPUs</div><div class=muted>Compressed CPU ranges</div></div><div class=cpu-rang"
-    "es>'+esc(cpuRanges(topology.allowed_cpus))+'</div></section><section class=card><h2>NUMA and cache layout</h2><div class"
-    "=topology-map>'+numaBlocks+'</div></section><section class=card topology-level><details><summary>Physical cores ('+topol"
-    "ogy.physical_cores.length+')</summary><div class=cpu-block-grid>'+blocks('Core',topology.physical_cores)+'</div></detail"
-    "s></section><section class=card topology-level><details><summary>SMT sibling sets ('+topology.smt_siblings.length+')</su"
-    "mmary><div class=cpu-block-grid>'+blocks('SMT set',topology.smt_siblings)+'</div></details></section><section class=card"
-    "><h2>Affinity availability</h2><table><tr><th>Mode</th><th>Status</th><th>First mask</th><th>Reason</th><th></th></tr>'+"
-    "value.affinity.map(item=>'<tr><td><code>'+esc(item.mode)+'</code></td><td>'+status(item.supported?'passed':'unsupported'"
-    ")+'</td><td class=affinity-mask><code>'+esc(cpuRanges(item.cpus))+'</code></td><td>'+esc(item.reason||'')+'</td><td><but"
-    'ton data-mode="\'+esc(item.mode)+\'">Use in new run</button></td></tr>\').join(\'\')+\'</table></section>\'+(topology.hierarchy'
+    "es>'+esc(cpuRanges(topology.allowed_cpus))+'</div></section><section class=card><h2>NUMA, cache and cores</h2><p cla"
+    "ss=muted>Physical cores include their visible SMT thread count.</p><div class=topology-map>'+numaBlocks+'</div></section"
+    "><section class=card><h2>Affinity availability</h2>'+affinityTree(value.affinity)+'</section>'+(topology.hierarchy"
     "_reasons.length?'<section class=card><h2>Topology notes</h2><ul>'+topology.hierarchy_reasons.map(item=>'<li><strong>'+es"
     "c(item.level)+':</strong> '+esc(item.reason)+'</li>').join('')+'</ul></section>':'');\n"
     "    app.innerHTML=shell('topology',content);\n"
-    "    for(const button of document.querySelectorAll('[data-mode]'))button.onclick=()=>{const mode=button.dataset.mode;edit"
-    "or.yaml='ping-bench:\\n  topology-template:\\n    threads: [1]\\n    duration: 3\\n    repetitions: 1\\n    affinity: ['+mode"
-    "+']\\n';editor.selected=null;saveDraft();setRoute('new')}\n"
     "  }catch(error){app.innerHTML=shell('topology',displayError(error))}\n"
     '}\n'
     'async function renderComparisons(){\n'
@@ -864,6 +1555,8 @@ def benchmark_catalog():
         {
             "name": item.name,
             "description": item.description,
+            "builder_supported": item.builder_supported,
+            "profile_kind": item.profile_kind,
             "parameter_name": item.parameter_name,
             "parameter_description": item.parameter_description,
             "parameters": [
@@ -891,23 +1584,28 @@ def editor_model(loaded, output):
     profiles = []
     for configuration in loaded.runs:
         benchmark = configuration.benchmark
-        profiles.append(
-            {
-                "key": "{}/{}".format(benchmark.name, configuration.profile),
-                "benchmark": benchmark.name,
-                "name": configuration.profile,
-                "threads": list(configuration.threads),
-                "parameters": {name: list(values) for name, values in configuration.parameters.items()},
-                "duration": configuration.duration_seconds,
-                "repetitions": configuration.repetitions,
-                "timeout": configuration.timeout_seconds if configuration.timeout_explicit else None,
-                "affinity": list(configuration.affinity_modes),
-            }
-        )
+        profile = {
+            "key": "{}/{}".format(benchmark.name, configuration.profile),
+            "benchmark": benchmark.name,
+            "name": configuration.profile,
+            "threads": list(configuration.threads),
+            "parameters": {},
+            "duration": configuration.duration_seconds,
+            "repetitions": configuration.repetitions,
+            "timeout": configuration.timeout_seconds if configuration.timeout_explicit else None,
+            "affinity": list(configuration.affinity_modes),
+            "background_load": list(configuration.background_load_modes),
+        }
+        if benchmark.profile_kind == "local-ydb":
+            profile["local_ydb"] = configuration.parameters["local_ydb"]
+        else:
+            profile["parameters"] = {name: list(values) for name, values in configuration.parameters.items()}
+        profiles.append(profile)
     return {
         "output": str(Path(output).resolve()),
         "benchmarks": benchmark_catalog(),
         "affinity_modes": list(AFFINITY_MODES),
+        "background_load_modes": list(BACKGROUND_LOAD_MODES),
         "profiles": profiles,
     }
 
@@ -1236,6 +1934,7 @@ class RunService:
                 "benchmark": s.benchmark,
                 "profile": s.profile,
                 "affinity": s.affinity,
+                "background_load": s.background_load,
                 "threads": s.threads,
                 "case": s.case,
                 "parameters": s.parameters,
@@ -1251,6 +1950,7 @@ class RunService:
                 "output": str(self.output),
                 "benchmarks": benchmark_catalog(),
                 "affinity_modes": list(AFFINITY_MODES),
+                "background_load_modes": list(BACKGROUND_LOAD_MODES),
                 "profiles": [],
             }
         loaded = self._load(yaml_text, perf)
@@ -1363,12 +2063,18 @@ class RunService:
         event = dict(event)
         event["sequence"] = run["store"].manifest.get("events", 0) + 1
         event["at"] = _utc_now()
+        try:
+            serialized_event = json.dumps(event, sort_keys=True, allow_nan=False)
+        except ValueError as error:
+            raise BenchmarkError("event contains a non-finite JSON number") from error
         if event.get("type") in ("stdout", "stderr"):
             key = event["type"]
             run["tail"][key] = (run["tail"][key] + str(event.get("data", "")))[-self.tail_limit :]
         step_id = event.get("step_id")
         if event.get("type") == "step-started" and step_id:
             run["store"].transition_step(step_id, "running", **event.get("fields", {}))
+        if event.get("type") == "step-progress" and step_id:
+            run["store"].update_step(step_id, **event.get("fields", {}))
         if event.get("type") == "step-artifacts" and step_id:
             run["store"].add_artifacts(step_id, event.get("artifacts", []))
             for artifact in event.get("artifacts", []):
@@ -1385,7 +2091,7 @@ class RunService:
         run["events"].append(event)
         run["store"].manifest["events"] = event["sequence"]
         with (run["root"] / "events.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(event, sort_keys=True) + "\n")
+            stream.write(serialized_event + "\n")
         run["store"].write()
 
     def _unsupported_executor(self, run, emit, cancelled):
@@ -1420,6 +2126,10 @@ class RunService:
         elif run["failed"]:
             self._cancel_unfinished(run)
             state, status = "failed", "failed"
+        elif run["store"].manifest["runs"] and all(
+            profile.get("status") == "unsupported" for profile in run["store"].manifest["runs"]
+        ):
+            state, status = "unsupported", "unsupported"
         else:
             # An executor is not allowed to report a completed run with a
             # hidden pending step.  Keep the durable queue terminal even for a
@@ -1551,7 +2261,15 @@ class RunService:
                 return False
             return True
 
-        return [record for record in self.model().values() if matches(record)]
+        records = [record for record in self.model().values() if matches(record)]
+        return sorted(
+            records,
+            key=lambda record: (
+                record.get("queued_at") or record.get("started_at") or record.get("finished_at") or "",
+                record["id"],
+            ),
+            reverse=True,
+        )
 
     def save_draft(self, yaml_text):
         # Store only generated IDs under the configured result root; the API
@@ -1591,6 +2309,106 @@ class RunService:
     def chart_data(self, run_ids):
         return chart_data(self.output, run_ids)
 
+    def local_ydb_profile(self, run_id, profile):
+        root = _run_directory(self.output, run_id)
+        manifest = load_manifest(root / "run.json")
+        steps = [
+            item
+            for item in manifest.get("steps", [])
+            if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+        ]
+        record = next(
+            (
+                item
+                for item in manifest.get("runs", [])
+                if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+            ),
+            None,
+        )
+
+        def unavailable_profile(record_status=None, error=None):
+            state_by_status = {
+                "completed": "passed",
+                "interrupted": "cancelled",
+                "pending": "preparing",
+                "queued": "preparing",
+                "running": "preparing",
+            }
+            if record_status:
+                state = state_by_status.get(record_status, record_status)
+                status = record_status
+            elif any(item.get("state") == "running" for item in steps):
+                state = status = "preparing"
+            elif any(item.get("state") == "failed" for item in steps):
+                state = status = "failed"
+            elif any(item.get("state") == "pending" for item in steps):
+                state = status = "preparing"
+            elif any(item.get("state") == "cancelled" for item in steps):
+                state = status = "cancelled"
+            elif steps and all(item.get("state") == "unsupported" for item in steps):
+                state = status = "unsupported"
+            else:
+                state, status = "passed", "completed"
+
+            top_state = manifest.get("state")
+            if state == "preparing" and top_state not in ("pending", "queued", "running"):
+                state = top_state or "failed"
+                status = manifest.get("status") or state
+
+            value = {
+                "benchmark": "local-ydb",
+                "profile": profile,
+                "status": status,
+                "state": state,
+            }
+            step_error = next(
+                (item.get("error") or item.get("reason") for item in steps if item.get("error") or item.get("reason")),
+                None,
+            )
+            error = error or step_error or (manifest.get("error") if state not in ("preparing", "passed") else None)
+            if error:
+                value["error"] = error
+            return value
+
+        if record is None:
+            if steps:
+                return unavailable_profile()
+            raise BenchmarkError("local-ydb profile not found: {}".format(profile))
+        relative = record.get("manifest") or str(Path(record.get("directory", "")) / "run.json")
+        unresolved = root / relative
+        candidate = unresolved.resolve()
+        if candidate == root or root not in candidate.parents or unresolved.is_symlink():
+            raise BenchmarkError("local-ydb profile manifest escapes the run directory")
+        if not candidate.is_file():
+            return unavailable_profile(record.get("status"), record.get("error"))
+        if candidate.stat().st_size > 16 * 1024 * 1024:
+            raise BenchmarkError("local-ydb profile manifest is too large")
+        value = load_manifest(candidate)
+        top_state = manifest.get("state")
+        if value.get("state") in ("preparing", "running") and top_state not in ("pending", "queued", "running"):
+            value["state"] = top_state or "failed"
+            value["status"] = manifest.get("status") or value["state"]
+            if manifest.get("error"):
+                value["error"] = manifest["error"]
+        fields = (
+            "schema_version",
+            "benchmark",
+            "profile",
+            "status",
+            "state",
+            "started_at",
+            "finished_at",
+            "parameters",
+            "timeout_seconds",
+            "role_affinity",
+            "progress",
+            "attempts",
+            "searches",
+            "result",
+            "error",
+        )
+        return {name: value[name] for name in fields if name in value}
+
     def comparisons(self, selected=None):
         model = self.model()
         if selected is None:
@@ -1621,17 +2439,43 @@ class RunService:
         return item
 
     def events(self, run_id, after=0):
+        path = _run_directory(self.output, run_id) / "events.jsonl"
         with self._lock:
             run = self._runs.get(run_id)
         if run:
             with run["lock"]:
-                return [dict(e) for e in run["events"] if e["sequence"] > after]
-        path = _run_directory(self.output, run_id) / "events.jsonl"
+                live_events = [dict(event) for event in run["events"]]
+                last_sequence = run["store"].manifest.get("events", 0)
+                if after >= last_sequence:
+                    return []
+                if live_events and after >= live_events[0]["sequence"] - 1:
+                    return [event for event in live_events if event["sequence"] > after]
+                if path.is_symlink():
+                    raise BenchmarkError("run event log must be a regular file")
+                try:
+                    snapshot_size = path.stat().st_size
+                except FileNotFoundError:
+                    return [event for event in live_events if event["sequence"] > after]
+            # Capture the byte boundary while emissions are locked, then read
+            # outside the lock.  Later appends belong to the next poll and
+            # cannot expose a partially written JSON line in this replay.
+            with path.open("rb") as stream:
+                payload = stream.read(snapshot_size)
+            return [
+                event
+                for line in payload.decode("utf-8").splitlines()
+                if (event := json.loads(line, parse_constant=_non_finite_json_as_null))["sequence"] > after
+            ]
+        if path.is_symlink():
+            raise BenchmarkError("run event log must be a regular file")
         if not path.is_file():
             return []
+        snapshot_size = path.stat().st_size
+        with path.open("rb") as stream:
+            payload = stream.read(snapshot_size)
         events = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            event = json.loads(line)
+        for line in payload.decode("utf-8").splitlines():
+            event = json.loads(line, parse_constant=_non_finite_json_as_null)
             if event["sequence"] > after:
                 events.append(event)
         return events
@@ -1645,11 +2489,18 @@ def production_executor(resource_loader, tool_revision):
             raise BenchmarkError("the benchmark executable resource loader is not configured")
         with tempfile.TemporaryDirectory(prefix="ydb-bench-web-") as work:
             binaries = {}
+            background_binary = None
+            if any("none" != mode for config in run["loaded"].runs for mode in config.background_load_modes):
+                background_binary = extract_executable(resource_loader("background_load"), work, "background_load")
             for configuration in run["loaded"].runs:
-                resource_name = configuration.benchmark.resource_name
-                if resource_name not in binaries:
-                    binaries[resource_name] = extract_executable(resource_loader(resource_name), work, resource_name)
-                binary = binaries[resource_name]
+                profile_binaries = {}
+                for resource_name in configuration.benchmark.resources:
+                    if resource_name not in binaries:
+                        binaries[resource_name] = extract_executable(
+                            resource_loader(resource_name), work, resource_name
+                        )
+                    profile_binaries[resource_name] = binaries[resource_name]
+                binary = profile_binaries[configuration.benchmark.resource_name]
                 if cancelled.is_set():
                     return
                 relative = Path(configuration.benchmark.name) / configuration.profile
@@ -1678,6 +2529,7 @@ def production_executor(resource_loader, tool_revision):
                                 if step["benchmark"] == configuration.benchmark.name
                                 and step["profile"] == configuration.profile
                                 and step["affinity"] == item["affinity"]
+                                and step.get("background_load", "none") == item.get("background_load", "none")
                                 and step["threads"] == item["threads"]
                                 and step["case"] == item["case"]
                                 and step["repeat"] == item["repeat"]
@@ -1687,15 +2539,27 @@ def production_executor(resource_loader, tool_revision):
                         emit(item)
 
                 try:
-                    profile = run_benchmark(
-                        binary,
-                        configuration,
-                        directory,
-                        tool_revision,
-                        work_dir_hint=work,
-                        event_sink=event,
-                        cancel_event=cancelled,
-                    )
+                    if configuration.benchmark.executor == "local-ydb":
+                        profile = run_local_ydb(
+                            profile_binaries,
+                            configuration,
+                            directory,
+                            tool_revision,
+                            work_dir_hint=work,
+                            event_sink=event,
+                            cancel_event=cancelled,
+                        )
+                    else:
+                        profile = run_benchmark(
+                            binary,
+                            configuration,
+                            directory,
+                            tool_revision,
+                            work_dir_hint=work,
+                            event_sink=event,
+                            cancel_event=cancelled,
+                            background_binary=background_binary,
+                        )
                 except BenchmarkInterrupted:
                     with run["lock"]:
                         if run["finalized"]:
@@ -1738,7 +2602,7 @@ def production_executor(resource_loader, tool_revision):
                         return
                     run["store"].manifest["runs"][-1].update(
                         {
-                            "status": "completed",
+                            "status": profile.get("status", "completed"),
                             "manifest": str(relative / "run.json"),
                             "summary": str(relative / profile["summary"]),
                         }
@@ -1765,7 +2629,12 @@ def _handler(service):
             self.wfile.write(body)
 
         def _json(self, status, value):
-            self._send(status, "application/json", json.dumps(value).encode())
+            try:
+                body = json.dumps(value, allow_nan=False).encode()
+            except ValueError:
+                status = 500
+                body = b'{"error": "response contains a non-finite JSON number"}'
+            self._send(status, "application/json", body)
 
         def _attachment(self, content_type, filename, body):
             self._send(200, content_type, body, {"Content-Disposition": _content_disposition(filename)})
@@ -1868,6 +2737,16 @@ def _handler(service):
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
                 return self._json(200, service.chart_data(parse_qs(parsed.query).get("run", [])))
+            if path.startswith("/api/runs/") and path.endswith("/local-ydb-profile"):
+                run_id = unquote(path[len("/api/runs/") : -len("/local-ydb-profile")])
+                profile = parse_qs(parsed.query).get("profile", [""])[-1]
+                if not profile:
+                    return self._json(400, {"error": "local-ydb profile is required"})
+                try:
+                    value = service.local_ydb_profile(run_id, profile)
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
+                return self._json(202 if value.get("state") == "preparing" else 200, value)
             if path.startswith("/api/runs/") and path.endswith("/config.json"):
                 return self._json(200, service.run_config(unquote(path[len("/api/runs/") : -len("/config.json")])))
             if path.startswith("/api/runs/") and path.endswith("/config"):
@@ -1881,10 +2760,14 @@ def _handler(service):
             if path.startswith("/api/runs/") and path.endswith("/manifest"):
                 run_id = unquote(path[len("/api/runs/") : -len("/manifest")])
                 manifest = load_manifest(_run_directory(service.output, run_id) / "run.json")
+                try:
+                    body = (json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
+                except ValueError:
+                    return self._json(500, {"error": "run manifest contains a non-finite JSON number"})
                 return self._attachment(
                     "application/json",
                     "{}-run.json".format(run_id.replace("/", "-")),
-                    (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode(),
+                    body,
                 )
             if path.startswith("/api/runs/") and path.endswith("/archive"):
                 run_id = unquote(path[len("/api/runs/") : -len("/archive")])
@@ -1904,10 +2787,16 @@ def _handler(service):
                 except ValueError:
                     return self._json(400, {"error": "events after must be an integer"})
                 events = service.events(run_id, after)
-                payload = (
-                    b"".join(("id: %s\ndata: %s\n\n" % (e["sequence"], json.dumps(e))).encode() for e in events)
-                    or b": connected\n\n"
-                )
+                try:
+                    payload = (
+                        b"".join(
+                            ("id: %s\ndata: %s\n\n" % (event["sequence"], json.dumps(event, allow_nan=False))).encode()
+                            for event in events
+                        )
+                        or b": connected\n\n"
+                    )
+                except ValueError:
+                    return self._json(500, {"error": "event log contains a non-finite JSON number"})
                 return self._send(200, "text/event-stream", payload)
             if path.startswith("/api/runs/"):
                 item = service.detail(unquote(path[len("/api/runs/") :]))

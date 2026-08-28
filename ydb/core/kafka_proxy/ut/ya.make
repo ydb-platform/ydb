@@ -26,6 +26,8 @@ SRCS(
     ut_transaction_actor.cpp
     ut_produce_actor.cpp
     actors_ut.cpp
+    ut_consumer_protocol.cpp
+    ut_authz.cpp
 )
 
 PEERDIR(

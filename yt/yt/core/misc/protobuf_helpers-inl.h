@@ -372,7 +372,7 @@ void ToProtoArrayImpl(
     const TEnumIndexedArray<E, T, Min, Max>& originalArray)
 {
     serializedArray->Clear();
-    for (auto key : TEnumTraits<E>::GetDomainValues()) {
+    for (auto key : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (originalArray.IsValidIndex(key)) {
             const auto& value = originalArray[key];
             auto* pair = serializedArray->Add();
@@ -387,7 +387,7 @@ void FromProtoArrayImpl(
     TEnumIndexedArray<E, T, Min, Max>* originalArray,
     const TSerializedArray& serializedArray)
 {
-    for (auto key : TEnumTraits<E>::GetDomainValues()) {
+    for (auto key : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (originalArray->IsValidIndex(key)) {
             (*originalArray)[key] = T{};
         }

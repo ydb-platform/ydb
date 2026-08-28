@@ -238,6 +238,95 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
     }
 
+    TString GetTaskDebugState() const final {
+        auto diagnostics = TStringBuilder() << TBase::GetTaskDebugState();
+
+        ui64 emptySources = 0;
+        ui64 bytesInSources = 0;
+        i64 sourcesFreeSpace = 0;
+        for (const auto& [_, sourceInfo] : this->SourcesMap) {
+            if (sourceInfo.Buffer) {
+                emptySources += sourceInfo.Buffer->Empty();
+                bytesInSources += sourceInfo.Buffer->GetStoredBytes();
+                sourcesFreeSpace += sourceInfo.Buffer->GetFreeSpace();
+            }
+        }
+
+        ui64 checkpointedInputChannels = 0;
+        ui64 emptyInputChannels = 0;
+        ui64 finishedOrPausedInputChannels = 0;
+        ui64 bytesInInputChannels = 0;
+        i64 inputChannelsFreeSpace = 0;
+        for (const auto& [_, channelInfo] : this->InputChannelsMap) {
+            if (channelInfo.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                checkpointedInputChannels++;
+
+                if (channelInfo.Channel) {
+                    emptyInputChannels += channelInfo.Channel->Empty();
+                    finishedOrPausedInputChannels += channelInfo.IsPaused() || channelInfo.Channel->IsFinished();
+                    bytesInInputChannels += channelInfo.Channel->GetStoredBytes();
+                    inputChannelsFreeSpace += channelInfo.Channel->GetFreeSpace();
+                }
+            }
+        }
+
+        ui64 emptyInputTransforms = 0;
+        ui64 pendingInputTransforms = 0;
+        ui64 bytesInInputTransforms = 0;
+        i64 inputTransformsFreeSpace = 0;
+        for (const auto& [_, transformInfo] : this->InputTransformsMap) {
+            if (const auto buffer = transformInfo.Buffer) {
+                emptyInputTransforms += buffer->Empty();
+                pendingInputTransforms += buffer->IsPending();
+                bytesInInputTransforms += buffer->GetStoredBytes();
+                inputTransformsFreeSpace += buffer->GetFreeSpace();
+            }
+        }
+
+        diagnostics << "Inputs state. ["
+            << "Channels paused or finished: " << finishedOrPausedInputChannels << " / " << checkpointedInputChannels
+            << ". Channels empty: " << emptyInputChannels << " / " << checkpointedInputChannels << " (stored bytes: " << bytesInInputChannels << ", fs: " << inputChannelsFreeSpace << ")"
+            << ". Sources empty: " << emptySources << " / " << this->SourcesMap.size() << " (stored bytes: " << bytesInSources << ", fs: " << sourcesFreeSpace << ")"
+            << ". Transforms empty: " << emptyInputTransforms << " / " << this->InputTransformsMap.size() << " (stored bytes: " << bytesInInputTransforms << ", fs: " << inputTransformsFreeSpace << ")"
+            << ". Transforms pending: " << pendingInputTransforms << " / " << this->InputTransformsMap.size()
+            << "] ";
+
+        const auto getOutputStats = [](const auto& objects, const auto outputInfoExtractor) -> TString {
+            ui64 noLimit = 0;
+            ui64 softLimit = 0;
+            ui64 hardLimit = 0;
+            for (const auto& [_, info] : objects) {
+                if (const auto& output = outputInfoExtractor(info)) {
+                    switch (output->GetFillLevel()) {
+                        case NoLimit:
+                            noLimit++;
+                            break;
+                        case SoftLimit:
+                            softLimit++;
+                            break;
+                        case HardLimit:
+                            hardLimit++;
+                            break;
+                    }
+                }
+            }
+
+            return TStringBuilder() << " no + soft + hard limit: {" << noLimit << " + " << softLimit << " + " << hardLimit << "} / " << objects.size();
+        };
+
+        diagnostics
+            << "Outputs state. [Channels ready: " << this->ProcessOutputsState.ChannelsReady
+            << ". Has data to send: " << this->ProcessOutputsState.HasDataToSend
+            << ". Data was sent: " << this->ProcessOutputsState.DataWasSent
+            << ". All outputs finished: " << this->ProcessOutputsState.AllOutputsFinished
+            << ". Channels: " << getOutputStats(this->OutputChannelsMap, [](const auto& info) { return info.Channel; })
+            << ". Sinks: " << getOutputStats(this->SinksMap, [](const auto& info) { return info.Buffer; })
+            << ". Transforms: " << getOutputStats(this->OutputTransformsMap, [](const auto& info) { return info.OutputBuffer; })
+            << "] ";
+
+        return diagnostics;
+    }
+
 protected:
     void DoLoadRunnerState(TString&& blob) override {
         TMaybe<TString> error = Nothing();

@@ -787,8 +787,8 @@ message TReqPushQueueProducer
     optional int64 epoch = 5;
     optional bytes user_meta = 6; // YSON
     optional int64 sequence_number = 7;
-
     optional bool require_sync_replica = 8;
+    optional bytes format = 9; // YSON-serialized TFormat
 
     required TRowsetDescriptor rowset_descriptor = 200;
 }

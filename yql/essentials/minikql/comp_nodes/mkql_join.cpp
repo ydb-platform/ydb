@@ -92,7 +92,7 @@ public:
             return false;
         }
 
-        FileState_.reset(new TFileState);
+        FileState_ = std::make_unique<TFileState>();
         OpenWrite();
         for (ui32 i = 0; i < Count_; ++i) {
             Write(std::move(InMemory(i)));
@@ -277,7 +277,7 @@ private:
 
     void OpenWrite() {
         Logger_->Log(LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "Spill started at " << Count_ << " items to " << FileState_->File.GetName());
-        FileState_->Output.reset(new TFixedBufferFileOutput(FileState_->File.GetName()));
+        FileState_->Output = std::make_unique<TFixedBufferFileOutput>(FileState_->File.GetName());
         FileState_->Output->SetFlushPropagateMode(false);
         FileState_->Output->SetFinishPropagateMode(false);
     }
@@ -294,7 +294,7 @@ private:
 
     void OpenRead() {
         FileState_->Input.reset();
-        FileState_->Input.reset(new TFileInput(FileState_->File.GetName()));
+        FileState_->Input = std::make_unique<TFileInput>(FileState_->File.GetName());
     }
 
     NUdf::TUnboxedValue Read(TComputationContext& ctx) {
@@ -307,7 +307,6 @@ private:
         return ReadValue_ = ItemPacker_.Unpack(TStringBuf(FileState_->Buffer.Data(), length), ctx.HolderFactory);
     }
 
-private:
     const NUdf::TLoggerPtr Logger_;
     const NUdf::TLogComponentId LogComponent_;
     const size_t Width_;
@@ -534,20 +533,20 @@ public:
                     }
                         continue;
                     case EOutputMode::LeftNull:
-                        if (const auto item = List2_.Next(ctx); item.IsSpecial()) {
+                        if (auto item = List2_.Next(ctx); item.IsSpecial()) {
                             return item;
                         } else {
                             return PrepareNullItem<true>(ctx, item);
                         }
                     case EOutputMode::RightNull:
-                        if (const auto item = List1_.Next(ctx); item.IsSpecial()) {
+                        if (auto item = List1_.Next(ctx); item.IsSpecial()) {
                             return item;
                         } else {
                             return PrepareNullItem<false>(ctx, item);
                         }
                     case EOutputMode::BothNull:
                         if (CrossMove1_) {
-                            if (const auto item = List1_.Next(ctx); item.IsFinish()) {
+                            if (auto item = List1_.Next(ctx); item.IsFinish()) {
                                 CrossMove1_ = false;
                             } else if (item.IsYield()) {
                                 return item;
@@ -556,7 +555,7 @@ public:
                             }
                         }
 
-                        if (const auto item = List2_.Next(ctx); item.IsSpecial()) {
+                        if (auto item = List2_.Next(ctx); item.IsSpecial()) {
                             return item;
                         } else {
                             return PrepareNullItem<true>(ctx, item);
@@ -675,7 +674,6 @@ public:
             }
         }
 
-    private:
         const TSelf* const Self_;
         bool EatInput_;
         bool KeyHasNulls_;
@@ -1158,7 +1156,6 @@ public:
             }
         }
 
-    private:
         const TSelf* const Self_;
         TFetcher Fetcher_;
         bool EatInput_;
@@ -1515,7 +1512,7 @@ public:
             return false;
         }
 
-        FileState_.reset(new TFileState);
+        FileState_ = std::make_unique<TFileState>();
         OpenWrite();
         for (ui32 i = 0; i < Count_; ++i) {
             Write(std::move(InMemory(i)));
@@ -1652,7 +1649,7 @@ private:
 
     void OpenWrite() {
         Logger_->Log(LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "Spill started at " << Count_ << " items to " << FileState_->File.GetName());
-        FileState_->Output.reset(new TFixedBufferFileOutput(FileState_->File.GetName()));
+        FileState_->Output = std::make_unique<TFixedBufferFileOutput>(FileState_->File.GetName());
         FileState_->Output->SetFlushPropagateMode(false);
         FileState_->Output->SetFinishPropagateMode(false);
     }
@@ -1669,7 +1666,7 @@ private:
 
     void OpenRead() {
         FileState_->Input.reset();
-        FileState_->Input.reset(new TFileInput(FileState_->File.GetName()));
+        FileState_->Input = std::make_unique<TFileInput>(FileState_->File.GetName());
     }
 
     NUdf::TUnboxedValue Read() {
@@ -1682,7 +1679,6 @@ private:
         return ItemPacker_.Unpack(TStringBuf(FileState_->Buffer.Data(), length), Ctx_->HolderFactory);
     }
 
-private:
     const NUdf::TLoggerPtr Logger_;
     const NUdf::TLogComponentId LogComponent_;
     TValuePacker& ItemPacker_;
@@ -2074,7 +2070,6 @@ public:
             }
         }
 
-    private:
         NUdf::TUnboxedValue Stream_;
         TComputationContext& Ctx_;
         const TSelf* const Self_;

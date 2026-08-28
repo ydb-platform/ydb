@@ -1,6 +1,7 @@
 #include "kafka_offset_fetch_actor.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 
 #include <ydb/core/kafka_proxy/actors/kafka_create_topics_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_service.h>
@@ -92,33 +93,38 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
         }
         converted->PartitionIdToOffsets = std::move(offsets);
     }
+    if (converted->Status == NONE_ERROR) {
+        Context->RememberTopicAclOk(topicName);
+    } else if (converted->Status == UNKNOWN_TOPIC_OR_PARTITION && Context->HadTopicAclOk(topicName)) {
+        converted->Status = TOPIC_AUTHORIZATION_FAILED;
+    }
+    const bool topicExists = converted->Status == NONE_ERROR;
     TopicsToResponses[topicName].Reset(converted.Release());
-    bool topicNotCreatedYet = false;
     auto& topicGroupRequests = GroupRequests[topicName];
     for (const auto& [topicRequest, groupId] : topicGroupRequests) {
-        if (topicNotCreatedYet) {
-            break;
-        }
-        auto topicResponse = GetOffsetResponseForTopic(topicRequest, groupId);
-        for (const auto& topicPartition : topicResponse.Partitions) {
-            TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
-            TString topicPath = NormalizePath(DatabasePath, topicName);
-            if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&
-                Context->Config.GetAutoCreateConsumersEnable()) {
-                // consumer is not assigned to the topic case
-                TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
-                                                                        topicPath,
-                                                                        topicName,
-                                                                        groupId);
-                break;
-            } else if (topicPartition.ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION &&
-                        Context->Config.GetAutoCreateTopicsEnable()) {
-                // topic or partition does not exist case
-                CreateTopicIfNecessary(topicName, *topicRequest.Name, ctx);
-                topicNotCreatedYet = true;
-                break;
+        TString topicNameWithoutDb = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
+        TString topicPath = NormalizePath(DatabasePath, topicNameWithoutDb);
+        if (topicExists && Context->Config.GetAutoCreateConsumersEnable()) {
+            auto partitionsToOffsets = TopicsToResponses[topicName]->PartitionIdToOffsets;
+            bool consumerOnTopic = false;
+            if (partitionsToOffsets) {
+                for (const auto& [_, consumers] : *partitionsToOffsets) {
+                    if (consumers.contains(groupId)) {
+                        consumerOnTopic = true;
+                        break;
+                    }
+                }
+            }
+            if (!consumerOnTopic) {
+                CreateConsumerGroupIfNecessary(topicNameWithoutDb, topicPath, topicNameWithoutDb, groupId);
             }
         }
+        // Do not auto-create a topic reported as unknown. Apache Kafka OffsetFetch never creates
+        // topics (auto.create.topics.enable applies to Metadata, not OffsetFetch). For a missing
+        // topic/partition the group coordinator returns NONE + committedOffset -1; see
+        // https://issues.apache.org/jira/browse/KAFKA-20165. Scheme cache also uses "unknown" to
+        // hide topics without DescribeSchema; auto-create on that path would grant access. If this
+        // connection already saw the topic with access, the unknown describe is mapped to AUTH.
     }
     if (InflyTopics == 0) {
         auto response = GetOffsetFetchResponse();
@@ -261,13 +267,11 @@ void TKafkaOffsetFetchActor::ParseGroupsAssignments(const NKqp::TEvKqp::TEvQuery
         TString groupId = parser.ColumnParser("consumer_group").GetUtf8().c_str();
         if (!assignmentStr.empty()) {
             TKafkaBytes assignment = assignmentStr;
-            TKafkaVersion version = *(TKafkaVersion*)(assignment.value().data() + sizeof(TKafkaVersion));
-            TBuffer buffer(assignment.value().data() + sizeof(TKafkaVersion), assignment.value().size_bytes() - sizeof(TKafkaVersion));
-            TKafkaReadable readable(buffer);
-
-            TConsumerProtocolAssignment consumerAssignment;
-            consumerAssignment.Read(readable, version);
-            assignments.emplace_back(groupId, consumerAssignment);
+            auto consumerAssignment = TryReadConsumerProtocolBlob<TConsumerProtocolAssignment>(assignment);
+            if (!consumerAssignment) {
+                continue;
+            }
+            assignments.emplace_back(groupId, *consumerAssignment);
         }
     }
 }
@@ -302,7 +306,7 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
     };
     NKikimr::NGRpcService::DoAlterTopicRequest(
         std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-        topicName, DatabasePath, std::move(request), callback, Context->UserToken),
+        topicName, DatabasePath, std::move(request), callback, Context->Token.UserToken),
         NKikimr::NReplication::TLocalProxyActor(DatabasePath));
 
 }
@@ -325,7 +329,7 @@ void TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
     TContext::TPtr ContextForTopicCreation;
     ContextForTopicCreation = std::make_shared<TContext>(TContext(*Context));
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
-    ContextForTopicCreation->UserToken = Context->UserToken;
+    ContextForTopicCreation->Token.UserToken = Context->Token.UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
     ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     ContextForTopicCreation->RequireAuthentication = Context->RequireAuthentication;
@@ -454,7 +458,7 @@ void TKafkaOffsetFetchActor::RegisterOffsetsActor(const TString& topicName, cons
         .Path = NormalizePath(Context->DatabasePath, topicName),
         .Database = Context->DatabasePath,
         .Token = GetUserSerializedToken(Context),
-        .SelectRowToken = Context->UserToken ? Context->UserToken->GetSerializedToken() : TString(),
+        .SelectRowToken = GetUserSerializedToken(Context),
         .PartitionIds = TVector<ui32>(entities.Partitions->begin(), entities.Partitions->end()),
         .Consumers = TVector<TString>(entities.Consumers->begin(), entities.Consumers->end()),
         .RequireSelectRow = true,

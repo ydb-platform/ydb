@@ -1,6 +1,5 @@
 import asyncio
 import socket
-import sys
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from .abc import AbstractResolver, ResolveResult
@@ -19,7 +18,9 @@ except ImportError:  # pragma: no cover
 
 _NUMERIC_SOCKET_FLAGS = socket.AI_NUMERICHOST | socket.AI_NUMERICSERV
 _NAME_SOCKET_FLAGS = socket.NI_NUMERICHOST | socket.NI_NUMERICSERV
-_SUPPORTS_SCOPE_ID = sys.version_info >= (3, 9, 0)
+_AI_ADDRCONFIG = socket.AI_ADDRCONFIG
+if hasattr(socket, "AI_MASK"):
+    _AI_ADDRCONFIG &= socket.AI_MASK
 
 
 class ThreadedResolver(AbstractResolver):
@@ -40,7 +41,7 @@ class ThreadedResolver(AbstractResolver):
             port,
             type=socket.SOCK_STREAM,
             family=family,
-            # flags=socket.AI_ADDRCONFIG,
+            # flags=_AI_ADDRCONFIG,
         )
 
         hosts: List[ResolveResult] = []
@@ -50,7 +51,7 @@ class ThreadedResolver(AbstractResolver):
                     # IPv6 is not supported by Python build,
                     # or IPv6 is not enabled in the host
                     continue
-                if address[3] and _SUPPORTS_SCOPE_ID:
+                if address[3]:
                     # This is essential for link-local IPv6 addresses.
                     # LL IPv6 is a VERY rare case. Strictly speaking, we should use
                     # getnameinfo() unconditionally, but performance makes sense.
@@ -87,7 +88,7 @@ class AsyncResolver(AbstractResolver):
         self,
         loop: Optional[asyncio.AbstractEventLoop] = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         if aiodns is None:
             raise RuntimeError("Resolver requires aiodns library")
@@ -107,7 +108,7 @@ class AsyncResolver(AbstractResolver):
                 port=port,
                 type=socket.SOCK_STREAM,
                 family=family,
-                flags=socket.AI_ADDRCONFIG,
+                flags=_AI_ADDRCONFIG,
             )
         except aiodns.error.DNSError as exc:
             msg = exc.args[1] if len(exc.args) >= 1 else "DNS lookup failed"
@@ -117,7 +118,7 @@ class AsyncResolver(AbstractResolver):
             address: Union[Tuple[bytes, int], Tuple[bytes, int, int, int]] = node.addr
             family = node.family
             if family == socket.AF_INET6:
-                if len(address) > 3 and address[3] and _SUPPORTS_SCOPE_ID:
+                if len(address) > 3 and address[3]:
                     # This is essential for link-local IPv6 addresses.
                     # LL IPv6 is a VERY rare case. Strictly speaking, we should use
                     # getnameinfo() unconditionally, but performance makes sense.

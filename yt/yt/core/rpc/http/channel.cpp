@@ -178,6 +178,7 @@ private:
             const IClientRequestPtr& request,
             IClientResponseHandlerPtr responseHandler)
         {
+            request->Header().set_start_time(ToProto(TInstant::Now()));
             auto httpRequestHeaders = TranslateRequest(request);
 
             auto protocol = channel->IsHttps_ ? "https" : "http";
@@ -319,6 +320,10 @@ private:
             if (rpcHeader.has_request_id()) {
                 auto requestId = FromProto<TRequestId>(rpcHeader.request_id());
                 httpHeaders->Add(RequestIdHeaderName, ToString(requestId));
+            }
+
+            if (rpcHeader.has_start_time()) {
+                httpHeaders->Add(StartTimeHeaderName, ToString(rpcHeader.start_time()));
             }
 
             if (rpcHeader.HasExtension(NRpc::NProto::TCredentialsExt::credentials_ext)) {

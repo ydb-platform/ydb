@@ -233,13 +233,9 @@ private:
             return;
         }
 
-        YT_LOG_EVENT(
-            GrpcInternalLogger,
-            level,
-            "%v (File: %v, Line: %v)",
-            args->message,
-            args->file,
-            args->line);
+        YT_TLOG_EVENT(GrpcInternalLogger, level, args->message)
+            .With("File", args->file)
+            .With("Line", args->line);
     }
 
     std::atomic<bool> Initialized_ = false;

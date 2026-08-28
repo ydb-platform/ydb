@@ -7,6 +7,8 @@ import ydb
 from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.common.wait_for import retry_assertions
+from ydb.core.protos import msgbus_pb2
 import requests
 from urllib.parse import urlencode
 import time
@@ -48,6 +50,12 @@ class TestViewer(object):
             'enable_column_statistics': True,
             },
             enable_static_auth=True)
+        config.yaml_config['blob_storage_config']['infer_pdisk_slot_count_settings'] = {
+            'rot': {
+                'unit_size': 4 * 1024**3,
+                'max_slots': 16,
+            },
+        }
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
         config.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True
         config.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database']
@@ -89,6 +97,7 @@ class TestViewer(object):
             'X-CSRF-Token': cls.csrf_token,
         }
         cls.wait_for_cluster_ready()
+        cls.setup_group_size_in_units()
         yield
         cls.cluster.stop()
 
@@ -392,6 +401,34 @@ class TestViewer(object):
         return {}
 
     @classmethod
+    def setup_group_size_in_units(cls, pool_name='dynamic_storage_pool:1', size_in_units=1):
+        "Changes group_size_in_units for all groups in pool"
+        cls.cluster.client.set_auth_token(cls.root_token)
+        storage_pool = next(p for p in cls.cluster.client.read_storage_pools() if p.Name == pool_name)
+
+        request = msgbus_pb2.TBlobStorageConfigRequest(Domain=1)
+        command = request.Request.Command.add().ChangeGroupSizeInUnits
+        command.BoxId = storage_pool.BoxId
+        command.StoragePoolId = storage_pool.StoragePoolId
+        command.ItemConfigGeneration = storage_pool.ItemConfigGeneration
+        command.SizeInUnits = size_in_units
+
+        response = cls.cluster.client._send_blob_storage_config_request(request)
+        assert response.Success, response.ErrorDescription
+        assert all(status.Success for status in response.Status), response
+
+        def get_updated_groups():
+            result = cls.get_viewer_normalized("/viewer/groups", {
+                'fields_required': 'GroupSizeInUnits,PoolName',
+                'filter_group_by': 'PoolName',
+                'filter_group': pool_name
+            })
+            assert result.get('StorageGroups'), result
+            assert all(g.get('GroupSizeInUnits') == size_in_units for g in result['StorageGroups']), result
+
+        return retry_assertions(get_updated_groups)
+
+    @classmethod
     def test_whoami_root(cls):
         return cls.get_viewer_normalized("/viewer/whoami")
 
@@ -605,7 +642,6 @@ class TestViewer(object):
                                     'CreateTxId',
                                     'PathId',
                                     'PublicKeys',
-                                    'OriginalUserToken',
                                     'HashesInitParams',
                                     })
 
@@ -688,6 +724,31 @@ class TestViewer(object):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
         cls.delete_keys_recursively(result, {'issue_log'})
         return result
+
+    @classmethod
+    def normalize_result_database_stats(cls, result):
+        if 'status_code' in result:
+            return result
+        return {
+            'DatabaseNodes': result.get('DatabaseNodes'),
+            'StorageGroups': result.get('StorageGroups'),
+            'StorageNodes': result.get('StorageNodes'),
+            'Problems': sorted(result.get('Problems') or []),
+        }
+
+    @classmethod
+    def get_viewer_database_stats_ready(cls, database):
+        tries = 15
+        last = {}
+        while tries > 0:
+            last = cls.get_viewer("/viewer/database_stats", {'database': database})
+            if 'status_code' not in last and last.get('StorageGroups', 0) > 0:
+                return last
+            tries -= 1
+            time.sleep(1)
+        assert last.get('StorageGroups', 0) > 0, \
+            "StorageGroups was not populated in /viewer/database_stats response after 15 retries: %s" % last
+        return last
 
     @classmethod
     def normalize_result_transfer_describe(cls, result):
@@ -792,9 +853,107 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_groups(cls):
-        return cls.normalize_result(cls.get_viewer("/viewer/groups", {
+        result = cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'
         }))
+
+        group_size_only = cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'GroupSizeInUnits',
+        })
+        group_size_only_groups = group_size_only.get('StorageGroups', [])
+        assert group_size_only_groups, group_size_only
+        assert all('GroupSizeInUnits' in group for group in group_size_only_groups), group_size_only
+        assert all('VDisks' not in group for group in group_size_only_groups), group_size_only
+
+        whiteboard_only = cls.get_viewer_normalized("/viewer/groups", {
+            'whiteboard_only': 'true',
+            'filter_group_by': 'PoolName',
+            'filter_group': 'dynamic_storage_pool:1',
+        })
+        whiteboard_only_groups = whiteboard_only.get('StorageGroups', [])
+        assert whiteboard_only_groups, whiteboard_only
+        assert all(
+            group.get('GroupSizeInUnits', 0) > 0
+            for group in whiteboard_only_groups
+        ), whiteboard_only
+        for group in whiteboard_only_groups:
+            vdisks = group.get('VDisks', [])
+            assert vdisks, group
+            assert all(
+                vdisk.get('Whiteboard', {}).get('GroupSizeInUnits') == group['GroupSizeInUnits']
+                for vdisk in vdisks
+            ), group
+
+        result['GroupSizeInUnitsChecks'] = {
+            'GroupSizeOnly': {
+                'AllGroupsHaveField': True,
+                'HasNestedDiskData': False,
+            },
+            'WhiteboardOnly': {
+                'AllGroupsHaveNonZeroSize': True,
+                'AllGroupsMatchVDisks': True,
+            },
+        }
+        return result
+
+    # A strict database user is allowed to filter groups by group_id/node_id/pdisk_id, and every such
+    # filter is validated against the storage of the database, so the handler has to fetch GroupId,
+    # NodeId and PDiskId from BS controller. GroupId is a part of the response anyway, but the disks
+    # behind a group are cluster-level data, so they must not be rendered for such a user - unlike
+    # the response of a viewer+ user.
+    @classmethod
+    def test_storage_groups_pdisk_fields_hidden_for_database_user(cls):
+        def disks_of_groups(response):
+            if 'status_code' in response:
+                return response
+
+            def vdisk_disks(vdisk):
+                disks = {key: vdisk[key] for key in ('VDiskId', 'NodeId') if key in vdisk}
+                if 'PDisk' in vdisk:
+                    disks['PDisk'] = {'PDiskId': (vdisk['PDisk'] or {}).get('PDiskId')}
+                return disks
+
+            return {
+                'StorageGroups': [
+                    {
+                        'GroupId': group.get('GroupId'),
+                        'VDisks': [vdisk_disks(vdisk) for vdisk in group.get('VDisks') or []],
+                    }
+                    for group in response.get('StorageGroups') or []
+                ],
+            }
+
+        base_params = {
+            'database': cls.dedicated_db,
+            'fields_required': 'VDisk,PDisk,NodeId,PDiskId',
+        }
+        # The ids to filter by are taken from the actual response of the database, so they end up
+        # canonized together with the request of every case below.
+        probe = cls.get_viewer("/storage/groups", base_params)
+        probe_group = next(iter(probe.get('StorageGroups') or []), {})
+        probe_vdisk = next(iter(probe_group.get('VDisks') or []), {})
+        # PDiskId is reported as "<node_id>-<pdisk_id>", but the filter takes the local id only
+        pdisk_id = str((probe_vdisk.get('PDisk') or {}).get('PDiskId') or '').rsplit('-', 1)[-1]
+
+        cases = [
+            base_params,
+            {**base_params, 'group_id': str(probe_group.get('GroupId'))},
+            {**base_params, 'node_id': str(probe_vdisk.get('NodeId'))},
+            {**base_params, 'pdisk_id': pdisk_id},
+        ]
+        users = {
+            'database': cls.make_cookie_headers(cls.database_session_id),
+            'root': cls.default_headers,
+        }
+        return [
+            {
+                'request': "/storage/groups?" + urlencode(params, safe='/,'),
+                'user': user,
+                'response': disks_of_groups(cls.get_viewer("/storage/groups", params, headers=headers)),
+            }
+            for params in cases
+            for user, headers in users.items()
+        ]
 
     @classmethod
     def test_viewer_groups_group_by_pool_name(cls):
@@ -994,6 +1153,19 @@ class TestViewer(object):
     def test_viewer_healthcheck(cls):
         result = cls.get_viewer_db_normalized("/viewer/healthcheck")
         result = cls.normalize_result_healthcheck(result)
+        return result
+
+    @classmethod
+    def test_viewer_database_stats(cls):
+        result = {
+            'no-database': cls.normalize_result_database_stats(
+                cls.call_viewer("/viewer/database_stats"),
+            ),
+        }
+        for name in (cls.dedicated_db, cls.shared_db, cls.serverless_db):
+            result[name] = cls.normalize_result_database_stats(
+                cls.get_viewer_database_stats_ready(name),
+            )
         return result
 
     @classmethod

@@ -379,7 +379,7 @@ namespace NKikimr {
                                         TABLER() {
                                             TABLED() {str << ti.TabletId;}
                                             TABLED() {str << ti.Generation;}
-                                            if (auto it = b->EraseBarriers.find(ti.TabletId); it != b->EraseBarriers.end()) {
+                                            if (auto it = b->EraseBarriers.find({ti.TabletId, ti.DirectBlockGroupIndex}); it != b->EraseBarriers.end()) {
                                                 TABLED() {str << it->second;}
                                             } else {
                                                 TABLED() {str << "No barrier";}

@@ -49,7 +49,29 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& 
     return result;
 }
 
-    
+void CreateDlqTopic(
+    NActors::TTestActorRuntime& runtime,
+    const TString& dlqTopicPath,
+    const TString& database = "/Root/test_db"
+) {
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path(dlqTopicPath);
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+    settings.mutable_attributes()->insert({"_federation_account", "account1"});
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        dlqTopicPath,
+        database
+    );
+    UNIT_ASSERT(result->ResultStatus);
+    UNIT_ASSERT_VALUES_EQUAL_C(*result->ResultStatus, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+}
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
@@ -61,6 +83,7 @@ Y_UNIT_TEST(SharedConsumer) {
     auto& runtime = setup->GetRuntime();
     runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
+    CreateDlqTopic(runtime, "/Root/test_db/test_dead_letter_queue");
 
     Ydb::PersQueue::V1::CreateTopicRequest request;
     request.set_path("/Root/test_db/topic1");

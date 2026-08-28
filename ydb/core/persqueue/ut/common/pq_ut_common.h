@@ -281,6 +281,8 @@ struct TConsumerPreparationParameters {
 
     std::optional<ui64> ReadSpeedInBytesPerSecond;
     std::optional<ui64> ReadSpeedInMessagesPerSecond;
+    std::optional<NKikimrPQ::TPQTabletConfig::EConsumerType> Type;
+    bool KeepMessageOrder = false;
 };
 
 NKikimrPQ::TPQTabletConfig MakePQTabletConfig(

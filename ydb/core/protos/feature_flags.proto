@@ -238,7 +238,7 @@ message TFeatureFlags {
     optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
-    optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
+    optional bool EnableTopicMessageLevelParallelism = 212 [default = true];
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true, deprecated = true]; // deprecated: always true
@@ -323,7 +323,7 @@ message TFeatureFlags {
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = false];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
-    optional bool EnableFulltextIndexPrefix = 282 [default = false];
+    optional bool EnableFulltextIndexPrefix = 282 [default = true];
     optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
@@ -363,4 +363,13 @@ message TFeatureFlags {
     optional bool EnableTxIdInStats = 310 [default = false];
     optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
     optional bool EnableCsFlowControl = 312 [default = false];
+    // Keys SourceId→Partition mapping by a unique topic Id (UUID) instead of the topic name,
+    // so that deleting and recreating a topic with the same name does not inherit stale mappings.
+    optional bool EnableTopicSourceIdMappingById = 313 [default = false];
+    optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
+    optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
+    optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 316 [default = false];
+    // Offloads TEvDataShard::TEvPeriodicTableStats parsing to a dedicated aux actor to reduce
+    // SchemeShard's single-threaded load.
+    optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
 }

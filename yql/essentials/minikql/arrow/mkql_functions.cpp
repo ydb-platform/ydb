@@ -79,7 +79,6 @@ private:
         Type_ = TDataType::Create(NUdf::GetDataTypeInfo(slot).TypeId, Env_);
     }
 
-private:
     TTypeEnvironment& Env_;
     TType* Type_ = nullptr;
 };

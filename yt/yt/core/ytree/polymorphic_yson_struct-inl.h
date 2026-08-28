@@ -264,7 +264,8 @@ template <class T>
     requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
 void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path)
 {
-    static constexpr auto enumValues = TEnumTraits<typename T::TKey>::GetDomainValues();
+    static constexpr auto enumValues =
+        TEnumTraits<typename T::TKey>::template GetDomainValues</*AllowAmbiguousValues*/ true>();
     [&]<auto... Is> (std::index_sequence<Is...>) {
         (TraverseYsonStruct<typename T::template TEnumToDerived<enumValues[Is]>>(visitor, path + "/" + FormatEnum(enumValues[Is])), ...);
     } (std::make_index_sequence<std::size(enumValues)>());

@@ -112,6 +112,7 @@ message TPersQueuePartitionRequest {
         optional bool IgnoreQuotaDeadline = 16 [ default = false ];
 
         optional NKikimrPQ.THeartbeat Heartbeat = 17; // mutually exclusive with Data & related fields
+        optional NKikimrPQ.TSchemaChangeInfo SchemaChange = 26; // mutually exclusive with Data & Heartbeat
 
         optional bool EnableKafkaDeduplication = 18 [ default = false ];
         optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol

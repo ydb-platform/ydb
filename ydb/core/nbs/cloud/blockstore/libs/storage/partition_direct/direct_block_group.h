@@ -4,6 +4,7 @@
 
 #include "restore_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
@@ -61,7 +62,7 @@ struct TDBGRestoreResponse
 {
     struct TRestoreMeta
     {
-        ui64 Lsn = 0;
+        TPBufferKey PBufferKey;
         TBlockRange64 Range;
         THostIndex HostIndex = InvalidHostIndex;
     };
@@ -73,7 +74,7 @@ struct TDBGRestoreResponse
 struct TListPBufferMeta
 {
     ui32 VChunkIndex = 0;
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
     TBlockRange64 Range;
 };
 
@@ -117,6 +118,11 @@ public:
 
     virtual TExecutorPtr GetExecutor() = 0;
 
+    // The tablet generation this DBG was created with. New records are
+    // minted under it; restored records keep the generation they were
+    // written in.
+    virtual ui32 GetTabletGeneration() const = 0;
+
     virtual IOraclePtr GetOracle() = 0;
 
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
@@ -142,7 +148,7 @@ public:
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
@@ -157,7 +163,7 @@ public:
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
@@ -169,7 +175,7 @@ public:
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
@@ -194,13 +200,14 @@ public:
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) = 0;
 
+    // The bound is an lsn within the current tablet generation; the PBuffer
+    // side additionally drops every record of the previous generations.
     virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
 
-    // The lowest lsn that must be preserved across all vchunks of this
-    // DirectBlockGroup (records below it are safe to erase). Used to compute
-    // the tablet-wide cleanup watermark. Resolves on the executor thread.
-    // nullopt means nothing is inflight here.
-    virtual NThreading::TFuture<std::optional<ui64>>
+    // The lowest record id that must be preserved across all vchunks of this
+    // DirectBlockGroup. Used to compute the tablet-wide cleanup watermark.
+    // Resolves on the executor thread. nullopt means nothing is inflight here.
+    virtual NThreading::TFuture<std::optional<TPBufferKey>>
     GatherSafeBarrierForErase() = 0;
 
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
@@ -219,6 +226,11 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
 
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
+    // by all DirectBlockGroups. Returns the delay before the operation may
+    // start. Zero means it may start immediately or throttling is disabled.
+    [[nodiscard]] virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
+
     // Translate host index to NodeId.
     [[nodiscard]] virtual ui32 GetNodeId(THostIndex host) const = 0;
 
@@ -227,6 +239,10 @@ public:
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
     virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
+
+    // Sums (and optionally lists) vchunk stats on the executor thread.
+    virtual NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

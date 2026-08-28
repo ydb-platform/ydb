@@ -18,7 +18,6 @@ public:
     {
     }
 
-public:
     void Rewind() override {
         Fired_ = false;
     }

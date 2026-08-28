@@ -592,7 +592,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     TContext::TPtr ContextForTopicCreation;
     ContextForTopicCreation = std::make_shared<TContext>(TContext(*Context));
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
-    ContextForTopicCreation->UserToken = Context->UserToken;
+    ContextForTopicCreation->Token.UserToken = Context->Token.UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
     ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,

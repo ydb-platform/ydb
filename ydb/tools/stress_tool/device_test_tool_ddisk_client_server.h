@@ -128,31 +128,6 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
         return proto;
     }
 
-    NDDisk::TDDiskConfig ExtractDDiskConfig() const {
-        NDDisk::TDDiskConfig config;
-        bool initialized = false;
-        for (ui32 i = 0; i < DDiskTestProto.DDiskTestListSize(); ++i) {
-            const auto& record = DDiskTestProto.GetDDiskTestList(i);
-            if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
-                continue;
-            }
-            const auto& load = record.GetDDiskLoad();
-            const bool useSQPoll = load.GetSQPoll();
-            const bool useIOPoll = load.GetIOPoll();
-            if (!initialized) {
-                config.UseSQPoll = useSQPoll;
-                config.UseIOPoll = useIOPoll;
-                initialized = true;
-                continue;
-            }
-            if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
-                ythrow TWithBackTrace<yexception>()
-                    << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
-            }
-        }
-        return config;
-    }
-
     void Init() override {
         try {
             TBase::DoBasicSetup();
@@ -167,7 +142,8 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
                 services.end());
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
-            const NDDisk::TDDiskConfig ddiskConfig = ExtractDDiskConfig();
+            const NDDisk::TDDiskConfig ddiskConfig =
+                MakeDDiskConfig(DDiskTestProto, !TBase::Cfg.DisableDDiskChecksums);
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(ServerNodeId, i + 1, DDiskSlotId);
@@ -267,6 +243,7 @@ struct TDDiskClient : public TPerfTest {
     void Init() override {
         try {
             Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            Printer->AddGlobalParam("DDiskChecksums", Cfg.DisableDDiskChecksums ? "off" : "on");
 
             const ui32 totalDevices = ServerPeers.size() * NumDevicesPerServer;
             Setup->NodeId = ClientNodeId;

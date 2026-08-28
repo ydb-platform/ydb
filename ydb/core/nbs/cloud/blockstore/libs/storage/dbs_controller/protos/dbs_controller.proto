@@ -1,12 +1,17 @@
 syntax = "proto3";
 
 import "ydb/core/protos/blobstorage_ddisk.proto";
+import "ydb/core/protos/blobstorage_disk.proto";
 
 import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
 
 package NYdb.NBS.NBlockStore.NStorage.NDbsController.NProto;
 option java_package = "ru.yandex.ydb.core.nbs.dbs_controller.proto";
 
+
+// =============================================================================
+// API DDiskMap
+// =============================================================================
 
 //
 // Структура с описанием зависимостей Partition от DDisk-ов (включая PBuffer-ы)
@@ -42,6 +47,17 @@ message TUpdateDDiskMapResponse {
 }
 
 //
+// Запрос на удаление всех отношений таблетки в Rel(DDiskId, TabletId).
+//
+message TRemoveTabletDDiskMapRequest {
+  uint64 TabletId = 1;                  // Id таблетки partition
+}
+
+message TRemoveTabletDDiskMapResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+}
+
+//
 // GetPartitionsForNode
 //
 message TGetPartitionsForNodeRequest
@@ -56,17 +72,51 @@ message TGetPartitionsForNodeResponse
   repeated uint64 Partitions = 2;
 }
 
-//
-// GetNodesForPartition
-//
-message TGetNodesForPartitionRequest
-{
-  uint64 PartitionTabletId = 1;
+// =============================================================================
+// API для Maintenance permission
+// =============================================================================
+
+enum EDecision {
+  ALLOW = 0;
+  DENY = 1;
 }
 
-message TGetNodesForPartitionResponse
-{
-  NYdb.NBS.NProto.TError Error = 1;
 
-  repeated uint32 Nodes = 2;
+// Запрос на разрешение Maintenance хостов.
+// Принимает список ID storage нод.
+// Возвращает EDecision::ALLOW,
+// если все DBG, зависящие от NodeIds,
+// имеют на момент вызова полный набор нод
+// (при отказе node окажутся в состоянии не хуже -1),
+// и EDecision::DENY в остальных случаях.
+// Дополнительно возвращает список Partition-ов,
+// которые блокируют разрешение (пустой при EDecision::ALLOW).
+message TNodeMaintenancePermissionRequest {
+  repeated uint32 NodeIds = 1;
+}
+
+message TNodeMaintenancePermissionResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+  EDecision Decision = 2;
+  repeated uint64 BlockingPartitionIds = 3;
+}
+
+
+// Запрос на разрешение Maintenance дисков.
+// Принимает список PDisk-ов.
+// Возвращает EDecision::ALLOW,
+// если все DBG, зависящие от node,
+// имеют на момент вызова полный набор нод
+// (при отказе node окажутся в состоянии не хуже -1),
+// и EDecision::DENY в остальных случаях.
+// Дополнительно возвращает список Partition-ов,
+// которые блокируют разрешение (пустой при EDecision::ALLOW).
+message TDiskMaintenancePermissionRequest {
+  repeated NKikimrBlobStorage.TPDiskId PDisks = 1;
+}
+
+message TDiskMaintenancePermissionResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+  EDecision Decision = 2;
+  repeated uint64 BlockingPartitionIds = 3;
 }

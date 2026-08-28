@@ -44,10 +44,22 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
+    // We inline join filters in the following cases:
+    // - There implementation is a lookup join or reverse lookup join
+    // - There are no equi-join conditions in the join
+    // - We're not using BlockJoin, which supports join filters
+
+    bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
+    bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
+    bool containsEquiJoinConditions = !join->JoinKeys.empty();
     for (const auto& f : join->JoinFilters) {
         if (f.MaybeEquiJoinCondition()) {
-            return input;
+            containsEquiJoinConditions = true;
         }
+    }
+
+    if (usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
+        return input;
     }
 
     // In case of inner or cross join, we push the join filters above the join

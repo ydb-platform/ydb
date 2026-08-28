@@ -39,6 +39,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "vchunk") {
         return EMonPage::VChunk;
     }
+    if (page == "vchunkcounters") {
+        return EMonPage::VChunkCounters;
+    }
     if (page == "latency") {
         return EMonPage::Latency;
     }
@@ -76,6 +79,19 @@ ELatencyPercentile ParseSelectedPercentile(const TCgiParameters& cgi)
         return ELatencyPercentile::Max;
     }
     return ELatencyPercentile::P99;
+}
+
+// Per-vchunk row cap. all=1 dumps everything; limit=N overrides the default.
+size_t ParseVChunkStatsLimit(const TCgiParameters& cgi)
+{
+    if (cgi.Get("all") == "1") {
+        return 0;
+    }
+    size_t limit = 0;
+    if (cgi.Has("limit") && TryFromString(cgi.Get("limit"), limit)) {
+        return limit;
+    }
+    return DefaultVChunkStatsLimit;
 }
 
 std::optional<EOperation> ParseSelectedLatencyOperation(
@@ -119,6 +135,7 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
+        .BlockSize = VolumeConfig.GetBlockSize(),
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };
@@ -192,6 +209,43 @@ bool TPartitionActor::OnRenderAppHtmlPage(
                         .SelectedVChunk = selectedVChunk,
                         .VChunk = future.GetValue(),
                     };
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
+        return true;
+    }
+
+    if (page == EMonPage::VChunkCounters) {
+        auto* actorSystem = TActivationContext::ActorSystem();
+        const TActorId requester = ev->Sender;
+        const size_t limit = ParseVChunkStatsLimit(cgi);
+        const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
+        const bool showVChunks = cgi.Get("showvchunks") == "1";
+        const auto detail = (showVChunks && selectedDbg)
+                                ? EVChunkStatsDetail::PerVChunk
+                                : EVChunkStatsDetail::TotalOnly;
+        FastPathService->GatherVChunkStats(detail, selectedDbg)
+            .Subscribe(
+                [tabletInfo = MakeMonTabletInfo(),
+                 page,
+                 limit,
+                 selectedDbg,
+                 showVChunks,
+                 requester,
+                 actorSystem](const auto& future)
+                {
+                    TMonPageData data{
+                        .Page = page,
+                        .TabletInfo = tabletInfo,
+                        .VChunkStats = future.GetValue(),
+                        .VChunkStatsLimit = limit,
+                        .ShowVChunks = showVChunks,
+                    };
+                    if (selectedDbg) {
+                        data.SelectedVChunkDbg =
+                            static_cast<ui32>(*selectedDbg);
+                    }
                     actorSystem->Send(
                         requester,
                         new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));

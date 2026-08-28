@@ -305,6 +305,13 @@ public:
                         if (WatermarkMode_) {
                             if (auto watermark = GetWatermark()) {
                                 CloseOldBuckets(watermark->MicroSeconds(), newHopsStat, farFutureStateSizeChange);
+
+                                // A `Yield` during active watermark is considered permanent.
+                                // Until that `Yield` is produced into output stream, all subsequent runs must also yield.
+                                // Therefore, input may be read and buckets may be closed only once.
+                                //
+                                // **note:** Unlike most MKQL nodes, this node may produce a `Yield` without receiving one from its input.
+                                //           This exception is allowed here due to watermark propagation logic.
                                 PendingYield_ = true;
                                 continue;
                             }

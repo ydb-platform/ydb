@@ -364,4 +364,64 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             }
         }
     }
+
+    // A read that asks for MustRestoreFirst turns into a resolve, and in decommission mode the
+    // tablet answers it by copying the blob into its own storage. The kind of the read is the only
+    // thing that can tell that copy whether it is allowed to happen in a group short of space, so
+    // it has to travel with the resolve.
+    Y_UNIT_TEST(DataKindReachesTheResolve) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+        auto& env = *tenv.Env;
+
+        ui64 tabletId = 100600;
+        for (const auto dataKind : {NKikimrBlobStorage::TDataKind::USER, NKikimrBlobStorage::TDataKind::SYSTEM}) {
+            const TString data = "hello";
+            const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+            const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            auto putRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(putRes->Get()->Status, NKikimrProto::OK);
+
+            // A range resolve names the tablet it scans, which keeps unrelated resolves -- the agent
+            // issues them for its own housekeeping too -- out of the measurement.
+            std::vector<NKikimrBlobStorage::TDataKind::E> seen;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobDepot::EvResolve) {
+                    const auto& record = ev->Get<TEvBlobDepot::TEvResolve>()->Record;
+                    for (const auto& item : record.GetItems()) {
+                        if (item.GetTabletId() == tabletId) {
+                            seen.push_back(record.GetDataKind());
+                        }
+                    }
+                }
+                return true;
+            };
+
+            const TLogoBlobID from(tabletId, 0, 0, 0, 0, 0);
+            const TLogoBlobID to(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
+                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                auto range = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to,
+                    true /*mustRestoreFirst*/, TInstant::Max(), false /*isIndexOnly*/);
+                range->DataKind = dataKind;
+                SendToBSProxy(sender, tenv.BlobDepot, range.release());
+            });
+            auto rangeRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(rangeRes->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(rangeRes->Get()->Responses.size(), 1);
+
+            env.Runtime->FilterFunction = nullptr;
+
+            UNIT_ASSERT_C(!seen.empty(), "the read did not resolve anything, so it proves nothing");
+            for (const auto kind : seen) {
+                UNIT_ASSERT_EQUAL(kind, dataKind);
+            }
+
+            ++tabletId;
+        }
+    }
 }

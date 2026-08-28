@@ -157,11 +157,17 @@ STFUNC(TDbsControllerActor::StateWork)
             TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest,
             HandleUpdateDDiskMapRequest);
         HFunc(
-            TEvDbsControllerPrivate::TEvGetNodesForPartitionRequest,
-            HandleGetNodesForPartitionRequest);
+            TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapRequest,
+            HandleRemoveTabletDDiskMapRequest);
         HFunc(
             TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest,
             HandleGetPartitionsForNodeRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvNodeMaintenancePermissionRequest,
+            HandleNodeMaintenancePermissionRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvDiskMaintenancePermissionRequest,
+            HandleDiskMaintenancePermissionRequest);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

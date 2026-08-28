@@ -506,7 +506,7 @@ private:
                 }
             }
         }
-        if (mode == EYtWriteMode::Replace && !notFlowDynamic) {
+        if (mode == EYtWriteMode::Replace && !meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
                 "Modification of static table " << outTableInfo.Name.Quote() << " is supported only by INSERT"));
             return TStatus::Error;
@@ -1437,7 +1437,8 @@ private:
             | EYtSettingType::KeySwitch
             | EYtSettingType::MapOutputType
             | EYtSettingType::ReduceInputType
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::ForceApplyMaxJobCount;
 
         if (hasMapLambda) {
             acceptedSettings |= EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied;

@@ -25,6 +25,10 @@
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
+#include <yql/essentials/public/issue/yql_issue_utils.h>
+
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
@@ -77,7 +81,7 @@ namespace {
                     if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
                     }
-                    TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
+                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
                     YDB_LOG_WARN_CTX(*actorSystem, message,
                         {"issues", describePathResult.GetIssues()});
                     auto rootIssue = NYql::TIssue(message);
@@ -100,6 +104,7 @@ namespace {
         ytServices.FunctionRegistry = functionRegistry;
         ytServices.FileStorage = WithAsync(CreateFileStorage(queryServiceConfig.GetFileStorage(), {MakeYtDownloader(queryServiceConfig.GetFileStorage())}));
         ytServices.Config = std::make_shared<NYql::TYtGatewayConfig>(queryServiceConfig.GetYt());
+        ytServices.StaticConfig = std::make_shared<NYql::TYtStaticGatewayConfig>();
         return CreateYtNativeGateway(ytServices);
     }
 
@@ -411,7 +416,7 @@ namespace {
         const TString& structuredTokenJson,
         const TString& path) {
         if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database with endpoint",
+            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database",
                 {"path", path},
                 {"database", database},
                 {"endpoint", endpoint});

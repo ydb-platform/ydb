@@ -125,7 +125,13 @@ private:
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
             auto status = NDescriber::Convert(topicInfo.Status);
-            if (status == Ydb::StatusIds::NOT_FOUND) {
+            // Missing and hidden topics (no DescribeSchema) are PathErrorUnknown in
+            // scheme cache. Kafka ListOffsets must stay UNKNOWN_TOPIC so mixed-version
+            // / auto-create still work. OffsetFetch maps unknown → AUTH via HadTopicAclOk
+            // when this connection previously saw the topic.
+            if (status == Ydb::StatusIds::NOT_FOUND ||
+                topicInfo.Status == NDescriber::EStatus::UNAUTHORIZED)
+            {
                 status = Ydb::StatusIds::SCHEME_ERROR;
             }
             return ReplyError(status, NDescriber::Description(Settings.Path, topicInfo.Status));

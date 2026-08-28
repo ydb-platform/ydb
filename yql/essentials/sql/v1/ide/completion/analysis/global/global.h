@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/ide/completion/core/environment.h>
+#include <yql/essentials/sql/v1/ide/core/environment.h>
 #include <yql/essentials/sql/v1/ide/completion/core/input.h>
 #include <yql/essentials/sql/v1/ide/completion/core/name.h>
 
@@ -12,6 +12,8 @@
 #include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
+
+using NSQLPureAST::TEnvironment;
 
 struct TClusterContext {
     TString Provider;

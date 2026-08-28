@@ -9,7 +9,6 @@
 
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v0/sql.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -190,15 +189,9 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     }
 
     if (SqlVersion) {
-        settings.SyntaxVersion = *SqlVersion;
-
-        if (*SqlVersion > 0) {
-            // Restrict fallback to V0
-            settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        }
+        settings.SyntaxVersion = *SqlVersion == 0 ? 1 : *SqlVersion;
     } else {
-        settings.SyntaxVersion = KqpYqlSyntaxVersion;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
+        settings.SyntaxVersion = KqpYqlSyntaxVersion == 0 ? 1 : KqpYqlSyntaxVersion;
     }
 
     if (IsEnableExternalDataSources) {
@@ -208,8 +201,6 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     }
 
     settings.InferSyntaxVersion = true;
-    settings.V0ForceDisable = false;
-    settings.WarnOnV0 = false;
     settings.DefaultCluster = Cluster;
     settings.ClusterMapping = {
         {Cluster, TString(NYql::KikimrProviderName)},
@@ -333,14 +324,14 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
         NSQLTranslation::TTranslators translators(
-            NSQLTranslationV0::MakeTranslator(),
+            nullptr,
             NSQLTranslationV1::MakeTranslator(lexers, parsers),
             NSQLTranslationPG::MakeTranslator()
         );
 
         auto ast = NSQLTranslation::SqlToYql(translators, queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
-        deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
-        sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
+        deprecatedSQL = false;
+        sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::Pg ? 0 : 1;
         keepInCache = stmtParseInfo.KeepInCache;
         commandTagName = stmtParseInfo.CommandTagName;
         return std::move(ast);
@@ -348,7 +339,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         sqlVersion = {};
         deprecatedSQL = true;
         return NYql::ParseAst(queryText);
-        // Do not check SQL constraints on s-expressions input, as it may come from both V0/V1.
+        // Do not check SQL constraints on s-expressions input.
         // Constraints were already checked on type annotation of SQL query.
     }
 }
@@ -380,7 +371,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
     NSQLTranslation::TTranslators translators(
-        NSQLTranslationV0::MakeTranslator(),
+        nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator()
     );
@@ -393,14 +384,14 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         auto settings = settingsBuilder.Build(ctx);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
-        ui16 actualSyntaxVersion = 0;
+        ui16 actualSyntaxVersion = 1;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
         auto astStatements = NSQLTranslation::SqlToAstStatements(translators, queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
-        deprecatedSQL = (actualSyntaxVersion == 0);
+        deprecatedSQL = false;
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
         for (size_t i = 0; i < astStatements.size(); ++i) {
-            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, (actualSyntaxVersion == 0), stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
+            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, false, stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
         }
         return result;
     } else {

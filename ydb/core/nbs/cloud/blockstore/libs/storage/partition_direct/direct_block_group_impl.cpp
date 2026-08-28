@@ -2100,17 +2100,19 @@ TVChunkStatsGatherResult TDirectBlockGroup::DoGatherVChunkStats(
 TConnectionSnapshot TDirectBlockGroup::MakeConnectionSnapshot(
     size_t hostIndex) const
 {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(DDiskConnections.size() == PBufferConnections.size());
+
     const auto& ddisk = DDiskConnections[hostIndex];
-    const bool hasPBuffer = hostIndex < PBufferConnections.size();
-    const auto* pbuffer = hasPBuffer ? &PBufferConnections[hostIndex] : nullptr;
+    const auto& pbuffer = PBufferConnections[hostIndex];
 
     return {
         .HostIndex = static_cast<THostIndex>(hostIndex),
         .DDiskId = ddisk.HostConnection.DDiskId,
-        .PBufferId = pbuffer ? std::optional(pbuffer->HostConnection.DDiskId)
-                             : std::nullopt,
+        .PBufferId = pbuffer.HostConnection.DDiskId,
         .DDiskSession = ToString(ddisk.SessionState),
-        .PBufferConnected = pbuffer && pbuffer->ConnectPromise.HasValue(),
+        .DDiskConnected = ddisk.ConnectPromise.HasValue(),
+        .PBufferConnected = pbuffer.ConnectPromise.HasValue(),
     };
 }
 

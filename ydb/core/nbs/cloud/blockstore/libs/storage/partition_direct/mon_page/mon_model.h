@@ -22,12 +22,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 enum class EMonPage
 {
-    Overview,
-    Dbg,
-    LocalDb,
-    VChunk,
-    VChunkCounters,
-    Latency,
+    Overview,         // Tablet summary.
+    Dbg,              // Runtime state of direct block groups.
+    Chaos,            // Transport failure controls.
+    LocalDb,          // Persisted tablet state.
+    VChunk,           // State of one vchunk.
+    VChunkCounters,   // Vchunk operation counters.
+    Latency,          // Per-node and per-slot latency.
 };
 
 // How much per-vchunk detail GatherVChunkStats should collect.
@@ -73,8 +74,9 @@ struct TConnectionSnapshot
 {
     THostIndex HostIndex = InvalidHostIndex;
     NKikimr::NBsController::TDDiskId DDiskId;
-    std::optional<NKikimr::NBsController::TDDiskId> PBufferId;
+    NKikimr::NBsController::TDDiskId PBufferId;
     TString DDiskSession;
+    bool DDiskConnected = false;
     bool PBufferConnected = false;
 };
 
@@ -138,16 +140,19 @@ struct TMonPageData
     // When set, the page shows only the header/menu plus this message.
     std::optional<TString> RuntimeError;
     std::optional<TFastPathServiceInfo> FastPathServiceInfo;
+
     // DBG tab: all DBGs (list) or the selected one (detail).
     TVector<TDbgSnapshot> Dbgs;
     // DBG detail index (absent => list view).
     std::optional<ui32> SelectedDbg;
+
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;
     // VChunk tab: the requested index (absent => only the input form) and the
     // snapshot (absent => no such vchunk).
     std::optional<ui32> SelectedVChunk;
     std::optional<TVChunkSnapshot> VChunk;
+
     // VChunk counters tab: disk / per-DBG totals, and optional per-vchunk
     // rows for SelectedVChunkDbg when ShowVChunks is set. VChunkStatsLimit
     // is the per-vchunk row cap (0 = dump everything).
@@ -155,10 +160,14 @@ struct TMonPageData
     size_t VChunkStatsLimit = DefaultVChunkStatsLimit;
     std::optional<ui32> SelectedVChunkDbg;
     bool ShowVChunks = false;
+
     // Latency tab: which percentile colors the heatmap / slot grid, and
     // which operation filters the slot grid (absent => worst across ops).
     ELatencyPercentile SelectedPercentile = ELatencyPercentile::P99;
     std::optional<EOperation> SelectedLatencyOperation;
+
+    // Chaos controller state.
+    TChaosSnapshot Chaos;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -289,6 +289,7 @@ private:
     TLogTitle LogTitle;
     ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
+    // DDiskConnections and PBufferConnections always have the same size.
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
     TDDiskIdToHostIndex PBufferIdToHostIndex;

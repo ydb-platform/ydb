@@ -276,6 +276,7 @@ private:
         size_t dbgId,
         THostIndex newHostIndex);
 
+    // Mon-page related methods.
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     [[nodiscard]] TString GetSocketPath() const;

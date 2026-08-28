@@ -329,10 +329,10 @@ Y_UNIT_TEST(RequireSelectRowWithoutTokenSucceeds) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
 }
 
-Y_UNIT_TEST(UnauthorizedWithoutDescribeIsSchemeError) {
-    auto setup = CreateSetup("TopicOffsetsHiddenTopic");
+Y_UNIT_TEST(RequireSelectRowWithBadTokenIsUnauthorized) {
+    auto setup = CreateSetup("TopicOffsetsSelectRowAuth");
     auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_offsets_hidden";
+    const TString path = "/Root/topic_offsets_select_row_auth";
     CreateTopic(runtime, path);
 
     auto token = MakeIntrusive<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
@@ -341,7 +341,7 @@ Y_UNIT_TEST(UnauthorizedWithoutDescribeIsSchemeError) {
     settings.Token = token->GetSerializedToken();
     settings.RequireSelectRow = true;
     auto ev = RunTopicOffsets(runtime, std::move(settings));
-    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
 }
 
 Y_UNIT_TEST(SelectRowUsesDedicatedTokenWhenDescriberIsAnonymous) {

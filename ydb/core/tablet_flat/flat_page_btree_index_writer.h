@@ -14,13 +14,14 @@ namespace NKikimr::NTable::NPage {
         using TChild = TBtreeIndexNode::TChild;
         using TShortChildV2 = TBtreeIndexNode::TShortChildV2;
         using TChildV2 = TBtreeIndexNode::TChildV2;
-        using TChildVariant = std::variant<TChild, TChildV2>;
+        using TChildren = std::variant<TVector<TChild>, TVector<TChildV2>>;
 
     public:
         TBtreeIndexNodeWriter(TIntrusiveConstPtr<TPartScheme> scheme, TGroupId groupId, bool writeV2 = false)
             : Scheme(std::move(scheme))
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
+            , Children(writeV2 ? TChildren(std::in_place_index<1>) : TChildren(std::in_place_index<0>))
             , WriteV2(writeV2)
         {
             if (GroupId.IsMain()) {
@@ -58,19 +59,19 @@ namespace NKikimr::NTable::NPage {
         void AddChild(TChild child) {
             Y_ENSURE(!WriteV2, "Use AddChild(TChildV2) for v2 format");
             Y_ENSURE(child.GetErasedRowCount() == 0 || !IsShortChildFormat(), "Short format can't have ErasedRowCount");
-            Children.push_back(std::variant<TChild, TChildV2>(std::in_place_type<TChild>, child));
+            std::get<TVector<TChild>>(Children).push_back(std::move(child));
         }
 
         void AddChild(TChildV2 child) {
             Y_ENSURE(WriteV2, "Use AddChild(TChild) for v1 format");
             Y_ENSURE(child.GetErasedRowCount() == 0 || !IsShortChildFormat(), "Short format can't have ErasedRowCount");
-            Children.push_back(std::variant<TChild, TChildV2>(std::in_place_type<TChildV2>, child));
+            std::get<TVector<TChildV2>>(Children).push_back(std::move(child));
         }
 
         void EnsureEmpty() {
             Y_ENSURE(!Keys);
             Y_ENSURE(!KeysSize);
-            Y_ENSURE(!Children);
+            Y_ENSURE(std::visit([](const auto& v) { return v.empty(); }, Children));
             Y_ENSURE(!Ptr);
             Y_ENSURE(!End);
         }
@@ -78,7 +79,7 @@ namespace NKikimr::NTable::NPage {
         void Reset() {
             Keys.clear();
             KeysSize = 0;
-            Children.clear();
+            std::visit([](auto& v) { v.clear(); }, Children);
             Ptr = 0;
             End = 0;
         }
@@ -110,7 +111,7 @@ namespace NKikimr::NTable::NPage {
 
         TSharedData Finish() {
             Y_ENSURE(Keys.size());
-            Y_ENSURE(Children.size() == Keys.size() + 1);
+            Y_ENSURE(std::visit([](const auto& v) { return v.size(); }, Children) == Keys.size() + 1);
 
             size_t pageSize = CalcPageSize();
             TSharedData buf = TSharedData::Uninitialized(pageSize);
@@ -149,10 +150,12 @@ namespace NKikimr::NTable::NPage {
             Keys.clear();
             KeysSize = 0;
 
-            for (auto &child : Children) {
-                std::visit([this](const auto& c) { PlaceChild(c); }, child);
-            }
-            Children.clear();
+            std::visit([this](auto& vec) {
+                for (const auto& c : vec) {
+                    PlaceChild(c);
+                }
+                vec.clear();
+            }, Children);
 
             Y_ENSURE(Ptr == End);
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
@@ -321,7 +324,7 @@ namespace NKikimr::NTable::NPage {
         TVector<TString> Keys;
         size_t KeysSize = 0;
 
-        TVector<TChildVariant> Children;
+        TChildren Children;
         const bool WriteV2;
 
         char* Ptr = 0;

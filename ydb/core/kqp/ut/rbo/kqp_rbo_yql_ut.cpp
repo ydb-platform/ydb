@@ -4220,6 +4220,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto runQueries = [&](bool newRbo) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+            appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
             appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
             appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
             appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);

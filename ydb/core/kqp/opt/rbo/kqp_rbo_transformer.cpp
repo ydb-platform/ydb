@@ -120,6 +120,8 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
                 return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, translated, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
+            } else if (TKqlTableEffect::Match(node.Get())) {
+                Y_ENSURE(false, "DML functionality not yet supported in new optimizer");
             } else {
                 return node;
             }

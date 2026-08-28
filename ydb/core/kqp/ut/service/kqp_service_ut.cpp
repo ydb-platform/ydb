@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             if (ev->GetTypeRewrite() == NWorkloadManager::TEvContinueRequest::EventType && ++continueRequests == 1) {
                 const auto* msg = ev->Get<NWorkloadManager::TEvContinueRequest>();
                 auto copy = std::make_unique<NWorkloadManager::TEvContinueRequest>(
-                    msg->Status, msg->PoolId, msg->PoolConfig, msg->Issues);
+                    msg->QueryId, msg->Status, msg->PoolId, msg->PoolConfig, msg->Issues);
                 runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
             }
             return TTestActorRuntime::EEventAction::PROCESS;

@@ -37,10 +37,10 @@ namespace NKikimr {
         private:
             NMonitoring::THistogramPtr Histo;
             ::NMonitoring::TDynamicCounters::TCounterPtr ThroughputBytes;
-            TMaxTracker LatencyMsMax;
-            ::NMonitoring::TDynamicCounters::TCounterPtr LatencyMsCompletedSum;
+            TMaxTracker LatencyUsMax;
+            ::NMonitoring::TDynamicCounters::TCounterPtr LatencyUsCompletedSum;
             ::NMonitoring::TDynamicCounters::TCounterPtr LatencyCompletedCount;
-            ::NMonitoring::TDynamicCounters::TCounterPtr InFlightLatencyMsSum;
+            ::NMonitoring::TDynamicCounters::TCounterPtr InFlightLatencyUsSum;
             ::NMonitoring::TDynamicCounters::TCounterPtr InFlightCount;
             THashMap<ui64, TInstant> InFlightRequests;
         };

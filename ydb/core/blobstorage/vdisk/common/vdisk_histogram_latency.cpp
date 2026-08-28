@@ -20,20 +20,20 @@ namespace NKikimr {
 
             auto h = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(type));
             Histo = histoGroup->GetHistogram("LatencyMs", std::move(h));
-            LatencyMsMax.Init(histoGroup->GetCounter("LatencyMsMax", false));
-            LatencyMsCompletedSum = histoGroup->GetCounter("LatencyMsCompletedSum", true);
+            LatencyUsMax.Init(histoGroup->GetCounter("LatencyUsMax", false));
+            LatencyUsCompletedSum = histoGroup->GetCounter("LatencyUsCompletedSum", true);
             LatencyCompletedCount = histoGroup->GetCounter("LatencyCompletedCount", true);
-            InFlightLatencyMsSum = histoGroup->GetCounter("InFlightLatencyMsSum", false);
+            InFlightLatencyUsSum = histoGroup->GetCounter("InFlightLatencyUsSum", false);
             InFlightCount = histoGroup->GetCounter("InFlightCount", false);
         }
 
         void TLtcHisto::Collect(TDuration d, ui64 size) {
-            const auto durationMs = d.MillisecondsFloat();
+            const ui64 durationUs = d.MicroSeconds();
             if (Histo) {
                 Histo->Collect(d.MillisecondsFloat());
             }
-            LatencyMsMax.Collect(durationMs);
-            LatencyMsCompletedSum->Add(durationMs);
+            LatencyUsMax.Collect(durationUs);
+            LatencyUsCompletedSum->Add(durationUs);
             LatencyCompletedCount->Inc();
             if (size) {
                 ThroughputBytes->Add(size);
@@ -49,19 +49,19 @@ namespace NKikimr {
         }
 
         void TLtcHisto::UpdateCounters(TInstant now) {
-            ui64 latencyMsSum = 0;
-            ui64 latencyMsMax = 0;
+            ui64 latencyUsSum = 0;
+            ui64 latencyUsMax = 0;
             for (const auto& [requestId, receivedTime] : InFlightRequests) {
                 Y_UNUSED(requestId);
-                const ui64 latencyMs = now > receivedTime ? (now - receivedTime).MilliSeconds() : 0;
-                latencyMsSum += latencyMs;
-                latencyMsMax = Max(latencyMsMax, latencyMs);
+                const ui64 latencyUs = now > receivedTime ? (now - receivedTime).MicroSeconds() : 0;
+                latencyUsSum += latencyUs;
+                latencyUsMax = Max(latencyUsMax, latencyUs);
             }
 
-            InFlightLatencyMsSum->Set(latencyMsSum);
+            InFlightLatencyUsSum->Set(latencyUsSum);
             InFlightCount->Set(InFlightRequests.size());
-            LatencyMsMax.Collect(latencyMsMax);
-            LatencyMsMax.Update();
+            LatencyUsMax.Collect(latencyUsMax);
+            LatencyUsMax.Update();
         }
 
         TInFlightLatencyGuard::TInFlightLatencyGuard(TLtcHistoPtr histogram, ui64 requestId, TInstant receivedTime)

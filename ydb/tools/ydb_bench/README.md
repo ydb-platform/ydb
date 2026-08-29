@@ -333,11 +333,14 @@ manifests, and non-v4 result manifests are rejected before extraction.
 Accepted results are installed under `OUTPUT/imports/import-<id>` without
 changing `run.json`; files are made read-only and a collision never overwrites
 an existing import. The Runs list labels them `imported` while local results
-remain `local`. The Comparisons page persists a chosen run set locally and
-shows only availability keys: shared benchmark/profile/affinity keys, shared
-benchmark/profile keys where that shared affinity is unique, and each run's
-own benchmark/profile keys. It intentionally performs no charting or metric
-calculation.
+remain `local`. The Comparisons page persists a chosen run set locally. For
+local YDB results it provides a compact baseline table with selected load,
+throughput, latency, errors, CPU usage, dynamic-node count, and directional
+deltas. Deltas are suppressed for semantically incompatible workload,
+load-parameter, or latency-percentile combinations. Configuration,
+environment, affinity, and binary differences remain visible next to every
+candidate so that a confounded comparison is not mistaken for a regression.
+Generic summary charts remain available below the baseline table.
 # Result manifest compatibility
 
 Run manifests use schema version 4. Earlier manifests are intentionally not

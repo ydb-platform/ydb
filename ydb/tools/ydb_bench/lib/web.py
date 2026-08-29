@@ -158,6 +158,7 @@ _CSS = (
 .local-profile-config{margin:.8rem 0;padding:.7rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
 .local-profile-config pre{max-height:24rem;overflow:auto;white-space:pre;margin:.7rem 0 0}
 .attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
+.comparison-delta{font-weight:650}.comparison-delta.good{color:var(--good)}.comparison-delta.bad{color:var(--bad)}
 @media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
 """
     '.status.queued{color:var(--warn)}\n'
@@ -816,6 +817,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
 """
     "async function loadChartData(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);ret"
     "urn api('/api/chart-data?'+query)}\n"
+    "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);return api('/api/local-ydb-comparison?'+query)}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
     "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
     '[0]&&!value.startsWith(parts[0]))return false;for(const part of parts){if(!part)continue;const found=value.indexOf(part,'
@@ -994,6 +996,103 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'e,...chart,onRemove:charts.length>1?()=>{charts=charts.filter(item=>item.id!==chart.id);renderBoard()}:null});cha'
     'rt.open=false}}\n'
     '  renderBoard()\n'
+    '}\n'
+    "function localComparisonKey(item){return JSON.stringify([item.run,item.profile])}\n"
+    "function localComparisonId(item){return item.run+' / '+item.profile}\n"
+    'function localComparisonConfig(item){\n'
+    '  const parameters=item.parameters||{},workload=parameters.workload||{},geometry=parameters.geometry||{},client=parameters.client||{};\n'
+    '  const measurement=parameters.measurement||{},load=parameters.load||{},objective=load.objective||{};\n'
+    "  const values={\n"
+    "    'Workload':workload.type??'—','Operation':workload.operation??'—','Load parameter':load.parameter??'—',\n"
+    "    'Load values':JSON.stringify(localComparisonStable(load.values??null)),\n"
+    "    'Objective':objective.type??'points','Warmup seconds':measurement.warmup??'—',\n"
+    "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
+    "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
+    "    'Initial dynamic nodes':geometry.dynamic_nodes??'—','Maximum dynamic nodes':geometry.max_dynamic_nodes??'—',\n"
+    "    'Storage groups':geometry.storage_groups??'—','Disk size GiB':geometry.disk_size_gb??'—','YDB CLI threads':client.threads??'—',\n"
+    "    'Affinity config':JSON.stringify(localComparisonStable(parameters.affinity??null)),\n"
+    "    'YDB CLI CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.ydb_cli??null)),\n"
+    "    'Static CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.static_nodes??null)),\n"
+    "    'Dynamic CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.dynamic_nodes??null))\n"
+    "  };for(const [name,value] of Object.entries(workload.options||{}))values['Option '+name]=value;\n"
+    "  for(const [name,value] of Object.entries(load.search||{}))values['Search '+name]=value;\n"
+    "  for(const [name,value] of Object.entries(objective))values['Objective '+name]=value;\n"
+    "  values['Allow errors']=Boolean(load.allow_errors);return values\n"
+    '}\n'
+    'function localComparisonContext(item){return {\n'
+    "  'Host':item.platform?.uname?.node??'—','CPU':item.platform?.cpu_model??'—',\n"
+    "  'Kernel':item.platform?.uname?.release??'—','CPU topology':JSON.stringify(localComparisonStable(item.cpu_topology??null)),\n"
+    "  'YDB CLI build':item.binaries?.ydb_cli?.sha256??'—'\n"
+    '}}\n'
+    "function localComparisonBuild(item){return {'ydbd':item.binaries?.ydbd?.sha256??'—','Tool revision':item.tool_revision??'—'}}\n"
+    'function localComparisonStable(value){\n'
+    "  if(Array.isArray(value))return value.map(localComparisonStable);\n"
+    "  if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value)\n"
+    '    .sort(([left],[right])=>left.localeCompare(right))\n'
+    '    .map(([name,item])=>[name,localComparisonStable(item)]));\n'
+    '  return value\n'
+    '}\n'
+    'function localComparisonSemantic(item){\n'
+    '  const parameters=item.parameters||{},load=parameters.load||{},objective=load.objective||{type:\'points\'};return localComparisonStable({\n'
+    '    workload:parameters.workload||{},parameter:load.parameter,objective:objective.type,\n'
+    "    latency_percentile:objective.type==='latency-slo'?objective.percentile:null\n"
+    '  })\n'
+    '}\n'
+    'function localComparisonDelta(value,baseline,lowerIsBetter=false,compatible=true){\n'
+    "  if(!compatible)return '<span class=muted>incompatible</span>';\n"
+    "  if(value===null||value===undefined||value===''||baseline===null||baseline===undefined||baseline==='')return '—';\n"
+    '  const current=Number(value),reference=Number(baseline);\n'
+    "  if(!Number.isFinite(current)||!Number.isFinite(reference))return '—';\n"
+    "  if(reference===0){if(current===0)return '<span class=\"comparison-delta\">0</span>';\n"
+    "    return lowerIsBetter?'<span class=\"comparison-delta bad\">+'+metricLabel(current)+'</span>':'—'};\n"
+    '  const delta=(current/reference-1)*100,good=lowerIsBetter?delta<0:delta>0,bad=lowerIsBetter?delta>0:delta<0;\n'
+    "  return '<span class=\"comparison-delta '+(good?'good':bad?'bad':'')+'\">'+(delta>0?'+':'')+delta.toFixed(1)+'%</span>'\n"
+    '}\n'
+    'function mountLocalYdbComparison(container,data){\n'
+    "  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}\n"
+    '  const previous=container.dataset.baseline,baseline=entries.find(item=>localComparisonKey(item)===previous)||entries.find(item=>item.result?.selected_metrics)||entries[0];\n'
+    '  container.dataset.baseline=localComparisonKey(baseline);const baselineMetrics=baseline.result?.selected_metrics||{};\n'
+    "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99',latencyMetric=percentile+'_ms';\n"
+    '  const baselineConfig=localComparisonConfig(baseline),baselineContext=localComparisonContext(baseline);\n'
+    '  const baselineBuild=localComparisonBuild(baseline);\n'
+    '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));\n'
+    '  const rows=entries.map(item=>{\n'
+    '    const metrics=item.result?.selected_metrics||{},config=localComparisonConfig(item);\n'
+    '    const context=localComparisonContext(item),build=localComparisonBuild(item);\n'
+    '    const compatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;\n'
+    '    const differences=[...new Set([...Object.keys(baselineConfig),...Object.keys(config)])].sort()\n'
+    '      .filter(name=>String(config[name])!==String(baselineConfig[name]));\n'
+    '    const contextDifferences=[...new Set([...Object.keys(baselineContext),...Object.keys(context)])].sort()\n'
+    '      .filter(name=>String(context[name])!==String(baselineContext[name]));\n'
+    '    const buildDifferences=[...new Set([...Object.keys(baselineBuild),...Object.keys(build)])].sort()\n'
+    '      .filter(name=>String(build[name])!==String(baselineBuild[name]));\n'
+    "    const details=[...differences.map(name=>'<li><strong>'+esc(name)+':</strong> '+esc(baselineConfig[name])+\n"
+    "      ' → '+esc(config[name])+'</li>'),...contextDifferences.map(name=>'<li><strong>'+esc(name)+':</strong> '+\n"
+    "      esc(baselineContext[name])+' → '+esc(context[name])+'</li>'),...buildDifferences.map(name=>'<li><strong>'+\n"
+    "      esc(name)+':</strong> '+esc(baselineBuild[name])+' → '+esc(build[name])+'</li>')];\n"
+    "    const comparisonState=compatible?(differences.length||contextDifferences.length?'Comparable with warnings':\n"
+    "      'Comparable · build changed'):'Incompatible';\n"
+    "    const differenceText=item===baseline?'Baseline':details.length?'<details><summary class=\"'+\n"
+    "      (compatible?'':'attempt-fail')+'\">'+comparisonState+' · '+differences.length+' config · '+\n"
+    "      contextDifferences.length+' environment · '+buildDifferences.length+' build</summary><ul>'+\n"
+    "      details.join('')+'</ul></details>':'Same configuration, environment and build';\n"
+    "    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+'</td><td><code>'+\n"
+    "      esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+\n"
+    "      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics.throughput??'—'))+' '+localComparisonDelta(metrics.throughput,baselineMetrics.throughput,false,compatible)+'</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics[latencyMetric]??'—'))+' ms '+localComparisonDelta(metrics[latencyMetric],baselineMetrics[latencyMetric],true,compatible)+'</td>'+\n"
+    "      '<td>'+esc(metrics.errors??'—')+' '+localComparisonDelta(metrics.errors,baselineMetrics.errors,true,compatible)+'</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics.static_cpu_mean??'—'))+'%</td><td>'+esc(metricLabel(metrics.dynamic_cpu_mean??'—'))+'%</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics.cli_cpu_mean??'—'))+'%</td><td>'+esc(item.result?.dynamic_nodes??'—')+'</td><td>'+differenceText+'</td></tr>'\n"
+    '  }).join(\'\');\n'
+    "  container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline <select id=local-comparison-baseline>'+\n"
+    "    entries.map(item=>'<option value=\"'+esc(localComparisonKey(item))+'\" '+(item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+\n"
+    "    '<p class=muted>Deltas compare selected search results. Expand configuration differences before interpreting a regression.</p>'+\n"
+    "    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+\n"
+    "    '<th>ydbd</th><th>Selected load</th><th>Throughput</th><th>'+esc(percentile)+'</th><th>Errors</th>'+\n"
+    "    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+\n"
+    "    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>';\n"
+    "  container.querySelector('#local-comparison-baseline').onchange=event=>{container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data)}\n"
     '}\n'
     """
 const localPhaseLabels={
@@ -1420,14 +1519,18 @@ async function mountLocalYdbProfile(container,runId,profile,runState){
     "h2>Runs</h2>'+ (value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=chec"
     'kbox value="\'+esc(run.id)+\'" \'+(value.selected.includes(run.id)?\'checked\':\'\')+\'> \'+esc(run.id)+\' <span class=muted>(\'+es'
     "c(run.source)+')</span></label>').join('')+'</div>':'<div class=empty>No runs are available.</div>')+'<div class=toolbar"
-    '><button class=primary id=save-comparisons>Update comparison</button></div></section><section class=card><h2>Comparison '
-    "chart</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
+    "><button class=primary id=save-comparisons>Update comparison</button></div></section><section class=card><div id=local-ydb-comparison>'+"
+    "(value.selected.length?'Loading local YDB results…':'Select one or more runs.')+'</div></section><section class=card><h2>Comparison "
+    "charts</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
     "/section>';\n"
     "    app.innerHTML=shell('comparisons',content);\n"
     "    document.querySelector('#save-comparisons').onclick=async()=>{await api('/api/comparisons/selection',jsonOptions([.."
     ".document.querySelectorAll('.compare:checked')].map(input=>input.value)));renderComparisons()};\n"
-    "    if(value.selected.length)try{mountChartBuilder(document.querySelector('#comparison-chart'),await loadChartData(value"
-    ".selected))}catch(error){document.querySelector('#comparison-chart').innerHTML=displayError(error)}\n"
+    "    if(value.selected.length){try{mountLocalYdbComparison(document.querySelector('#local-ydb-comparison'),\n"
+    "      await loadLocalYdbComparison(value.selected))}catch(error){\n"
+    "      document.querySelector('#local-ydb-comparison').innerHTML=displayError(error)}\n"
+    "      try{mountChartBuilder(document.querySelector('#comparison-chart'),await loadChartData(value.selected))}\n"
+    "      catch(error){document.querySelector('#comparison-chart').innerHTML=displayError(error)}}\n"
     "  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}\n"
     '}\n'
     "async function compose(){const current=route();if(current==='runs')return renderRuns();if(current==='new')return renderN"
@@ -2423,6 +2526,10 @@ class RunService:
             "parameters",
             "timeout_seconds",
             "role_affinity",
+            "tool_revision",
+            "binaries",
+            "platform",
+            "cpu_topology",
             "progress",
             "attempts",
             "searches",
@@ -2430,6 +2537,155 @@ class RunService:
             "error",
         )
         return {name: value[name] for name in fields if name in value}
+
+    def local_ydb_comparison(self, run_ids):
+        if not isinstance(run_ids, list) or not run_ids or len(run_ids) > 20:
+            raise BenchmarkError("local YDB comparisons require between 1 and 20 run ids")
+        if any(not isinstance(run_id, str) or not run_id for run_id in run_ids):
+            raise BenchmarkError("local YDB comparison run ids must be non-empty strings")
+        if len(set(run_ids)) != len(run_ids):
+            raise BenchmarkError("local YDB comparison run ids must be unique")
+
+        def project(value, fields):
+            if not isinstance(value, dict):
+                return {}
+            return {name: value[name] for name in fields if name in value}
+
+        def project_parameters(value):
+            if not isinstance(value, dict):
+                return {}
+            workload = project(value.get("workload"), ("type", "operation", "options"))
+            geometry = project(
+                value.get("geometry"),
+                (
+                    "preset",
+                    "static_nodes",
+                    "dynamic_nodes",
+                    "max_dynamic_nodes",
+                    "disk_size_gb",
+                    "storage_groups",
+                ),
+            )
+            client = project(value.get("client"), ("threads",))
+            load = project(value.get("load"), ("parameter", "allow_errors", "values", "search", "objective"))
+            measurement = project(value.get("measurement"), ("warmup", "duration", "repetitions"))
+            affinity = project(value.get("affinity"), ("ydb_cli", "static_nodes", "dynamic_nodes"))
+            return {
+                name: item
+                for name, item in (
+                    ("workload", workload),
+                    ("geometry", geometry),
+                    ("client", client),
+                    ("load", load),
+                    ("measurement", measurement),
+                    ("affinity", affinity),
+                )
+                if item
+            }
+
+        def project_binaries(value):
+            if not isinstance(value, dict):
+                return {}
+            return {
+                name: item
+                for name in ("ydbd", "ydb_cli")
+                if (item := project(value.get(name), ("name", "sha256", "size")))
+            }
+
+        def project_platform(value):
+            result = project(value, ("architecture", "cpu_count", "cpu_model", "physical_memory_bytes"))
+            uname = project(
+                value.get("uname") if isinstance(value, dict) else None,
+                ("machine", "node", "release", "system", "version"),
+            )
+            if uname:
+                result["uname"] = uname
+            return result
+
+        def project_topology(value):
+            return project(
+                value,
+                (
+                    "version",
+                    "allowed_cpus",
+                    "numa_nodes",
+                    "chiplets",
+                    "physical_cores",
+                    "smt_siblings",
+                    "hierarchy_reasons",
+                ),
+            )
+
+        model = self.model()
+        entries = []
+        response_size = 0
+        for run_id in run_ids:
+            record = model.get(run_id)
+            if record is None:
+                raise BenchmarkError("run not found: {}".format(run_id))
+            profiles = sorted(
+                {
+                    str(item["profile"])
+                    for item in record.get("runs", []) + record.get("steps", [])
+                    if item.get("benchmark") == "local-ydb" and item.get("profile") is not None
+                }
+            )
+            for profile in profiles:
+                value = self.local_ydb_profile(run_id, profile)
+                compact_fields = (
+                    "status",
+                    "state",
+                    "started_at",
+                    "finished_at",
+                    "tool_revision",
+                    "error",
+                )
+                entry = {
+                    "run": run_id,
+                    "profile": profile,
+                    **{name: value[name] for name in compact_fields if name in value},
+                }
+                projections = {
+                    "parameters": project_parameters(value.get("parameters")),
+                    "role_affinity": project(value.get("role_affinity"), ("ydb_cli", "static_nodes", "dynamic_nodes")),
+                    "binaries": project_binaries(value.get("binaries")),
+                    "platform": project_platform(value.get("platform")),
+                    "cpu_topology": project_topology(value.get("cpu_topology")),
+                }
+                entry.update({name: item for name, item in projections.items() if item})
+                result = value.get("result")
+                if isinstance(result, dict):
+                    result_fields = (
+                        "outcome",
+                        "objective",
+                        "parameter",
+                        "allow_errors",
+                        "search_stage",
+                        "dynamic_nodes",
+                        "selected_load",
+                        "passing_load",
+                        "failing_load",
+                        "stop_reason",
+                    )
+                    compact_result = {name: result[name] for name in result_fields if name in result}
+                    metrics = result.get("selected_metrics")
+                    if isinstance(metrics, dict):
+                        metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
+                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated"))
+                        compact_result["selected_metrics"] = {
+                            name: metrics[name] for name in metric_names if name in metrics
+                        }
+                    entry["result"] = compact_result
+                try:
+                    response_size += len(json.dumps(entry, allow_nan=False, separators=(",", ":")).encode("utf-8")) + 1
+                except (TypeError, ValueError) as error:
+                    raise BenchmarkError("local YDB comparison contains invalid JSON data") from error
+                if response_size > 4 * 1024 * 1024:
+                    raise BenchmarkError("local YDB comparison response is too large")
+                entries.append(entry)
+                if len(entries) > 100:
+                    raise BenchmarkError("local YDB comparison contains more than 100 profiles")
+        return {"entries": entries}
 
     def comparisons(self, selected=None):
         model = self.model()
@@ -2759,6 +3015,12 @@ def _handler(service):
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
                 return self._json(200, service.chart_data(parse_qs(parsed.query).get("run", [])))
+            if path == "/api/local-ydb-comparison":
+                try:
+                    value = service.local_ydb_comparison(parse_qs(parsed.query).get("run", []))
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
+                return self._json(200, value)
             if path.startswith("/api/runs/") and path.endswith("/local-ydb-profile"):
                 run_id = unquote(path[len("/api/runs/") : -len("/local-ydb-profile")])
                 profile = parse_qs(parsed.query).get("profile", [""])[-1]

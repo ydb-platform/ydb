@@ -17,27 +17,27 @@ TString SvgRect(ui32 x, ui32 y, ui32 w, ui32 h, const TString& cssClass) {
     return SvgRect(x, y, w, ToString(h), cssClass);
 }
 
-TString SvgText(const TString& x, const TString& y, const TString& cssClass, const TString& text) {
+TString SvgText(const TString& x, const TString& y, const TString& cssClass, TStringBuf text) {
     return TStringBuilder() << "<text x='" << x << "' y='" << y << "' class='" << cssClass << "'>" << text << "</text>" << Endl;
 }
 
-TString SvgText(ui32 x, const TString& y, const TString& cssClass, const TString& text) {
+TString SvgText(ui32 x, const TString& y, const TString& cssClass, TStringBuf text) {
     return SvgText(ToString(x), y, cssClass, text);
 }
 
-TString SvgText(ui32 x, ui32 y, const TString& cssClass, const TString& text) {
+TString SvgText(ui32 x, ui32 y, const TString& cssClass, TStringBuf text) {
     return SvgText(ToString(x), ToString(y), cssClass, text);
 }
 
-TString SvgTextS(ui32 x, ui32 y, const TString& text) {
+TString SvgTextS(ui32 x, ui32 y, TStringBuf text) {
     return SvgText(x, y, "texts", text);
 }
 
-TString SvgTextM(ui32 x, ui32 y, const TString& text) {
+TString SvgTextM(ui32 x, ui32 y, TStringBuf text) {
     return SvgText(x, y, "textm", text);
 }
 
-TString SvgTextE(ui32 x, ui32 y, const TString& text) {
+TString SvgTextE(ui32 x, ui32 y, TStringBuf text) {
     return SvgText(x, y, "texte", text);
 }
 

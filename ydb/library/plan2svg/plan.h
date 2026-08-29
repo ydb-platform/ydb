@@ -20,6 +20,40 @@ namespace NPlan2Svg {
 
 class TVisualizer;
 
+// Where a horizontal strip is drawn: the column it sits in, and the row it
+// occupies within that column.
+struct TViewBox {
+    ui32 Left;
+    ui32 Width;
+    ui32 Top;
+    ui32 Height;
+};
+
+// The icon drawn in the gutter left of a summary bar. Ref is empty for the bars
+// that have none, and the other two fields are then unread.
+struct TIcon {
+    TStringBuf Ref;
+    TStringBuf Color;
+    TStringBuf Scale;
+};
+
+// Everything a summary bar draws besides its box: the metric it measures, the
+// text and tooltip over it, and the decorations, all of which are optional -
+// icon, peer id, the local/remote split marker, the mean chunk size dashes, and
+// the skew badge, which is only considered when TaskCount is set.
+struct TStageSummary {
+    TSingleMetric* Metric = nullptr;
+    TColorTriple Colors;
+    TStringBuf Text;
+    TStringBuf Tooltip;
+    ui32 TaskCount = 0;
+    TIcon Icon;
+    bool BackgroundRect = false;
+    TStringBuf PeerId;
+    ui64 Split = 0;
+    TScalarMetric* Scalar = nullptr;
+};
+
 class TPlan {
 
 public:
@@ -40,8 +74,8 @@ public:
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor = "");
     void PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor = "");
-    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TColorTriple& colors, const TString& textSum, const TString& tooltip, ui32 taskCount, TStringBuf iconRef, TStringBuf iconColor, TStringBuf iconScale, bool backgroundRect = false, const TString& peerId = "", ui64 split = 0, const std::shared_ptr<TScalarMetric>& scalar = nullptr);
-    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMutableMetric*, TStringBuf>> history, ui64 scale, TStringBuf iconRef, TStringBuf iconColor, TStringBuf iconScale);
+    void PrintStageSummary(TStringBuilder& background, const TViewBox& box, const TStageSummary& bar);
+    void PrintStageSummary(TStringBuilder& background, const TViewBox& box, std::initializer_list<std::pair<TMutableMetric*, TStringBuf>> history, ui64 scale, const TIcon& icon);
     // The timeline strip every data flow draws: the bar, then the wait time
     // overlay under the connection canvas, then the derivative curve over it.
     void PrintDataFlowTimeline(TStringBuilder& builder, const TString& title, const std::shared_ptr<TSingleMetric>& bytes, ui32 x, ui32 y, ui32 w, const TColorTriple& colors, bool backgroundRect = false);

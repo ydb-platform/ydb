@@ -381,6 +381,15 @@ public:
         const std::string& /*expectedMD5*/,
         const TPutFileToCacheOptions& /*options*/))
 
+    UNIMPLEMENTED_METHOD(TFuture<TFilePartitions>, PartitionFile, (
+        const NYPath::TYPath& /*path*/,
+        const std::vector<TFileReadRange>& /*ranges*/,
+        const TPartitionFileOptions& /*options*/))
+
+    UNIMPLEMENTED_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (
+        const TFilePartitionCookiePtr& /*cookie*/,
+        const TReadFilePartitionOptions& /*options*/))
+
     // Security
     UNIMPLEMENTED_METHOD(TFuture<void>, AddMember, (
         const std::string& /*group*/,

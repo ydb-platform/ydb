@@ -7,6 +7,13 @@
 #include <util/generic/yexception.h>
 
 namespace NKikimr {
+namespace {
+
+ui64 RangeDiff(ui64 right, ui64 left) {
+    return right > left ? right - left : 0;
+}
+
+} // namespace
 
 TEqHeightHistogram::TEqHeightHistogram(const TEqHeightHistogramResult& result) {
     bool isFinalizeRejected = result.ByteSizeLong() == 0;
@@ -64,19 +71,71 @@ TEqHeightHistogram::TBucket TEqHeightHistogram::GetBucket(size_t i) const {
     return {record.UpperBound, record.CumulativeCount};
 }
 
-ui64 TEqHeightHistogram::EstimateLessOrEqual(TStringBuf key) const {
+TEqHeightHistogram::TBound TEqHeightHistogram::FindBound(TStringBuf key) const {
     if (Buckets_.empty()) {
-        return 0;
+        return {};
     }
-    auto it = UpperBound(Buckets_.begin(), Buckets_.end(), key,
-                         [](TStringBuf k, const TBucketRecord& record) {
-                             return k < record.UpperBound;
+    auto it = LowerBound(Buckets_.begin(), Buckets_.end(), key,
+                         [](const TBucketRecord& record, TStringBuf k) {
+                             return record.UpperBound < k;
                          });
-    if (it == Buckets_.begin()) {
+    if (it == Buckets_.end()) {
+        return {TotalCount_, TotalCount_};
+    }
+    const ui64 prev = (it == Buckets_.begin()) ? 0 : (it - 1)->CumulativeCount;
+    if (it->UpperBound == key) {
+        return {prev, it->CumulativeCount};
+    }
+    return {prev, prev};
+}
+
+ui64 TEqHeightHistogram::EstimateLessOrEqual(TStringBuf key) const {
+    return FindBound(key).LessOrEqual;
+}
+
+ui64 TEqHeightHistogram::EstimateLess(TStringBuf key) const {
+    return FindBound(key).Less;
+}
+
+ui64 TEqHeightHistogram::EstimateGreaterOrEqual(TStringBuf key) const {
+    return TotalCount_ - FindBound(key).Less;
+}
+
+ui64 TEqHeightHistogram::EstimateGreater(TStringBuf key) const {
+    return TotalCount_ - FindBound(key).LessOrEqual;
+}
+
+ui64 TEqHeightHistogram::EstimateEqual(TStringBuf key) const {
+    const TBound bound = FindBound(key);
+    return bound.LessOrEqual - bound.Less;
+}
+
+ui64 TEqHeightHistogram::EstimateRangeGreaterLess(TStringBuf left, TStringBuf right) const {
+    if (left > right) {
         return 0;
     }
-    --it;
-    return it->CumulativeCount;
+    return RangeDiff(FindBound(right).Less, FindBound(left).LessOrEqual);
+}
+
+ui64 TEqHeightHistogram::EstimateRangeGreaterLessOrEqual(TStringBuf left, TStringBuf right) const {
+    if (left > right) {
+        return 0;
+    }
+    return RangeDiff(FindBound(right).LessOrEqual, FindBound(left).LessOrEqual);
+}
+
+ui64 TEqHeightHistogram::EstimateRangeGreaterOrEqualLess(TStringBuf left, TStringBuf right) const {
+    if (left > right) {
+        return 0;
+    }
+    return RangeDiff(FindBound(right).Less, FindBound(left).Less);
+}
+
+ui64 TEqHeightHistogram::EstimateRangeGreaterOrEqualLessOrEqual(TStringBuf left, TStringBuf right) const {
+    if (left > right) {
+        return 0;
+    }
+    return RangeDiff(FindBound(right).LessOrEqual, FindBound(left).Less);
 }
 
 } // namespace NKikimr

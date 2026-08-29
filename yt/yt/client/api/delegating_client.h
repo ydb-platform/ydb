@@ -459,6 +459,17 @@ public:
         const TPutFileToCacheOptions& options),
         (path, expectedMD5, options))
 
+    DELEGATE_METHOD(TFuture<TFilePartitions>, PartitionFile, (
+        const NYPath::TYPath& path,
+        const std::vector<TFileReadRange>& ranges,
+        const TPartitionFileOptions& options),
+        (path, ranges, options))
+
+    DELEGATE_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (
+        const TFilePartitionCookiePtr& cookie,
+        const TReadFilePartitionOptions& options),
+        (cookie, options))
+
     // Security
     DELEGATE_METHOD(TFuture<void>, AddMember, (
         const std::string& group,

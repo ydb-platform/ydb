@@ -17,10 +17,6 @@ namespace NKikimr::NSecret {
 
 namespace {
 
-TStringBuilder GetLogLabel(const TString& label, const ui64 requestId) {
-    return TStringBuilder() << label << " [" << requestId << "]: ";
-}
-
 class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecretsActor> {
     STRICT_STFUNC(StateFunc,
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -213,12 +209,16 @@ TString ListSecrets(const TVector<TString>& paths) {
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
     YDB_LOG_DEBUG("HandleIncomingRequest",
-        {"logLabel", GetLogLabel("TEvResolveSecret", LastRequestId)},
-        {"secrets", JoinSeq(',', ev->Get()->SecretNames)});
+        {"event", "TEvResolveSecret"},
+        {"requestId", LastRequestId},
+        {"secrets", JoinSeq(',', ev->Get()->SecretNames)}
+    );
 
     if (ev->Get()->SecretNames.empty()) {
         YDB_LOG_WARN("Empty secret names list",
-            {"logLabel", GetLogLabel("TEvResolveSecret", LastRequestId)});
+            {"event", "TEvResolveSecret"},
+            {"requestId", LastRequestId}
+        );
         static const auto emptyRequest =
             NKqp::TEvDescribeSecretsResponse::TDescription(
                 Ydb::StatusIds::BAD_REQUEST,
@@ -235,7 +235,9 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
 
 void TDescribeSchemaSecretsService::HandleIncomingSchemeCacheRetryRequest(TEvResolveSecretSchemeCacheRetry::TPtr& ev) {
     YDB_LOG_NOTICE("HandleIncomingSchemeCacheRetryRequest",
-        {"logLabel", GetLogLabel("TEvResolveSecretSchemeCacheRetry", ev->Get()->InitialRequestId)});
+        {"event", "TEvResolveSecretSchemeCacheRetry"},
+        {"requestId", ev->Get()->InitialRequestId}
+    );
 
     const auto it = RequestsInFlight.find(ev->Get()->InitialRequestId);
     Y_ENSURE(it != RequestsInFlight.end(), "Unregistered requestId: " << ToString(ev->Get()->InitialRequestId));
@@ -245,13 +247,17 @@ void TDescribeSchemaSecretsService::HandleIncomingSchemeCacheRetryRequest(TEvRes
 
 void TDescribeSchemaSecretsService::HandleIncomingSchemeShardRetryRequest(TEvResolveSecretSchemeShardRetry::TPtr& ev) {
     YDB_LOG_NOTICE("HandleIncomingSchemeShardRetryRequest",
-        {"logLabel", GetLogLabel("TEvResolveSecretSchemeShardRetry", ev->Get()->InitialRequestId)},
-        {"secret", ev->Get()->SecretPath});
+        {"event", "TEvResolveSecretSchemeShardRetry"},
+        {"requestId", ev->Get()->InitialRequestId},
+        {"secret", ev->Get()->SecretPath}
+    );
 
     const auto it = RequestsInFlight.find(ev->Get()->InitialRequestId);
     if (it == RequestsInFlight.end()) {
         YDB_LOG_NOTICE("Retry handling was skipped due to previous errors",
-            {"logLabel", GetLogLabel("TEvResolveSecretSchemeShardRetry", ev->Get()->InitialRequestId)});
+            {"event", "TEvResolveSecretSchemeShardRetry"},
+            {"requestId", ev->Get()->InitialRequestId}
+        );
         return;
     }
     Y_ENSURE(it->second.Request.Get(), "Initial request was not saved");
@@ -263,7 +269,9 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(
 ) {
     const auto requestId = ev->Cookie;
     YDB_LOG_DEBUG("HandleSchemeCacheResponse",
-        {"logLabel", GetLogLabel("TEvNavigateKeySetResult", requestId)});
+        {"event", "TEvNavigateKeySetResult"},
+        {"requestId", requestId}
+    );
 
     auto respIt = ResolveInFlight.find(requestId);
     Y_ENSURE(respIt != ResolveInFlight.end(), "such requestId is not registered");
@@ -315,12 +323,16 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(
 ) {
     const auto requestId = ev->Cookie;
     YDB_LOG_DEBUG("HandleSchemeShardResponse",
-        {"logLabel", GetLogLabel("TEvDescribeSchemeResult", requestId)});
+        {"event", "TEvDescribeSchemeResult"},
+        {"requestId", requestId}
+    );
 
     const auto respIt = ResolveInFlight.find(requestId);
     if (respIt == ResolveInFlight.end()) {
         YDB_LOG_NOTICE("Response handling was skipped due to previous errors",
-            {"logLabel", GetLogLabel("TEvDescribeSchemeResult", requestId)});
+            {"event", "TEvDescribeSchemeResult"},
+            {"requestId", requestId}
+        );
         return;
     }
 
@@ -415,7 +427,9 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
 ) {
     if (result.ResultSet.empty()) {
         YDB_LOG_NOTICE("SchemeCache error: empty response",
-            {"logLabel", GetLogLabel("TEvNavigateKeySetResult", requestId)});
+            {"event", "TEvNavigateKeySetResult"},
+            {"requestId", requestId}
+        );
         FillResponse(
             requestId,
             NKqp::TEvDescribeSecretsResponse::TDescription(
@@ -460,9 +474,11 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
                 }
 
                 YDB_LOG_NOTICE("SchemeCache error",
-                    {"logLabel", GetLogLabel("TEvNavigateKeySetResult", requestId)},
+                    {"event", "TEvNavigateKeySetResult"},
+                    {"requestId", requestId},
                     {"entryStatus", ToString(entry.Status)},
-                    {"unresolvedPaths", ListSecrets(unresolvedPaths)});
+                    {"unresolvedPaths", ListSecrets(unresolvedPaths)}
+                );
                 FillResponse(
                     requestId,
                     NKqp::TEvDescribeSecretsResponse::TDescription(
@@ -480,9 +496,11 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
         }
 
         // no more retries
-        YDB_LOG_NOTICE("Retry limit exceeded for secret ` `",
-            {"logLabel", GetLogLabel("TEvNavigateKeySetResult", requestId)},
-            {"firstUnresolvedPath", firstUnresolvedPath});
+        YDB_LOG_NOTICE("Retry limit exceeded for secret",
+            {"event", "TEvNavigateKeySetResult"},
+            {"requestId", requestId},
+            {"secret", firstUnresolvedPath}
+        );
         FillResponse(
             requestId,
             NKqp::TEvDescribeSecretsResponse::TDescription(
@@ -508,9 +526,11 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
 
     const auto secretName = CanonizePath(record.GetPath());
 
-    YDB_LOG_NOTICE("SchemeShard",
-        {"logLabel", GetLogLabel("TEvDescribeSchemeResult", requestId)},
-        {"error", EStatus_Name(status)});
+    YDB_LOG_NOTICE("SchemeShard error",
+        {"event", "TEvDescribeSchemeResult"},
+        {"requestId", requestId},
+        {"error", EStatus_Name(status)}
+    );
     if (IsRetryableSchemeShardStatus(status)) {
         const auto requestIt = RequestsInFlight.find(requestId);
         Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
@@ -519,9 +539,11 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
                 return true;
             }
 
-            YDB_LOG_NOTICE("Retry limit exceeded for secret ` `",
-                {"logLabel", GetLogLabel("TEvDescribeSchemeResult", requestId)},
-                {"secretName", secretName});
+            YDB_LOG_NOTICE("Retry limit exceeded for secret",
+                {"event", "TEvDescribeSchemeResult"},
+                {"requestId", requestId},
+                {"secret", secretName}
+            );
             FillResponse(
                 requestId,
                 NKqp::TEvDescribeSecretsResponse::TDescription(
@@ -557,10 +579,12 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
     }
 
     if (const auto delay = requestIt->second.SchemeCacheRetryState->GetNextRetryDelay()) {
-        YDB_LOG_NOTICE("Secret ` ` not found. Request will be retried",
-            {"logLabel", GetLogLabel("TEvNavigateKeySetResult", requestId)},
-            {"unresolvedSecretPath", unresolvedSecretPath},
-            {"in", *delay});
+        YDB_LOG_NOTICE("Secret not found. Request will be retried",
+            {"event", "TEvNavigateKeySetResult"},
+            {"requestId", requestId},
+            {"secret", unresolvedSecretPath},
+            {"retryDelay", *delay}
+        );
         this->Schedule(*delay, new TEvResolveSecretSchemeCacheRetry(requestId));
         return true;
     }
@@ -583,10 +607,12 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     }
 
     if (const auto delay = retryState->GetNextRetryDelay()) {
-        YDB_LOG_NOTICE("Secret ` ` is unavailable. Request will be retried",
-            {"logLabel", GetLogLabel("TEvDescribeSchemeResult", requestId)},
-            {"secretPath", secretPath},
-            {"in", *delay});
+        YDB_LOG_NOTICE("Secret is unavailable. Request will be retried",
+            {"event", "TEvDescribeSchemeResult"},
+            {"requestId", requestId},
+            {"secret", secretPath},
+            {"retryDelay", *delay}
+        );
         this->Schedule(*delay, new TEvResolveSecretSchemeShardRetry(requestId, secretPath));
         return true;
     }
@@ -627,9 +653,10 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
         const auto& secretPath = secret.first;
         auto it = VersionedSecrets.find(secret.first);
         if (it == VersionedSecrets.end()) {
-            YDB_LOG_NOTICE("Secret ` ` was dropped during request",
-                {"logLabel", GetLogLabel("FillResponseIfFinished", requestId)},
-                {"secretPath", secretPath});
+            YDB_LOG_NOTICE("FillResponseIfFinished: secret was dropped during request",
+                {"requestId", requestId},
+                {"secret", secretPath}
+            );
             FillResponse(
                 requestId,
                 NKqp::TEvDescribeSecretsResponse::TDescription(

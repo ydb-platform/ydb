@@ -21,6 +21,141 @@ class WorkloadCommandPlan:
     argv: tuple
     timeout_seconds: float | None = None
     measurement_window_builder: object = None
+    progress_duration_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class WorkloadMetric:
+    name: str
+    unit: str
+    repetition_aggregation: str = "median"
+    required: bool = False
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class WorkloadRunRequest:
+    load_parameter: str
+    load: int
+    duration_seconds: int
+    warmup_seconds: int
+    client_threads: int
+    objective: object
+
+
+@dataclass(frozen=True)
+class WorkloadResult:
+    metrics: dict
+    details: object = None
+    measurement_window: tuple | None = None
+
+
+@dataclass(frozen=True)
+class WorkloadResultAdapter:
+    schema_id: str
+    parse: object
+    metrics: tuple
+    slo_metrics: tuple = ()
+
+
+def parse_generic_total_metrics(stdout):
+    """Parse the stable Total table printed by generic ``ydb workload``."""
+
+    lines = [line.strip() for line in stdout.splitlines()]
+    for index, line in enumerate(lines):
+        columns = line.split()
+        if not columns or columns[0] != "Total":
+            continue
+        for values_line in lines[index + 1 :]:
+            values = values_line.split()
+            if not values:
+                continue
+            # Current CLI prints the total duration in the first column below
+            # the "Total" heading. Older builds omitted that value.
+            if len(values) == 9:
+                values = values[1:]
+            if len(values) != 8:
+                break
+            try:
+                result = {
+                    "transactions": int(values[0]),
+                    "throughput": float(values[1]),
+                    "retries": int(values[2]),
+                    "errors": int(values[3]),
+                    "p50_ms": float(values[4]),
+                    "p95_ms": float(values[5]),
+                    "p99_ms": float(values[6]),
+                    "pmax_ms": float(values[7]),
+                }
+                if not all(
+                    math.isfinite(result[name]) for name in ("throughput", "p50_ms", "p95_ms", "p99_ms", "pmax_ms")
+                ):
+                    raise ValueError("non-finite workload metric")
+                if any(value < 0 for value in result.values()):
+                    raise ValueError("negative workload metric")
+                return result
+            except ValueError:
+                break
+    raise BenchmarkError("YDB CLI workload output does not contain a valid Total row")
+
+
+def _parse_generic_total_result(command_result, normalized_workload, request):
+    del normalized_workload, request
+    return WorkloadResult(parse_generic_total_metrics(command_result.stdout))
+
+
+GENERIC_TOTAL_RESULT = WorkloadResultAdapter(
+    schema_id="generic-total-v1",
+    parse=_parse_generic_total_result,
+    metrics=tuple(
+        WorkloadMetric(name, unit, repetition_aggregation=aggregation, required=True)
+        for name, unit, aggregation in (
+            ("transactions", "operations", "median"),
+            ("throughput", "operations/s", "median"),
+            ("retries", "retries", "median"),
+            ("errors", "errors", "sum"),
+            ("p50_ms", "ms", "median"),
+            ("p95_ms", "ms", "median"),
+            ("p99_ms", "ms", "median"),
+            ("pmax_ms", "ms", "median"),
+        )
+    ),
+    slo_metrics=(
+        ("p50", "p50_ms"),
+        ("p95", "p95_ms"),
+        ("p99", "p99_ms"),
+        ("pmax", "pmax_ms"),
+    ),
+)
+
+_RESERVED_RESULT_METRIC_NAMES = frozenset(
+    (
+        "load",
+        "dynamic_nodes",
+        "repetition",
+        "empty_repetitions",
+        "attempt",
+        "search_stage",
+        "started_at",
+        "finished_at",
+        "duration_seconds",
+        "commands",
+        "passed",
+        "decision",
+        "search_low",
+        "search_high",
+        "throughput_gain_percent",
+        "target_cpu_saturated",
+        "static_cpu_mean",
+        "static_cpu_max",
+        "dynamic_cpu_mean",
+        "dynamic_cpu_max",
+        "cli_cpu_mean",
+        "cli_cpu_max",
+        "host_cpu_mean",
+        "host_cpu_max",
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -89,6 +224,8 @@ class WorkloadDefinition:
     prepare_plan_builder: object = None
     run_plan_builder: object = None
     cleanup_plan_builder: object = None
+    result_adapter: WorkloadResultAdapter = GENERIC_TOTAL_RESULT
+    throughput_unit: str = "operations/s"
 
 
 def _config_error(location, message):
@@ -331,7 +468,78 @@ def _validate_catalog(definitions):
     if len(names) != len(set(names)):
         raise ValueError("local YDB workload names must be unique")
     option_schemas = {}
+    result_schemas = {}
     for definition in definitions:
+        adapter = definition.result_adapter
+        if not isinstance(adapter, WorkloadResultAdapter):
+            raise ValueError("invalid result adapter for {}".format(definition.name))
+        if not isinstance(adapter.schema_id, str) or re.fullmatch("[a-z0-9][a-z0-9._-]*", adapter.schema_id) is None:
+            raise ValueError("invalid result schema id for {}".format(definition.name))
+        if not callable(adapter.parse):
+            raise ValueError("result adapter parse must be callable for {}".format(definition.name))
+        if not isinstance(adapter.metrics, tuple) or not adapter.metrics:
+            raise ValueError("result adapter metrics must be a non-empty tuple for {}".format(definition.name))
+        result_schema = (adapter.metrics, adapter.slo_metrics)
+        if adapter.schema_id in result_schemas and result_schemas[adapter.schema_id] != result_schema:
+            raise ValueError("result schema id {} has incompatible definitions".format(adapter.schema_id))
+        result_schemas[adapter.schema_id] = result_schema
+        metric_names = []
+        for metric in adapter.metrics:
+            if not isinstance(metric, WorkloadMetric):
+                raise ValueError("invalid result metric for {}".format(definition.name))
+            if not isinstance(metric.name, str) or re.fullmatch("[a-z][a-z0-9_]*", metric.name) is None:
+                raise ValueError("invalid result metric name for {}".format(definition.name))
+            if metric.name in _RESERVED_RESULT_METRIC_NAMES:
+                raise ValueError("result metric name is reserved for {}.{}".format(definition.name, metric.name))
+            if not isinstance(metric.unit, str) or not metric.unit:
+                raise ValueError("result metric {} requires a unit".format(metric.name))
+            if metric.repetition_aggregation not in ("median", "sum"):
+                raise ValueError("invalid repetition aggregation for {}.{}".format(definition.name, metric.name))
+            if not isinstance(metric.required, bool):
+                raise ValueError(
+                    "result metric required flag must be boolean for {}.{}".format(definition.name, metric.name)
+                )
+            if not isinstance(metric.description, str):
+                raise ValueError(
+                    "result metric description must be a string for {}.{}".format(definition.name, metric.name)
+                )
+            metric_names.append(metric.name)
+        if len(metric_names) != len(set(metric_names)):
+            raise ValueError("result metric names must be unique for {}".format(definition.name))
+        throughput = next((metric for metric in adapter.metrics if metric.name == "throughput"), None)
+        if throughput is None or not throughput.required or throughput.repetition_aggregation != "median":
+            raise ValueError(
+                "result adapter throughput must be required and median-aggregated for {}".format(definition.name)
+            )
+        transactions = next((metric for metric in adapter.metrics if metric.name == "transactions"), None)
+        if transactions is not None and (not transactions.required or transactions.repetition_aggregation != "median"):
+            raise ValueError(
+                "result adapter transactions must be required and median-aggregated for {}".format(definition.name)
+            )
+        errors = next((metric for metric in adapter.metrics if metric.name == "errors"), None)
+        if errors is not None and (not errors.required or errors.repetition_aggregation != "sum"):
+            raise ValueError("result adapter errors must be required and sum-aggregated for {}".format(definition.name))
+        if not isinstance(definition.throughput_unit, str) or not definition.throughput_unit:
+            raise ValueError("throughput unit must be a non-empty string for {}".format(definition.name))
+        if not isinstance(adapter.slo_metrics, tuple):
+            raise ValueError("SLO metrics must be a tuple for {}".format(definition.name))
+        slo_percentiles = []
+        for item in adapter.slo_metrics:
+            if not isinstance(item, tuple) or len(item) != 2 or not all(isinstance(value, str) for value in item):
+                raise ValueError("invalid SLO metric mapping for {}".format(definition.name))
+            percentile, metric_name = item
+            if not percentile or metric_name not in metric_names:
+                raise ValueError("invalid SLO metric mapping for {}".format(definition.name))
+            metric = next(metric for metric in adapter.metrics if metric.name == metric_name)
+            if not metric.required or metric.unit != "ms" or metric.repetition_aggregation != "median":
+                raise ValueError(
+                    "SLO metric {}.{} must be required, measured in ms, and median-aggregated".format(
+                        definition.name, metric_name
+                    )
+                )
+            slo_percentiles.append(percentile)
+        if len(slo_percentiles) != len(set(slo_percentiles)):
+            raise ValueError("SLO percentiles must be unique for {}".format(definition.name))
         if definition.dataset_scope not in ("sample", "geometry", "profile"):
             raise ValueError("unknown dataset scope for {}: {}".format(definition.name, definition.dataset_scope))
         if definition.warmup_mode not in ("separate", "inline"):
@@ -421,6 +629,7 @@ _DEFINITIONS = (
         init_builder=_kv_init_builder,
         run_builder=_kv_run_builder,
         options_validator=_validate_kv_options,
+        throughput_unit="requests/s",
     ),
     WorkloadDefinition(
         name="stock",
@@ -440,6 +649,7 @@ _DEFINITIONS = (
         init_builder=_stock_init_builder,
         run_builder=_stock_run_builder,
         options_validator=_validate_stock_options,
+        throughput_unit="transactions/s",
     ),
     WorkloadDefinition(
         name="log",
@@ -467,6 +677,7 @@ _DEFINITIONS = (
         options_validator=_validate_log_options,
         dataset_scope="sample",
         warmup_mode="separate",
+        throughput_unit="batches/s",
     ),
 )
 _validate_catalog(_DEFINITIONS)
@@ -533,6 +744,28 @@ def workload_config_schema():
     }
 
 
+def _workload_result_schema(definition):
+    adapter = definition.result_adapter
+    metrics = []
+    for metric in adapter.metrics:
+        descriptor = {
+            "name": metric.name,
+            "unit": definition.throughput_unit if metric.name == "throughput" else metric.unit,
+            "repetition_aggregation": metric.repetition_aggregation,
+            "required": metric.required,
+        }
+        if metric.description:
+            descriptor["description"] = metric.description
+        metrics.append(descriptor)
+    return {
+        "schema_id": adapter.schema_id,
+        "metrics": metrics,
+        "slo_metrics": dict(adapter.slo_metrics),
+        "throughput_unit": definition.throughput_unit,
+        "reports_errors": any(metric.name == "errors" for metric in adapter.metrics),
+    }
+
+
 def web_workload_catalog():
     """Return a stable JSON-compatible workload description for the web builder."""
 
@@ -542,6 +775,10 @@ def web_workload_catalog():
             "default_operation": definition.default_operation,
             "operations": list(definition.operations),
             "load_parameters": list(definition.load_parameters),
+            "throughput_unit": definition.throughput_unit,
+            "slo_metrics": dict(definition.result_adapter.slo_metrics),
+            "reports_errors": any(metric.name == "errors" for metric in definition.result_adapter.metrics),
+            "result_schema_id": definition.result_adapter.schema_id,
             "options": [
                 {
                     "name": option.name,
@@ -569,6 +806,20 @@ def allowed_load_parameters(workload_type):
 
 def all_load_parameters():
     return tuple(dict.fromkeys(parameter for definition in _DEFINITIONS for parameter in definition.load_parameters))
+
+
+def all_slo_percentiles():
+    return tuple(
+        dict.fromkeys(
+            percentile
+            for definition in _DEFINITIONS
+            for percentile, _metric_name in definition.result_adapter.slo_metrics
+        )
+    )
+
+
+def allowed_slo_metrics(workload_type):
+    return dict(_definition(workload_type).result_adapter.slo_metrics)
 
 
 def build_init_argv(cli, path, workload):
@@ -608,6 +859,10 @@ def _validate_command_plans(plans, description, allow_default_timeout=False):
             raise BenchmarkError(
                 "{} command {} has an invalid measurement window builder".format(description, plan.name)
             )
+        if plan.progress_duration_seconds is not None and (
+            not _is_finite_number(plan.progress_duration_seconds) or plan.progress_duration_seconds <= 0
+        ):
+            raise BenchmarkError("{} command {} must have a positive progress duration".format(description, plan.name))
     return plans
 
 
@@ -677,7 +932,11 @@ def build_run_plan(
             warmup_seconds,
         )
     plan = _validate_command_plans((plan,), "{} run plan".format(definition.name))[0]
-    if definition.warmup_mode == "inline" and plan.measurement_window_builder is None:
+    if (
+        definition.warmup_mode == "inline"
+        and plan.measurement_window_builder is None
+        and definition.result_adapter is GENERIC_TOTAL_RESULT
+    ):
         raise BenchmarkError("{} inline warmup requires a CPU measurement window".format(definition.name))
     return plan
 
@@ -707,6 +966,47 @@ def workload_definition(workload_type):
     """Return immutable lifecycle metadata for one registered workload."""
 
     return _definition(workload_type)
+
+
+def workload_result_schema(workload_type):
+    """Return the JSON-compatible metric schema produced by one workload."""
+
+    return _workload_result_schema(_definition(workload_type))
+
+
+def parse_workload_result(workload_type, command_result, normalized_workload, request):
+    """Parse and validate one workload command result through its adapter."""
+
+    definition = _definition(workload_type)
+    adapter = definition.result_adapter
+    if not isinstance(request, WorkloadRunRequest):
+        raise BenchmarkError("workload result adapter requires a valid run request")
+    parsed = adapter.parse(command_result, normalized_workload, request)
+    if not isinstance(parsed, WorkloadResult):
+        raise BenchmarkError("workload result adapter {} returned an invalid result".format(adapter.schema_id))
+    if not isinstance(parsed.metrics, dict):
+        raise BenchmarkError("workload result adapter {} metrics must be a mapping".format(adapter.schema_id))
+    declared = {metric.name: metric for metric in adapter.metrics}
+    unknown = sorted((name for name in parsed.metrics if name not in declared), key=str)
+    if unknown:
+        raise BenchmarkError(
+            "workload result adapter {} returned unknown metrics: {}".format(
+                adapter.schema_id, ", ".join(map(str, unknown))
+            )
+        )
+    missing = [metric.name for metric in adapter.metrics if metric.required and metric.name not in parsed.metrics]
+    if missing:
+        raise BenchmarkError(
+            "workload result adapter {} omitted required metrics: {}".format(adapter.schema_id, ", ".join(missing))
+        )
+    for name, value in parsed.metrics.items():
+        if not _is_finite_number(value) or value < 0:
+            raise BenchmarkError(
+                "workload result adapter {} metric {} must be a finite non-negative number".format(
+                    adapter.schema_id, name
+                )
+            )
+    return WorkloadResult(dict(parsed.metrics), parsed.details, parsed.measurement_window)
 
 
 def workload_table_path(workload_type, path):

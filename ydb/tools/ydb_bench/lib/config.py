@@ -13,7 +13,9 @@ from ydb.tools.ydb_bench.lib.actors_core import RunConfiguration
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     allowed_load_parameters,
+    allowed_slo_metrics,
     all_load_parameters,
+    all_slo_percentiles,
     normalize_workload,
     workload_config_schema,
 )
@@ -160,7 +162,7 @@ def _profile_schema(benchmark):
                             "type": "object",
                             "additionalProperties": False,
                             "properties": {
-                                "percentile": {"enum": ["p50", "p95", "p99", "pmax"]},
+                                "percentile": {"enum": list(all_slo_percentiles())},
                                 "max-ms": {"type": "number", "minimum": 0},
                                 "max-errors": {"type": "integer", "minimum": 0},
                                 "min-achieved-rate-ratio": {
@@ -199,7 +201,7 @@ def _profile_schema(benchmark):
                                     "exclusiveMinimum": 0,
                                     "maximum": 100,
                                 },
-                                "percentile": {"enum": ["p50", "p95", "p99", "pmax"]},
+                                "percentile": {"enum": list(all_slo_percentiles())},
                                 "max-ms": {"type": "number", "minimum": 0},
                                 "max-errors": {"type": "integer", "minimum": 0},
                                 "min-achieved-rate-ratio": {
@@ -721,13 +723,16 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         else:
             if "max-ms" not in objective:
                 _config_error(location + ".load.objective", "latency-slo requires max-ms")
+            slo_metrics = allowed_slo_metrics(workload["type"])
+            percentile = _choice(
+                objective.get("percentile", "p99"),
+                tuple(slo_metrics),
+                location + ".load.objective.percentile",
+            )
             parsed_objective.update(
                 {
-                    "percentile": _choice(
-                        objective.get("percentile", "p99"),
-                        ("p50", "p95", "p99", "pmax"),
-                        location + ".load.objective.percentile",
-                    ),
+                    "percentile": percentile,
+                    "latency_metric": slo_metrics[percentile],
                     "max_ms": _finite_number(objective["max-ms"], location + ".load.objective.max-ms", 0),
                     "max_errors": _nonnegative_integer(
                         objective.get("max-errors", 0), location + ".load.objective.max-errors"

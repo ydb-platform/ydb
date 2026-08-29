@@ -235,6 +235,7 @@ class YdbBenchTest(unittest.TestCase):
         }
         events = []
         self.last_local_ydb_cluster = cluster
+        self.last_local_ydb_monitor = monitor
         with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
             local_ydb, "LinuxCpuMonitor", return_value=monitor
         ), mock.patch.object(
@@ -441,6 +442,13 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[2]["operations"], ["insert", "upsert", "bulk-upsert"])
         self.assertEqual(catalog[2]["load_parameters"], ["threads"])
         self.assertEqual(catalog[2]["options"][4]["choices"], ["row", "column"])
+        self.assertEqual([item["result_schema_id"] for item in catalog], ["generic-total-v1"] * 3)
+        self.assertEqual(
+            [item["throughput_unit"] for item in catalog],
+            ["requests/s", "transactions/s", "batches/s"],
+        )
+        self.assertTrue(all(item["reports_errors"] for item in catalog))
+        self.assertEqual(catalog[0]["slo_metrics"]["p99"], "p99_ms")
         catalog_parameters = tuple(
             dict.fromkeys(parameter for definition in catalog for parameter in definition["load_parameters"])
         )
@@ -1507,6 +1515,238 @@ class YdbBenchTest(unittest.TestCase):
                 Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
                 20 nan 0 0 1 2 3 4
             """)
+
+    def test_local_ydb_result_adapter_rejects_invalid_metric_mappings(self):
+        metric_schema = (
+            local_ydb_workloads.WorkloadMetric("throughput", "widgets/s", required=True),
+            local_ydb_workloads.WorkloadMetric("latency_ms", "ms"),
+        )
+        request = local_ydb_workloads.WorkloadRunRequest("threads", 4, 10, 0, 8, None)
+        command_result = self._local_ydb_command_result(("ydb", "workload", "fake"))
+        invalid_results = (
+            ({"throughput": 1, "unknown": 2}, "unknown metrics"),
+            ({"latency_ms": 2}, "omitted required metrics: throughput"),
+            ({"throughput": float("nan")}, "finite non-negative number"),
+            ({"throughput": True}, "finite non-negative number"),
+            ({"throughput": -1}, "finite non-negative number"),
+        )
+        for index, (metrics, message) in enumerate(invalid_results):
+            with self.subTest(metrics=metrics):
+                adapter = local_ydb_workloads.WorkloadResultAdapter(
+                    "fake-invalid-{}".format(index),
+                    lambda _result, _workload, _request, metrics=metrics: local_ydb_workloads.WorkloadResult(metrics),
+                    metric_schema,
+                )
+                definition = replace(
+                    local_ydb_workloads.workload_definition("kv"),
+                    result_adapter=adapter,
+                    throughput_unit="widgets/s",
+                )
+                with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+                    with self.assertRaisesRegex(BenchmarkError, message):
+                        local_ydb_workloads.parse_workload_result(
+                            "kv",
+                            command_result,
+                            {"type": "kv", "operation": "upsert", "options": {}},
+                            request,
+                        )
+
+    def test_local_ydb_catalog_rejects_unsafe_result_metric_contracts(self):
+        definition = local_ydb_workloads.workload_definition("kv")
+        generic = local_ydb_workloads.GENERIC_TOTAL_RESULT
+
+        def changed_metric(name, **changes):
+            return tuple(replace(metric, **changes) if metric.name == name else metric for metric in generic.metrics)
+
+        invalid_adapters = (
+            (replace(generic, metrics=changed_metric("throughput", repetition_aggregation="sum")), "throughput"),
+            (replace(generic, metrics=changed_metric("transactions", required=False)), "transactions"),
+            (replace(generic, metrics=changed_metric("errors", required=False)), "errors"),
+            (replace(generic, metrics=changed_metric("p99_ms", repetition_aggregation="sum")), "SLO metric"),
+            (
+                local_ydb_workloads.WorkloadResultAdapter(
+                    "reserved-v1",
+                    generic.parse,
+                    (
+                        local_ydb_workloads.WorkloadMetric("throughput", "operations/s", required=True),
+                        local_ydb_workloads.WorkloadMetric("load", "items"),
+                    ),
+                ),
+                "reserved",
+            ),
+        )
+        for adapter, message in invalid_adapters:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                local_ydb_workloads._validate_catalog((replace(definition, result_adapter=adapter),))
+
+    def test_local_ydb_result_adapter_repetition_schema_is_consistent_without_fake_errors(self):
+        metrics = (
+            local_ydb_workloads.WorkloadMetric("throughput", "widgets/s", required=True),
+            local_ydb_workloads.WorkloadMetric("latency_ms", "ms"),
+        )
+        aggregated = local_ydb._aggregate_measurements(
+            [{"throughput": 10}, {"throughput": 20}],
+            metrics,
+        )
+        self.assertEqual(aggregated, {"throughput": 15.0})
+        self.assertNotIn("errors", aggregated)
+        passed, reason = load_control.evaluate_load(
+            {"parameter": "threads", "allow_errors": False, "values": [1]},
+            1,
+            aggregated,
+        )
+        self.assertTrue(passed)
+        self.assertEqual(reason, "configured point")
+        with self.assertRaisesRegex(BenchmarkError, "inconsistent metric keys"):
+            local_ydb._aggregate_measurements(
+                [
+                    {"throughput": 10, "latency_ms": 1},
+                    {"throughput": 20},
+                ],
+                metrics,
+            )
+
+    def test_local_ydb_custom_result_adapter_writes_details_and_controls_progress_and_cpu_window(self):
+        requests = []
+
+        def parse_result(_command_result, normalized_workload, request):
+            requests.append((normalized_workload, request))
+            return local_ydb_workloads.WorkloadResult(
+                {"throughput": 12.5, "latency_ms": 7},
+                details={"transactions": {"new-order": 42}},
+                measurement_window=(101.0, 109.0),
+            )
+
+        adapter = local_ydb_workloads.WorkloadResultAdapter(
+            "fake-json-v1",
+            parse_result,
+            (
+                local_ydb_workloads.WorkloadMetric("throughput", "widgets/s", required=True),
+                local_ydb_workloads.WorkloadMetric(
+                    "latency_ms",
+                    "ms",
+                    required=True,
+                    description="fake SLO latency",
+                ),
+            ),
+            (("p99", "latency_ms"),),
+        )
+
+        def build_run_plan(*_args):
+            return local_ydb_workloads.WorkloadCommandPlan(
+                "run",
+                ("ydb", "workload", "fake", "run"),
+                30,
+                progress_duration_seconds=17,
+            )
+
+        definition = replace(
+            local_ydb_workloads.workload_definition("kv"),
+            warmup_mode="inline",
+            run_plan_builder=build_run_plan,
+            result_adapter=adapter,
+            throughput_unit="widgets/s",
+        )
+        configuration = load_config(self._config("""
+            local-ydb:
+              fake-adapter:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 2, duration: 3, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            manifest, output, events = self._run_mock_local_ydb(
+                configuration,
+                "fake-adapter",
+                [{"throughput": 999}],
+            )
+
+        self.assertEqual(len(requests), 1)
+        request = requests[0][1]
+        self.assertEqual(
+            (request.load_parameter, request.load, request.duration_seconds, request.warmup_seconds),
+            ("threads", 1, 3, 2),
+        )
+        self.assertEqual(request.client_threads, 64)
+        self.assertIsNone(request.objective)
+        measuring = [
+            event["fields"]["progress"]
+            for event in events
+            if event["type"] == "step-progress" and event["fields"]["progress"]["phase"] == "measuring"
+        ]
+        self.assertEqual(measuring[0]["phase_duration_seconds"], 17)
+        artifact = json.loads(
+            (output / "dynamic-nodes-01" / "load-00000001" / "repeat-001" / "workload-result.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            artifact,
+            {
+                "schema_id": "fake-json-v1",
+                "metrics": {"latency_ms": 7, "throughput": 12.5},
+                "details": {"transactions": {"new-order": 42}},
+            },
+        )
+        self.assertEqual(manifest["attempts"][0]["throughput"], 12.5)
+        self.assertNotIn("errors", manifest["attempts"][0])
+        self.assertEqual(manifest["workload_result_schema"]["schema_id"], "fake-json-v1")
+        self.assertEqual(manifest["workload_result_schema"]["slo_metrics"], {"p99": "latency_ms"})
+        self.assertEqual(manifest["workload_result_schema"]["throughput_unit"], "widgets/s")
+        self.assertEqual(manifest["workload_result_schema"]["metrics"][1]["description"], "fake SLO latency")
+        repetitions_header = (output / "repetitions.csv").read_text(encoding="utf-8").splitlines()[0]
+        summary_header = (output / "summary.csv").read_text(encoding="utf-8").splitlines()[0]
+        self.assertIn("latency_ms", repetitions_header)
+        self.assertIn("median_latency_ms", summary_header)
+        self.assertNotIn("errors", repetitions_header)
+        self.assertNotIn("errors", summary_header)
+        self.last_local_ydb_monitor.summary.assert_called_once_with(
+            started_at_unix=101.0,
+            finished_at_unix=109.0,
+        )
+        self.last_local_ydb_cluster.ensure_running.assert_called()
+
+    def test_local_ydb_result_adapter_maps_configured_slo_to_declared_metric(self):
+        adapter = local_ydb_workloads.WorkloadResultAdapter(
+            "fake-slo-v1",
+            lambda _result, _workload, _request: local_ydb_workloads.WorkloadResult(
+                {"throughput": 1, "new_order_p90_ms": 4}
+            ),
+            (
+                local_ydb_workloads.WorkloadMetric("throughput", "widgets/s", required=True),
+                local_ydb_workloads.WorkloadMetric("new_order_p90_ms", "ms", required=True),
+            ),
+            (("p90", "new_order_p90_ms"),),
+        )
+        definition = replace(
+            local_ydb_workloads.workload_definition("kv"),
+            result_adapter=adapter,
+            throughput_unit="widgets/s",
+        )
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            configuration = load_config(self._config("""
+                local-ydb:
+                  fake-slo:
+                    workload: {type: kv, operation: upsert}
+                    load:
+                      parameter: threads
+                      search: {start: 1, maximum: 2}
+                      objective: {type: latency-slo, percentile: p90, max-ms: 5}
+            """)).runs[0]
+
+        objective = configuration.parameters["local_ydb"]["load"]["objective"]
+        self.assertEqual(objective["latency_metric"], "new_order_p90_ms")
+        passed, reason = load_control.evaluate_load(
+            configuration.parameters["local_ydb"]["load"],
+            1,
+            {"throughput": 1, "new_order_p90_ms": 4},
+        )
+        self.assertTrue(passed)
+        self.assertIn("does not report request errors", reason)
 
     def test_local_ydb_cli_total_row_rejects_negative_counters(self):
         for values in ("-1 10 0 0 1 2 3 4", "1 10 -1 0 1 2 3 4", "1 10 0 -1 1 2 3 4"):

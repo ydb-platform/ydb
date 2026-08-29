@@ -273,7 +273,7 @@ void TUserActionProcessorFixture::CreatePartitionActor(const TPartitionId& id,
     Config.SetLocalDC(true);
     Config.SetYdbDatabasePath("/Root/LbCommunal/account");
 
-    TopicConverter = NNameResolver::MakeTopicNamesPtr(NNameResolver::NamesFromFirstClassConfig(Config));
+    TopicConverter = NNameResolver::MakeTopicNamesPtr(NNameResolver::NamesFromConfig(Config, true));
 
     auto actor = new NPQ::TPartition(Ctx->TabletId,
                                      id,

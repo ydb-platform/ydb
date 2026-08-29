@@ -754,6 +754,20 @@ Y_UNIT_TEST_F(NamesFromConfigFcc, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/database/my-stream");
 }
 
+Y_UNIT_TEST_F(NamesFromConfigExplicitFirstClassCitizen, TNameResolverFixture) {
+    SetFcc(false);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("my-stream");
+    cfg.SetTopicPath("/lb/database/my-stream");
+    cfg.SetYdbDatabasePath("/lb/database");
+
+    auto names = NamesFromConfig(cfg, true);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/database/my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "/lb/database/my-stream");
+}
+
 Y_UNIT_TEST_F(NamesFromConfigFccTopicWhenFederationEnabled, TNameResolverFixture) {
     SetFcc(false);
     NKikimrPQ::TPQTabletConfig cfg;

@@ -58,7 +58,7 @@ NKikimr::NPQ::NNameResolver::TTopicNamesPtr MakeTopicConverter() {
     pqConfig->SetTopicName("topic-1");
     pqConfig->SetTopicPath("/Root/topic-1");
     return NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(
-        NKikimr::NPQ::NNameResolver::NamesFromFirstClassConfig(*pqConfig));
+        NKikimr::NPQ::NNameResolver::NamesFromConfig(*pqConfig, true));
 }
 
 } // namespace

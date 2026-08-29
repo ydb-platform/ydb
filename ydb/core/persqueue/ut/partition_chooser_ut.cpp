@@ -199,7 +199,7 @@ struct TWriteSessionMock: public NActors::TActorBootstrapped<TWriteSessionMock> 
 
 NKikimr::NPQ::NNameResolver::TTopicNamesPtr CreateTopicConverter() {
     return NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(
-        NKikimr::NPQ::NNameResolver::NamesFromFirstClassConfig(CreateConfig(SMDisabled).GetPQTabletConfig()));
+        NKikimr::NPQ::NNameResolver::NamesFromConfig(CreateConfig(SMDisabled).GetPQTabletConfig(), true));
 }
 
 TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,

@@ -78,7 +78,7 @@ NKikimrSchemeOp::TPersQueueGroupDescription MakeOldConfig() {
 
 NKikimr::NPQ::NNameResolver::TTopicNamesPtr MakeConverter(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
     return NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(
-        NKikimr::NPQ::NNameResolver::NamesFromFirstClassConfig(config.GetPQTabletConfig()));
+        NKikimr::NPQ::NNameResolver::NamesFromConfig(config.GetPQTabletConfig(), true));
 }
 
 Ydb::ResultSet MakeSelectResultSet(std::optional<ui32> partition, std::optional<ui64> seqNo) {

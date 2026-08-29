@@ -1110,23 +1110,23 @@ struct TNameBuilder {
 
 } // namespace
 
-TTopicNames NamesFromFirstClassConfig(const NKikimrPQ::TPQTabletConfig& config) {
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen) {
     TNameBuilder builder;
-    builder.InitFromTabletConfig(true, {}, config, "");
+    builder.InitFromTabletConfig(firstClassCitizen, {}, config, "");
     return builder.ToTopicNames(true);
 }
 
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config) {
     const auto& pqConfig = AppData()->PQConfig;
-    const bool firstClass = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
+    const bool firstClassCitizen = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
     TNameBuilder builder;
     builder.InitFromTabletConfig(
-        firstClass, NormalizePqPrefix(pqConfig.GetRoot()), config, pqConfig.GetTestDatabaseRoot());
+        firstClassCitizen, NormalizePqPrefix(pqConfig.GetRoot()), config, pqConfig.GetTestDatabaseRoot());
     auto names = builder.ToTopicNames(true);
     // Request-side FCC converters used to keep names valid when AppData FCC is off
     // for a first-class tablet config (kafka BalanceScenarioForFederation).
-    if (!names.IsValid() && !firstClass) {
-        return NamesFromFirstClassConfig(config);
+    if (!names.IsValid() && !firstClassCitizen) {
+        return NamesFromConfig(config, true);
     }
     return names;
 }

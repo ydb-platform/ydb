@@ -194,11 +194,17 @@ inline TTopicNamesPtr MakeTopicNamesPtr(TTopicNames names) {
     return std::make_shared<const TTopicNames>(std::move(names));
 }
 
-/** Analog of MakeTopicConverter. Uses AppData()->PQConfig. Tablet's only name entry. */
+/**
+ * Tablet's only name entry. Reads firstClassCitizen, PQ Root and TestDatabaseRoot from AppData()->PQConfig.
+ * Prefer this overload wherever an actor context is available.
+ */
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config);
 
-/** FCC names from a tablet config. Does not read AppData (usable without an actor context). */
-TTopicNames NamesFromFirstClassConfig(const NKikimrPQ::TPQTabletConfig& config);
+/**
+ * Same formation as NamesFromConfig, but firstClassCitizen is passed explicitly and AppData is not read.
+ * Use when there is no actor TLS (unit tests) or when formation must not follow AppData.
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen);
 
 /** CDC: override ClientsideName with the stream path (not streamImpl). */
 TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clientsideName);

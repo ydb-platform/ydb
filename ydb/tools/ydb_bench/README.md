@@ -14,7 +14,8 @@ The tool provides four benchmarks:
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
-- `local-ydb`: a local static/dynamic YDB cluster driven by `ydb workload kv`.
+- `local-ydb`: a local static/dynamic YDB cluster driven by the `kv`, `stock`,
+  or `log` YDB CLI workload.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -123,15 +124,20 @@ specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
 
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
-benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. A
-`values` list measures exact points. For adaptive runs, `search` defines the
-range and resolution. `maximize-throughput` uses a discrete ternary search and,
-after confirming a plateau, selects the lowest CPU-saturated load within the
-configured throughput tolerance of the best saturated measurement. A plateau
-is confirmed only when the selected role's CPU is saturated. `latency-slo` uses
-the configured `multiplier` to find the first failing point, then a binary
-search to find the highest load whose millisecond percentile, error count, and
-achieved-rate ratio satisfy the SLO. For example:
+benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. The
+`kv` and `stock` workloads accept either parameter; `log` searches `threads`
+because its CLI does not expose `--rate`. Log throughput is the number of
+successful batches per second; `rows-per-operation` controls how many rows are
+written by each batch. Its default `ttl-minutes: 0` is a zero-minute table TTL,
+not disabled TTL. A `values` list measures exact points. For adaptive runs,
+`search` defines the range and resolution. `maximize-throughput` uses a
+discrete ternary search and, after confirming a plateau, selects the lowest
+CPU-saturated load within the configured throughput tolerance of the best
+saturated measurement. A plateau is confirmed only when the selected role's
+CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
+first failing point, then a binary search to find the highest load whose
+millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
+For example:
 
 ```yaml
     load:

@@ -1,0 +1,30 @@
+local-ydb:
+  log-smoke:
+    workload:
+      type: log
+      operation: bulk-upsert
+      options:
+        min-partitions: 1
+        max-partitions: 1
+        partition-size-mb: 128
+        auto-partition: 0
+        rows-per-operation: 16
+    geometry:
+      preset: single
+    client:
+      threads: 8
+    load:
+      parameter: threads
+      values: [1, 2, 4]
+    measurement:
+      warmup: 1
+      duration: 3
+      repetitions: 1
+      verification-repetitions: 0
+    affinity:
+      ydb-cli:
+        mode: none
+      static-nodes:
+        mode: none
+      dynamic-nodes:
+        mode: none

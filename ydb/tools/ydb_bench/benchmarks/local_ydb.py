@@ -20,8 +20,8 @@ DIMENSIONS = (
 METRICS = tuple(
     MetricDefinition(name, unit)
     for name, unit in (
-        ("transactions", "transactions"),
-        ("throughput", "transactions/s"),
+        ("transactions", "operations"),
+        ("throughput", "operations/s"),
         ("retries", "retries"),
         ("errors", "errors"),
         ("p50_ms", "ms"),

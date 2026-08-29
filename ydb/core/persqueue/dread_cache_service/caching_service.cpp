@@ -35,21 +35,12 @@ i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
     return 0;
 }
 
-<<<<<<< HEAD
-#define PQ_CPROXY_LOG_D(message) LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_I(message) LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_W(message) LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_E(message) LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_A(message) LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-
 void SetKafkaBatchBaseOffsetIfNeeded(NKikimrPQClient::TDataChunk& proto, ui64 offset) {
     if (GetDataChunkCodec(proto) == Ydb::Topic::CODEC_KAFKA_BATCH) {
         NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), offset);
     }
 }
 
-=======
->>>>>>> 268c27ad174 ([YDB_LOG] Migrate ydb/core/persqueue/dread_cache_service (#45803))
 class TPQDirectReadCacheService : public TActorBootstrapped<TPQDirectReadCacheService> {
 public:
     TPQDirectReadCacheService(const ::NMonitoring::TDynamicCounterPtr& counters)
@@ -205,15 +196,10 @@ private:
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: server session",
                 {"deregistered", key.SessionId});
         } else {
-<<<<<<< HEAD
-            PQ_CPROXY_LOG_W("attempted to deregister unknown server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << generation << ", ignored");
-=======
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to deregister unknown server session with generation ignored",
                 {"sessionId", key.SessionId},
                 {"partitionSessionId", key.PartitionSessionId},
-                {"Generation", ev->Get()->Generation});
->>>>>>> 268c27ad174 ([YDB_LOG] Migrate ydb/core/persqueue/dread_cache_service (#45803))
+                {"generation", ev->Get()->Generation});
             return;
         }
     }
@@ -223,20 +209,21 @@ private:
         auto sessionKey = MakeSessionKey(ev->Get());
         auto sessionIter = ServerSessions.find(sessionKey);
         if (sessionIter.IsEnd()) {
-<<<<<<< HEAD
             if (IsSessionGenerationRetired(sessionKey, ev->Get()->TabletGeneration)) {
-                PQ_CPROXY_LOG_I("drop stage for retired session generation: session=" << sessionKey.SessionId
-                                << ", partitionSessionId=" << sessionKey.PartitionSessionId
-                                << ", ReadKey.ReadId=" << ev->Get()->ReadKey.ReadId
-                                << ", TabletGeneration=" << ev->Get()->TabletGeneration);
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop stage for retired session generation",
+                    {"session", sessionKey.SessionId},
+                    {"partitionSessionId", sessionKey.PartitionSessionId},
+                    {"readId", ev->Get()->ReadKey.ReadId},
+                    {"tabletGeneration", ev->Get()->TabletGeneration});
                 return;
             }
             // LOGBROKER-10590: CreateSession Register is fire-and-forget; Stage can arrive first.
             // Dropping it permanently leaves tablet inFlight without client-visible DirectRead.
-            PQ_CPROXY_LOG_I("buffer stage for unregistered session: session=" << sessionKey.SessionId
-                            << ", partitionSessionId=" << sessionKey.PartitionSessionId
-                            << ", ReadKey.ReadId=" << ev->Get()->ReadKey.ReadId
-                            << ", TabletGeneration=" << ev->Get()->TabletGeneration);
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer stage for unregistered session",
+                {"session", sessionKey.SessionId},
+                {"partitionSessionId", sessionKey.PartitionSessionId},
+                {"readId", ev->Get()->ReadKey.ReadId},
+                {"tabletGeneration", ev->Get()->TabletGeneration});
             BufferPendingStage(
                     sessionKey,
                     ev->Get()->ReadKey.ReadId,
@@ -246,33 +233,6 @@ private:
         }
         StageToSession(sessionIter, ev->Get()->ReadKey.ReadId, ev->Get()->TabletGeneration, ev->Get()->Response);
         TryApplyPendingPublish(sessionKey, ev->Get()->ReadKey.ReadId);
-=======
-            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: tried to stage direct read for unregistered session",
-                {"session", sessionKey.SessionId},
-                {"partitionSessionId", sessionKey.PartitionSessionId});
-            return;
-        }
-        if (sessionIter->second.Generation != ev->Get()->TabletGeneration) {
-            YDB_LOG_ALERT_CTX(ctx, "Direct read cache: tried to stage direct read for session with generation previously had this session with generation Data ignored",
-                {"sessionId", sessionKey.SessionId},
-                {"TabletGeneration", ev->Get()->TabletGeneration},
-                {"generation", sessionIter->second.Generation});
-            return;
-        }
-        auto ins = sessionIter->second.StagedReads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, ev->Get()->Response));
-        if (!ins.second) {
-            YDB_LOG_WARN_CTX(ctx, "Direct read cache: tried to stage duplicate direct read for session with id new data ignored",
-                {"sessionId", sessionKey.SessionId},
-                {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId});
-            return;
-        }
-        ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
-        ChangeCounterValue("StagedReadsCount", 1, false);
-        ChangeCounterValue("StagedReadsRate", 1, false, true);
-        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: staged direct read id",
-            {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
-            {"session", sessionKey.SessionId});
->>>>>>> 268c27ad174 ([YDB_LOG] Migrate ydb/core/persqueue/dread_cache_service (#45803))
     }
 
     void HandlePublish(TEvPQ::TEvPublishDirectRead::TPtr& ev) {
@@ -287,50 +247,27 @@ private:
 
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
-<<<<<<< HEAD
             if (IsSessionGenerationRetired(key, generation)) {
                 PQ_CPROXY_LOG_I("drop publish for retired session generation: sessionId=" << key.SessionId
                                 << ", partitionSessionId=" << key.PartitionSessionId
                                 << ", readId=" << readId << ", generation=" << generation);
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop publish for retired session generation",
+                    {"sessionId", key.SessionId},
+                    {"partitionSessionId", key.PartitionSessionId},
+                    {"readId", readId},
+                    {"generation", generation});
                 return;
             }
-            PQ_CPROXY_LOG_I("buffer publish for unregistered session: sessionId=" << key.SessionId
-                            << ", partitionSessionId=" << key.PartitionSessionId
-                            << ", readId=" << readId << ", generation=" << generation);
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer publish for unregistered session",
+                    {"sessionId", key.SessionId},
+                    {"partitionSessionId", key.PartitionSessionId},
+                    {"readId", readId},
+                    {"generation", generation});
             BufferPendingPublish(key, readId, generation);
             return;
         }
 
         Y_UNUSED(PublishToSession(iter, readId, generation));
-=======
-            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish read for unknow session ignored",
-                {"sessionId", key.SessionId});
-            return;
-        }
-
-        if (iter->second.Generation != generation)
-            return;
-
-        auto stagedIter = iter->second.StagedReads.find(readId);
-        if (stagedIter == iter->second.StagedReads.end()) {
-            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish unknown read id ignored",
-                {"readId", readId},
-                {"sessionId", key.SessionId});
-            return;
-        }
-        auto inserted = iter->second.Reads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, stagedIter->second)).second;
-        if (inserted) {
-            ChangeCounterValue("PublishedReadDataSize", stagedIter->second->ByteSize(), false);
-            ChangeCounterValue("PublishedReadsCount", 1, false);
-            ChangeCounterValue("PublishedReadsRate", 1, false, true);
-        }
-        ChangeCounterValue("StagedReadDataSize", -stagedIter->second->ByteSize(), false);
-        ChangeCounterValue("StagedReadsCount", -1, false);
-
-        iter->second.StagedReads.erase(stagedIter);
-
-        SendNextReadToClient(iter);
->>>>>>> 268c27ad174 ([YDB_LOG] Migrate ydb/core/persqueue/dread_cache_service (#45803))
     }
 
     void HandleForget(TEvPQ::TEvForgetDirectRead::TPtr& ev) {
@@ -345,13 +282,10 @@ private:
                 {"session", ev->Get()->ReadKey.SessionId});
             return;
         }
-<<<<<<< HEAD
-        PQ_CPROXY_LOG_D("forget read: " << readId << " for session " << key.SessionId);
-=======
+
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: forget for session",
-            {"read", ev->Get()->ReadKey.ReadId},
+            {"read", readId},
             {"sessionId", key.SessionId});
->>>>>>> 268c27ad174 ([YDB_LOG] Migrate ydb/core/persqueue/dread_cache_service (#45803))
 
         if (iter->second.Generation != generation) { // Stale generation in event, ignore it
             return;
@@ -423,28 +357,18 @@ private:
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
             FlushPendingDirectReads(key);
         } else if (sessionsIter->second.Generation == generation) {
-<<<<<<< HEAD
-            PQ_CPROXY_LOG_W("attempted to register duplicate server session: " << key.SessionId << ":"
-                            << key.PartitionSessionId << " with same generation " << generation << ", ignored");
-            ClearRetiredSession(key);
-            FlushPendingDirectReads(key);
-        } else if (DestroyServerSession(sessionsIter, generation)) {
-            PQ_CPROXY_LOG_D("registered server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << generation
-                            << ", killed existing session with older generation ");
-            ClearRetiredSession(key);
-=======
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to register duplicate server with same generation ignored",
                 {"session", key.SessionId},
-                {"sessionId", key.PartitionSessionId},
+                {"partitionSessionId", key.PartitionSessionId},
                 {"generation", generation});
-
+            ClearRetiredSession(key);
+            FlushPendingDirectReads(key);
         } else if (DestroyServerSession(sessionsIter, generation)) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation killed existing session with older generation",
                 {"sessionId", key.SessionId},
                 {"partitionSessionId", key.PartitionSessionId},
                 {"generation", generation});
->>>>>>> 268c27ad174 ([YDB_LOG] Migrate ydb/core/persqueue/dread_cache_service (#45803))
+            ClearRetiredSession(key);
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
             FlushPendingDirectReads(key);
         } else {

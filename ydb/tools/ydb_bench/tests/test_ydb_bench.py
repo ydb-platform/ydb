@@ -9,6 +9,7 @@ import shutil
 import signal
 import socket
 import stat
+import subprocess
 import tempfile
 import textwrap
 import threading
@@ -404,10 +405,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(workload_schema, local_ydb_workloads.workload_config_schema())
 
         catalog = local_ydb_workloads.web_workload_catalog()
-        self.assertEqual([item["type"] for item in catalog], ["kv", "stock"])
+        self.assertEqual([item["type"] for item in catalog], ["kv", "stock", "log"])
         self.assertEqual(catalog[0]["operations"], ["upsert", "select", "read-rows", "mixed"])
         self.assertEqual(catalog[0]["load_parameters"], ["rate", "threads"])
         self.assertEqual(catalog[1]["default_operation"], "put-rand-order")
+        self.assertEqual(catalog[2]["default_operation"], "bulk-upsert")
+        self.assertEqual(catalog[2]["operations"], ["insert", "upsert", "bulk-upsert"])
+        self.assertEqual(catalog[2]["load_parameters"], ["threads"])
+        self.assertEqual(catalog[2]["options"][4]["choices"], ["row", "column"])
         catalog_parameters = tuple(
             dict.fromkeys(parameter for definition in catalog for parameter in definition["load_parameters"])
         )
@@ -418,6 +423,12 @@ class YdbBenchTest(unittest.TestCase):
             next(option for option in catalog[0]["options"] if option["name"] == "init-upserts")["operation_defaults"],
             {"upsert": 0},
         )
+        operation_enum = workload_schema["properties"]["operation"]["enum"]
+        expected_operations = list(
+            dict.fromkeys(operation for definition in catalog for operation in definition["operations"])
+        )
+        self.assertEqual(operation_enum, expected_operations)
+        self.assertEqual(len(operation_enum), len(set(operation_enum)))
         json.dumps(catalog, allow_nan=False)
 
     def test_local_ydb_workload_registry_preserves_defaults_and_validation(self):
@@ -438,7 +449,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(stock["options"]["orders"], 100)
 
         invalid = (
-            ({"type": [], "operation": "upsert"}, r"workload\.type.*must be one of kv, stock"),
+            ({"type": [], "operation": "upsert"}, r"workload\.type.*must be one of kv, stock, log"),
             ({"type": "kv", "operation": "put-rand-order"}, r"workload\.operation.*must be one of upsert"),
             (
                 {"type": "stock", "operation": "put-rand-order", "options": {"products": 500001}},
@@ -1488,6 +1499,140 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(workload["operation"], "put-rand-order")
         self.assertEqual(workload["options"]["products"], 10)
 
+    def test_local_ydb_log_profile_defaults_validation_and_web_contract(self):
+        loaded = load_config(self._config("""
+            local-ydb:
+              log-smoke:
+                workload: {type: log, operation: bulk-upsert}
+                load: {parameter: threads, values: [1, 2, 4]}
+        """))
+        profile = loaded.runs[0].parameters["local_ydb"]
+        self.assertEqual(
+            profile["workload"]["options"],
+            {
+                "min-partitions": 40,
+                "max-partitions": 1000,
+                "partition-size-mb": 2000,
+                "auto-partition": 1,
+                "store": "row",
+                "ttl-minutes": 0,
+                "string-length": 8,
+                "integer-columns": 0,
+                "string-columns": 0,
+                "key-columns": 0,
+                "rows-per-operation": 1,
+                "null-percent": 10,
+            },
+        )
+        definition = local_ydb_workloads.workload_definition("log")
+        self.assertEqual((definition.dataset_scope, definition.warmup_mode), ("sample", "separate"))
+        self.assertEqual(profile["load"]["values"], [1, 2, 4])
+
+        model = web.editor_model(loaded, self.root / "results")
+        editor_profile = model["profiles"][0]["local_ydb"]
+        self.assertEqual(editor_profile["workload"]["type"], "log")
+        self.assertEqual(editor_profile["load"]["parameter"], "threads")
+        self.assertIn(
+            "threads:{values:[1,2,4,8,16,32,64],start:1,maximum:256}",
+            web._JS,
+        )
+        self.assertIn("localYdbLoadForWorkload(config.load,parameters)", web._JS)
+        self.assertIn("log:'batches/s'", web._JS)
+        transactions = next(metric for metric in LOCAL_YDB_BENCHMARK.metrics if metric.name == "transactions")
+        throughput = next(metric for metric in LOCAL_YDB_BENCHMARK.metrics if metric.name == "throughput")
+        self.assertEqual(transactions.unit, "operations")
+        self.assertEqual(throughput.unit, "operations/s")
+
+        invalid = (
+            ({"max-partitions": 3, "min-partitions": 4}, "max-partitions.*must not be below"),
+            (
+                {"integer-columns": 1, "string-columns": 1, "key-columns": 3},
+                "key-columns.*must not exceed",
+            ),
+            ({"null-percent": 101}, "null-percent.*must not exceed 100"),
+            ({"rows-per-operation": 0}, "rows-per-operation.*positive integer"),
+            ({"string-length": 0}, "string-length.*positive integer"),
+            ({"store": "external"}, "store.*must be one of row, column"),
+        )
+        for options, message in invalid:
+            with self.subTest(options=options), self.assertRaisesRegex(BenchmarkError, message):
+                local_ydb_workloads.normalize_workload(
+                    {"type": "log", "operation": "bulk-upsert", "options": options},
+                    "workload",
+                )
+
+        invalid_load = self._config("""
+            local-ydb:
+              invalid:
+                workload: {type: log, operation: insert}
+                load: {parameter: rate, values: [1000]}
+        """)
+        with self.assertRaisesRegex(BenchmarkError, "load.parameter.*must be one of threads"):
+            load_config(invalid_load)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the web Builder behavior test")
+    def test_local_ydb_web_builder_resets_only_incompatible_load_parameters(self):
+        start = web._JS.index("const localYdbLoadDefaults=")
+        finish = web._JS.index("function defaultLocalYdbWorkload", start)
+        unit_start = web._JS.index("function localYdbThroughputUnit")
+        unit_finish = web._JS.index("function localAttemptRows", unit_start)
+        script = web._JS[start:finish] + web._JS[unit_start:unit_finish] + """
+            const points=localYdbResetLoadParameter(
+              {parameter:'rate',allow_errors:false,values:[1000]},'threads'
+            );
+            const automatic=localYdbResetLoadParameter({
+              parameter:'rate',allow_errors:true,
+              search:{start:777,maximum:9999,multiplier:3,resolution_percent:7},
+              objective:{type:'latency-slo',percentile:'p99',max_ms:10}
+            },'threads');
+            const custom={
+              parameter:'threads',allow_errors:false,
+              search:{start:7,maximum:91,multiplier:4,resolution_percent:9},
+              objective:{type:'maximize-throughput',target_role:'dynamic'}
+            };
+            const compatible=localYdbLoadForWorkload(custom,['rate','threads']);
+            process.stdout.write(JSON.stringify({
+              points,automatic,compatible,same_reference:compatible===custom,
+              units:['kv','stock','log','future'].map(localYdbThroughputUnit)
+            }));
+        """
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertEqual(
+            result["points"],
+            {
+                "parameter": "threads",
+                "allow_errors": False,
+                "values": [1, 2, 4, 8, 16, 32, 64],
+            },
+        )
+        self.assertEqual(
+            result["automatic"],
+            {
+                "parameter": "threads",
+                "allow_errors": True,
+                "search": {"start": 1, "maximum": 256, "multiplier": 3, "resolution_percent": 7},
+                "objective": {"type": "latency-slo", "percentile": "p99", "max_ms": 10},
+            },
+        )
+        self.assertTrue(result["same_reference"])
+        self.assertEqual(
+            result["compatible"],
+            {
+                "parameter": "threads",
+                "allow_errors": False,
+                "search": {"start": 7, "maximum": 91, "multiplier": 4, "resolution_percent": 9},
+                "objective": {"type": "maximize-throughput", "target_role": "dynamic"},
+            },
+        )
+        self.assertEqual(result["units"], ["requests/s", "transactions/s", "batches/s", "operations/s"])
+
     def test_local_ydb_stock_commands_do_not_use_kv_path_option(self):
         cli_context = local_ydb_workloads.WorkloadCli(
             Path("ydb"),
@@ -1543,6 +1688,214 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(add_command[add_command.index("run") + 1], "add-rand-order")
         self.assertEqual(put_command[put_command.index("run") + 1], "put-rand-order")
         self.assertEqual(add_command[add_command.index("--threads") + 1], 8)
+
+    def test_local_ydb_log_commands_are_golden_and_use_threads_as_load(self):
+        cli_context = local_ydb_workloads.WorkloadCli(
+            Path("/tmp/ydb cli"),
+            "grpc://benchmark-host.example:2135",
+            "/Root/bench",
+        )
+        workload = local_ydb_workloads.normalize_workload(
+            {
+                "type": "log",
+                "operation": "bulk-upsert",
+                "options": {
+                    "min-partitions": 1,
+                    "max-partitions": 4,
+                    "partition-size-mb": 512,
+                    "auto-partition": 0,
+                    "store": "column",
+                    "ttl-minutes": 0,
+                    "string-length": 16,
+                    "integer-columns": 1,
+                    "string-columns": 2,
+                    "key-columns": 3,
+                    "rows-per-operation": 50,
+                    "null-percent": 0,
+                },
+            },
+            "workload",
+        )
+        base = [
+            Path("/tmp/ydb cli"),
+            "--endpoint",
+            "grpc://benchmark-host.example:2135",
+            "--database",
+            "/Root/bench",
+            "workload",
+            "log",
+            "--path",
+            "log-table",
+        ]
+        self.assertEqual(
+            local_ydb_workloads.build_init_argv(cli_context, "log-table", workload),
+            base
+            + [
+                "init",
+                "--min-partitions",
+                1,
+                "--max-partitions",
+                4,
+                "--partition-size",
+                512,
+                "--auto-partition",
+                0,
+                "--len",
+                16,
+                "--int-cols",
+                1,
+                "--str-cols",
+                2,
+                "--key-cols",
+                3,
+                "--ttl",
+                0,
+                "--store",
+                "column",
+                "--null-percent",
+                0,
+            ],
+        )
+        expected_run = base + [
+            "run",
+            "bulk-upsert",
+            "--seconds",
+            30,
+            "--threads",
+            32,
+            "--quiet",
+            "--rows",
+            50,
+            "--len",
+            16,
+            "--int-cols",
+            1,
+            "--str-cols",
+            2,
+            "--key-cols",
+            3,
+            "--null-percent",
+            0,
+        ]
+        self.assertEqual(
+            local_ydb_workloads.build_run_argv(cli_context, "log-table", workload, "threads", 32, 30, 64),
+            expected_run,
+        )
+        self.assertNotIn("--rate", expected_run)
+        self.assertEqual(expected_run[expected_run.index("--rows") + 1], 50)
+        self.assertEqual(expected_run[expected_run.index("--threads") + 1], 32)
+        for operation in ("insert", "upsert", "bulk-upsert"):
+            with self.subTest(operation=operation):
+                command = local_ydb_workloads.build_run_argv(
+                    cli_context,
+                    "log-table",
+                    {**workload, "operation": operation},
+                    "threads",
+                    2,
+                    1,
+                    64,
+                )
+                self.assertEqual(command[command.index("run") + 1], operation)
+                self.assertNotIn("bulk_upsert", command)
+        self.assertEqual(
+            local_ydb_workloads.build_clean_argv(cli_context, "log-table", "log"),
+            base + ["clean"],
+        )
+        with self.assertRaisesRegex(BenchmarkError, "log does not support load parameter rate"):
+            local_ydb_workloads.build_run_argv(cli_context, "log-table", workload, "rate", 1000, 30, 64)
+
+    def test_local_ydb_log_uses_sample_lifecycle_and_preserves_rows_per_operation(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {
+                "type": "log",
+                "operation": "bulk-upsert",
+                "options": {"rows-per-operation": 25},
+            },
+            "workload",
+        )
+        metrics_output = """
+            Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+            10 10 0 0 1 2 3 4
+        """
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, **_kwargs: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {
+            "static_cpu_mean": 1,
+            "static_cpu_max": 2,
+            "dynamic_cpu_mean": 3,
+            "dynamic_cpu_max": 4,
+            "cli_cpu_mean": 5,
+            "cli_cpu_max": 6,
+            "host_cpu_mean": 7,
+            "host_cpu_max": 8,
+        }
+        topology = CpuTopology(
+            allowed_cpus=(0,),
+            numa_nodes=((0, (0,)),),
+            chiplets=(),
+            physical_cores=((0,),),
+        )
+        progress = []
+        with mock.patch.object(local_ydb, "LinuxCpuMonitor", return_value=monitor), mock.patch.object(
+            local_ydb, "atomic_write_text"
+        ), mock.patch.object(local_ydb, "atomic_write_json"), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: self._local_ydb_command_result(command, metrics_output),
+        ):
+            lifecycle = local_ydb.WorkloadLifecycle(
+                cluster,
+                local_ydb_workloads.WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database),
+                workload,
+                {"parameter": "threads"},
+                {"warmup": 1, "duration": 1},
+                64,
+                LOCAL_YDB_BENCHMARK,
+                topology,
+                {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+                None,
+                lambda phase, **fields: progress.append({"phase": phase, **fields}),
+            )
+            lifecycle.open_profile(self.root / "log-profile", "ignored-profile-table")
+            _metrics, commands = lifecycle.run_sample(
+                2,
+                1,
+                1,
+                1,
+                self.root / "log-lifecycle",
+                "log-table",
+                {"attempt": 1},
+            )
+            lifecycle.close_profile()
+
+        self.assertEqual(
+            [command["phase"] for command in commands],
+            ["initializing-workload", "warming-up", "measuring", "cleaning-workload"],
+        )
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            ["initializing-workload", "warming-up", "measuring", "cleaning-workload"],
+        )
+        init, warmup, measure, clean = (command["argv"] for command in commands)
+        self.assertIn("init", init)
+        self.assertIn("clean", clean)
+        self.assertEqual(init[init.index("--path") + 1], clean[clean.index("--path") + 1])
+        for command in (warmup, measure):
+            self.assertEqual(command[command.index("run") + 1], "bulk-upsert")
+            self.assertEqual(command[command.index("--threads") + 1], "2")
+            self.assertEqual(command[command.index("--rows") + 1], "25")
+            self.assertNotIn("--rate", command)
 
     def test_local_ydb_command_record_preserves_argv_and_affinity(self):
         result = runner.CommandResult(
@@ -5275,9 +5628,10 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"Failed workload requests are allowed", script)
                 self.assertIn(b"editor.model?.local_ydb_workloads", script)
                 self.assertIn(b"definition.load_parameters", script)
-                self.assertIn(
-                    b"if(!parameters.includes(config.load.parameter))config.load.parameter=parameters[0]", script
-                )
+                self.assertIn(b"config.load=localYdbLoadForWorkload(config.load,parameters)", script)
+                self.assertIn(b"log:'batches/s'", script)
+                self.assertIn(b"<th>Throughput</th>", script)
+                self.assertIn(b"esc(throughputUnit)+' '+localComparisonDelta", script)
                 self.assertIn(b"if(option.choices.length)return localSelect", script)
                 self.assertIn(b"if(option.kind==='boolean')return localCheck", script)
                 self.assertIn(b"if(option.kind==='integer')", script)

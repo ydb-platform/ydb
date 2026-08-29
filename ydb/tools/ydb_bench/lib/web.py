@@ -238,6 +238,10 @@ _JS = (
     "const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};\n"
     "function localYdbWorkloadDefinition(type){const definition=(editor.model?.local_ydb_workloads||[]).find(item=>item.type"
     "===type);if(!definition)throw Error('Unknown local YDB workload: '+type);return definition}\n"
+    "const localYdbLoadDefaults={rate:{values:[1000],start:1000,maximum:100000},threads:{values:[1,2,4,8,16,32,64],start:1,maximum:256}};\n"
+    "function localYdbResetLoadParameter(load,parameter){const defaults=localYdbLoadDefaults[parameter]||localYdbLoadDefaults.threads;"
+    "if(load.values)return {...load,parameter,values:[...defaults.values]};return {...load,parameter,search:{...(load.search||{}),start:defaults.start,maximum:defaults.maximum}}}\n"
+    "function localYdbLoadForWorkload(load,parameters){return parameters.includes(load.parameter)?load:localYdbResetLoadParameter(load,parameters[0])}\n"
     "function defaultLocalYdbWorkload(type){const definition=localYdbWorkloadDefinition(type),operation=definition.default_"
     "operation,options=Object.fromEntries(definition.options.map(option=>[option.name,Object.prototype.hasOwnProperty.call("
     "option.operation_defaults,operation)?option.operation_defaults[operation]:option.default]));return {type,operation,opt"
@@ -498,7 +502,12 @@ function bindLocalYdbEditor(profile){
     if(event.target.id==='local-workload-type'){
       config.workload=defaultLocalYdbWorkload(event.target.value);editor.selected=profile.key;
       const parameters=localYdbWorkloadDefinition(event.target.value).load_parameters;
-      if(!parameters.includes(config.load.parameter))config.load.parameter=parameters[0];
+      config.load=localYdbLoadForWorkload(config.load,parameters);
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
+    if(event.target.id==='local-load-parameter'){
+      const parameter=event.target.value;
+      if(parameter!==config.load.parameter)config.load=localYdbResetLoadParameter(config.load,parameter);
       editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
     }
     if(event.target.id==='local-geometry-preset'){
@@ -514,10 +523,11 @@ function bindLocalYdbEditor(profile){
     }
     if(event.target.id==='local-load-mode'){
       const mode=event.target.value,allow_errors=Boolean(config.load.allow_errors);
+      const defaults=localYdbLoadDefaults[config.load.parameter]||localYdbLoadDefaults.threads;
       if(mode==='points'){
-        config.load={parameter:config.load.parameter,allow_errors,values:config.load.values||[1000]}
+        config.load={parameter:config.load.parameter,allow_errors,values:config.load.values||[...defaults.values]}
       }else{
-        const search=config.load.search||{start:1000,maximum:100000,multiplier:2,resolution_percent:2};
+        const search=config.load.search||{start:defaults.start,maximum:defaults.maximum,multiplier:2,resolution_percent:2};
         const old=config.load.objective||{};
         const objective={
           type:mode,target_role:old.target_role||'dynamic',plateau_gain_percent:old.plateau_gain_percent??2,
@@ -1153,8 +1163,9 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '    .sort((left,right)=>left-right);\n'
     "  if(!xValues.length){container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';return}\n"
     "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99';\n"
+    "  const throughputUnit=localYdbThroughputUnit(baseline.parameters?.workload?.type);\n"
     '  const specifications=[\n'
-    "    ['throughput','median_throughput','Achieved throughput'],\n"
+    "    ['throughput','median_throughput','Achieved throughput ('+throughputUnit+')'],\n"
     "    ['latency_ms','median_'+percentile+'_ms',percentile+' latency (ms)'],\n"
     "    ['static_cpu','median_static_cpu_mean','Static node CPU (%)'],\n"
     "    ['dynamic_cpu','median_dynamic_cpu_mean','Dynamic node CPU (%)'],\n"
@@ -1192,6 +1203,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));\n'
     '  const rows=entries.map(item=>{\n'
     '    const metricView=localResultMetrics(item.result),metrics=metricView.metrics,config=localComparisonConfig(item);\n'
+    '    const throughputUnit=localYdbThroughputUnit(item.parameters?.workload?.type);\n'
     '    const context=localComparisonContext(item),build=localComparisonBuild(item);\n'
     '    const semanticCompatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;\n'
     '    const sameMetricSource=metricView.source===baselineView.source,compatible=semanticCompatible&&sameMetricSource;\n'
@@ -1219,7 +1231,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "      '</td><td><code>'+\n"
     "      esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+\n"
     "      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+\n"
-    "      '<td>'+esc(metricLabel(metrics.throughput??'—'))+' '+localComparisonDelta(metrics.throughput,baselineMetrics.throughput,false,compatible)+'</td>'+\n"
+    "      '<td>'+esc(metricLabel(metrics.throughput??'—'))+' '+esc(throughputUnit)+' '+localComparisonDelta(metrics.throughput,baselineMetrics.throughput,false,compatible)+'</td>'+\n"
     "      '<td>'+esc(metricLabel(metrics[latencyMetric]??'—'))+' ms '+localComparisonDelta(metrics[latencyMetric],baselineMetrics[latencyMetric],true,compatible)+'</td>'+\n"
     "      '<td>'+esc(metrics.errors??'—')+' '+localComparisonDelta(metrics.errors,baselineMetrics.errors,true,compatible)+'</td>'+\n"
     "      '<td>'+esc(metricLabel(metrics.static_cpu_mean??'—'))+'%</td><td>'+esc(metricLabel(metrics.dynamic_cpu_mean??'—'))+'%</td>'+\n"
@@ -1391,6 +1403,9 @@ function localSearchAxisLabel(parameter,workload){
   if(parameter==='rate')return workload==='stock'?'Offered rate (transactions/s)':'Offered rate (requests/s)';
   return parameter||'Search value'
 }
+function localYdbThroughputUnit(workload){
+  return {kv:'requests/s',stock:'transactions/s',log:'batches/s'}[workload]||'operations/s'
+}
 function localAttemptRows(attempts,xField='attempt'){return new Map(attempts.map(item=>[String(item[xField]),item]))}
 function localChart(title,metric,xName,xValues,series){
   return '<section class=chart-panel data-metric="'+esc(metric)+'"><h3>'+esc(title)+'</h3>'+
@@ -1442,6 +1457,7 @@ function renderLocalYdbProfile(container,data){
   const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[];
   const result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{};
   const objective=loadConfig.objective||{type:'points'};
+  const throughputUnit=localYdbThroughputUnit(parameters.workload?.type);
   const phaseElapsed=localElapsed(progress.phase_started_at);
   const phaseDuration=Number(progress.phase_duration_seconds);
   const profileElapsed=localElapsed(data.started_at,data.finished_at);
@@ -1483,7 +1499,7 @@ function renderLocalYdbProfile(container,data){
     html+=localVerificationSummary(data);
     html+='<div class=local-kpis>'+localKpi(
       localOutcomeLabel(result.outcome),selectedLabel,result.parameter||loadConfig.parameter,true
-    )+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),'transactions/s')+
+    )+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),throughputUnit)+
       localKpi(
         loadConfig.objective?.percentile||'p99',metricLabel(selected[latencyMetric]??'—'),'ms'
       )+localKpi('Dynamic nodes',result.dynamic_nodes,result.stop_reason||'')+'</div>'
@@ -1491,7 +1507,7 @@ function renderLocalYdbProfile(container,data){
     html+='<div class=local-kpis>'+localKpi(
       'Completed attempts',attempts.length,'search stage '+(progress.search_stage||1),true
     )+localKpi(
-      'Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—','transactions/s'
+      'Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—',throughputUnit
     )+localKpi(
       'Latest p99',attempts.length?metricLabel(attempts.at(-1).p99_ms):'—','ms'
     )+'</div>'
@@ -1596,13 +1612,16 @@ function renderLocalYdbProfile(container,data){
         objective.type==='maximize-throughput'?'Ternary search progress':'Load search progress',
         'load',xName,xValues,candidateSeries
       ):'')+
-      localChart('Offered and achieved throughput','throughput',xName,xValues,throughputSeries)+
+      localChart(
+        (loadConfig.parameter==='rate'?'Offered and achieved':'Achieved')+' throughput ('+throughputUnit+')',
+        'throughput',xName,xValues,throughputSeries
+      )+
       localChart('Latency','latency_ms',xName,xValues,latencySeries)+
       localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
       localChart('Errors and retries','errors',xName,xValues,errorSeries)+'</div>';
     html+='<h3>Attempts</h3><div class=local-attempts-scroll tabindex=0 role=region aria-label="Search attempts">'+
       '<table class=local-attempts><thead><tr><th>#</th><th>Stage</th><th>Dynamic</th><th>Candidate</th>'+
-      '<th>Throughput</th><th>p99</th><th>Errors</th><th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th>'+
+      '<th>Throughput ('+esc(throughputUnit)+')</th><th>p99</th><th>Errors</th><th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th>'+
       '<th>Verdict</th><th>Decision</th><th>Duration</th><th>Commands</th></tr></thead><tbody>'+
       attempts.map(item=>'<tr><td>'+esc(item.attempt)+'</td><td>'+esc(item.search_stage)+'</td><td>'+
         esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td><td>'+esc(metricLabel(item.throughput))+

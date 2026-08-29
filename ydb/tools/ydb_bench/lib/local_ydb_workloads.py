@@ -226,6 +226,61 @@ def _stock_run_builder(cli, definition, path, workload, load_parameter, load, se
     return command
 
 
+def _log_init_builder(cli, definition, path, workload):
+    options = workload["options"]
+    return _workload_base(cli, definition, path) + [
+        "init",
+        "--min-partitions",
+        options["min-partitions"],
+        "--max-partitions",
+        options["max-partitions"],
+        "--partition-size",
+        options["partition-size-mb"],
+        "--auto-partition",
+        options["auto-partition"],
+        "--len",
+        options["string-length"],
+        "--int-cols",
+        options["integer-columns"],
+        "--str-cols",
+        options["string-columns"],
+        "--key-cols",
+        options["key-columns"],
+        "--ttl",
+        options["ttl-minutes"],
+        "--store",
+        options["store"],
+        "--null-percent",
+        options["null-percent"],
+    ]
+
+
+def _log_run_builder(cli, definition, path, workload, load_parameter, load, seconds, client_threads):
+    del load_parameter, client_threads
+    options = workload["options"]
+    return _workload_base(cli, definition, path) + [
+        "run",
+        workload["operation"],
+        "--seconds",
+        seconds,
+        "--threads",
+        load,
+        "--quiet",
+        "--rows",
+        options["rows-per-operation"],
+        "--len",
+        options["string-length"],
+        "--int-cols",
+        options["integer-columns"],
+        "--str-cols",
+        options["string-columns"],
+        "--key-cols",
+        options["key-columns"],
+        "--null-percent",
+        options["null-percent"],
+    ]
+
+
 def _validate_kv_options(options, location):
     if options["max-partitions"] < options["min-partitions"]:
         _config_error(location + ".max-partitions", "must not be below min-partitions")
@@ -235,6 +290,14 @@ def _validate_kv_options(options, location):
 
 def _validate_stock_options(options, location):
     del options, location
+
+
+def _validate_log_options(options, location):
+    if options["max-partitions"] < options["min-partitions"]:
+        _config_error(location + ".max-partitions", "must not be below min-partitions")
+    columns = options["integer-columns"] + options["string-columns"]
+    if options["key-columns"] > columns:
+        _config_error(location + ".key-columns", "must not exceed integer-columns plus string-columns")
 
 
 def _validate_option_value(option, value, location):
@@ -378,6 +441,33 @@ _DEFINITIONS = (
         run_builder=_stock_run_builder,
         options_validator=_validate_stock_options,
     ),
+    WorkloadDefinition(
+        name="log",
+        default_operation="bulk-upsert",
+        operations=("insert", "upsert", "bulk-upsert"),
+        load_parameters=("threads",),
+        options=(
+            WorkloadOption("min-partitions", 40),
+            WorkloadOption("max-partitions", 1000),
+            WorkloadOption("partition-size-mb", 2000),
+            WorkloadOption("auto-partition", 1, allow_zero=True, choices=(0, 1)),
+            WorkloadOption("store", "row", kind="string", choices=("row", "column")),
+            WorkloadOption("ttl-minutes", 0, allow_zero=True),
+            WorkloadOption("string-length", 8),
+            WorkloadOption("integer-columns", 0, allow_zero=True),
+            WorkloadOption("string-columns", 0, allow_zero=True),
+            WorkloadOption("key-columns", 0, allow_zero=True),
+            WorkloadOption("rows-per-operation", 1),
+            WorkloadOption("null-percent", 10, allow_zero=True, maximum=100),
+        ),
+        uses_path=True,
+        table_name=None,
+        init_builder=_log_init_builder,
+        run_builder=_log_run_builder,
+        options_validator=_validate_log_options,
+        dataset_scope="sample",
+        warmup_mode="separate",
+    ),
 )
 _validate_catalog(_DEFINITIONS)
 _WORKLOADS = MappingProxyType({definition.name: definition for definition in _DEFINITIONS})
@@ -426,13 +516,14 @@ def workload_config_schema():
     for definition in _DEFINITIONS:
         for option in definition.options:
             option_schemas[option.name] = option.config_schema()
+    operations = tuple(dict.fromkeys(operation for definition in _DEFINITIONS for operation in definition.operations))
     return {
         "type": "object",
         "additionalProperties": False,
         "required": ["type", "operation"],
         "properties": {
             "type": {"enum": [definition.name for definition in _DEFINITIONS]},
-            "operation": {"enum": [operation for definition in _DEFINITIONS for operation in definition.operations]},
+            "operation": {"enum": list(operations)},
             "options": {
                 "type": "object",
                 "additionalProperties": False,

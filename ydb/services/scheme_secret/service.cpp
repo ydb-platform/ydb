@@ -211,7 +211,7 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
     YDB_LOG_DEBUG("HandleIncomingRequest",
         {"event", "TEvResolveSecret"},
         {"requestId", LastRequestId},
-        {"secrets", JoinSeq(',', ev->Get()->SecretNames)}
+        {"secrets", ev->Get()->SecretNames}
     );
 
     if (ev->Get()->SecretNames.empty()) {

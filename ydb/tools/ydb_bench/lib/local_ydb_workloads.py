@@ -1,5 +1,6 @@
 """Declarative local-YDB workload catalog and YDB CLI command builders."""
 
+import math
 import re
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -12,6 +13,14 @@ class WorkloadCli:
     executable: object
     endpoint: str
     database: str
+
+
+@dataclass(frozen=True)
+class WorkloadCommandPlan:
+    name: str
+    argv: tuple
+    timeout_seconds: float | None = None
+    measurement_window_builder: object = None
 
 
 @dataclass(frozen=True)
@@ -75,10 +84,24 @@ class WorkloadDefinition:
     init_builder: object
     run_builder: object
     options_validator: object
+    dataset_scope: str = "sample"
+    warmup_mode: str = "separate"
+    prepare_plan_builder: object = None
+    run_plan_builder: object = None
+    cleanup_plan_builder: object = None
 
 
 def _config_error(location, message):
     raise BenchmarkError("invalid benchmark config at {}: {}".format(location, message))
+
+
+def _is_finite_number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def _mapping(value, location, allowed=()):
@@ -246,6 +269,16 @@ def _validate_catalog(definitions):
         raise ValueError("local YDB workload names must be unique")
     option_schemas = {}
     for definition in definitions:
+        if definition.dataset_scope not in ("sample", "profile"):
+            raise ValueError("unknown dataset scope for {}: {}".format(definition.name, definition.dataset_scope))
+        if definition.warmup_mode not in ("separate", "inline"):
+            raise ValueError("unknown warmup mode for {}: {}".format(definition.name, definition.warmup_mode))
+        for name in ("prepare_plan_builder", "run_plan_builder", "cleanup_plan_builder"):
+            builder = getattr(definition, name)
+            if builder is not None and not callable(builder):
+                raise ValueError("{} must be callable for {}".format(name, definition.name))
+        if definition.warmup_mode == "inline" and definition.run_plan_builder is None:
+            raise ValueError("inline warmup requires a run plan builder for {}".format(definition.name))
         if len(definition.operations) != len(set(definition.operations)):
             raise ValueError("operations must be unique for {}".format(definition.name))
         if len(definition.load_parameters) != len(set(definition.load_parameters)):
@@ -464,6 +497,125 @@ def build_run_argv(cli, path, workload, load_parameter, load, seconds, client_th
 def build_clean_argv(cli, path, workload_type):
     definition = _definition(workload_type)
     return _workload_base(cli, definition, path) + ["clean"]
+
+
+def _validate_command_plans(plans, description, allow_default_timeout=False):
+    if not isinstance(plans, tuple) or not plans:
+        raise BenchmarkError("{} must produce a non-empty tuple of command plans".format(description))
+    for plan in plans:
+        if not isinstance(plan, WorkloadCommandPlan):
+            raise BenchmarkError("{} produced an invalid command plan".format(description))
+        if not plan.name or not isinstance(plan.name, str) or re.fullmatch("[a-z0-9-]+", plan.name) is None:
+            raise BenchmarkError("{} produced an invalid command plan name".format(description))
+        if not isinstance(plan.argv, tuple) or not plan.argv:
+            raise BenchmarkError("{} command {} must have a non-empty argv tuple".format(description, plan.name))
+        if plan.timeout_seconds is None and allow_default_timeout:
+            pass
+        elif not _is_finite_number(plan.timeout_seconds) or plan.timeout_seconds <= 0:
+            raise BenchmarkError("{} command {} must have a positive timeout".format(description, plan.name))
+        if plan.measurement_window_builder is not None and not callable(plan.measurement_window_builder):
+            raise BenchmarkError(
+                "{} command {} has an invalid measurement window builder".format(description, plan.name)
+            )
+    return plans
+
+
+def build_prepare_plan(cli, path, workload):
+    """Build the pure command plan which creates one workload dataset."""
+
+    definition = _definition(workload["type"])
+    if definition.prepare_plan_builder is None:
+        plans = (
+            WorkloadCommandPlan(
+                "init",
+                tuple(definition.init_builder(cli, definition, path, workload)),
+                120,
+            ),
+        )
+    else:
+        plans = definition.prepare_plan_builder(cli, definition, path, workload)
+    return _validate_command_plans(plans, "{} prepare plan".format(definition.name))
+
+
+def build_run_plan(
+    cli,
+    path,
+    workload,
+    load_parameter,
+    load,
+    seconds,
+    client_threads,
+    warmup_seconds=0,
+):
+    """Build one pure workload command plan without executing a process."""
+
+    definition = _definition(workload["type"])
+    if load_parameter not in definition.load_parameters:
+        raise BenchmarkError(
+            "local YDB workload {} does not support load parameter {}".format(definition.name, load_parameter)
+        )
+    if definition.run_plan_builder is None:
+        if warmup_seconds:
+            raise BenchmarkError("{} does not support inline warmup".format(definition.name))
+        plan = WorkloadCommandPlan(
+            "run",
+            tuple(
+                definition.run_builder(
+                    cli,
+                    definition,
+                    path,
+                    workload,
+                    load_parameter,
+                    load,
+                    seconds,
+                    client_threads,
+                )
+            ),
+            seconds + 30,
+        )
+    else:
+        plan = definition.run_plan_builder(
+            cli,
+            definition,
+            path,
+            workload,
+            load_parameter,
+            load,
+            seconds,
+            client_threads,
+            warmup_seconds,
+        )
+    plan = _validate_command_plans((plan,), "{} run plan".format(definition.name))[0]
+    if definition.warmup_mode == "inline" and plan.measurement_window_builder is None:
+        raise BenchmarkError("{} inline warmup requires a CPU measurement window".format(definition.name))
+    return plan
+
+
+def build_cleanup_plan(cli, path, workload):
+    """Build the pure command plan which removes one workload dataset."""
+
+    definition = _definition(workload["type"])
+    if definition.cleanup_plan_builder is None:
+        plans = (
+            WorkloadCommandPlan(
+                "clean",
+                tuple(_workload_base(cli, definition, path) + ["clean"]),
+                None,
+            ),
+        )
+    else:
+        plans = definition.cleanup_plan_builder(cli, definition, path, workload)
+    return _validate_command_plans(
+        plans,
+        "{} cleanup plan".format(definition.name),
+        allow_default_timeout=True,
+    )
+
+
+def workload_definition(workload_type):
+    """Return immutable lifecycle metadata for one registered workload."""
+
+    return _definition(workload_type)
 
 
 def workload_table_path(workload_type, path):

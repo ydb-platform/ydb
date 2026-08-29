@@ -1,11 +1,21 @@
 """Linux CPU sampling for benchmark process roles."""
 
+import math
 import os
 import threading
 import time
 from pathlib import Path
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
+
+
+def _is_finite_number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 class LinuxCpuMonitor:
@@ -64,6 +74,7 @@ class LinuxCpuMonitor:
 
     def _sample(self):
         now = time.monotonic()
+        now_unix = time.time()
         host = self._read_host_ticks()
         process_ticks = {
             role: sum(ticks for pid in tuple(provider()) if (ticks := self._read_process_ticks(pid)) is not None)
@@ -94,18 +105,47 @@ class LinuxCpuMonitor:
                 record["host_cpu"] = 100.0 * (total_delta - idle_delta) / total_delta
         if len(record) > 1:
             record["timestamp_monotonic"] = now
+            record["timestamp_unix"] = now_unix
             self._records.append(record)
         self._previous_time = now
         self._previous_host = host
         self._previous_process = process_ticks
 
-    def summary(self):
+    def summary(self, started_at_unix=None, finished_at_unix=None):
+        windowed = started_at_unix is not None or finished_at_unix is not None
+        if windowed:
+            if started_at_unix is None or finished_at_unix is None:
+                raise BenchmarkError("CPU measurement window requires both start and finish")
+            if (
+                not _is_finite_number(started_at_unix)
+                or not _is_finite_number(finished_at_unix)
+                or started_at_unix >= finished_at_unix
+            ):
+                raise BenchmarkError("CPU measurement window must be finite and increasing")
+
+        def inside_measurement_window(record):
+            if started_at_unix is None and finished_at_unix is None:
+                return True
+            timestamp = record.get("timestamp_unix")
+            if timestamp is None:
+                return False
+            interval_started_at = timestamp - record["elapsed_seconds"]
+            if started_at_unix is not None and interval_started_at < started_at_unix:
+                return False
+            if finished_at_unix is not None and timestamp > finished_at_unix:
+                return False
+            return True
+
+        records = [
+            record
+            for record in self._records
+            if record.get("elapsed_seconds", 0) > 0 and inside_measurement_window(record)
+        ]
+        if windowed and not records:
+            raise BenchmarkError("CPU measurement window does not contain a complete sample interval")
+
         def aggregate(name):
-            samples = [
-                (record[name], record["elapsed_seconds"])
-                for record in self._records
-                if name in record and record["elapsed_seconds"] > 0
-            ]
+            samples = [(record[name], record["elapsed_seconds"]) for record in records if name in record]
             if not samples:
                 return 0.0, 0.0
             elapsed = sum(duration for _, duration in samples)

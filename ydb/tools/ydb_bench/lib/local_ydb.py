@@ -37,6 +37,7 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     build_run_plan,
     parse_workload_result,
     workload_definition,
+    workload_effective_warmup_seconds,
     workload_result_schema,
 )
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
@@ -1120,7 +1121,8 @@ class WorkloadLifecycle:
 
     def _run_workload(self, state, load, dynamic_nodes, repetition, commands):
         phases = self._phases(state.purpose)
-        warmup = self.measurement["warmup"]
+        configured_warmup = self.measurement["warmup"]
+        warmup = workload_effective_warmup_seconds(self.workload, configured_warmup)
         if warmup and self.definition.warmup_mode == "separate":
             warmup_plan = build_run_plan(
                 self.workload_cli,
@@ -1198,6 +1200,8 @@ class WorkloadLifecycle:
             }
             if self.definition.warmup_mode == "inline":
                 progress_fields["inline_warmup_seconds"] = warmup
+                if warmup != configured_warmup:
+                    progress_fields["configured_warmup_seconds"] = configured_warmup
             self.progress(phases["measure"], **progress_fields)
             result = run_command(
                 plan.argv,

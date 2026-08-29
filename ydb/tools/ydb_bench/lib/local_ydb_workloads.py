@@ -1,5 +1,6 @@
 """Declarative local-YDB workload catalog and YDB CLI command builders."""
 
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -128,6 +129,225 @@ GENERIC_TOTAL_RESULT = WorkloadResultAdapter(
     ),
 )
 
+_TPCC_TRANSACTION_NAMES = ("NewOrder", "Delivery", "OrderStatus", "Payment", "StockLevel")
+_TPCC_PERCENTILES = (
+    ("50", "p50_ms"),
+    ("90", "p90_ms"),
+    ("95", "p95_ms"),
+    ("99", "p99_ms"),
+    ("99.9", "p999_ms"),
+)
+_TPCC_SLO_METRICS = (
+    ("p50", "p50_ms"),
+    ("p90", "p90_ms"),
+    ("p95", "p95_ms"),
+    ("p99", "p99_ms"),
+    ("p999", "p999_ms"),
+)
+_TPCC_TERMINALS_PER_WAREHOUSE = 10
+_TPCC_MIN_WARMUP_PER_TERMINAL_MS = 10
+_TPCC_JSON_MAX_BYTES = 1024 * 1024
+
+
+def _tpcc_result_error(message):
+    raise BenchmarkError("YDB CLI TPCC JSON output {}".format(message))
+
+
+def _tpcc_exact_mapping(value, location, fields):
+    if not isinstance(value, dict):
+        _tpcc_result_error("field {} must be an object".format(location))
+    missing = sorted(set(fields) - set(value))
+    unknown = sorted(set(value) - set(fields))
+    if missing:
+        _tpcc_result_error("field {} is missing: {}".format(location, ", ".join(missing)))
+    if unknown:
+        _tpcc_result_error("field {} contains unknown fields: {}".format(location, ", ".join(unknown)))
+    return value
+
+
+def _tpcc_integer(value, location, minimum=0):
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        _tpcc_result_error("field {} must be an integer not below {}".format(location, minimum))
+    return value
+
+
+def _tpcc_number(value, location, minimum=0, maximum=None):
+    if not _is_finite_number(value) or value < minimum or (maximum is not None and value > maximum):
+        bounds = "not below {}".format(minimum)
+        if maximum is not None:
+            bounds += " and not above {}".format(maximum)
+        _tpcc_result_error("field {} must be a finite number {}".format(location, bounds))
+    return float(value)
+
+
+def _tpcc_percentile_values(value, location):
+    value = _tpcc_exact_mapping(value, location, tuple(name for name, _metric in _TPCC_PERCENTILES))
+    parsed = [_tpcc_integer(value[name], "{}.{}".format(location, name)) for name, _metric in _TPCC_PERCENTILES]
+    if parsed != sorted(parsed):
+        _tpcc_result_error("field {} must contain monotonic percentiles".format(location))
+    return parsed
+
+
+def _tpcc_effective_warmup_seconds(workload, requested_seconds):
+    warehouses = workload["options"]["warehouses"]
+    terminals = warehouses * _TPCC_TERMINALS_PER_WAREHOUSE
+    minimum = terminals * _TPCC_MIN_WARMUP_PER_TERMINAL_MS // 1000 + 1
+    return max(requested_seconds, minimum)
+
+
+def _parse_tpcc_json_result(command_result, normalized_workload, request):
+    stdout = command_result.stdout
+    if not isinstance(stdout, str) or len(stdout.encode("utf-8")) > _TPCC_JSON_MAX_BYTES:
+        _tpcc_result_error("is empty or exceeds {} bytes".format(_TPCC_JSON_MAX_BYTES))
+    try:
+        root = json.loads(stdout)
+    except (TypeError, ValueError) as error:
+        raise BenchmarkError("YDB CLI TPCC JSON output is malformed: {}".format(error)) from error
+    if isinstance(root, dict) and set(root) == {"error"} and isinstance(root["error"], str):
+        _tpcc_result_error("reported a fatal error: {}".format(root["error"]))
+    root = _tpcc_exact_mapping(root, "$", ("summary", "transactions"))
+    summary = _tpcc_exact_mapping(
+        root["summary"],
+        "summary",
+        (
+            "name",
+            "time_seconds",
+            "measure_start_ts",
+            "warehouses",
+            "new_orders",
+            "tpmc",
+            "efficiency",
+            "max_sessions",
+            "threads",
+            "warmup_seconds",
+        ),
+    )
+    if summary["name"] != "Total":
+        _tpcc_result_error("field summary.name must equal Total")
+    measured_seconds = _tpcc_integer(summary["time_seconds"], "summary.time_seconds", 1)
+    measurement_started_at = _tpcc_integer(summary["measure_start_ts"], "summary.measure_start_ts", 1)
+    warehouses = _tpcc_integer(summary["warehouses"], "summary.warehouses", 1)
+    new_orders = _tpcc_integer(summary["new_orders"], "summary.new_orders")
+    tpcc_tpmc = _tpcc_number(summary["tpmc"], "summary.tpmc")
+    efficiency = _tpcc_number(summary["efficiency"], "summary.efficiency", maximum=100)
+    max_sessions = _tpcc_integer(summary["max_sessions"], "summary.max_sessions", 1)
+    _tpcc_integer(summary["threads"], "summary.threads", 1)
+    warmup_seconds = _tpcc_integer(summary["warmup_seconds"], "summary.warmup_seconds", 1)
+
+    options = normalized_workload["options"]
+    expected_warmup = _tpcc_effective_warmup_seconds(normalized_workload, request.warmup_seconds)
+    if warehouses != options["warehouses"]:
+        _tpcc_result_error("field summary.warehouses does not match the configured warehouses")
+    if max_sessions != request.load:
+        _tpcc_result_error("field summary.max_sessions does not match the requested load")
+    if warmup_seconds != expected_warmup:
+        _tpcc_result_error("field summary.warmup_seconds does not match the effective warmup")
+    if measured_seconds < request.duration_seconds or measured_seconds > request.duration_seconds + 60:
+        _tpcc_result_error("field summary.time_seconds is outside the requested measurement window")
+
+    transactions = _tpcc_exact_mapping(root["transactions"], "transactions", _TPCC_TRANSACTION_NAMES)
+    parsed_transactions = {}
+    transaction_fields = ("ok_count", "failed_count", "percentiles", "percentiles_ms", "percentiles_pure")
+    for transaction_name in _TPCC_TRANSACTION_NAMES:
+        location = "transactions.{}".format(transaction_name)
+        transaction = _tpcc_exact_mapping(transactions[transaction_name], location, transaction_fields)
+        ok_count = _tpcc_integer(transaction["ok_count"], location + ".ok_count")
+        percentile_families = {
+            field: _tpcc_percentile_values(transaction[field], location + "." + field)
+            for field in ("percentiles", "percentiles_ms", "percentiles_pure")
+        }
+        if ok_count == 0 and any(any(values) for values in percentile_families.values()):
+            _tpcc_result_error("field {} percentiles must be zero without successful transactions".format(location))
+        if ok_count > 0 and any(any(value < 1 for value in values) for values in percentile_families.values()):
+            _tpcc_result_error("field {} percentiles must be positive with successful transactions".format(location))
+        parsed_transactions[transaction_name] = {
+            "ok_count": ok_count,
+            "failed_count": _tpcc_integer(transaction["failed_count"], location + ".failed_count"),
+            "percentiles": percentile_families["percentiles"],
+        }
+    if new_orders != parsed_transactions["NewOrder"]["ok_count"]:
+        _tpcc_result_error("field summary.new_orders does not match transactions.NewOrder.ok_count")
+
+    latency_transaction = options["latency-transaction"]
+    selected = parsed_transactions[latency_transaction]
+    metrics = {
+        "transactions": selected["ok_count"] if new_orders > 0 else 0,
+        "new_orders": new_orders,
+        "throughput": new_orders / measured_seconds,
+        "tpcc_tpmc": tpcc_tpmc,
+        "efficiency_pct": efficiency,
+        "errors": sum(transaction["failed_count"] for transaction in parsed_transactions.values()),
+    }
+    metrics.update(
+        {metric_name: value for (_percentile, metric_name), value in zip(_TPCC_PERCENTILES, selected["percentiles"])}
+    )
+    return WorkloadResult(
+        metrics,
+        details=root,
+        measurement_window=(
+            float(measurement_started_at + 1),
+            float(measurement_started_at + request.duration_seconds),
+        ),
+    )
+
+
+TPCC_JSON_RESULT = WorkloadResultAdapter(
+    schema_id="tpcc-json-v1",
+    parse=_parse_tpcc_json_result,
+    metrics=(
+        WorkloadMetric(
+            "transactions",
+            "successful transactions",
+            required=True,
+            description=(
+                "Successful selected-transaction samples used for latency percentiles; zero when no NewOrder "
+                "transaction succeeded"
+            ),
+        ),
+        WorkloadMetric(
+            "new_orders",
+            "new orders",
+            required=True,
+            description="Successful NewOrder transactions in the measurement window",
+        ),
+        WorkloadMetric(
+            "throughput",
+            "new orders/s",
+            required=True,
+            description="Successful NewOrder transactions divided by measured seconds",
+        ),
+        WorkloadMetric(
+            "tpcc_tpmc",
+            "tpmC",
+            required=True,
+            description="CLI-reported capped TPC-C tpmC",
+        ),
+        WorkloadMetric(
+            "efficiency_pct",
+            "%",
+            required=True,
+            description="CLI-reported TPC-C efficiency",
+        ),
+        WorkloadMetric(
+            "errors",
+            "failed transactions",
+            repetition_aggregation="sum",
+            required=True,
+            description="Failed transactions across all TPC-C transaction types",
+        ),
+        *(
+            WorkloadMetric(
+                metric_name,
+                "ms",
+                required=True,
+                description="Full selected-transaction latency including inflight queue wait",
+            )
+            for _percentile, metric_name in _TPCC_PERCENTILES
+        ),
+    ),
+    slo_metrics=_TPCC_SLO_METRICS,
+)
+
 _RESERVED_RESULT_METRIC_NAMES = frozenset(
     (
         "load",
@@ -231,6 +451,11 @@ class WorkloadDefinition:
     cleanup_plan_builder: object = None
     result_adapter: WorkloadResultAdapter = GENERIC_TOTAL_RESULT
     throughput_unit: str = "operations/s"
+    profile_validator: object = None
+    effective_warmup_builder: object = None
+    minimum_duration_seconds: int = 1
+    load_limits: tuple = ()
+    default_client_threads: int = 64
 
 
 def _config_error(location, message):
@@ -257,13 +482,18 @@ def _mapping(value, location, allowed=()):
     return value
 
 
-def _workload_base(cli, definition, path):
-    command = [
+def _cli_base(cli):
+    return [
         cli.executable,
         "--endpoint",
         cli.endpoint,
         "--database",
         cli.database,
+    ]
+
+
+def _workload_base(cli, definition, path):
+    command = _cli_base(cli) + [
         "workload",
         definition.name,
     ]
@@ -423,6 +653,114 @@ def _log_run_builder(cli, definition, path, workload, load_parameter, load, seco
     ]
 
 
+def _tpcc_init_builder(cli, definition, path, workload):
+    return _workload_base(cli, definition, path) + [
+        "init",
+        "--warehouses",
+        workload["options"]["warehouses"],
+    ]
+
+
+def _tpcc_run_command(cli, definition, path, workload, load, seconds, client_threads, warmup_seconds):
+    options = workload["options"]
+    effective_warmup = _tpcc_effective_warmup_seconds(workload, warmup_seconds)
+    command = _workload_base(cli, definition, path) + [
+        "run",
+        "--warehouses",
+        options["warehouses"],
+        "--warmup",
+        "{}s".format(effective_warmup),
+        "--time",
+        "{}s".format(seconds),
+        "--max-sessions",
+        load,
+        "--threads",
+        client_threads,
+        "--format",
+        "Json",
+        "--no-tui",
+        "--tx-mode",
+        options["tx-mode"],
+    ]
+    if options["no-delays"]:
+        command.append("--no-delays")
+    if options["highres-histogram"]:
+        command.append("--highres-histogram")
+    return command
+
+
+def _tpcc_run_builder(cli, definition, path, workload, load_parameter, load, seconds, client_threads):
+    del load_parameter
+    return _tpcc_run_command(cli, definition, path, workload, load, seconds, client_threads, 0)
+
+
+def _tpcc_prepare_plan_builder(cli, definition, path, workload):
+    options = workload["options"]
+    import_command = _workload_base(cli, definition, path) + [
+        "import",
+        "--warehouses",
+        options["warehouses"],
+        "--threads",
+        options["import-threads"],
+        "--no-tui",
+    ]
+    if options["compact"]:
+        import_command.append("--compact")
+    return (
+        WorkloadCommandPlan("init", tuple(_tpcc_init_builder(cli, definition, path, workload)), 120),
+        WorkloadCommandPlan(
+            "import",
+            tuple(import_command),
+            max(600, options["warehouses"] * 60),
+        ),
+    )
+
+
+def _tpcc_run_plan_builder(
+    cli,
+    definition,
+    path,
+    workload,
+    load_parameter,
+    load,
+    seconds,
+    client_threads,
+    warmup_seconds,
+):
+    del load_parameter
+    effective_warmup = _tpcc_effective_warmup_seconds(workload, warmup_seconds)
+    return WorkloadCommandPlan(
+        "run",
+        tuple(
+            _tpcc_run_command(
+                cli,
+                definition,
+                path,
+                workload,
+                load,
+                seconds,
+                client_threads,
+                effective_warmup,
+            )
+        ),
+        effective_warmup + seconds + 60,
+        progress_duration_seconds=effective_warmup + seconds,
+    )
+
+
+def _tpcc_cleanup_plan_builder(cli, definition, path, workload):
+    del workload
+    full_path = path if str(path).startswith("/") else cli.database.rstrip("/") + "/" + str(path).lstrip("/")
+    return (
+        WorkloadCommandPlan("clean", tuple(_workload_base(cli, definition, path) + ["clean"]), 300),
+        WorkloadCommandPlan(
+            "rmdir",
+            tuple(_cli_base(cli) + ["scheme", "rmdir", "--recursive", "--force", full_path]),
+            300,
+        ),
+    )
+
+
 def _validate_kv_options(options, location):
     if options["max-partitions"] < options["min-partitions"]:
         _config_error(location + ".max-partitions", "must not be below min-partitions")
@@ -440,6 +778,29 @@ def _validate_log_options(options, location):
     columns = options["integer-columns"] + options["string-columns"]
     if options["key-columns"] > columns:
         _config_error(location + ".key-columns", "must not exceed integer-columns plus string-columns")
+
+
+def _validate_tpcc_options(options, location):
+    del options, location
+
+
+def _validate_tpcc_profile(workload, load, measurement, location):
+    maximum_sessions = workload["options"]["warehouses"] * _TPCC_TERMINALS_PER_WAREHOUSE
+    if "values" in load:
+        for index, value in enumerate(load["values"]):
+            if value > maximum_sessions:
+                _config_error(
+                    "{}.load.values[{}]".format(location, index),
+                    "must not exceed warehouses * 10 ({})".format(maximum_sessions),
+                )
+    else:
+        for name in ("start", "maximum"):
+            value = load["search"][name]
+            if value > maximum_sessions:
+                _config_error(
+                    "{}.load.search.{}".format(location, name),
+                    "must not exceed warehouses * 10 ({})".format(maximum_sessions),
+                )
 
 
 def _validate_option_value(option, value, location):
@@ -572,12 +933,30 @@ def _validate_catalog(definitions):
             raise ValueError("unknown dataset scope for {}: {}".format(definition.name, definition.dataset_scope))
         if definition.warmup_mode not in ("separate", "inline"):
             raise ValueError("unknown warmup mode for {}: {}".format(definition.name, definition.warmup_mode))
-        for name in ("prepare_plan_builder", "run_plan_builder", "cleanup_plan_builder"):
+        for name in (
+            "prepare_plan_builder",
+            "run_plan_builder",
+            "cleanup_plan_builder",
+            "profile_validator",
+            "effective_warmup_builder",
+        ):
             builder = getattr(definition, name)
             if builder is not None and not callable(builder):
                 raise ValueError("{} must be callable for {}".format(name, definition.name))
         if definition.warmup_mode == "inline" and definition.run_plan_builder is None:
             raise ValueError("inline warmup requires a run plan builder for {}".format(definition.name))
+        if (
+            isinstance(definition.minimum_duration_seconds, bool)
+            or not isinstance(definition.minimum_duration_seconds, int)
+            or definition.minimum_duration_seconds <= 0
+        ):
+            raise ValueError("minimum duration must be a positive integer for {}".format(definition.name))
+        if (
+            isinstance(definition.default_client_threads, bool)
+            or not isinstance(definition.default_client_threads, int)
+            or definition.default_client_threads <= 0
+        ):
+            raise ValueError("default client threads must be a positive integer for {}".format(definition.name))
         if len(definition.operations) != len(set(definition.operations)):
             raise ValueError("operations must be unique for {}".format(definition.name))
         if len(definition.load_parameters) != len(set(definition.load_parameters)):
@@ -587,6 +966,29 @@ def _validate_catalog(definitions):
         option_names = [option.name for option in definition.options]
         if len(option_names) != len(set(option_names)):
             raise ValueError("option names must be unique for {}".format(definition.name))
+        if not isinstance(definition.load_limits, tuple):
+            raise ValueError("load limits must be a tuple for {}".format(definition.name))
+        limited_parameters = []
+        for limit in definition.load_limits:
+            limit_option = (
+                next((option for option in definition.options if option.name == limit[1]), None)
+                if isinstance(limit, tuple) and len(limit) == 3
+                else None
+            )
+            if (
+                not isinstance(limit, tuple)
+                or len(limit) != 3
+                or limit[0] not in definition.load_parameters
+                or limit_option is None
+                or limit_option.kind != "integer"
+                or isinstance(limit[2], bool)
+                or not isinstance(limit[2], int)
+                or limit[2] <= 0
+            ):
+                raise ValueError("invalid load limit for {}".format(definition.name))
+            limited_parameters.append(limit[0])
+        if len(limited_parameters) != len(set(limited_parameters)):
+            raise ValueError("load limits must be unique for {}".format(definition.name))
         for option in definition.options:
             if option.kind not in ("integer", "string", "boolean", "duration"):
                 raise ValueError("unknown workload option kind: {}".format(option.kind))
@@ -707,6 +1109,48 @@ _DEFINITIONS = (
         warmup_mode="separate",
         throughput_unit="batches/s",
     ),
+    WorkloadDefinition(
+        name="tpcc",
+        default_operation="run",
+        operations=("run",),
+        load_parameters=("max-sessions",),
+        options=(
+            WorkloadOption("warehouses", 10),
+            WorkloadOption("import-threads", 0, allow_zero=True),
+            WorkloadOption("compact", False, kind="boolean"),
+            WorkloadOption(
+                "tx-mode",
+                "serializable-rw",
+                kind="string",
+                choices=("serializable-rw", "snapshot-rw"),
+            ),
+            WorkloadOption(
+                "latency-transaction",
+                "NewOrder",
+                kind="string",
+                choices=_TPCC_TRANSACTION_NAMES,
+            ),
+            WorkloadOption("no-delays", False, kind="boolean"),
+            WorkloadOption("highres-histogram", False, kind="boolean"),
+        ),
+        uses_path=True,
+        table_name=None,
+        init_builder=_tpcc_init_builder,
+        run_builder=_tpcc_run_builder,
+        options_validator=_validate_tpcc_options,
+        dataset_scope="geometry",
+        warmup_mode="inline",
+        prepare_plan_builder=_tpcc_prepare_plan_builder,
+        run_plan_builder=_tpcc_run_plan_builder,
+        cleanup_plan_builder=_tpcc_cleanup_plan_builder,
+        result_adapter=TPCC_JSON_RESULT,
+        throughput_unit="new orders/s",
+        profile_validator=_validate_tpcc_profile,
+        effective_warmup_builder=_tpcc_effective_warmup_seconds,
+        minimum_duration_seconds=2,
+        load_limits=(("max-sessions", "warehouses", _TPCC_TERMINALS_PER_WAREHOUSE),),
+        default_client_threads=2,
+    ),
 )
 _validate_catalog(_DEFINITIONS)
 _WORKLOADS = MappingProxyType({definition.name: definition for definition in _DEFINITIONS})
@@ -807,6 +1251,12 @@ def web_workload_catalog():
             "slo_metrics": dict(definition.result_adapter.slo_metrics),
             "reports_errors": any(metric.name == "errors" for metric in definition.result_adapter.metrics),
             "result_schema_id": definition.result_adapter.schema_id,
+            "minimum_duration_seconds": definition.minimum_duration_seconds,
+            "default_client_threads": definition.default_client_threads,
+            "load_limits": {
+                parameter: {"option": option, "multiplier": multiplier}
+                for parameter, option, multiplier in definition.load_limits
+            },
             "options": [
                 {
                     "name": option.name,
@@ -848,6 +1298,33 @@ def all_slo_percentiles():
 
 def allowed_slo_metrics(workload_type):
     return dict(_definition(workload_type).result_adapter.slo_metrics)
+
+
+def validate_workload_profile(workload, load, measurement, location):
+    """Validate cross-field constraints owned by one workload definition."""
+
+    definition = _definition(workload["type"])
+    if measurement["duration"] < definition.minimum_duration_seconds:
+        _config_error(
+            location + ".measurement.duration",
+            "must be at least {} for {}".format(definition.minimum_duration_seconds, definition.name),
+        )
+    if definition.profile_validator is not None:
+        definition.profile_validator(workload, load, measurement, location)
+
+
+def workload_effective_warmup_seconds(workload, requested_seconds):
+    """Return the explicit warmup passed to the CLI for one workload run."""
+
+    if isinstance(requested_seconds, bool) or not isinstance(requested_seconds, int) or requested_seconds < 0:
+        raise BenchmarkError("workload warmup must be a non-negative integer")
+    definition = _definition(workload["type"])
+    if definition.effective_warmup_builder is None:
+        return requested_seconds
+    effective = definition.effective_warmup_builder(workload, requested_seconds)
+    if isinstance(effective, bool) or not isinstance(effective, int) or effective < requested_seconds:
+        raise BenchmarkError("{} returned an invalid effective warmup".format(definition.name))
+    return effective
 
 
 def build_init_argv(cli, path, workload):

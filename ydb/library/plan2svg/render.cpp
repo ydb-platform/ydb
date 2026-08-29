@@ -386,14 +386,14 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
     SummaryBuilder
         << "<g><title>Ingress "
-        << FormatBytes(p->IngressBytes->Value) << ", Rows " << FormatIntegerValue(p->IngressRows->Value);
-    if (p->IngressRows->Value) {
+        << FormatBytes(p->IngressBytes.Value) << ", Rows " << FormatIntegerValue(p->IngressRows.Value);
+    if (p->IngressRows.Value) {
     SummaryBuilder
-        << ", Width " << p->IngressBytes->Value / p->IngressRows->Value << "B";
+        << ", Width " << p->IngressBytes.Value / p->IngressRows.Value << "B";
     }
     if (p->MaxTime) {
     SummaryBuilder
-        << ", Avg " << FormatBytes(p->IngressBytes->Value * 1000 / p->MaxTime) << "/s";
+        << ", Avg " << FormatBytes(p->IngressBytes.Value * 1000 / p->MaxTime) << "/s";
     }
     SummaryBuilder
         << "</title>" << Endl
@@ -402,13 +402,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "' stroke-width='0' fill='" << Config.Palette.Ingress.Medium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + 2
-        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->IngressBytes->Value) << "</text>" << Endl
+        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->IngressBytes.Value) << "</text>" << Endl
         << "</g>" << Endl;
 
     SummaryBuilder
-        << "<g><title>CPU Usage " << FormatUsage(p->CpuTime->Value);
+        << "<g><title>CPU Usage " << FormatUsage(p->CpuTime.Value);
     if (p->MaxTime) {
-        auto usagePS = p->CpuTime->Value / p->MaxTime;
+        auto usagePS = p->CpuTime.Value / p->MaxTime;
         usagePS /= 10;
     SummaryBuilder
         << ", Avg " << Sprintf("%lu.%.2lu", usagePS / 100, usagePS % 100) << " CPU/s";
@@ -421,17 +421,17 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "' stroke-width='0' fill='" << Config.Palette.Cpu.Medium << "'/>" << Endl
         << "  <text class='cpupath' data-groups='" << cpuGroups << "' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
-        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
+        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p->CpuTime.Value) << "</text>" << Endl
         << "</g>" << Endl;
 
     SummaryBuilder
-        << "<g><title>Memory " << FormatBytes(p->MaxMemoryUsage->Value) << "</title>" << Endl
+        << "<g><title>Memory " << FormatBytes(p->MaxMemoryUsage.Value) << "</title>" << Endl
         << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.Mem.Medium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 + 2
-        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
+        << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->MaxMemoryUsage.Value) << "</text>" << Endl
         << "</g>" << Endl;
 
     auto timeGroups = GetCriticalTimeGroups();

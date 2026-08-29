@@ -67,8 +67,8 @@ struct TChannelStats {
 // summary it is given, so reading them anyway would pull values into an
 // aggregate that does not see them today.
 TChannelStats LoadChannelStats(const NJson::TJsonValue& statNode,
-    const std::shared_ptr<TSummaryMetric>& bytesSummary,
-    const std::shared_ptr<TSummaryMetric>& rowsSummary,
-    const std::shared_ptr<TSummaryMetric>& chunkSizeSummary);
+    TSummaryMetric* bytesSummary,
+    TSummaryMetric* rowsSummary,
+    TSummaryMetric* chunkSizeSummary);
 
 } // namespace NPlan2Svg

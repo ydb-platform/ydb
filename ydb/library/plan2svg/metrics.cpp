@@ -191,7 +191,7 @@ void UpdateMax(ui64& m, ui64 v) {
     }
 }
 
-TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJson::TJsonValue& node,
+TSingleMetric::TSingleMetric(TSummaryMetric* summary, const NJson::TJsonValue& node,
         ui64 minTime, ui64 maxTime,
         const NJson::TJsonValue* firstMessageNode, const NJson::TJsonValue* lastMessageNode,
         const NJson::TJsonValue* waitTimeUsNode)
@@ -223,17 +223,17 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJso
     }
 }
 
-TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value)
+TSingleMetric::TSingleMetric(TSummaryMetric* summary, ui64 value)
     : Summary(summary), Details(value) {
     Summary->Add(Details.Sum);
 }
 
-TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary)
+TSingleMetric::TSingleMetric(TSummaryMetric* summary)
     : Summary(summary) {
     Summary->Add(Details.Sum);
 }
 
-TScalarMetric::TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value)
+TScalarMetric::TScalarMetric(TSummaryMetric* summary, ui64 value)
     : Summary(summary), Value(value) {
     Summary->Add(Value);
 }

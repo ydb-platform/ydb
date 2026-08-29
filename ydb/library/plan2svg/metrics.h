@@ -63,16 +63,19 @@ struct TMetricHistory {
     ui64 Average();
 };
 
+// Summary on both metrics below points at an aggregate owned by the TPlan the
+// metric belongs to, and every metric outlives neither more nor less than that
+// plan. It is a plain pointer, not a shared one: nothing shares that ownership.
 struct TSingleMetric {
-    TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJson::TJsonValue& node,
+    TSingleMetric(TSummaryMetric* summary, const NJson::TJsonValue& node,
         ui64 minTime = 0, ui64 maxTime = 0,
         const NJson::TJsonValue* firstMessageNode = nullptr,
         const NJson::TJsonValue* lastMessageNode = nullptr,
         const NJson::TJsonValue* waitTimeUsNode = nullptr);
-    TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
-    TSingleMetric(std::shared_ptr<TSummaryMetric> summary);
+    TSingleMetric(TSummaryMetric* summary, ui64 value);
+    TSingleMetric(TSummaryMetric* summary);
 
-    std::shared_ptr<TSummaryMetric> Summary;
+    TSummaryMetric* Summary = nullptr;
     TAggregation Details;
 
     TMetricHistory History;
@@ -85,9 +88,9 @@ struct TSingleMetric {
 };
 
 struct TScalarMetric {
-    TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
+    TScalarMetric(TSummaryMetric* summary, ui64 value);
 
-    std::shared_ptr<TSummaryMetric> Summary;
+    TSummaryMetric* Summary = nullptr;
     ui64 Value = 0;
 };
 

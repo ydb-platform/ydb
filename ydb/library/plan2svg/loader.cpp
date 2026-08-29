@@ -58,7 +58,7 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
         ReadUi64(node, "FinishedTasks", clusterNode->FinishedTasks);
         /*
         if (auto* outputBytesNode = node.GetValueByPath("OutputBytes")) {
-            clusterNode->OutputBytes = std::make_shared<TSingleMetric>(NodeOutputBytes, *outputBytesNode);
+            clusterNode->OutputBytes = std::make_shared<TSingleMetric>(&NodeOutputBytes, *outputBytesNode);
             clusterNode->OutputBytes->FirstMessage.Min = clusterNode->OutputBytes->History.MinTime;
             clusterNode->OutputBytes->FirstMessage.Max = clusterNode->OutputBytes->FirstMessage.Min;
             clusterNode->OutputBytes->LastMessage.Max = clusterNode->OutputBytes->History.MaxTime;
@@ -66,15 +66,15 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
         }
         */
         if (auto* maxMemoryUsageNode = node.GetValueByPath("MaxMemoryUsage")) {
-            clusterNode->MaxMemoryUsage = std::make_shared<TSingleMetric>(NodeMaxMemoryUsage, *maxMemoryUsageNode);
+            clusterNode->MaxMemoryUsage = std::make_shared<TSingleMetric>(&NodeMaxMemoryUsage, *maxMemoryUsageNode);
             clusterNode->MaxMemoryUsage->MinMaxDistribution = false;
         }
         if (auto* memoryUsageNode = node.GetValueByPath("MemoryUsageMB")) {
-            clusterNode->MemoryUsage = std::make_shared<TSingleMetric>(NodeMemoryUsage, *memoryUsageNode);
+            clusterNode->MemoryUsage = std::make_shared<TSingleMetric>(&NodeMemoryUsage, *memoryUsageNode);
             clusterNode->MemoryUsage->MinMaxDistribution = false;
         }
         if (auto* cpuTimeNode = node.GetValueByPath("CpuTimeUs")) {
-            clusterNode->CpuTime = std::make_shared<TSingleMetric>(NodeCpuTime, *cpuTimeNode);
+            clusterNode->CpuTime = std::make_shared<TSingleMetric>(&NodeCpuTime, *cpuTimeNode);
             clusterNode->CpuTime->MinMaxDistribution = false;
         }
         if (auto* globNode = node.GetValueByPath("GlobalMemoryUsageMB")) {
@@ -141,10 +141,10 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
         }
         /*
         if (auto* inputBytesNode = node.GetValueByPath("InputBytes")) {
-            clusterNode->InputBytes = std::make_shared<TSingleMetric>(NodeInputBytes, *inputBytesNode);
+            clusterNode->InputBytes = std::make_shared<TSingleMetric>(&NodeInputBytes, *inputBytesNode);
         }
         if (auto* ingressBytesNode = node.GetValueByPath("IngressBytes")) {
-            clusterNode->IngressBytes = std::make_shared<TSingleMetric>(NodeIngressBytes, *ingressBytesNode);
+            clusterNode->IngressBytes = std::make_shared<TSingleMetric>(&NodeIngressBytes, *ingressBytesNode);
         }
         */
         Nodes.push_back(clusterNode);
@@ -173,7 +173,7 @@ void TPlan::ResolveCteRefs() {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(it->second->PlanNodeId) == nameNode->GetStringSafe()) {
                             if (auto* statNode = GetInputStatNode(subNode)) {
-                                auto stats = LoadChannelStats(*statNode, InputBytes, InputRows, InputChunkSize);
+                                auto stats = LoadChannelStats(*statNode, &InputBytes, &InputRows, &InputChunkSize);
                                 cteRef.second->InputBytes = stats.Bytes;
                                 cteRef.second->InputRows = stats.Rows;
                                 if (stats.HasChunks) {
@@ -200,7 +200,7 @@ void TPlan::ResolveCteRefs() {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(cteRef.second->Stage.PlanNodeId) == nameNode->GetStringSafe()) {
                             if (auto* statNode = GetOutputStatNode(subNode)) {
-                                auto stats = LoadChannelStats(*statNode, OutputBytes, OutputRows, OutputChunkSize);
+                                auto stats = LoadChannelStats(*statNode, &OutputBytes, &OutputRows, &OutputChunkSize);
                                 cteRef.second->CteOutputBytes = stats.Bytes;
                                 cteRef.second->CteOutputRows = stats.Rows;
                                 if (stats.HasChunks) {
@@ -215,7 +215,7 @@ void TPlan::ResolveCteRefs() {
                                     UpdateMax(MaxTime, stats.Bytes->MaxTime);
                                 }
                                 if (stats.RowsNode) {
-                                    cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *stats.RowsNode);
+                                    cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(&OperatorOutputRows, *stats.RowsNode);
                                 }
                             }
                             ReadUi64(subNode, "LocalBytes", cteRef.second->CteOutputLocalBytes);
@@ -595,7 +595,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                         if (operatorStatNode) {
                             if (auto* rowsStatsNode = operatorStatNode->GetValueByPath("Rows")) {
-                                stage->Operators.back().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsStatsNode);
+                                stage->Operators.back().OutputRows = std::make_shared<TSingleMetric>(&OperatorOutputRows, *rowsStatsNode);
                             }
                         }
                     }
@@ -631,7 +631,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     ingressNode = GetInputStatNode(ingress0);
                                 }
                                 if (ingressNode) {
-                                    auto stats = LoadChannelStats(*ingressNode, IngressBytes, IngressRows, nullptr);
+                                    auto stats = LoadChannelStats(*ingressNode, &IngressBytes, &IngressRows, nullptr);
                                     stage->IngressBytes = stats.Bytes;
                                     stage->IngressRows = stats.Rows;
                                     if (stats.BytesNode) {
@@ -678,17 +678,17 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 auto& ingress0 = (*ingressTopNode)[0];
                 if (auto* externalNode = ingress0.GetValueByPath("External")) {
                     if (auto* externalBytesNode = externalNode->GetValueByPath("ExternalBytes")) {
-                        externalStage->EgressBytes = std::make_shared<TSingleMetric>(ExternalBytes, *externalBytesNode, 0, 0,
+                        externalStage->EgressBytes = std::make_shared<TSingleMetric>(&ExternalBytes, *externalBytesNode, 0, 0,
                             externalNode->GetValueByPath("FirstMessageMs"),
                             externalNode->GetValueByPath("LastMessageMs")
                         );
                     }
                     if (auto* externalRowsNode = externalNode->GetValueByPath("ExternalRows")) {
-                        externalStage->EgressRows = std::make_shared<TSingleMetric>(ExternalRows, *externalRowsNode);
-                        externalStage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *externalRowsNode);
+                        externalStage->EgressRows = std::make_shared<TSingleMetric>(&ExternalRows, *externalRowsNode);
+                        externalStage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(&OperatorOutputRows, *externalRowsNode);
                     }
                     if (auto* cpuTimeNode = externalNode->GetValueByPath("CpuTimeUs")) {
-                        externalStage->CpuTime = std::make_shared<TSingleMetric>(ExternalCpuTime, *cpuTimeNode);
+                        externalStage->CpuTime = std::make_shared<TSingleMetric>(&ExternalCpuTime, *cpuTimeNode);
                         MergeTotalCpu(externalStage->CpuTime);
                     }
                     ReadUi64(*externalNode, "PartitionCount", externalStage->Tasks);
@@ -719,7 +719,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     auto name = nameNode->GetStringSafe();
                     if ((outputConnection && name == ToString(outputConnection->Stage.PlanNodeId)) || name == "RESULT") {
                         if (auto* statNode = GetOutputStatNode(subNode)) {
-                            auto stats = LoadChannelStats(*statNode, OutputBytes, OutputRows, OutputChunkSize);
+                            auto stats = LoadChannelStats(*statNode, &OutputBytes, &OutputRows, &OutputChunkSize);
                             stage->OutputBytes = stats.Bytes;
                             stage->OutputRows = stats.Rows;
                             if (stats.HasChunks) {
@@ -734,8 +734,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             }
                             if (!stage->Operators.front().OutputRows) {
                                 stage->Operators.front().OutputRows = stats.RowsNode
-                                    ? std::make_shared<TSingleMetric>(OperatorOutputRows, *stats.RowsNode)
-                                    : std::make_shared<TSingleMetric>(OperatorOutputRows);
+                                    ? std::make_shared<TSingleMetric>(&OperatorOutputRows, *stats.RowsNode)
+                                    : std::make_shared<TSingleMetric>(&OperatorOutputRows);
                             }
                         }
                         ReadUi64(subNode, "LocalBytes", stage->OutputLocalBytes);
@@ -745,22 +745,22 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
 
         if (auto* spillingComputeBytesNode = stage->StatsNode->GetValueByPath("SpillingComputeBytes")) {
-            stage->SpillingComputeBytes = std::make_shared<TSingleMetric>(SpillingComputeBytes, *spillingComputeBytesNode,
+            stage->SpillingComputeBytes = std::make_shared<TSingleMetric>(&SpillingComputeBytes, *spillingComputeBytesNode,
                 stage->MinTime, stage->MaxTime);
         }
 
         if (auto* spillingComputeTimeNode = stage->StatsNode->GetValueByPath("SpillingComputeTimeUs")) {
-            stage->SpillingComputeTime = std::make_shared<TSingleMetric>(SpillingComputeTime, *spillingComputeTimeNode,
+            stage->SpillingComputeTime = std::make_shared<TSingleMetric>(&SpillingComputeTime, *spillingComputeTimeNode,
                 stage->MinTime, stage->MaxTime);
         }
 
         if (auto* spillingChannelBytesNode = stage->StatsNode->GetValueByPath("SpillingChannelBytes")) {
-            stage->SpillingChannelBytes = std::make_shared<TSingleMetric>(SpillingChannelBytes, *spillingChannelBytesNode,
+            stage->SpillingChannelBytes = std::make_shared<TSingleMetric>(&SpillingChannelBytes, *spillingChannelBytesNode,
                 stage->MinTime, stage->MaxTime);
         }
 
         if (auto* spillingChannelTimeNode = stage->StatsNode->GetValueByPath("SpillingChannelTimeUs")) {
-            stage->SpillingChannelTime = std::make_shared<TSingleMetric>(SpillingChannelTime, *spillingChannelTimeNode,
+            stage->SpillingChannelTime = std::make_shared<TSingleMetric>(&SpillingChannelTime, *spillingChannelTimeNode,
                 stage->MinTime, stage->MaxTime);
         }
 
@@ -819,7 +819,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                                         if (planNodeId == nameNode->GetStringSafe()) {
                                             if (auto* statNode = GetInputStatNode(subNode)) {
-                                                auto stats = LoadChannelStats(*statNode, InputBytes, InputRows, InputChunkSize);
+                                                auto stats = LoadChannelStats(*statNode, &InputBytes, &InputRows, &InputChunkSize);
                                                 connection->InputBytes = stats.Bytes;
                                                 connection->InputRows = stats.Rows;
                                                 if (stats.HasChunks) {
@@ -837,7 +837,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                     for (auto& op : stage->Operators) {
                                                         for(auto& input : op.Inputs) {
                                                             if (input.PlanNodeId == connectionPlanNodeId) {
-                                                                input.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *stats.RowsNode);
+                                                                input.Rows = std::make_shared<TSingleMetric>(&OperatorInputRows, *stats.RowsNode);
                                                             }
                                                         }
                                                     }
@@ -924,7 +924,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 ingressNode = GetInputStatNode(ingress0);
                             }
                             if (ingressNode) {
-                                auto stats = LoadChannelStats(*ingressNode, IngressBytes, IngressRows, nullptr);
+                                auto stats = LoadChannelStats(*ingressNode, &IngressBytes, &IngressRows, nullptr);
                                 stage->IngressBytes = stats.Bytes;
                                 stage->IngressRows = stats.Rows;
                                 if (stats.BytesNode) {
@@ -972,24 +972,24 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
 
         if (auto* cpuTimeNode = stage->StatsNode->GetValueByPath("CpuTimeUs")) {
-            stage->CpuTime = std::make_shared<TSingleMetric>(CpuTime, *cpuTimeNode, stage->MinTime, stage->MaxTime);
+            stage->CpuTime = std::make_shared<TSingleMetric>(&CpuTime, *cpuTimeNode, stage->MinTime, stage->MaxTime);
             MergeTotalCpu(stage->CpuTime);
         }
 
         if (auto* mmuNode = stage->StatsNode->GetValueByPath("MemoryUsageMB")) {
-            stage->MemoryUsage = std::make_shared<TSingleMetric>(MemoryUsage, *mmuNode, stage->MinTime, stage->MaxTime);
+            stage->MemoryUsage = std::make_shared<TSingleMetric>(&MemoryUsage, *mmuNode, stage->MinTime, stage->MaxTime);
         }
 
         if (auto* mmuNode = stage->StatsNode->GetValueByPath("MaxMemoryUsage")) {
-            stage->MaxMemoryUsage = std::make_shared<TSingleMetric>(MaxMemoryUsage, *mmuNode, stage->MinTime, stage->MaxTime);
+            stage->MaxMemoryUsage = std::make_shared<TSingleMetric>(&MaxMemoryUsage, *mmuNode, stage->MinTime, stage->MaxTime);
         }
 
         if (auto* witNode = stage->StatsNode->GetValueByPath("WaitInputTimeUs")) {
-            stage->WaitInputTime = std::make_shared<TSingleMetric>(WaitInputTime, *witNode, stage->MinTime, stage->MaxTime);
+            stage->WaitInputTime = std::make_shared<TSingleMetric>(&WaitInputTime, *witNode, stage->MinTime, stage->MaxTime);
         }
 
         if (auto* wotNode = stage->StatsNode->GetValueByPath("WaitOutputTimeUs")) {
-            stage->WaitOutputTime = std::make_shared<TSingleMetric>(WaitOutputTime, *wotNode, stage->MinTime, stage->MaxTime);
+            stage->WaitOutputTime = std::make_shared<TSingleMetric>(&WaitOutputTime, *wotNode, stage->MinTime, stage->MaxTime);
         }
 
         ReadUi64(*stage->StatsNode, "UpdateTimeMs", stage->UpdateTime);
@@ -1001,7 +1001,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     auto stageDuration = stage->MaxTime - stage->MinTime;
 
     if (stageDuration && inputBytes) {
-        stage->InputThroughput = std::make_shared<TSingleMetric>(StageInputThroughput, inputBytes * 1000 / stageDuration);
+        stage->InputThroughput = std::make_shared<TSingleMetric>(&StageInputThroughput, inputBytes * 1000 / stageDuration);
     }
 
     UpdateMax(MaxTime, stage->MaxTime);
@@ -1047,7 +1047,7 @@ void TPlan::LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>
             stageOperators.emplace_back(name, info);
             stageOperators.back().Estimations = GetEstimation(subNode);
             if (ingressRowsNode) {
-                stageOperators.back().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *ingressRowsNode);
+                stageOperators.back().OutputRows = std::make_shared<TSingleMetric>(&OperatorOutputRows, *ingressRowsNode);
             }
             break;
         }

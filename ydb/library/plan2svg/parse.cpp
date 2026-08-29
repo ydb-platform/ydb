@@ -118,9 +118,9 @@ TString ParseColumns(const NJson::TJsonValue* node) {
 }
 
 TChannelStats LoadChannelStats(const NJson::TJsonValue& statNode,
-    const std::shared_ptr<TSummaryMetric>& bytesSummary,
-    const std::shared_ptr<TSummaryMetric>& rowsSummary,
-    const std::shared_ptr<TSummaryMetric>& chunkSizeSummary)
+    TSummaryMetric* bytesSummary,
+    TSummaryMetric* rowsSummary,
+    TSummaryMetric* chunkSizeSummary)
 {
     TChannelStats stats;
 

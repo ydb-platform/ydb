@@ -156,6 +156,11 @@ _RESERVED_RESULT_METRIC_NAMES = frozenset(
         "host_cpu_max",
     )
 )
+_RESULT_SCHEMA_MAX_METRICS = 128
+_RESULT_SCHEMA_MAX_ID_LENGTH = 256
+_RESULT_SCHEMA_MAX_NAME_LENGTH = 128
+_RESULT_SCHEMA_MAX_UNIT_LENGTH = 128
+_RESULT_SCHEMA_MAX_DESCRIPTION_LENGTH = 4096
 
 
 @dataclass(frozen=True)
@@ -473,11 +478,19 @@ def _validate_catalog(definitions):
         adapter = definition.result_adapter
         if not isinstance(adapter, WorkloadResultAdapter):
             raise ValueError("invalid result adapter for {}".format(definition.name))
-        if not isinstance(adapter.schema_id, str) or re.fullmatch("[a-z0-9][a-z0-9._-]*", adapter.schema_id) is None:
+        if (
+            not isinstance(adapter.schema_id, str)
+            or re.fullmatch("[a-z0-9][a-z0-9._-]*", adapter.schema_id) is None
+            or len(adapter.schema_id) > _RESULT_SCHEMA_MAX_ID_LENGTH
+        ):
             raise ValueError("invalid result schema id for {}".format(definition.name))
         if not callable(adapter.parse):
             raise ValueError("result adapter parse must be callable for {}".format(definition.name))
-        if not isinstance(adapter.metrics, tuple) or not adapter.metrics:
+        if (
+            not isinstance(adapter.metrics, tuple)
+            or not adapter.metrics
+            or len(adapter.metrics) > _RESULT_SCHEMA_MAX_METRICS
+        ):
             raise ValueError("result adapter metrics must be a non-empty tuple for {}".format(definition.name))
         result_schema = (adapter.metrics, adapter.slo_metrics)
         if adapter.schema_id in result_schemas and result_schemas[adapter.schema_id] != result_schema:
@@ -487,11 +500,15 @@ def _validate_catalog(definitions):
         for metric in adapter.metrics:
             if not isinstance(metric, WorkloadMetric):
                 raise ValueError("invalid result metric for {}".format(definition.name))
-            if not isinstance(metric.name, str) or re.fullmatch("[a-z][a-z0-9_]*", metric.name) is None:
+            if (
+                not isinstance(metric.name, str)
+                or re.fullmatch("[a-z][a-z0-9_]*", metric.name) is None
+                or len(metric.name) > _RESULT_SCHEMA_MAX_NAME_LENGTH
+            ):
                 raise ValueError("invalid result metric name for {}".format(definition.name))
             if metric.name in _RESERVED_RESULT_METRIC_NAMES:
                 raise ValueError("result metric name is reserved for {}.{}".format(definition.name, metric.name))
-            if not isinstance(metric.unit, str) or not metric.unit:
+            if not isinstance(metric.unit, str) or not metric.unit or len(metric.unit) > _RESULT_SCHEMA_MAX_UNIT_LENGTH:
                 raise ValueError("result metric {} requires a unit".format(metric.name))
             if metric.repetition_aggregation not in ("median", "sum"):
                 raise ValueError("invalid repetition aggregation for {}.{}".format(definition.name, metric.name))
@@ -499,7 +516,10 @@ def _validate_catalog(definitions):
                 raise ValueError(
                     "result metric required flag must be boolean for {}.{}".format(definition.name, metric.name)
                 )
-            if not isinstance(metric.description, str):
+            if (
+                not isinstance(metric.description, str)
+                or len(metric.description) > _RESULT_SCHEMA_MAX_DESCRIPTION_LENGTH
+            ):
                 raise ValueError(
                     "result metric description must be a string for {}.{}".format(definition.name, metric.name)
                 )
@@ -519,16 +539,24 @@ def _validate_catalog(definitions):
         errors = next((metric for metric in adapter.metrics if metric.name == "errors"), None)
         if errors is not None and (not errors.required or errors.repetition_aggregation != "sum"):
             raise ValueError("result adapter errors must be required and sum-aggregated for {}".format(definition.name))
-        if not isinstance(definition.throughput_unit, str) or not definition.throughput_unit:
+        if (
+            not isinstance(definition.throughput_unit, str)
+            or not definition.throughput_unit
+            or len(definition.throughput_unit) > _RESULT_SCHEMA_MAX_UNIT_LENGTH
+        ):
             raise ValueError("throughput unit must be a non-empty string for {}".format(definition.name))
-        if not isinstance(adapter.slo_metrics, tuple):
+        if not isinstance(adapter.slo_metrics, tuple) or len(adapter.slo_metrics) > _RESULT_SCHEMA_MAX_METRICS:
             raise ValueError("SLO metrics must be a tuple for {}".format(definition.name))
         slo_percentiles = []
         for item in adapter.slo_metrics:
             if not isinstance(item, tuple) or len(item) != 2 or not all(isinstance(value, str) for value in item):
                 raise ValueError("invalid SLO metric mapping for {}".format(definition.name))
             percentile, metric_name = item
-            if not percentile or metric_name not in metric_names:
+            if (
+                re.fullmatch(r"p(?:\d+(?:\.\d+)?|max)", percentile) is None
+                or len(percentile) > _RESULT_SCHEMA_MAX_NAME_LENGTH
+                or metric_name not in metric_names
+            ):
                 raise ValueError("invalid SLO metric mapping for {}".format(definition.name))
             metric = next(metric for metric in adapter.metrics if metric.name == metric_name)
             if not metric.required or metric.unit != "ms" or metric.repetition_aggregation != "median":

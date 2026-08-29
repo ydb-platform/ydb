@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 import mimetypes
+import re
 import socket
 import statistics
 import tempfile
@@ -373,20 +374,27 @@ function localYdbOptionValue(option){
   }
   return value
 }
+function localYdbSloPercentile(definition,requested=null){
+  const supported=Object.keys(definition.slo_metrics||{});
+  if(requested&&supported.includes(requested))return requested;
+  return supported.includes('p99')?'p99':supported[0]||null
+}
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
   const definition=localYdbWorkloadDefinition(workload.type);
   const loadMode=load.values?'points':load.objective.type;
+  const sloPercentiles=Object.keys(definition.slo_metrics||{});
+  const objectiveChoices=['points','maximize-throughput',...(sloPercentiles.length?['latency-slo']:[])];
   const options=definition.options.map(option=>localYdbOptionField(option,workload.options[option.name])).join('');
   const geometryFields=Object.entries(localYdbGeometryKeys)
     .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
   const loadCommon=
-    localSelect('local-load-mode','Objective',loadMode,['points','maximize-throughput','latency-slo'])+
+    localSelect('local-load-mode','Objective',loadMode,objectiveChoices)+
     localSelect('local-load-parameter','Parameter',load.parameter,definition.load_parameters)+
-    localCheck(
+    (definition.reports_errors?localCheck(
       'local-load-allow-errors','Allow failed workload requests',Boolean(load.allow_errors),
       'Failed requests remain visible in results but do not limit load search.'
-    );
+    ):'');
   const searchFields=loadMode==='points'?'':
     localField('local-load-start','Start',load.search.start,'','type=number min=1')+
     localField('local-load-maximum','Maximum',load.search.maximum,'','type=number min=1')+
@@ -414,13 +422,13 @@ function localYdbProfileEditor(profile){
         '','type=number min=0 max=100 step=any'
       ):'');
   const slo=loadMode==='latency-slo'?'<h3>Latency SLO</h3><div class=form-grid>'+
-    localSelect('local-slo-percentile','Percentile',load.objective.percentile,['p50','p95','p99','pmax'])+
+    localSelect('local-slo-percentile','Percentile',load.objective.percentile,sloPercentiles)+
     localField('local-slo-max-ms','Maximum latency (ms)',load.objective.max_ms,'','type=number min=0 step=any')+
-    localField(
+    (definition.reports_errors?localField(
       'local-slo-max-errors','Maximum errors',load.objective.max_errors,
       load.allow_errors?'Ignored while failed requests are allowed.':'',
       'type=number min=0 '+(load.allow_errors?'disabled':'')
-    )+
+    ):'')+
     localField(
       'local-slo-min-achieved-rate-ratio','Minimum achieved rate ratio',load.objective.min_achieved_rate_ratio,
       '','type=number min=0 max=1 step=any'
@@ -501,8 +509,20 @@ function bindLocalYdbEditor(profile){
     profile.name=name;profile.key=benchmarkName+'/'+name;const config=profile.local_ydb;
     if(event.target.id==='local-workload-type'){
       config.workload=defaultLocalYdbWorkload(event.target.value);editor.selected=profile.key;
-      const parameters=localYdbWorkloadDefinition(event.target.value).load_parameters;
+      const nextDefinition=localYdbWorkloadDefinition(event.target.value);
+      const parameters=nextDefinition.load_parameters;
       config.load=localYdbLoadForWorkload(config.load,parameters);
+      if(!nextDefinition.reports_errors)config.load.allow_errors=false;
+      if(config.load.objective?.type==='latency-slo'){
+        const percentile=localYdbSloPercentile(nextDefinition,config.load.objective.percentile);
+        if(percentile)config.load.objective.percentile=percentile;
+        else{
+          const defaults=localYdbLoadDefaults[config.load.parameter]||localYdbLoadDefaults.threads;
+          config.load={
+            parameter:config.load.parameter,allow_errors:false,values:[...defaults.values]
+          }
+        }
+      }
       editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
     }
     if(event.target.id==='local-load-parameter'){
@@ -534,7 +554,9 @@ function bindLocalYdbEditor(profile){
           plateau_points:old.plateau_points||2,cpu_saturation_percent:old.cpu_saturation_percent||95
         };
         if(mode==='latency-slo')Object.assign(objective,{
-          percentile:old.percentile||'p99',max_ms:old.max_ms??10,max_errors:old.max_errors??0,
+          percentile:localYdbSloPercentile(
+            localYdbWorkloadDefinition(config.workload.type),old.percentile
+          ),max_ms:old.max_ms??10,max_errors:old.max_errors??0,
           min_achieved_rate_ratio:old.min_achieved_rate_ratio??.98
         });
         config.load={parameter:config.load.parameter,allow_errors,search,objective}
@@ -565,7 +587,7 @@ function bindLocalYdbEditor(profile){
     config.client.threads=localInteger('local-client-threads');
     const loadMode=document.querySelector('#local-load-mode').value;
     const parameter=document.querySelector('#local-load-parameter').value;
-    const allow_errors=document.querySelector('#local-load-allow-errors').checked;
+    const allow_errors=Boolean(document.querySelector('#local-load-allow-errors')?.checked);
     if(loadMode==='points'){
       config.load={parameter,allow_errors,values:arrayField(document.querySelector('#local-load-values').value)}
     }else{
@@ -588,7 +610,8 @@ function bindLocalYdbEditor(profile){
       });
       else Object.assign(objective,{
         percentile:document.querySelector('#local-slo-percentile').value,
-        max_ms:localNumber('local-slo-max-ms',0),max_errors:localInteger('local-slo-max-errors',0),
+        max_ms:localNumber('local-slo-max-ms',0),
+        max_errors:workloadDefinition.reports_errors?localInteger('local-slo-max-errors',0):0,
         min_achieved_rate_ratio:localNumber('local-slo-min-achieved-rate-ratio',0)
       })
     }
@@ -794,7 +817,7 @@ function addProfile(){
     'function metricLabel(value){const number=Number(value);if(!Number.isFinite(number))return String(value);return Math.abs('
     "number)>=1e9?(number/1e9).toFixed(2)+'B':Math.abs(number)>=1e6?(number/1e6).toFixed(2)+'M':Math.abs(number)>=1e3?(number"
     "/1e3).toFixed(2)+'k':Number.isInteger(number)?String(number):number.toFixed(2)}\n"
-    'function chartNumber(value){return value===null||value===undefined?NaN:Number(value)}\n'
+    "function chartNumber(value){return value===null||value===undefined||typeof value==='string'&&!value.trim()?NaN:Number(value)}\n"
     "function chartSeriesLabel(series,compact=false){return compact?series.affinity:series.run+' / '+series.profile+' / '+ser"
     'ies.affinity}\n'
     "function seriesCpuNote(series){if(series.cpu_masks&&Object.keys(series.cpu_masks).length)return 'CPUs by threads: '+Obje"
@@ -891,6 +914,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "('run',run);if(benchmark)query.set('benchmark',benchmark);return api('/api/chart-data?'+query)}\n"
     "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);return api('/api/local-ydb-comparison?'+query)}\n"
     "async function loadLocalYdbActivity(runId,profile,after){const query=new URLSearchParams({profile,after:String(after)});return api('/api/runs/'+enc(runId)+'/local-ydb-activity?'+query)}\n"
+    "function chartMetricTitle(data,metric){const metadata=data.metric_metadata?.[metric]||{};return metadata.unit?metric+' ('+metadata.unit+')':metric}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
     "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
     '[0]&&!value.startsWith(parts[0]))return false;for(const part of parts){if(!part)continue;const found=value.indexOf(part,'
@@ -951,8 +975,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "';\n"
     '    const facetNames=Object.entries(filterOptions).filter(([,values])=>values.size>1).map(([name])=>name),queryRows=stat'
     'e.queries.map((query,index)=>\'<div class=query-row data-query="\'+index+\'"><span class=query-token><b>metric</b> = <selec'
-    "t class=query-metric>'+data.metrics.map(metric=>'<option '+(metric===(query.metric||[...state.ys][0])?'selected':'')+'>'"
-    "+esc(metric)+'</option>').join('')+'</select></span>'+facetNames.map(name=>{const listId='query-values-'+index+'-'+name;"
+    "t class=query-metric>'+data.metrics.map(metric=>'<option value=\"'+esc(metric)+'\" '+(metric===(query.metric||[...state.ys][0])?'selected':'')+'>'"
+    "+esc(chartMetricTitle(data,metric))+'</option>').join('')+'</select></span>'+facetNames.map(name=>{const listId='query-values-'+index+'-'+name;"
     'return \'<span class=query-token><b>\'+esc(name)+\'</b> = <input class=query-facet data-facet="\'+esc(name)+\'" value="\'+esc('
     'query[name]||\'*\')+\'" list="\'+esc(listId)+\'" placeholder="*"><datalist id="\'+esc(listId)+\'"><option value="*">\'+[...filte'
     'rOptions[name]].sort((left,right)=>left.localeCompare(right,undefined,{numeric:true})).map(value=>\'<option value="\'+esc('
@@ -1003,9 +1027,9 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "and one Y axis.</div>';return}\n"
     '    const selectedMetrics=[...new Set(chosen.flatMap(item=>[...item.metrics]))],indexed=[];for(const item of chosen){con'
     'st rows=new Map;for(const row of item.rows)if(row[state.x]!==undefined)rows.set(String(row[state.x]),row);for(const metr'
-    "ic of item.metrics)indexed.push({item,rows,metric,label:item.label+(selectedMetrics.length>1?' · '+metric:''),colorIndex"
+    "ic of item.metrics)indexed.push({item,rows,metric,label:item.label+(selectedMetrics.length>1?' · '+chartMetricTitle(data,metric):''),colorIndex"
     ':indexed.length})}\n'
-    '    const sets=indexed.map(item=>new Set([...item.rows].filter(([,row])=>Number.isFinite(Number(row[item.metric]))).map('
+    '    const sets=indexed.map(item=>new Set([...item.rows].filter(([,row])=>Number.isFinite(chartNumber(row[item.metric]))).map('
     '([x])=>x))),common=[...sets[0]].filter(value=>sets.every(set=>set.has(value))).sort((a,b)=>Number(a)-Number(b)),union=ne'
     'w Set(sets.flatMap(set=>[...set]));\n'
     "    const xValues=[...union].sort((a,b)=>Number(a)-Number(b));if(!xValues.length){warning.innerHTML='<div class=\"notice"
@@ -1019,7 +1043,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "tColors.length]);const legend=indexed.length===1?'':'<div class=chart-legend>'+i"
     'ndexed.map((item,index)=>\'<span><i class="legend-swatch chart-bg-\'+index%chartColors.length+\'"></i>\'+esc(item.label)+\'</'
     "span>').join('')+'</div>';\n"
-    "    const metricTitle=selectedMetrics.join(', '),chartTitle=scope.title?metricTitle+' — '+scope.title:metricTitle;output."
+    "    const metricTitle=selectedMetrics.map(metric=>chartMetricTitle(data,metric)).join(', '),chartTitle=scope.title?metricTitle+' — '+scope.title:metricTitle;output."
     'innerHTML=legend+\'<section class=chart-panel data-metric="combined"><h3>\'+esc(chartTitle)+\'</h3>\'+svgChart(\'combined\',s'
     'tate.x,xValues,indexed,colors)+\'</section>\';bindChartTooltips(out'
     "put,state.x,xValues,indexed,['combined'],colors)\n"
@@ -1107,17 +1131,20 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '  return value\n'
     '}\n'
     'function localComparisonSemantic(item){\n'
-    '  const parameters=item.parameters||{},load=parameters.load||{},objective=load.objective||{type:\'points\'};return localComparisonStable({\n'
+    '  const parameters=item.parameters||{},load=parameters.load||{},objective=load.objective||{type:\'points\'};\n'
+    '  const schema=localResultSchema(item);return localComparisonStable({\n'
     '    workload:parameters.workload||{},parameter:load.parameter,objective:objective.type,\n'
-    "    latency_percentile:objective.type==='latency-slo'?objective.percentile:null\n"
+    "    latency_percentile:objective.type==='latency-slo'?objective.percentile:null,\n"
+    "    slo_metric:objective.type==='latency-slo'?localSloMetric(schema,objective.percentile):null,\n"
+    '    result_schema_id:schema.schema_id,throughput_unit:schema.throughput_unit\n'
     '  })\n'
     '}\n'
-    'function localResultMetrics(result){\n'
+    'function localResultMetrics(result,schema=localLegacyResultSchema(null)){\n'
     "  const verified=Boolean(result?.metrics_source==='verification'&&result?.verified_metrics&&\n"
     "    typeof result.verified_metrics==='object');\n"
     "  const raw=(verified?result.verified_metrics:result?.selected_metrics)||{};\n"
     '  const metrics=Number(raw.empty_repetitions)>0?{\n'
-    '    ...raw,p50_ms:null,p95_ms:null,p99_ms:null,pmax_ms:null\n'
+    '    ...raw,...Object.fromEntries(Object.values(schema.slo_metrics||{}).map(name=>[name,null]))\n'
     '  }:raw;\n'
     "  return {metrics,verified,source:verified?'Holdout':'Search'}\n"
     '}\n'
@@ -1132,130 +1159,163 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "  return '<span class=\"verification-badge '+(accepted===false?'bad':'')+'\" title=\"Independent holdout measurements\">Holdout'+\n"
     "    (repetitions?' · '+esc(repetitions):'')+'</span>'\n"
     '}\n'
-    'function localComparisonDelta(value,baseline,lowerIsBetter=false,compatible=true){\n'
+    'function localComparisonDelta(value,baseline,direction=null,compatible=true){\n'
     "  if(!compatible)return '<span class=muted>incompatible</span>';\n"
     "  if(value===null||value===undefined||value===''||baseline===null||baseline===undefined||baseline==='')return '—';\n"
     '  const current=Number(value),reference=Number(baseline);\n'
     "  if(!Number.isFinite(current)||!Number.isFinite(reference))return '—';\n"
     "  if(reference===0){if(current===0)return '<span class=\"comparison-delta\">0</span>';\n"
-    "    return lowerIsBetter?'<span class=\"comparison-delta bad\">+'+metricLabel(current)+'</span>':'—'};\n"
-    '  const delta=(current/reference-1)*100,good=lowerIsBetter?delta<0:delta>0,bad=lowerIsBetter?delta>0:delta<0;\n'
+    "    return direction==='lower'?'<span class=\"comparison-delta bad\">+'+metricLabel(current)+'</span>':'—'};\n"
+    "  const delta=(current/reference-1)*100,good=direction==='lower'?delta<0:direction==='higher'&&delta>0;\n"
+    "  const bad=direction==='lower'?delta>0:direction==='higher'&&delta<0;\n"
     "  return '<span class=\"comparison-delta '+(good?'good':bad?'bad':'')+'\">'+(delta>0?'+':'')+delta.toFixed(1)+'%</span>'\n"
     '}\n'
-    'function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseline){\n'
-    "  if(!chartData){container.innerHTML='<div class=empty>Search curves are unavailable because summary data could not be loaded.</div>';return}\n"
-    '  const entries=new Map((comparisonData.entries||[]).map(item=>[localComparisonKey(item),item]));\n'
-    '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline)),groups=[];\n'
-    '  for(const series of chartData.series||[]){\n'
-    "    if(series.benchmark!=='local-ydb'||series.affinity!=='roles')continue;\n"
-    '    const entry=entries.get(JSON.stringify([series.run,series.profile]));\n'
-    '    if(!entry||JSON.stringify(localComparisonSemantic(entry))!==baselineSemantic)continue;\n'
-    '    const byNodes=new Map;\n'
-    '    for(const row of series.rows||[]){\n'
-    '      const load=chartNumber(row.load);if(!Number.isFinite(load))continue;\n'
-    "      const dynamicNodes=String(row.dynamic_nodes??entry.result?.dynamic_nodes??'—');\n"
-    '      if(!byNodes.has(dynamicNodes))byNodes.set(dynamicNodes,new Map);\n'
-    '      byNodes.get(dynamicNodes).set(String(load),row)\n'
-    '    }\n'
-    '    for(const [dynamicNodes,rows] of byNodes)groups.push({\n'
-    "      rows,label:localComparisonId(entry)+' · '+dynamicNodes+' dynamic',connectMeasuredPoints:true\n"
-    '    })\n'
-    '  }\n'
-    '  groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));\n'
-    '  groups.forEach((group,index)=>group.colorIndex=index);\n'
-    '  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]\n'
-    '    .sort((left,right)=>left-right);\n'
-    "  if(!xValues.length){container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';return}\n"
-    "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99';\n"
-    "  const throughputUnit=localYdbThroughputUnit(baseline.parameters?.workload?.type);\n"
-    '  const specifications=[\n'
-    "    ['throughput','median_throughput','Achieved throughput ('+throughputUnit+')'],\n"
-    "    ['latency_ms','median_'+percentile+'_ms',percentile+' latency (ms)'],\n"
-    "    ['static_cpu','median_static_cpu_mean','Static node CPU (%)'],\n"
-    "    ['dynamic_cpu','median_dynamic_cpu_mean','Dynamic node CPU (%)'],\n"
-    "    ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)'],\n"
-    "    ['errors','max_errors','Maximum errors per repetition']\n"
-    '  ].filter(([,metric])=>groups.some(group=>[...group.rows.values()]\n'
-    '    .some(row=>Number.isFinite(chartNumber(row[metric])))));\n'
-    "  if(!specifications.length){container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';return}\n"
-    '  const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[\n'
-    '    alias,groups.map(group=>({...group,metric}))\n'
-    ']));\n'
-    '  const xName=localSearchAxisLabel(\n'
-    "    baseline.parameters?.load?.parameter||'load',baseline.parameters?.workload?.type\n"
-    '  );\n'
-    "  const legend='<div class=chart-legend>'+groups.map(group=>'<span><i class=\"legend-swatch chart-bg-'+\n"
-    "    group.colorIndex%chartColors.length+'\"></i>'+esc(group.label)+'</span>').join('')+'</div>';\n"
-    "  container.innerHTML='<h3>Search curves</h3><p class=muted>Lines connect each profile&apos;s own measured loads; no values are synthesized at loads measured only by another profile.</p>'+\n"
-    "    legend+'<div class=local-charts>'+specifications.map(([alias,,title])=>\n"
-    '      localChart(title,alias,xName,xValues,seriesByMetric[alias])\n'
-    "    ).join('')+'</div>';\n"
-    '  bindChartTooltips(\n'
-    '    container,xName,xValues,seriesByMetric,specifications.map(([alias])=>alias),chartColors,true\n'
-    '  )\n'
-    '}\n'
-    'function mountLocalYdbComparison(container,data,chartData=null){\n'
-    "  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}\n"
-    '  const previous=container.dataset.baseline;\n'
-    '  const baseline=entries.find(item=>localComparisonKey(item)===previous)||\n'
-    '    entries.find(item=>Object.keys(localResultMetrics(item.result).metrics).length)||entries[0];\n'
-    '  container.dataset.baseline=localComparisonKey(baseline);const baselineView=localResultMetrics(baseline.result);\n'
-    '  const baselineMetrics=baselineView.metrics;\n'
-    "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99',latencyMetric=percentile+'_ms';\n"
-    '  const baselineConfig=localComparisonConfig(baseline),baselineContext=localComparisonContext(baseline);\n'
-    '  const baselineBuild=localComparisonBuild(baseline);\n'
-    '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));\n'
-    '  const rows=entries.map(item=>{\n'
-    '    const metricView=localResultMetrics(item.result),metrics=metricView.metrics,config=localComparisonConfig(item);\n'
-    '    const throughputUnit=localYdbThroughputUnit(item.parameters?.workload?.type);\n'
-    '    const context=localComparisonContext(item),build=localComparisonBuild(item);\n'
-    '    const semanticCompatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;\n'
-    '    const sameMetricSource=metricView.source===baselineView.source,compatible=semanticCompatible&&sameMetricSource;\n'
-    '    const differences=[...new Set([...Object.keys(baselineConfig),...Object.keys(config)])].sort()\n'
-    '      .filter(name=>String(config[name])!==String(baselineConfig[name]));\n'
-    '    const contextDifferences=[...new Set([...Object.keys(baselineContext),...Object.keys(context)])].sort()\n'
-    '      .filter(name=>String(context[name])!==String(baselineContext[name]));\n'
-    '    const buildDifferences=[...new Set([...Object.keys(baselineBuild),...Object.keys(build)])].sort()\n'
-    '      .filter(name=>String(build[name])!==String(baselineBuild[name]));\n'
-    "    const details=[...differences.map(name=>'<li><strong>'+esc(name)+':</strong> '+esc(baselineConfig[name])+\n"
-    "      ' → '+esc(config[name])+'</li>'),...contextDifferences.map(name=>'<li><strong>'+esc(name)+':</strong> '+\n"
-    "      esc(baselineContext[name])+' → '+esc(context[name])+'</li>'),...buildDifferences.map(name=>'<li><strong>'+\n"
-    "      esc(name)+':</strong> '+esc(baselineBuild[name])+' → '+esc(build[name])+'</li>')];\n"
-    "    if(!sameMetricSource)details.unshift('<li><strong>Metric source:</strong> '+esc(baselineView.source)+' → '+\n"
-    "      esc(metricView.source)+'</li>');\n"
-    "    const comparisonState=!semanticCompatible?'Incompatible workload':!sameMetricSource?'Incompatible metric source':\n"
-    "      differences.length||contextDifferences.length?'Comparable with warnings':'Comparable · build changed';\n"
-    "    const differenceText=item===baseline?'Baseline':details.length?'<details><summary class=\"'+\n"
-    "      (compatible?'':'attempt-fail')+'\">'+comparisonState+' · '+differences.length+' config · '+\n"
-    "      contextDifferences.length+' environment · '+buildDifferences.length+' build'+\n"
-    "      (sameMetricSource?'':' · metric source')+'</summary><ul>'+\n"
-    "      details.join('')+'</ul></details>':'Same configuration, environment and build';\n"
-    "    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+\n"
-    "      localVerificationBadge(item.result,item.parameters,item.verification)+'</td><td>'+esc(metricView.source)+\n"
-    "      '</td><td><code>'+\n"
-    "      esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+\n"
-    "      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+\n"
-    "      '<td>'+esc(metricLabel(metrics.throughput??'—'))+' '+esc(throughputUnit)+' '+localComparisonDelta(metrics.throughput,baselineMetrics.throughput,false,compatible)+'</td>'+\n"
-    "      '<td>'+esc(metricLabel(metrics[latencyMetric]??'—'))+' ms '+localComparisonDelta(metrics[latencyMetric],baselineMetrics[latencyMetric],true,compatible)+'</td>'+\n"
-    "      '<td>'+esc(metrics.errors??'—')+' '+localComparisonDelta(metrics.errors,baselineMetrics.errors,true,compatible)+'</td>'+\n"
-    "      '<td>'+esc(metricLabel(metrics.static_cpu_mean??'—'))+'%</td><td>'+esc(metricLabel(metrics.dynamic_cpu_mean??'—'))+'%</td>'+\n"
-    "      '<td>'+esc(metricLabel(metrics.cli_cpu_mean??'—'))+'%</td><td>'+esc(item.result?.dynamic_nodes??'—')+'</td><td>'+differenceText+'</td></tr>'\n"
-    '  }).join(\'\');\n'
-    "  container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline <select id=local-comparison-baseline>'+\n"
-    "    entries.map(item=>'<option value=\"'+esc(localComparisonKey(item))+'\" '+(item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+\n"
-    "    '<p class=muted>Deltas compare metrics only when both rows use the same source: search or independent holdout. Expand configuration differences before interpreting a regression.</p>'+\n"
-    "    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+\n"
-    "    '<th>Metric source</th><th>ydbd</th><th>Selected load</th><th>Throughput</th><th>'+esc(percentile)+'</th><th>Errors</th>'+\n"
-    "    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+\n"
-    "    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+\n"
-    "    '<div id=local-comparison-curves></div>';\n"
-    '  mountLocalYdbComparisonCurves(\n'
-    "    container.querySelector('#local-comparison-curves'),data,chartData,baseline\n"
-    '  );\n'
-    "  container.querySelector('#local-comparison-baseline').onchange=event=>{\n"
-    '    container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data,chartData)\n'
-    '  }\n'
-    '}\n'
+    """
+function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseline){
+  if(!chartData){
+    container.innerHTML='<div class=empty>Search curves are unavailable because summary data could not be loaded.</div>';
+    return
+  }
+  const entries=new Map((comparisonData.entries||[]).map(item=>[localComparisonKey(item),item]));
+  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline)),groups=[];
+  for(const series of chartData.series||[]){
+    if(series.benchmark!=='local-ydb'||series.affinity!=='roles')continue;
+    const entry=entries.get(JSON.stringify([series.run,series.profile]));
+    if(!entry||JSON.stringify(localComparisonSemantic(entry))!==baselineSemantic)continue;
+    const byNodes=new Map;
+    for(const row of series.rows||[]){
+      const load=chartNumber(row.load);if(!Number.isFinite(load))continue;
+      const dynamicNodes=String(row.dynamic_nodes??entry.result?.dynamic_nodes??'—');
+      if(!byNodes.has(dynamicNodes))byNodes.set(dynamicNodes,new Map);
+      byNodes.get(dynamicNodes).set(String(load),row)
+    }
+    for(const [dynamicNodes,rows] of byNodes)groups.push({
+      rows,label:localComparisonId(entry)+' · '+dynamicNodes+' dynamic',connectMeasuredPoints:true
+    })
+  }
+  groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));
+  groups.forEach((group,index)=>group.colorIndex=index);
+  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]
+    .sort((left,right)=>left-right);
+  if(!xValues.length){
+    container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';
+    return
+  }
+  const schema=localResultSchema(baseline);
+  const objective=baseline.parameters?.load?.objective||{};
+  const curveMetrics=localComparisonCurveMetrics(schema,objective);
+  const cpuSpecifications=[
+    ['static_cpu','median_static_cpu_mean','Static node CPU (%)'],
+    ['dynamic_cpu','median_dynamic_cpu_mean','Dynamic node CPU (%)'],
+    ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)']
+  ];
+  const customSpecifications=curveMetrics.map(metric=>[
+    'workload_'+metric.name,(metric.name==='errors'?'max_':'median_')+metric.name,
+    localMetricLabel(schema,metric.name)+' ('+metric.unit+')'
+  ]);
+  const [percentile,sloMetric]=localPreferredSlo(schema,objective);
+  const specifications=(schema.schema_id==='generic-total-v1'?[
+    ['throughput','median_throughput','Achieved throughput ('+schema.throughput_unit+')'],
+    ['latency_ms','median_'+sloMetric,percentile+' latency (ms)'],
+    ...cpuSpecifications,
+    ['errors','max_errors','Maximum errors per repetition']
+  ]:customSpecifications.concat(cpuSpecifications)).filter(([,metric])=>groups.some(group=>[...group.rows.values()]
+    .some(row=>Number.isFinite(chartNumber(row[metric])))));
+  if(!specifications.length){
+    container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';
+    return
+  }
+  const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[
+    alias,groups.map(group=>({...group,metric}))
+  ]));
+  const xName=localSearchAxisLabel(
+    baseline.parameters?.load?.parameter||'load',baseline.parameters?.workload?.type
+  );
+  const legend='<div class=chart-legend>'+groups.map(group=>'<span><i class="legend-swatch chart-bg-'+
+    group.colorIndex%chartColors.length+'"></i>'+esc(group.label)+'</span>').join('')+'</div>';
+  container.innerHTML='<h3>Search curves</h3><p class=muted>Lines connect each profile&apos;s own measured loads; '+
+    'no values are synthesized at loads measured only by another profile.</p>'+legend+'<div class=local-charts>'+
+    specifications.map(([alias,,title])=>localChart(title,alias,xName,xValues,seriesByMetric[alias])).join('')+'</div>';
+  bindChartTooltips(
+    container,xName,xValues,seriesByMetric,specifications.map(([alias])=>alias),chartColors,true
+  )
+}
+function mountLocalYdbComparison(container,data,chartData=null){
+  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}
+  const previous=container.dataset.baseline;
+  const baseline=entries.find(item=>localComparisonKey(item)===previous)||entries.find(item=>{
+    const schema=localResultSchema(item);return Object.keys(localResultMetrics(item.result,schema).metrics).length
+  })||entries[0];
+  const baselineSchema=localResultSchema(baseline);
+  container.dataset.baseline=localComparisonKey(baseline);
+  const baselineView=localResultMetrics(baseline.result,baselineSchema),baselineMetrics=baselineView.metrics;
+  const metricColumns=localDisplayedMetrics(baselineSchema,baseline.parameters?.load?.objective||{});
+  const baselineConfig=localComparisonConfig(baseline),baselineContext=localComparisonContext(baseline);
+  const baselineBuild=localComparisonBuild(baseline);
+  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));
+  const rows=entries.map(item=>{
+    const itemSchema=localResultSchema(item);
+    const metricView=localResultMetrics(item.result,itemSchema),metrics=metricView.metrics;
+    const config=localComparisonConfig(item),context=localComparisonContext(item),build=localComparisonBuild(item);
+    const sameResultSchema=itemSchema.schema_id===baselineSchema.schema_id&&
+      itemSchema.throughput_unit===baselineSchema.throughput_unit;
+    const semanticCompatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;
+    const sameMetricSource=metricView.source===baselineView.source;
+    const compatible=sameResultSchema&&semanticCompatible&&sameMetricSource;
+    const differences=[...new Set([...Object.keys(baselineConfig),...Object.keys(config)])].sort()
+      .filter(name=>String(config[name])!==String(baselineConfig[name]));
+    const contextDifferences=[...new Set([...Object.keys(baselineContext),...Object.keys(context)])].sort()
+      .filter(name=>String(context[name])!==String(baselineContext[name]));
+    const buildDifferences=[...new Set([...Object.keys(baselineBuild),...Object.keys(build)])].sort()
+      .filter(name=>String(build[name])!==String(baselineBuild[name]));
+    const details=[...differences.map(name=>'<li><strong>'+esc(name)+':</strong> '+esc(baselineConfig[name])+
+      ' → '+esc(config[name])+'</li>'),...contextDifferences.map(name=>'<li><strong>'+esc(name)+':</strong> '+
+      esc(baselineContext[name])+' → '+esc(context[name])+'</li>'),...buildDifferences.map(name=>'<li><strong>'+
+      esc(name)+':</strong> '+esc(baselineBuild[name])+' → '+esc(build[name])+'</li>')];
+    if(!sameResultSchema)details.unshift('<li><strong>Result schema:</strong> '+esc(baselineSchema.schema_id)+' → '+
+      esc(itemSchema.schema_id)+'</li>');
+    if(!sameMetricSource)details.unshift('<li><strong>Metric source:</strong> '+esc(baselineView.source)+' → '+
+      esc(metricView.source)+'</li>');
+    const comparisonState=!sameResultSchema?'Incompatible result schema':
+      !semanticCompatible?'Incompatible workload':!sameMetricSource?'Incompatible metric source':
+      differences.length||contextDifferences.length?'Comparable with warnings':'Comparable · build changed';
+    const differenceText=item===baseline?'Baseline':details.length?'<details><summary class="'+
+      (compatible?'':'attempt-fail')+'">'+comparisonState+' · '+differences.length+' config · '+
+      contextDifferences.length+' environment · '+buildDifferences.length+' build'+
+      (sameMetricSource?'':' · metric source')+'</summary><ul>'+details.join('')+
+      '</ul></details>':'Same configuration, environment and build';
+    const metricCells=metricColumns.map(metric=>'<td>'+esc(metricLabel(metrics[metric.name]??'—'))+' '+
+      localComparisonDelta(
+        metrics[metric.name],baselineMetrics[metric.name],localMetricDirection(baselineSchema,metric.name),compatible
+      )+'</td>').join('');
+    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+
+      localVerificationBadge(item.result,item.parameters,item.verification)+'</td><td>'+esc(metricView.source)+
+      '</td><td><code>'+esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+
+      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+metricCells+
+      '<td>'+esc(metricLabel(metrics.static_cpu_mean??'—'))+'%</td><td>'+esc(metricLabel(metrics.dynamic_cpu_mean??'—'))+'%</td>'+
+      '<td>'+esc(metricLabel(metrics.cli_cpu_mean??'—'))+'%</td><td>'+esc(item.result?.dynamic_nodes??'—')+'</td><td>'+
+      differenceText+'</td></tr>'
+  }).join('');
+  const metricHeaders=metricColumns.map(metric=>'<th title="'+esc(metric.description||'')+'">'+
+    esc(localMetricLabel(baselineSchema,metric.name))+' ('+esc(metric.unit)+')</th>').join('');
+  container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline '+
+    '<select id=local-comparison-baseline>'+entries.map(item=>'<option value="'+esc(localComparisonKey(item))+'" '+
+    (item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+
+    '<p class=muted>Deltas compare metrics only when both rows use the same result schema and source: search or '+
+    'independent holdout. Expand configuration differences before interpreting a regression.</p>'+
+    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+
+    '<th>Metric source</th><th>ydbd</th><th>Selected load</th>'+metricHeaders+
+    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+
+    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div id=local-comparison-curves></div>';
+  mountLocalYdbComparisonCurves(
+    container.querySelector('#local-comparison-curves'),data,chartData,baseline
+  );
+  container.querySelector('#local-comparison-baseline').onchange=event=>{
+    container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data,chartData)
+  }
+}
+    """
     """
 const localPhaseLabels={
   'preparing-cluster':'Preparing cluster','starting-static-nodes':'Starting static nodes','waiting-for-static-nodes':'Waiting for static nodes',
@@ -1408,15 +1468,66 @@ function localSearchAxisLabel(parameter,workload){
   if(parameter==='rate')return workload==='stock'?'Offered rate (transactions/s)':'Offered rate (requests/s)';
   return parameter||'Search value'
 }
-function localYdbThroughputUnit(workload){
-  return {kv:'requests/s',stock:'transactions/s',log:'batches/s'}[workload]||'operations/s'
+function localLegacyResultSchema(workload){
+  const throughputUnit={kv:'requests/s',stock:'transactions/s',log:'batches/s'}[workload]||'operations/s';
+  return {
+    schema_id:'generic-total-v1',throughput_unit:throughputUnit,reports_errors:true,
+    metrics:[
+      ['transactions','operations','median'],['throughput',throughputUnit,'median'],
+      ['retries','retries','median'],['errors','errors','sum'],
+      ['p50_ms','ms','median'],['p95_ms','ms','median'],['p99_ms','ms','median'],['pmax_ms','ms','median']
+    ].map(([name,unit,repetition_aggregation])=>({name,unit,repetition_aggregation,required:true})),
+    slo_metrics:{p50:'p50_ms',p95:'p95_ms',p99:'p99_ms',pmax:'pmax_ms'}
+  }
 }
-function localAttemptLatency(item,metric='p99_ms'){
-  return Number(item.empty_repetitions)>0?'—':item[metric]
+function localResultSchema(value){
+  const schema=value?.workload_result_schema;
+  if(schema&&typeof schema==='object'&&Array.isArray(schema.metrics)&&schema.schema_id)return schema;
+  return localLegacyResultSchema(value?.parameters?.workload?.type)
 }
-function localAttemptRows(attempts,xField='attempt'){
+function localYdbThroughputUnit(value){
+  return typeof value==='string'?localLegacyResultSchema(value).throughput_unit:
+    localResultSchema(value).throughput_unit
+}
+function localMetricDescriptor(schema,name){return (schema.metrics||[]).find(item=>item.name===name)||null}
+function localSloMetric(schema,percentile){return schema.slo_metrics?.[percentile]||null}
+function localPreferredSlo(schema,objective={}){
+  const requested=objective.type==='latency-slo'?objective.percentile:null;
+  if(requested&&localSloMetric(schema,requested))return [requested,localSloMetric(schema,requested)];
+  if(localSloMetric(schema,'p99'))return ['p99',localSloMetric(schema,'p99')];
+  return Object.entries(schema.slo_metrics||{})[0]||[null,null]
+}
+function localMetricLabel(schema,name){
+  if(schema.schema_id==='generic-total-v1'){
+    if(name==='throughput')return 'Throughput';
+    if(name==='errors')return 'Errors';
+    const percentile=Object.entries(schema.slo_metrics||{}).find(([,metric])=>metric===name)?.[0];
+    if(percentile)return percentile
+  }
+  if(name==='throughput')return 'Achieved throughput';
+  const percentile=Object.entries(schema.slo_metrics||{}).find(([,metric])=>metric===name)?.[0];
+  return percentile?percentile+' · '+name:name.replaceAll('_',' ')
+}
+function localMetricDirection(schema,name){
+  if(name==='throughput')return 'higher';
+  if(name==='errors'||name==='retries'||Object.values(schema.slo_metrics||{}).includes(name))return 'lower';
+  return null
+}
+function localDisplayedMetrics(schema,objective={}){
+  if(schema.schema_id!=='generic-total-v1')return schema.metrics||[];
+  const [,sloMetric]=localPreferredSlo(schema,objective);
+  return ['throughput',sloMetric,'errors'].map(name=>localMetricDescriptor(schema,name)).filter(Boolean)
+}
+function localComparisonCurveMetrics(schema,objective={}){
+  return schema.schema_id==='generic-total-v1'?localDisplayedMetrics(schema,objective):schema.metrics||[]
+}
+function localAttemptMetric(item,metric,schema){
+  return Number(item.empty_repetitions)>0&&Object.values(schema.slo_metrics||{}).includes(metric)?'—':item[metric]
+}
+function localAttemptRows(attempts,schema,xField='attempt'){
+  const invalidMetrics=new Set(Object.values(schema.slo_metrics||{}));
   return new Map(attempts.map(item=>[String(item[xField]),Number(item.empty_repetitions)>0?{
-    ...item,p50_ms:null,p95_ms:null,p99_ms:null,pmax_ms:null
+    ...item,...Object.fromEntries([...invalidMetrics].map(name=>[name,null]))
   }:item]))
 }
 function localChart(title,metric,xName,xValues,series){
@@ -1469,7 +1580,8 @@ function renderLocalYdbProfile(container,data){
   const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[];
   const result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{};
   const objective=loadConfig.objective||{type:'points'};
-  const throughputUnit=localYdbThroughputUnit(parameters.workload?.type);
+  const resultSchema=localResultSchema(data),throughputUnit=resultSchema.throughput_unit;
+  const [latencyPercentile,latencyMetric]=localPreferredSlo(resultSchema,objective);
   const phaseElapsed=localElapsed(progress.phase_started_at);
   const phaseDuration=Number(progress.phase_duration_seconds);
   const profileElapsed=localElapsed(data.started_at,data.finished_at);
@@ -1504,25 +1616,27 @@ function renderLocalYdbProfile(container,data){
     data.activity||[],Boolean(data.activity_truncated),activityOpen,data.activity_error||''
   );
   if(result){
-    const selected=localResultMetrics(result).metrics;
-    const latencyMetric=(loadConfig.objective?.percentile||'p99')+'_ms';
+    const selected=localResultMetrics(result,resultSchema).metrics;
     const selectedLabel=result.selected_load===null||result.selected_load===undefined?
       '—':metricLabel(result.selected_load);
     html+=localVerificationSummary(data);
     html+='<div class=local-kpis>'+localKpi(
       localOutcomeLabel(result.outcome),selectedLabel,result.parameter||loadConfig.parameter,true
     )+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),throughputUnit)+
-      localKpi(
-        loadConfig.objective?.percentile||'p99',metricLabel(selected[latencyMetric]??'—'),'ms'
-      )+localKpi('Dynamic nodes',result.dynamic_nodes,result.stop_reason||'')+'</div>'
+      (latencyMetric?localKpi(
+        latencyPercentile,metricLabel(selected[latencyMetric]??'—'),
+        localMetricDescriptor(resultSchema,latencyMetric)?.unit||''
+      ):'')+localKpi('Dynamic nodes',result.dynamic_nodes,result.stop_reason||'')+'</div>'
   }else{
     html+='<div class=local-kpis>'+localKpi(
       'Completed attempts',attempts.length,'search stage '+(progress.search_stage||1),true
     )+localKpi(
       'Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—',throughputUnit
-    )+localKpi(
-      'Latest p99',attempts.length?metricLabel(localAttemptLatency(attempts.at(-1))):'—','ms'
-    )+'</div>'
+    )+(latencyMetric?localKpi(
+      'Latest '+latencyPercentile,
+      attempts.length?metricLabel(localAttemptMetric(attempts.at(-1),latencyMetric,resultSchema)):'—',
+      localMetricDescriptor(resultSchema,latencyMetric)?.unit||''
+    ):'')+'</div>'
   }
   const currentStage=Number(progress.search_stage||0);
   const lastStored=searches.length?Math.max(...searches.map(item=>Number(item.stage)||0)):0;
@@ -1560,7 +1674,7 @@ function renderLocalYdbProfile(container,data){
       stage.attempts.push(item)
     }
     const groups=(xAxis==='parameter'?stages:[{attempts}]).map(item=>({
-      rows:localAttemptRows(item.attempts,xField),bestRows:localBestRows(item.attempts,objective,xField),
+      rows:localAttemptRows(item.attempts,resultSchema,xField),bestRows:localBestRows(item.attempts,objective,xField),
       suffix:xAxis==='parameter'&&stages.length>1?
         ' · stage '+item.search_stage+' · '+item.dynamic_nodes+' dynamic':''
     }));
@@ -1582,11 +1696,12 @@ function renderLocalYdbProfile(container,data){
       });
       return values
     });
-    const latencySeries=groups.flatMap(group=>
-      ['p50_ms','p95_ms','p99_ms','pmax_ms'].map((metric,index)=>({
-        rows:group.rows,metric,label:metric.replace('_ms','')+group.suffix,colorIndex:index
-      }))
-    );
+    const latencyMetrics=[...new Map(Object.entries(resultSchema.slo_metrics||{}).map(
+      ([percentile,metric])=>[metric,{percentile,metric}]
+    )).values()];
+    const latencySeries=groups.flatMap(group=>latencyMetrics.map((item,index)=>({
+      rows:group.rows,metric:item.metric,label:item.percentile+' · '+item.metric+group.suffix,colorIndex:index
+    })));
     if(loadConfig.objective?.type==='latency-slo'){
       const sloRows=new Map(xValues.map(value=>[String(value),{slo_ms:loadConfig.objective.max_ms}]));
       latencySeries.push({rows:sloRows,metric:'slo_ms',label:'SLO',colorIndex:8})
@@ -1598,14 +1713,31 @@ function renderLocalYdbProfile(container,data){
     const cpuSeries=groups.flatMap(group=>cpuMetrics.map(([metric,label],index)=>({
       rows:group.rows,metric,label:label+group.suffix,colorIndex:index
     })));
-    const errorSeries=groups.flatMap(group=>[
-      {rows:group.rows,metric:'errors',label:'Errors'+group.suffix,colorIndex:8},
-      {rows:group.rows,metric:'retries',label:'Retries'+group.suffix,colorIndex:1}
+    const errorMetrics=(resultSchema.metrics||[]).filter(item=>['errors','retries'].includes(item.name));
+    const errorSeries=groups.flatMap(group=>errorMetrics.map((item,index)=>({
+      rows:group.rows,metric:item.name,label:localMetricLabel(resultSchema,item.name)+group.suffix,
+      colorIndex:item.name==='errors'?8:index+1
+    })));
+    const reservedMetrics=new Set([
+      'transactions','throughput','errors','retries',...latencyMetrics.map(item=>item.metric)
     ]);
+    const extraMetricGroups=new Map;
+    for(const metric of resultSchema.metrics||[]){
+      if(reservedMetrics.has(metric.name))continue;
+      if(!extraMetricGroups.has(metric.unit))extraMetricGroups.set(metric.unit,[]);
+      extraMetricGroups.get(metric.unit).push(metric)
+    }
+    const extraCharts=[...extraMetricGroups.entries()].map(([unit,metrics],index)=>{
+      const alias='workload_metrics_'+index;
+      return {alias,unit,metrics,series:groups.flatMap(group=>metrics.map((metric,colorIndex)=>({
+        rows:group.rows,metric:metric.name,label:localMetricLabel(resultSchema,metric.name)+group.suffix,colorIndex
+      })))}
+    });
     const showSearchProgress=xAxis==='attempt';
-    const chartSeries={
-      throughput:throughputSeries,latency_ms:latencySeries,cpu_percent:cpuSeries,errors:errorSeries
-    };
+    const chartSeries={throughput:throughputSeries,cpu_percent:cpuSeries};
+    if(latencySeries.length)chartSeries.latency_ms=latencySeries;
+    if(errorSeries.length)chartSeries.errors=errorSeries;
+    for(const chart of extraCharts)chartSeries[chart.alias]=chart.series;
     if(showSearchProgress)chartSeries.load=candidateSeries;
     chartBinding={
       xName,xValues,
@@ -1628,16 +1760,25 @@ function renderLocalYdbProfile(container,data){
         (loadConfig.parameter==='rate'?'Offered and achieved':'Achieved')+' throughput ('+throughputUnit+')',
         'throughput',xName,xValues,throughputSeries
       )+
-      localChart('Latency','latency_ms',xName,xValues,latencySeries)+
+      (latencySeries.length?localChart('Latency (ms)','latency_ms',xName,xValues,latencySeries):'')+
+      extraCharts.map(chart=>localChart(
+        'Workload metrics ('+chart.unit+')',chart.alias,xName,xValues,chart.series
+      )).join('')+
       localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
-      localChart('Errors and retries','errors',xName,xValues,errorSeries)+'</div>';
+      (errorSeries.length?localChart('Errors and retries','errors',xName,xValues,errorSeries):'')+'</div>';
+    const displayedMetrics=localDisplayedMetrics(resultSchema);
+    const workloadHeaders=displayedMetrics.map(metric=>'<th title="'+
+      esc(metric.description||'')+'">'+esc(localMetricLabel(resultSchema,metric.name))+
+      (metric.unit?' ('+esc(metric.unit)+')':'')+'</th>').join('');
     html+='<h3>Attempts</h3><div class=local-attempts-scroll tabindex=0 role=region aria-label="Search attempts">'+
       '<table class=local-attempts><thead><tr><th>#</th><th>Stage</th><th>Dynamic</th><th>Candidate</th>'+
-      '<th>Throughput ('+esc(throughputUnit)+')</th><th>p99</th><th>Errors</th><th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th>'+
+      workloadHeaders+'<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th>'+
       '<th>Verdict</th><th>Decision</th><th>Duration</th><th>Commands</th></tr></thead><tbody>'+
       attempts.map(item=>'<tr><td>'+esc(item.attempt)+'</td><td>'+esc(item.search_stage)+'</td><td>'+
-        esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td><td>'+esc(metricLabel(item.throughput))+
-        '</td><td>'+esc(metricLabel(localAttemptLatency(item)))+' ms</td><td>'+esc(item.errors)+'</td><td>'+
+        esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td>'+
+        displayedMetrics.map(metric=>'<td>'+esc(metricLabel(
+          localAttemptMetric(item,metric.name,resultSchema)??'—'
+        ))+'</td>').join('')+'<td>'+
         esc(metricLabel(item.static_cpu_mean))+'%</td><td>'+esc(metricLabel(item.dynamic_cpu_mean))+
         '%</td><td>'+esc(metricLabel(item.cli_cpu_mean))+'%</td><td class="'+
         (item.passed?'attempt-pass':'attempt-fail')+'">'+(item.passed?'PASS':'FAIL')+'</td><td>'+esc(item.decision)+
@@ -2084,6 +2225,184 @@ def _summary_value(value):
     return int(number) if number.is_integer() else number
 
 
+_LOCAL_YDB_SCHEMA_MAX_METRICS = 128
+_LOCAL_YDB_EXECUTOR_METRICS = (
+    "static_cpu_mean",
+    "static_cpu_max",
+    "dynamic_cpu_mean",
+    "dynamic_cpu_max",
+    "cli_cpu_mean",
+    "cli_cpu_max",
+    "host_cpu_mean",
+    "host_cpu_max",
+)
+_LOCAL_YDB_DERIVED_METRICS = (
+    "load",
+    "dynamic_nodes",
+    "target_cpu_saturated",
+    "empty_repetitions",
+)
+_LOCAL_YDB_CONTROL_METRICS = (
+    "repetition",
+    "attempt",
+    "search_stage",
+    "started_at",
+    "finished_at",
+    "duration_seconds",
+    "commands",
+    "passed",
+    "decision",
+    "search_low",
+    "search_high",
+    "throughput_gain_percent",
+)
+_LOCAL_YDB_RESERVED_WORKLOAD_METRICS = frozenset(
+    _LOCAL_YDB_EXECUTOR_METRICS + _LOCAL_YDB_DERIVED_METRICS + _LOCAL_YDB_CONTROL_METRICS
+)
+
+
+def _legacy_local_ydb_result_schema(workload_type):
+    throughput_unit = {
+        "kv": "requests/s",
+        "stock": "transactions/s",
+        "log": "batches/s",
+    }.get(workload_type, "operations/s")
+    return {
+        "schema_id": "generic-total-v1",
+        "metrics": [
+            {
+                "name": name,
+                "unit": throughput_unit if name == "throughput" else unit,
+                "repetition_aggregation": aggregation,
+                "required": True,
+            }
+            for name, unit, aggregation in (
+                ("transactions", "operations", "median"),
+                ("throughput", "operations/s", "median"),
+                ("retries", "retries", "median"),
+                ("errors", "errors", "sum"),
+                ("p50_ms", "ms", "median"),
+                ("p95_ms", "ms", "median"),
+                ("p99_ms", "ms", "median"),
+                ("pmax_ms", "ms", "median"),
+            )
+        ],
+        "slo_metrics": {
+            "p50": "p50_ms",
+            "p95": "p95_ms",
+            "p99": "p99_ms",
+            "pmax": "pmax_ms",
+        },
+        "throughput_unit": throughput_unit,
+        "reports_errors": True,
+    }
+
+
+def _project_local_ydb_result_schema(value):
+    if not isinstance(value, dict):
+        raise BenchmarkError("local YDB workload result schema must be an object")
+    schema_id = value.get("schema_id")
+    throughput_unit = value.get("throughput_unit")
+    reports_errors = value.get("reports_errors")
+    raw_metrics = value.get("metrics")
+    raw_slo_metrics = value.get("slo_metrics")
+    if (
+        not isinstance(schema_id, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9._-]*", schema_id) is None
+        or len(schema_id) > 256
+    ):
+        raise BenchmarkError("local YDB workload result schema id is invalid")
+    if not isinstance(throughput_unit, str) or not throughput_unit or len(throughput_unit) > 128:
+        raise BenchmarkError("local YDB workload throughput unit is invalid")
+    if not isinstance(reports_errors, bool):
+        raise BenchmarkError("local YDB workload reports_errors flag is invalid")
+    if not isinstance(raw_metrics, list) or not raw_metrics or len(raw_metrics) > _LOCAL_YDB_SCHEMA_MAX_METRICS:
+        raise BenchmarkError("local YDB workload result metrics are invalid")
+    metrics = []
+    names = set()
+    for item in raw_metrics:
+        if not isinstance(item, dict):
+            raise BenchmarkError("local YDB workload result metric must be an object")
+        name = item.get("name")
+        unit = item.get("unit")
+        aggregation = item.get("repetition_aggregation")
+        required = item.get("required")
+        description = item.get("description", "")
+        if (
+            not isinstance(name, str)
+            or re.fullmatch(r"[a-z][a-z0-9_]*", name) is None
+            or len(name) > 128
+            or name in names
+            or name in _LOCAL_YDB_RESERVED_WORKLOAD_METRICS
+        ):
+            raise BenchmarkError("local YDB workload result metric name is invalid")
+        if not isinstance(unit, str) or not unit or len(unit) > 128:
+            raise BenchmarkError("local YDB workload result metric unit is invalid")
+        if aggregation not in ("median", "sum") or not isinstance(required, bool):
+            raise BenchmarkError("local YDB workload result metric contract is invalid")
+        if not isinstance(description, str) or len(description) > 4096:
+            raise BenchmarkError("local YDB workload result metric description is invalid")
+        descriptor = {
+            "name": name,
+            "unit": unit,
+            "repetition_aggregation": aggregation,
+            "required": required,
+        }
+        if description:
+            descriptor["description"] = description
+        metrics.append(descriptor)
+        names.add(name)
+    if "throughput" not in names:
+        raise BenchmarkError("local YDB workload result schema must declare throughput")
+    descriptors = {item["name"]: item for item in metrics}
+    throughput = descriptors["throughput"]
+    if (
+        not throughput["required"]
+        or throughput["repetition_aggregation"] != "median"
+        or throughput["unit"] != throughput_unit
+    ):
+        raise BenchmarkError("local YDB workload throughput metric contract is invalid")
+    errors = descriptors.get("errors")
+    if reports_errors != (errors is not None):
+        raise BenchmarkError("local YDB workload reports_errors does not match its metrics")
+    if errors is not None and (not errors["required"] or errors["repetition_aggregation"] != "sum"):
+        raise BenchmarkError("local YDB workload errors metric contract is invalid")
+    if not isinstance(raw_slo_metrics, dict) or len(raw_slo_metrics) > _LOCAL_YDB_SCHEMA_MAX_METRICS:
+        raise BenchmarkError("local YDB workload SLO metric mapping is invalid")
+    slo_metrics = {}
+    for percentile, metric_name in raw_slo_metrics.items():
+        if (
+            not isinstance(percentile, str)
+            or re.fullmatch(r"p(?:\d+(?:\.\d+)?|max)", percentile) is None
+            or len(percentile) > 128
+            or not isinstance(metric_name, str)
+            or metric_name not in names
+        ):
+            raise BenchmarkError("local YDB workload SLO metric mapping is invalid")
+        metric = descriptors[metric_name]
+        if not metric["required"] or metric["repetition_aggregation"] != "median" or metric["unit"] != "ms":
+            raise BenchmarkError("local YDB workload SLO metric contract is invalid")
+        slo_metrics[percentile] = metric_name
+    return {
+        "schema_id": schema_id,
+        "metrics": metrics,
+        "slo_metrics": slo_metrics,
+        "throughput_unit": throughput_unit,
+        "reports_errors": reports_errors,
+    }
+
+
+def _resolved_local_ydb_result_schema(manifest):
+    has_persisted_schema = isinstance(manifest, dict) and "workload_result_schema" in manifest
+    persisted = manifest.get("workload_result_schema") if has_persisted_schema else None
+    parameters = manifest.get("parameters") if isinstance(manifest, dict) else None
+    workload = parameters.get("workload") if isinstance(parameters, dict) else None
+    workload_type = workload.get("type") if isinstance(workload, dict) else None
+    if has_persisted_schema:
+        return _project_local_ydb_result_schema(persisted)
+    return _project_local_ydb_result_schema(_legacy_local_ydb_result_schema(workload_type))
+
+
 _MEMORY_FAIRNESS_METRICS = (
     "worker_max_min_spread_pct",
     "worker_mean_min_gap_pct",
@@ -2153,6 +2472,26 @@ def _add_memory_fairness_rows(grouped, dimension_fields):
     return derived_count
 
 
+def _merge_chart_metric_metadata(target, name, metadata):
+    current = target.get(name)
+    if current is None or current == metadata:
+        target[name] = metadata
+        return
+    if current.get("unit") != metadata.get("unit"):
+        target[name] = {
+            "unit": "varies",
+            "description": "Metric units differ between the selected result schemas.",
+            "conflict": True,
+        }
+        return
+    descriptions = {item for item in (current.get("description"), metadata.get("description")) if item}
+    target[name] = {
+        "unit": current.get("unit", ""),
+        "description": next(iter(descriptions)) if len(descriptions) == 1 else "",
+        **({"conflict": True} if len(descriptions) > 1 else {}),
+    }
+
+
 def chart_data(output, run_ids, benchmark_filter=None):
     """Read bounded profile summaries into UI-facing affinity series."""
     if not isinstance(run_ids, list) or not run_ids or len(run_ids) > 20:
@@ -2169,6 +2508,9 @@ def chart_data(output, run_ids, benchmark_filter=None):
                 raise BenchmarkError("summary CSV is too large: {}".format(path.relative_to(root)))
             affinity_cpus = {}
             affinity_cpu_masks = {}
+            benchmark_name = path.relative_to(root).parts[0]
+            profile_manifest = None
+            local_result_schema = None
             profile_manifest_path = path.parent / "run.json"
             if profile_manifest_path.is_file():
                 try:
@@ -2183,12 +2525,14 @@ def chart_data(output, run_ids, benchmark_filter=None):
                 except (OSError, ValueError, TypeError):
                     affinity_cpus = {}
                     affinity_cpu_masks = {}
+                    profile_manifest = None
+            if benchmark_name == "local-ydb" and profile_manifest is not None:
+                local_result_schema = _resolved_local_ydb_result_schema(profile_manifest)
             with path.open(newline="", encoding="utf-8") as stream:
                 reader = csv.DictReader(stream)
                 fields = [name for name in (reader.fieldnames or []) if isinstance(name, str) and name]
                 if "affinity_mode" not in fields:
                     continue
-                benchmark_name = path.relative_to(root).parts[0]
                 benchmark_definition = BENCHMARKS.get(benchmark_name) if benchmark_name in BENCHMARKS else None
                 normalized_repetitions = benchmark_name == "memory-bandwidth-bench"
                 has_memory_fairness = False
@@ -2243,20 +2587,24 @@ def chart_data(output, run_ids, benchmark_filter=None):
                         metric_fields += list(_MEMORY_FAIRNESS_METRICS)
                 dimensions.update(dimension_fields)
                 metrics.update(metric_fields)
+                file_metric_metadata = {}
                 if benchmark_definition is not None:
                     for dimension in benchmark_definition.dimensions:
                         dimension_metadata[dimension.name] = {"series": dimension.series}
                     for metric in benchmark_definition.metrics:
                         if normalized_repetitions:
-                            metric_metadata[metric.name] = {"unit": metric.unit, "description": metric.description}
+                            file_metric_metadata[metric.name] = {
+                                "unit": metric.unit,
+                                "description": metric.description,
+                            }
                         else:
                             for prefix in ("median_", "min_", "max_"):
-                                metric_metadata[prefix + metric.name] = {
+                                file_metric_metadata[prefix + metric.name] = {
                                     "unit": metric.unit,
                                     "description": metric.description,
                                 }
                     if has_memory_fairness:
-                        metric_metadata.update(
+                        file_metric_metadata.update(
                             {
                                 _MEMORY_FAIRNESS_METRICS[0]: {
                                     "unit": "%",
@@ -2268,6 +2616,16 @@ def chart_data(output, run_ids, benchmark_filter=None):
                                 },
                             }
                         )
+                if local_result_schema is not None:
+                    for descriptor in local_result_schema["metrics"]:
+                        metadata = {
+                            "unit": descriptor["unit"],
+                            "description": descriptor.get("description", ""),
+                        }
+                        for prefix in ("median_", "min_", "max_"):
+                            file_metric_metadata[prefix + descriptor["name"]] = metadata
+                for name, metadata in file_metric_metadata.items():
+                    _merge_chart_metric_metadata(metric_metadata, name, metadata)
                 for affinity, rows in grouped.items():
                     benchmark, profile = path.relative_to(root).parts[:2]
                     series = {
@@ -2282,6 +2640,8 @@ def chart_data(output, run_ids, benchmark_filter=None):
                         series["cpus"] = affinity_cpus[affinity]
                     if affinity in affinity_cpu_masks:
                         series["cpu_masks"] = affinity_cpu_masks[affinity]
+                    if local_result_schema is not None:
+                        series["result_schema_id"] = local_result_schema["schema_id"]
                     result.append(series)
     return {
         "series": result,
@@ -2852,6 +3212,7 @@ class RunService:
         if candidate.stat().st_size > 16 * 1024 * 1024:
             raise BenchmarkError("local-ydb profile manifest is too large")
         value = load_manifest(candidate)
+        value["workload_result_schema"] = _resolved_local_ydb_result_schema(value)
         top_state = manifest.get("state")
         if value.get("state") in ("preparing", "running") and top_state not in ("pending", "queued", "running"):
             value["state"] = top_state or "failed"
@@ -2867,6 +3228,7 @@ class RunService:
             "started_at",
             "finished_at",
             "parameters",
+            "workload_result_schema",
             "timeout_seconds",
             "role_affinity",
             "tool_revision",
@@ -3208,6 +3570,7 @@ class RunService:
             )
             for profile in profiles:
                 value = self.local_ydb_profile(run_id, profile)
+                result_schema = value.get("workload_result_schema")
                 compact_fields = (
                     "status",
                     "state",
@@ -3221,6 +3584,8 @@ class RunService:
                     "profile": profile,
                     **{name: value[name] for name in compact_fields if name in value},
                 }
+                if isinstance(result_schema, dict):
+                    entry["workload_result_schema"] = result_schema
                 projections = {
                     "parameters": project_parameters(value.get("parameters")),
                     "role_affinity": project(value.get("role_affinity"), ("ydb_cli", "static_nodes", "dynamic_nodes")),
@@ -3269,17 +3634,20 @@ class RunService:
                         "holdout_accepted",
                     )
                     compact_result = {name: result[name] for name in result_fields if name in result}
+                    metric_names = set(_LOCAL_YDB_EXECUTOR_METRICS + _LOCAL_YDB_DERIVED_METRICS)
+                    if isinstance(result_schema, dict):
+                        metric_names.update(
+                            item["name"] for item in result_schema.get("metrics", ()) if isinstance(item, dict)
+                        )
+                    else:
+                        metric_names.update(metric.name for metric in BENCHMARKS["local-ydb"].metrics)
                     metrics = result.get("selected_metrics")
                     if isinstance(metrics, dict):
-                        metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
-                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated", "empty_repetitions"))
                         compact_result["selected_metrics"] = {
                             name: metrics[name] for name in metric_names if name in metrics
                         }
                     verified_metrics = result.get("verified_metrics")
                     if isinstance(verified_metrics, dict):
-                        metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
-                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated", "empty_repetitions"))
                         compact_result["verified_metrics"] = {
                             name: verified_metrics[name] for name in metric_names if name in verified_metrics
                         }

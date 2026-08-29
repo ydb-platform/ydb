@@ -4,6 +4,8 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 
+namespace NPlan2Svg {
+
 constexpr ui32 INDENT_X = 8;
 constexpr ui32 GAP_X = 3;
 constexpr ui32 GAP_Y = 3;
@@ -188,17 +190,6 @@ TString GetEstimation(const NJson::TJsonValue& node) {
         }
     }
     return ebuilder;
-}
-
-TString DivP1(ui32 divisible, ui32 divisor) {
-    TStringBuilder result;
-    ui32 p0 = divisible / divisor;
-    result << p0;
-    ui32 p1 = divisible * 10 / divisor - p0 * 10;
-    if (p1) {
-        result << '.' << p1;
-    }
-    return result;
 }
 
 const NJson::TJsonValue* GetOutputStatNode(const NJson::TJsonValue& node) {
@@ -474,7 +465,7 @@ TString ParseTableOrIndexName(const TString& table) {
     if (nt == table.npos) {
         return table.substr(0, n);
     } else {
-        return table.substr(nt + 1, nt - n - 1);
+        return table.substr(nt + 1, n - nt - 1);
     }
 }
 
@@ -1595,7 +1586,6 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else {
                     stage->Connections.push_back(std::make_shared<TConnection>(Viz.NextGroupId(), *stage, "Implicit", 0));
                     Stages.push_back(std::make_shared<TStage>(Viz.NextGroupId(), this, subNodeType));
-                    // NodeToConnection[connectionPlanNodeId] = connection.get();
                     stage->Connections.back()->FromStage = Stages.back();
                     Stages.back()->OutputPhysicalStageId = stage->PhysicalStageId;
                     LoadStage(Stages.back(), plan, nullptr);
@@ -1733,7 +1723,6 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
     for (auto c : stage->Connections) {
         if (c->CteConnection) {
             c->CteIndentX = indent;
-            c->CteOffsetY = offsetY;
             offsetY += GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
             stage->IndentY = std::max(stage->IndentY, offsetY);
         } else {
@@ -1752,7 +1741,6 @@ void TPlan::MarkLayout() {
         MarkStageIndent(0, offsetY, Stages.front());
     }
     if (!Nodes.empty()) {
-        NodeOffsetY = Height;
         ui32 nodeOffsetY = GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
         Height += nodeOffsetY; // only node header
         for (auto& node : Nodes) {
@@ -2213,9 +2201,6 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             ui32 index = 0;
             for (auto op : s->Operators) {
                 ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
-                // if (index > 0) {
-                //     s->_Builder << SvgLine(Config.HeaderLeft + s->IndentX + 2, yt, Config.HeaderLeft + Config.HeaderWidth, yt, "opdiv");
-                // }
                 s->_Builder
                     << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
                 if (op.Blocks) {
@@ -2546,14 +2531,15 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             if (s->WaitOutputTime) {
                 if (totalTime) {
-                    auto heightPercents = s->WaitOutputTime->Details.Sum * s->Height / totalTime;
+                    auto heightPercents = s->WaitOutputTime->Details.Sum * 100 / totalTime;
                     activePercentsMin += heightPercents;
                 s->_Builder
                     << "<g><title>";
                     FormatTooltip(s->_Builder, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage, totalTime);
                 s->_Builder
                     << "</title>" << Endl
-                    << "  <rect x='" << Config.TaskLeft << "' y='0%' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
+                    << "  <rect x='" << Config.TaskLeft << "' y='0%' width='" << Config.TaskWidth << "' height='" << heightPercents
+                    << "%' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
                     << "</g>" << Endl;
                 }
                 if (!s->WaitOutputTime->History.Deriv.empty()) {
@@ -2951,7 +2937,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             auto px = Config.TimelineLeft;
             auto pw = Config.TimelineWidth;
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325");
-            // PrintTimeline(builder, builder, "Output", node->OutputBytes->FirstMessage, node->OutputBytes->LastMessage, Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, Config.Palette.OutputMedium, true);
             PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.OutputMedium, Config.Palette.OutputMedium);
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
@@ -3266,14 +3251,10 @@ TColorPalette::TColorPalette() {
     TextInverted  = "var(--text-inv, #FFFFFF)";
     TextSummary   = "var(--text-summary, #262626)";
 
-    SpillingBytesDark   = "var(--spill-dark, #CC9700)";
     SpillingBytesMedium = "var(--spill-medium, #FFC522)";
     SpillingBytesLight  = "var(--spill-light, #FFD766)";
-    SpillingTimeDark    = "var(--spill-dark, #CC9700)";
     SpillingTimeMedium  = "var(--spill-medium, #FFC522)";
-    SpillingTimeLight   = "var(--spill-light, #FFD766)";
 
-    BlockLight = "var(--block-light, #EACB68)";
     BlockMedium = "var(--block-medium, #D9AE61)";
 }
 
@@ -3364,7 +3345,6 @@ TString TPlanVisualizer::PrintSvgSafe() {
 
 TString TPlanVisualizer::PrintSvg() {
     TStringBuilder background;
-    TStringBuilder canvas;
     TStringBuilder svg;
 
     ui32 offsetY = 0;
@@ -3735,8 +3715,12 @@ TString TPlanVisualizer::PrintSvg() {
         << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
 
-    svg << TString(canvas) << Endl;
+    // Blank line left over from a canvas builder that was never written to. Kept so that the
+    // output stays byte for byte identical; drop it together with a golden re-baseline.
+    svg << Endl;
     svg << "</svg>" << Endl;
 
     return svg;
 }
+
+} // namespace NPlan2Svg

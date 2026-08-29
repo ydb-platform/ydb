@@ -11,6 +11,8 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
+namespace NPlan2Svg {
+
 class TStage;
 
 class TSummaryMetric {
@@ -122,7 +124,6 @@ public:
     bool Parallel = false;
     bool CteConnection = false;
     ui32 CteIndentX = 0;
-    ui32 CteOffsetY = 0;
     std::shared_ptr<TSingleMetric> CteOutputBytes;
     std::shared_ptr<TSingleMetric> CteOutputRows;
     std::shared_ptr<TSingleMetric> CteOperatorOutputRows;
@@ -147,10 +148,6 @@ public:
     // CTE Ref
     TString PrecomputeRef;
     std::shared_ptr<TSingleMetric> Rows;
-
-    bool IsAssigned() {
-        return static_cast<bool>(OperatorId) || static_cast<bool>(PlanNodeId) || static_cast<bool>(PrecomputeRef);
-    }
 };
 
 class TOperatorInfo {
@@ -162,7 +159,6 @@ public:
     TString Name;
     TString Info;
     std::shared_ptr<TSingleMetric> OutputRows;
-    std::shared_ptr<TSingleMetric> OutputThroughput;
     std::vector<TOperatorInput> Inputs;
     std::shared_ptr<TSingleMetric> InputThroughput;
     TString Estimations;
@@ -290,13 +286,9 @@ struct TColorPalette {
     TString TextLight;
     TString TextInverted;
     TString TextSummary;
-    TString SpillingBytesDark;
     TString SpillingBytesMedium;
     TString SpillingBytesLight;
-    TString SpillingTimeDark;
     TString SpillingTimeMedium;
-    TString SpillingTimeLight;
-    TString BlockLight;
     TString BlockMedium;
 };
 
@@ -348,8 +340,6 @@ public:
         SpillingChannelBytes = std::make_shared<TSummaryMetric>();
         OperatorInputRows = std::make_shared<TSummaryMetric>();
         OperatorOutputRows = std::make_shared<TSummaryMetric>();
-        OperatorInputThroughput = std::make_shared<TSummaryMetric>();
-        OperatorOutputThroughput = std::make_shared<TSummaryMetric>();
         StageInputThroughput = std::make_shared<TSummaryMetric>();
         NodeOutputBytes = std::make_shared<TSummaryMetric>();
         NodeCpuTime = std::make_shared<TSummaryMetric>();
@@ -410,8 +400,6 @@ public:
     std::shared_ptr<TSummaryMetric> SpillingChannelBytes;
     std::shared_ptr<TSummaryMetric> OperatorInputRows;
     std::shared_ptr<TSummaryMetric> OperatorOutputRows;
-    std::shared_ptr<TSummaryMetric> OperatorInputThroughput;
-    std::shared_ptr<TSummaryMetric> OperatorOutputThroughput;
     std::shared_ptr<TSummaryMetric> StageInputThroughput;
     std::shared_ptr<TSummaryMetric> NodeOutputBytes;
     std::shared_ptr<TSummaryMetric> NodeMemoryUsage;
@@ -439,7 +427,6 @@ public:
     std::unordered_set<ui32> NodeToSource;
     TStringBuilder SummaryBuilder;
     std::vector<std::shared_ptr<TClusterNode>> Nodes;
-    ui32 NodeOffsetY = 0;
     ui32 NodeIndentY = 0;
 };
 
@@ -464,3 +451,5 @@ public:
     std::map<std::string, TPlan*> CteSubPlans;
     ui32 GroupId = 0;
 };
+
+} // namespace NPlan2Svg

@@ -14,7 +14,7 @@
 
 namespace NPlan2Svg {
 
-void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, const TString& color, bool backgroundRect) {
+void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf color, bool backgroundRect) {
 
     auto firstMin = firstMessage.Min * w / MaxTime;
     auto lastMax = lastMessage.Max * w / MaxTime;
@@ -59,7 +59,7 @@ void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, co
         << "</g>" << Endl;
 }
 
-void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor) {
+void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor) {
 
     if (metric->WaitTime.MaxDeriv == 0) {
         return;
@@ -78,7 +78,7 @@ void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMet
         << "' stroke='none' fill='" << fillColor << "' />" << Endl;
 }
 
-void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor, bool closed) {
+void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed) {
     if (MaxTime == 0 || maxValue == 0 || series.empty()) {
         return;
     }
@@ -118,19 +118,19 @@ void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64
 }
 
 
-void TPlan::PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor) {
+void TPlan::PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor) {
     if (history.MaxDeriv != 0) {
         PrintSeries(canvas, history.Deriv, history.MaxDeriv, x, y, w, h, title, lineColor, fillColor);
     }
 }
 
-void TPlan::PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor) {
+void TPlan::PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor) {
     if (history.MaxValue != 0) {
         PrintSeries(canvas, history.Values, history.MaxValue, x, y, w, h, title, lineColor, fillColor);
     }
 }
 
-void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect, const TString& peerId, ui64 split, const std::shared_ptr<TScalarMetric>& scalar) {
+void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TColorTriple& colors, const TString& textSum, const TString& tooltip, ui32 taskCount, TStringBuf iconRef, TStringBuf iconColor, TStringBuf iconScale, bool backgroundRect, const TString& peerId, ui64 split, const std::shared_ptr<TScalarMetric>& scalar) {
 
     ui32 x0 = viewLeft + INTERNAL_GAP_X;
     ui32 width = viewWidth - INTERNAL_GAP_X * 2;
@@ -169,24 +169,24 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         background
         << "  <rect x='" << x0 << "' y='" << y0
         << "' width='" << width << "' height='" << h
-        << "' stroke-width='0' fill='" << lightColor << "'/>"
+        << "' stroke-width='0' fill='" << colors.Light << "'/>"
         << "  <polygon points='" << x0 << "," << y0 << " "
         << x0 + wavg << "," << y0 + h - metric->Details.Avg * h / metric->Details.Max << " "
         << x0 + width << "," << y0 + h - metric->Details.Min * h / metric->Details.Max << " "
         << x0 + width << "," << y0 + h << " "
         << x0 << "," << y0 + h
-        << "' stroke='none' fill='" << mediumColor << "'/>" << Endl;
+        << "' stroke='none' fill='" << colors.Medium << "'/>" << Endl;
     } else {
         background
         << "  <rect x='" << x0 << "' y='" << y0
         << "' width='" << width << "' height='" << h
-        << "' stroke-width='0' fill='" << mediumColor << "'/>" << Endl;
+        << "' stroke-width='0' fill='" << colors.Medium << "'/>" << Endl;
     }
     if (split && split < metric->Details.Sum) {
         auto xs = x0 + width - split * width / metric->Details.Sum;
         background
         << "  <line x1='" << xs << "' y1='" << y0 << "' x2='" << xs << "' y2='" << y0 + h
-        << "' stroke-width='2' stroke='" << lightColor << "'/>" << Endl;
+        << "' stroke-width='2' stroke='" << colors.Light << "'/>" << Endl;
     }
     if (scalar) {
         ui32 width = viewWidth - INTERNAL_GAP_X * 2;
@@ -196,7 +196,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         auto x2 = x0 + width - (scalar->Summary->Max ? scalar->Value * width / scalar->Summary->Max : 0);
         background
         << "  <line x1='" << x0 << "' y1='" << y0 + h - 3 << "' x2='" << x2 << "' y2='" << y0 + h - 3
-        << "' stroke-width='3' stroke='" << lightColor << "' stroke-dasharray='1,1'/>" << Endl;
+        << "' stroke-width='3' stroke='" << colors.Light << "' stroke-dasharray='1,1'/>" << Endl;
     }
     if (textSum) {
         background
@@ -256,7 +256,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
     }
 }
 
-void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMutableMetric*, TString>> history, ui64 scale, const TString& iconRef, const TString& iconColor, const TString& iconScale) {
+void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMutableMetric*, TStringBuf>> history, ui64 scale, TStringBuf iconRef, TStringBuf iconColor, TStringBuf iconScale) {
     ui32 x0 = viewLeft + INTERNAL_GAP_X;
     ui32 width = viewWidth - INTERNAL_GAP_X * 2;
 
@@ -331,20 +331,20 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
 
 
 void TPlan::PrintDataFlowTimeline(TStringBuilder& builder, const TString& title, const std::shared_ptr<TSingleMetric>& bytes,
-    ui32 x, ui32 y, ui32 w, const TString& mediumColor, const TString& lightColor, const TString& darkColor, bool backgroundRect)
+    ui32 x, ui32 y, ui32 w, const TColorTriple& colors, bool backgroundRect)
 {
     TStringBuilder connCanvas;
 
-    PrintTimeline(builder, connCanvas, title, bytes->FirstMessage, bytes->LastMessage, x, y, w, INTERNAL_HEIGHT, mediumColor, backgroundRect);
+    PrintTimeline(builder, connCanvas, title, bytes->FirstMessage, bytes->LastMessage, x, y, w, INTERNAL_HEIGHT, colors.Medium, backgroundRect);
 
     if (!bytes->WaitTime.Deriv.empty()) {
-        PrintWaitTime(builder, bytes, x, y, w, INTERNAL_HEIGHT, lightColor);
+        PrintWaitTime(builder, bytes, x, y, w, INTERNAL_HEIGHT, colors.Light);
     }
 
     builder << connCanvas;
 
     if (!bytes->History.Deriv.empty()) {
-        PrintDeriv(builder, bytes->History, x, y, w, INTERNAL_HEIGHT, "", darkColor);
+        PrintDeriv(builder, bytes->History, x, y, w, INTERNAL_HEIGHT, "", colors.Dark);
     }
 }
 
@@ -399,7 +399,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "</title>" << Endl
         << "  <rect x='" << Config.SummaryLeft << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
-        << "' stroke-width='0' fill='" << Config.Palette.IngressMedium << "'/>" << Endl
+        << "' stroke-width='0' fill='" << Config.Palette.Ingress.Medium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + 2
         << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->IngressBytes->Value) << "</text>" << Endl
@@ -418,7 +418,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "</title>" << Endl
         << "  <rect class='cpupath' data-groups='" << cpuGroups << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << Config.SummaryWidth - (summary3 + INTERNAL_GAP_X) * 2 << "' height='" << TIME_HEIGHT
-        << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl
+        << "' stroke-width='0' fill='" << Config.Palette.Cpu.Medium << "'/>" << Endl
         << "  <text class='cpupath' data-groups='" << cpuGroups << "' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
         << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
@@ -428,7 +428,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "<g><title>Memory " << FormatBytes(p->MaxMemoryUsage->Value) << "</title>" << Endl
         << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
-        << "' stroke-width='0' fill='" << Config.Palette.MemMedium << "'/>" << Endl
+        << "' stroke-width='0' fill='" << Config.Palette.Mem.Medium << "'/>" << Endl
         << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 + 2
         << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
@@ -455,7 +455,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         auto xmax = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TotalCpuTime.MaxTime + p->TimeOffset) / maxTime;
 
         auto maxCpu = p->TotalCpuTime.MaxDeriv * TIME_SERIES_RANGES / (p->TotalCpuTime.MaxTime - p->TotalCpuTime.MinTime);
-        p->PrintDeriv(SummaryBuilder, p->TotalCpuTime, xmin, titleHeight + INTERNAL_GAP_Y, xmax - xmin, TIME_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+        p->PrintDeriv(SummaryBuilder, p->TotalCpuTime, xmin, titleHeight + INTERNAL_GAP_Y, xmax - xmin, TIME_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.Cpu.Medium, Config.Palette.Cpu.Light);
     }
     offsetY += TIME_HEIGHT;
 
@@ -496,7 +496,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                         tooltip
                         << ", " << op.Estimations;
                     }
-                    PrintStageSummary(s->Svg, Config.OperatorLeft, Config.OperatorWidth, y0, INTERNAL_HEIGHT, op.OutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "", "", "");
+                    PrintStageSummary(s->Svg, Config.OperatorLeft, Config.OperatorWidth, y0, INTERNAL_HEIGHT, op.OutputRows, Config.Palette.Output, textSum, tooltip, s->Tasks, "", "", "");
                 }
                 s->Svg
                     << "</g>" << Endl;
@@ -595,12 +595,12 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             TStringBuilder tooltip;
             auto textSum = FormatDataFlowTooltip(tooltip, "Egress", s->EgressBytes, s->EgressRows, 0, 0, nullptr);
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->EgressBytes, Config.Palette.EgressMedium, Config.Palette.EgressLight, textSum, tooltip, s->Tasks, "#icon_egress", Config.Palette.EgressMedium, "0.9 0.9", s->External);
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->EgressBytes, Config.Palette.Egress, textSum, tooltip, s->Tasks, "#icon_egress", Config.Palette.Egress.Medium, "0.9 0.9", s->External);
 
             auto title = FormatDataFlowRate("Egress", s->EgressBytes, s->EgressRows);
 
             PrintDataFlowTimeline(builder, title, s->EgressBytes, px, y0, pw,
-                Config.Palette.EgressMedium, Config.Palette.EgressLight, Config.Palette.EgressDark);
+                Config.Palette.Egress);
 
             builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -613,7 +613,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             TStringBuilder tooltip;
             auto textSum = FormatDataFlowTooltip(tooltip, "Output", s->OutputBytes, s->OutputRows,
                 s->OutputLocalBytes, s->OutputChunks, s->OutputChunkSize);
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "", s->OutputLocalBytes, s->OutputChunkSize);
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.Output, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.Output.Light, "0.0325 0.0325", true, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "", s->OutputLocalBytes, s->OutputChunkSize);
 
             if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
                 builder
@@ -627,7 +627,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 << "</title>" << Endl
                 << "  <rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
                 << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
-                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytesLight << "'/>" << Endl
+                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytes.Light << "'/>" << Endl
                 << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
                 << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
                 << "</g>" << Endl;
@@ -636,7 +636,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             auto title = FormatDataFlowRate("Output", s->OutputBytes, s->OutputRows);
 
             PrintDataFlowTimeline(builder, title, s->OutputBytes, px, y0, pw,
-                Config.Palette.OutputMedium, Config.Palette.OutputLight, Config.Palette.OutputDark);
+                Config.Palette.Output);
 
             builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -645,7 +645,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         if (s->MaxMemoryUsage) {
             TString tooltip;
             auto textSum = FormatTooltip(tooltip, "Memory", s->MaxMemoryUsage.get(), FormatBytes);
-            PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, s->Tasks, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+            PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->MaxMemoryUsage, Config.Palette.Mem, textSum, tooltip, s->Tasks, "#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6");
 
             if (s->SpillingComputeBytes && s->SpillingComputeBytes->Details.Sum) {
                 s->Svg
@@ -659,7 +659,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 << "</title>" << Endl
                 << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
                 << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
-                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytesLight << "'/>" << Endl
+                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytes.Light << "'/>" << Endl
                 << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
                 << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
                 << "</g>" << Endl;
@@ -667,13 +667,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         }
 
         if (s->MemoryUsage && !s->MemoryUsage->History.Values.empty()) {
-            PrintValues(s->Svg, s->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MemoryUsage->History.MaxValue * 1_MB), Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintValues(s->Svg, s->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MemoryUsage->History.MaxValue * 1_MB), Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
         } else if (s->MaxMemoryUsage && !s->MaxMemoryUsage->History.Values.empty()) {
-            PrintValues(s->Svg, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintValues(s->Svg, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
         }
 
         if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-            PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
+            PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytes.Medium, Config.Palette.SpillingBytes.Light);
         }
 
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -681,7 +681,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         if (s->CpuTime) {
             TString tooltip;
             auto textSum = FormatTooltip(tooltip, "CPU Usage", s->CpuTime.get(), FormatUsage);
-            PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip, s->Tasks, "#icon_cpu", Config.Palette.CpuMedium, "0.6 0.6");
+            PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->CpuTime, Config.Palette.Cpu, textSum, tooltip, s->Tasks, "#icon_cpu", Config.Palette.Cpu.Medium, "0.6 0.6");
 
             auto totalTime = s->CpuTime->Details.Sum;
             if (s->WaitInputTime) {
@@ -705,11 +705,11 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                     << "</title>" << Endl
                     << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMax
                     << "%' width='" << Config.TaskWidth << "' height='" << heightPercents
-                    << "%' stroke-width='0' fill='" << Config.Palette.InputLight << "'/>" << Endl
+                    << "%' stroke-width='0' fill='" << Config.Palette.Input.Light << "'/>" << Endl
                     << "</g>" << Endl;
                 }
                 if(!s->WaitInputTime->History.Deriv.empty()) {
-                    PrintDeriv(s->Svg, s->WaitInputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputLight);
+                    PrintDeriv(s->Svg, s->WaitInputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Input.Medium, Config.Palette.Input.Light);
                 }
 
                 // consider only 10% or more waiting times
@@ -759,11 +759,11 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 s->Svg
                     << "</title>" << Endl
                     << "  <rect x='" << Config.TaskLeft << "' y='0%' width='" << Config.TaskWidth << "' height='" << heightPercents
-                    << "%' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
+                    << "%' stroke-width='0' fill='" << Config.Palette.Output.Light << "'/>" << Endl
                     << "</g>" << Endl;
                 }
                 if (!s->WaitOutputTime->History.Deriv.empty()) {
-                    PrintDeriv(s->Svg, s->WaitOutputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputLight);
+                    PrintDeriv(s->Svg, s->WaitOutputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Output.Medium, Config.Palette.Output.Light);
                 }
             }
 
@@ -773,13 +773,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 << "<g><title>Input Throughput " << FormatInteger(s->InputThroughput->Details.Sum) << "/s</title>" << Endl
                 << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMin
                 << "%' width='" << Config.TaskWidth << "' height='" << activePercentsMax - activePercentsMin
-                << "%' stroke-width='0' fill='" << Config.Palette.CpuLight << "' opacity='" << opacity  << "'/>" << Endl
+                << "%' stroke-width='0' fill='" << Config.Palette.Cpu.Light << "' opacity='" << opacity  << "'/>" << Endl
                 << "</g>" << Endl;
             }
 
             if (!s->CpuTime->History.Deriv.empty() && s->CpuTime->History.MaxTime > s->CpuTime->History.MinTime) {
                 auto maxCpu = s->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (s->CpuTime->History.MaxTime - s->CpuTime->History.MinTime);
-                PrintDeriv(s->Svg, s->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+                PrintDeriv(s->Svg, s->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.Cpu.Medium, Config.Palette.Cpu.Light);
             }
 
             if (s->SpillingComputeTime && !s->SpillingComputeTime->History.Deriv.empty()) {
@@ -884,7 +884,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 if (c->CteOperatorOutputRows) {
                     TStringBuilder tooltip;
                     auto textSum = FormatTooltip(tooltip, "Output Rows", c->CteOperatorOutputRows.get(), FormatInteger);
-                    PrintStageSummary(c->CteSvg, Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT, c->CteOperatorOutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "", "", "");
+                    PrintStageSummary(c->CteSvg, Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT, c->CteOperatorOutputRows, Config.Palette.Output, textSum, tooltip, 0, "", "", "");
                 }
 
                 c->CteSvg
@@ -899,12 +899,12 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                     TStringBuilder tooltip;
                     auto textSum = FormatDataFlowTooltip(tooltip, "Output", c->CteOutputBytes, c->CteOutputRows,
                         c->CteOutputLocalBytes, c->CteOutputChunks, c->CteOutputChunkSize);
-                    PrintStageSummary(c->CteSvg, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId), c->CteOutputLocalBytes, c->CteOutputChunkSize);
+                    PrintStageSummary(c->CteSvg, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.Output, textSum, tooltip, 0, "#icon_output", Config.Palette.Output.Light, "0.0325 0.0325", true, ToString(s->PhysicalStageId), c->CteOutputLocalBytes, c->CteOutputChunkSize);
 
                     auto title = FormatDataFlowRate("Output", c->CteOutputBytes, c->CteOutputRows);
 
                     PrintDataFlowTimeline(c->CteSvg, title, c->CteOutputBytes, px, y + INTERNAL_GAP_Y, pw,
-                        Config.Palette.OutputMedium, Config.Palette.OutputLight, Config.Palette.OutputDark, true);
+                        Config.Palette.Output, true);
                     c->CteSvg << "</g>" << Endl;
                 }
             }
@@ -945,12 +945,12 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 TStringBuilder tooltip;
                 auto textSum = FormatDataFlowTooltip(tooltip, "Input", c->InputBytes, c->InputRows,
                     c->InputLocalBytes, c->InputChunks, c->InputChunkSize);
-                PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId), c->InputLocalBytes, c->InputChunkSize);
+                PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.Input, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.Input.Light, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId), c->InputLocalBytes, c->InputChunkSize);
 
                 auto title = FormatDataFlowRate("Input", c->InputBytes, c->InputRows);
 
                 PrintDataFlowTimeline(s->Svg, title, c->InputBytes, px, y0, pw,
-                    Config.Palette.InputMedium, Config.Palette.InputLight, Config.Palette.InputDark);
+                    Config.Palette.Input);
 
                 y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
@@ -964,12 +964,12 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             TStringBuilder tooltip;
             auto textSum = FormatDataFlowTooltip(tooltip, "Ingress", s->IngressBytes, s->IngressRows, 0, 0, nullptr);
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip, s->Tasks, "#icon_ingress", Config.Palette.IngressMedium, "0.9 0.9", s->IngressConnection);
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->IngressBytes, Config.Palette.Ingress, textSum, tooltip, s->Tasks, "#icon_ingress", Config.Palette.Ingress.Medium, "0.9 0.9", s->IngressConnection);
 
             auto title = FormatDataFlowRate("Ingress", s->IngressBytes, s->IngressRows);
 
             PrintDataFlowTimeline(builder, title, s->IngressBytes, px, y0, pw,
-                Config.Palette.IngressMedium, Config.Palette.IngressLight, Config.Palette.IngressDark);
+                Config.Palette.Ingress);
 
             builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -1065,15 +1065,15 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             auto tooltip = "";
             auto px = Config.TimelineLeft;
             auto pw = Config.TimelineWidth;
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325");
-            PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.OutputMedium, Config.Palette.OutputMedium);
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->OutputBytes, Config.Palette.Output, textSum, tooltip, 0, "#icon_output", Config.Palette.Output.Light, "0.0325 0.0325");
+            PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.Output.Medium, Config.Palette.Output.Medium);
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
 
         if (node->MaxMemoryUsage) {
             TString tooltip;
             auto textSum = FormatTooltip(tooltip, "Memory", node->MaxMemoryUsage.get(), FormatBytes);
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, 0, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->MaxMemoryUsage, Config.Palette.Mem, textSum, tooltip, 0, "#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6");
         }
 */
         ui32 px = Config.TimelineLeft;
@@ -1081,8 +1081,8 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
 
         if (node->MemPhysicalUsage.Values.size()) {
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
-                { &node->MemSysFragmented, Config.Palette.MemMedium },
-                { &node->MemSysAllocated, Config.Palette.MemLight },
+                { &node->MemSysFragmented, Config.Palette.Mem.Medium },
+                { &node->MemSysAllocated, Config.Palette.Mem.Light },
                 { &node->MemPhysicalUsage, "red" },
             }, physicalScale, "#icon_memory", "red", "0.6 0.6");
 
@@ -1096,25 +1096,25 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 << ", Max Allocated " << FormatBytes(node->MemSysAllocated.DisplayMaxValue * 1_MB)
                 << ", Max RSS " + FormatBytes(node->MemPhysicalUsage.DisplayMaxValue * 1_MB)
                 << "</title>" << Endl;
-            PrintSeries(builder, node->MemSysAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
-            PrintSeries(builder, node->MemSysFragmented.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->MemSysAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Mem.Light, Config.Palette.Mem.Light);
+            PrintSeries(builder, node->MemSysFragmented.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
             PrintSeries(builder, node->MemPhysicalUsage.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", "red", "none", false);
             builder << "</g>" << Endl;
         }
 
 /*
             if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-                PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
+                PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytes.Medium, Config.Palette.SpillingBytes.Light);
             }
 */
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (node->MemArrowDefault.Values.size() || node->MemMkqlAllocated.Values.size() || node->MemMkqlFreeList.Values.size()) {
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
-                { &node->MemMkqlFreeList, Config.Palette.MemMedium },
-                { &node->MemMkqlAllocated, Config.Palette.MemLight },
+                { &node->MemMkqlFreeList, Config.Palette.Mem.Medium },
+                { &node->MemMkqlAllocated, Config.Palette.Mem.Light },
                 { &node->MemArrowDefault, Config.Palette.BlockMedium },
-            }, memoryScale, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+            }, memoryScale, "#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6");
 
             auto maxValue = std::max(node->MemArrowDefault.MaxValue, node->MemMkqlAllocated.MaxValue);
             builder
@@ -1124,8 +1124,8 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 << ", Max Arrow " << FormatBytes(node->MemArrowDefault.DisplayMaxValue * 1_MB)
                 << "</title>" << Endl;
             PrintSeries(builder, node->MemArrowDefault.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.BlockMedium, Config.Palette.BlockMedium);
-            PrintSeries(builder, node->MemMkqlAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
-            PrintSeries(builder, node->MemMkqlFreeList.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->MemMkqlAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Mem.Light, Config.Palette.Mem.Light);
+            PrintSeries(builder, node->MemMkqlFreeList.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
             builder << "</g>" << Endl;
         }
 
@@ -1133,10 +1133,10 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
 
         if (node->OutputInflightBytes.Values.size() || node->LocalInflightBytes.Values.size() || node->InputInflightBytes.Values.size()) {
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
-                { &node->InputInflightBytes, Config.Palette.InputMedium },
-                { &node->LocalInflightBytes, Config.Palette.MemLight },
-                { &node->OutputInflightBytes, Config.Palette.OutputMedium },
-            }, dataScale, "#icon_memory", Config.Palette.InputDark, "0.6 0.6");
+                { &node->InputInflightBytes, Config.Palette.Input.Medium },
+                { &node->LocalInflightBytes, Config.Palette.Mem.Light },
+                { &node->OutputInflightBytes, Config.Palette.Output.Medium },
+            }, dataScale, "#icon_memory", Config.Palette.Input.Dark, "0.6 0.6");
 
             auto maxValue = node->OutputInflightBytes.MaxValue;
             builder
@@ -1145,9 +1145,9 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 << ", Max Local " <<  FormatBytes(node->LocalInflightBytes.DisplayMaxValue * 1_MB)
                 << ", Max Output " << FormatBytes(node->OutputInflightBytes.DisplayMaxValue * 1_MB)
                 << "</title>" << Endl;
-            PrintSeries(builder, node->OutputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputMedium);
-            PrintSeries(builder, node->LocalInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
-            PrintSeries(builder, node->InputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputMedium);
+            PrintSeries(builder, node->OutputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Output.Medium, Config.Palette.Output.Medium);
+            PrintSeries(builder, node->LocalInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Mem.Light, Config.Palette.Mem.Light);
+            PrintSeries(builder, node->InputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Input.Medium, Config.Palette.Input.Medium);
             builder << "</g>" << Endl;
         }
 
@@ -1156,13 +1156,13 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         if (node->CpuTime) {
             TString tooltip;
             auto textSum = FormatTooltip(tooltip, "CPU Usage", node->CpuTime.get(), FormatUsage);
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip, 0, "#icon_cpu", Config.Palette.CpuMedium, "0.6 0.6");
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->CpuTime, Config.Palette.Cpu, textSum, tooltip, 0, "#icon_cpu", Config.Palette.Cpu.Medium, "0.6 0.6");
 
             if (!node->CpuTime->History.Deriv.empty() && node->CpuTime->History.MaxTime > node->CpuTime->History.MinTime) {
                 auto px = Config.TimelineLeft + (TimeOffset + node->CpuTime->History.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
                 auto pw = (node->CpuTime->History.MaxTime - node->CpuTime->History.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
                 auto maxCpu = node->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (node->CpuTime->History.MaxTime - node->CpuTime->History.MinTime);
-                PrintDeriv(builder, node->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+                PrintDeriv(builder, node->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.Cpu.Medium, Config.Palette.Cpu.Light);
             }
         }
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -1170,14 +1170,14 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         if (node->InputBytes) {
             auto textSum = "";
             auto tooltip = "";
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, 0, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325");
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->InputBytes, Config.Palette.Input, textSum, tooltip, 0, "#icon_input", Config.Palette.Input.Light, "0.0325 0.0325");
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
 
         if (node->IngressBytes) {
             auto textSum = "";
             auto tooltip = "";
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip, 0, "#icon_ingress", Config.Palette.IngressMedium, "0.9 0.9");
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->IngressBytes, Config.Palette.Ingress, textSum, tooltip, 0, "#icon_ingress", Config.Palette.Ingress.Medium, "0.9 0.9");
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
 */

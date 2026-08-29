@@ -339,10 +339,13 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
 
+    MKQL_ENSURE(!joinComponents.empty(), "Expected at least block length column");
+    MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least block length column");
+    MKQL_ENSURE(!rightStreamComponents.empty(), "Expected at least block length column");
     if (joinKind != EJoinKind::Cross) {
-        MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
-        MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least one column");
-        MKQL_ENSURE(!rightStreamComponents.empty(), "Expected at least one column");
+        MKQL_ENSURE(joinComponents.size() > 1, "Expected at least one data column");
+        MKQL_ENSURE(leftStreamComponents.size() > 1, "Expected at least one data column");
+        MKQL_ENSURE(rightStreamComponents.size() > 1, "Expected at least one data column");
     }
 
     const auto leftStream = LocateNode(ctx.NodeLocator, callable, 0);

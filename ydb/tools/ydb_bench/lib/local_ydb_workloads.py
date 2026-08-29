@@ -332,7 +332,7 @@ def _validate_catalog(definitions):
         raise ValueError("local YDB workload names must be unique")
     option_schemas = {}
     for definition in definitions:
-        if definition.dataset_scope not in ("sample", "profile"):
+        if definition.dataset_scope not in ("sample", "geometry", "profile"):
             raise ValueError("unknown dataset scope for {}: {}".format(definition.name, definition.dataset_scope))
         if definition.warmup_mode not in ("separate", "inline"):
             raise ValueError("unknown warmup mode for {}: {}".format(definition.name, definition.warmup_mode))

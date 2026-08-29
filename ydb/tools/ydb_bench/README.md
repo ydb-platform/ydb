@@ -186,6 +186,12 @@ holdout metrics are evaluated with the same aggregate SLO contract as a search
 point. A throughput holdout is diagnostic: its request-error acceptance,
 throughput drift, and CPU saturation do not claim statistical reproducibility.
 
+Workloads with geometry-scoped datasets initialize and import once for each
+dynamic-node count, reuse that dataset across every search attempt at the same
+geometry, and clean it before adding nodes. The final geometry remains open for
+verification and is cleaned only after the holdout finishes. Shared setup and
+cleanup commands are stored under that geometry's `workload/commands.json`.
+
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.
 The web profile page shows the same live phase with elapsed time and a countdown

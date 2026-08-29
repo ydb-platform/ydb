@@ -824,12 +824,19 @@ class WorkloadLifecycle:
         self._profile_opened = False
         self._profile_closed = False
         self._profile_state = None
+        self._geometry_state = None
 
     @property
     def profile_commands(self):
         if self._profile_state is None:
             return ()
         return tuple(self._profile_state.commands)
+
+    @property
+    def geometry_commands(self):
+        if self._geometry_state is None:
+            return ()
+        return tuple(self._geometry_state.commands)
 
     def _check_cancelled(self):
         if self.cancel_event is not None and self.cancel_event.is_set():
@@ -862,8 +869,8 @@ class WorkloadLifecycle:
         prefix = "verification-" if state.purpose == "verification" else ""
         return prefix + "cleaning-" + name
 
-    def _write_profile_commands(self, state, cleanup_errors=None):
-        if self.definition.dataset_scope != "profile":
+    def _write_shared_commands(self, state, cleanup_errors=None):
+        if state.repetition is not None:
             return
         try:
             atomic_write_json(state.directory / "commands.json", state.commands)
@@ -922,7 +929,7 @@ class WorkloadLifecycle:
                         for attempt in attempts
                     ],
                 )
-                self._write_profile_commands(state)
+                self._write_shared_commands(state)
         except BaseException as error:
             try:
                 self._cleanup_dataset(state, primary_error=error)
@@ -993,7 +1000,7 @@ class WorkloadLifecycle:
                     except BaseException as error:
                         errors.append(error)
             finally:
-                self._write_profile_commands(state, errors)
+                self._write_shared_commands(state, errors)
         if errors and primary_error is None:
             control_flow_error = next(
                 (error for error in errors if isinstance(error, (BenchmarkInterrupted, KeyboardInterrupt))),
@@ -1023,11 +1030,43 @@ class WorkloadLifecycle:
         self._profile_state = state
         self._prepare_dataset(state)
 
+    def open_geometry(self, directory, table_path, dynamic_nodes, progress_fields=None):
+        if not self._profile_opened or self._profile_closed:
+            raise BenchmarkError("workload profile lifecycle is not open")
+        self._check_cancelled()
+        if self.definition.dataset_scope != "geometry":
+            return
+        if isinstance(dynamic_nodes, bool) or not isinstance(dynamic_nodes, int) or dynamic_nodes <= 0:
+            raise BenchmarkError("workload geometry requires a positive dynamic-node count")
+        if self._geometry_state is not None and not self._geometry_state.cleaned:
+            raise BenchmarkError("workload geometry lifecycle is already open")
+        directory = Path(directory)
+        directory.mkdir(parents=True)
+        state = _DatasetState(
+            directory=directory,
+            table_path=table_path,
+            purpose="geometry",
+            repetition=None,
+            fields={**(progress_fields or {}), "geometry_dataset": True, "dynamic_nodes": dynamic_nodes},
+        )
+        self._geometry_state = state
+        self._prepare_dataset(state)
+
+    def close_geometry(self, primary_error=None):
+        if self.definition.dataset_scope != "geometry":
+            return
+        if self._geometry_state is not None:
+            self._cleanup_dataset(self._geometry_state, primary_error=primary_error)
+        if primary_error is None:
+            self._check_cancelled()
+
     def close_profile(self, primary_error=None):
         if self._profile_closed:
             return
         self._profile_closed = True
-        if self._profile_state is not None:
+        if self.definition.dataset_scope == "geometry":
+            self.close_geometry(primary_error=primary_error)
+        elif self._profile_state is not None:
             self._cleanup_dataset(self._profile_state, primary_error=primary_error)
         if primary_error is None:
             self._check_cancelled()
@@ -1179,10 +1218,22 @@ class WorkloadLifecycle:
         if self.definition.dataset_scope == "sample":
             dataset = _DatasetState(directory, table_path, purpose, repetition, fields, commands)
             self._prepare_dataset(dataset)
-        else:
+        elif self.definition.dataset_scope == "profile":
             dataset = self._profile_state
             if dataset is None or dataset.cleaned:
                 raise BenchmarkError("profile-scoped workload dataset is unavailable")
+            dataset = _DatasetState(directory, dataset.table_path, purpose, repetition, fields)
+        else:
+            dataset = self._geometry_state
+            if dataset is None or dataset.cleaned:
+                raise BenchmarkError("geometry-scoped workload dataset is unavailable")
+            geometry_dynamic_nodes = dataset.fields["dynamic_nodes"]
+            if dynamic_nodes != geometry_dynamic_nodes:
+                raise BenchmarkError(
+                    "geometry-scoped workload dataset belongs to {} dynamic nodes, got {}".format(
+                        geometry_dynamic_nodes, dynamic_nodes
+                    )
+                )
             dataset = _DatasetState(directory, dataset.table_path, purpose, repetition, fields)
         run_error = None
         try:
@@ -1336,10 +1387,16 @@ def run_local_ydb(
         while True:
             dynamic_nodes = len(cluster.dynamic_nodes)
             search_stage = len(manifest["searches"]) + 1
-            search_started_at = _utc_now()
-            search_started_monotonic = time.monotonic()
             geometry_directory = output_directory / "dynamic-nodes-{:02d}".format(dynamic_nodes)
             geometry_directory.mkdir()
+            lifecycle.open_geometry(
+                geometry_directory / "workload",
+                "ydb_bench_geometry_{:02d}".format(dynamic_nodes),
+                dynamic_nodes,
+                progress_fields={"search_stage": search_stage},
+            )
+            search_started_at = _utc_now()
+            search_started_monotonic = time.monotonic()
 
             def measure(load):
                 attempt = len(manifest["attempts"]) + 1
@@ -1454,6 +1511,7 @@ def run_local_ydb(
                     "stop_reason": result.stop_reason,
                 }
                 break
+            lifecycle.close_geometry()
             publish_progress(
                 "scaling-dynamic-nodes",
                 search_stage=search_stage,

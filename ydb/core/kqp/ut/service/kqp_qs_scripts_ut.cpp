@@ -100,6 +100,7 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
     Y_UNIT_TEST(SyntaxV0ReturnsBadRequestWithPerStatementExecution) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetQueryClient();

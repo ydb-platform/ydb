@@ -1,6 +1,7 @@
 #include "test_env.h"
 
 #include "helpers.h"
+#include "schemeshard_counters.h"
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -16,6 +17,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
@@ -26,6 +28,8 @@
 #include <ydb/services/metadata/ds_table/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/system/env.h>
 
 
 bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
@@ -38,6 +42,58 @@ static const bool ENABLE_TOPIC_LOG = false;
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+
+bool NSchemeShardUT_Private::SchemeChangeCorpusEnabled() {
+    static const bool enabled = !GetEnv("YDB_SCHEME_CHANGE_CORPUS").empty();
+    return enabled;
+}
+
+std::optional<bool> NSchemeShardUT_Private::SchemeChangeCorpusFlagDefault() {
+    return SchemeChangeCorpusEnabled() ? std::optional<bool>(true) : std::nullopt;
+}
+
+NSchemeShardUT_Private::TSchemeChangePathMissingTally& NSchemeShardUT_Private::TSchemeChangePathMissingTally::Instance() {
+    static TSchemeChangePathMissingTally instance;
+    return instance;
+}
+
+void NSchemeShardUT_Private::TSchemeChangePathMissingTally::Reset() {
+    Accumulated = 0;
+    LastSeen = 0;
+}
+
+ui64 NSchemeShardUT_Private::TSchemeChangePathMissingTally::Sample(TTestActorRuntime& runtime) {
+    const ui64 current = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangePathMissing");
+    // The counter only grows within one tablet life, so a drop means the tablet
+    // restarted behind the tally's back and everything before that is already lost.
+    UNIT_ASSERT_C(current >= LastSeen,
+        "scheme change path-missing tally missed a tablet restart (" << LastSeen << " -> " << current
+            << "); the outbox invariant is unreliable until that restart path calls OnObservedRestart");
+    LastSeen = current;
+    return current;
+}
+
+void NSchemeShardUT_Private::TSchemeChangePathMissingTally::OnObservedRestart(TTestActorRuntime& runtime) {
+    Sample(runtime);
+    Accumulated += LastSeen;
+    LastSeen = 0;
+}
+
+ui64 NSchemeShardUT_Private::TSchemeChangePathMissingTally::Total(TTestActorRuntime& runtime) {
+    return Accumulated + Sample(runtime);
+}
+
+void NSchemeShardUT_Private::CheckSchemeChangeCorpusInvariant(TTestActorRuntime& runtime) {
+    if (!SchemeChangeCorpusEnabled()) {
+        return;
+    }
+    // An op that cannot name its target is a hole in the outbox, so fail here
+    // instead of silently dropping the record.
+    const ui64 missing = TSchemeChangePathMissingTally::Instance().Total(runtime);
+    UNIT_ASSERT_VALUES_EQUAL_C(missing, 0u,
+        "scheme change outbox failed to resolve a target path; grep the log for"
+        " 'scheme change record skipped' to see which operation type");
+}
 
 // BlockStoreVolume mock for testing schemeshard
 class TFakeBlockStoreVolume : public TActor<TFakeBlockStoreVolume>, public NTabletFlatExecutor::TTabletExecutedFlat {
@@ -623,6 +679,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , ChannelsCount(opts.NChannels_)
 {
     EnableYDBBacktraceFormat();
+    // Per-env, so a gap is reported against the test that hit it rather than
+    // against every test that runs after it in the same binary.
+    TSchemeChangePathMissingTally::Instance().Reset();
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;
@@ -677,6 +736,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
     app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
     app.SetEnableIndexMaterialization(opts.EnableIndexMaterialization_);
+    app.SetEnableSchemeChangeRecords(opts.EnableSchemeChangeRecords_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -948,6 +1008,7 @@ void NSchemeShardUT_Private::TestWaitNotification(NActors::TTestActorRuntime &ru
         UNIT_ASSERT(txIds.find(eventTxId) != txIds.end());
         txIds.erase(eventTxId);
     }
+    CheckSchemeChangeCorpusInvariant(runtime);
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorRuntime &runtime, TSet<ui64> txIds, ui64 schemeshardId) {
@@ -1213,6 +1274,9 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     NoRebootEventTypes.insert(TEvSchemeShard::EvMeasureSelfResponseTime);
     NoRebootEventTypes.insert(TEvSchemeShard::EvWakeupToMeasureSelfResponseTime);
     NoRebootEventTypes.insert(TEvTablet::EvLocalMKQL);
+    // The corpus invariant reads a tablet counter after every op; that read must not
+    // become a reboot point of its own.
+    NoRebootEventTypes.insert(TEvTablet::EvGetCounters);
     NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
     NoRebootEventTypes.insert(TEvSchemeShard::EvCancelTx);
     NoRebootEventTypes.insert(TEvExport::EvCreateExportRequest);

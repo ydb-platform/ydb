@@ -1375,6 +1375,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextPathId, Self->NextLocalPathId));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextShardIdx, Self->NextLocalShardIdx));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextSchemeChangeOrder, Self->NextSchemeChangeOrder));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_LastAssignedPlanStep, Self->LastAssignedPlanStep));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_SchemeChangeFloorOrder, Self->SchemeChangeFloorOrder));
+
 
         {
             ui64 isReadOnlyModeVal = 0;
@@ -3967,6 +3971,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 txState.MinStep =       txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::MinStep>(InvalidStepId);
                 txState.PlanStep =      txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::PlanStep>(InvalidStepId);
+                if (txState.PlanStep != InvalidStepId) {
+                    Self->AddInFlightPlanStep(ui64(txState.PlanStep));
+                }
+                if (txState.PlanStep != InvalidStepId && ui64(txState.PlanStep) > Self->LastAssignedPlanStep) {
+                    Self->LastAssignedPlanStep = ui64(txState.PlanStep);
+                }
 
                 TString extraData =     txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::ExtraBytes>("");
                 txState.StartTime =     TInstant::MicroSeconds(txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::StartTime>());
@@ -3993,6 +4003,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Self->PersistRemoveTx(db, operationId, txState);
                         skippedOrphanTxs.insert(operationId);
                         skippedOrphanTxIds.insert(operationId.GetTxId());
+                        // Undo the bump above: RemoveTx never runs for this tx,
+                        // so its step would pin ClosedThroughPlanStep forever.
+                        if (txState.PlanStep != InvalidStepId) {
+                            Self->RemoveInFlightPlanStep(ui64(txState.PlanStep));
+                        }
                         Self->TxInFlight.erase(operationId);
                         if (!txInFlightRowset.Next())
                             return false;
@@ -4338,6 +4353,44 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!rowset.Next()) {
                     return false;
+                }
+            }
+        }
+
+        {
+            auto rowset = db.Table<Schema::SchemeChangePendingRecords>().Range().Select();
+            if (!rowset.IsReady()) return false;
+            THashMap<TTxId, TMap<ui32, TOperation::TSchemeChangeSlot>> byTx;
+            while (!rowset.EndOfSet()) {
+                TTxId txId = rowset.GetValue<Schema::SchemeChangePendingRecords::TxId>();
+                ui32 idx = rowset.GetValue<Schema::SchemeChangePendingRecords::RequestIdx>();
+                TOperation::TSchemeChangeSlot slot;
+                slot.RequestIdx = idx;
+                slot.Order = rowset.GetValue<Schema::SchemeChangePendingRecords::Order>();
+                slot.Targets = TSchemeShard::DecodeSchemeChangeTargets(
+                    rowset.GetValueOrDefault<Schema::SchemeChangePendingRecords::Path>(""));
+                byTx[txId][idx] = std::move(slot);
+                if (!rowset.Next()) return false;
+            }
+            for (auto& [txId, idxMap] : byTx) {
+                auto opIt = Self->Operations.find(txId);
+                if (opIt == Self->Operations.end()) {
+                    // No operation survived to finalise these rows. Leaving
+                    // CompletedAtUs at 0 would wedge the fetch stream forever.
+                    using T = Schema::SchemeChangeRecords;
+                    for (auto& [idx, slot] : idxMap) {
+                        db.Table<T>().Key(slot.Order).Update(
+                            NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusPreconditionFailed)),
+                            NIceDb::TUpdate<T::CompletedAtUs>(ctx.Now().MicroSeconds())
+                        );
+                        Self->PersistRemoveSchemeChangePendingOrder(db, txId, idx);
+                    }
+                    continue;
+                }
+                opIt->second->SchemeChangeSlots.clear();
+                opIt->second->SchemeChangeSlots.reserve(idxMap.size());
+                for (auto& [idx, slot] : idxMap) {
+                    opIt->second->SchemeChangeSlots.push_back(std::move(slot));
                 }
             }
         }
@@ -6770,6 +6823,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ScheduleForcedCompactionProgress(ctx);
+
     }
 };
 

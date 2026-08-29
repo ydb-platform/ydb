@@ -2711,6 +2711,53 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
+    struct SchemeChangeRecords : Table<141> {
+        struct Order :         Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId :          Column<2, NScheme::NTypeIds::Uint64> {};
+        struct OperationType : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct PathOwnerId :   Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct PathLocalId :   Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        // Serialized protobuf, not a delimited string -- a path may contain any delimiter.
+        struct Path :          Column<6, NScheme::NTypeIds::String> {};
+        struct ObjectType :    Column<7, NScheme::NTypeIds::Uint32> {};
+        struct Status :        Column<8, NScheme::NTypeIds::Uint32> {};
+        struct UserSID :       Column<9, NScheme::NTypeIds::Utf8> {};
+        struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct CompletedAtUs : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
+        struct BodySizeBytes :      Column<13, NScheme::NTypeIds::Uint64> {};
+        struct Description :   Column<14, NScheme::NTypeIds::String, false, true> {}; // Sensitive: may describe a secret
+        struct PositionKind :  Column<15, NScheme::NTypeIds::Uint32> {};
+        struct RedactedFields : Column<16, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
+                                      Path, ObjectType, Status, UserSID, SchemaVersion,
+                                      CompletedAtUs, PlanStep, BodySizeBytes, Description, PositionKind,
+                                      RedactedFields>;
+    };
+
+    struct SchemeChangeRecordDetails : Table<143> {
+        struct Order : Column<1, NScheme::NTypeIds::Uint64> {};
+        // Sensitive: the captured request body can contain a plaintext secret.
+        struct Body :  Column<2, NScheme::NTypeIds::String, false, true> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, Body>;
+    };
+
+
+    // Path is duplicated here because finalisation runs after NoMoreReadsForTx().
+    struct SchemeChangePendingRecords : Table<144> {
+        struct TxId :       Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        // Index into the request's repeated TModifyScheme list.
+        struct RequestIdx : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Order :      Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Path :       Column<5, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, RequestIdx>;
+        using TColumns = TableColumns<TxId, RequestIdx, Order, Path>;
+    };
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2849,7 +2896,10 @@ struct Schema : NIceDb::Schema {
         FullBackupItems,
         SetColumnConstraint,
         SetColumnConstraintShardStatus,
-        TestShardSet
+        TestShardSet,
+        SchemeChangeRecords,
+        SchemeChangeRecordDetails,
+        SchemeChangePendingRecords
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;
@@ -2866,6 +2916,9 @@ struct Schema : NIceDb::Schema {
     // static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12; deprecated
     static constexpr ui64 SysParam_TablePartitionsFormatSweepStatus = 13;
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
+    static constexpr ui64 SysParam_NextSchemeChangeOrder = 15;
+    static constexpr ui64 SysParam_LastAssignedPlanStep = 16;
+    static constexpr ui64 SysParam_SchemeChangeFloorOrder = 17;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

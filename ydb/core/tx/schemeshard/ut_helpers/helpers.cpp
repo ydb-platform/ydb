@@ -230,6 +230,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
 
         CheckExpectedResult(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
+        CheckSchemeChangeCorpusInvariant(runtime);
         return event->Record.GetStatus();
     }
 
@@ -1884,6 +1885,15 @@ namespace NSchemeShardUT_Private {
         SetSchemeshardSchemaLimits(runtime, limits, TTestTxConfig::SchemeShard);
     }
 
+    void RebootSchemeShard(TTestActorRuntime& runtime, ui64 schemeShard) {
+        // The tally tracks the default schemeshard only, so leave it alone otherwise.
+        if (schemeShard == TTestTxConfig::SchemeShard) {
+            TSchemeChangePathMissingTally::Instance().OnObservedRestart(runtime);
+        }
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, schemeShard, sender);
+    }
+
 
     TString EscapedDoubleQuote(const TString src) {
         auto result = src;
@@ -1937,8 +1947,7 @@ namespace NSchemeShardUT_Private {
         Cdbg << result << "\n";
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, schemeShard, sender);
+        RebootSchemeShard(runtime, schemeShard);
     }
 
     void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId) {
@@ -1966,9 +1975,7 @@ namespace NSchemeShardUT_Private {
         Cdbg << result << "\n";
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, schemeShard, sender);
-
+        RebootSchemeShard(runtime, schemeShard);
     }
 
 

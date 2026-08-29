@@ -402,6 +402,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     StartStopShred();
 
+
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
     // Start local index migration if feature flag is enabled
@@ -4204,6 +4205,49 @@ void TSchemeShard::PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const {
                 NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextLocalShardIdx)));
 }
 
+void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_NextSchemeChangeOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeOrder)));
+    ++NextSchemeChangeOrderPersistCount;
+}
+
+void TSchemeShard::PersistSchemeChangeFloorOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_SchemeChangeFloorOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(SchemeChangeFloorOrder)));
+}
+
+void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_LastAssignedPlanStep).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(LastAssignedPlanStep)));
+}
+
+void TSchemeShard::PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 requestIdx,
+        ui64 order, const TVector<TOperation::TSchemeChangeTarget>& targets) const {
+    db.Table<Schema::SchemeChangePendingRecords>().Key(txId, requestIdx).Update(
+        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Order>(order),
+        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Path>(EncodeSchemeChangeTargets(targets)));
+}
+
+void TSchemeShard::PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 requestIdx) const {
+    // Point delete, not a range scan: TTxOperationPropose::Execute calls
+    // NoMoreReadsForTx() before this runs, and a later read aborts the tablet.
+    db.Table<Schema::SchemeChangePendingRecords>().Key(txId, requestIdx).Delete();
+}
+
+
+ui64 TSchemeShard::GetVisibleSchemeChangeTail() const {
+    ui64 firstPending = Max<ui64>();
+    for (const auto& [_, operation] : Operations) {
+        for (const auto& slot : operation->SchemeChangeSlots) {
+            firstPending = Min(firstPending, slot.Order);
+        }
+    }
+    return firstPending == Max<ui64>() ? NextSchemeChangeOrder : firstPending - 1;
+}
+
+
+
+
 void TSchemeShard::PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const {
     db.Table<Schema::SysParams>().Key(Schema::SysParam_ParentDomainSchemeShard).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(parentDomain.OwnerId)));
@@ -6267,6 +6311,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
     auto pathId = txState->TargetPathId;
 
+    RemoveInFlightPlanStep(ui64(txState->PlanStep));
     PersistRemoveTx(db, opId, *txState);
     TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
 
@@ -8792,6 +8837,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
+
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

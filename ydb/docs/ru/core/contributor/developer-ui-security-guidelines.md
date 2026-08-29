@@ -68,7 +68,7 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 }
 ```
 
-Для страниц локального мониторинга, отдаваемых через `TEvHttpInfoRes` без проксирования через [таблетки](../concepts/glossary.md#tablet), действует то же присваивание `res->Nonce = nonce`. Подробнее можно ознакомиться в `Notify(...)` в [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
+Для страниц локального мониторинга, отдаваемых через `TEvHttpInfoRes` без проксирования через [таблетки](../concepts/glossary.md#tablet), действует то же присваивание `res->Nonce = nonce`. См. функцию `Notify(...)` в [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
 
 При пересылке ответа между узлами nonce сохраняется: [TEvRemoteHttpInfoRes::SerializeToArcadiaStream](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.cpp) упаковывает его вместе с HTML, поэтому тот же подход работает для удалённого мониторинга таблеток.
 
@@ -76,7 +76,7 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 
 {% note alert %}
 
-Ослабление `script-src` через `'unsafe-inline'`, `'unsafe-eval'` или внешние домены отключает защиту CSP.
+Ослабление `script-src` через `'unsafe-inline'`, `'unsafe-eval'` или внешние домены отключает защиту CSP. Если скрипт не работает без `'unsafe-inline'`, его переписывают с nonce, см. [{#T}](#inline-script-nonce).
 
 ```cpp
 response << "Content-Security-Policy: script-src 'unsafe-inline'\r\n";
@@ -132,7 +132,7 @@ str << "<div class='mon-warning'>...</div>";
 | `font-src` | `'self'`, без внешних шрифтов | Нет |
 | `connect-src` | `'self'`, без внешних `fetch()`/XMLHttpRequest (XHR) | Нет |
 | `frame-src` | `'self'`, без внешних iframe | Нет |
-| `img-src` | `'self'` и `data:`, без внешних URL | Нет |
+| `img-src` | `'self'`, `data:` и `https:` — внешние URL допустимы | Нет |
 
 ### Относительные ссылки в HTML {#relative-links}
 
@@ -177,11 +177,11 @@ out << "<link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesh
 
 {% endnote %}
 
-Bootstrap, jQuery и tablesorter уже включены в набор встроенных ресурсов и отдаются обёрткой страницы мониторинга. Код отрисовки отдельных страниц на C++ обычно не добавляет для них дополнительные теги `<script>`/`<link>`.
+Bootstrap, jQuery и tablesorter уже включены в набор встроенных ресурсов и отдаются обёрткой страницы мониторинга. Повторные теги `<script>`/`<link>` для них не добавляют. У библиотек разные префиксы: Bootstrap и jQuery — из `/static/`, tablesorter — из корня (`/jquery.tablesorter.js`, `/jquery.tablesorter.css`), а не из `/static/js/jquery.tablesorter.js`.
 
-Если странице нужно сослаться на встроенный ресурс, применяется правило об относительных ссылках: пути от корня вроде `/static/js/jquery.min.js` или `/jquery.tablesorter.js` не зашиваются в код.
+Если странице всё же нужно сослаться на встроенный ресурс из C++, действуют относительные ссылки: пути от корня в генерируемый HTML не зашиваются.
 
-Если нужна библиотека, которой ещё нет во встроенных ресурсах, её добавляют в [ydb/core/viewer/](https://github.com/ydb-platform/ydb/tree/main/ydb/core/viewer) и подключают через обёртку или вспомогательную функцию мониторинга, без внешних ссылок и путей от корня в C++ страницы.
+Если нужна библиотека, которой ещё нет во встроенных ресурсах, её добавляют в [ydb/core/viewer/](https://github.com/ydb-platform/ydb/tree/main/ydb/core/viewer) и подключают через обёртку или вспомогательную функцию мониторинга с того же источника.
 
 ### Запросы fetch() и XHR {#no-absolute-fetch}
 
@@ -249,7 +249,7 @@ function getCsrfToken() {
 1. Заголовок запроса `X-CSRF-Token` предпочтителен для `fetch` и `$.ajax`. Он обязателен, если тело запроса не закодировано как форма, в том числе для JSON: сервер разбирает тело как `TCgiParameters`, поэтому поле `csrf_token` внутри JSON не будет найдено.
 2. Параметр формы `csrf_token` в теле POST работает только при `Content-Type: application/x-www-form-urlencoded`. Это обычная `<form method="POST">` или тело `URLSearchParams`. Формы не могут задавать произвольные заголовки.
 
-Оба подхода допустимы. Форма подходит, когда нужен запасной вариант без JavaScript. Пример — страница Disable [Self-Heal](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp) контроллера BlobStorage. В остальных случаях предпочтителен `fetch` с заголовком `X-CSRF-Token`: он лучше сочетается с динамическим UI и единственный для JSON-тел. Пример — [state_storage_state.js](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js).
+Оба подхода допустимы. Форма подходит, когда нужен запасной вариант без JavaScript. Пример — страница отключения Self-Heal контроллера BlobStorage в [self_heal.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp). В остальных случаях предпочтителен `fetch` с заголовком `X-CSRF-Token`: он лучше сочетается с динамическим UI и единственный для JSON-тел. Пример — [state_storage_state.js](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js).
 
 {% note alert %}
 
@@ -416,7 +416,7 @@ TABLED() { str << HtmlEscape(pathName); }
 TABLED() { str << HtmlEscape(errorMessage); }
 ```
 
-Для URL в атрибутах `href` применяется URL-кодирование. Пример ниже показывает только экранирование значений; сами пути должны оставаться относительными, см. [{#T}](#relative-links):
+В HTML-текст и в значения HTML-атрибутов подставляют `HtmlEscape`. Для значений в query-части `href` — URL-кодирование через `CGIEscapeRet`. Числовой идентификатор в query можно не экранировать; строку — нужно. Сами пути остаются относительными, см. [{#T}](#relative-links):
 
 ```cpp
 str << "<a href='tablets?TabletID=" << tabletId << "'>";       // число — безопасно

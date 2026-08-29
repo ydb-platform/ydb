@@ -18,12 +18,12 @@
 
 namespace NPlan2Svg {
 
-class TPlanVisualizer;
+class TVisualizer;
 
 class TPlan {
 
 public:
-    TPlan(ui32 groupId, const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
+    TPlan(ui32 groupId, const TString& nodeType, TPlanViewConfig& config, TVisualizer& viz)
         : GroupId(groupId), NodeType(nodeType), Config(config), Viz(viz) {}
 
     void Load(const NJson::TJsonValue& node);
@@ -101,7 +101,7 @@ public:
     TString CtePlanRef;
     TPlan* CtePlan = nullptr;
     TPlanViewConfig& Config;
-    TPlanVisualizer& Viz;
+    TVisualizer& Viz;
     std::unordered_map<ui32, TConnection*> NodeToConnection;
     std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
     std::unordered_set<ui32> NodeToSource;

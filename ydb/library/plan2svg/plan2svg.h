@@ -1,54 +1,44 @@
 #pragma once
 
-// Renders a query plan JSON as an SVG timeline. Consumers only need this header
-// and the three entry points on TPlanVisualizer below: LoadPlans, PrintSvg and
-// PrintSvgSafe.
+// Renders a query plan JSON as an SVG timeline. This is the whole public
+// surface: load one or more plans, then ask for the SVG.
 //
 // The implementation is split as:
-//   metrics.*  aggregations and time series      model.h    plan data structures
-//   format.*   value to string helpers           config.*   layout constants, palette
-//   svg.*      SVG element primitives            parse.*    JSON field extraction
-//   plan.h     TPlan                             assets/    static icon and script blobs
+//   visualizer.h the plan set behind this facade   plan.h     TPlan
+//   metrics.*  aggregations and time series        model.h    plan data structures
+//   format.*   value to string helpers             config.*   layout constants, palette
+//   svg.*      SVG element primitives              parse.*    JSON field extraction
 //   loader.cpp JSON to TPlan   layout.cpp  sizing and hot path   render.cpp  SVG emission
+//   assets/    static icon and script blobs
 
-#include "config.h"
-#include "metrics.h"
-#include "model.h"
-#include "plan.h"
-
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/json/yson/json2yson.h>
+#include <library/cpp/json/writer/json_value.h>
 
 #include <util/generic/string.h>
 
-#include <map>
 #include <memory>
-#include <string>
-#include <vector>
 
 namespace NPlan2Svg {
+
+class TVisualizer;
 
 class TPlanVisualizer {
 
 public:
+    TPlanVisualizer();
+    ~TPlanVisualizer();
 
+    // Accepts the plan JSON either as text or already parsed. Both are lenient:
+    // input that is not a plan simply loads nothing.
     void LoadPlans(const TString& plans, bool simplified = false);
     void LoadPlans(const NJson::TJsonValue& root);
-    void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
-    void PostProcessPlans();
+
+    // PrintSvg throws on a plan it cannot render; PrintSvgSafe returns an SVG
+    // carrying the error message instead.
     TString PrintSvg();
     TString PrintSvgSafe();
-    ui32 NextGroupId() { return ++GroupId; }
 
-    std::vector<std::shared_ptr<TPlan>> Plans;
-    ui64 MaxTime = 1;
-    ui64 BaseTime = 0;
-    ui64 UpdateTime = 0;
-    TPlanViewConfig Config;
-    std::map<std::string, std::shared_ptr<TStage>> CteStages;
-    std::map<std::string, TPlan*> CteSubPlans;
-    ui32 GroupId = 0;
+private:
+    std::unique_ptr<TVisualizer> Impl;
 };
 
 } // namespace NPlan2Svg

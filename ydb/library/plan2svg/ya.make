@@ -7,6 +7,7 @@ SRCS(
     loader.cpp
     metrics.cpp
     parse.cpp
+    plan2svg.cpp
     render.cpp
     svg.cpp
 )

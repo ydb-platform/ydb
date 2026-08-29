@@ -1,4 +1,4 @@
-#include "plan2svg.h"
+#include "visualizer.h"
 
 #include "format.h"
 #include "parse.h"
@@ -1054,7 +1054,7 @@ void TPlan::LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>
     }
 }
 
-void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
+void TVisualizer::LoadPlans(const TString& plans, bool simplified) {
     Config.Simplified = simplified;
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue jsonNode;
@@ -1067,7 +1067,7 @@ void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
     }
 }
 
-void TPlanVisualizer::LoadPlans(const NJson::TJsonValue& root) {
+void TVisualizer::LoadPlans(const NJson::TJsonValue& root) {
     if (auto* subNode = root.GetValueByPath("Plans")) {
         for (auto& plan : subNode->GetArray()) {
             if (auto* typeNode = plan.GetValueByPath("Node Type")) {
@@ -1079,12 +1079,12 @@ void TPlanVisualizer::LoadPlans(const NJson::TJsonValue& root) {
     PostProcessPlans();
 }
 
-void TPlanVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {
+void TVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {
     Plans.emplace_back(std::make_shared<TPlan>(NextGroupId(), nodeType, Config, *this));
     Plans.back()->Load(node);
 }
 
-void TPlanVisualizer::PostProcessPlans() {
+void TVisualizer::PostProcessPlans() {
     // Fix CTE Refs
     for (auto& p : Plans) {
         p->ResolveCteRefs();

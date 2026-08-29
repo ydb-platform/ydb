@@ -2,6 +2,7 @@
 #include <ydb/library/plan2svg/metrics.h>
 #include <ydb/library/plan2svg/parse.h>
 #include <ydb/library/plan2svg/plan2svg.h>
+#include <ydb/library/plan2svg/visualizer.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -126,25 +127,25 @@ Y_UNIT_TEST_SUITE(TPlan2SvgGolden) {
 Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
 
     Y_UNIT_TEST(EmptyInputProducesNoPlans) {
-        TPlanVisualizer viz;
+        TVisualizer viz;
         viz.LoadPlans(TString());
         UNIT_ASSERT(viz.Plans.empty());
     }
 
     Y_UNIT_TEST(MalformedJsonProducesNoPlans) {
-        TPlanVisualizer viz;
+        TVisualizer viz;
         viz.LoadPlans(TString("{\"Plan\": "));
         UNIT_ASSERT(viz.Plans.empty());
     }
 
     Y_UNIT_TEST(UnknownRootProducesNoPlans) {
-        TPlanVisualizer viz;
+        TVisualizer viz;
         viz.LoadPlans(TString("{\"NotAPlan\": {}}"));
         UNIT_ASSERT(viz.Plans.empty());
     }
 
     Y_UNIT_TEST(QueriesRootIsAccepted) {
-        TPlanVisualizer viz;
+        TVisualizer viz;
         viz.LoadPlans(TString(R"({"queries":[{"Plan":{"Node Type":"Query","Plans":[{"Node Type":"ResultSet"}]}}]})"));
         UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->NodeType, "ResultSet");
@@ -156,13 +157,13 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
             "SimplifiedPlan": {"Node Type": "Query", "Plans": [{"Node Type": "Simple"}]}
         })";
 
-        TPlanVisualizer full;
+        TVisualizer full;
         full.LoadPlans(plans, false);
         UNIT_ASSERT_VALUES_EQUAL(full.Plans.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(full.Plans[0]->NodeType, "Full");
         UNIT_ASSERT(!full.Config.Simplified);
 
-        TPlanVisualizer simplified;
+        TVisualizer simplified;
         simplified.LoadPlans(plans, true);
         UNIT_ASSERT_VALUES_EQUAL(simplified.Plans.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(simplified.Plans[0]->NodeType, "Simple");

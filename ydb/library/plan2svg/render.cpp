@@ -1,4 +1,4 @@
-#include "plan2svg.h"
+#include "visualizer.h"
 
 #include "format.h"
 #include "parse.h"
@@ -1219,7 +1219,7 @@ void TPlan::PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta) 
     builder << "</svg>" << Endl;
 }
 
-TString TPlanVisualizer::PrintSvgSafe() {
+TString TVisualizer::PrintSvgSafe() {
     try {
         return PrintSvg();
     } catch (std::exception& e) {
@@ -1227,7 +1227,7 @@ TString TPlanVisualizer::PrintSvgSafe() {
     }
 }
 
-TString TPlanVisualizer::PrintSvg() {
+TString TVisualizer::PrintSvg() {
     TStringBuilder background;
     TStringBuilder svg;
 

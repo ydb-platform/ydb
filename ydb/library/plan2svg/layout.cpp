@@ -1,4 +1,4 @@
-#include "plan2svg.h"
+#include "visualizer.h"
 
 #include "format.h"
 

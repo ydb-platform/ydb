@@ -3416,9 +3416,12 @@ class WebTest(unittest.TestCase):
         self._manifest(self.root / "complete")
         summary = self.root / "complete" / "local-ydb" / "capacity" / "summary.csv"
         summary.parent.mkdir(parents=True)
-        row = {"load": 10, "dynamic_nodes": 2}
-        row.update({metric.name: index + 1 for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
-        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics([row], LOCAL_YDB_BENCHMARK)
+        rows = []
+        for load, dynamic_nodes, scale in ((10, 1, 1), (20, 1, 2), (10, 2, 3)):
+            row = {"load": load, "dynamic_nodes": dynamic_nodes}
+            row.update({metric.name: (index + 1) * scale for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
+            rows.append(row)
+        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics(rows, LOCAL_YDB_BENCHMARK)
         summary.write_text(
             LOCAL_YDB_BENCHMARK.render_summary(summarized, LOCAL_YDB_BENCHMARK),
             encoding="utf-8",
@@ -3429,6 +3432,24 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][0]["benchmark"], "local-ydb")
         self.assertEqual(value["series"][0]["affinity"], "roles")
         self.assertEqual(value["series"][0]["rows"][0]["load"], 10)
+        self.assertEqual(
+            {(row["load"], row["dynamic_nodes"]) for row in value["series"][0]["rows"]},
+            {(10, 1), (20, 1), (10, 2)},
+        )
+        self.assertIn("median_throughput", value["metrics"])
+        self.assertIn("median_p99_ms", value["metrics"])
+        self.assertIn("median_dynamic_cpu_mean", value["metrics"])
+        self.assertIn("max_errors", value["metrics"])
+        unrelated = self.root / "complete" / "ping-bench" / "broken" / "summary.csv"
+        unrelated.parent.mkdir(parents=True)
+        with unrelated.open("wb") as stream:
+            stream.truncate(16 * 1024 * 1024 + 1)
+        with self.assertRaisesRegex(BenchmarkError, "summary CSV is too large"):
+            chart_data(self.root, ["complete"])
+        filtered = chart_data(self.root, ["complete"], "local-ydb")
+        self.assertEqual(len(filtered["series"]), 1)
+        with self.assertRaisesRegex(BenchmarkError, "unknown chart benchmark"):
+            chart_data(self.root, ["complete"], "missing")
 
     def test_memory_fairness_is_derived_per_repeat_before_aggregation(self):
         dimensions = ["threads", "random_percent", "scope", "worker_aggregation"]
@@ -3555,6 +3576,7 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"function defaultMemoryCharts", script)
                 self.assertIn(b"Local YDB baseline comparison", script)
                 self.assertIn(b"function mountLocalYdbComparison", script)
+                self.assertIn(b"function mountLocalYdbComparisonCurves", script)
                 self.assertIn(b"function localComparisonSemantic", script)
                 self.assertIn(b"function localComparisonKey", script)
                 self.assertIn(b"Incompatible", script)
@@ -3562,6 +3584,16 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"value===null", script)
                 self.assertIn(b"Load values", script)
                 self.assertIn(b"...Object.keys(config)", script)
+                self.assertIn(b"series.benchmark!=='local-ydb'", script)
+                self.assertIn(b"median_throughput", script)
+                self.assertIn(b"median_dynamic_cpu_mean", script)
+                self.assertIn(b"max_errors", script)
+                self.assertIn(b"dynamicNodes", script)
+                self.assertIn(b"connectMeasuredPoints", script)
+                self.assertIn(b"item.rows.has(String(x))", script)
+                self.assertIn(b"no values are synthesized", script)
+                self.assertIn(b"loadChartData(value.selected,'local-ydb')", script)
+                self.assertIn(b"Promise.allSettled", script)
                 self.assertIn(b"function defaultChartScope", script)
                 self.assertIn(b"['actorPairs','in_flight']", script)
                 self.assertIn(b"['actorPairs','star_multiply']", script)

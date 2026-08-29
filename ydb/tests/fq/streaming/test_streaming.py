@@ -1842,7 +1842,7 @@ FROM `{table_name}`"""
                 )
                 WHERE foo.bar regexp "lunch" and foo.bat.`0` > 0
                       {comment_for_pushdown} OR ListLength(foo.baz) > 5
-                      OR foo.bum.b IS NOT NULL OR foo.bum.d IS DISTINCT FROM NULL OR foo.bum.c
+                      OR foo.bum.b IS NOT NULL OR foo.bum.cd.d IS DISTINCT FROM NULL OR foo.bum.cd.c
                 ;
                 $in = SELECT * FROM $in FLATTEN COLUMNS; -- expand foo
                 $in = SELECT
@@ -1913,8 +1913,8 @@ FROM `{table_name}`"""
                     assert "`bar`" in filter
                     assert "`bat`" in filter
                     assert "((`foo`).`bum`).`b`" in filter
-                    assert "((`foo`).`bum`).`c`" in filter
-                    assert "((`foo`).`bum`).`d`" in filter
+                    assert "(((`foo`).`bum`).`cd`).`c`" in filter
+                    assert "(((`foo`).`bum`).`cd`).`d`" in filter
                     sources += 1
         assert sources > 0
 

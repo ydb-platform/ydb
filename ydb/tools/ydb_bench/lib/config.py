@@ -24,6 +24,7 @@ BACKGROUND_LOAD_MODES = (
     "coherence-all-numa",
 )
 _COMMON_OPTIONAL_FIELDS = ("timeout", "background-load")
+MAX_LOCAL_YDB_VERIFICATION_REPETITIONS = 20
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -250,6 +251,11 @@ def _profile_schema(benchmark):
                         "warmup": {"type": "integer", "minimum": 0},
                         "duration": {"type": "integer", "minimum": 1},
                         "repetitions": {"type": "integer", "minimum": 1},
+                        "verification-repetitions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": MAX_LOCAL_YDB_VERIFICATION_REPETITIONS,
+                        },
                     },
                 },
                 "affinity": {
@@ -812,11 +818,26 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
             )
         load_config["objective"] = parsed_objective
 
-    measurement = _mapping(value.get("measurement"), location + ".measurement", ("warmup", "duration", "repetitions"))
+    measurement = _mapping(
+        value.get("measurement"),
+        location + ".measurement",
+        ("warmup", "duration", "repetitions", "verification-repetitions"),
+    )
+    verification_location = location + ".measurement.verification-repetitions"
+    verification_repetitions = _nonnegative_integer(
+        measurement.get("verification-repetitions", 0),
+        verification_location,
+    )
+    if verification_repetitions > MAX_LOCAL_YDB_VERIFICATION_REPETITIONS:
+        _config_error(
+            verification_location,
+            "must be at most {}".format(MAX_LOCAL_YDB_VERIFICATION_REPETITIONS),
+        )
     measurement_config = {
         "warmup": _nonnegative_integer(measurement.get("warmup", 10), location + ".measurement.warmup"),
         "duration": _positive_integer(measurement.get("duration", 30), location + ".measurement.duration"),
         "repetitions": _positive_integer(measurement.get("repetitions", 3), location + ".measurement.repetitions"),
+        "verification_repetitions": verification_repetitions,
     }
 
     affinity = _mapping(value.get("affinity"), location + ".affinity", ("ydb-cli", "static-nodes", "dynamic-nodes"))
@@ -834,9 +855,8 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     }
 
     attempts = len(load_config.get("values", ())) or 64
-    computed_timeout = 300 + attempts * measurement_config["repetitions"] * (
-        measurement_config["warmup"] + measurement_config["duration"] + 10
-    )
+    measurement_runs = attempts * measurement_config["repetitions"] + measurement_config["verification_repetitions"]
+    computed_timeout = 300 + measurement_runs * (measurement_config["warmup"] + measurement_config["duration"] + 10)
     timeout_explicit = "timeout" in value
     timeout = _timeout(value.get("timeout", computed_timeout), location + ".timeout")
     return RunConfiguration(

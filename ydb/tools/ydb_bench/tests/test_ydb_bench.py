@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import inspect
 import io
@@ -111,6 +112,105 @@ class YdbBenchTest(unittest.TestCase):
             repetitions=repetitions,
             timeout_seconds=timeout,
         )
+
+    def _run_mock_local_ydb(self, configuration, output_name, measurements):
+        def command_result(command, stdout="", exit_code=0, stderr="", interrupted=False, timed_out=False):
+            return runner.CommandResult(
+                command=tuple(str(part) for part in command),
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=exit_code,
+                started_at="2026-08-25T10:00:00+00:00",
+                finished_at="2026-08-25T10:00:01+00:00",
+                duration_seconds=1.0,
+                interrupted=interrupted,
+                timed_out=timed_out,
+            )
+
+        def measurement_stdout(value):
+            if isinstance(value, BaseException):
+                raise value
+            return """
+                Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+                1 {throughput} {throughput} 0 {errors} 1 2 {p99_ms} 4
+            """.format(
+                throughput=value.get("throughput", 10),
+                errors=value.get("errors", 0),
+                p99_ms=value.get("p99_ms", 3),
+            )
+
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            dynamic_nodes=[{}],
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command: (
+            command_result(command),
+            [command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.start.return_value = monitor
+        monitor.stop.return_value = {
+            "static_cpu_mean": 1,
+            "static_cpu_max": 2,
+            "dynamic_cpu_mean": 3,
+            "dynamic_cpu_max": 4,
+            "cli_cpu_mean": 5,
+            "cli_cpu_max": 6,
+            "host_cpu_mean": 7,
+            "host_cpu_max": 8,
+        }
+        outputs = iter(measurements)
+
+        def next_measurement(command):
+            value = next(outputs)
+            stdout = measurement_stdout(value)
+            return command_result(
+                command,
+                stdout,
+                exit_code=value.get("exit_code", 0),
+                stderr=value.get("stderr", ""),
+                interrupted=value.get("interrupted", False),
+                timed_out=value.get("timed_out", False),
+            )
+
+        output = self.root / output_name
+        binaries = {
+            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            for name in ("ydbd", "ydb_cli", "process_guard")
+        }
+        events = []
+        self.last_local_ydb_cluster = cluster
+        with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
+            local_ydb, "LinuxCpuMonitor", return_value=monitor
+        ), mock.patch.object(
+            local_ydb,
+            "discover_topology",
+            return_value=CpuTopology(
+                allowed_cpus=(0,),
+                numa_nodes=((0, (0,)),),
+                chiplets=(),
+                physical_cores=((0,),),
+            ),
+        ), mock.patch.object(
+            local_ydb, "collect_system_info", return_value={}
+        ), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: next_measurement(command),
+        ):
+            manifest = local_ydb.run_local_ydb(
+                binaries,
+                configuration,
+                output,
+                tool_revision="test",
+                event_sink=events.append,
+            )
+        return manifest, output, events
 
     def _worker_metrics_benchmark(self):
         return replace(
@@ -246,6 +346,43 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(profile["load"]["objective"]["cpu_saturation_percent"], 80)
         self.assertTrue(profile["load"]["allow_errors"])
         self.assertEqual(profile["affinity"]["ydb_cli"]["cpus"], "one-chiplet")
+        self.assertEqual(profile["measurement"]["verification_repetitions"], 0)
+
+    def test_local_ydb_verification_config_is_optional_bounded_and_counted_in_default_timeout(self):
+        loaded = load_config(self._config("""
+            local-ydb:
+              verified:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement:
+                  warmup: 1
+                  duration: 2
+                  repetitions: 1
+                  verification-repetitions: 2
+        """))
+        configuration = loaded.runs[0]
+        self.assertEqual(configuration.parameters["local_ydb"]["measurement"]["verification_repetitions"], 2)
+        self.assertEqual(configuration.timeout_seconds, 300 + 3 * (1 + 2 + 10))
+
+        invalid = self._config("""
+            local-ydb:
+              invalid:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement: {verification-repetitions: -1}
+        """)
+        with self.assertRaisesRegex(BenchmarkError, "verification-repetitions"):
+            load_config(invalid)
+
+        too_many = self._config("""
+            local-ydb:
+              invalid:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement: {verification-repetitions: 21}
+        """)
+        with self.assertRaisesRegex(BenchmarkError, "must be at most 20"):
+            load_config(too_many)
 
     def test_local_ydb_allow_errors_defaults_to_false_and_requires_boolean(self):
         loaded = load_config(self._config("""
@@ -353,6 +490,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(profile["local_ydb"]["geometry"]["max_dynamic_nodes"], 4)
         self.assertEqual(profile["local_ydb"]["load"]["values"], [10, 20])
         self.assertTrue(profile["local_ydb"]["load"]["allow_errors"])
+        self.assertEqual(profile["local_ydb"]["measurement"]["verification_repetitions"], 0)
         self.assertEqual(profile["local_ydb"]["affinity"]["ydb_cli"]["cpus"], "one-chiplet")
         self.assertEqual(profile["parameters"], {})
 
@@ -451,7 +589,7 @@ class YdbBenchTest(unittest.TestCase):
               audit:
                 workload: {type: stock, operation: add-rand-order}
                 load: {parameter: threads, values: [8]}
-                measurement: {warmup: 1, duration: 1, repetitions: 1}
+                measurement: {warmup: 1, duration: 1, repetitions: 1, verification-repetitions: 2}
                 affinity:
                   ydb-cli: {mode: none}
                   static-nodes: {mode: none}
@@ -494,10 +632,14 @@ class YdbBenchTest(unittest.TestCase):
             "host_cpu_mean": 7,
             "host_cpu_max": 8,
         }
-        measurement_stdout = """
-            Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
-            1 10 10 0 0 1 2 3 4
-        """
+
+        def measurement_stdout(throughput):
+            return """
+                Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+                1 {throughput} {throughput} 0 0 1 2 3 4
+            """.format(throughput=throughput)
+
+        measurement_outputs = iter(measurement_stdout(value) for value in (10, 20, 30))
         events = []
         output = self.root / "command-audit"
         binaries = {
@@ -520,7 +662,7 @@ class YdbBenchTest(unittest.TestCase):
         ), mock.patch.object(
             local_ydb,
             "run_command",
-            side_effect=lambda command, *_args, **_kwargs: command_result(command, measurement_stdout),
+            side_effect=lambda command, *_args, **_kwargs: command_result(command, next(measurement_outputs)),
         ):
             manifest = local_ydb.run_local_ydb(
                 binaries,
@@ -542,6 +684,203 @@ class YdbBenchTest(unittest.TestCase):
         progress = [event["fields"]["progress"] for event in events if event["type"] == "step-progress"]
         running = [item for item in progress if item.get("current_command")]
         self.assertEqual([item["phase"] for item in running[:4]], [command["phase"] for command in commands])
+        self.assertIn("verification-evaluating", [item["phase"] for item in progress])
+        evaluating = next(item for item in progress if item["phase"] == "verification-evaluating")
+        self.assertEqual(
+            set(evaluating["verification"]),
+            {"status", "configured_repetitions", "completed_repetitions"},
+        )
+        verification_completed = next(item for item in progress if item["phase"] == "verification-completed")
+        for item in (evaluating, verification_completed):
+            payload = json.dumps(item)
+            self.assertNotIn('"samples"', payload)
+            self.assertNotIn('"commands"', payload)
+        self.assertEqual(len(manifest["attempts"]), 1)
+        self.assertEqual(manifest["result"]["metrics_source"], "verification")
+        self.assertEqual(manifest["result"]["selected_metrics"]["throughput"], 10)
+        self.assertEqual(manifest["attempts"][0]["throughput"], 10)
+        self.assertEqual(manifest["searches"][0]["selected_metrics"]["throughput"], 10)
+        self.assertEqual(manifest["result"]["verified_metrics"]["throughput"], 25)
+        self.assertTrue(manifest["result"]["holdout_accepted"])
+        self.assertEqual(manifest["verification"]["completed_repetitions"], 2)
+        self.assertTrue(manifest["verification"]["accepted"])
+        self.assertEqual(manifest["verification"]["evaluation_kind"], "validity")
+        self.assertNotIn("samples", manifest["verification"])
+        self.assertTrue((output / "verification-repetitions.csv").is_file())
+        self.assertTrue((output / "verification-summary.csv").is_file())
+        with (output / "repetitions.csv").open(newline="", encoding="utf-8") as stream:
+            search_rows = list(csv.DictReader(stream))
+        with (output / "verification-repetitions.csv").open(newline="", encoding="utf-8") as stream:
+            verification_rows = list(csv.DictReader(stream))
+        with (output / "verification-summary.csv").open(newline="", encoding="utf-8") as stream:
+            verification_summary = list(csv.DictReader(stream))
+        self.assertEqual([float(row["throughput"]) for row in search_rows], [10])
+        self.assertEqual([float(row["throughput"]) for row in verification_rows], [20, 30])
+        self.assertNotIn("passed", verification_rows[0])
+        self.assertEqual(verification_summary[0]["samples"], "2")
+        self.assertEqual(float(verification_summary[0]["median_throughput"]), 25)
+        verification_commands = []
+        for repetition in (1, 2):
+            commands_path = output / "verification" / "repeat-{:03d}".format(repetition) / "commands.json"
+            verification_commands.extend(json.loads(commands_path.read_text(encoding="utf-8")))
+        self.assertEqual(len(verification_commands) + len(commands), 12)
+        self.assertEqual(
+            [item["phase"] for item in verification_commands[:4]],
+            [
+                "verification-initializing",
+                "verification-warmup",
+                "verification-measuring",
+                "verification-cleanup",
+            ],
+        )
+        artifacts = next(event["artifacts"] for event in events if event["type"] == "step-artifacts")
+        self.assertIn("verification-repetitions.csv", artifacts)
+
+    def test_local_ydb_disabled_verification_keeps_search_metrics(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              search-only:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, output, events = self._run_mock_local_ydb(
+            configuration,
+            "verification-disabled",
+            [{"throughput": 10}],
+        )
+        self.assertEqual(manifest["verification"]["status"], "disabled")
+        self.assertEqual(manifest["result"]["metrics_source"], "search")
+        self.assertNotIn("verified_metrics", manifest["result"])
+        self.assertFalse((output / "verification-repetitions.csv").exists())
+        artifacts = next(event["artifacts"] for event in events if event["type"] == "step-artifacts")
+        self.assertNotIn("verification-repetitions.csv", artifacts)
+
+    def test_local_ydb_verification_is_skipped_without_feasible_load(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              no-feasible:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, output, _events = self._run_mock_local_ydb(
+            configuration,
+            "verification-skipped",
+            [{"throughput": 10, "errors": 1}],
+        )
+        self.assertIsNone(manifest["result"]["selected_load"])
+        self.assertEqual(manifest["result"]["metrics_source"], "search")
+        self.assertEqual(manifest["verification"]["status"], "skipped")
+        self.assertIn("did not select", manifest["verification"]["reason"])
+        self.assertFalse((output / "verification-repetitions.csv").exists())
+        self.assertTrue((output / "repetitions.csv").is_file())
+
+    def test_local_ydb_latency_verification_reports_failed_holdout_without_changing_search(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              latency:
+                workload: {type: kv, operation: upsert}
+                load:
+                  parameter: threads
+                  search: {start: 10, maximum: 10}
+                  objective: {type: latency-slo, percentile: p99, max-ms: 10}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, _output, _events = self._run_mock_local_ydb(
+            configuration,
+            "verification-latency-fail",
+            [
+                {"throughput": 10, "p99_ms": 9},
+                {"throughput": 11, "p99_ms": 9},
+                {"throughput": 12, "p99_ms": 13},
+            ],
+        )
+        self.assertEqual(manifest["state"], "passed")
+        self.assertEqual(manifest["result"]["selected_metrics"]["p99_ms"], 9)
+        self.assertEqual(manifest["result"]["verified_metrics"]["p99_ms"], 11)
+        self.assertEqual(manifest["result"]["metrics_source"], "verification")
+        self.assertFalse(manifest["result"]["holdout_accepted"])
+        self.assertFalse(manifest["verification"]["accepted"])
+        self.assertEqual(manifest["verification"]["evaluation_kind"], "objective")
+        self.assertIn("exceeds", manifest["verification"]["decision"])
+        self.assertNotIn("saturated_repetitions", manifest["verification"])
+
+    def test_local_ydb_verification_failure_preserves_search_and_partial_holdout(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              verification-failure:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        output = self.root / "verification-failure"
+        with self.assertRaisesRegex(BenchmarkError, "exited with code 17"):
+            self._run_mock_local_ydb(
+                configuration,
+                output.name,
+                [
+                    {"throughput": 10},
+                    {"throughput": 20},
+                    {"throughput": 0, "exit_code": 17, "stderr": "verification command failed"},
+                ],
+            )
+        manifest = json.loads((output / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["verification"]["status"], "failed")
+        self.assertEqual(manifest["verification"]["completed_repetitions"], 1)
+        self.assertEqual(manifest["result"]["selected_metrics"]["throughput"], 10)
+        self.assertEqual(manifest["result"]["metrics_source"], "search")
+        self.assertTrue((output / "repetitions.csv").is_file())
+        with (output / "verification-repetitions.csv").open(newline="", encoding="utf-8") as stream:
+            self.assertEqual(len(list(csv.DictReader(stream))), 1)
+        self.last_local_ydb_cluster.stop.assert_called_once_with()
+
+    def test_local_ydb_verification_cancellation_is_durable(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              verification-cancel:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        output = self.root / "verification-cancel"
+        with self.assertRaisesRegex(BenchmarkInterrupted, "workload was interrupted"):
+            self._run_mock_local_ydb(
+                configuration,
+                output.name,
+                [{"throughput": 10}, {"throughput": 0, "interrupted": True}],
+            )
+        manifest = json.loads((output / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["state"], "cancelled")
+        self.assertEqual(manifest["verification"]["status"], "cancelled")
+        self.assertEqual(manifest["verification"]["completed_repetitions"], 0)
+        self.assertEqual(manifest["result"]["selected_metrics"]["throughput"], 10)
+        self.assertNotIn("repetitions_file", manifest["verification"])
+        self.assertNotIn("summary_file", manifest["verification"])
+        self.assertTrue((output / "summary.csv").is_file())
+        self.assertTrue((output / "verification" / "repeat-001" / "stdout.txt").is_file())
+        self.last_local_ydb_cluster.stop.assert_called_once_with()
 
     def test_local_ydb_kv_commands_keep_table_path(self):
         cluster = mock.Mock(
@@ -820,6 +1159,31 @@ class YdbBenchTest(unittest.TestCase):
         self.assertGreater(latency.failing_load, latency.selected_load)
         self.assertTrue(latency.attempts[0]["passed"])
         self.assertIn("latency", latency.attempts[-1]["decision"])
+
+    def test_evaluate_load_reuses_search_acceptance_for_verification(self):
+        points = {"parameter": "threads", "values": [1]}
+        self.assertEqual(load_control.evaluate_load(points, 1, {"errors": 0}), (True, "configured point"))
+        self.assertFalse(load_control.evaluate_load(points, 1, {"errors": 1})[0])
+        self.assertTrue(load_control.evaluate_load({**points, "allow_errors": True}, 1, {"errors": 1})[0])
+
+        latency = {
+            "parameter": "rate",
+            "objective": {
+                "type": "latency-slo",
+                "percentile": "p99",
+                "max_ms": 10,
+                "max_errors": 0,
+                "min_achieved_rate_ratio": 0.98,
+            },
+        }
+        self.assertTrue(load_control.evaluate_load(latency, 100, {"throughput": 100, "errors": 0, "p99_ms": 9})[0])
+        passed, reason = load_control.evaluate_load(
+            latency,
+            100,
+            {"throughput": 100, "errors": 0, "p99_ms": 11},
+        )
+        self.assertFalse(passed)
+        self.assertIn("exceeds", reason)
 
     def test_linux_cpu_summary_weights_intervals_and_ignores_short_spikes_for_max(self):
         monitor = linux_telemetry.LinuxCpuMonitor({"dynamic": lambda: ()}, {"dynamic": 1}, interval=0.5)
@@ -2759,7 +3123,7 @@ class WebTest(unittest.TestCase):
         (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
         (directory / "artifact.txt").write_text("artifact", encoding="utf-8")
 
-    def _local_ydb_result(self, directory, throughput, operation="put"):
+    def _local_ydb_result(self, directory, throughput, operation="put", verified=False):
         self._manifest(directory)
         main_path = directory / "run.json"
         main = json.loads(main_path.read_text(encoding="utf-8"))
@@ -2799,6 +3163,37 @@ class WebTest(unittest.TestCase):
             "cli_cpu_mean": 30,
             "commands": [{"argv": ["must", "not", "leak"]}],
         }
+        result = {
+            "outcome": "best-observed",
+            "parameter": "rate",
+            "dynamic_nodes": 1,
+            "selected_load": 100,
+            "selected_metrics": selected_metrics,
+        }
+        verification = None
+        if verified:
+            result.update(
+                {
+                    "metrics_source": "verification",
+                    "holdout_accepted": True,
+                    "verified_metrics": {
+                        **selected_metrics,
+                        "throughput": throughput + 50,
+                        "commands": [{"argv": ["must", "also", "not", "leak"]}],
+                    },
+                }
+            )
+            verification = {
+                "status": "completed",
+                "configured_repetitions": 3,
+                "completed_repetitions": 3,
+                "accepted": True,
+                "evaluation_kind": "validity",
+                "decision": "workload completed without errors",
+                "throughput_delta_percent": 5,
+                "saturated_repetitions": 3,
+                "samples": [{"commands": [{"argv": ["not", "in", "comparison"]}]}],
+            }
         profile = {
             "schema_version": SCHEMA_VERSION,
             "benchmark": "local-ydb",
@@ -2837,14 +3232,10 @@ class WebTest(unittest.TestCase):
             "role_affinity": {"ydb_cli": [0], "static_nodes": [1], "dynamic_nodes": [2]},
             "attempts": [],
             "searches": [],
-            "result": {
-                "outcome": "best-observed",
-                "parameter": "rate",
-                "dynamic_nodes": 1,
-                "selected_load": 100,
-                "selected_metrics": selected_metrics,
-            },
+            "result": result,
         }
+        if verification is not None:
+            profile["verification"] = verification
         (profile_root / "run.json").write_text(json.dumps(profile), encoding="utf-8")
 
     def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False, run_updates=None):
@@ -3202,7 +3593,7 @@ class WebTest(unittest.TestCase):
             service.shutdown()
 
     def test_local_ydb_comparison_returns_bounded_profile_results(self):
-        self._local_ydb_result(self.root / "baseline", 1000)
+        self._local_ydb_result(self.root / "baseline", 1000, verified=True)
         self._local_ydb_result(self.root / "candidate", 1100, operation="mixed")
         service = RunService(self.root)
         try:
@@ -3220,6 +3611,11 @@ class WebTest(unittest.TestCase):
             self.assertNotIn("private", comparison["entries"][0]["parameters"])
             self.assertNotIn("attempts", comparison["entries"][0])
             self.assertNotIn("commands", comparison["entries"][0]["result"]["selected_metrics"])
+            self.assertEqual(comparison["entries"][0]["result"]["metrics_source"], "verification")
+            self.assertEqual(comparison["entries"][0]["result"]["verified_metrics"]["throughput"], 1050)
+            self.assertNotIn("commands", comparison["entries"][0]["result"]["verified_metrics"])
+            self.assertTrue(comparison["entries"][0]["verification"]["accepted"])
+            self.assertNotIn("samples", comparison["entries"][0]["verification"])
             self.assertEqual(comparison["entries"][1]["parameters"]["workload"]["operation"], "mixed")
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
                 service.local_ydb_comparison([])
@@ -3542,6 +3938,15 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"local-load-allow-errors", script)
                 self.assertIn(b"allow-errors: ", script)
                 self.assertIn(b"Failed workload requests are allowed", script)
+                self.assertIn(b"verification-repetitions:", script)
+                self.assertIn(b"local-measurement-verification-repetitions", script)
+                self.assertIn(b"localInteger('local-measurement-verification-repetitions',0,20)", script)
+                self.assertIn(b"function localVerificationSummary", script)
+                self.assertIn(b"metrics_source==='verification'", script)
+                self.assertIn(b"verification-measuring", script)
+                self.assertIn(b"'verification-evaluating':'Evaluating verification'", script)
+                self.assertIn(b"Reported metrics come from the independent holdout", script)
+                self.assertIn(b"Incompatible metric source", script)
                 self.assertIn(b"function localElapsed(started,finished=null)", script)
                 self.assertIn(b"Search process", script)
                 self.assertIn(b"Ternary search progress", script)
@@ -3578,6 +3983,8 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"function mountLocalYdbComparison", script)
                 self.assertIn(b"function mountLocalYdbComparisonCurves", script)
                 self.assertIn(b"function localComparisonSemantic", script)
+                self.assertIn(b"sameMetricSource=metricView.source===baselineView.source", script)
+                self.assertIn(b"<th>Metric source</th>", script)
                 self.assertIn(b"function localComparisonKey", script)
                 self.assertIn(b"Incompatible", script)
                 self.assertIn(b"reference===0", script)

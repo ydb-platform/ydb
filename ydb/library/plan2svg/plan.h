@@ -79,6 +79,14 @@ public:
     // The timeline strip every data flow draws: the bar, then the wait time
     // overlay under the connection canvas, then the derivative curve over it.
     void PrintDataFlowTimeline(TStringBuilder& builder, const TString& title, const std::shared_ptr<TSingleMetric>& bytes, ui32 x, ui32 y, ui32 w, const TColorTriple& colors, bool backgroundRect = false);
+    // The dashed line down the task gutter, covering the share of the stage's
+    // tasks that have not finished yet. Draws nothing until at least one task has.
+    void PrintUnfinishedTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks);
+    // A red circle with one letter in it, hung at the bottom of a strip and
+    // explained by its tooltip.
+    void PrintWarningBadge(TStringBuilder& builder, ui32 cx, ui32 bottom, const TString& title, TStringBuf label);
+    // The highlighted amount a stage spilled, right aligned over its summary bar.
+    void PrintSpillingBadge(TStringBuilder& builder, ui32 top, const TString& label, TSingleMetric* bytes);
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
     void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);

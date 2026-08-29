@@ -72,15 +72,22 @@ struct TCpuSample {
     ui32 StageId;
 };
 
-TString TPlan::GetCriticalCpuGroups() {
+// A critical path is a chain of stages, each reached from the one before it
+// through a single connection. Which connection that is depends on what is being
+// measured, so the caller names the TStage member holding it. The result is the
+// group id list the SVG uses to highlight the whole chain at once.
+static TString CriticalPathGroups(const std::vector<std::shared_ptr<TStage>>& stages,
+    std::shared_ptr<TConnection> TStage::* critical)
+{
     TStringBuilder builder;
-    if (!Stages.empty()) {
-        auto* stage = Stages[0].get();
+    if (!stages.empty()) {
+        auto* stage = stages[0].get();
         builder << 'g' << stage->GroupId;
         while (stage) {
-            if (stage->CriticalCpuConnection) {
-                builder << ",g" << stage->CriticalCpuConnection->GroupId;
-                stage = stage->CriticalCpuConnection->FromStage.get();
+            auto& connection = stage->*critical;
+            if (connection) {
+                builder << ",g" << connection->GroupId;
+                stage = connection->FromStage.get();
                 builder << ",g" << stage->GroupId;
             } else {
                 stage = nullptr;
@@ -90,22 +97,12 @@ TString TPlan::GetCriticalCpuGroups() {
     return builder;
 }
 
+TString TPlan::GetCriticalCpuGroups() {
+    return CriticalPathGroups(Stages, &TStage::CriticalCpuConnection);
+}
+
 TString TPlan::GetCriticalTimeGroups() {
-    TStringBuilder builder;
-    if (!Stages.empty()) {
-        auto* stage = Stages[0].get();
-        builder << 'g' << stage->GroupId;
-        while (stage) {
-            if (stage->CriticalTimeConnection) {
-                builder << ",g" << stage->CriticalTimeConnection->GroupId;
-                stage = stage->CriticalTimeConnection->FromStage.get();
-                builder << ",g" << stage->GroupId;
-            } else {
-                stage = nullptr;
-            }
-        }
-    }
-    return builder;
+    return CriticalPathGroups(Stages, &TStage::CriticalTimeConnection);
 }
 
 void TPlan::CalcCriticals(TStage& stage) {

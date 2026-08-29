@@ -240,18 +240,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, const TViewBox& box, c
         }
 
         if (w) {
-            background
-            << "<g><title>" << warn << "</title>" << Endl
-            << "  <circle cx='" << (box.Left + box.Width) - INTERNAL_WIDTH / 2
-            << "' cy='" << box.Top + INTERNAL_WIDTH / 2
-            << "' r='" << INTERNAL_WIDTH / 2 - 1
-            << "' stroke='none' fill='" << Config.Palette.StageTextHighlight << "' />" << Endl
-            << "  <text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-            << "px' fill='" << Config.Palette.TextLight
-            << "' x='" << (box.Left + box.Width) - INTERNAL_WIDTH / 2
-            << "' y='" << box.Top + INTERNAL_WIDTH - (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / 2
-            << "'>" << w << "</text>" << Endl
-            << "</g>" << Endl;
+            PrintWarningBadge(background, (box.Left + box.Width) - INTERNAL_WIDTH / 2, box.Top + INTERNAL_WIDTH, warn, w);
         }
     }
 }
@@ -346,6 +335,54 @@ void TPlan::PrintDataFlowTimeline(TStringBuilder& builder, const TString& title,
     if (!bytes->History.Deriv.empty()) {
         PrintDeriv(builder, bytes->History, x, y, w, INTERNAL_HEIGHT, "", colors.Dark);
     }
+}
+
+void TPlan::PrintUnfinishedTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks) {
+    if (finishedTasks && finishedTasks <= tasks) {
+        auto unfinishedPercent = 100 * (tasks - finishedTasks) / tasks;
+        auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+        builder
+        << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
+        << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+    }
+}
+
+void TPlan::PrintWarningBadge(TStringBuilder& builder, ui32 cx, ui32 bottom, const TString& title, TStringBuf label) {
+    builder
+    << "<g><title>" << title << "</title>" << Endl
+    << "  <circle cx='" << cx
+    << "' cy='" << bottom - INTERNAL_WIDTH / 2
+    << "' r='" << INTERNAL_WIDTH / 2 - 1
+    << "' stroke='none' fill='" << Config.Palette.StageTextHighlight << "' />" << Endl
+    << "  <text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
+    << "px' fill='" << Config.Palette.TextLight
+    << "' x='" << cx
+    << "' y='" << bottom - (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / 2
+    << "'>" << label << "</text>" << Endl
+    << "</g>" << Endl;
+}
+
+void TPlan::PrintSpillingBadge(TStringBuilder& builder, ui32 top, const TString& label, TSingleMetric* bytes) {
+    if (!bytes || !bytes->Details.Sum) {
+        return;
+    }
+
+    builder
+    << "<g><title>";
+
+    // The tooltip goes straight into the title element being opened above.
+    auto textSum = FormatTooltip(builder, label, bytes, FormatBytes);
+    auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
+    auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
+
+    builder
+    << "</title>" << Endl
+    << "  <rect x='" << x0 << "' y='" << top + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+    << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
+    << "' stroke-width='0' fill='" << Config.Palette.SpillingBytes.Light << "'/>" << Endl
+    << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
+    << "' y='" << top + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
+    << "</g>" << Endl;
 }
 
 void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
@@ -640,23 +677,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 .Scalar = s->OutputChunkSize.get(),
             });
 
-            if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
-                builder
-                << "<g><title>";
-
-                auto textSum = FormatTooltip(builder, "Channel Spilling", s->SpillingChannelBytes.get(), FormatBytes);
-                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
-                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
-
-                builder
-                << "</title>" << Endl
-                << "  <rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
-                << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
-                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytes.Light << "'/>" << Endl
-                << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
-                << "</g>" << Endl;
-            }
+            PrintSpillingBadge(builder, y0, "Channel Spilling", s->SpillingChannelBytes.get());
 
             auto title = FormatDataFlowRate("Output", s->OutputBytes, s->OutputRows);
 
@@ -679,23 +700,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 .Icon = {"#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6"},
             });
 
-            if (s->SpillingComputeBytes && s->SpillingComputeBytes->Details.Sum) {
-                s->Svg
-                << "<g><title>";
-
-                auto textSum = FormatTooltip(s->Svg, "Compute Spilling", s->SpillingComputeBytes.get(), FormatBytes);
-                auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
-                auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
-
-                s->Svg
-                << "</title>" << Endl
-                << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
-                << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
-                << "' stroke-width='0' fill='" << Config.Palette.SpillingBytes.Light << "'/>" << Endl
-                << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x1 - 1
-                << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << textSum << "</text>" << Endl
-                << "</g>" << Endl;
-            }
+            PrintSpillingBadge(s->Svg, y0, "Compute Spilling", s->SpillingComputeBytes.get());
         }
 
         if (s->MemoryUsage && !s->MemoryUsage->History.Values.empty()) {
@@ -772,18 +777,9 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                         }
                     }
                     if (waitOutputPeers) {
-                    s->Svg
-                        << "<g><title>" << "Wait input with peer stage(s) " << waitOutputPeers << " wait output" << "</title>" << Endl
-                        << "  <circle cx='" << Config.TaskLeft + Config.TaskWidth / 2
-                        << "' cy='" << s->OffsetY + offsetY + s->Height - INTERNAL_WIDTH / 2
-                        << "' r='" << INTERNAL_WIDTH / 2 - 1
-                        << "' stroke='none' fill='" << Config.Palette.StageTextHighlight << "' />" << Endl
-                        << "  <text text-anchor='middle' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT
-                        << "px' fill='" << Config.Palette.TextLight
-                        << "' x='" << Config.TaskLeft + Config.TaskWidth / 2
-                        << "' y='" << s->OffsetY + offsetY + s->Height - (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / 2
-                        << "'>" << "W" << "</text>" << Endl
-                        << "</g>" << Endl;
+                        PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2,
+                            s->OffsetY + offsetY + s->Height,
+                            TStringBuilder() << "Wait input with peer stage(s) " << waitOutputPeers << " wait output", "W");
                     }
                 }
             }
@@ -827,33 +823,17 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         }
 
         if (s->Tasks) {
+            s->Svg << "<g><title>";
             if (s->External) {
-                s->Svg
-                << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-                if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                    auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
-                    auto xx = Config.TaskLeft + Config.TaskWidth / 8;
-                    s->Svg
-                    << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-                    << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
-                }
-                s->Svg
-                << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
-                << "</g>" << Endl;
+                s->Svg << "External Source, partitions: " << s->Tasks;
             } else {
-                s->Svg
-                << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-                if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                    auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
-                    auto xx = Config.TaskLeft + Config.TaskWidth / 8;
-                    s->Svg
-                    << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-                    << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
-                }
-                s->Svg
-                << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
-                << "</g>" << Endl;
+                s->Svg << "Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks;
             }
+            s->Svg << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+            PrintUnfinishedTasks(s->Svg, s->Tasks, s->FinishedTasks);
+            s->Svg
+            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
+            << "</g>" << Endl;
         }
 
         if (!s->Connections.empty()) {
@@ -1285,13 +1265,7 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         }
 */
         if (node->Tasks) {
-            if (node->FinishedTasks && node->FinishedTasks <= node->Tasks) {
-                auto unfinishedPercent = 100 * (node->Tasks - node->FinishedTasks) / node->Tasks;
-                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
-                builder
-                << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-                << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
-            }
+            PrintUnfinishedTasks(builder, node->Tasks, node->FinishedTasks);
             builder
             << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(node->Tasks));
         }

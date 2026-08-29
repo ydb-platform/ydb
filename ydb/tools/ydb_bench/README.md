@@ -102,6 +102,7 @@ local-ydb:
       warmup: 10
       duration: 30
       repetitions: 3
+      verification-repetitions: 3
     affinity:
       ydb-cli:
         mode: pack-numa-pack-chiplet-spread-core
@@ -158,6 +159,21 @@ and achieved-rate checks active.
 
 The previous flat `mode`, `start`, and `slo` fields remain accepted for config
 compatibility, but newly generated YAML uses `search` and `objective`.
+
+`measurement.repetitions` controls how many samples contribute to every search
+point. Set `measurement.verification-repetitions` to run additional independent
+samples at the load selected by the search; it defaults to `0` so existing
+configurations keep their previous runtime and is limited to 20. These
+post-search samples contribute to the automatically computed default command
+timeout; `timeout` remains a per-command safety bound rather than an absolute
+profile deadline. Verification never
+changes the selected load or dynamic-node scaling decision. Its holdout samples
+are written separately to `verification-repetitions.csv` and
+`verification-summary.csv`; a completed holdout becomes the reported metric
+source while the search measurements remain intact for diagnostics. Latency
+holdout metrics are evaluated with the same aggregate SLO contract as a search
+point. A throughput holdout is diagnostic: its request-error acceptance,
+throughput drift, and CPU saturation do not claim statistical reproducibility.
 
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.

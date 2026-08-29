@@ -159,6 +159,11 @@ _CSS = (
 .local-profile-config pre{max-height:24rem;overflow:auto;white-space:pre;margin:.7rem 0 0}
 .attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
 .comparison-delta{font-weight:650}.comparison-delta.good{color:var(--good)}.comparison-delta.bad{color:var(--bad)}
+.verification-badge{display:inline-flex;align-items:center;margin-left:.35rem;padding:.08rem .42rem;border:1px solid #d0d5dd}
+.verification-badge{border-radius:999px;background:var(--panel);color:var(--text);font-size:.75rem;font-weight:650;vertical-align:middle}
+.verification-badge.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
+.verification-summary{margin:.7rem 0;padding:.65rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:var(--panel);color:var(--text)}
+.verification-summary.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
 @media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
 """
     '.status.queued{color:var(--warn)}\n'
@@ -229,7 +234,7 @@ _JS = (
     "function defaultLocalYdb(){return {workload:defaultLocalYdbWorkload('kv'),"
     "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
     ":{threads:64},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:10,duration:30,rep"
-    "etitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
+    "etitions:3,verification_repetitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
     ",cpus:null},dynamic_nodes:{mode:'none',cpus:null}}}}\n"
     "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;lines.push('    work"
     "load:','      type: '+workload.type,'      operation: '+workload.operation,'      options:');for(const [key,value] of "
@@ -245,7 +250,8 @@ _JS = (
     "jectiveKeys))lines.push('        '+yamlKey+': '+config.load.objective[key]);else{lines.push('        percentile: '+config.load.o"
     "bjective.percentile);for(const [key,yamlKey] of Object.entries(localYdbSloKeys))lines.push('        '+yamlKey+': '+con"
     "fig.load.objective[key])}}lines.push('    measurement:','      warmup: '+config.measurement.warmup,' "
-    "     duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,'    affinity:');f"
+    "     duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,"
+    "'      verification-repetitions: '+(config.measurement.verification_repetitions??0),'    affinity:');f"
     "or(const [key,yamlKey] of Object.entries(localYdbAffinityKeys)){const role=config.affinity[key];lines.push('      '+yam"
     "lKey+':','        mode: '+role.mode);if(role.cpus!==null&&role.cpus!==undefined)lines.push('        cpus: '+role.cpus)}"
     "if(profile.timeout!==null&&profile.timeout!==undefined&&profile.timeout!=='')lines.push('    timeout: '+profile.timeo"
@@ -401,6 +407,12 @@ function localYdbProfileEditor(profile){
     localField('local-measurement-duration','Duration (seconds)',measurement.duration,'','type=number min=1')+
     localField('local-measurement-repetitions','Repetitions',measurement.repetitions,'','type=number min=1')+
     localField(
+      'local-measurement-verification-repetitions','Verification repetitions',
+      measurement.verification_repetitions??0,
+      'Independent holdout measurements at the selected load; 0 disables verification.',
+      'type=number min=0 max=20'
+    )+
+    localField(
       'local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1'
     )+'</div><h3>Role affinity</h3>'+affinity+
     '<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
@@ -410,7 +422,12 @@ function localNumber(id,minimum=1){
   if(!Number.isFinite(value)||value<minimum)throw Error(id+' must be a number not below '+minimum+'.');
   return value
 }
-function localInteger(id,minimum=1){const value=localNumber(id,minimum);if(!Number.isSafeInteger(value))throw Error(id+' must be an integer.');return value}
+function localInteger(id,minimum=1,maximum=null){
+  const value=localNumber(id,minimum);
+  if(!Number.isSafeInteger(value))throw Error(id+' must be an integer.');
+  if(maximum!==null&&value>maximum)throw Error(id+' must not exceed '+maximum+'.');
+  return value
+}
 function localCpu(id,mode){
   if(mode==='none')return null;
   const raw=document.querySelector('#'+id).value.trim();
@@ -525,7 +542,8 @@ function bindLocalYdbEditor(profile){
     config.measurement={
       warmup:localInteger('local-measurement-warmup',0),
       duration:localInteger('local-measurement-duration'),
-      repetitions:localInteger('local-measurement-repetitions')
+      repetitions:localInteger('local-measurement-repetitions'),
+      verification_repetitions:localInteger('local-measurement-verification-repetitions',0,20)
     };
     for(const key of Object.keys(localYdbAffinityKeys)){
       const mode=document.querySelector('#local-affinity-'+key+'-mode').value;
@@ -1008,6 +1026,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "    'Load values':JSON.stringify(localComparisonStable(load.values??null)),\n"
     "    'Objective':objective.type??'points','Warmup seconds':measurement.warmup??'—',\n"
     "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
+    "    'Verification repetitions':measurement.verification_repetitions??0,\n"
     "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
     "    'Initial dynamic nodes':geometry.dynamic_nodes??'—','Maximum dynamic nodes':geometry.max_dynamic_nodes??'—',\n"
     "    'Storage groups':geometry.storage_groups??'—','Disk size GiB':geometry.disk_size_gb??'—','YDB CLI threads':client.threads??'—',\n"
@@ -1038,6 +1057,22 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '    workload:parameters.workload||{},parameter:load.parameter,objective:objective.type,\n'
     "    latency_percentile:objective.type==='latency-slo'?objective.percentile:null\n"
     '  })\n'
+    '}\n'
+    'function localResultMetrics(result){\n'
+    "  const verified=Boolean(result?.metrics_source==='verification'&&result?.verified_metrics&&\n"
+    "    typeof result.verified_metrics==='object');\n"
+    "  return {metrics:(verified?result.verified_metrics:result?.selected_metrics)||{},verified,source:verified?'Holdout':'Search'}\n"
+    '}\n'
+    'function localVerificationCount(result,parameters={},verification={}){\n'
+    '  return result?.verification_repetitions??verification?.configured_repetitions??verification?.completed_repetitions??\n'
+    '    parameters?.measurement?.verification_repetitions??0\n'
+    '}\n'
+    'function localVerificationBadge(result,parameters={},verification={}){\n'
+    '  const view=localResultMetrics(result);if(!view.verified)return \'\';\n'
+    '  const repetitions=localVerificationCount(result,parameters,verification);\n'
+    '  const accepted=result?.holdout_accepted??verification?.accepted;\n'
+    "  return '<span class=\"verification-badge '+(accepted===false?'bad':'')+'\" title=\"Independent holdout measurements\">Holdout'+\n"
+    "    (repetitions?' · '+esc(repetitions):'')+'</span>'\n"
     '}\n'
     'function localComparisonDelta(value,baseline,lowerIsBetter=false,compatible=true){\n'
     "  if(!compatible)return '<span class=muted>incompatible</span>';\n"
@@ -1102,16 +1137,20 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '}\n'
     'function mountLocalYdbComparison(container,data,chartData=null){\n'
     "  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}\n"
-    '  const previous=container.dataset.baseline,baseline=entries.find(item=>localComparisonKey(item)===previous)||entries.find(item=>item.result?.selected_metrics)||entries[0];\n'
-    '  container.dataset.baseline=localComparisonKey(baseline);const baselineMetrics=baseline.result?.selected_metrics||{};\n'
+    '  const previous=container.dataset.baseline;\n'
+    '  const baseline=entries.find(item=>localComparisonKey(item)===previous)||\n'
+    '    entries.find(item=>Object.keys(localResultMetrics(item.result).metrics).length)||entries[0];\n'
+    '  container.dataset.baseline=localComparisonKey(baseline);const baselineView=localResultMetrics(baseline.result);\n'
+    '  const baselineMetrics=baselineView.metrics;\n'
     "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99',latencyMetric=percentile+'_ms';\n"
     '  const baselineConfig=localComparisonConfig(baseline),baselineContext=localComparisonContext(baseline);\n'
     '  const baselineBuild=localComparisonBuild(baseline);\n'
     '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));\n'
     '  const rows=entries.map(item=>{\n'
-    '    const metrics=item.result?.selected_metrics||{},config=localComparisonConfig(item);\n'
+    '    const metricView=localResultMetrics(item.result),metrics=metricView.metrics,config=localComparisonConfig(item);\n'
     '    const context=localComparisonContext(item),build=localComparisonBuild(item);\n'
-    '    const compatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;\n'
+    '    const semanticCompatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;\n'
+    '    const sameMetricSource=metricView.source===baselineView.source,compatible=semanticCompatible&&sameMetricSource;\n'
     '    const differences=[...new Set([...Object.keys(baselineConfig),...Object.keys(config)])].sort()\n'
     '      .filter(name=>String(config[name])!==String(baselineConfig[name]));\n'
     '    const contextDifferences=[...new Set([...Object.keys(baselineContext),...Object.keys(context)])].sort()\n'
@@ -1122,13 +1161,18 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "      ' → '+esc(config[name])+'</li>'),...contextDifferences.map(name=>'<li><strong>'+esc(name)+':</strong> '+\n"
     "      esc(baselineContext[name])+' → '+esc(context[name])+'</li>'),...buildDifferences.map(name=>'<li><strong>'+\n"
     "      esc(name)+':</strong> '+esc(baselineBuild[name])+' → '+esc(build[name])+'</li>')];\n"
-    "    const comparisonState=compatible?(differences.length||contextDifferences.length?'Comparable with warnings':\n"
-    "      'Comparable · build changed'):'Incompatible';\n"
+    "    if(!sameMetricSource)details.unshift('<li><strong>Metric source:</strong> '+esc(baselineView.source)+' → '+\n"
+    "      esc(metricView.source)+'</li>');\n"
+    "    const comparisonState=!semanticCompatible?'Incompatible workload':!sameMetricSource?'Incompatible metric source':\n"
+    "      differences.length||contextDifferences.length?'Comparable with warnings':'Comparable · build changed';\n"
     "    const differenceText=item===baseline?'Baseline':details.length?'<details><summary class=\"'+\n"
     "      (compatible?'':'attempt-fail')+'\">'+comparisonState+' · '+differences.length+' config · '+\n"
-    "      contextDifferences.length+' environment · '+buildDifferences.length+' build</summary><ul>'+\n"
+    "      contextDifferences.length+' environment · '+buildDifferences.length+' build'+\n"
+    "      (sameMetricSource?'':' · metric source')+'</summary><ul>'+\n"
     "      details.join('')+'</ul></details>':'Same configuration, environment and build';\n"
-    "    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+'</td><td><code>'+\n"
+    "    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+\n"
+    "      localVerificationBadge(item.result,item.parameters,item.verification)+'</td><td>'+esc(metricView.source)+\n"
+    "      '</td><td><code>'+\n"
     "      esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+\n"
     "      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+\n"
     "      '<td>'+esc(metricLabel(metrics.throughput??'—'))+' '+localComparisonDelta(metrics.throughput,baselineMetrics.throughput,false,compatible)+'</td>'+\n"
@@ -1139,9 +1183,9 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '  }).join(\'\');\n'
     "  container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline <select id=local-comparison-baseline>'+\n"
     "    entries.map(item=>'<option value=\"'+esc(localComparisonKey(item))+'\" '+(item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+\n"
-    "    '<p class=muted>Deltas compare selected search results. Expand configuration differences before interpreting a regression.</p>'+\n"
+    "    '<p class=muted>Deltas compare metrics only when both rows use the same source: search or independent holdout. Expand configuration differences before interpreting a regression.</p>'+\n"
     "    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+\n"
-    "    '<th>ydbd</th><th>Selected load</th><th>Throughput</th><th>'+esc(percentile)+'</th><th>Errors</th>'+\n"
+    "    '<th>Metric source</th><th>ydbd</th><th>Selected load</th><th>Throughput</th><th>'+esc(percentile)+'</th><th>Errors</th>'+\n"
     "    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+\n"
     "    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+\n"
     "    '<div id=local-comparison-curves></div>';\n"
@@ -1158,6 +1202,9 @@ const localPhaseLabels={
   'bootstrapping-cluster':'Bootstrapping cluster','creating-database':'Creating database','starting-dynamic-nodes':'Starting dynamic nodes',
   'waiting-for-database':'Waiting for database','cluster-ready':'Cluster ready','initializing-workload':'Initializing workload',
   'warming-up':'Warming up','measuring':'Measuring','cleaning-workload':'Cleaning workload','evaluating-attempt':'Evaluating attempt',
+  'verification-initializing':'Preparing verification workload','verification-warmup':'Warming up verification',
+  'verification-measuring':'Measuring verification','verification-cleanup':'Cleaning verification workload',
+  'verification-evaluating':'Evaluating verification','verification-completed':'Verification completed',
   'scaling-dynamic-nodes':'Scaling dynamic nodes','stopping-cluster':'Stopping cluster','finishing':'Writing results',
   completed:'Completed',failed:'Failed',cancelled:'Cancelled'
 };
@@ -1187,6 +1234,51 @@ function localProfileDetails(data,open){
     '><summary><strong>Launch parameters</strong> <span class=muted>Normalized profile and effective CPU affinity; '+
     'exact commands are listed per attempt.</span></summary><pre><code>'+esc(JSON.stringify(configuration,null,2))+
     '</code></pre></details>'
+}
+function localVerificationSummary(data){
+  const result=data.result||{},view=localResultMetrics(result);
+  const verification=data.verification||{},repetitions=localVerificationCount(
+    result,data.parameters,verification
+  );
+  if(!view.verified){
+    if(verification.status==='running'||verification.status==='pending'){
+      return '<div class=notice><strong>Verification in progress.</strong> '+
+        esc(verification.completed_repetitions??0)+'/'+esc(repetitions)+
+        ' independent repetitions completed; KPIs still show the search measurement.</div>'
+    }
+    if(verification.status==='skipped'){
+      return '<div class=notice><strong>Search measurement only.</strong> Verification was skipped: '+
+        esc(verification.reason||'no feasible load was selected')+'.</div>'
+    }
+    if(verification.status==='failed'||verification.status==='cancelled'){
+      return '<div class="notice error"><strong>Verification '+esc(verification.status)+'.</strong> '+
+        esc(verification.error||'The independent holdout did not complete')+
+        '. KPIs remain based on the search measurement.</div>'
+    }
+    return '<div class=notice><strong>Search measurement only.</strong> Configure verification repetitions to '+
+      'publish independent holdout metrics.</div>'
+  }
+  const detail=repetitions?
+    repetitions+' independent holdout repetition'+(Number(repetitions)===1?'':'s'):
+    'Independent holdout measurements';
+  const outcomes=[];
+  if(verification.decision){
+    outcomes.push((verification.evaluation_kind==='objective'?'Objective':'Validity check')+': '+verification.decision)
+  }
+  if(verification.throughput_delta_percent!==null&&verification.throughput_delta_percent!==undefined&&
+      Number.isFinite(Number(verification.throughput_delta_percent)))outcomes.push(
+    (Number(verification.throughput_delta_percent)>0?'+':'')+
+      Number(verification.throughput_delta_percent).toFixed(1)+'% throughput vs search'
+  );
+  if(verification.saturated_repetitions!==undefined)outcomes.push(
+    verification.saturated_repetitions+'/'+repetitions+' CPU-saturated'
+  );
+  const failed=(result.holdout_accepted??verification.accepted)===false;
+  return '<div class="verification-summary '+(failed?'bad':'')+'">'+localVerificationBadge(
+    result,data.parameters,verification
+  )+' <strong>Reported metrics come from the independent holdout.</strong> '+esc(detail)+
+    ' at the selected load.'+(outcomes.length?' '+esc(outcomes.join(' · '))+'.':'')+
+    ' Search measurements remain available in the attempt history.</div>'
 }
 function localElapsed(started,finished=null){
   const value=Date.parse(started),end=finished?Date.parse(finished):Date.now();
@@ -1282,10 +1374,11 @@ function renderLocalYdbProfile(container,data){
       '</code></pre></section>'
   }
   if(result){
-    const selected=result.selected_metrics||{};
+    const selected=localResultMetrics(result).metrics;
     const latencyMetric=(loadConfig.objective?.percentile||'p99')+'_ms';
     const selectedLabel=result.selected_load===null||result.selected_load===undefined?
       '—':metricLabel(result.selected_load);
+    html+=localVerificationSummary(data);
     html+='<div class=local-kpis>'+localKpi(
       localOutcomeLabel(result.outcome),selectedLabel,result.parameter||loadConfig.parameter,true
     )+localKpi('Achieved throughput',metricLabel(selected.throughput??'—'),'transactions/s')+
@@ -2601,6 +2694,7 @@ class RunService:
             "progress",
             "attempts",
             "searches",
+            "verification",
             "result",
             "error",
         )
@@ -2636,7 +2730,10 @@ class RunService:
             )
             client = project(value.get("client"), ("threads",))
             load = project(value.get("load"), ("parameter", "allow_errors", "values", "search", "objective"))
-            measurement = project(value.get("measurement"), ("warmup", "duration", "repetitions"))
+            measurement = project(
+                value.get("measurement"),
+                ("warmup", "duration", "repetitions", "verification_repetitions"),
+            )
             affinity = project(value.get("affinity"), ("ydb_cli", "static_nodes", "dynamic_nodes"))
             return {
                 name: item
@@ -2719,6 +2816,28 @@ class RunService:
                     "binaries": project_binaries(value.get("binaries")),
                     "platform": project_platform(value.get("platform")),
                     "cpu_topology": project_topology(value.get("cpu_topology")),
+                    "verification": project(
+                        value.get("verification"),
+                        (
+                            "status",
+                            "state",
+                            "started_at",
+                            "finished_at",
+                            "load",
+                            "dynamic_nodes",
+                            "configured_repetitions",
+                            "completed_repetitions",
+                            "accepted",
+                            "evaluation_kind",
+                            "decision",
+                            "outcome",
+                            "reason",
+                            "duration_seconds",
+                            "throughput_delta_percent",
+                            "saturated_repetitions",
+                            "error",
+                        ),
+                    ),
                 }
                 entry.update({name: item for name, item in projections.items() if item})
                 result = value.get("result")
@@ -2734,6 +2853,9 @@ class RunService:
                         "passing_load",
                         "failing_load",
                         "stop_reason",
+                        "metrics_source",
+                        "verification_repetitions",
+                        "holdout_accepted",
                     )
                     compact_result = {name: result[name] for name in result_fields if name in result}
                     metrics = result.get("selected_metrics")
@@ -2742,6 +2864,13 @@ class RunService:
                         metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated"))
                         compact_result["selected_metrics"] = {
                             name: metrics[name] for name in metric_names if name in metrics
+                        }
+                    verified_metrics = result.get("verified_metrics")
+                    if isinstance(verified_metrics, dict):
+                        metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
+                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated"))
+                        compact_result["verified_metrics"] = {
+                            name: verified_metrics[name] for name in metric_names if name in verified_metrics
                         }
                     entry["result"] = compact_result
                 try:

@@ -15,7 +15,7 @@ The tool provides four benchmarks:
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
 - `local-ydb`: a local static/dynamic YDB cluster driven by the `kv`, `stock`,
-  `log`, or `tpcc` YDB CLI workload.
+  `log`, `tpcc`, or `topic` YDB CLI workload.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -124,12 +124,13 @@ specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
 
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
-benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. The
-`kv` and `stock` workloads accept either parameter; `log` searches `threads`
-because its CLI does not expose `--rate`. Log throughput is the number of
-successful batches per second; `rows-per-operation` controls how many rows are
-written by each batch. Its default `ttl-minutes: 0` is a zero-minute table TTL,
-not disabled TTL. A `values` list measures exact points. For adaptive runs,
+benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. Topic
+also searches `rate`, but maps it to the Topic CLI's `--message-rate`. The `kv`
+and `stock` workloads accept either parameter; `log` searches `threads` because
+its CLI does not expose `--rate`. Log throughput is the number of successful
+batches per second; `rows-per-operation` controls how many rows are written by
+each batch. Its default `ttl-minutes: 0` is a zero-minute table TTL, not disabled
+TTL. A `values` list measures exact points. For adaptive runs,
 `search` defines the range and resolution. `maximize-throughput` uses a
 discrete ternary search and, after confirming a plateau, selects the lowest
 CPU-saturated load within the configured throughput tolerance of the best
@@ -174,8 +175,31 @@ inflight queue wait) of `latency-transaction`, with `p50`, `p90`, `p95`, `p99`,
 and `p999` available. See `examples/local-ydb-tpcc.yaml` for a small manual
 smoke configuration.
 
-Set `load.allow-errors: true` when request-level errors reported by
-`ydb workload` are an expected part of the experiment. Such points remain
+Topic supports the CLI `full` producer-and-consumer workload. Every sample
+creates a fresh generated topic, runs one inline warmup and measurement, and
+then drops that topic, so consumer offsets and unread backlog cannot leak into
+the next search or verification sample. `partitions`, `consumers`,
+`message-size`, and the `raw`, `gzip`, or `zstd` codec are configurable.
+`client.threads` defaults to 1 and is passed to both `--producer-threads` and
+`--consumer-threads`; with multiple consumers, each consumer receives that many
+reader threads. The CLI receives `--seconds` equal to warmup plus measurement
+duration, one-second reporting windows with UTC timestamps, and a fixed p99
+percentile. CPU aggregation is anchored to the CLI timestamps at windows
+`warmup + 1` and `warmup + duration`; this excludes topic/session startup and
+the first measurement interval from the approximate CPU window.
+
+Canonical Topic throughput is the smaller of the write rate and the aggregate
+read rate divided by `consumers`. The raw aggregate read rate and normalized
+per-consumer rate remain separate result metrics. Latency SLOs therefore expose
+only `p99`, backed by the CLI's full end-to-end p99 latency. The CLI output does
+not contain a trustworthy request-error count, so Topic requires
+`allow-errors: false` and `max-errors: 0`; a zero-throughput sample is still
+ineligible. Measurement duration must be at least two seconds. See
+`examples/local-ydb-topic.yaml` for a small manual smoke configuration.
+
+For workloads which report an `errors` metric, set `load.allow-errors: true`
+when request-level errors reported by `ydb workload` are an expected part of
+the experiment. Such points remain
 eligible for selection and the error counts stay in CSV, manifests, tables,
 and charts, provided every repetition completed at least one successful
 operation. A repetition with zero successful operations makes the whole point

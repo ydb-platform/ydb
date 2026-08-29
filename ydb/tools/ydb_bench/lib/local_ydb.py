@@ -4,11 +4,13 @@ import csv
 import errno
 import io
 import itertools
+import math
 import os
 import socket
 import statistics
 import sys
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,9 +30,10 @@ from ydb.tools.ydb_bench.lib.linux_telemetry import LinuxCpuMonitor
 from ydb.tools.ydb_bench.lib.load_control import evaluate_load, search_load
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     WorkloadCli,
-    build_clean_argv,
-    build_init_argv,
-    build_run_argv,
+    build_cleanup_plan,
+    build_prepare_plan,
+    build_run_plan,
+    workload_definition,
 )
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
 from ydb.tools.ydb_bench.lib.runner import run_command, start_managed_process
@@ -334,8 +337,9 @@ class LocalYdbCluster:
         if self.cancel_event is not None and self.cancel_event.is_set():
             raise BenchmarkInterrupted("local YDB benchmark was cancelled")
 
-    def _run(self, command, timeout=None, cpu_affinity=None):
-        self._check_cancelled()
+    def _run(self, command, timeout=None, cpu_affinity=None, ignore_cancellation=False):
+        if not ignore_cancellation:
+            self._check_cancelled()
         self.ensure_running("cannot run YDB CLI command")
         result = run_command(
             command,
@@ -343,7 +347,7 @@ class LocalYdbCluster:
             timeout or self.timeout,
             work_dir_hint=self.directory,
             cpu_affinity=cpu_affinity,
-            cancel_event=self.cancel_event,
+            cancel_event=None if ignore_cancellation else self.cancel_event,
         )
         self.ensure_running("YDB process exited while running a CLI command")
         if result.interrupted:
@@ -757,12 +761,439 @@ def _role_capacity(mask, topology):
     return len(mask) if mask is not None else len(topology.allowed_cpus)
 
 
+def _is_finite_number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def _write_csv(path, rows, columns):
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)
     atomic_write_text(path, output.getvalue())
+
+
+@dataclass
+class _DatasetState:
+    directory: Path
+    table_path: str
+    purpose: str
+    repetition: object
+    fields: dict
+    commands: list = field(default_factory=list)
+    cleanup_armed: bool = False
+    cleaned: bool = False
+
+
+class WorkloadLifecycle:
+    """Execute workload datasets according to declarative lifecycle metadata."""
+
+    def __init__(
+        self,
+        cluster,
+        workload_cli,
+        workload,
+        load_config,
+        measurement,
+        client_threads,
+        benchmark,
+        topology,
+        affinities,
+        cancel_event,
+        progress,
+    ):
+        self.cluster = cluster
+        self.workload_cli = workload_cli
+        self.workload = workload
+        self.load_config = load_config
+        self.measurement = measurement
+        self.client_threads = client_threads
+        self.benchmark = benchmark
+        self.topology = topology
+        self.affinities = affinities
+        self.cancel_event = cancel_event
+        self.progress = progress
+        self.definition = workload_definition(workload["type"])
+        self._profile_opened = False
+        self._profile_closed = False
+        self._profile_state = None
+
+    @property
+    def profile_commands(self):
+        if self._profile_state is None:
+            return ()
+        return tuple(self._profile_state.commands)
+
+    def _check_cancelled(self):
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise BenchmarkInterrupted("local YDB benchmark was cancelled")
+
+    def _phases(self, purpose):
+        if purpose == "verification":
+            return {
+                "init": "verification-initializing",
+                "warmup": "verification-warmup",
+                "measure": "verification-measuring",
+                "clean": "verification-cleanup",
+            }
+        return {
+            "init": "initializing-workload",
+            "warmup": "warming-up",
+            "measure": "measuring",
+            "clean": "cleaning-workload",
+        }
+
+    def _prepare_phase(self, state, name):
+        if name == "init":
+            return self._phases(state.purpose)["init"]
+        prefix = "verification-" if state.purpose == "verification" else ""
+        return prefix + "preparing-" + name
+
+    def _cleanup_phase(self, state, name):
+        if name == "clean":
+            return self._phases(state.purpose)["clean"]
+        prefix = "verification-" if state.purpose == "verification" else ""
+        return prefix + "cleaning-" + name
+
+    def _write_profile_commands(self, state, cleanup_errors=None):
+        if self.definition.dataset_scope != "profile":
+            return
+        try:
+            atomic_write_json(state.directory / "commands.json", state.commands)
+        except BaseException as error:
+            if cleanup_errors is None:
+                raise
+            cleanup_errors.append(error)
+
+    @staticmethod
+    def _write_cleanup_error(path, error, cleanup_errors):
+        try:
+            atomic_write_text(path, str(error) + "\n")
+        except BaseException as artifact_error:
+            cleanup_errors.append(artifact_error)
+
+    def _prepare_dataset(self, state):
+        state.cleanup_armed = True
+        try:
+            plans = build_prepare_plan(self.workload_cli, state.table_path, self.workload)
+            for plan in plans:
+                phase = self._prepare_phase(state, plan.name)
+                self.progress(
+                    phase,
+                    **state.fields,
+                    current_command=_command_record(
+                        phase,
+                        state.repetition,
+                        plan.argv,
+                        self.affinities["ydb_cli"],
+                    ),
+                )
+                result, attempts = self.cluster.init_workload(plan.argv, timeout=plan.timeout_seconds)
+                state.commands.extend(
+                    _command_record(
+                        phase,
+                        state.repetition,
+                        attempt.command,
+                        self.affinities["ydb_cli"],
+                        attempt,
+                    )
+                    for attempt in attempts
+                )
+                atomic_write_text(state.directory / "{}.stdout.txt".format(plan.name), result.stdout)
+                atomic_write_text(state.directory / "{}.stderr.txt".format(plan.name), result.stderr)
+                atomic_write_json(
+                    state.directory / "{}-attempts.json".format(plan.name),
+                    [
+                        {
+                            "command": [str(part) for part in attempt.command],
+                            "exit_code": attempt.exit_code,
+                            "timed_out": attempt.timed_out,
+                            "duration_seconds": attempt.duration_seconds,
+                            "stdout": attempt.stdout,
+                            "stderr": attempt.stderr,
+                        }
+                        for attempt in attempts
+                    ],
+                )
+                self._write_profile_commands(state)
+        except BaseException as error:
+            try:
+                self._cleanup_dataset(state, primary_error=error)
+            except BaseException:
+                pass
+            raise
+
+    def _cleanup_dataset(self, state, primary_error=None):
+        if not state.cleanup_armed or state.cleaned:
+            return
+        state.cleaned = True
+        errors = []
+        try:
+            plans = build_cleanup_plan(self.workload_cli, state.table_path, self.workload)
+        except BaseException as error:
+            plans = ()
+            errors.append(error)
+            self._write_cleanup_error(state.directory / "clean.error.txt", error, errors)
+        for plan in plans:
+            phase = self._cleanup_phase(state, plan.name)
+            try:
+                self.progress(
+                    phase,
+                    **state.fields,
+                    current_command=_command_record(
+                        phase,
+                        state.repetition,
+                        plan.argv,
+                        self.affinities["ydb_cli"],
+                    ),
+                )
+            except BaseException as error:
+                errors.append(error)
+                self._write_cleanup_error(
+                    state.directory / "{}.progress.error.txt".format(plan.name),
+                    error,
+                    errors,
+                )
+            try:
+                result = self.cluster._run(
+                    plan.argv,
+                    timeout=plan.timeout_seconds,
+                    cpu_affinity=self.affinities["ydb_cli"],
+                    ignore_cancellation=True,
+                )
+            except BaseException as error:
+                errors.append(error)
+                self._write_cleanup_error(state.directory / "{}.error.txt".format(plan.name), error, errors)
+            else:
+                try:
+                    state.commands.append(
+                        _command_record(
+                            phase,
+                            state.repetition,
+                            result.command,
+                            self.affinities["ydb_cli"],
+                            result,
+                        )
+                    )
+                except BaseException as error:
+                    errors.append(error)
+                for suffix, value in (("stdout", result.stdout), ("stderr", result.stderr)):
+                    try:
+                        atomic_write_text(
+                            state.directory / "{}.{}.txt".format(plan.name, suffix),
+                            value,
+                        )
+                    except BaseException as error:
+                        errors.append(error)
+            finally:
+                self._write_profile_commands(state, errors)
+        if errors and primary_error is None:
+            control_flow_error = next(
+                (error for error in errors if isinstance(error, (BenchmarkInterrupted, KeyboardInterrupt))),
+                None,
+            )
+            if control_flow_error is not None:
+                raise control_flow_error
+            if len(errors) == 1 and isinstance(errors[0], BenchmarkError):
+                raise errors[0]
+            raise BenchmarkError("workload cleanup failed: {}".format("; ".join(map(str, errors))))
+
+    def open_profile(self, directory, table_path):
+        if self._profile_opened:
+            raise BenchmarkError("workload profile lifecycle is already open")
+        self._profile_opened = True
+        if self.definition.dataset_scope != "profile":
+            return
+        directory = Path(directory)
+        directory.mkdir(parents=True)
+        state = _DatasetState(
+            directory=directory,
+            table_path=table_path,
+            purpose="profile",
+            repetition=None,
+            fields={"profile_dataset": True},
+        )
+        self._profile_state = state
+        self._prepare_dataset(state)
+
+    def close_profile(self, primary_error=None):
+        if self._profile_closed:
+            return
+        self._profile_closed = True
+        if self._profile_state is not None:
+            self._cleanup_dataset(self._profile_state, primary_error=primary_error)
+        if primary_error is None:
+            self._check_cancelled()
+
+    def _run_workload(self, state, load, dynamic_nodes, repetition, commands):
+        phases = self._phases(state.purpose)
+        warmup = self.measurement["warmup"]
+        if warmup and self.definition.warmup_mode == "separate":
+            warmup_plan = build_run_plan(
+                self.workload_cli,
+                state.table_path,
+                self.workload,
+                self.load_config["parameter"],
+                load,
+                warmup,
+                self.client_threads,
+            )
+            self.progress(
+                phases["warmup"],
+                **state.fields,
+                phase_duration_seconds=warmup,
+                current_command=_command_record(
+                    phases["warmup"],
+                    repetition,
+                    warmup_plan.argv,
+                    self.affinities["ydb_cli"],
+                ),
+            )
+            result = self.cluster._run(
+                warmup_plan.argv,
+                timeout=warmup_plan.timeout_seconds,
+                cpu_affinity=self.affinities["ydb_cli"],
+            )
+            commands.append(
+                _command_record(
+                    phases["warmup"],
+                    repetition,
+                    result.command,
+                    self.affinities["ydb_cli"],
+                    result,
+                )
+            )
+            atomic_write_text(state.directory / "warmup.stdout.txt", result.stdout)
+            atomic_write_text(state.directory / "warmup.stderr.txt", result.stderr)
+
+        cli_pids = []
+        monitor = LinuxCpuMonitor(
+            {
+                "static": lambda: self.cluster.static_pids,
+                "dynamic": lambda: self.cluster.dynamic_pids,
+                "cli": lambda: tuple(cli_pids),
+            },
+            {
+                "static": _role_capacity(self.affinities["static_nodes"], self.topology),
+                "dynamic": _role_capacity(self.affinities["dynamic_nodes"], self.topology),
+                "cli": _role_capacity(self.affinities["ydb_cli"], self.topology),
+            },
+        )
+        monitor.start()
+        try:
+            plan = build_run_plan(
+                self.workload_cli,
+                state.table_path,
+                self.workload,
+                self.load_config["parameter"],
+                load,
+                self.measurement["duration"],
+                self.client_threads,
+                warmup_seconds=warmup if self.definition.warmup_mode == "inline" else 0,
+            )
+            self.cluster.ensure_running("cannot start workload measurement")
+            progress_fields = {
+                **state.fields,
+                "phase_duration_seconds": self.measurement["duration"]
+                + (warmup if self.definition.warmup_mode == "inline" else 0),
+                "current_command": _command_record(
+                    phases["measure"],
+                    repetition,
+                    plan.argv,
+                    self.affinities["ydb_cli"],
+                ),
+            }
+            if self.definition.warmup_mode == "inline":
+                progress_fields["inline_warmup_seconds"] = warmup
+            self.progress(phases["measure"], **progress_fields)
+            result = run_command(
+                plan.argv,
+                {},
+                plan.timeout_seconds,
+                cpu_affinity=self.affinities["ydb_cli"],
+                cancel_event=self.cancel_event,
+                on_process_started=lambda process: cli_pids.append(process.pid),
+            )
+        finally:
+            cpu = monitor.stop()
+        self.cluster.ensure_running("YDB process exited during workload measurement")
+        commands.append(
+            _command_record(
+                phases["measure"],
+                repetition,
+                result.command,
+                self.affinities["ydb_cli"],
+                result,
+            )
+        )
+        atomic_write_text(state.directory / "stdout.txt", result.stdout)
+        atomic_write_text(state.directory / "stderr.txt", result.stderr)
+        atomic_write_json(state.directory / "cpu-samples.json", list(monitor.records))
+        if result.interrupted:
+            raise BenchmarkInterrupted("YDB CLI workload was interrupted")
+        if result.timed_out or result.exit_code:
+            raise BenchmarkError(
+                "YDB CLI workload {}".format(
+                    "timed out" if result.timed_out else "exited with code {}".format(result.exit_code)
+                )
+            )
+        if plan.measurement_window_builder is not None:
+            window = plan.measurement_window_builder(result.stdout)
+            if (
+                not isinstance(window, tuple)
+                or len(window) != 2
+                or not all(_is_finite_number(value) for value in window)
+                or window[0] >= window[1]
+            ):
+                raise BenchmarkError("workload command returned an invalid CPU measurement window")
+            cpu = monitor.summary(started_at_unix=window[0], finished_at_unix=window[1])
+        metrics = {**self.benchmark.parse_metrics(result.stdout, self.benchmark)[0], **cpu}
+        metrics.update({"load": load, "dynamic_nodes": dynamic_nodes, "repetition": repetition})
+        return metrics
+
+    def run_sample(
+        self,
+        load,
+        dynamic_nodes,
+        repetition,
+        repetitions,
+        directory,
+        table_path,
+        progress_fields,
+        purpose="search",
+    ):
+        if not self._profile_opened or self._profile_closed:
+            raise BenchmarkError("workload profile lifecycle is not open")
+        self._check_cancelled()
+        directory = Path(directory)
+        directory.mkdir(parents=True)
+        fields = {**progress_fields, "repetition": repetition, "repetitions": repetitions}
+        commands = []
+        if self.definition.dataset_scope == "sample":
+            dataset = _DatasetState(directory, table_path, purpose, repetition, fields, commands)
+            self._prepare_dataset(dataset)
+        else:
+            dataset = self._profile_state
+            if dataset is None or dataset.cleaned:
+                raise BenchmarkError("profile-scoped workload dataset is unavailable")
+            dataset = _DatasetState(directory, dataset.table_path, purpose, repetition, fields)
+        run_error = None
+        try:
+            metrics = self._run_workload(dataset, load, dynamic_nodes, repetition, commands)
+            return metrics, commands
+        except BaseException as error:
+            run_error = error
+            raise
+        finally:
+            if self.definition.dataset_scope == "sample":
+                self._cleanup_dataset(dataset, primary_error=run_error)
+                if run_error is None:
+                    self._check_cancelled()
 
 
 def run_local_ydb(
@@ -870,229 +1301,36 @@ def run_local_ydb(
         cancel_event,
         publish_progress,
     )
-    workload_cli = None
-
-    def run_repetition(
-        load,
-        dynamic_nodes,
-        repetition,
-        repetitions,
-        directory,
-        table_path,
-        progress_fields,
-        purpose="search",
-    ):
-        if cancel_event is not None and cancel_event.is_set():
-            raise BenchmarkInterrupted("local YDB benchmark was cancelled")
-        phases = (
-            {
-                "init": "verification-initializing",
-                "warmup": "verification-warmup",
-                "measure": "verification-measuring",
-                "clean": "verification-cleanup",
-            }
-            if purpose == "verification"
-            else {
-                "init": "initializing-workload",
-                "warmup": "warming-up",
-                "measure": "measuring",
-                "clean": "cleaning-workload",
-            }
-        )
-        directory.mkdir(parents=True)
-        fields = {**progress_fields, "repetition": repetition, "repetitions": repetitions}
-        commands = []
-        init_command = build_init_argv(workload_cli, table_path, profile["workload"])
-        publish_progress(
-            phases["init"],
-            **fields,
-            current_command=_command_record(
-                phases["init"],
-                repetition,
-                init_command,
-                affinities["ydb_cli"],
-            ),
-        )
-        init, init_attempts = cluster.init_workload(init_command)
-        commands.extend(
-            _command_record(
-                phases["init"],
-                repetition,
-                init_attempt.command,
-                affinities["ydb_cli"],
-                init_attempt,
-            )
-            for init_attempt in init_attempts
-        )
-        atomic_write_text(directory / "init.stdout.txt", init.stdout)
-        atomic_write_text(directory / "init.stderr.txt", init.stderr)
-        atomic_write_json(
-            directory / "init-attempts.json",
-            [
-                {
-                    "command": [str(part) for part in attempt.command],
-                    "exit_code": attempt.exit_code,
-                    "timed_out": attempt.timed_out,
-                    "duration_seconds": attempt.duration_seconds,
-                    "stdout": attempt.stdout,
-                    "stderr": attempt.stderr,
-                }
-                for attempt in init_attempts
-            ],
-        )
-        run_error = None
-        try:
-            warmup = profile["measurement"]["warmup"]
-            if warmup:
-                warmup_command = build_run_argv(
-                    workload_cli,
-                    table_path,
-                    profile["workload"],
-                    profile["load"]["parameter"],
-                    load,
-                    warmup,
-                    profile["client"]["threads"],
-                )
-                publish_progress(
-                    phases["warmup"],
-                    **fields,
-                    phase_duration_seconds=warmup,
-                    current_command=_command_record(
-                        phases["warmup"],
-                        repetition,
-                        warmup_command,
-                        affinities["ydb_cli"],
-                    ),
-                )
-                result = cluster._run(
-                    warmup_command,
-                    timeout=warmup + 30,
-                    cpu_affinity=affinities["ydb_cli"],
-                )
-                commands.append(
-                    _command_record(
-                        phases["warmup"],
-                        repetition,
-                        result.command,
-                        affinities["ydb_cli"],
-                        result,
-                    )
-                )
-                atomic_write_text(directory / "warmup.stdout.txt", result.stdout)
-                atomic_write_text(directory / "warmup.stderr.txt", result.stderr)
-
-            cli_pids = []
-            monitor = LinuxCpuMonitor(
-                {
-                    "static": lambda: cluster.static_pids,
-                    "dynamic": lambda: cluster.dynamic_pids,
-                    "cli": lambda: tuple(cli_pids),
-                },
-                {
-                    "static": _role_capacity(affinities["static_nodes"], topology),
-                    "dynamic": _role_capacity(affinities["dynamic_nodes"], topology),
-                    "cli": _role_capacity(affinities["ydb_cli"], topology),
-                },
-            )
-            monitor.start()
-            try:
-                command = build_run_argv(
-                    workload_cli,
-                    table_path,
-                    profile["workload"],
-                    profile["load"]["parameter"],
-                    load,
-                    profile["measurement"]["duration"],
-                    profile["client"]["threads"],
-                )
-                cluster.ensure_running("cannot start workload measurement")
-                publish_progress(
-                    phases["measure"],
-                    **fields,
-                    phase_duration_seconds=profile["measurement"]["duration"],
-                    current_command=_command_record(
-                        phases["measure"],
-                        repetition,
-                        command,
-                        affinities["ydb_cli"],
-                    ),
-                )
-                result = run_command(
-                    command,
-                    {},
-                    profile["measurement"]["duration"] + 30,
-                    cpu_affinity=affinities["ydb_cli"],
-                    cancel_event=cancel_event,
-                    on_process_started=lambda process: cli_pids.append(process.pid),
-                )
-            finally:
-                cpu = monitor.stop()
-            cluster.ensure_running("YDB process exited during workload measurement")
-            commands.append(
-                _command_record(
-                    phases["measure"],
-                    repetition,
-                    result.command,
-                    affinities["ydb_cli"],
-                    result,
-                )
-            )
-            atomic_write_text(directory / "stdout.txt", result.stdout)
-            atomic_write_text(directory / "stderr.txt", result.stderr)
-            atomic_write_json(directory / "cpu-samples.json", list(monitor.records))
-            if result.interrupted:
-                raise BenchmarkInterrupted("YDB CLI workload was interrupted")
-            if result.timed_out or result.exit_code:
-                raise BenchmarkError(
-                    "YDB CLI workload {}".format(
-                        "timed out" if result.timed_out else "exited with code {}".format(result.exit_code)
-                    )
-                )
-            metrics = {**benchmark.parse_metrics(result.stdout, benchmark)[0], **cpu}
-            metrics.update({"load": load, "dynamic_nodes": dynamic_nodes, "repetition": repetition})
-            return metrics, commands
-        except BaseException as error:
-            run_error = error
-            raise
-        finally:
-            try:
-                clean_command = build_clean_argv(
-                    workload_cli,
-                    table_path,
-                    profile["workload"]["type"],
-                )
-                publish_progress(
-                    phases["clean"],
-                    **fields,
-                    current_command=_command_record(
-                        phases["clean"],
-                        repetition,
-                        clean_command,
-                        affinities["ydb_cli"],
-                    ),
-                )
-                clean = cluster._run(clean_command, cpu_affinity=affinities["ydb_cli"])
-                commands.append(
-                    _command_record(
-                        phases["clean"],
-                        repetition,
-                        clean.command,
-                        affinities["ydb_cli"],
-                        clean,
-                    )
-                )
-                atomic_write_text(directory / "clean.stdout.txt", clean.stdout)
-                atomic_write_text(directory / "clean.stderr.txt", clean.stderr)
-            except BenchmarkError as error:
-                atomic_write_text(directory / "clean.error.txt", str(error) + "\n")
-                if run_error is None:
-                    raise
-
     repetition_rows = []
     cluster_stopped = False
+    lifecycle = None
+
+    def close_lifecycle(primary_error=None):
+        if lifecycle is None:
+            return
+        try:
+            lifecycle.close_profile(primary_error=primary_error)
+        except BaseException:
+            if primary_error is None:
+                raise
+
     try:
         cluster.start()
         workload_cli = WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database)
+        lifecycle = WorkloadLifecycle(
+            cluster,
+            workload_cli,
+            profile["workload"],
+            profile["load"],
+            profile["measurement"],
+            profile["client"]["threads"],
+            benchmark,
+            topology,
+            affinities,
+            cancel_event,
+            publish_progress,
+        )
+        lifecycle.open_profile(output_directory / "workload", "ydb_bench_profile")
         while True:
             dynamic_nodes = len(cluster.dynamic_nodes)
             search_stage = len(manifest["searches"]) + 1
@@ -1111,7 +1349,7 @@ def run_local_ydb(
                 for repetition in range(1, repetitions + 1):
                     directory = geometry_directory / "load-{:08d}".format(load) / "repeat-{:03d}".format(repetition)
                     table_path = "ydb_bench_{}_{}_{}".format(dynamic_nodes, load, repetition)
-                    metrics, repetition_commands = run_repetition(
+                    metrics, repetition_commands = lifecycle.run_sample(
                         load,
                         dynamic_nodes,
                         repetition,
@@ -1267,7 +1505,7 @@ def run_local_ydb(
                 for repetition in range(1, verification_repetitions + 1):
                     directory = output_directory / "verification" / "repeat-{:03d}".format(repetition)
                     table_path = "ydb_bench_verify_{}_{}_{}".format(dynamic_nodes, selected_load, repetition)
-                    metrics, commands = run_repetition(
+                    metrics, commands = lifecycle.run_sample(
                         selected_load,
                         dynamic_nodes,
                         repetition,
@@ -1381,6 +1619,7 @@ def run_local_ydb(
                 verification=verification,
             )
 
+        close_lifecycle()
         publish_progress("stopping-cluster", result=compact_result_progress())
         cluster.stop()
         cluster_stopped = True
@@ -1423,6 +1662,7 @@ def run_local_ydb(
         write_manifest(manifest_path, manifest)
         return manifest
     except (BenchmarkInterrupted, KeyboardInterrupt) as error:
+        close_lifecycle(primary_error=error)
         interruption = (
             error
             if isinstance(error, BenchmarkInterrupted)
@@ -1450,7 +1690,8 @@ def run_local_ydb(
         if interruption is error:
             raise
         raise interruption from error
-    except BenchmarkError as error:
+    except Exception as error:
+        close_lifecycle(primary_error=error)
         manifest.update({"status": "failed", "state": "failed", "finished_at": _utc_now(), "error": str(error)})
         publish_progress("failed", error=str(error))
         write_manifest(manifest_path, manifest)
@@ -1465,5 +1706,8 @@ def run_local_ydb(
             )
         raise
     finally:
-        if not cluster_stopped:
-            cluster.stop()
+        try:
+            close_lifecycle(primary_error=sys.exc_info()[1])
+        finally:
+            if not cluster_stopped:
+                cluster.stop()

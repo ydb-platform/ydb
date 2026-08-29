@@ -115,7 +115,14 @@ class YdbBenchTest(unittest.TestCase):
             timeout_seconds=timeout,
         )
 
-    def _run_mock_local_ydb(self, configuration, output_name, measurements):
+    def _run_mock_local_ydb(
+        self,
+        configuration,
+        output_name,
+        measurements,
+        cancel_event=None,
+        cleanup_action=None,
+    ):
         def command_result(command, stdout="", exit_code=0, stderr="", interrupted=False, timed_out=False):
             return runner.CommandResult(
                 command=tuple(str(part) for part in command),
@@ -149,11 +156,17 @@ class YdbBenchTest(unittest.TestCase):
             static_pids=(10,),
             dynamic_pids=(20,),
         )
-        cluster.init_workload.side_effect = lambda command: (
+        cluster.init_workload.side_effect = lambda command, **_kwargs: (
             command_result(command),
             [command_result(command)],
         )
-        cluster._run.side_effect = lambda command, **_kwargs: command_result(command)
+
+        def run_cluster_command(command, **_kwargs):
+            if cleanup_action is not None and "clean" in command:
+                cleanup_action()
+            return command_result(command)
+
+        cluster._run.side_effect = run_cluster_command
         monitor = mock.Mock(records=[])
         monitor.start.return_value = monitor
         monitor.stop.return_value = {
@@ -165,6 +178,16 @@ class YdbBenchTest(unittest.TestCase):
             "cli_cpu_max": 6,
             "host_cpu_mean": 7,
             "host_cpu_max": 8,
+        }
+        monitor.summary.return_value = {
+            "static_cpu_mean": 11,
+            "static_cpu_max": 12,
+            "dynamic_cpu_mean": 13,
+            "dynamic_cpu_max": 14,
+            "cli_cpu_mean": 15,
+            "cli_cpu_max": 16,
+            "host_cpu_mean": 17,
+            "host_cpu_max": 18,
         }
         outputs = iter(measurements)
 
@@ -211,8 +234,110 @@ class YdbBenchTest(unittest.TestCase):
                 output,
                 tool_revision="test",
                 event_sink=events.append,
+                cancel_event=cancel_event,
             )
         return manifest, output, events
+
+    @staticmethod
+    def _local_ydb_command_result(command, stdout="", exit_code=0, interrupted=False):
+        return runner.CommandResult(
+            command=tuple(str(part) for part in command),
+            stdout=stdout,
+            stderr="",
+            exit_code=exit_code,
+            started_at="2026-08-25T10:00:00+00:00",
+            finished_at="2026-08-25T10:00:01+00:00",
+            duration_seconds=1.0,
+            interrupted=interrupted,
+        )
+
+    @staticmethod
+    def _synthetic_profile_workload(cleanup_names=("clean",), measurement_window=(101.0, 109.0)):
+        def prepare(cli_context, _definition, path, _workload):
+            return (
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "init",
+                    (cli_context.executable, "synthetic", "init", path),
+                    10,
+                ),
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "import",
+                    (cli_context.executable, "synthetic", "import", path),
+                    20,
+                ),
+            )
+
+        def run(cli_context, _definition, path, _workload, _parameter, load, seconds, threads, warmup):
+            return local_ydb_workloads.WorkloadCommandPlan(
+                "run",
+                (
+                    cli_context.executable,
+                    "synthetic",
+                    "run",
+                    path,
+                    "--load",
+                    load,
+                    "--seconds",
+                    seconds,
+                    "--threads",
+                    threads,
+                    "--warmup",
+                    warmup,
+                ),
+                warmup + seconds + 30,
+                measurement_window_builder=lambda _stdout: measurement_window,
+            )
+
+        def cleanup(cli_context, _definition, path, _workload):
+            return tuple(
+                local_ydb_workloads.WorkloadCommandPlan(
+                    name,
+                    (cli_context.executable, "synthetic", name, path),
+                    5,
+                )
+                for name in cleanup_names
+            )
+
+        definition = local_ydb_workloads.WorkloadDefinition(
+            name="synthetic",
+            default_operation="run",
+            operations=("run",),
+            load_parameters=("sessions",),
+            options=(),
+            uses_path=True,
+            table_name=None,
+            init_builder=lambda *_args: (),
+            run_builder=lambda *_args: (),
+            options_validator=lambda *_args: None,
+            dataset_scope="profile",
+            warmup_mode="inline",
+            prepare_plan_builder=prepare,
+            run_plan_builder=run,
+            cleanup_plan_builder=cleanup,
+        )
+        return definition, {"type": "synthetic", "operation": "run", "options": {}}
+
+    @staticmethod
+    def _synthetic_workload_lifecycle(workload, cluster, progress, cancel_event=None):
+        topology = CpuTopology(
+            allowed_cpus=(0,),
+            numa_nodes=((0, (0,)),),
+            chiplets=(),
+            physical_cores=((0,),),
+        )
+        return local_ydb.WorkloadLifecycle(
+            cluster,
+            local_ydb_workloads.WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database),
+            workload,
+            {"parameter": "sessions"},
+            {"warmup": 5, "duration": 10},
+            4,
+            LOCAL_YDB_BENCHMARK,
+            topology,
+            {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+            cancel_event,
+            lambda phase, **fields: progress.append({"phase": phase, **fields}),
+        )
 
     def _worker_metrics_benchmark(self):
         return replace(
@@ -502,6 +627,617 @@ class YdbBenchTest(unittest.TestCase):
             local_ydb_workloads.build_clean_argv(cli_context, "table-prefix", "kv"),
             base + ["clean"],
         )
+        prepare = local_ydb_workloads.build_prepare_plan(cli_context, "table-prefix", workload)
+        run = local_ydb_workloads.build_run_plan(
+            cli_context,
+            "table-prefix",
+            workload,
+            "rate",
+            250,
+            30,
+            64,
+        )
+        cleanup = local_ydb_workloads.build_cleanup_plan(cli_context, "table-prefix", workload)
+        self.assertEqual(
+            prepare,
+            (
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "init",
+                    tuple(
+                        base
+                        + [
+                            "init",
+                            "--init-upserts",
+                            1000,
+                            "--min-partitions",
+                            40,
+                            "--max-partitions",
+                            1000,
+                            "--partition-size",
+                            2000,
+                            "--max-first-key",
+                            65536,
+                            "--len",
+                            64,
+                            "--cols",
+                            2,
+                            "--int-cols",
+                            1,
+                            "--key-cols",
+                            1,
+                            "--rows",
+                            1,
+                        ]
+                    ),
+                    120,
+                ),
+            ),
+        )
+        self.assertEqual(
+            run.argv,
+            tuple(
+                local_ydb_workloads.build_run_argv(
+                    cli_context,
+                    "table-prefix",
+                    workload,
+                    "rate",
+                    250,
+                    30,
+                    64,
+                )
+            ),
+        )
+        self.assertEqual(run.timeout_seconds, 60)
+        self.assertEqual(cleanup[0].argv, tuple(base + ["clean"]))
+        self.assertIsNone(cleanup[0].timeout_seconds)
+
+    def test_local_ydb_workload_registry_validates_lifecycle_metadata_and_plans(self):
+        definition = local_ydb_workloads.WorkloadDefinition(
+            name="inline",
+            default_operation="run",
+            operations=("run",),
+            load_parameters=("sessions",),
+            options=(),
+            uses_path=True,
+            table_name=None,
+            init_builder=lambda *_args: (),
+            run_builder=lambda *_args: (),
+            options_validator=lambda *_args: None,
+            dataset_scope="profile",
+            warmup_mode="inline",
+            run_plan_builder=lambda *_args: local_ydb_workloads.WorkloadCommandPlan("run", ("ydb",), 1),
+        )
+        local_ydb_workloads._validate_catalog((definition,))
+        with self.assertRaisesRegex(ValueError, "dataset scope"):
+            local_ydb_workloads._validate_catalog((replace(definition, dataset_scope="attempt"),))
+        with self.assertRaisesRegex(ValueError, "inline warmup requires"):
+            local_ydb_workloads._validate_catalog((replace(definition, run_plan_builder=None),))
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"inline": definition}):
+            with self.assertRaisesRegex(BenchmarkError, "CPU measurement window"):
+                local_ydb_workloads.build_run_plan(
+                    local_ydb_workloads.WorkloadCli("ydb", "endpoint", "database"),
+                    "path",
+                    {"type": "inline", "operation": "run", "options": {}},
+                    "sessions",
+                    1,
+                    1,
+                    1,
+                    warmup_seconds=0,
+                )
+            with self.assertRaisesRegex(BenchmarkError, "non-empty argv"):
+                invalid = replace(
+                    definition,
+                    run_plan_builder=lambda *_args: local_ydb_workloads.WorkloadCommandPlan("run", (), 1),
+                )
+                with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"inline": invalid}):
+                    local_ydb_workloads.build_run_plan(
+                        local_ydb_workloads.WorkloadCli("ydb", "endpoint", "database"),
+                        "path",
+                        {"type": "inline", "operation": "run", "options": {}},
+                        "sessions",
+                        1,
+                        1,
+                        1,
+                        warmup_seconds=1,
+                    )
+            for timeout in (float("nan"), float("inf"), True, 10**1000):
+                nonfinite = replace(
+                    definition,
+                    run_plan_builder=lambda *_args, timeout=timeout: local_ydb_workloads.WorkloadCommandPlan(
+                        "run",
+                        ("ydb",),
+                        timeout,
+                    ),
+                )
+                with self.subTest(timeout=timeout), mock.patch.object(
+                    local_ydb_workloads,
+                    "_WORKLOADS",
+                    {"inline": nonfinite},
+                ), self.assertRaisesRegex(BenchmarkError, "positive timeout"):
+                    local_ydb_workloads.build_run_plan(
+                        local_ydb_workloads.WorkloadCli("ydb", "endpoint", "database"),
+                        "path",
+                        {"type": "inline", "operation": "run", "options": {}},
+                        "sessions",
+                        1,
+                        1,
+                        1,
+                        warmup_seconds=1,
+                    )
+
+    def test_local_ydb_profile_inline_lifecycle_prepares_once_and_cleans_once(self):
+        definition, workload = self._synthetic_profile_workload()
+        metrics_output = """
+            Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+            10 10 0 0 1 2 3 4
+        """
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {
+            "static_cpu_mean": 1,
+            "static_cpu_max": 2,
+            "dynamic_cpu_mean": 3,
+            "dynamic_cpu_max": 4,
+            "cli_cpu_mean": 5,
+            "cli_cpu_max": 6,
+            "host_cpu_mean": 7,
+            "host_cpu_max": 8,
+        }
+        monitor.summary.return_value = {
+            "static_cpu_mean": 11,
+            "static_cpu_max": 12,
+            "dynamic_cpu_mean": 13,
+            "dynamic_cpu_max": 14,
+            "cli_cpu_mean": 15,
+            "cli_cpu_max": 16,
+            "host_cpu_mean": 17,
+            "host_cpu_max": 18,
+        }
+        progress = []
+        profile_directory = self.root / "synthetic-profile"
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "LinuxCpuMonitor",
+            return_value=monitor,
+        ), mock.patch.object(
+            local_ydb,
+            "atomic_write_text",
+        ), mock.patch.object(
+            local_ydb,
+            "atomic_write_json",
+        ), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: self._local_ydb_command_result(command, metrics_output),
+        ) as execute:
+            lifecycle = self._synthetic_workload_lifecycle(
+                workload,
+                cluster,
+                progress,
+            )
+            lifecycle.open_profile(profile_directory, "tpcc-dataset")
+            first_metrics, first_commands = lifecycle.run_sample(
+                8,
+                1,
+                1,
+                2,
+                self.root / "synthetic-repeat-1",
+                "ignored-1",
+                {"attempt": 1},
+            )
+            second_metrics, second_commands = lifecycle.run_sample(
+                16,
+                1,
+                2,
+                2,
+                self.root / "synthetic-repeat-2",
+                "ignored-2",
+                {"attempt": 2},
+            )
+            lifecycle.close_profile()
+            lifecycle.close_profile()
+
+        self.assertEqual(cluster.init_workload.call_count, 2)
+        self.assertEqual([call.args[0][2] for call in cluster.init_workload.call_args_list], ["init", "import"])
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(cluster._run.call_count, 1)
+        self.assertTrue(cluster._run.call_args.kwargs["ignore_cancellation"])
+        self.assertEqual(cluster._run.call_args.kwargs["timeout"], 5)
+        self.assertEqual(
+            [item["phase"] for item in progress],
+            [
+                "initializing-workload",
+                "preparing-import",
+                "measuring",
+                "measuring",
+                "cleaning-workload",
+            ],
+        )
+        self.assertNotIn("warming-up", [item["phase"] for item in progress])
+        self.assertEqual([len(first_commands), len(second_commands)], [1, 1])
+        self.assertEqual(first_metrics["static_cpu_mean"], 11)
+        self.assertEqual(second_metrics["load"], 16)
+        self.assertEqual(
+            monitor.summary.call_args_list,
+            [
+                mock.call(started_at_unix=101.0, finished_at_unix=109.0),
+                mock.call(started_at_unix=101.0, finished_at_unix=109.0),
+            ],
+        )
+        for call in execute.call_args_list:
+            argv = call.args[0]
+            self.assertEqual(argv[argv.index("--warmup") + 1], 5)
+            self.assertEqual(call.args[2], 45)
+        profile_commands = lifecycle.profile_commands
+        self.assertEqual([item["argv"][2] for item in profile_commands], ["init", "import", "clean"])
+
+    def test_local_ydb_profile_lifecycle_cleans_partial_prepare_without_masking_error(self):
+        definition, workload = self._synthetic_profile_workload()
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+        )
+        initialized = self._local_ydb_command_result(("ydb", "synthetic", "init"))
+        cluster.init_workload.side_effect = ((initialized, [initialized]), BenchmarkError("import failed"))
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        progress = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "atomic_write_text",
+        ), mock.patch.object(local_ydb, "atomic_write_json"):
+            lifecycle = self._synthetic_workload_lifecycle(
+                workload,
+                cluster,
+                progress,
+            )
+            with self.assertRaisesRegex(BenchmarkError, "import failed"):
+                lifecycle.open_profile(self.root / "partial-profile", "tpcc-dataset")
+            lifecycle.close_profile()
+
+        self.assertEqual(cluster.init_workload.call_count, 2)
+        self.assertEqual(cluster._run.call_count, 1)
+        self.assertTrue(cluster._run.call_args.kwargs["ignore_cancellation"])
+
+    def test_local_ydb_inline_lifecycle_rejects_huge_cpu_measurement_window(self):
+        definition, workload = self._synthetic_profile_workload(measurement_window=(10**1000, 10**1000 + 1))
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {}
+        progress = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "LinuxCpuMonitor",
+            return_value=monitor,
+        ), mock.patch.object(local_ydb, "atomic_write_text"), mock.patch.object(
+            local_ydb,
+            "atomic_write_json",
+        ), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: self._local_ydb_command_result(command),
+        ):
+            lifecycle = self._synthetic_workload_lifecycle(workload, cluster, progress)
+            lifecycle.open_profile(self.root / "huge-window-profile", "tpcc-dataset")
+            with self.assertRaisesRegex(BenchmarkError, "invalid CPU measurement window") as caught:
+                lifecycle.run_sample(
+                    8,
+                    1,
+                    1,
+                    1,
+                    self.root / "huge-window-repeat",
+                    "ignored",
+                    {},
+                )
+            lifecycle.close_profile(primary_error=caught.exception)
+
+        monitor.summary.assert_not_called()
+        self.assertEqual(cluster._run.call_count, 1)
+
+    def test_local_ydb_profile_lifecycle_preserves_run_error_when_cleanup_fails(self):
+        definition, workload = self._synthetic_profile_workload()
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = BenchmarkError("cleanup failed")
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {}
+        progress = []
+        failed_run = self._local_ydb_command_result(("ydb", "synthetic", "run"), exit_code=17)
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "LinuxCpuMonitor",
+            return_value=monitor,
+        ), mock.patch.object(local_ydb, "atomic_write_text") as write_text, mock.patch.object(
+            local_ydb,
+            "atomic_write_json",
+        ), mock.patch.object(
+            local_ydb, "run_command", return_value=failed_run
+        ):
+            lifecycle = self._synthetic_workload_lifecycle(
+                workload,
+                cluster,
+                progress,
+            )
+            lifecycle.open_profile(self.root / "run-error-profile", "tpcc-dataset")
+            with self.assertRaisesRegex(BenchmarkError, "exited with code 17") as caught:
+                lifecycle.run_sample(
+                    8,
+                    1,
+                    1,
+                    1,
+                    self.root / "run-error-repeat",
+                    "ignored",
+                    {},
+                )
+            lifecycle.close_profile(primary_error=caught.exception)
+
+        self.assertEqual(cluster._run.call_count, 1)
+        self.assertTrue(cluster._run.call_args.kwargs["ignore_cancellation"])
+        self.assertIn("clean.error.txt", [Path(call.args[0]).name for call in write_text.call_args_list])
+
+    def test_local_ydb_profile_lifecycle_attempts_all_cleanup_steps_and_only_cleanup_error_fails(self):
+        definition, workload = self._synthetic_profile_workload(("clean", "vacuum"))
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = (
+            OSError("clean failed"),
+            self._local_ydb_command_result(("ydb", "synthetic", "vacuum")),
+        )
+        progress = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "atomic_write_text",
+        ), mock.patch.object(local_ydb, "atomic_write_json"):
+            lifecycle = self._synthetic_workload_lifecycle(
+                workload,
+                cluster,
+                progress,
+            )
+            lifecycle.open_profile(self.root / "cleanup-error-profile", "tpcc-dataset")
+            with self.assertRaisesRegex(BenchmarkError, "clean failed"):
+                lifecycle.close_profile()
+            lifecycle.close_profile()
+
+        self.assertEqual(cluster._run.call_count, 2)
+        self.assertTrue(all(call.kwargs["ignore_cancellation"] for call in cluster._run.call_args_list))
+
+    def test_local_ydb_profile_lifecycle_runs_cleanup_when_progress_fails(self):
+        class FailingCleanupProgress(list):
+            def append(self, item):
+                if item["phase"].startswith("cleaning-"):
+                    raise OSError("cleanup progress failed")
+                super().append(item)
+
+        definition, workload = self._synthetic_profile_workload(("clean", "vacuum"))
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        progress = FailingCleanupProgress()
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "atomic_write_text",
+        ), mock.patch.object(local_ydb, "atomic_write_json"):
+            lifecycle = self._synthetic_workload_lifecycle(workload, cluster, progress)
+            lifecycle.open_profile(self.root / "cleanup-progress-error-profile", "tpcc-dataset")
+            with self.assertRaisesRegex(BenchmarkError, "cleanup progress failed"):
+                lifecycle.close_profile()
+
+        self.assertEqual(cluster._run.call_count, 2)
+        self.assertTrue(all(call.kwargs["ignore_cancellation"] for call in cluster._run.call_args_list))
+
+    def test_local_ydb_profile_lifecycle_cancellation_cleanup_ignores_cancel_event(self):
+        definition, workload = self._synthetic_profile_workload()
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {}
+        progress = []
+        interrupted = self._local_ydb_command_result(("ydb", "synthetic", "run"), interrupted=True)
+        cancel_event = threading.Event()
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "LinuxCpuMonitor",
+            return_value=monitor,
+        ), mock.patch.object(local_ydb, "atomic_write_text"), mock.patch.object(
+            local_ydb,
+            "atomic_write_json",
+        ), mock.patch.object(
+            local_ydb, "run_command", return_value=interrupted
+        ):
+            lifecycle = self._synthetic_workload_lifecycle(
+                workload,
+                cluster,
+                progress,
+                cancel_event,
+            )
+            lifecycle.open_profile(self.root / "cancel-profile", "tpcc-dataset")
+            with self.assertRaisesRegex(BenchmarkInterrupted, "was interrupted") as caught:
+                lifecycle.run_sample(
+                    8,
+                    1,
+                    1,
+                    1,
+                    self.root / "cancel-repeat",
+                    "ignored",
+                    {},
+                )
+            cancel_event.set()
+            lifecycle.close_profile(primary_error=caught.exception)
+
+        self.assertEqual(cluster._run.call_count, 1)
+        self.assertTrue(cluster._run.call_args.kwargs["ignore_cancellation"])
+
+    def test_local_ydb_profile_lifecycle_cleanup_artifact_failures_do_not_mask_primary(self):
+        definition, workload = self._synthetic_profile_workload(("clean", "vacuum"))
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        progress = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "atomic_write_text",
+        ) as write_text, mock.patch.object(local_ydb, "atomic_write_json") as write_json:
+            lifecycle = self._synthetic_workload_lifecycle(
+                workload,
+                cluster,
+                progress,
+            )
+            lifecycle.open_profile(self.root / "artifact-error-profile", "tpcc-dataset")
+            primary = BenchmarkInterrupted("cancelled")
+            write_text.side_effect = OSError("text write failed")
+            write_json.side_effect = OSError("json write failed")
+            lifecycle.close_profile(primary_error=primary)
+
+        self.assertEqual(cluster._run.call_count, 2)
+        self.assertTrue(all(call.kwargs["ignore_cancellation"] for call in cluster._run.call_args_list))
+
+    def test_local_ydb_unexpected_profile_error_cleans_before_terminal_failure(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              unexpected-failure:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        definition = replace(local_ydb_workloads.workload_definition("kv"), dataset_scope="profile")
+
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            with self.assertRaisesRegex(OSError, "measurement failed"):
+                self._run_mock_local_ydb(
+                    configuration,
+                    "unexpected-profile-error",
+                    [OSError("measurement failed")],
+                )
+
+        manifest = json.loads((self.root / "unexpected-profile-error" / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "failed")
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["progress"]["phase"], "failed")
+        self.assertEqual(self.last_local_ydb_cluster._run.call_count, 1)
+        cleanup = self.last_local_ydb_cluster._run.call_args
+        self.assertIn("clean", cleanup.args[0])
+        self.assertTrue(cleanup.kwargs["ignore_cancellation"])
+        self.last_local_ydb_cluster.stop.assert_called_once_with()
+
+    def test_local_ydb_cancelled_during_cleanup_never_publishes_success(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              cleanup-cancellation:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: rate, values: [10]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        cancel_event = threading.Event()
+
+        with self.assertRaisesRegex(BenchmarkInterrupted, "was cancelled"):
+            self._run_mock_local_ydb(
+                configuration,
+                "cleanup-cancellation",
+                [{"throughput": 10}],
+                cancel_event=cancel_event,
+                cleanup_action=cancel_event.set,
+            )
+
+        manifest = json.loads((self.root / "cleanup-cancellation" / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "interrupted")
+        self.assertEqual(manifest["state"], "cancelled")
+        self.assertEqual(manifest["progress"]["phase"], "cancelled")
+        self.assertEqual(self.last_local_ydb_cluster._run.call_count, 1)
+        self.assertTrue(self.last_local_ydb_cluster._run.call_args.kwargs["ignore_cancellation"])
+        self.last_local_ydb_cluster.stop.assert_called_once_with()
+
+    def test_local_ydb_cleanup_plan_uses_cluster_configuration_timeout(self):
+        cluster = local_ydb.LocalYdbCluster(
+            self.root / "ydbd",
+            self.root / "ydb",
+            self.root / "process_guard",
+            self.root / "cluster-timeout",
+            {"static_nodes": 1, "dynamic_nodes": 1},
+            {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+            73,
+        )
+        cli_context = local_ydb_workloads.WorkloadCli(cluster.ydb_cli, "grpc://host:2135", cluster.database)
+        plan = local_ydb_workloads.build_cleanup_plan(
+            cli_context,
+            "table-prefix",
+            {"type": "kv"},
+        )[0]
+        result = self._local_ydb_command_result(plan.argv)
+        with mock.patch.object(local_ydb, "run_command", return_value=result) as execute:
+            cluster._run(plan.argv, timeout=plan.timeout_seconds, ignore_cancellation=True)
+
+        self.assertIsNone(plan.timeout_seconds)
+        self.assertEqual(execute.call_args.args[2], 73)
 
     def test_local_ydb_cli_total_row_is_parsed_in_milliseconds(self):
         metrics = parse_cli_metrics("""
@@ -858,7 +1594,7 @@ class YdbBenchTest(unittest.TestCase):
             static_pids=(10,),
             dynamic_pids=(20,),
         )
-        cluster.init_workload.side_effect = lambda command: (
+        cluster.init_workload.side_effect = lambda command, **_kwargs: (
             command_result(command),
             [command_result(command)],
         )
@@ -1444,6 +2180,41 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(summary["dynamic_cpu_max"], 30.0)
         self.assertAlmostEqual(summary["host_cpu_mean"], (10 + 60 + 1) / 2.01)
         self.assertEqual(summary["host_cpu_max"], 40.0)
+
+    def test_linux_cpu_summary_filters_complete_intervals_inside_measurement_window(self):
+        monitor = linux_telemetry.LinuxCpuMonitor({"dynamic": lambda: ()}, {"dynamic": 1}, interval=0.5)
+        monitor._records = [
+            {"elapsed_seconds": 1.0, "timestamp_unix": 101.0, "dynamic_cpu": 10.0, "host_cpu": 15.0},
+            {"elapsed_seconds": 1.0, "timestamp_unix": 102.0, "dynamic_cpu": 20.0, "host_cpu": 25.0},
+            {"elapsed_seconds": 1.0, "timestamp_unix": 103.0, "dynamic_cpu": 30.0, "host_cpu": 35.0},
+            {"elapsed_seconds": 1.0, "timestamp_unix": 104.0, "dynamic_cpu": 40.0, "host_cpu": 45.0},
+        ]
+        summary = monitor.summary(started_at_unix=101.0, finished_at_unix=103.0)
+        self.assertEqual(summary["dynamic_cpu_mean"], 25.0)
+        self.assertEqual(summary["dynamic_cpu_max"], 30.0)
+        self.assertEqual(summary["host_cpu_mean"], 30.0)
+        self.assertEqual(summary["host_cpu_max"], 35.0)
+
+    def test_linux_cpu_summary_rejects_invalid_or_empty_measurement_window(self):
+        monitor = linux_telemetry.LinuxCpuMonitor({"dynamic": lambda: ()}, {"dynamic": 1})
+        monitor._records = [
+            {"elapsed_seconds": 1.0, "timestamp_unix": 101.0, "dynamic_cpu": 10.0, "host_cpu": 15.0},
+        ]
+        for start, finish in (
+            (100.0, None),
+            (101.0, 101.0),
+            (float("nan"), 102.0),
+            (True, 102.0),
+            (10**1000, 10**1000 + 1),
+        ):
+            with self.subTest(start=start, finish=finish), self.assertRaisesRegex(BenchmarkError, "CPU measurement"):
+                monitor.summary(started_at_unix=start, finished_at_unix=finish)
+        with self.assertRaisesRegex(BenchmarkError, "does not contain"):
+            monitor.summary(started_at_unix=102.0, finished_at_unix=103.0)
+
+        default_summary = monitor.summary()
+        self.assertEqual(default_summary["dynamic_cpu_mean"], 10.0)
+        self.assertEqual(default_summary["host_cpu_mean"], 15.0)
 
     def test_local_ydb_attempt_aggregates_errors_across_repetitions(self):
         metrics = local_ydb._aggregate_measurements(

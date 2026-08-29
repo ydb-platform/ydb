@@ -1,7 +1,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/security/ticket_parser_log.h>
 #include <ydb/core/util/address_classifier.h>
 #include <queue>
 #include "ldap_auth_provider.h"

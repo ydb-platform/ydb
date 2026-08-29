@@ -123,7 +123,17 @@ class YdbBenchTest(unittest.TestCase):
         measurements,
         cancel_event=None,
         cleanup_action=None,
+        cpu_metrics=None,
+        lifecycle_actions=None,
     ):
+        def record(action, command=None):
+            if lifecycle_actions is None:
+                return
+            path = None
+            if command is not None and "--path" in command:
+                path = str(command[command.index("--path") + 1])
+            lifecycle_actions.append((action, path))
+
         def command_result(command, stdout="", exit_code=0, stderr="", interrupted=False, timed_out=False):
             return runner.CommandResult(
                 command=tuple(str(part) for part in command),
@@ -158,14 +168,24 @@ class YdbBenchTest(unittest.TestCase):
             static_pids=(10,),
             dynamic_pids=(20,),
         )
-        cluster.init_workload.side_effect = lambda command, **_kwargs: (
-            command_result(command),
-            [command_result(command)],
-        )
+
+        def init_workload(command, **_kwargs):
+            record("init", command)
+            return command_result(command), [command_result(command)]
+
+        cluster.init_workload.side_effect = init_workload
+
+        def add_dynamic_nodes(count):
+            record("scale")
+            cluster.dynamic_nodes.extend({} for _index in range(count))
+
+        cluster.add_dynamic_nodes.side_effect = add_dynamic_nodes
 
         def run_cluster_command(command, **_kwargs):
             if cleanup_action is not None and "clean" in command:
                 cleanup_action()
+            if "clean" in command:
+                record("clean", command)
             return command_result(command)
 
         cluster._run.side_effect = run_cluster_command
@@ -181,6 +201,8 @@ class YdbBenchTest(unittest.TestCase):
             "host_cpu_mean": 7,
             "host_cpu_max": 8,
         }
+        if cpu_metrics is not None:
+            monitor.stop.return_value.update(cpu_metrics)
         monitor.summary.return_value = {
             "static_cpu_mean": 11,
             "static_cpu_max": 12,
@@ -194,6 +216,7 @@ class YdbBenchTest(unittest.TestCase):
         outputs = iter(measurements)
 
         def next_measurement(command):
+            record("measure", command)
             value = next(outputs)
             stdout = measurement_stdout(value)
             return command_result(
@@ -254,7 +277,11 @@ class YdbBenchTest(unittest.TestCase):
         )
 
     @staticmethod
-    def _synthetic_profile_workload(cleanup_names=("clean",), measurement_window=(101.0, 109.0)):
+    def _synthetic_profile_workload(
+        cleanup_names=("clean",),
+        measurement_window=(101.0, 109.0),
+        dataset_scope="profile",
+    ):
         def prepare(cli_context, _definition, path, _workload):
             return (
                 local_ydb_workloads.WorkloadCommandPlan(
@@ -311,7 +338,7 @@ class YdbBenchTest(unittest.TestCase):
             init_builder=lambda *_args: (),
             run_builder=lambda *_args: (),
             options_validator=lambda *_args: None,
-            dataset_scope="profile",
+            dataset_scope=dataset_scope,
             warmup_mode="inline",
             prepare_plan_builder=prepare,
             run_plan_builder=run,
@@ -720,6 +747,7 @@ class YdbBenchTest(unittest.TestCase):
             run_plan_builder=lambda *_args: local_ydb_workloads.WorkloadCommandPlan("run", ("ydb",), 1),
         )
         local_ydb_workloads._validate_catalog((definition,))
+        local_ydb_workloads._validate_catalog((replace(definition, dataset_scope="geometry"),))
         with self.assertRaisesRegex(ValueError, "dataset scope"):
             local_ydb_workloads._validate_catalog((replace(definition, dataset_scope="attempt"),))
         with self.assertRaisesRegex(ValueError, "inline warmup requires"):
@@ -893,6 +921,208 @@ class YdbBenchTest(unittest.TestCase):
             self.assertEqual(call.args[2], 45)
         profile_commands = lifecycle.profile_commands
         self.assertEqual([item["argv"][2] for item in profile_commands], ["init", "import", "clean"])
+
+    def test_local_ydb_geometry_lifecycle_shares_dataset_and_requires_matching_nodes(self):
+        definition, workload = self._synthetic_profile_workload(dataset_scope="geometry")
+        metrics_output = """
+            Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
+            10 10 0 0 1 2 3 4
+        """
+        cluster = mock.Mock(
+            ydb_cli=Path("/tmp/ydb"),
+            client_endpoint="grpc://benchmark-host:2135",
+            database="/Root/bench",
+            static_pids=(10,),
+            dynamic_pids=(20,),
+        )
+        cluster.init_workload.side_effect = lambda command, timeout: (
+            self._local_ydb_command_result(command),
+            [self._local_ydb_command_result(command)],
+        )
+        cluster._run.side_effect = lambda command, **_kwargs: self._local_ydb_command_result(command)
+        monitor = mock.Mock(records=[])
+        monitor.stop.return_value = {}
+        monitor.summary.return_value = {}
+        progress = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {definition.name: definition}), mock.patch.object(
+            local_ydb,
+            "LinuxCpuMonitor",
+            return_value=monitor,
+        ), mock.patch.object(local_ydb, "atomic_write_text"), mock.patch.object(
+            local_ydb,
+            "atomic_write_json",
+        ), mock.patch.object(
+            local_ydb,
+            "run_command",
+            side_effect=lambda command, *_args, **_kwargs: self._local_ydb_command_result(command, metrics_output),
+        ) as execute:
+            lifecycle = self._synthetic_workload_lifecycle(workload, cluster, progress)
+            lifecycle.open_profile(self.root / "geometry-profile", "ignored-profile")
+            lifecycle.open_geometry(
+                self.root / "geometry-1",
+                "geometry-dataset-1",
+                1,
+                progress_fields={"search_stage": 3},
+            )
+            lifecycle.run_sample(8, 1, 1, 2, self.root / "geometry-repeat-1", "ignored-1", {})
+            lifecycle.run_sample(16, 1, 2, 2, self.root / "geometry-repeat-2", "ignored-2", {})
+            with self.assertRaisesRegex(BenchmarkError, "belongs to 1 dynamic nodes, got 2"):
+                lifecycle.run_sample(8, 2, 1, 1, self.root / "geometry-mismatch", "ignored", {})
+            lifecycle.close_geometry()
+            with self.assertRaisesRegex(BenchmarkError, "dataset is unavailable"):
+                lifecycle.run_sample(8, 1, 1, 1, self.root / "geometry-closed", "ignored", {})
+            lifecycle.close_profile()
+
+        self.assertEqual(cluster.init_workload.call_count, 2)
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(cluster._run.call_count, 1)
+        self.assertTrue(cluster._run.call_args.kwargs["ignore_cancellation"])
+        self.assertEqual(progress[0]["search_stage"], 3)
+        self.assertEqual([item["argv"][2] for item in lifecycle.geometry_commands], ["init", "import", "clean"])
+
+    def test_local_ydb_geometry_dataset_is_cleaned_before_dynamic_node_scaling(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              geometry-scaling:
+                workload: {type: kv, operation: upsert}
+                geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        definition = replace(local_ydb_workloads.workload_definition("kv"), dataset_scope="geometry")
+        actions = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            manifest, _output, _events = self._run_mock_local_ydb(
+                configuration,
+                "geometry-scaling",
+                [{"throughput": 10}, {"throughput": 20}],
+                cpu_metrics={"dynamic_cpu_mean": 100, "static_cpu_mean": 1},
+                lifecycle_actions=actions,
+            )
+
+        self.assertEqual(manifest["result"]["dynamic_nodes"], 2)
+        self.assertEqual(
+            actions,
+            [
+                ("init", "ydb_bench_geometry_01"),
+                ("measure", "ydb_bench_geometry_01"),
+                ("clean", "ydb_bench_geometry_01"),
+                ("scale", None),
+                ("init", "ydb_bench_geometry_02"),
+                ("measure", "ydb_bench_geometry_02"),
+                ("clean", "ydb_bench_geometry_02"),
+            ],
+        )
+
+    def test_local_ydb_geometry_cleanup_cancellation_prevents_scaling(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              geometry-cancel-scaling:
+                workload: {type: kv, operation: upsert}
+                geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        definition = replace(local_ydb_workloads.workload_definition("kv"), dataset_scope="geometry")
+        cancel_event = threading.Event()
+        actions = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            with self.assertRaisesRegex(BenchmarkInterrupted, "was cancelled"):
+                self._run_mock_local_ydb(
+                    configuration,
+                    "geometry-cancel-scaling",
+                    [{"throughput": 10}],
+                    cancel_event=cancel_event,
+                    cleanup_action=cancel_event.set,
+                    cpu_metrics={"dynamic_cpu_mean": 100, "static_cpu_mean": 1},
+                    lifecycle_actions=actions,
+                )
+
+        self.assertEqual(
+            actions,
+            [
+                ("init", "ydb_bench_geometry_01"),
+                ("measure", "ydb_bench_geometry_01"),
+                ("clean", "ydb_bench_geometry_01"),
+            ],
+        )
+        self.last_local_ydb_cluster.add_dynamic_nodes.assert_not_called()
+        cleanup = self.last_local_ydb_cluster._run.call_args
+        self.assertTrue(cleanup.kwargs["ignore_cancellation"])
+        manifest = json.loads((self.root / "geometry-cancel-scaling" / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["status"], "interrupted")
+        self.assertEqual(manifest["state"], "cancelled")
+
+    def test_local_ydb_final_geometry_dataset_is_reused_for_verification(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              geometry-verification:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        definition = replace(local_ydb_workloads.workload_definition("kv"), dataset_scope="geometry")
+        actions = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            manifest, _output, _events = self._run_mock_local_ydb(
+                configuration,
+                "geometry-verification",
+                [{"throughput": 10}, {"throughput": 11}, {"throughput": 12}],
+                lifecycle_actions=actions,
+            )
+
+        self.assertEqual(manifest["verification"]["status"], "completed")
+        self.assertEqual(
+            actions,
+            [
+                ("init", "ydb_bench_geometry_01"),
+                ("measure", "ydb_bench_geometry_01"),
+                ("measure", "ydb_bench_geometry_01"),
+                ("measure", "ydb_bench_geometry_01"),
+                ("clean", "ydb_bench_geometry_01"),
+            ],
+        )
+
+    def test_local_ydb_geometry_cleanup_does_not_mask_primary_error(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              geometry-failure:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        definition = replace(local_ydb_workloads.workload_definition("kv"), dataset_scope="geometry")
+
+        def fail_cleanup():
+            raise BenchmarkError("geometry cleanup failed")
+
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            with self.assertRaisesRegex(OSError, "measurement failed"):
+                self._run_mock_local_ydb(
+                    configuration,
+                    "geometry-failure",
+                    [OSError("measurement failed")],
+                    cleanup_action=fail_cleanup,
+                )
+
+        self.assertEqual(self.last_local_ydb_cluster._run.call_count, 1)
+        self.assertTrue(self.last_local_ydb_cluster._run.call_args.kwargs["ignore_cancellation"])
 
     def test_local_ydb_profile_lifecycle_cleans_partial_prepare_without_masking_error(self):
         definition, workload = self._synthetic_profile_workload()

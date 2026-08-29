@@ -402,6 +402,14 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     StartStopShred();
 
+    // The flag alone is not a sufficient guard: a cluster that had the feature on
+    // still needs this pass to drain acked rows after it is turned off.
+    if (AppData()->FeatureFlags.GetEnableSchemeChangeRecords()
+        || NextSchemeChangeOrder != SchemeChangeFloorOrder)
+    {
+        Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
+    }
+
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
     // Start local index migration if feature flag is enabled
@@ -4204,6 +4212,107 @@ void TSchemeShard::PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const {
                 NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextLocalShardIdx)));
 }
 
+void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_NextSchemeChangeOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeOrder)));
+    ++NextSchemeChangeOrderPersistCount;
+}
+
+void TSchemeShard::PersistSchemeChangeFloorOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_SchemeChangeFloorOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(SchemeChangeFloorOrder)));
+}
+
+void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_LastAssignedPlanStep).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(LastAssignedPlanStep)));
+}
+
+void TSchemeShard::PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 requestIdx,
+        ui64 order, const TVector<TOperation::TSchemeChangeTarget>& targets) const {
+    db.Table<Schema::SchemeChangePendingRecords>().Key(txId, requestIdx).Update(
+        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Order>(order),
+        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Path>(EncodeSchemeChangeTargets(targets)));
+}
+
+void TSchemeShard::PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 requestIdx) const {
+    // Point delete, not a range scan: TTxOperationPropose::Execute calls
+    // NoMoreReadsForTx() before this runs, and a later read aborts the tablet.
+    db.Table<Schema::SchemeChangePendingRecords>().Key(txId, requestIdx).Delete();
+}
+
+void TSchemeShard::UpdateSchemeChangeGauges() const {
+    const TInstant now = AppData()->TimeProvider->Now();
+    ui64 lost = 0;
+    ui64 stale = 0;
+    for (const auto& [_, info] : Subscribers) {
+        if (info.State == NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST) {
+            ++lost;
+        }
+        if (IsSubscriberStale(info, now)) {
+            ++stale;
+        }
+    }
+
+    // Depth is meaningless without a consumer.
+    const ui64 depth = Subscribers.empty()
+        ? 0
+        : NextSchemeChangeOrder - GetMinSubscriberOrder(now);
+
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_OUTBOX_DEPTH].Set(depth);
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_SUBSCRIBERS].Set(Subscribers.size());
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_SUBSCRIBERS_LOST].Set(lost);
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_SUBSCRIBERS_STALE].Set(stale);
+}
+
+ui64 TSchemeShard::GetVisibleSchemeChangeTail() const {
+    ui64 firstPending = Max<ui64>();
+    for (const auto& [_, operation] : Operations) {
+        for (const auto& slot : operation->SchemeChangeSlots) {
+            firstPending = Min(firstPending, slot.Order);
+        }
+    }
+    return firstPending == Max<ui64>() ? NextSchemeChangeOrder : firstPending - 1;
+}
+
+
+ui32 TSchemeShard::CountTransactionSupportingDomains() const {
+    ui32 count = 0;
+    for (const auto& [_, domain] : SubDomains) {
+        if (domain && domain->IsSupportTransactions()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const {
+    // Kill switch: disabled means DDL is never refused by the outbox,
+    // checked before anything else so a wedged cluster is always rescuable.
+    if (!AppData()->FeatureFlags.GetEnableSchemeChangeRecords()) {
+        return true;
+    }
+
+    // Refresh the gauges here too: a wedged cluster runs no outbox
+    // transactions, which would otherwise leave the gauges frozen.
+    UpdateSchemeChangeGauges();
+
+    if (Subscribers.empty()) {
+        return true;
+    }
+    const ui64 unacked = NextSchemeChangeOrder - GetMinSubscriberOrder(now);
+    if (unacked >= MaxSchemeChangeRecords) {
+        // DDL is now refused cluster-wide until an admin force-advance clears it.
+        TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_DDL_REJECTED].Increment(1);
+        errStr = TStringBuilder()
+            << "scheme change records is full: " << unacked
+            << " unacked entries (limit: " << MaxSchemeChangeRecords << ")."
+            << " Subscribers may not be draining.";
+        return false;
+    }
+    return true;
+}
+
 void TSchemeShard::PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const {
     db.Table<Schema::SysParams>().Key(Schema::SysParam_ParentDomainSchemeShard).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(parentDomain.OwnerId)));
@@ -5969,6 +6078,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NReplication::TEvController::TEvAlterReplicationResult, Handle);
         HFuncTraced(NReplication::TEvController::TEvDropReplicationResult, Handle);
 
+        HFuncTraced(TEvPrivate::TEvSchemeChangeRecordsCleanup, Handle);
+
         // conditional erase
         HFuncTraced(TEvPrivate::TEvRunConditionalErase, Handle);
         HFuncTraced(TEvPrivate::TEvFlushConditionalEraseBatch, Handle);
@@ -6158,6 +6269,12 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvShredManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
+        HFuncTraced(TEvSchemeShard::TEvRegisterSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecords, Handle);
+        HFuncTraced(TEvSchemeShard::TEvAckSchemeChangeRecords, Handle);
+        HFuncTraced(TEvSchemeShard::TEvUnregisterSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvForceAdvanceSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies, Handle);
 
         HFuncTraced(NKikimr::NTestShard::TEvControlResponse, Handle);
 
@@ -6267,6 +6384,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
     auto pathId = txState->TargetPathId;
 
+    RemoveInFlightPlanStep(ui64(txState->PlanStep));
     PersistRemoveTx(db, opId, *txState);
     TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
 
@@ -8735,6 +8853,17 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();
         ConfigureCondErase(schemeShardConfig, ctx);
+        // A zero cap rejects every DDL unconditionally, force-advance
+        // included, since unacked >= 0 always holds. Keep the previous value.
+        if (const ui64 maxRecords = schemeShardConfig.GetMaxSchemeChangeRecords()) {
+            MaxSchemeChangeRecords = maxRecords;
+        } else {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Ignoring MaxSchemeChangeRecords=0, keeping " << MaxSchemeChangeRecords);
+        }
+        RedactSchemeChangeSensitiveFields = schemeShardConfig.GetRedactSensitiveSchemeChangeFields();
+        SchemeChangeSubscriberStaleTtl =
+            TDuration::Seconds(schemeShardConfig.GetSchemeChangeSubscriberStaleTtlSeconds());
     }
 
     if (appConfig.HasTableProfilesConfig()) {
@@ -8792,6 +8921,12 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
+
+    // Cleanup self-chains only from Complete() hooks that are gated on the flag,
+    // so kick a drain here or rows sit on disk until the flag comes back on.
+    if (!featureFlags.GetEnableSchemeChangeRecords() && NextSchemeChangeOrder > SchemeChangeFloorOrder) {
+        EnqueueSchemeChangeRecordsCleanup(ctx);
+    }
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

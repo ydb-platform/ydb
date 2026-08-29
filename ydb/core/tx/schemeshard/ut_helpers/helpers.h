@@ -587,6 +587,9 @@ namespace NSchemeShardUT_Private {
     bool GetEraseCacheEnabled(TTestActorRuntime& runtime, ui64 tabletId, ui32 table);
     NKikimr::NLocalDb::TCompactionPolicyPtr GetCompactionPolicy(TTestActorRuntime& runtime, ui64 tabletId, ui32 localTableId);
     void SetSchemeshardReadOnlyMode(TTestActorRuntime& runtime, bool isReadOnly);
+    // Use instead of a bare RebootTablet on the schemeshard: it lets the path-missing
+    // tally carry its tablet counter, which restarts at zero, across the reboot.
+    void RebootSchemeShard(TTestActorRuntime& runtime, ui64 schemeShard = TTestTxConfig::SchemeShard);
     void SetSchemeshardSchemaLimits(TTestActorRuntime& runtime, NSchemeShard::TSchemeLimits limits);
     void SetSchemeshardSchemaLimits(TTestActorRuntime& runtime, NSchemeShard::TSchemeLimits limits, ui64 schemeShard);
     void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 domainId);

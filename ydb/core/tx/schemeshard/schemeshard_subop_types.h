@@ -160,4 +160,9 @@ bool IsCreate(ETxType t);
 bool IsDrop(ETxType t);
 bool CanDeleteParts(ETxType t);
 
+// Internal churn ops; they produce no scheme change records.
+bool IsChurnOp(NKikimrSchemeOp::EOperationType opType);
+
+bool IsPathlessOp(NKikimrSchemeOp::EOperationType opType);
+
 }  // namespace NKikimr::NSchemeShard

@@ -26,6 +26,32 @@ namespace NSchemeShardUT_Private {
     NActors::TActorId CreateNotificationSubscriber(NActors::TTestActorRuntime &runtime, ui64 schemeshardId);
     NActors::TActorId CreateFakeMetering(NActors::TTestActorRuntime &runtime);
 
+    // A suite opts into the scheme change outbox corpus check with
+    // ENV(YDB_SCHEME_CHANGE_CORPUS=1) in its ya.make; elsewhere these are inert.
+    bool SchemeChangeCorpusEnabled();
+    std::optional<bool> SchemeChangeCorpusFlagDefault();
+
+    // Reads SchemeShard/SchemeChangePathMissing, which is a tablet counter and so
+    // restarts at zero, and carries the pre-restart value across observed reboots.
+    class TSchemeChangePathMissingTally {
+    public:
+        static TSchemeChangePathMissingTally& Instance();
+
+        void Reset();
+        // Must be called while the tablet is still alive, right before it restarts.
+        void OnObservedRestart(NActors::TTestActorRuntime& runtime);
+        ui64 Total(NActors::TTestActorRuntime& runtime);
+
+    private:
+        ui64 Sample(NActors::TTestActorRuntime& runtime);
+
+        ui64 Accumulated = 0;
+        ui64 LastSeen = 0;
+    };
+
+    // Fails if any op proposed so far could not resolve an outbox target.
+    void CheckSchemeChangeCorpusInvariant(NActors::TTestActorRuntime& runtime);
+
     struct TTestEnvOptions {
         using TSelf = TTestEnvOptions;
 
@@ -94,6 +120,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableDataShardSplitKeySelection, false);
         OPTION(bool, EnableDataShardSplitHistogramOmission, false);
         OPTION(bool, DisableFileStoreSSDSystemSpaceAccounting, false);
+        OPTION(std::optional<bool>, EnableSchemeChangeRecords, SchemeChangeCorpusFlagDefault());
 
         #undef OPTION
     };

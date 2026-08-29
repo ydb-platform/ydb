@@ -26,6 +26,12 @@ from ydb.tools.ydb_bench.lib.common import (
 )
 from ydb.tools.ydb_bench.lib.linux_telemetry import LinuxCpuMonitor
 from ydb.tools.ydb_bench.lib.load_control import evaluate_load, search_load
+from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
+    WorkloadCli,
+    build_clean_argv,
+    build_init_argv,
+    build_run_argv,
+)
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
 from ydb.tools.ydb_bench.lib.runner import run_command, start_managed_process
 from ydb.tools.ydb_bench.lib.system_info import collect_system_info
@@ -681,139 +687,6 @@ class LocalYdbCluster:
         return records
 
 
-def _workload_base(cluster, workload_type, path=None):
-    command = [
-        cluster.ydb_cli,
-        "--endpoint",
-        cluster.client_endpoint,
-        "--database",
-        cluster.database,
-        "workload",
-        workload_type,
-    ]
-    if path is not None:
-        command += ["--path", path]
-    return command
-
-
-def _kv_init_command(cluster, path, options):
-    return _workload_base(cluster, "kv", path) + [
-        "init",
-        "--init-upserts",
-        options["init-upserts"],
-        "--min-partitions",
-        options["min-partitions"],
-        "--max-partitions",
-        options["max-partitions"],
-        "--partition-size",
-        options["partition-size-mb"],
-        "--max-first-key",
-        options["max-first-key"],
-        "--len",
-        options["value-size"],
-        "--cols",
-        options["columns"],
-        "--int-cols",
-        1,
-        "--key-cols",
-        1,
-        "--rows",
-        options["rows-per-query"],
-    ]
-
-
-def _kv_run_command(cluster, path, workload, load_config, load, seconds, client_threads):
-    options = workload["options"]
-    threads = load if load_config["parameter"] == "threads" else client_threads
-    command = _workload_base(cluster, "kv", path) + [
-        "run",
-        workload["operation"],
-        "--seconds",
-        seconds,
-        "--threads",
-        threads,
-        "--quiet",
-        "--max-first-key",
-        options["max-first-key"],
-        "--int-cols",
-        1,
-        "--key-cols",
-        1,
-        "--cols",
-        options["columns"],
-    ]
-    if workload["operation"] != "mixed":
-        command += ["--rows", options["rows-per-query"]]
-    if workload["operation"] in ("upsert", "mixed"):
-        command += ["--len", options["value-size"]]
-    if load_config["parameter"] == "rate":
-        command += ["--rate", load]
-    return command
-
-
-def _stock_init_command(cluster, path, options):
-    del path
-    return _workload_base(cluster, "stock") + [
-        "init",
-        "--products",
-        options["products"],
-        "--quantity",
-        options["quantity"],
-        "--orders",
-        options["orders"],
-        "--min-partitions",
-        options["min-partitions"],
-        "--auto-partition",
-        options["auto-partition"],
-    ]
-
-
-def _stock_run_command(cluster, path, workload, load_config, load, seconds, client_threads):
-    del path
-    options = workload["options"]
-    threads = load if load_config["parameter"] == "threads" else client_threads
-    command = _workload_base(cluster, "stock") + [
-        "run",
-        workload["operation"],
-        "--seconds",
-        seconds,
-        "--threads",
-        threads,
-        "--quiet",
-    ]
-    if workload["operation"] in ("user-hist", "rand-user-hist"):
-        command += ["--limit", options["limit"]]
-    else:
-        command += ["--products", options["products"]]
-    if load_config["parameter"] == "rate":
-        command += ["--rate", load]
-    return command
-
-
-def _init_command(cluster, path, workload):
-    if workload["type"] == "stock":
-        return _stock_init_command(cluster, path, workload["options"])
-    return _kv_init_command(cluster, path, workload["options"])
-
-
-def _run_workload_command(cluster, path, workload, load_config, load, seconds, client_threads):
-    if workload["type"] == "stock":
-        return _stock_run_command(cluster, path, workload, load_config, load, seconds, client_threads)
-    return _kv_run_command(cluster, path, workload, load_config, load, seconds, client_threads)
-
-
-def _workload_table_path(workload_type, path):
-    # Unlike KV, stock has no --path option and creates its tables directly in
-    # the selected database.  "stock" is the first table created by its init.
-    return "stock" if workload_type == "stock" else path
-
-
-def _clean_workload_command(cluster, workload_type, path):
-    if workload_type == "stock":
-        return _workload_base(cluster, workload_type) + ["clean"]
-    return _workload_base(cluster, workload_type, path) + ["clean"]
-
-
 def _command_record(phase, repetition, command, cpu_affinity, result=None):
     record = {
         "phase": phase,
@@ -997,6 +870,7 @@ def run_local_ydb(
         cancel_event,
         publish_progress,
     )
+    workload_cli = None
 
     def run_repetition(
         load,
@@ -1028,7 +902,7 @@ def run_local_ydb(
         directory.mkdir(parents=True)
         fields = {**progress_fields, "repetition": repetition, "repetitions": repetitions}
         commands = []
-        init_command = _init_command(cluster, table_path, profile["workload"])
+        init_command = build_init_argv(workload_cli, table_path, profile["workload"])
         publish_progress(
             phases["init"],
             **fields,
@@ -1070,11 +944,11 @@ def run_local_ydb(
         try:
             warmup = profile["measurement"]["warmup"]
             if warmup:
-                warmup_command = _run_workload_command(
-                    cluster,
+                warmup_command = build_run_argv(
+                    workload_cli,
                     table_path,
                     profile["workload"],
-                    profile["load"],
+                    profile["load"]["parameter"],
                     load,
                     warmup,
                     profile["client"]["threads"],
@@ -1122,11 +996,11 @@ def run_local_ydb(
             )
             monitor.start()
             try:
-                command = _run_workload_command(
-                    cluster,
+                command = build_run_argv(
+                    workload_cli,
                     table_path,
                     profile["workload"],
-                    profile["load"],
+                    profile["load"]["parameter"],
                     load,
                     profile["measurement"]["duration"],
                     profile["client"]["threads"],
@@ -1182,10 +1056,10 @@ def run_local_ydb(
             raise
         finally:
             try:
-                clean_command = _clean_workload_command(
-                    cluster,
-                    profile["workload"]["type"],
+                clean_command = build_clean_argv(
+                    workload_cli,
                     table_path,
+                    profile["workload"]["type"],
                 )
                 publish_progress(
                     phases["clean"],
@@ -1218,6 +1092,7 @@ def run_local_ydb(
     cluster_stopped = False
     try:
         cluster.start()
+        workload_cli = WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database)
         while True:
             dynamic_nodes = len(cluster.dynamic_nodes)
             search_stage = len(manifest["searches"]) + 1

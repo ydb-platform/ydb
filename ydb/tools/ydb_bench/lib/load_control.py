@@ -32,8 +32,22 @@ def _with_decision(metrics, load, passed, reason):
     return {**metrics, "load": load, "passed": bool(passed), "decision": reason}
 
 
+def _invalid_measurement_reason(metrics):
+    empty_repetitions = metrics.get("empty_repetitions")
+    if empty_repetitions:
+        noun = "repetition" if empty_repetitions == 1 else "repetitions"
+        return "invalid measurement: {} {} completed with zero successful operations".format(empty_repetitions, noun)
+    if metrics.get("transactions") == 0:
+        return "invalid measurement: workload completed with zero successful operations"
+    return None
+
+
 def evaluate_load(config, load, metrics):
     """Return whether one measured load is feasible and explain the decision."""
+    invalid_reason = _invalid_measurement_reason(metrics)
+    if invalid_reason is not None:
+        return False, invalid_reason
+
     if "values" in config:
         errors = metrics["errors"]
         passed = config.get("allow_errors", False) or not errors
@@ -183,7 +197,7 @@ def _run_throughput(config, measure, on_attempt):
         return LoadSearchResult(
             tuple(attempts),
             None,
-            "workload errors at minimum load {}".format(start),
+            "minimum load {} is infeasible: {}".format(start, first["decision"]),
             "no-feasible-point",
             failing_load=start,
         )
@@ -244,8 +258,16 @@ def _run_throughput(config, measure, on_attempt):
             objective["target_role"]
         )
     elif failing_load is not None:
-        outcome = "bounded-by-errors"
-        stop_reason = "workload errors bounded the ternary search below {}".format(failing_load)
+        failing_attempt = measured[failing_load]
+        invalid_reason = _invalid_measurement_reason(failing_attempt)
+        if invalid_reason is not None:
+            outcome = "bounded-by-invalid-sample"
+            stop_reason = "invalid measurement bounded the ternary search below {}: {}".format(
+                failing_load, invalid_reason
+            )
+        else:
+            outcome = "bounded-by-errors"
+            stop_reason = "workload errors bounded the ternary search below {}".format(failing_load)
     elif selected == maximum and measured.get(maximum, {}).get("passed"):
         outcome = "lower-bound"
         stop_reason = "maximum configured load {} remains the best observed point".format(maximum)
@@ -301,7 +323,7 @@ def _run_latency(config, measure, on_attempt):
         return LoadSearchResult(
             tuple(attempts),
             None,
-            "minimum load {} does not satisfy latency SLO".format(first_fail),
+            "minimum load {} is infeasible: {}".format(first_fail, measured[first_fail]["decision"]),
             "no-feasible-point",
             failing_load=first_fail,
         )
@@ -320,12 +342,18 @@ def _run_latency(config, measure, on_attempt):
             high = candidate
 
     selected = low or None
-    reason = "latency SLO bracketed between {} and {}".format(low, high)
+    invalid_reason = _invalid_measurement_reason(measured[high])
+    if invalid_reason is not None:
+        outcome = "bounded-by-invalid-sample"
+        reason = "invalid measurement bounded the latency search above {}: {}".format(low, invalid_reason)
+    else:
+        outcome = "boundary-found"
+        reason = "latency SLO bracketed between {} and {}".format(low, high)
     return LoadSearchResult(
         tuple(attempts),
         selected,
         reason,
-        "boundary-found" if selected is not None else "no-feasible-point",
+        outcome if selected is not None else "no-feasible-point",
         passing_load=selected,
         failing_load=high,
     )

@@ -158,10 +158,15 @@ For example:
 Set `load.allow-errors: true` when request-level errors reported by
 `ydb workload` are an expected part of the experiment. Such points remain
 eligible for selection and the error counts stay in CSV, manifests, tables,
-and charts. The flag does not hide or tolerate a failed CLI process, timeout,
-malformed output, cluster failure, or workload setup/cleanup failure. For a
-latency SLO, it disables the `max-errors` rejection while keeping the latency
-and achieved-rate checks active.
+and charts, provided every repetition completed at least one successful
+operation. A repetition with zero successful operations makes the whole point
+ineligible, even when errors are allowed. It remains in the raw repetition and
+attempt diagnostics, but is omitted from summary comparison rows and its
+latency is not plotted as a zero. The flag does not hide or tolerate a failed
+CLI process, timeout, malformed output, cluster failure, or workload
+setup/cleanup failure. For a latency SLO, it disables the `max-errors`
+rejection while keeping the successful-operation, latency, and achieved-rate
+checks active.
 
 The previous flat `mode`, `start`, and `slo` fields remain accepted for config
 compatibility, but newly generated YAML uses `search` and `objective`.

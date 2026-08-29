@@ -719,6 +719,8 @@ def _aggregate_measurements(rows):
     # counts describe the whole attempted point; performance metrics remain
     # medians so that an outlier repetition does not select the load.
     result["errors"] = sum(row["errors"] for row in rows)
+    if all("transactions" in row for row in rows):
+        result["empty_repetitions"] = sum(row["transactions"] == 0 for row in rows)
     return result
 
 

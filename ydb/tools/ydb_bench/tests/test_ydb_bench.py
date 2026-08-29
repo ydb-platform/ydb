@@ -142,8 +142,9 @@ class YdbBenchTest(unittest.TestCase):
                 raise value
             return """
                 Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
-                1 {throughput} {throughput} 0 {errors} 1 2 {p99_ms} 4
+                {transactions} {throughput} 0 {errors} 1 2 {p99_ms} 4
             """.format(
+                transactions=value.get("transactions", 1),
                 throughput=value.get("throughput", 10),
                 errors=value.get("errors", 0),
                 p99_ms=value.get("p99_ms", 3),
@@ -1277,6 +1278,11 @@ class YdbBenchTest(unittest.TestCase):
                 20 nan 0 0 1 2 3 4
             """)
 
+    def test_local_ydb_cli_total_row_rejects_negative_counters(self):
+        for values in ("-1 10 0 0 1 2 3 4", "1 10 -1 0 1 2 3 4", "1 10 0 -1 1 2 3 4"):
+            with self.subTest(values=values), self.assertRaisesRegex(BenchmarkError, "valid Total row"):
+                parse_cli_metrics("Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)\n" + values)
+
     def test_local_ydb_profile_parses_geometry_load_and_role_affinity(self):
         loaded = load_config(self._config("""
                 local-ydb:
@@ -1632,6 +1638,42 @@ class YdbBenchTest(unittest.TestCase):
             },
         )
         self.assertEqual(result["units"], ["requests/s", "transactions/s", "batches/s", "operations/s"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
+    def test_local_ydb_web_hides_latency_for_empty_measurements(self):
+        result_start = web._JS.index("function localResultMetrics")
+        result_finish = web._JS.index("function localVerificationCount", result_start)
+        attempt_start = web._JS.index("function localAttemptLatency")
+        attempt_finish = web._JS.index("function localChart", attempt_start)
+        script = web._JS[result_start:result_finish] + web._JS[attempt_start:attempt_finish] + """
+            const empty={attempt:1,empty_repetitions:1,throughput:123,errors:7,p99_ms:0};
+            const valid={attempt:2,empty_repetitions:0,throughput:100,errors:1,p99_ms:9};
+            const rows=localAttemptRows([empty,valid]);
+            const holdout=localResultMetrics({
+              metrics_source:'verification',
+              verified_metrics:{empty_repetitions:1,throughput:123,errors:7,p99_ms:0}
+            });
+            process.stdout.write(JSON.stringify({
+              empty_label:localAttemptLatency(empty),valid_label:localAttemptLatency(valid),
+              empty_chart:rows.get('1'),valid_chart:rows.get('2'),holdout
+            }));
+        """
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["empty_label"], "—")
+        self.assertEqual(result["valid_label"], 9)
+        self.assertIsNone(result["empty_chart"]["p99_ms"])
+        self.assertEqual(result["empty_chart"]["throughput"], 123)
+        self.assertEqual(result["empty_chart"]["errors"], 7)
+        self.assertEqual(result["valid_chart"]["p99_ms"], 9)
+        self.assertIsNone(result["holdout"]["metrics"]["p99_ms"])
+        self.assertEqual(result["holdout"]["metrics"]["throughput"], 123)
 
     def test_local_ydb_stock_commands_do_not_use_kv_path_option(self):
         cli_context = local_ydb_workloads.WorkloadCli(
@@ -2150,6 +2192,34 @@ class YdbBenchTest(unittest.TestCase):
         self.assertIn("exceeds", manifest["verification"]["decision"])
         self.assertNotIn("saturated_repetitions", manifest["verification"])
 
+    def test_local_ydb_verification_rejects_an_empty_repetition_when_errors_are_allowed(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              empty-holdout:
+                workload: {type: kv, operation: upsert}
+                load: {parameter: threads, allow-errors: true, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, _output, _events = self._run_mock_local_ydb(
+            configuration,
+            "verification-empty-repetition",
+            [
+                {"transactions": 10, "throughput": 10, "errors": 1},
+                {"transactions": 10, "throughput": 9, "errors": 1},
+                {"transactions": 0, "throughput": 0, "errors": 10},
+            ],
+        )
+        self.assertEqual(manifest["state"], "passed")
+        self.assertEqual(manifest["result"]["selected_load"], 1)
+        self.assertEqual(manifest["result"]["verified_metrics"]["empty_repetitions"], 1)
+        self.assertFalse(manifest["result"]["holdout_accepted"])
+        self.assertFalse(manifest["verification"]["accepted"])
+        self.assertIn("zero successful operations", manifest["verification"]["decision"])
+
     def test_local_ydb_verification_failure_preserves_search_and_partial_holdout(self):
         configuration = load_config(self._config("""
             local-ydb:
@@ -2521,6 +2591,122 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse(passed)
         self.assertIn("exceeds", reason)
 
+    def test_load_controllers_reject_zero_success_measurements_before_objectives(self):
+        point_configs = (
+            {"parameter": "threads", "values": [1]},
+            {"parameter": "threads", "allow_errors": True, "values": [1]},
+        )
+        for config in point_configs:
+            with self.subTest(controller="points", allow_errors=config.get("allow_errors", False)):
+                result = load_control.search_load(
+                    config,
+                    lambda _load: {"transactions": 0, "throughput": 0, "errors": 10},
+                )
+                self.assertIsNone(result.selected_load)
+                self.assertFalse(result.attempts[0]["passed"])
+                self.assertIn("zero successful operations", result.attempts[0]["decision"])
+
+        throughput = load_control.search_load(
+            {
+                "parameter": "threads",
+                "allow_errors": True,
+                "search": {"start": 10, "maximum": 100, "multiplier": 2, "resolution_percent": 2},
+                "objective": {
+                    "type": "maximize-throughput",
+                    "target_role": "dynamic",
+                    "cpu_saturation_percent": 90,
+                    "plateau_gain_percent": 1,
+                    "plateau_points": 2,
+                },
+            },
+            lambda load: {
+                "transactions": 0 if load >= 70 else 1,
+                "throughput": 100 - abs(load - 55),
+                "errors": 0,
+                "dynamic_cpu_mean": 50,
+                "static_cpu_mean": 10,
+                "host_cpu_mean": 20,
+            },
+        )
+        self.assertEqual(throughput.outcome, "bounded-by-invalid-sample")
+        self.assertIn("invalid measurement", throughput.stop_reason)
+
+        latency = load_control.search_load(
+            {
+                "parameter": "threads",
+                "allow_errors": True,
+                "search": {"start": 10, "maximum": 40, "multiplier": 2, "resolution_percent": 5},
+                "objective": {
+                    "type": "latency-slo",
+                    "percentile": "p99",
+                    "max_ms": 10,
+                    "max_errors": 0,
+                    "min_achieved_rate_ratio": 0.98,
+                },
+            },
+            lambda load: {
+                "transactions": 0 if load >= 20 else 1,
+                "throughput": load,
+                "errors": 0,
+                "p99_ms": 1,
+            },
+        )
+        self.assertEqual(latency.selected_load, 19)
+        self.assertEqual(latency.outcome, "bounded-by-invalid-sample")
+        self.assertIn("invalid measurement", latency.stop_reason)
+
+        for allow_errors in (False, True):
+            with self.subTest(controller="maximize-throughput", allow_errors=allow_errors):
+                result = load_control.search_load(
+                    {
+                        "parameter": "threads",
+                        "allow_errors": allow_errors,
+                        "search": {"start": 1, "maximum": 2, "multiplier": 2, "resolution_percent": 5},
+                        "objective": {
+                            "type": "maximize-throughput",
+                            "target_role": "dynamic",
+                            "cpu_saturation_percent": 90,
+                            "plateau_gain_percent": 1,
+                            "plateau_points": 2,
+                        },
+                    },
+                    lambda _load: {
+                        "transactions": 0,
+                        "throughput": 0,
+                        "errors": 10,
+                        "dynamic_cpu_mean": 100,
+                        "static_cpu_mean": 10,
+                        "host_cpu_mean": 50,
+                    },
+                )
+                self.assertIsNone(result.selected_load)
+                self.assertFalse(result.attempts[0]["passed"])
+                self.assertIn("zero successful operations", result.attempts[0]["decision"])
+
+            with self.subTest(controller="latency-slo", allow_errors=allow_errors):
+                result = load_control.search_load(
+                    {
+                        "parameter": "threads",
+                        "allow_errors": allow_errors,
+                        "search": {"start": 1, "maximum": 2, "multiplier": 2, "resolution_percent": 5},
+                        "objective": {
+                            "type": "latency-slo",
+                            "percentile": "p99",
+                            "max_ms": 10,
+                            "max_errors": 0,
+                            "min_achieved_rate_ratio": 0.98,
+                        },
+                    },
+                    lambda _load: {"transactions": 0, "throughput": 0, "errors": 10, "p99_ms": 1},
+                )
+                self.assertIsNone(result.selected_load)
+                self.assertFalse(result.attempts[0]["passed"])
+                self.assertIn("zero successful operations", result.attempts[0]["decision"])
+
+    def test_evaluate_load_remains_compatible_without_success_metadata(self):
+        config = {"parameter": "threads", "allow_errors": True, "values": [1]}
+        self.assertTrue(load_control.evaluate_load(config, 1, {"throughput": 0, "errors": 1})[0])
+
     def test_linux_cpu_summary_weights_intervals_and_ignores_short_spikes_for_max(self):
         monitor = linux_telemetry.LinuxCpuMonitor({"dynamic": lambda: ()}, {"dynamic": 1}, interval=0.5)
         monitor._records = [
@@ -2579,6 +2765,53 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(metrics["throughput"], 20)
         self.assertEqual(metrics["errors"], 100)
+
+    def test_local_ydb_attempt_rejects_one_empty_repetition(self):
+        metrics = local_ydb._aggregate_measurements(
+            [
+                {"transactions": 10, "throughput": 10, "errors": 1},
+                {"transactions": 0, "throughput": 0, "errors": 10},
+                {"transactions": 20, "throughput": 20, "errors": 2},
+            ]
+        )
+        passed, reason = load_control.evaluate_load(
+            {"parameter": "threads", "allow_errors": True, "values": [1]},
+            1,
+            metrics,
+        )
+        self.assertEqual(metrics["empty_repetitions"], 1)
+        self.assertEqual(metrics["errors"], 13)
+        self.assertFalse(passed)
+        self.assertIn("1 repetition", reason)
+        self.assertIn("zero successful operations", reason)
+
+    def test_local_ydb_attempt_allows_partial_errors_when_every_repetition_succeeds(self):
+        metrics = local_ydb._aggregate_measurements(
+            [
+                {"transactions": 10, "throughput": 10, "errors": 1},
+                {"transactions": 20, "throughput": 20, "errors": 2},
+            ]
+        )
+        passed, reason = load_control.evaluate_load(
+            {"parameter": "threads", "allow_errors": True, "values": [1]},
+            1,
+            metrics,
+        )
+        self.assertEqual(metrics["empty_repetitions"], 0)
+        self.assertEqual(metrics["errors"], 3)
+        self.assertTrue(passed)
+        self.assertIn("errors allowed", reason)
+
+    def test_local_ydb_summary_omits_points_with_an_empty_repetition(self):
+        rows = [
+            {"load": 1, "dynamic_nodes": 1, "transactions": 10},
+            {"load": 1, "dynamic_nodes": 1, "transactions": 0},
+            {"load": 2, "dynamic_nodes": 1, "transactions": 20},
+        ]
+        for row in rows:
+            row.update({metric.name: row.get(metric.name, 1) for metric in LOCAL_YDB_BENCHMARK.metrics})
+        summary = LOCAL_YDB_BENCHMARK.summarize_metrics(rows, LOCAL_YDB_BENCHMARK)
+        self.assertEqual([(row["load"], row["dynamic_nodes"]) for row in summary], [(2, 1)])
 
     def test_local_ydb_scaling_uses_failing_boundary_and_minimum_attempt(self):
         attempts = (
@@ -5315,6 +5548,30 @@ class WebTest(unittest.TestCase):
                     service.local_ydb_comparison(["baseline"])
         finally:
             service.shutdown()
+
+    def test_local_ydb_comparison_projects_empty_holdout_repetitions(self):
+        run_root = self.root / "empty-holdout"
+        self._local_ydb_result(run_root, 1000, verified=True)
+        profile_path = run_root / "local-ydb" / "capacity" / "run.json"
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        profile["result"]["holdout_accepted"] = False
+        profile["result"]["verified_metrics"].update(
+            {"empty_repetitions": 1, "p99_ms": 0, "throughput": 0, "errors": 10}
+        )
+        profile["verification"].update(
+            {"accepted": False, "decision": "invalid measurement: zero successful operations"}
+        )
+        profile_path.write_text(json.dumps(profile), encoding="utf-8")
+
+        service = RunService(self.root)
+        try:
+            comparison = service.local_ydb_comparison(["empty-holdout"])
+        finally:
+            service.shutdown()
+        result = comparison["entries"][0]["result"]
+        self.assertEqual(result["verified_metrics"]["empty_repetitions"], 1)
+        self.assertEqual(result["verified_metrics"]["p99_ms"], 0)
+        self.assertFalse(result["holdout_accepted"])
 
     def test_local_ydb_profile_projection_preserves_terminal_state_without_nested_manifest(self):
         run_root = self.root / "terminal-local-ydb-run"

@@ -1,6 +1,7 @@
 #include "kafka_read_session_actor.h"
 #include "kafka_read_session_utils.h"
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -457,23 +458,12 @@ void TKafkaReadSessionActor::ProcessBalancerDead(ui64 tabletId, const TActorCont
 }
 
 void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
-
-    auto topicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-        true, "", ""
-    );
-    auto topicHandler = std::make_unique<NPersQueue::TTopicsListController>(
-        topicConverterFactory
-    );
-
-    TopicsToConverter = topicHandler->GetReadTopicsList(TopicsToReadNames, false, Context->DatabasePath);
-    if (!TopicsToConverter.IsValid) {
-        SendJoinGroupResponseFail(ctx, CorellationId, INVALID_REQUEST, TStringBuilder() << "topicsToConverter is not valid");
-        return;
-    }
-
+    // Kafka always used TTopicNamesConverterFactory(true, …): first-class paths, no DC expansion.
+    // TopicsToReadNames are already NormalizePath'd. Do not call ExpandReadTopics here —
+    // it follows AppData FCC and, with an empty cluster list, yields no paths.
     ctx.Register(new NGRpcProxy::V1::TReadInitAndAuthActor(
-        ctx, ctx.SelfID, GroupId, Cookie, Session, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeSchemeCacheID(), nullptr, Context->Token.UserToken, TopicsToConverter,
-        topicHandler->GetLocalCluster(), false));
+        ctx, ctx.SelfID, GroupId, Cookie, Session, TActorId(), MakeSchemeCacheID(), nullptr, Context->Token.UserToken,
+        TopicsToReadNames, Context->DatabasePath, {}, false));
 }
 
 void TKafkaReadSessionActor::HandleBalancerError(TEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
@@ -496,7 +486,6 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
         auto internalName = t.TopicNameConverter->GetInternalName();
         TopicsInfo.insert_or_assign(internalName, NGRpcProxy::TTopicHolderBase(t));
         FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
-        FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
     }
 
     Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));

@@ -46,7 +46,7 @@ TConsumerReadQuota::TConsumerReadQuota(
 
 
 TPartitionQuoterBase::TPartitionQuoterBase(
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
     const TPartitionId& partition,
     TActorId tabletActor,
@@ -163,7 +163,7 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
     } else {
         YDB_LOG_ERROR("Attempt to make the inflight counter below zero. Topic partition readCookie",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"clientSideName", TopicConverter->GetClientsideName()},
+            {"clientSideName", TopicConverter->Path},
             {"partition", Partition},
             {"requestCookie", ev->Get()->RequestCookie});
     }

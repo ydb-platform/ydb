@@ -11,6 +11,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
@@ -422,7 +423,7 @@ protected:
 
     TActorId ActorId;
 
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
     NKikimrPQ::TPQTabletConfig Config;
 
     std::shared_ptr<TTabletCountersBase> TabletCounters;
@@ -475,8 +476,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                         config.MeteringMode);
     Config.SetLocalDC(true);
 
-    NPersQueue::TTopicNamesConverterFactory factory(Ctx->Runtime->GetAppData(0).PQConfig.GetTopicsAreFirstClassCitizen(), "/Root/PQ", "dc1");
-    TopicConverter = factory.MakeTopicConverter(Config);
+    TopicConverter = NNameResolver::MakeTopicNamesPtr(NNameResolver::NamesFromConfig(Config));
     TActorId quoterId;
     if (Ctx->Runtime->GetAppData(0).PQConfig.GetQuotingConfig().GetEnableQuoting()) {
         quoterId = Ctx->Runtime->Register(CreateWriteQuoter(

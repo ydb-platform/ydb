@@ -1,16 +1,8 @@
 #pragma once
 
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <util/generic/fwd.h>
-
-namespace NKikimrPQ {
-class TPQTabletConfig;
-}
-
-namespace NPersQueue {
-class TTopicNameConverter;
-using TTopicConverterPtr = std::shared_ptr<TTopicNameConverter>;
-}
 
 namespace NKikimr {
 
@@ -30,7 +22,7 @@ NActors::IActor* CreatePartitionActor(ui64 tabletId,
                                       const NActors::TActorId& tablet,
                                       ui32 tabletGeneration,
                                       const NActors::TActorId& blobCache,
-                                      const NPersQueue::TTopicConverterPtr& topicConverter,
+                                      const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
                                       TString dcId,
                                       bool isServerless,
                                       const NKikimrPQ::TPQTabletConfig& config,

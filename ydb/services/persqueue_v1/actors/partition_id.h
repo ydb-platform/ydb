@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 #include <util/stream/output.h>
 #include <util/system/types.h>
@@ -10,20 +10,22 @@
 namespace NKikimr::NGRpcProxy::V1 {
 
 struct TPartitionId {
-    //NPersQueue::TTopicConverterPtr TopicConverter;
-    NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
+    NPQ::NNameResolver::TTopicNamesPtr TopicNames;
     ui64 Partition;
     ui64 AssignId;
 
     bool operator < (const TPartitionId& rhs) const {
-        return std::make_tuple(AssignId, Partition, DiscoveryConverter->GetOriginalPath()) <
-               std::make_tuple(rhs.AssignId, rhs.Partition, rhs.DiscoveryConverter->GetOriginalPath());
+        const TString& leftPath = TopicNames ? TopicNames->Path : TString();
+        const TString& rightPath = rhs.TopicNames ? rhs.TopicNames->Path : TString();
+        return std::make_tuple(AssignId, Partition, leftPath) <
+               std::make_tuple(rhs.AssignId, rhs.Partition, rightPath);
     }
 };
 
 
 inline IOutputStream& operator <<(IOutputStream& out, const TPartitionId& partId) {
-    out << "TopicId: " << partId.DiscoveryConverter->GetPrintableString() << ", partition " << partId.Partition
+    out << "TopicId: " << (partId.TopicNames ? partId.TopicNames->GetPrintableString() : TString())
+        << ", partition " << partId.Partition
         << "(assignId:" << partId.AssignId << ")";
     return out;
 }

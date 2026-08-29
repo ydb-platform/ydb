@@ -21,6 +21,23 @@ namespace {
 
 using namespace NSchemeCache;
 
+// Scheme description stores tablet config without TopicPath/TopicName (those are filled
+// only when schemeshard configures the tablet). NamesFromConfig requires a path.
+NKikimrPQ::TPQTabletConfig TabletConfigForNames(
+    const NKikimrPQ::TPQTabletConfig& src,
+    const TString& realPath,
+    const TString& ydbDatabaseFallback)
+{
+    auto cfg = src;
+    if (cfg.GetTopicPath().empty()) {
+        cfg.SetTopicPath(realPath);
+    }
+    if (cfg.GetYdbDatabasePath().empty() && !ydbDatabaseFallback.empty()) {
+        cfg.SetYdbDatabasePath(ydbDatabaseFallback);
+    }
+    return cfg;
+}
+
 bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject> securityObject) {
     if (!settings.UserToken) {
         return true;
@@ -50,7 +67,7 @@ public:
         UsedSyncVersion = Settings.ForceSyncVersion;
 
         for (const auto& topic : TopicPaths) {
-            auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
+            auto resolved = NNameResolver::ResolveName(DatabasePath, topic, Settings.LocalDc);
             if (!resolved) {
                 YDB_LOG_DEBUG("Name resolve failed",
                     {"logPrefix", LOG_PREFIX},
@@ -130,13 +147,13 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            SetErrorResults(originals, EStatus::UNAUTHORIZED);
+                            SetErrorResults(originals, EStatus::UNAUTHORIZED, entry, realPath);
                         } else {
                             YDB_LOG_DEBUG("Path not found",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            SetErrorResults(originals, EStatus::NOT_FOUND);
+                            SetErrorResults(originals, EStatus::NOT_FOUND, entry, realPath);
                         }
                     } else {
                         unknownPaths.insert(realPath);
@@ -147,7 +164,7 @@ public:
                     YDB_LOG_DEBUG("Path ACCESS DENIED",
                         {"logPrefix", LOG_PREFIX},
                         {"realPath", realPath});
-                    SetErrorResults(originals, EStatus::UNAUTHORIZED);
+                    SetErrorResults(originals, EStatus::UNAUTHORIZED, entry, realPath);
                     break;
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
@@ -171,7 +188,7 @@ public:
                                 YDB_LOG_DEBUG("Path not found",
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
-                                SetErrorResults(originals, EStatus::NOT_FOUND);
+                                SetErrorResults(originals, EStatus::NOT_FOUND, entry, realPath);
                             } else {
                                 unknownPaths.insert(realPath);
                             }
@@ -181,24 +198,33 @@ public:
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
 
-                                SetTopicResults(originals, TTopicInfo{
-                                    .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
-                                            ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
-                                });
+                                auto info = MakeTopicInfo(
+                                    entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
+                                        ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED,
+                                    entry,
+                                    realPath);
+                                SetTopicResults(originals, std::move(info));
                             } else {
                                 YDB_LOG_DEBUG("Path SUCCESS",
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
-                                SetTopicResults(originals, TTopicInfo{
-                                    .Status = EStatus::SUCCESS,
-                                    .RealPath = realPath,
-                                    .CdcStream = isCDCStream,
-                                    .CdcStreamName = cdcStreamName,
-                                    .CreateStep = entry.CreateStep,
-                                    .Info = entry.PQGroupInfo,
-                                    .Self = entry.Self,
-                                    .SecurityObject = entry.SecurityObject
-                                });
+                                auto names = NNameResolver::NamesFromConfig(TabletConfigForNames(
+                                    entry.PQGroupInfo->Description.GetPQTabletConfig(),
+                                    realPath,
+                                    RequestDatabaseName));
+                                if (isCDCStream) {
+                                    TString cdcPath = realPath;
+                                    constexpr TStringBuf suffix = "/streamImpl";
+                                    if (cdcPath.EndsWith(suffix)) {
+                                        cdcPath.resize(cdcPath.size() - suffix.size());
+                                    }
+                                    names = NNameResolver::WithClientsideNameOverride(std::move(names), cdcPath);
+                                }
+                                auto info = MakeTopicInfo(EStatus::SUCCESS, entry, realPath);
+                                info.CdcStream = isCDCStream;
+                                info.CdcStreamName = cdcStreamName;
+                                info.Names = std::move(names);
+                                SetTopicResults(originals, std::move(info));
                             }
                         }
                     } else {
@@ -210,14 +236,9 @@ public:
                             YDB_LOG_DEBUG("Path UNAUTHORIZED",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
-                            SetTopicResults(originals, TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED
-                            });
+                            SetTopicResults(originals, MakeTopicInfo(EStatus::UNAUTHORIZED, entry, realPath));
                         } else {
-                            SetTopicResults(originals, TTopicInfo{
-                                .Status = EStatus::NOT_TOPIC,
-                                .RealPath = realPath
-                            });
+                            SetTopicResults(originals, MakeTopicInfo(EStatus::NOT_TOPIC, entry, realPath));
                         }
                     }
                     break;
@@ -226,10 +247,7 @@ public:
                     YDB_LOG_DEBUG("Path unknown error",
                         {"logPrefix", LOG_PREFIX},
                         {"realPath", realPath});
-                    SetTopicResults(originals, TTopicInfo{
-                        .Status = EStatus::UNKNOWN_ERROR,
-                        .RealPath = realPath
-                    });
+                    SetTopicResults(originals, MakeTopicInfo(EStatus::UNKNOWN_ERROR, entry, realPath));
                     break;
                 }
             }
@@ -312,6 +330,20 @@ private:
         return true;
     }
 
+    TTopicInfo MakeTopicInfo(EStatus status, const TSchemeCacheNavigate::TEntry& entry, const TString& realPath) {
+        TTopicInfo info;
+        info.Status = status;
+        info.NavigateStatus = entry.Status;
+        info.Kind = entry.Kind;
+        info.RealPath = realPath;
+        info.CreateStep = entry.CreateStep;
+        info.Info = entry.PQGroupInfo;
+        info.Self = entry.Self;
+        info.SecurityObject = entry.SecurityObject;
+        info.IsServerless = entry.DomainInfo && entry.DomainInfo->IsServerless();
+        return info;
+    }
+
     void SetErrorResult(const TString& originalPath, EStatus status, const TString& realPath = {}) {
         Result[originalPath] = TTopicInfo{
             .Status = status,
@@ -319,13 +351,16 @@ private:
         };
     }
 
-    void SetErrorResults(const TVector<TString>& originals, EStatus status, const TString& realPath = {}) {
-        for (const auto& originalPath : originals) {
-            SetErrorResult(originalPath, status, realPath);
-        }
+    void SetErrorResults(
+        const TVector<TString>& originals,
+        EStatus status,
+        const TSchemeCacheNavigate::TEntry& entry,
+        const TString& realPath)
+    {
+        SetTopicResults(originals, MakeTopicInfo(status, entry, realPath));
     }
 
-    void SetTopicResults(const TVector<TString>& originals, const TTopicInfo& info) {
+    void SetTopicResults(const TVector<TString>& originals, TTopicInfo info) {
         for (const auto& originalPath : originals) {
             Result[originalPath] = info;
         }

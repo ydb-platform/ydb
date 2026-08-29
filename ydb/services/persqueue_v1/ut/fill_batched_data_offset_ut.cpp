@@ -4,7 +4,7 @@
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -23,19 +23,18 @@ TString MakeRegularDataChunk(const TString& payload) {
     return out;
 }
 
-NPersQueue::TTopicConverterPtr MakeTestTopicConverter() {
-    NKikimrPQ::TPQTabletConfig cfg;
-    cfg.SetTopicName("topic");
-    cfg.SetTopicPath("/Root/topic");
-    cfg.SetYdbDatabasePath("/Root");
-    cfg.SetLocalDC(true);
-    cfg.SetDC("dc1");
-    return NPersQueue::TTopicNameConverter::ForFirstClass(cfg);
+NKikimr::NPQ::NNameResolver::TTopicNamesPtr MakeTestTopicConverter() {
+    NKikimr::NPQ::NNameResolver::TTopicNames names;
+    names.Valid = true;
+    names.Path = "/Root/topic";
+    names.ClientsideName = "topic";
+    names.InternalName = "/Root/topic";
+    return NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(std::move(names));
 }
 
 TPartitionId MakeTestPartitionId(ui64 partition, ui64 assignId) {
     TPartitionId id;
-    id.DiscoveryConverter = MakeTestTopicConverter();
+    id.TopicNames = MakeTestTopicConverter();
     id.Partition = partition;
     id.AssignId = assignId;
     return id;

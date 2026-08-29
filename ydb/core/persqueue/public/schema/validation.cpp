@@ -6,6 +6,8 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <util/string/join.h>
+
 namespace NKikimr::NPQ::NSchema {
 
 TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {

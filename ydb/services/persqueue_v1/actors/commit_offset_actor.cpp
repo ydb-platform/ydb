@@ -17,7 +17,7 @@ using namespace PersQueue::V1;
 
 
 TCommitOffsetActor::TCommitOffsetActor(
-        TEvCommitOffsetRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
+        TEvCommitOffsetRequest* request, const NKikimr::NPQ::NNameResolver::TReadTopicsContext& topicsHandler,
         const TActorId& schemeCache, const TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
@@ -26,7 +26,7 @@ TCommitOffsetActor::TCommitOffsetActor(
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
     , Counters(counters)
-    , TopicsHandler(std::make_unique<NPersQueue::TTopicsListController>(topicsHandler))
+    , TopicsHandler(topicsHandler)
 {
     Y_ASSERT(request);
 }
@@ -52,15 +52,6 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
     PartitionId = request->partition_id();
 
-    if (TopicsHandler == nullptr) {
-        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-            NKikimrPQ::TPQConfig(), ""
-        );
-        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-                TopicConverterFactory
-        );
-    }
-
     TIntrusivePtr<NACLib::TUserToken> token;
     if (Request_->GetSerializedToken().empty()) {
         if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
@@ -79,9 +70,8 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     }
     topicsToResolve.insert(request->path());
 
-    auto topicsList = TopicsHandler->GetReadTopicsList(
-            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
-    );
+    const auto database = Request().GetDatabaseName().GetOrElse(TString());
+    auto topicsList = TopicsHandler.ExpandRead(database, topicsToResolve, true);
     if (!topicsList.IsValid) {
         return AnswerError(
                 topicsList.Reason,
@@ -91,7 +81,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
+            SchemeCache, NewSchemeCache, Counters, token, topicsList.Paths, database, TopicsHandler.LocalCluster
     ));
 }
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
@@ -248,7 +249,7 @@ TResult ApplyChangesInt( // create and alter
         : !settings.client_write_disabled();
 
     if (operation == EOperation::Create && !pqConfig.GetTopicsAreFirstClassCitizen()) {
-        auto converter = NPersQueue::TTopicNameConverter::ForFederation(
+        auto names = NPQ::NNameResolver::NamesForCreate(
                 pqConfig.GetRoot(),
                 pqConfig.GetTestDatabaseRoot(),
                 name,
@@ -259,14 +260,14 @@ TResult ApplyChangesInt( // create and alter
                 pqTabletConfig->GetFederationAccount()
         );
 
-        if (!converter->IsValid()) {
-            error = TStringBuilder() << "Bad topic: " << converter->GetReason();
+        if (!names.IsValid()) {
+            error = TStringBuilder() << "Bad topic: " << names.GetReason();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }
         pqTabletConfig->SetLocalDC(local);
-        pqTabletConfig->SetDC(converter->GetCluster());
-        pqTabletConfig->SetProducer(converter->GetLegacyProducer());
-        pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
+        pqTabletConfig->SetDC(names.GetCluster());
+        pqTabletConfig->SetProducer(names.GetLegacyProducer());
+        pqTabletConfig->SetTopic(names.GetLegacyLogtype());
     }
 
     //Sets legacy 'logtype'.

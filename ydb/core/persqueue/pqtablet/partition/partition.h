@@ -502,7 +502,7 @@ private:
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                   const TEvPQ::TMessageGroupsPtr& explicitMessageGroups,
-                                  NPersQueue::TTopicConverterPtr topicConverter,
+                                  NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
 
@@ -567,7 +567,7 @@ public:
     }
 
     TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
-               const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
+               const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                const TActorId& writeQuoterActorId,
                const TActorId& batchProcessorActorId,
@@ -802,7 +802,7 @@ private:
     const NKikimrPQ::TPQTabletConfig::TPartition* PendingPartitionConfig = nullptr;
 
     std::shared_ptr<TTabletCountersBase> Counters;
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
     const bool IsLocalDC;
     const TString DCId;
 

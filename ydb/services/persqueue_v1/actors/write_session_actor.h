@@ -13,6 +13,8 @@
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -55,9 +57,6 @@ class TWriteSessionActor
 
     using IContext = NGRpcServer::IGRpcStreamingContext<TClientMessage, TServerMessage>;
 
-    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
-    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
-
     using TWriteRequestInfo = TWriteRequestInfoImpl<TEvWrite>;
 
     // Codec ID size in bytes
@@ -71,7 +70,7 @@ public:
     TWriteSessionActor(TEvStreamWriteRequest* request, const ui64 cookie,
                        const NActors::TActorId& schemeCache,
                        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
-                       const NPersQueue::TTopicsListController& topicsController);
+                       const TString& localCluster);
     ~TWriteSessionActor() = default;
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -99,7 +98,7 @@ private:
             HFunc(TEvUpdateToken, Handle)
             HFunc(TEvPQProxy::TEvDone, Handle)
 
-            HFunc(TEvDescribeTopicsResponse, Handle)
+            hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle)
 
             HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle);
@@ -132,7 +131,7 @@ private:
     void Handle(typename TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(typename TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev);
     void LogSession(const TActorContext& ctx);
     bool InitAfterDiscovery(const TActorContext& ctx);
 
@@ -203,9 +202,9 @@ private:
     TString PeerName;
     ui64 Cookie;
 
-    NPersQueue::TTopicsListController TopicsController;
-    NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
-    NPersQueue::TTopicConverterPtr FullConverter;
+    TString LocalCluster;
+    TString TopicPath;
+    NPQ::NNameResolver::TTopicNamesPtr FullConverter;
     ui32 Partition;
     ui64 PartitionTabletId;
     ui32 PreferedPartition;

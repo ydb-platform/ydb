@@ -34,7 +34,7 @@ TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters,
-        const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
+        const TString& clientDC, bool rangesMode, const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const TString& database,
         bool directRead, EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
         const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
@@ -543,7 +543,7 @@ template<typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
-        const NPersQueue::TTopicConverterPtr& topic) {
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic) {
     constexpr EProtocol Protocol = std::is_same_v<TReadResponse, PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch> ? EProtocol::PQv1 : EProtocol::Topic;
     auto* partitionData = data->add_partition_data();
 
@@ -692,13 +692,13 @@ template bool FillBatchedData<PersQueue::V1::MigrationStreamingReadServerMessage
         PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch* data,
         const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
-        const NPersQueue::TTopicConverterPtr& topic);
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic);
 
 template bool FillBatchedData<Topic::StreamReadMessage::ReadResponse>(
         Topic::StreamReadMessage::ReadResponse* data,
         const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
-        const NPersQueue::TTopicConverterPtr& topic);
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic);
 
 void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx) {
     NotCommitedToFinishParents.erase(ev->Get()->ParentPartitionId);

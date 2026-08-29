@@ -6,6 +6,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -220,7 +221,7 @@ protected:
 
     TActorId ActorId;
 
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
     NKikimrPQ::TPQTabletConfig Config;
     TActorId Pipe;
 };
@@ -272,9 +273,7 @@ void TUserActionProcessorFixture::CreatePartitionActor(const TPartitionId& id,
     Config.SetLocalDC(true);
     Config.SetYdbDatabasePath("/Root/LbCommunal/account");
 
-    NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/LbCommunal", "dc1");
-
-    TopicConverter = factory.MakeTopicConverter(Config);
+    TopicConverter = NNameResolver::MakeTopicNamesPtr(NNameResolver::NamesFromFirstClassConfig(Config));
 
     auto actor = new NPQ::TPartition(Ctx->TabletId,
                                      id,

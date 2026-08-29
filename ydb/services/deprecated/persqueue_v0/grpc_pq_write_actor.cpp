@@ -5,6 +5,10 @@
 
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
+#include <ydb/library/aclib/aclib.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -116,9 +120,6 @@ void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
     Database = CanonizePath(NKikimr::NPQ::GetDatabaseFromConfig(pqConfig));
-    ConverterFactory = MakeHolder<NPersQueue::TTopicNamesConverterFactory>(
-            pqConfig, LocalDC
-    );
     StartTime = ctx.Now();
 }
 
@@ -184,7 +185,7 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
         }
     } else {
         TString errorReason = Sprintf("access to topic '%s' denied for '%s' due to 'no WriteTopic rights', Marker# PQ1125",
-            DiscoveryConverter->GetPrintableString().c_str(),
+            FullConverter ? FullConverter->GetPrintableString().c_str() : TopicPath.c_str(),
             Token->GetUserSID().c_str());
         CloseSession(errorReason, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
     }
@@ -215,11 +216,12 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     //2. No database. Try parse and resolve account to database. If possible, try search this path.
     //3. Fallback from 2 - legacy mode.
 
-    DiscoveryConverter = ConverterFactory->MakeDiscoveryConverter(init.GetTopic(), true, LocalDC, Database);
-    if (!DiscoveryConverter->IsValid()) {
+    TopicPath = init.GetTopic();
+    auto resolved = NPQ::NNameResolver::ResolveName(Database, TopicPath, LocalDC, LocalDC);
+    if (!resolved) {
         CloseSession(
-                TStringBuilder() << "incorrect topic \"" << DiscoveryConverter->GetOriginalTopic()
-                                 << "\": " << DiscoveryConverter->GetReason(),
+                TStringBuilder() << "incorrect topic \"" << TopicPath
+                                 << "\": " << resolved.error(),
                 NPersQueue::NErrorCode::BAD_REQUEST,
                 ctx
         );
@@ -245,9 +247,12 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     UserAgent = init.GetVersion();
     LogSession(ctx);
 
-    auto* request = new TEvDescribeTopicsRequest({DiscoveryConverter});
-    //TODO: GetNode for /Root/PQ then describe from balancer
-    ctx.Send(SchemeCache, request);
+    absl::flat_hash_set<TString> paths;
+    paths.insert(TopicPath);
+    NPQ::NDescriber::TDescribeSettings settings;
+    settings.AccessRights = NPQ::NDescriber::TAccessRights(NACLib::EAccessRights::UpdateRow);
+    settings.LocalDc = LocalDC;
+    ctx.Register(NPQ::NDescriber::CreateDescriberActor(this->SelfId(), Database.empty() ? "/Root" : Database, std::move(paths), settings));
     State = ES_WAIT_SCHEME;
     InitRequest = init;
     PreferedPartition = init.GetPartitionGroup() > 0 ? init.GetPartitionGroup() - 1 : Max<ui32>();
@@ -286,7 +291,7 @@ void TWriteSessionActor::SetupCounters()
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetServiceCounters(Counters, "pqproxy|writeSession");
     Y_ABORT_UNLESS(FullConverter);
-    auto aggr = GetLabels(FullConverter);
+    auto aggr = GetLabels(FullConverter->CounterNames());
 
     BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflight"}, false);
     SessionsWithoutAuth = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WithoutAuth"}, true);
@@ -322,7 +327,7 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetCountersForTopic(Counters, isServerless);
     Y_ABORT_UNLESS(FullConverter);
-    auto subgroups = GetSubgroupsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
+    auto subgroups = GetSubgroupsForTopic(FullConverter->CounterNames(), cloudId, dbId, dbPath, folderId);
 
     SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
     SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
@@ -335,66 +340,46 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 }
 
 
-void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+void TWriteSessionActor::Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+    const auto ctx = ActorContext();
     if (State != ES_WAIT_SCHEME && State != ES_INITED) {
         return CloseSession("erroneous internal state", NPersQueue::NErrorCode::ERROR, ctx);
     }
 
-    auto& res = ev->Get()->Result;
-    Y_ABORT_UNLESS(res->ResultSet.size() == 1);
-
-    auto& entry = res->ResultSet[0];
+    Y_ABORT_UNLESS(ev->Get()->Topics.size() == 1);
+    const auto& [path, info] = *ev->Get()->Topics.begin();
     TString errorReason;
 
-    auto& path = entry.Path;
-    auto& topic = ev->Get()->TopicsRequested[0];
-    switch (entry.Status) {
-        case TSchemeCacheNavigate::EStatus::RootUnknown: {
-            errorReason = Sprintf("path '%s' has incorrect root prefix, Marker# PQ14", JoinPath(path).c_str());
-            CloseSession(errorReason, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx);
-            return;
-        }
-        case TSchemeCacheNavigate::EStatus::PathErrorUnknown: {
-            errorReason = Sprintf("no path '%s', Marker# PQ151", JoinPath(path).c_str());
-            CloseSession(errorReason, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx);
-            return;
-        }
-        case TSchemeCacheNavigate::EStatus::Ok:
-            break;
-        default: {
-            errorReason = Sprintf("topic '%s' describe error, Status# %s, Marker# PQ1", path.back().c_str(),
-                                  ToString(entry.Status).c_str());
-            CloseSession(errorReason, NPersQueue::NErrorCode::ERROR, ctx);
-            return;
-        }
+    if (info.Status != NPQ::NDescriber::EStatus::SUCCESS) {
+        CloseSession(NPQ::NDescriber::Description(path, info.Status),
+                     info.Status == NPQ::NDescriber::EStatus::UNAUTHORIZED
+                         || info.Status == NPQ::NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS
+                         ? NPersQueue::NErrorCode::ACCESS_DENIED
+                         : info.Status == NPQ::NDescriber::EStatus::BAD_REQUEST
+                             ? NPersQueue::NErrorCode::BAD_REQUEST
+                             : NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                     ctx);
+        return;
     }
-    if (!entry.PQGroupInfo) {
-
+    if (!info.Info) {
         errorReason = Sprintf("topic '%s' describe error, reason - could not retrieve topic metadata, Marker# PQ99",
-                              topic->GetPrintableString().c_str());
+                              path.c_str());
         CloseSession(errorReason, NPersQueue::NErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    PQInfo = entry.PQGroupInfo;
+    PQInfo = info.Info;
     Y_ABORT_UNLESS(PQInfo->PartitionChooser);
     Y_ABORT_UNLESS(PQInfo->PartitionGraph);
     Config = std::move(PQInfo->Description);
-    //const TString topicName = description.GetName();
 
-    if (entry.Kind != TSchemeCacheNavigate::EKind::KindTopic) {
-        errorReason = Sprintf("item '%s' is not a topic, Marker# PQ13", DiscoveryConverter->GetPrintableString().c_str());
-        CloseSession(errorReason, NPersQueue::NErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-    if (!DiscoveryConverter->IsValid()) {
-        errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
+    FullConverter = NPQ::NNameResolver::MakeTopicNamesPtr(info.Names);
+    if (!FullConverter || !FullConverter->IsValid()) {
+        errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", path.c_str());
         CloseSession(errorReason, NPersQueue::NErrorCode::ERROR, ctx);
         return;
     }
-    FullConverter = DiscoveryConverter->UpgradeToFullConverter(Config.GetPQTabletConfig(),
-                                                               AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     InitAfterDiscovery(ctx);
-    SecurityObject = entry.SecurityObject;
+    SecurityObject = info.SecurityObject;
 
     Y_ABORT_UNLESS(Config.PartitionsSize() > 0);
 
@@ -404,7 +389,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = Config.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
-                      tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
+                      tabletConfig.GetYdbDatabasePath(), info.IsServerless,
                       tabletConfig.GetYcFolderId());
     } else {
         SetupCounters();
@@ -413,7 +398,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
     if (Auth.GetCredentialsCase() == NPersQueueCommon::TCredentials::CREDENTIALS_NOT_SET) {
         //ACLCheckInProgress is still true - no recheck will be done
         YDB_LOG_WARN_CTX(ctx, "Session without AuthInfo sourceId",
-            {"discoveryConverter", DiscoveryConverter->GetPrintableString()},
+            {"topic", FullConverter->GetPrintableString()},
             {"sourceId", SourceId},
             {"peerName", PeerName});
         SessionsWithoutAuth.Inc();
@@ -515,7 +500,7 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
 
     if (!PartitionTabletId) {
         CloseSession(
-                Sprintf("no partition %u in topic '%s', Marker# PQ4", Partition, DiscoveryConverter->GetPrintableString().c_str()),
+                Sprintf("no partition %u in topic '%s', Marker# PQ4", Partition, FullConverter->GetPrintableString().c_str()),
                 NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx
         );
         return;
@@ -914,7 +899,7 @@ void TWriteSessionActor::LogSession(const TActorContext& ctx) {
         {"sessionId", OwnerCookie},
         {"userAgent", UserAgent},
         {"ip", PeerName},
-        {"topic", DiscoveryConverter->GetPrintableString()},
+        {"topic", FullConverter ? FullConverter->GetPrintableString() : TopicPath},
         {"durationSec", (ctx.Now() - StartTime).Seconds()});
 
     LogSessionDeadline = ctx.Now() + TDuration::Hours(1) + TDuration::Seconds(rand() % 60);
@@ -934,8 +919,15 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
         RequestNotChecked = false;
         if (Auth.GetCredentialsCase() != NPersQueueCommon::TCredentials::CREDENTIALS_NOT_SET) {
             ACLCheckInProgress = true;
-            auto* request = new TEvDescribeTopicsRequest({DiscoveryConverter});
-            ctx.Send(SchemeCache, request);
+            absl::flat_hash_set<TString> paths;
+            paths.insert(TopicPath);
+            NPQ::NDescriber::TDescribeSettings settings;
+            if (Token) {
+                settings.UserToken = Token;
+            }
+            settings.AccessRights = NPQ::NDescriber::TAccessRights(NACLib::EAccessRights::UpdateRow);
+            settings.LocalDc = LocalDC;
+            ctx.Register(NPQ::NDescriber::CreateDescriberActor(this->SelfId(), Database.empty() ? "/Root" : Database, std::move(paths), settings));
         }
     }
 

@@ -300,7 +300,7 @@ TConsumerReadQuota* TReadQuoter::GetConsumerQuotaIfExists(const TString& consume
 
 NActors::IActor* CreateReadQuoter(
     const NKikimrPQ::TPQConfig& pqConfig,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
     const TPartitionId& partition,
     TActorId tabletActor,

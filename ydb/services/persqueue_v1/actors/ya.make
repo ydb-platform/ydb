@@ -12,6 +12,8 @@ PEERDIR(
     ydb/core/persqueue/deferred_publish
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/nameresolver
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/dataplane

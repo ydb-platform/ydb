@@ -4,6 +4,8 @@
 #include "msgbus_tabletreq.h"
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -68,15 +70,17 @@ protected:
     struct TPerTopicInfo {
         TPerTopicInfo()
         { }
-        explicit TPerTopicInfo(const TSchemeEntry& topicEntry, NPersQueue::TTopicConverterPtr& topicConverter)
+        explicit TPerTopicInfo(const TSchemeEntry& topicEntry, NPQ::NNameResolver::TTopicNamesPtr topicNames, TString name)
             : TopicEntry(topicEntry)
-            , Converter(topicConverter)
+            , Names(std::move(topicNames))
+            , Name(std::move(name))
         {
         }
 
         TActorId ActorId;
         TSchemeEntry TopicEntry;
-        NPersQueue::TTopicConverterPtr Converter;
+        NPQ::NNameResolver::TTopicNamesPtr Names;
+        TString Name;
         NKikimrClient::TResponse Response;
         bool ActorAnswered = false;
     };
@@ -145,7 +149,7 @@ protected:
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleTimeout(const TActorContext& ctx);
 
@@ -160,8 +164,9 @@ protected:
     const TActorId PqMetaCache;
     THashMap<TActorId, THolder<TPerTopicInfo>> Children;
     size_t ChildrenAnswered = 0;
-    std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> TopicsDescription;
-    TVector<NPersQueue::TTopicConverterPtr> TopicsConverters;
+    bool TopicsDescribed = false;
+    absl::flat_hash_map<TString, NPQ::NDescriber::TTopicInfo> DescribedTopics;
+    TActorId DescriberActorId;
 
     // Nodes info
     const bool ListNodes;

@@ -1329,11 +1329,11 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     auto counters = AppData(ctx)->Counters;
-    auto labels = NPersQueue::GetLabels(TopicConverter);
+    auto labels = NPersQueue::GetLabels(TopicConverter->CounterNames());
     const TString suffix = IsLocalDC ? "Original" : "Mirrored";
 
     WriteBufferIsFullCounter.SetCounter(
-        NPersQueue::GetCounters(counters, "writingTime", TopicConverter),
+        NPersQueue::GetCounters(counters, "writingTime", TopicConverter->CounterNames()),
             {{"host", DCId},
             {"Partition", ToString<ui32>(Partition.InternalPartitionId)}},
             {"sensor", "BufferFullTime" + suffix, true});
@@ -1397,7 +1397,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     const auto topicName = TopicConverter->GetModernName();
     auto counters = AppData(ctx)->Counters;
-    auto subgroups = NPersQueue::GetSubgroupsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(TopicConverter->CounterNames(), CloudId, DbId, DbPath, FolderId);
 /*
     WriteBufferIsFullCounter.SetCounter(
         NPersQueue::GetCountersForTopic(counters, IsServerless),

@@ -17,6 +17,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/actors/core/event.h>
@@ -687,12 +688,12 @@ struct TEvPQ {
     };
 
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
-        TEvChangePartitionConfig(const NPersQueue::TTopicConverterPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config)
+        TEvChangePartitionConfig(const NPQ::NNameResolver::TTopicNamesPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config)
             : TopicConverter(topicConverter)
             , Config(config)
         {}
 
-        NPersQueue::TTopicConverterPtr TopicConverter;
+        NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
     };
 
@@ -1026,7 +1027,7 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
-        NPersQueue::TTopicConverterPtr TopicConverter;
+        NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
     };
 

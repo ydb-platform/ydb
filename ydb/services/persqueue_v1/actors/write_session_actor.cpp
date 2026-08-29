@@ -23,6 +23,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
 #include <util/string/cast.h>
@@ -208,7 +210,7 @@ TWriteSessionActor<Protocol>::TWriteSessionActor(
         TEvStreamWriteRequest* request, const ui64 cookie,
         const NActors::TActorId& schemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
-        const NPersQueue::TTopicsListController& topicsController
+        const TString& localCluster
 )
     : TRlHelpers({}, request, WRITE_BLOCK_SIZE, false)
     , Request(request)
@@ -216,7 +218,7 @@ TWriteSessionActor<Protocol>::TWriteSessionActor(
     , SchemeCache(schemeCache)
     , PeerName("")
     , Cookie(cookie)
-    , TopicsController(topicsController)
+    , LocalCluster(localCluster)
     , Partition(0)
     , PreferedPartition(Max<ui32>())
     , WritesDone(false)
@@ -431,7 +433,7 @@ void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
         }
     } else {
         TString errorReason = Sprintf("access to topic '%s' denied for '%s' due to 'no WriteTopic rights', Marker# PQ1125",
-            DiscoveryConverter->GetPrintableString().c_str(),
+            (FullConverter ? FullConverter->GetPrintableString().c_str() : TopicPath.c_str()),
             Token->GetUserSID().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ACCESS_DENIED, ctx);
     }
@@ -489,10 +491,12 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         }
     }
 
-    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
-    if (!DiscoveryConverter->IsValid()) {
+    TopicPath = topic_path;
+    auto resolved = NPQ::NNameResolver::ResolveName(
+        Request->GetDatabaseName().GetOrElse("/Root"), topic_path, LocalCluster, LocalCluster);
+    if (!resolved) {
         CloseSession(
-                TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),
+                TStringBuilder() << "topic " << topic_path << " could not be recognized: " << resolved.error(),
                 PersQueue::ErrorCode::BAD_REQUEST, ctx
         );
         return;
@@ -594,7 +598,7 @@ void TWriteSessionActor<Protocol>::SetupCounters()
 
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetServiceCounters(Counters, "pqproxy|writeSession");
-    auto aggr = NPersQueue::GetLabels(FullConverter);
+    auto aggr = NPersQueue::GetLabels(FullConverter->CounterNames());
 
     BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflight"}, false);
     BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflightTotal"}, false);
@@ -627,7 +631,7 @@ void TWriteSessionActor<Protocol>::SetupCounters(const TString& cloudId, const T
 
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
-    auto subgroups = NPersQueue::GetSubgroupsForTopic(FullConverter, cloudId, dbId, dbPath, folderId);
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(FullConverter->CounterNames(), cloudId, dbId, dbPath, folderId);
 
     SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_created"}, true, "name");
     SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_write.sessions_active_count"}, false, "name");
@@ -641,31 +645,43 @@ void TWriteSessionActor<Protocol>::SetupCounters(const TString& cloudId, const T
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema, NWilson::TTraceId traceId) {
+    Y_UNUSED(traceId);
     YDB_LOG_INFO_CTX(ctx, "Init check schema");
 
     if (!needWaitSchema) {
         ACLCheckInProgress = true;
     }
-    ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({DiscoveryConverter}), 0, 0, std::move(traceId));
+    absl::flat_hash_set<TString> paths;
+    paths.insert(TopicPath);
+    NPQ::NDescriber::TDescribeSettings settings;
+    settings.UserToken = Token;
+    settings.AccessRights = NPQ::NDescriber::TAccessRights(NACLib::EAccessRights::UpdateRow);
+    settings.LocalDc = LocalCluster;
+    ctx.Register(NPQ::NDescriber::CreateDescriberActor(this->SelfId(), Request->GetDatabaseName().GetOrElse("/Root"), std::move(paths), settings));
     if (needWaitSchema) {
         State = ES_WAIT_SCHEME;
     }
 }
 
 template <EProtocol Protocol>
-void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    auto& res = ev->Get()->Result;
-    AFL_ENSURE(res->ResultSet.size() == 1);
-
-    auto& entry = res->ResultSet[0];
+void TWriteSessionActor<Protocol>::Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+    const auto ctx = this->ActorContext();
+    AFL_ENSURE(ev->Get()->Topics.size() == 1);
+    const auto& [path, info] = *ev->Get()->Topics.begin();
     TString errorReason;
-    auto processResult = ProcessMetaCacheTopicResponse(entry);
-    if (processResult.IsFatal) {
-        CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
+    if (info.Status != NPQ::NDescriber::EStatus::SUCCESS) {
+        CloseSession(NPQ::NDescriber::Description(path, info.Status),
+                     info.Status == NPQ::NDescriber::EStatus::UNAUTHORIZED
+                         || info.Status == NPQ::NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS
+                         ? PersQueue::ErrorCode::ACCESS_DENIED
+                         : info.Status == NPQ::NDescriber::EStatus::BAD_REQUEST
+                             ? PersQueue::ErrorCode::BAD_REQUEST
+                             : PersQueue::ErrorCode::UNKNOWN_TOPIC,
+                     ctx);
         return;
     }
-    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
-    PQGroupInfo = entry.PQGroupInfo;
+    AFL_ENSURE(info.Info);
+    PQGroupInfo = info.Info;
     const auto& config = PQGroupInfo->Description;
     Chooser = PQGroupInfo->PartitionChooser;
     AFL_ENSURE(Chooser);
@@ -675,19 +691,18 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
     AFL_ENSURE(config.PartitionsSize() > 0);
     AFL_ENSURE(config.HasPQTabletConfig());
     InitialPQTabletConfig = config.GetPQTabletConfig();
-    if (!DiscoveryConverter->IsValid()) {
-        errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
+    FullConverter = NPQ::NNameResolver::MakeTopicNamesPtr(info.Names);
+    if (!FullConverter || !FullConverter->IsValid()) {
+        errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", path.c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !config.GetPQTabletConfig().GetLocalDC()) {
-        errorReason = Sprintf("Write to mirrored topic '%s' is forbidden", DiscoveryConverter->GetPrintableString().c_str());
+        errorReason = Sprintf("Write to mirrored topic '%s' is forbidden", FullConverter->GetPrintableString().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
 
-    FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig,
-                                                               AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     if (!InitAfterDiscovery(ctx)) {
         return;
     }
@@ -695,14 +710,14 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = config.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
-                        tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
+                        tabletConfig.GetYdbDatabasePath(), info.IsServerless,
                       tabletConfig.GetYcFolderId());
     } else {
         SetupCounters();
     }
 
-    AFL_ENSURE(entry.SecurityObject);
-    ACL.Reset(new TAclWrapper(entry.SecurityObject));
+    AFL_ENSURE(info.SecurityObject);
+    ACL.Reset(new TAclWrapper(info.SecurityObject));
     YDB_LOG_INFO_CTX(ctx, "Session v1 describe result for acl check",
         {"cookie", Cookie},
         {"sessionId", OwnerCookie});
@@ -785,7 +800,7 @@ void TWriteSessionActor<Protocol>::ProceedPartition(const ui32 partition, const 
     if (!PartitionTabletId) {
         CloseSession(
                 Sprintf("no partition %u in topic '%s', Marker# PQ4", Partition,
-                        DiscoveryConverter->GetPrintableString().c_str()),
+                        FullConverter->GetPrintableString().c_str()),
                 PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx
         );
         return;
@@ -1741,8 +1756,8 @@ void TWriteSessionActor<Protocol>::LogSession(const TActorContext& ctx) {
             return InitRequest.path();
         }
     }();
-    if (DiscoveryConverter && DiscoveryConverter->IsValid()) {
-        topic_path = DiscoveryConverter->GetPrintableString();
+    if (FullConverter && FullConverter->IsValid()) {
+        topic_path = FullConverter->GetPrintableString();
     }
     YDB_LOG_INFO_CTX(ctx, "Write session: userAgent=",
         {"cookie", Cookie},

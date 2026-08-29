@@ -76,7 +76,7 @@ public:
         TActorId tabletActor,
         TActorId recepient,
         ui64 tabletId,
-        const NPersQueue::TTopicConverterPtr& topicConverter,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
         const TPartitionId& partition,
         const TQuoterParams& params,
         ui64 quotaCreditBytes,
@@ -116,7 +116,7 @@ protected:
 
     TString KesusPath;
     TString ResourcePath;
-    const NPersQueue::TTopicConverterPtr TopicConverter;
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
     THolder<TPercentileCounter> QuotaWaitCounter;
     TTabletCountersBase Counters;
     const TPartitionId Partition;
@@ -151,7 +151,7 @@ public:
         TActorId tabletActor,
         TActorId recepient,
         ui64 tabletId,
-        const NPersQueue::TTopicConverterPtr& topicConverter,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
         const TPartitionId& partition,
         const TString& user,
         const TTabletCountersBase& counters
@@ -175,14 +175,14 @@ private:
 static const TString WRITE_QUOTA_ROOT_PATH;
 
 static TQuoterParams CreateQuoterParams(const NKikimrPQ::TPQConfig& pqConfig,
-                                        NPersQueue::TTopicConverterPtr topicConverter,
+                                        NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter,
                                         ui64 tabletId, const TActorContext& ctx);
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
 
     TAccountWriteQuoter(TActorId tabletActor, TActorId recepient, ui64 tabletId,
-            const NPersQueue::TTopicConverterPtr& topicConverter, const TPartitionId& partition,
+            const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter, const TPartitionId& partition,
             const TTabletCountersBase& counters, const TActorContext& ctx);
 
 protected:

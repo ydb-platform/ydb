@@ -82,7 +82,7 @@ struct TUserInfo: public TUserInfoBase, public TAtomicRefCount<TUserInfo> {
         TConstArrayRef<NMonitoring::TDynamicCounterPtr> partitionCountersSubgroups,
         const TString& user,
         const ui64 readRuleGeneration, const bool important, const TDuration availabilityPeriod,
-        const NPersQueue::TTopicConverterPtr& topicConverter,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
         const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
@@ -145,7 +145,7 @@ public:
 
     bool HasReadRule = false;
     std::optional<TTabletLabeledCountersBase> LabeledCounters;
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
 
     TWorkingTimeCounter Counter;
     NKikimr::NPQ::TMultiCounter BytesRead;
@@ -193,7 +193,7 @@ class TUsersInfoStorage {
 public:
     TUsersInfoStorage(
         TString dcId,
-        const NPersQueue::TTopicConverterPtr& topicConverter,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
         ui32 partition,
         const NKikimrPQ::TPQTabletConfig& config,
         const TString& CloudId,
@@ -286,7 +286,7 @@ private:
     THashMap<TString, TIntrusivePtr<TUserInfo>> ImportantExtUsersInfoSlice;
 
     const TString DCId;
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
     const ui32 Partition;
     NMonitoring::TDynamicCounterPtr StreamCountersSubgroup;
 

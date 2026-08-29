@@ -28,7 +28,7 @@ TBasicAccountQuoter::TBasicAccountQuoter(
     TActorId tabletActor,
     TActorId recepient,
     ui64 tabletId,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const TPartitionId& partition,
     const TQuoterParams& params,
     ui64 quotaCreditBytes,
@@ -65,9 +65,9 @@ void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorCont
     for (const auto& event : Queue) {
         auto cookie = event.Request->Get()->Cookie;
         ReplyPersQueueError(
-            TabletActorId, ctx, TabletId, TopicConverter->GetClientsideName(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
+            TabletActorId, ctx, TabletId, TopicConverter->Path, Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
             cookie, NPersQueue::NErrorCode::INITIALIZING,
-            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetClientsideName() << " (ReadInfo) cookie " << cookie
+            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->Path << " (ReadInfo) cookie " << cookie
         );
     }
     Die(ctx);
@@ -181,7 +181,7 @@ TAccountReadQuoter::TAccountReadQuoter(
     TActorId tabletActor,
     TActorId recepient,
     ui64 tabletId,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const TPartitionId& partition,
     const TString& user,
     const TTabletCountersBase& counters
@@ -203,7 +203,7 @@ void TAccountReadQuoter::InitCountersImpl(const TActorContext& ctx) {
     if (counters) {
         QuotaWaitCounter.Reset(new TPercentileCounter(
             GetServiceCounters(counters, "pqproxy|consumerReadQuotaWait"),
-            NPersQueue::GetLabels(TopicConverter),
+            NPersQueue::GetLabels(TopicConverter->CounterNames()),
             {
                 {"Client", User},
                 {"ConsumerPath", ConsumerPath},
@@ -221,7 +221,7 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdat
 }
 
 TString TAccountReadQuoter::BuildLogPrefix() const {
-    return TStringBuilder()  << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " user=" << User << ": ";
+    return TStringBuilder()  << "topic=" << TopicConverter->Path << ":" << Partition << " user=" << User << ": ";
 }
 
 
@@ -229,7 +229,7 @@ TAccountWriteQuoter::TAccountWriteQuoter(
     TActorId tabletActor,
     TActorId recepient,
     ui64 tabletId,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const TPartitionId& partition,
     const TTabletCountersBase& counters,
     const TActorContext& ctx
@@ -247,7 +247,7 @@ TAccountWriteQuoter::TAccountWriteQuoter(
 }
 
 TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
-        const NKikimrPQ::TPQConfig& pqConfig, NPersQueue::TTopicConverterPtr topicConverter,
+        const NKikimrPQ::TPQConfig& pqConfig, NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter,
         ui64 tabletId, const TActorContext& ctx
 ) {
     TQuoterParams params;
@@ -277,7 +277,7 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpda
 }
 
 TString TAccountWriteQuoter::BuildLogPrefix() const {
-    return TStringBuilder() << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " writeQuoter" << ": ";
+    return TStringBuilder() << "topic=" << TopicConverter->Path << ":" << Partition << " writeQuoter" << ": ";
 }
 
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/events.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -46,6 +47,9 @@ struct TAccessRights {
 
 struct TTopicInfo {
     EStatus Status = EStatus::NOT_FOUND;
+    // SchemeCache status/kind/info as returned; msgbus maps these to historical error strings.
+    NSchemeCache::TSchemeCacheNavigate::EStatus NavigateStatus = NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown;
+    NSchemeCache::TSchemeCacheNavigate::EKind Kind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
 
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
@@ -56,6 +60,9 @@ struct TTopicInfo {
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;
+    // Filled on SUCCESS via NamesFromConfig. Empty on errors.
+    NNameResolver::TTopicNames Names;
+    bool IsServerless = false;
 };
 
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
@@ -75,6 +82,7 @@ struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAccessRights AccessRights;
     bool ForceSyncVersion = false;
+    TString LocalDc;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

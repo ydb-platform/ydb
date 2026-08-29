@@ -16,6 +16,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
@@ -178,7 +180,7 @@ struct TEvPQProxy {
     };
 
     struct TEvPartitionReady : public NActors::TEventLocal<TEvPartitionReady, EvPartitionReady> {
-        TEvPartitionReady(const NPersQueue::TTopicConverterPtr& topic, const ui32 partition, const ui64 wTime, const ui64 sizeLag,
+        TEvPartitionReady(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const ui32 partition, const ui64 wTime, const ui64 sizeLag,
                           const ui64 readOffset, const ui64 endOffset)
             : Topic(topic)
             , Partition(partition)
@@ -188,7 +190,7 @@ struct TEvPQProxy {
             , EndOffset(endOffset)
         { }
 
-        NPersQueue::TTopicConverterPtr Topic;
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr Topic;
         ui32 Partition;
         ui64 WTime;
         ui64 SizeLag;
@@ -266,14 +268,14 @@ struct TEvPQProxy {
 
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
-        TEvCommitDone(ui64 readId, const NPersQueue::TTopicConverterPtr& topic, const ui32 partition)
+        TEvCommitDone(ui64 readId, const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const ui32 partition)
             : ReadId(readId)
             , Topic(topic)
             , Partition(partition)
         { }
 
         ui64 ReadId;
-        NPersQueue::TTopicConverterPtr Topic;
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr Topic;
         ui32 Partition;
     };
 
@@ -298,12 +300,12 @@ struct TEvPQProxy {
 
 
     struct TEvPartitionReleased : public NActors::TEventLocal<TEvPartitionReleased, EvPartitionReleased> {
-        TEvPartitionReleased(const NPersQueue::TTopicConverterPtr& topic, const ui32 partition)
+        TEvPartitionReleased(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const ui32 partition)
             : Topic(topic)
             , Partition(partition)
         { }
 
-        NPersQueue::TTopicConverterPtr Topic;
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr Topic;
         ui32 Partition;
     };
 
@@ -333,7 +335,7 @@ struct TEvPQProxy {
     };
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
-        TEvPartitionStatus(const NPersQueue::TTopicConverterPtr& topic, const ui32 partition, const ui64 offset,
+        TEvPartitionStatus(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const ui32 partition, const ui64 offset,
                            const ui64 endOffset, ui64 writeTimestampEstimateMs, bool init = true)
         : Topic(topic)
         , Partition(partition)
@@ -343,7 +345,7 @@ struct TEvPQProxy {
         , Init(init)
         { }
 
-        NPersQueue::TTopicConverterPtr Topic;
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr Topic;
         ui32 Partition;
         ui64 Offset;
         ui64 EndOffset;
@@ -389,8 +391,6 @@ struct TEvPQProxy {
 
 /// WRITE ACTOR
 class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor> {
-    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
-    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
     using TPQGroupInfoPtr = TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>;
 public:
     TWriteSessionActor(IWriteSessionHandlerRef handler, const ui64 cookie, const NActors::TActorId& schemeCache,
@@ -415,7 +415,7 @@ private:
             HFunc(TEvPQProxy::TEvWrite, Handle)
             HFunc(TEvPQProxy::TEvDone, Handle)
 
-            HFunc(TEvDescribeTopicsResponse, Handle);
+            hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
 
             HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle);
@@ -448,7 +448,7 @@ private:
     void InitAfterDiscovery(const TActorContext& ctx);
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
 
-    void Handle(TEvDescribeTopicsResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev);
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
@@ -574,9 +574,8 @@ private:
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NYdb::NPersQueue::TCounterPtr BytesWrittenByUserAgent;
 
-    THolder<NPersQueue::TTopicNamesConverterFactory> ConverterFactory;
-    NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
-    NPersQueue::TTopicConverterPtr FullConverter;
+    TString TopicPath;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr FullConverter;
 
     NPersQueue::TWriteRequest::TInit InitRequest;
 
@@ -586,10 +585,8 @@ private:
 };
 
 class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {
-    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
-    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
 public:
-     TReadSessionActor(IReadSessionHandlerRef handler, const NPersQueue::TTopicsListController& topicsHandler, const ui64 cookie,
+     TReadSessionActor(IReadSessionHandlerRef handler, const NPQ::NNameResolver::TReadTopicsContext& topicsHandler, const ui64 cookie,
                         const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                         const TMaybe<TString> clientDC);
     ~TReadSessionActor();
@@ -650,7 +647,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
-            HFunc(TEvDescribeTopicsResponse, HandleDescribeTopicsResponse);
+            hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, HandleDescribeTopicsResponse);
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
 
         default:
@@ -697,15 +694,15 @@ private:
                       const NActors::TActorContext& ctx);
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx);
-    void HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
+    void HandleDescribeTopicsResponse(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev);
 
     void SendAuthRequest(const TActorContext& ctx);
     void CreateInitAndAuthActor(const TActorContext& ctx);
 
     void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
-    void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
-    void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic, const TString& cloudId, const TString& dbId,
+    void SetupTopicCounters(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic);
+    void SetupTopicCounters(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const TString& cloudId, const TString& dbId,
                             const TString& dbPath, bool isServerless, const TString& folderId);
 
     [[nodiscard]] bool ProcessReads(const NActors::TActorContext& ctx); // returns false if actor died
@@ -786,9 +783,9 @@ private:
         bool Released;
         ui64 LockGeneration;
         bool LockSent;
-        NPersQueue::TTopicConverterPtr Converter;
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr Converter;
 
-        TPartitionActorInfo(const TActorId& actor, ui64 generation, const NPersQueue::TTopicConverterPtr& topic)
+        TPartitionActorInfo(const TActorId& actor, ui64 generation, const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic)
             : Actor(actor)
             , Reading(false)
             , Releasing(false)
@@ -803,14 +800,14 @@ private:
     THashSet<TActorId> ActualPartitionActors;
     THashMap<std::pair<TString, ui32>, TPartitionActorInfo> Partitions; //topic[ClientSideName!]:partition -> info
 
-    THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
+    THashMap<TString, NKikimr::NPQ::NNameResolver::TTopicNamesPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashMap<TString, TTopicHolder::TPtr> Topics; // PrimaryName ->topic info
 
     TVector<ui32> Groups;
     bool ReadOnlyLocal;
 
     struct TPartitionInfo {
-        NPersQueue::TTopicConverterPtr Topic;
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr Topic;
         ui32 Partition;
         ui64 WTime;
         ui64 SizeLag;
@@ -941,8 +938,8 @@ private:
     NKikimr::NPQ::TMultiCounter SLIBigReadLatency;
     NKikimr::NPQ::TMultiCounter ReadsTotal;
 
-    NPersQueue::TTopicsListController TopicsHandler;
-    NPersQueue::TTopicsToConverter TopicsList;
+    NPQ::NNameResolver::TReadTopicsContext TopicsHandler;
+    NPQ::NNameResolver::TExpandReadTopicsResult TopicsList;
 
     std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
 };

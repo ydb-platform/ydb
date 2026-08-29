@@ -61,6 +61,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/kafka
     ydb/core/base
     ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/nameresolver
     ydb/core/persqueue/public/fetcher
     ydb/core/persqueue/public/schema
     ydb/core/persqueue/public/write_meta

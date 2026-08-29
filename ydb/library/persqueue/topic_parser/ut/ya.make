@@ -11,7 +11,7 @@ PEERDIR(
 )
 
 SRCS(
-    topic_names_converter_ut.cpp
+    consumer_helpers_ut.cpp
 )
 
 END()

@@ -5,7 +5,7 @@
 #include "grpc_pq_session.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
@@ -31,14 +31,13 @@ class TPQReadService : public IPQClustersUpdaterCallback, public std::enable_sha
 
         TSession(std::shared_ptr<TPQReadService> proxy,
              grpc::ServerCompletionQueue* cq, ui64 cookie, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool needDiscoverClusters,
-             const NPersQueue::TConverterFactoryPtr& converterFactory);
+             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool needDiscoverClusters);
 
         void Start() override;
         void SendEvent(NActors::IEventBase* ev);
 
     private:
-        void CreateActor(std::unique_ptr<NPersQueue::TTopicsListController>&& topicsHandler);
+        void CreateActor(const NPQ::NNameResolver::TReadTopicsContext& topicsHandler);
         ui64 GetCookie() const;
 
     private:
@@ -52,9 +51,6 @@ class TPQReadService : public IPQClustersUpdaterCallback, public std::enable_sha
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
         bool NeedDiscoverClusters;
-
-        NPersQueue::TConverterFactoryPtr TopicConverterFactory;
-
     };
 
     using TSessionRef = TIntrusivePtr<TSession>;
@@ -113,7 +109,6 @@ private:
     void CheckClustersListChange(const TVector<TString>& clusters) override;
     void CheckClusterChange(const TString& localCluster, const bool enabled) override;
     void NetClassifierUpdated(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier) override;
-    void UpdateTopicsHandler();
     //! Unregistry session object.
     void ReleaseSession(ui64 cookie);
 
@@ -148,9 +143,6 @@ private:
 
     bool NeedDiscoverClusters;
     TClustersUpdater::TStatus::TPtr ClustersUpdaterStatus;
-
-    NPersQueue::TConverterFactoryPtr TopicConverterFactory;
-    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };
 
 

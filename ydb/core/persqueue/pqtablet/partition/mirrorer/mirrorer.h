@@ -122,7 +122,7 @@ public:
         ui64 tabletId,
         TActorId tabletActor,
         TActorId partitionActor,
-        const NPersQueue::TTopicConverterPtr& topicConverter,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
         ui32 partition,
         bool isLocalDC,
         ui64 endOffset,
@@ -153,7 +153,7 @@ public:
 
 private:
     const TActorId PartitionActor;
-    const NPersQueue::TTopicConverterPtr TopicConverter;
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
     const ui32 Partition;
     const bool IsLocalDC;
     ui64 EndOffset;

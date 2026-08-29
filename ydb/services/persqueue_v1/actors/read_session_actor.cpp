@@ -31,7 +31,7 @@ TReadSessionActor<Protocol>::TReadSessionActor(
         const TActorId& schemeCache, const TActorId& newSchemeCache,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
         const TMaybe<TString> clientDC,
-        const NPersQueue::TTopicsListController& topicsHandler)
+        const NPQ::NNameResolver::TReadTopicsContext& topicsHandler)
     : TRlHelpers({}, request, READ_BLOCK_SIZE, false)
     , Request(request)
     , ClientDC(clientDC.GetOrElse("other"))
@@ -762,7 +762,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadSessionStatus::TPtr&
 
     for (const auto& [_, info] : Partitions) {
         auto part = result->Record.AddPartition();
-        part->SetTopic(info.Partition.DiscoveryConverter->GetPrimaryPath());
+        part->SetTopic(info.Partition.TopicNames->GetPrimaryPath());
         part->SetPartition(info.Partition.Partition);
         part->SetAssignId(info.Partition.AssignId);
         part->SetReadIdCommitted(info.ReadIdCommitted);
@@ -867,6 +867,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
         }
     };
     auto database = Request->GetDatabaseName().GetOrElse(TString());
+    Database = database;
 
     for (const auto& topic : init.topics_read_settings()) {
         const TString path = getTopicPath(topic);
@@ -893,7 +894,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database);
+    TopicsList = TopicsHandler.ExpandRead(database, TopicsToResolve, ReadOnlyLocal);
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);
@@ -906,8 +907,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
                 TStringBuilder() << "unknown topic " << getTopicPath(topic), ctx);
         }
 
-        for (const auto& converter : it->second) {
-            const auto internalName = converter->GetOriginalPath();
+        for (const auto& internalName : it->second) {
             if constexpr (Protocol == EProtocol::PQv1) {
                 for (const i64 pg : topic.partition_group_ids()) {
                     if (pg <= 0) {
@@ -1012,10 +1012,10 @@ void TReadSessionActor<Protocol>::SetupCounters() {
 }
 
 template <EProtocol Protocol>
-void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic) {
+void TReadSessionActor<Protocol>::SetupTopicCounters(const NPQ::NNameResolver::TTopicNamesPtr& topic) {
     auto& topicCounters = TopicCounters[topic->GetInternalName()];
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
-    auto aggr = NPersQueue::GetLabels(topic);
+    auto aggr = NPersQueue::GetLabels(topic->CounterNames());
     TVector<std::pair<TString, TString>> cons;
     if (!ReadWithoutConsumer) {
         cons = {{"Client", ClientId}, {"ConsumerPath", ClientPath}};
@@ -1038,12 +1038,12 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
 }
 
 template <EProtocol Protocol>
-void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic,
+void TReadSessionActor<Protocol>::SetupTopicCounters(const NPQ::NNameResolver::TTopicNamesPtr& topic,
         const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     auto& topicCounters = TopicCounters[topic->GetInternalName()];
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
-    auto subgroups = NPersQueue::GetSubgroupsForTopic(topic, cloudId, dbId, dbPath, folderId);
+    auto subgroups = NPersQueue::GetSubgroupsForTopic(topic->CounterNames(), cloudId, dbId, dbPath, folderId);
     if (!ReadWithoutConsumer)
         subgroups.push_back({"consumer", ClientPath});
 
@@ -1127,7 +1127,6 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, 
 
             Topics[internalName] = TTopicHolder::FromTopicInfo(t);
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
-            FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
 
             if (!GetMeteringMode()) {
                 SetMeteringMode(t.MeteringMode);
@@ -2236,7 +2235,7 @@ ui32 TReadSessionActor<Protocol>::NormalizeMaxReadSize(ui32 sourceValue) {
 }
 
 template <EProtocol Protocol>
-std::tuple<TString, ui32, ui64> TReadSessionActor<Protocol>::GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const {
+std::tuple<TString, ui32, ui64> TReadSessionActor<Protocol>::GetReadFrom(const NPQ::NNameResolver::TTopicNamesPtr& topic, const TActorContext& ctx) const {
     auto jt = ReadFromTimestamp.find(topic->GetInternalName());
     if (jt == ReadFromTimestamp.end()) {
         YDB_LOG_ALERT_CTX(ctx, "Error searching for topic",
@@ -2470,8 +2469,8 @@ template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
-        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
+        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token,
+        TopicsList.Paths, Database, TopicsHandler.LocalCluster, ReadWithoutConsumer));
 }
 
 template <EProtocol Protocol>

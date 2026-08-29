@@ -26,7 +26,7 @@ TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytes
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     pqConfig.SetTopicsAreFirstClassCitizen(true);
 
-    NPersQueue::TTopicConverterPtr topicConverter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter;
     NKikimrPQ::TPQTabletConfig config;
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetBurstSize(writeSpeedInBytesPerSecond);

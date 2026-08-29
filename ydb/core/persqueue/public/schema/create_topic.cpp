@@ -7,6 +7,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/topic_description.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -95,7 +96,7 @@ TResult ApplyChangesInt(
     bool local = true; // TODO: check here cluster;
 
     if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
-        auto converter = NPersQueue::TTopicNameConverter::ForFederation(
+        auto names = NNameResolver::NamesForCreate(
                 pqConfig.GetRoot(),
                 pqConfig.GetTestDatabaseRoot(),
                 name,
@@ -106,14 +107,14 @@ TResult ApplyChangesInt(
                 pqTabletConfig->GetFederationAccount()
         );
 
-        if (!converter->IsValid()) {
-            error = TStringBuilder() << "Bad topic: " << converter->GetReason();
+        if (!names.IsValid()) {
+            error = TStringBuilder() << "Bad topic: " << names.GetReason();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }
         pqTabletConfig->SetLocalDC(local);
-        pqTabletConfig->SetDC(converter->GetCluster());
-        pqTabletConfig->SetProducer(converter->GetLegacyProducer());
-        pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
+        pqTabletConfig->SetDC(names.GetCluster());
+        pqTabletConfig->SetProducer(names.GetLegacyProducer());
+        pqTabletConfig->SetTopic(names.GetLegacyLogtype());
     }
 
     const auto& channelProfiles = pqConfig.GetChannelProfiles();

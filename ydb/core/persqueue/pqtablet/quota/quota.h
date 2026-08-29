@@ -61,7 +61,7 @@ struct TEvQuotaCountersUpdated : public TEventLocal<TEvQuotaCountersUpdated, TEv
 
 NActors::IActor* CreateReadQuoter(
     const NKikimrPQ::TPQConfig& pqConfig,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
     const TPartitionId& partition,
     TActorId tabletActor,
@@ -72,7 +72,7 @@ NActors::IActor* CreateReadQuoter(
 
 NActors::IActor* CreateWriteQuoter(
     const NKikimrPQ::TPQConfig& pqConfig,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
     const TPartitionId& partition,
     TActorId tabletActor,

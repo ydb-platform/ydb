@@ -13,6 +13,6 @@ template <typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
-        const NPersQueue::TTopicConverterPtr& topic);
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic);
 
 } // namespace NKikimr::NGRpcProxy::V1

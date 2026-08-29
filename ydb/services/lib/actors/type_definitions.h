@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ydb/core/persqueue/public/utils.h"
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -20,7 +20,7 @@ struct TPartitionInfo {
 };
 
 struct TTopicInitInfo {
-    NPersQueue::TTopicConverterPtr TopicNameConverter;
+    NPQ::NNameResolver::TTopicNamesPtr TopicNameConverter;
     ui64 TabletID;
     TString CloudId;
     TString DbId;
@@ -59,8 +59,7 @@ struct TTopicHolderBase {
     bool IsServerless;
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
-    NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
-    NPersQueue::TTopicConverterPtr FullConverter;
+    NPQ::NNameResolver::TTopicNamesPtr FullConverter;
     TMaybe<TString> CdcStreamPath;
 
     TVector<ui32> Groups;

@@ -72,7 +72,7 @@ struct TDistributedTransaction {
 
     NKikimrPQ::TPQTabletConfig TabletConfig;
     NKikimrPQ::TBootstrapConfig BootstrapConfig;
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NNameResolver::TTopicNamesPtr TopicConverter;
     NKikimrPQ::TPartitions PartitionsData;
 
     bool WriteInProgress = false;

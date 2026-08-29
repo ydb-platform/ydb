@@ -65,6 +65,8 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/nameresolver
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme

@@ -1,6 +1,7 @@
 #include "msgbus_server_persqueue.h"
 #include "msgbus_server_pq_read_session_info.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -11,7 +12,10 @@
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/mock_pq_metacache.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -26,7 +30,6 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-using namespace testing;
 using namespace NSchemeCache;
 
 void FillValidTopicRequest(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request, ui64 topicsCount);
@@ -39,6 +42,38 @@ const static TString topic2 = "rt3.dc1--topic2";
 // Base test class with useful helpers for constructing all you need to test pq requests.
 class TMessageBusServerPersQueueRequestTestBase: public TTestBase {
 protected:
+    class TFakeSchemeCacheActor : public TActorBootstrapped<TFakeSchemeCacheActor> {
+    public:
+        explicit TFakeSchemeCacheActor(TMessageBusServerPersQueueRequestTestBase* test)
+            : Test(test)
+        {
+        }
+
+        void Bootstrap() {
+            Become(&TFakeSchemeCacheActor::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle);
+            default:
+                break; // tablets also send WatchRemove etc.; ignore
+            }
+        }
+
+    private:
+        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
+            if (!Test->ReplyToDescribe) {
+                return;
+            }
+            auto request = std::move(ev->Get()->Request);
+            Test->ApplyPreparedDescribe(request->ResultSet);
+            Send(ev->Sender, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(std::move(request)));
+        }
+
+        TMessageBusServerPersQueueRequestTestBase* Test;
+    };
+
     void SetUp() override {
         TTestBase::SetUp();
 
@@ -54,6 +89,9 @@ protected:
             return RegistrationObserver(parentId, actorId);
         });
         SetupTabletServices(*Runtime); // Calls Runtime->Initialize();
+
+        FakeSchemeCacheId = Runtime->Register(new TFakeSchemeCacheActor(this));
+        Runtime->RegisterService(MakeSchemeCacheID(), FakeSchemeCacheId);
 
         // Edge actor
         EdgeActorId = Runtime->AllocateEdgeActor();
@@ -86,11 +124,15 @@ protected:
         TestMainActorHasAnswered = false;
         EdgeActorId = TActorId();
         TestMainActorId = TActorId();
+        FakeSchemeCacheId = TActorId();
+        CaptureTestSubtree = false;
         EdgeEventHandle.Reset();
         LoadedFakeSchemeShard = false;
         TestActors.clear();
         PausedEventTypes.clear();
         PausedEvents.clear();
+        DescribeResultSet.clear();
+        ReplyToDescribe = true;
         TTestBase::TearDown();
     }
 
@@ -104,6 +146,11 @@ protected:
             Runtime->Register(MockPQMetaCache);
         }
         return *MockPQMetaCache;
+    }
+
+    void SetDescribeTopicsAnswer(TSchemeCacheNavigate::TResultSet resultSet = {}) {
+        DescribeResultSet = std::move(resultSet);
+        ReplyToDescribe = true;
     }
 
     void EnsureHasFakeSchemeShard() {
@@ -260,8 +307,10 @@ protected:
             request,
             GetMockPQMetaCache().SelfId()
         );
+        CaptureTestSubtree = true;
         TestMainActorId = Runtime->Register(Actor);
         TestActors.insert(TestMainActorId);
+        CaptureTestSubtree = false;
     }
 
     TEvPersQueue::TEvResponse* GrabResponseEvent() {
@@ -375,8 +424,61 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL_C(ResponseFieldsCount(), 1, "Response: " << resp->Record);
     }
 
+    bool SameDescribeTopic(const TSchemeCacheNavigate::TEntry& prepared, const TSchemeCacheNavigate::TEntry& actual) const {
+        const TString actualPath = CanonizePath(JoinPath(actual.Path));
+        const TString actualLeaf = actual.Path.empty() ? TString() : actual.Path.back();
+        if (prepared.PQGroupInfo) {
+            const auto& descr = prepared.PQGroupInfo->Description;
+            const TString& name = descr.GetName();
+            if (!name.empty() && (name == actualLeaf || actualPath.EndsWith("/" + name))) {
+                return true;
+            }
+            const TString& topicPath = descr.GetPQTabletConfig().GetTopicPath();
+            if (!topicPath.empty() && CanonizePath(topicPath) == actualPath) {
+                return true;
+            }
+        }
+        if (!prepared.Path.empty() && CanonizePath(JoinPath(prepared.Path)) == actualPath) {
+            return true;
+        }
+        return false;
+    }
+
+    void ApplyPreparedDescribe(TSchemeCacheNavigate::TResultSet& resultSet) {
+        TVector<bool> used(DescribeResultSet.size(), false);
+        for (auto& entry : resultSet) {
+            size_t matched = DescribeResultSet.size();
+            for (size_t i = 0; i < DescribeResultSet.size(); ++i) {
+                if (!used[i] && SameDescribeTopic(DescribeResultSet[i], entry)) {
+                    matched = i;
+                    break;
+                }
+            }
+            if (matched == DescribeResultSet.size()) {
+                for (size_t i = 0; i < DescribeResultSet.size(); ++i) {
+                    if (!used[i]) {
+                        matched = i;
+                        break;
+                    }
+                }
+            }
+            if (matched < DescribeResultSet.size()) {
+                used[matched] = true;
+                const auto& prepared = DescribeResultSet[matched];
+                entry.Status = prepared.Status;
+                entry.Kind = prepared.Kind;
+                entry.PQGroupInfo = prepared.PQGroupInfo;
+                entry.SecurityObject = prepared.SecurityObject;
+                entry.DomainInfo = prepared.DomainInfo;
+                entry.Self = prepared.Self;
+            } else {
+                entry.Status = TSchemeCacheNavigate::EStatus::PathErrorUnknown;
+            }
+        }
+    }
+
     TTestActorRuntime::EEventAction EventsObserver(TAutoPtr<IEventHandle>& event) {
-        switch (event->Type) {
+        switch (event->GetTypeRewrite()) {
         case NKikimr::TEvPersQueue::EvResponse:
             {
                 if (event->Sender == TestMainActorId) {
@@ -394,10 +496,10 @@ protected:
     }
 
     void RegistrationObserver(const TActorId& parentId, const TActorId& actorId) {
-        if (IsIn(TestActors, parentId)) {
+        if (CaptureTestSubtree || IsIn(TestActors, parentId)) {
             IActor* child = Runtime->FindActor(actorId);
             UNIT_ASSERT(child);
-            UNIT_ASSERT(TestActors.insert(actorId).second);
+            TestActors.insert(actorId);
         }
     }
 
@@ -450,6 +552,8 @@ protected:
     TActorId EdgeActorId;
     IActor* Actor = nullptr;
     TActorId TestMainActorId;
+    TActorId FakeSchemeCacheId;
+    bool CaptureTestSubtree = false;
     bool TestMainActorHasAnswered = false;
     TMockPQMetaCache* MockPQMetaCache = nullptr;
     TAutoPtr<IEventHandle> EdgeEventHandle;
@@ -458,6 +562,8 @@ protected:
     THashSet<ui64> PausedEventTypes;
     std::list<TAutoPtr<IEventHandle>> PausedEvents;
     THolder<TTestActorRuntime> Runtime;
+    TSchemeCacheNavigate::TResultSet DescribeResultSet;
+    bool ReplyToDescribe = true;
 
 };
 
@@ -532,6 +638,7 @@ public:
             part->SetTabletId(MakeTabletID(false, topicId * 100 + 1 + i));
         }
         entry.PQGroupInfo.Reset(pqInfo);
+        entry.Path = {"Root", "PQ", descr.GetName()};
 
         return entry;
     }
@@ -550,13 +657,15 @@ public:
     }
 
     void HandlesTimeout() {
-        EXPECT_CALL(GetMockPQMetaCache(), HandleDescribeTopicsByName(_, _)); // gets request and doesn't reply
+        ReplyToDescribe = false;
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
         Runtime->EnableScheduleForActor(Actor->SelfId());
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back([](IEventHandle& h) { return h.Type == TEvPqMetaCache::TEvDescribeTopicsByNameRequest::EventType; }, 1);
+        options.FinalEvents.emplace_back([](IEventHandle& h) {
+            return h.GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySet::EventType;
+        }, 1);
         Runtime->DispatchEvents(options);
 
         Runtime->UpdateCurrentTime(Runtime->GetCurrentTime() + TDuration::MilliSeconds(90000 + 1));
@@ -566,7 +675,7 @@ public:
     }
 
     void FailsOnFailedGetAllTopicsRequest() {
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer();
+        SetDescribeTopicsAnswer();
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -579,7 +688,7 @@ public:
         auto entry = MakeEntry(1);
         entry.Status = TSchemeCacheNavigate::EStatus::PathErrorUnknown;
 
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(TSchemeCacheNavigate::TResultSet{entry});
+        SetDescribeTopicsAnswer(TSchemeCacheNavigate::TResultSet{entry});
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest(1);
         RegisterActor(request);
@@ -590,9 +699,9 @@ public:
 
     void FailsOnBadRootStatusInGetNodeRequest() {
         auto resultSet = MakeResultSet();
-        resultSet[0].Status = ESchemeStatus::RootUnknown;
+        resultSet[0].Status = TSchemeCacheNavigate::EStatus::RootUnknown;
 
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
+        SetDescribeTopicsAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -606,7 +715,7 @@ public:
         resultSet[1].Kind = TSchemeCacheNavigate::KindPath;
         resultSet[1].PQGroupInfo = nullptr;
 
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
+        SetDescribeTopicsAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -618,7 +727,7 @@ public:
     void FailsOnNoBalancerInGetNodeRequest() {
         auto resultSet = MakeResultSet();
         SetBalancerId(resultSet, 0, Nothing());
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
+        SetDescribeTopicsAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -630,7 +739,7 @@ public:
     void FailsOnZeroBalancerTabletIdInGetNodeRequest() {
         auto resultSet = MakeResultSet();
         SetBalancerId(resultSet, 0, 0);
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
+        SetDescribeTopicsAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -643,7 +752,7 @@ public:
         auto resultSet = MakeResultSet();
         resultSet[1].Status = TSchemeCacheNavigate::EStatus::LookupError;
         //SetBalancerId(resultSet, 1, 0);
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(resultSet);
+        SetDescribeTopicsAnswer(resultSet);
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -662,7 +771,7 @@ public:
 
     template <class TResponseEvent>
     void HandlesPipeDisconnectionImpl(EDisconnectionMode disconnectionMode, std::function<void(EDisconnectionMode disconnectionMode)> dataValidationFunction, bool requestTheWholeTopic = false) {
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::forward<TSchemeCacheNavigate::TResultSet>(MakeResultSet()));
+        SetDescribeTopicsAnswer(std::forward<TSchemeCacheNavigate::TResultSet>(MakeResultSet()));
 
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
@@ -781,7 +890,7 @@ public:
     }
 
     void SuccessfullyReplies() {
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
+        SetDescribeTopicsAnswer(MakeResultSet());
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
 
@@ -891,7 +1000,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
+        SetDescribeTopicsAnswer(MakeResultSet());
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
@@ -1056,7 +1165,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
+        SetDescribeTopicsAnswer(MakeResultSet());
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
@@ -1219,7 +1328,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
+        SetDescribeTopicsAnswer(MakeResultSet());
 
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
@@ -1366,7 +1475,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
+        SetDescribeTopicsAnswer(MakeResultSet());
 
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});

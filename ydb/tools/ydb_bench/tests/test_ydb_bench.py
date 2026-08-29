@@ -16,6 +16,7 @@ import time
 import unittest
 import urllib.request
 import zipfile
+from collections import deque
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import FrozenInstanceError, fields, replace
 from pathlib import Path
@@ -3502,6 +3503,316 @@ class WebTest(unittest.TestCase):
         finally:
             service.shutdown()
 
+    def test_run_service_compacts_oversized_event_log_records_without_changing_lifecycle(self):
+        def oversized_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit(
+                {
+                    "type": "step-finished",
+                    "step_id": step_id,
+                    "state": "passed",
+                    "fields": {"reason": "x" * 4096},
+                }
+            )
+
+        with mock.patch.object(web, "_EVENT_LOG_RECORD_BYTES", 512):
+            service = RunService(self.root, executor=oversized_executor)
+            try:
+                run_id = service.start(
+                    "ping-bench:\n  oversized: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+                )["id"]
+                run = service._runs[run_id]
+                self.assertTrue(run["finished"].wait(2))
+                manifest = json.loads((run["root"] / "run.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["state"], "passed")
+                self.assertEqual(manifest["steps"][0]["state"], "passed")
+                persisted = [
+                    json.loads(line) for line in (run["root"] / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                compacted = next(event for event in persisted if event.get("payload_truncated"))
+                self.assertEqual(compacted["type"], "step-finished")
+                self.assertEqual(compacted["state"], "passed")
+                self.assertGreater(compacted["original_size_bytes"], web._EVENT_LOG_RECORD_BYTES)
+                self.assertTrue(
+                    all(
+                        len((json.dumps(event, sort_keys=True) + "\n").encode("utf-8")) <= web._EVENT_LOG_RECORD_BYTES
+                        for event in persisted
+                    )
+                )
+            finally:
+                service.shutdown()
+
+    def test_run_service_keeps_original_failure_when_compacting_oversized_event(self):
+        def oversized_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit(
+                {
+                    "type": "step-finished",
+                    "step_id": step_id,
+                    "state": "failed",
+                    "fields": {"error": "x" * 4096},
+                }
+            )
+            raise BenchmarkError("original benchmark failure")
+
+        with mock.patch.object(web, "_EVENT_LOG_RECORD_BYTES", 512):
+            service = RunService(self.root, executor=oversized_executor)
+            try:
+                run_id = service.start(
+                    "ping-bench:\n  oversized: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+                )["id"]
+                run = service._runs[run_id]
+                self.assertTrue(run["finished"].wait(2))
+                manifest = json.loads((run["root"] / "run.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["state"], "failed")
+                self.assertEqual(manifest["steps"][0]["state"], "failed")
+                self.assertEqual(manifest["error"], "original benchmark failure")
+                persisted = [
+                    json.loads(line) for line in (run["root"] / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                compacted = next(event for event in persisted if event.get("payload_truncated"))
+                self.assertEqual(compacted["type"], "step-finished")
+                self.assertEqual(compacted["state"], "failed")
+            finally:
+                service.shutdown()
+
+    def test_local_ydb_activity_is_profile_scoped_bounded_and_strictly_projected(self):
+        run_root = self.root / "local-ydb-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [
+            {"benchmark": "local-ydb", "profile": "capacity", "status": "running"},
+            {"benchmark": "local-ydb", "profile": "other", "status": "running"},
+        ]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            },
+            {
+                "id": "other-step",
+                "benchmark": "local-ydb",
+                "profile": "other",
+                "state": "running",
+            },
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        events = [
+            {
+                "sequence": 1,
+                "at": "2025-01-01T00:00:00+00:00",
+                "type": "step-started",
+                "step_id": "capacity-step",
+                "fields": {"role_affinity": {"private": list(range(1000))}},
+            }
+        ]
+        for index in range(205):
+            progress = {
+                "phase": "measuring",
+                "search_stage": 1,
+                "attempt": index + 1,
+                "parameter": "rate",
+                "load": 1000 + index,
+                "latest_attempt": {"commands": [{"private": "not projected"}]},
+            }
+            if index == 204:
+                progress.update(
+                    {
+                        "current_command": {
+                            "phase": "measuring",
+                            "repetition": 2,
+                            "argv": ["/tmp/ydb", "workload", "run"],
+                            "cpu_affinity": [0, 128],
+                            "private": "not projected",
+                        },
+                        "verification": {
+                            "status": "completed",
+                            "configured_repetitions": 3,
+                            "completed_repetitions": 3,
+                            "accepted": True,
+                            "evaluation_kind": "objective",
+                            "decision": "latency-slo-passed",
+                            "samples": [{"commands": ["not projected"]}],
+                        },
+                    }
+                )
+            events.append(
+                {
+                    "sequence": index + 2,
+                    "at": "2025-01-01T00:00:{:02d}+00:00".format(index % 60),
+                    "type": "step-progress",
+                    "step_id": "capacity-step",
+                    "fields": {"progress": progress},
+                }
+            )
+        last_target_sequence = events[-1]["sequence"]
+        events.append(
+            {
+                "sequence": last_target_sequence + 1,
+                "at": "2025-01-01T00:04:00+00:00",
+                "type": "step-progress",
+                "step_id": "other-step",
+                "fields": {"progress": {"phase": "measuring", "attempt": 999}},
+            }
+        )
+        (run_root / "events.jsonl").write_text(
+            "".join(json.dumps(event) + "\n" for event in events),
+            encoding="utf-8",
+        )
+
+        service = RunService(self.root)
+        try:
+            with mock.patch.object(service, "events", side_effect=AssertionError("must stream event log")):
+                activity = service.local_ydb_activity("local-ydb-activity", "capacity")
+            self.assertTrue(activity["truncated"])
+            self.assertEqual(len(activity["events"]), web._LOCAL_YDB_ACTIVITY_LIMIT)
+            self.assertEqual(activity["after"], last_target_sequence + 1)
+            self.assertTrue(all(item["sequence"] <= last_target_sequence for item in activity["events"]))
+            projected = activity["events"][-1]
+            self.assertEqual(projected["current_command"]["argv"], ["/tmp/ydb", "workload", "run"])
+            self.assertEqual(projected["current_command"]["cpu_affinity"], [0, 128])
+            self.assertNotIn("private", projected["current_command"])
+            self.assertNotIn("latest_attempt", projected)
+            self.assertTrue(projected["verification"]["accepted"])
+            self.assertEqual(projected["verification"]["evaluation_kind"], "objective")
+            self.assertNotIn("samples", projected["verification"])
+            replay = service.local_ydb_activity("local-ydb-activity", "capacity", after=last_target_sequence)
+            self.assertEqual(replay, {"events": [], "after": last_target_sequence + 1, "truncated": False})
+            live_event = {
+                "sequence": last_target_sequence + 2,
+                "type": "step-progress",
+                "step_id": "capacity-step",
+                "fields": {"progress": {"phase": "finishing"}},
+            }
+            service._runs["local-ydb-activity"] = {
+                "lock": threading.RLock(),
+                "events": deque([live_event]),
+                "store": mock.Mock(manifest={"events": live_event["sequence"]}),
+            }
+            try:
+                with mock.patch.object(web, "load_manifest", return_value=manifest), mock.patch.object(
+                    Path, "open", side_effect=AssertionError("live poll must not replay the event log")
+                ):
+                    live = service.local_ydb_activity("local-ydb-activity", "capacity", after=last_target_sequence + 1)
+                self.assertEqual(live["after"], live_event["sequence"])
+                self.assertEqual(live["events"][0]["phase"], "finishing")
+            finally:
+                del service._runs["local-ydb-activity"]
+            with self.assertRaisesRegex(BenchmarkError, "non-negative integer"):
+                service.local_ydb_activity("local-ydb-activity", "capacity", after=-1)
+            with self.assertRaisesRegex(BenchmarkError, "JSON safe range"):
+                service.local_ydb_activity("local-ydb-activity", "capacity", after=web._MAX_SAFE_JSON_INTEGER + 1)
+            with self.assertRaisesRegex(BenchmarkError, "profile not found"):
+                service.local_ydb_activity("local-ydb-activity", "missing")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": "one", "type": "step-progress"}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "strictly increasing integers"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": 1, "type": 7}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "type must be a string"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": web._MAX_SAFE_JSON_INTEGER + 1, "type": "step-progress"}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "strictly increasing integers"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+
+            large_events = []
+            for sequence in range(1, 41):
+                large_events.append(
+                    {
+                        "sequence": sequence,
+                        "type": "step-progress",
+                        "step_id": "capacity-step",
+                        "fields": {
+                            "progress": {
+                                "phase": "measuring",
+                                "current_command": {"argv": ["x" * 512] * 64},
+                            }
+                        },
+                    }
+                )
+            (run_root / "events.jsonl").write_text(
+                "".join(json.dumps(event) + "\n" for event in large_events),
+                encoding="utf-8",
+            )
+            bounded = service.local_ydb_activity("local-ydb-activity", "capacity")
+            self.assertTrue(bounded["truncated"])
+            self.assertLess(len(bounded["events"]), len(large_events))
+            self.assertLessEqual(
+                len(json.dumps(bounded["events"], separators=(",", ":")).encode("utf-8")),
+                web._LOCAL_YDB_ACTIVITY_RESPONSE_BYTES + 2,
+            )
+        finally:
+            service.shutdown()
+
+    def test_local_ydb_activity_http_endpoint_validates_profile_and_cursor(self):
+        run_root = self.root / "local-ydb-http-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [{"benchmark": "local-ydb", "profile": "capacity", "status": "running"}]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            }
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        (run_root / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "sequence": 1,
+                    "at": "2025-01-01T00:00:00+00:00",
+                    "type": "step-progress",
+                    "step_id": "capacity-step",
+                    "fields": {"progress": {"phase": "warming-up", "load": 1000}},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:{}".format(server.server_port)
+        endpoint = base + "/api/runs/local-ydb-http-activity/local-ydb-activity"
+        try:
+            with urllib.request.urlopen(endpoint + "?profile=capacity&after=0") as response:
+                activity = json.loads(response.read())
+            self.assertEqual(activity["after"], 1)
+            self.assertEqual(activity["events"][0]["phase"], "warming-up")
+            for query, message in (
+                ("?after=0", "profile is required"),
+                ("?profile=capacity&after=abc", "non-negative integer"),
+                ("?profile=capacity&after=-1", "non-negative integer"),
+                (
+                    "?profile=capacity&after={}".format(web._MAX_SAFE_JSON_INTEGER + 1),
+                    "JSON safe range",
+                ),
+            ):
+                with self.assertRaises(HTTPError) as context:
+                    urllib.request.urlopen(endpoint + query)
+                self.assertEqual(context.exception.code, 400)
+                self.assertIn(message, json.loads(context.exception.read())["error"])
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
     def test_local_ydb_profile_projection_supports_preparing_and_live_results(self):
         run_root = self.root / "local-ydb-run"
         self._manifest(run_root, "running")
@@ -3935,6 +4246,13 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"for(const points of segments)", script)
                 self.assertIn(b"function mountChartBuilder", script)
                 self.assertIn(b"function mountLocalYdbProfile", script)
+                self.assertIn(b"function loadLocalYdbActivity", script)
+                self.assertIn(b"/local-ydb-activity?", script)
+                self.assertIn(b"function localActivityLog", script)
+                self.assertIn(b"Recent activity", script)
+                self.assertIn(b"activityScrollTop", script)
+                self.assertIn(b"activityPinned", script)
+                self.assertIn(b"showLiveOutput=activeBenchmark!=='local-ydb'", script)
                 self.assertIn(b"local-load-allow-errors", script)
                 self.assertIn(b"allow-errors: ", script)
                 self.assertIn(b"Failed workload requests are allowed", script)
@@ -4044,6 +4362,7 @@ class WebTest(unittest.TestCase):
                 stylesheet = response.read()
                 self.assertIn(b".local-attempts-scroll{max-width:100%;overflow-x:auto}", stylesheet)
                 self.assertIn(b".local-attempts{width:max-content;min-width:100%}", stylesheet)
+                self.assertIn(b".local-activity-log{max-height:20rem;overflow:auto", stylesheet)
                 self.assertNotIn(b".local-attempts{display:block", stylesheet)
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")

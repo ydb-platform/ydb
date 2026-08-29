@@ -181,7 +181,9 @@ The web profile page shows the same live phase with elapsed time and a countdown
 for warmup and measurement. Completed attempts appear immediately on synchronized
 search-order charts for candidate load, current best load, throughput, latency,
 CPU by role, errors, and retries. Geometry stages and the chronological attempt
-table remain available after completion. Profile `run.json` stores attempt and
+table remain available after completion. A bounded recent-activity log replays
+profile phase transitions and commands after a page reload without exposing the
+full event payload. Profile `run.json` stores attempt and
 stage timestamps, durations, structured decisions, scaling actions, and the
 final outcome so consumers do not have to parse diagnostic text.
 

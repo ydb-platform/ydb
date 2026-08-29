@@ -34,6 +34,10 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, 
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
+_LOCAL_YDB_ACTIVITY_LIMIT = 200
+_EVENT_LOG_RECORD_BYTES = 4 * 1024 * 1024
+_LOCAL_YDB_ACTIVITY_RESPONSE_BYTES = 512 * 1024
+_MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
 _HTML = (
     "<!doctype html><html lang=en><meta charset=utf-8>"
     '<meta name=viewport content="width=device-width,initial-scale=1">'
@@ -157,6 +161,11 @@ _CSS = (
 .local-command-entry{margin:.55rem 0;padding:.55rem;border:1px solid #e4e7ec;border-radius:5px;background:var(--panel)}
 .local-profile-config{margin:.8rem 0;padding:.7rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
 .local-profile-config pre{max-height:24rem;overflow:auto;white-space:pre;margin:.7rem 0 0}
+.local-activity{margin:.8rem 0;padding:.7rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:#fff}
+.local-activity>summary{cursor:pointer}.local-activity-log{max-height:20rem;overflow:auto;margin:.65rem 0 0;padding:0;list-style:none}
+.local-activity-item{display:grid;grid-template-columns:6.5rem minmax(10rem,1fr);gap:.35rem .75rem;padding:.45rem 0;border-top:1px solid #e4e7ec}
+.local-activity-item:first-child{border-top:0}.local-activity-time{color:var(--muted);font-variant-numeric:tabular-nums}
+.local-activity-command{grid-column:2;margin:.15rem 0}.local-activity-command summary{cursor:pointer;color:var(--muted)}
 .attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
 .comparison-delta{font-weight:650}.comparison-delta.good{color:var(--good)}.comparison-delta.bad{color:var(--bad)}
 .verification-badge{display:inline-flex;align-items:center;margin-left:.35rem;padding:.08rem .42rem;border:1px solid #d0d5dd}
@@ -837,6 +846,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "async function loadChartData(runIds,benchmark=null){const query=new URLSearchParams;for(const run of runIds)query.append"
     "('run',run);if(benchmark)query.set('benchmark',benchmark);return api('/api/chart-data?'+query)}\n"
     "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);return api('/api/local-ydb-comparison?'+query)}\n"
+    "async function loadLocalYdbActivity(runId,profile,after){const query=new URLSearchParams({profile,after:String(after)});return api('/api/runs/'+enc(runId)+'/local-ydb-activity?'+query)}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
     "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
     '[0]&&!value.startsWith(parts[0]))return false;for(const part of parts){if(!part)continue;const found=value.indexOf(part,'
@@ -1226,6 +1236,52 @@ function localCommandDetails(item,open){
       '</code></pre></div>'
     ).join('')+'</details>'
 }
+function localActivityTime(value){
+  const date=new Date(value);
+  return Number.isFinite(date.valueOf())?date.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'
+}
+function localActivityLabel(item){
+  if(item.type==='step-started')return 'Profile started';
+  if(item.type==='step-finished')return 'Profile '+(item.state||'finished');
+  return localPhaseLabel(item.phase)
+}
+function localActivityContext(item){
+  const verification=item.verification&&typeof item.verification==='object'?item.verification:null;
+  return [
+    item.search_stage?'stage '+item.search_stage:null,
+    item.attempt?'attempt #'+item.attempt:null,
+    item.repetition?'repetition '+item.repetition+'/'+(item.repetitions||'?'):null,
+    item.load!==undefined?(item.parameter||'load')+' '+metricLabel(item.load):null,
+    item.dynamic_nodes!==undefined?item.dynamic_nodes+' dynamic':null,
+    item.target_dynamic_nodes!==undefined?'target '+item.target_dynamic_nodes+' dynamic':null,
+    item.passed===true?'passed':item.passed===false?'failed':null,
+    verification?.completed_repetitions!==undefined?
+      'verification '+verification.completed_repetitions+'/'+(verification.configured_repetitions||'?'):null,
+    verification?.accepted===true?'holdout accepted':verification?.accepted===false?'holdout rejected':null,
+    item.decision||verification?.decision||item.reason||item.error||null
+  ].filter(Boolean).join(' · ')
+}
+function localActivityLog(events,truncated,open,error=''){
+  const rows=events.map(item=>{
+    const command=item.current_command?.argv?.length?'<details class=local-activity-command><summary>Command</summary>'+
+      '<pre class=local-command-code><code>'+esc(localCommandText(item.current_command))+'</code></pre></details>':'';
+    const context=localActivityContext(item);
+    return '<li class=local-activity-item><time class=local-activity-time datetime="'+esc(item.at||'')+'">'+
+      esc(localActivityTime(item.at))+'</time><div><strong>'+esc(localActivityLabel(item))+'</strong>'+
+      (context?'<div class=muted>'+esc(context)+'</div>':'')+'</div>'+command+'</li>'
+  }).join('');
+  return '<details class=local-activity data-local-activity'+(open?' open':'')+'><summary><strong>Recent activity</strong> '+
+    '<span class=muted>'+events.length+' events</span></summary>'+
+    (truncated?'<p class=muted>Earlier activity was omitted; recent events are bounded for display.</p>':'')+
+    (error?'<p class="notice error">'+esc(error)+'</p>':'')+
+    (rows?'<ol class=local-activity-log data-local-activity-log>'+rows+'</ol>':
+      '<p class=muted>No profile activity has been recorded yet.</p>')+'</details>'
+}
+function localRestoreActivityScroll(container,scrollTop,pinned){
+  const log=container.querySelector('[data-local-activity-log]');
+  if(!log)return;
+  log.scrollTop=pinned?log.scrollHeight:Math.min(scrollTop,Math.max(0,log.scrollHeight-log.clientHeight))
+}
 function localProfileDetails(data,open){
   const configuration={
     parameters:data.parameters||{},timeout_seconds:data.timeout_seconds??null,role_affinity:data.role_affinity||{}
@@ -1333,8 +1389,17 @@ function localBestRows(attempts,objective,xField='attempt'){
   return rows
 }
 function renderLocalYdbProfile(container,data){
+  const previousActivity=container.querySelector('[data-local-activity]');
+  const previousActivityLog=container.querySelector('[data-local-activity-log]');
+  const activityOpen=previousActivity?previousActivity.open:['running','preparing'].includes(data.state);
+  const activityScrollTop=previousActivityLog?.scrollTop||0;
+  const activityPinned=!previousActivityLog||
+    previousActivityLog.scrollHeight-previousActivityLog.scrollTop-previousActivityLog.clientHeight<8;
   if(data.state==='preparing'){
-    container.innerHTML='<div class=notice>Preparing local YDB profile and extracting binaries…</div>';return
+    container.innerHTML='<div class=notice>Preparing local YDB profile and extracting binaries…</div>'+localActivityLog(
+      data.activity||[],Boolean(data.activity_truncated),activityOpen,data.activity_error||''
+    );
+    localRestoreActivityScroll(container,activityScrollTop,activityPinned);return
   }
   const openCommandAttempts=new Set(
     [...container.querySelectorAll('[data-command-attempt][open]')].map(details=>details.dataset.commandAttempt)
@@ -1373,6 +1438,9 @@ function renderLocalYdbProfile(container,data){
       '<pre class=local-command-code><code>'+esc(localCommandText(progress.current_command))+
       '</code></pre></section>'
   }
+  html+=localActivityLog(
+    data.activity||[],Boolean(data.activity_truncated),activityOpen,data.activity_error||''
+  );
   if(result){
     const selected=localResultMetrics(result).metrics;
     const latencyMetric=(loadConfig.objective?.percentile||'p99')+'_ms';
@@ -1513,6 +1581,7 @@ function renderLocalYdbProfile(container,data){
       ).join('')+'</tbody></table></div>';
   }else html+='<div class=empty>No completed search attempts yet. The timeline will appear after the first measurement.</div>';
   container.innerHTML=html;
+  localRestoreActivityScroll(container,activityScrollTop,activityPinned);
   for(const axisButton of container.querySelectorAll('[data-local-chart-x]'))axisButton.onclick=()=>{
     container.dataset.localYdbXAxis=axisButton.dataset.localChartX;renderLocalYdbProfile(container,data)
   };
@@ -1522,12 +1591,25 @@ function renderLocalYdbProfile(container,data){
   )
 }
 async function mountLocalYdbProfile(container,runId,profile,runState){
-  let loading=false,terminal=false;
+  let loading=false,terminal=false,activity=[],activityAfter=0,activityTruncated=false;
   const scheduleRunRefresh=()=>{if(['running','queued'].includes(runState)&&!refreshTimer)refreshTimer=setTimeout(()=>renderRun(runId,'local-ydb/'+profile),700)};
   const refresh=async()=>{
     if(loading)return;loading=true;
     try{
-      const data=await api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile));
+      const [data,activityUpdate]=await Promise.all([
+        api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile)),
+        loadLocalYdbActivity(runId,profile,activityAfter).catch(error=>({error:error.message}))
+      ]);
+      if(activityUpdate.error)data.activity_error='Recent activity could not be loaded: '+activityUpdate.error;
+      else{
+        const merged=new Map(activity.map(item=>[item.sequence,item]));
+        for(const item of activityUpdate.events||[])merged.set(item.sequence,item);
+        activity=[...merged.values()].sort((left,right)=>left.sequence-right.sequence);
+        if(activity.length>200){activity=activity.slice(-200);activityTruncated=true}
+        activityTruncated=activityTruncated||Boolean(activityUpdate.truncated);
+        if(Number.isSafeInteger(activityUpdate.after))activityAfter=Math.max(activityAfter,activityUpdate.after)
+      }
+      data.activity=activity;data.activity_truncated=activityTruncated;
       renderLocalYdbProfile(container,data);terminal=!['running','preparing'].includes(data.state);
       if(terminal&&refreshTimer){clearInterval(refreshTimer);refreshTimer=null}
       if(terminal)scheduleRunRefresh()
@@ -1595,12 +1677,12 @@ async function mountLocalYdbProfile(container,runId,profile,runState){
     "card run-tree\"><details'+open+'><summary><strong>Execution details</strong> — affinity, cases and artifacts</summary><"
     "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
     "    const running=(run.steps||[]).find(step=>step.state==='running'),live=['running','queued','failed','recovery_requir"
-    "ed'].includes(run.state);\n"
+    "ed'].includes(run.state),showLiveOutput=activeBenchmark!=='local-ydb';\n"
     "    if(live)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
     "sc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repe"
-    "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+'<h3>Live stdout"
-    "</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><pre class=log>'+esc"
-    "(run.tail?.stderr||'No stderr captured yet.')+'</pre></section>';content+='</div>';\n"
+    "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+(showLiveOutput"
+    "?'<h3>Live stdout</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><p"
+    "re class=log>'+esc(run.tail?.stderr||'No stderr captured yet.')+'</pre>':'')+'</section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,activeProfile);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
@@ -2347,12 +2429,46 @@ class RunService:
 
     def _emit_locked(self, run, event):
         event = dict(event)
-        event["sequence"] = run["store"].manifest.get("events", 0) + 1
+        sequence = run["store"].manifest.get("events", 0) + 1
+        if sequence > _MAX_SAFE_JSON_INTEGER:
+            raise BenchmarkError("event sequence exceeds the JSON safe-integer range")
+        event["sequence"] = sequence
         event["at"] = _utc_now()
+        if event.get("type") in ("stdout", "stderr"):
+            event["data"] = str(event.get("data", ""))[-self.tail_limit :]
+        persisted_event = event
         try:
-            serialized_event = json.dumps(event, sort_keys=True, allow_nan=False)
+            serialized_event = json.dumps(persisted_event, sort_keys=True, allow_nan=False)
         except ValueError as error:
             raise BenchmarkError("event contains a non-finite JSON number") from error
+        serialized_size = len(serialized_event.encode("utf-8")) + 1
+        if serialized_size > _EVENT_LOG_RECORD_BYTES:
+            persisted_event = {
+                "sequence": event["sequence"],
+                "at": event["at"],
+                "payload_truncated": True,
+                "original_size_bytes": serialized_size,
+            }
+            for name in ("type", "step_id", "state"):
+                value = event.get(name)
+                if isinstance(value, str):
+                    persisted_event[name] = value[:2048]
+            fields = event.get("fields")
+            if isinstance(fields, dict):
+                persisted_fields = {}
+                for name in ("reason", "error"):
+                    value = fields.get(name)
+                    if isinstance(value, str):
+                        persisted_fields[name] = value[:2048]
+                if persisted_fields:
+                    persisted_event["fields"] = persisted_fields
+            serialized_event = json.dumps(persisted_event, sort_keys=True, allow_nan=False)
+            if len(serialized_event.encode("utf-8")) + 1 > _EVENT_LOG_RECORD_BYTES:
+                persisted_event.pop("fields", None)
+                for name in ("type", "step_id", "state"):
+                    if name in persisted_event:
+                        persisted_event[name] = persisted_event[name][:128]
+                serialized_event = json.dumps(persisted_event, sort_keys=True, allow_nan=False)
         if event.get("type") in ("stdout", "stderr"):
             key = event["type"]
             run["tail"][key] = (run["tail"][key] + str(event.get("data", "")))[-self.tail_limit :]
@@ -2374,7 +2490,7 @@ class RunService:
                         pass
         if event.get("type") == "step-finished" and step_id:
             run["store"].transition_step(step_id, event.get("state", "passed"), **event.get("fields", {}))
-        run["events"].append(event)
+        run["events"].append(persisted_event)
         run["store"].manifest["events"] = event["sequence"]
         with (run["root"] / "events.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(serialized_event + "\n")
@@ -2699,6 +2815,235 @@ class RunService:
             "error",
         )
         return {name: value[name] for name in fields if name in value}
+
+    def local_ydb_activity(self, run_id, profile, after=0):
+        if not isinstance(profile, str) or not profile:
+            raise BenchmarkError("local-ydb profile is required")
+        if isinstance(after, bool) or not isinstance(after, int) or after < 0 or after > _MAX_SAFE_JSON_INTEGER:
+            raise BenchmarkError("activity cursor must be a non-negative integer in the JSON safe range")
+
+        root = _run_directory(self.output, run_id)
+        manifest = load_manifest(root / "run.json")
+        matching_steps = [
+            item
+            for item in manifest.get("steps", [])
+            if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+        ]
+        profile_exists = bool(matching_steps) or any(
+            item.get("benchmark") == "local-ydb" and item.get("profile") == profile for item in manifest.get("runs", [])
+        )
+        if not profile_exists:
+            raise BenchmarkError("local-ydb profile not found: {}".format(profile))
+        step_ids = {item["id"] for item in matching_steps if isinstance(item.get("id"), str) and item["id"]}
+
+        def bounded_scalar(value, limit=2048):
+            if isinstance(value, str):
+                return value[:limit]
+            if value is None or isinstance(value, bool):
+                return value
+            if isinstance(value, int) and abs(value) <= _MAX_SAFE_JSON_INTEGER:
+                return value
+            if isinstance(value, float) and math.isfinite(value) and abs(value) <= _MAX_SAFE_JSON_INTEGER:
+                return value
+            return None
+
+        def project_command(value):
+            if not isinstance(value, dict) or not isinstance(value.get("argv"), (list, tuple)):
+                return None
+            command = {
+                "argv": [
+                    str(part)[:512]
+                    for part in value["argv"][:64]
+                    if part is None or isinstance(part, (str, bool, int, float))
+                ]
+            }
+            cpus = value.get("cpu_affinity")
+            if isinstance(cpus, (list, tuple)):
+                command["cpu_affinity"] = [
+                    cpu
+                    for cpu in cpus[:4096]
+                    if isinstance(cpu, int) and not isinstance(cpu, bool) and 0 <= cpu <= _MAX_SAFE_JSON_INTEGER
+                ]
+            for name in ("phase", "repetition"):
+                projected = bounded_scalar(value.get(name))
+                if projected is not None:
+                    command[name] = projected
+            return command
+
+        def project_progress(value):
+            if not isinstance(value, dict):
+                return {}
+            result = {}
+            fields = (
+                "phase",
+                "phase_started_at",
+                "phase_duration_seconds",
+                "search_stage",
+                "attempt",
+                "static_nodes",
+                "dynamic_nodes",
+                "parameter",
+                "load",
+                "repetition",
+                "repetitions",
+                "passed",
+                "decision",
+                "target_dynamic_nodes",
+                "reason",
+            )
+            for name in fields:
+                projected = bounded_scalar(value.get(name))
+                if projected is not None:
+                    result[name] = projected
+            command = project_command(value.get("current_command"))
+            if command is not None:
+                result["current_command"] = command
+            verification = value.get("verification")
+            if isinstance(verification, bool):
+                result["verification"] = verification
+            elif isinstance(verification, dict):
+                result["verification"] = {
+                    name: projected
+                    for name in (
+                        "status",
+                        "configured_repetitions",
+                        "completed_repetitions",
+                        "accepted",
+                        "evaluation_kind",
+                        "decision",
+                        "throughput_delta_percent",
+                        "saturated_repetitions",
+                    )
+                    if (projected := bounded_scalar(verification.get(name))) is not None
+                }
+            return result
+
+        def project_event(event):
+            event_type = event.get("type")
+            if event_type not in ("step-started", "step-progress", "step-finished"):
+                return None
+            item = {
+                "sequence": event["sequence"],
+                "type": event_type,
+            }
+            at = bounded_scalar(event.get("at"))
+            if at is not None:
+                item["at"] = at
+            if event_type == "step-progress":
+                fields = event.get("fields")
+                progress = fields.get("progress") if isinstance(fields, dict) else None
+                item.update(project_progress(progress))
+            elif event_type == "step-finished":
+                state = bounded_scalar(event.get("state"))
+                if state is not None:
+                    item["state"] = state
+                fields = event.get("fields")
+                if not isinstance(fields, dict):
+                    fields = {}
+                for name in ("reason", "error"):
+                    projected = bounded_scalar(fields.get(name))
+                    if projected is not None:
+                        item[name] = projected
+            return item
+
+        events_path = root / "events.jsonl"
+
+        def event_log_snapshot_size():
+            if events_path.is_symlink():
+                raise BenchmarkError("run event log must be a regular file")
+            try:
+                size = events_path.stat().st_size
+            except FileNotFoundError:
+                return 0
+            if not events_path.is_file():
+                raise BenchmarkError("run event log must be a regular file")
+            return size
+
+        cursor = after
+        matched = 0
+        activity = deque(maxlen=_LOCAL_YDB_ACTIVITY_LIMIT)
+
+        def consume(event):
+            nonlocal cursor, matched
+            sequence = event["sequence"]
+            if sequence <= after:
+                return
+            cursor = sequence
+            step_id = event.get("step_id")
+            if not isinstance(step_id, str) or step_id not in step_ids:
+                return
+            item = project_event(event)
+            if item is not None:
+                activity.append(item)
+                matched += 1
+
+        with self._lock:
+            run = self._runs.get(run_id)
+        live_events = None
+        if run:
+            with run["lock"]:
+                last_sequence = run["store"].manifest.get("events", 0)
+                if after >= last_sequence:
+                    live_events = ()
+                elif run["events"] and after >= run["events"][0]["sequence"] - 1:
+                    live_events = tuple(dict(event) for event in run["events"] if event["sequence"] > after)
+                else:
+                    snapshot_size = event_log_snapshot_size()
+        else:
+            snapshot_size = event_log_snapshot_size()
+
+        if live_events is not None:
+            for event in live_events:
+                consume(event)
+        elif snapshot_size:
+            try:
+                stream = events_path.open("rb")
+            except OSError as error:
+                raise BenchmarkError("cannot read run event log") from error
+            with stream:
+                remaining = snapshot_size
+                previous_sequence = 0
+                while remaining:
+                    line = stream.readline(min(remaining, _EVENT_LOG_RECORD_BYTES + 1))
+                    if not line:
+                        raise BenchmarkError("run event log ended before its snapshot boundary")
+                    remaining -= len(line)
+                    if len(line) > _EVENT_LOG_RECORD_BYTES or not line.endswith(b"\n"):
+                        raise BenchmarkError("run event log contains an oversized or incomplete event")
+                    try:
+                        event = json.loads(line.decode("utf-8"), parse_constant=_non_finite_json_as_null)
+                    except (UnicodeDecodeError, ValueError) as error:
+                        raise BenchmarkError("run event log contains malformed JSON") from error
+                    if not isinstance(event, dict):
+                        raise BenchmarkError("run event log event must be an object")
+                    sequence = event.get("sequence")
+                    if (
+                        not isinstance(sequence, int)
+                        or isinstance(sequence, bool)
+                        or sequence <= previous_sequence
+                        or sequence > _MAX_SAFE_JSON_INTEGER
+                    ):
+                        raise BenchmarkError("run event log sequences must be strictly increasing integers")
+                    previous_sequence = sequence
+                    if not isinstance(event.get("type"), str):
+                        raise BenchmarkError("run event log event type must be a string")
+                    consume(event)
+
+        bounded = deque()
+        response_bytes = 0
+        for item in reversed(activity):
+            encoded_size = len(json.dumps(item, allow_nan=False, separators=(",", ":")).encode("utf-8")) + 1
+            if encoded_size > _LOCAL_YDB_ACTIVITY_RESPONSE_BYTES:
+                continue
+            if response_bytes + encoded_size > _LOCAL_YDB_ACTIVITY_RESPONSE_BYTES:
+                break
+            bounded.appendleft(item)
+            response_bytes += encoded_size
+        return {
+            "events": list(bounded),
+            "after": cursor,
+            "truncated": matched > len(bounded),
+        }
 
     def local_ydb_comparison(self, run_ids):
         if not isinstance(run_ids, list) or not run_ids or len(run_ids) > 20:
@@ -3220,6 +3565,19 @@ def _handler(service):
             if path == "/api/local-ydb-comparison":
                 try:
                     value = service.local_ydb_comparison(parse_qs(parsed.query).get("run", []))
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
+                return self._json(200, value)
+            if path.startswith("/api/runs/") and path.endswith("/local-ydb-activity"):
+                run_id = unquote(path[len("/api/runs/") : -len("/local-ydb-activity")])
+                query = parse_qs(parsed.query)
+                profile = query.get("profile", [""])[-1]
+                try:
+                    after = int(query.get("after", [0])[-1])
+                except ValueError:
+                    return self._json(400, {"error": "activity cursor must be a non-negative integer"})
+                try:
+                    value = service.local_ydb_activity(run_id, profile, after)
                 except BenchmarkError as error:
                     return self._json(400, {"error": str(error)})
                 return self._json(200, value)

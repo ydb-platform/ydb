@@ -1,0 +1,35 @@
+local-ydb:
+  tpcc-smoke:
+    workload:
+      type: tpcc
+      operation: run
+      options:
+        warehouses: 1
+        import-threads: 1
+        compact: false
+        tx-mode: serializable-rw
+        latency-transaction: NewOrder
+        no-delays: true
+        highres-histogram: false
+    geometry:
+      preset: single
+      static-nodes: 1
+      disk-size-gb: 64
+      storage-groups: 1
+    client:
+      threads: 2
+    load:
+      parameter: max-sessions
+      values: [1]
+    measurement:
+      warmup: 0
+      duration: 2
+      repetitions: 1
+      verification-repetitions: 0
+    affinity:
+      ydb-cli:
+        mode: none
+      static-nodes:
+        mode: none
+      dynamic-nodes:
+        mode: none

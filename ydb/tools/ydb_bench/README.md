@@ -15,7 +15,7 @@ The tool provides four benchmarks:
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
 - `local-ydb`: a local static/dynamic YDB cluster driven by the `kv`, `stock`,
-  or `log` YDB CLI workload.
+  `log`, or `tpcc` YDB CLI workload.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -154,6 +154,25 @@ For example:
         max-errors: 0
         min-achieved-rate-ratio: 0.98
 ```
+
+TPC-C uses `load.parameter: max-sessions`, which maps to the CLI
+`--max-sessions` limit and must not exceed `warehouses * 10`. The benchmark
+runs `tpcc init` and `tpcc import` once for each dynamic-node geometry, reuses
+that dataset for every search and verification sample at the geometry, then
+runs both `tpcc clean` and recursive `scheme rmdir` cleanup. `client.threads`
+maps to the TPC-C runner's `--threads`; it defaults to 2, while
+`import-threads: 0` asks the CLI to select import concurrency automatically.
+
+TPC-C warmup is inline. The CLI receives the explicit value
+`max(measurement.warmup, floor(warehouses / 10) + 1)` so terminal startup is
+complete before measurement; YAML `warmup: 0` requests that minimum rather
+than the CLI's adaptive warmup. Measurement duration must be at least two
+seconds. Canonical throughput is uncapped successful NewOrder transactions per
+measured second. The CLI-reported, warehouse-capped `tpmC` remains available as
+the separate `tpcc_tpmc` metric. Latency SLOs use the full latency (including
+inflight queue wait) of `latency-transaction`, with `p50`, `p90`, `p95`, `p99`,
+and `p999` available. See `examples/local-ydb-tpcc.yaml` for a small manual
+smoke configuration.
 
 Set `load.allow-errors: true` when request-level errors reported by
 `ydb workload` are an expected part of the experiment. Such points remain

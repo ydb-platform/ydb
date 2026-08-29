@@ -170,10 +170,13 @@ complete before measurement; YAML `warmup: 0` requests that minimum rather
 than the CLI's adaptive warmup. Measurement duration must be at least two
 seconds. Canonical throughput is uncapped successful NewOrder transactions per
 measured second. The CLI-reported, warehouse-capped `tpmC` remains available as
-the separate `tpcc_tpmc` metric. Latency SLOs use the full latency (including
-inflight queue wait) of `latency-transaction`, with `p50`, `p90`, `p95`, `p99`,
-and `p999` available. See `examples/local-ydb-tpcc.yaml` for a small manual
-smoke configuration.
+the separate `tpcc_tpmc` metric. Latency SLOs use the admitted latency of
+`latency-transaction`: it excludes the queue created by the configured
+`max-sessions` limit, but includes session acquisition and SDK retries. This
+keeps the latency signal monotonic enough for load search; the full terminal
+latency and pure transaction time remain in the raw CLI result. `p50`, `p90`,
+`p95`, `p99`, and `p999` are available. See `examples/local-ydb-tpcc.yaml` for
+a small manual smoke configuration.
 
 Topic supports the CLI `full` producer-and-consumer workload. Every sample
 creates a fresh generated topic, runs one inline warmup and measurement, and

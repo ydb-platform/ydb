@@ -264,7 +264,7 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
         parsed_transactions[transaction_name] = {
             "ok_count": ok_count,
             "failed_count": _tpcc_integer(transaction["failed_count"], location + ".failed_count"),
-            "percentiles": percentile_families["percentiles"],
+            "percentiles_ms": percentile_families["percentiles_ms"],
         }
     if new_orders != parsed_transactions["NewOrder"]["ok_count"]:
         _tpcc_result_error("field summary.new_orders does not match transactions.NewOrder.ok_count")
@@ -280,7 +280,10 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
         "errors": sum(transaction["failed_count"] for transaction in parsed_transactions.values()),
     }
     metrics.update(
-        {metric_name: value for (_percentile, metric_name), value in zip(_TPCC_PERCENTILES, selected["percentiles"])}
+        {
+            metric_name: value
+            for (_percentile, metric_name), value in zip(_TPCC_PERCENTILES, selected["percentiles_ms"])
+        }
     )
     return WorkloadResult(
         metrics,
@@ -293,7 +296,7 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
 
 
 TPCC_JSON_RESULT = WorkloadResultAdapter(
-    schema_id="tpcc-json-v1",
+    schema_id="tpcc-json-v2",
     parse=_parse_tpcc_json_result,
     metrics=(
         WorkloadMetric(
@@ -341,7 +344,10 @@ TPCC_JSON_RESULT = WorkloadResultAdapter(
                 metric_name,
                 "ms",
                 required=True,
-                description="Full selected-transaction latency including inflight queue wait",
+                description=(
+                    "Selected-transaction latency after admission by max-sessions, including session acquisition "
+                    "and SDK retries"
+                ),
             )
             for _percentile, metric_name in _TPCC_PERCENTILES
         ),

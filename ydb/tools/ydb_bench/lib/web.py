@@ -753,7 +753,8 @@ function addProfile(){
     '><line class=chart-axis x1="\'+left+\'" y1="\'+top+\'" x2="\'+left+\'" y2="\'+(top+plotHeight)+\'"/><text class=chart-label x="\''
     '+(left+plotWidth/2)+\'" y="\'+(height-5)+\'" text-anchor=middle>\'+esc(xName)+\'</text>\';\n'
     '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],segments=[];let segment=[]'
-    ';for(const x of xValues){const row=item.rows.get(String(x)),y=valueFor(item,row);if(Number.isFinite(y)){segment.push({x'
+    ';const plottedX=item.connectMeasuredPoints?xValues.filter(x=>item.rows.has(String(x))):xValues;for(const x of plottedX){'
+    'const row=item.rows.get(String(x)),y=valueFor(item,row);if(Number.isFinite(y)){segment.push({x'
     ',y,row});continue}if(segment.length){segments.push(segment);segment=[]}}if(segment.length)segments.push(segment);for(con'
     'st points of segments)svg+=\'<polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+'
     '\',\'+yPos(point.y)).join(\' \')+\'"/>\';for(const point of segments.flat())svg+=\'<circle class=chart-point fill="\'+color+\'"'
@@ -815,8 +816,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
   }
 }
 """
-    "async function loadChartData(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);ret"
-    "urn api('/api/chart-data?'+query)}\n"
+    "async function loadChartData(runIds,benchmark=null){const query=new URLSearchParams;for(const run of runIds)query.append"
+    "('run',run);if(benchmark)query.set('benchmark',benchmark);return api('/api/chart-data?'+query)}\n"
     "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);return api('/api/local-ydb-comparison?'+query)}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
     "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
@@ -1048,7 +1049,58 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '  const delta=(current/reference-1)*100,good=lowerIsBetter?delta<0:delta>0,bad=lowerIsBetter?delta>0:delta<0;\n'
     "  return '<span class=\"comparison-delta '+(good?'good':bad?'bad':'')+'\">'+(delta>0?'+':'')+delta.toFixed(1)+'%</span>'\n"
     '}\n'
-    'function mountLocalYdbComparison(container,data){\n'
+    'function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseline){\n'
+    "  if(!chartData){container.innerHTML='<div class=empty>Search curves are unavailable because summary data could not be loaded.</div>';return}\n"
+    '  const entries=new Map((comparisonData.entries||[]).map(item=>[localComparisonKey(item),item]));\n'
+    '  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline)),groups=[];\n'
+    '  for(const series of chartData.series||[]){\n'
+    "    if(series.benchmark!=='local-ydb'||series.affinity!=='roles')continue;\n"
+    '    const entry=entries.get(JSON.stringify([series.run,series.profile]));\n'
+    '    if(!entry||JSON.stringify(localComparisonSemantic(entry))!==baselineSemantic)continue;\n'
+    '    const byNodes=new Map;\n'
+    '    for(const row of series.rows||[]){\n'
+    '      const load=chartNumber(row.load);if(!Number.isFinite(load))continue;\n'
+    "      const dynamicNodes=String(row.dynamic_nodes??entry.result?.dynamic_nodes??'—');\n"
+    '      if(!byNodes.has(dynamicNodes))byNodes.set(dynamicNodes,new Map);\n'
+    '      byNodes.get(dynamicNodes).set(String(load),row)\n'
+    '    }\n'
+    '    for(const [dynamicNodes,rows] of byNodes)groups.push({\n'
+    "      rows,label:localComparisonId(entry)+' · '+dynamicNodes+' dynamic',connectMeasuredPoints:true\n"
+    '    })\n'
+    '  }\n'
+    '  groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));\n'
+    '  groups.forEach((group,index)=>group.colorIndex=index);\n'
+    '  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]\n'
+    '    .sort((left,right)=>left-right);\n'
+    "  if(!xValues.length){container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';return}\n"
+    "  const percentile=baseline.parameters?.load?.objective?.percentile||'p99';\n"
+    '  const specifications=[\n'
+    "    ['throughput','median_throughput','Achieved throughput'],\n"
+    "    ['latency_ms','median_'+percentile+'_ms',percentile+' latency (ms)'],\n"
+    "    ['static_cpu','median_static_cpu_mean','Static node CPU (%)'],\n"
+    "    ['dynamic_cpu','median_dynamic_cpu_mean','Dynamic node CPU (%)'],\n"
+    "    ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)'],\n"
+    "    ['errors','max_errors','Maximum errors per repetition']\n"
+    '  ].filter(([,metric])=>groups.some(group=>[...group.rows.values()]\n'
+    '    .some(row=>Number.isFinite(chartNumber(row[metric])))));\n'
+    "  if(!specifications.length){container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';return}\n"
+    '  const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[\n'
+    '    alias,groups.map(group=>({...group,metric}))\n'
+    ']));\n'
+    '  const xName=localSearchAxisLabel(\n'
+    "    baseline.parameters?.load?.parameter||'load',baseline.parameters?.workload?.type\n"
+    '  );\n'
+    "  const legend='<div class=chart-legend>'+groups.map(group=>'<span><i class=\"legend-swatch chart-bg-'+\n"
+    "    group.colorIndex%chartColors.length+'\"></i>'+esc(group.label)+'</span>').join('')+'</div>';\n"
+    "  container.innerHTML='<h3>Search curves</h3><p class=muted>Lines connect each profile&apos;s own measured loads; no values are synthesized at loads measured only by another profile.</p>'+\n"
+    "    legend+'<div class=local-charts>'+specifications.map(([alias,,title])=>\n"
+    '      localChart(title,alias,xName,xValues,seriesByMetric[alias])\n'
+    "    ).join('')+'</div>';\n"
+    '  bindChartTooltips(\n'
+    '    container,xName,xValues,seriesByMetric,specifications.map(([alias])=>alias),chartColors,true\n'
+    '  )\n'
+    '}\n'
+    'function mountLocalYdbComparison(container,data,chartData=null){\n'
     "  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}\n"
     '  const previous=container.dataset.baseline,baseline=entries.find(item=>localComparisonKey(item)===previous)||entries.find(item=>item.result?.selected_metrics)||entries[0];\n'
     '  container.dataset.baseline=localComparisonKey(baseline);const baselineMetrics=baseline.result?.selected_metrics||{};\n'
@@ -1091,8 +1143,14 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+\n"
     "    '<th>ydbd</th><th>Selected load</th><th>Throughput</th><th>'+esc(percentile)+'</th><th>Errors</th>'+\n"
     "    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+\n"
-    "    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>';\n"
-    "  container.querySelector('#local-comparison-baseline').onchange=event=>{container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data)}\n"
+    "    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+\n"
+    "    '<div id=local-comparison-curves></div>';\n"
+    '  mountLocalYdbComparisonCurves(\n'
+    "    container.querySelector('#local-comparison-curves'),data,chartData,baseline\n"
+    '  );\n'
+    "  container.querySelector('#local-comparison-baseline').onchange=event=>{\n"
+    '    container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data,chartData)\n'
+    '  }\n'
     '}\n'
     """
 const localPhaseLabels={
@@ -1526,11 +1584,18 @@ async function mountLocalYdbProfile(container,runId,profile,runState){
     "    app.innerHTML=shell('comparisons',content);\n"
     "    document.querySelector('#save-comparisons').onclick=async()=>{await api('/api/comparisons/selection',jsonOptions([.."
     ".document.querySelectorAll('.compare:checked')].map(input=>input.value)));renderComparisons()};\n"
-    "    if(value.selected.length){try{mountLocalYdbComparison(document.querySelector('#local-ydb-comparison'),\n"
-    "      await loadLocalYdbComparison(value.selected))}catch(error){\n"
-    "      document.querySelector('#local-ydb-comparison').innerHTML=displayError(error)}\n"
-    "      try{mountChartBuilder(document.querySelector('#comparison-chart'),await loadChartData(value.selected))}\n"
-    "      catch(error){document.querySelector('#comparison-chart').innerHTML=displayError(error)}}\n"
+    "    if(value.selected.length){const [localResult,localChartResult,chartResult]=await Promise.allSettled([\n"
+    "      loadLocalYdbComparison(value.selected),loadChartData(value.selected,'local-ydb'),loadChartData(value.selected)\n"
+    '    ]);\n'
+    "      const localTarget=document.querySelector('#local-ydb-comparison');\n"
+    "      const chartTarget=document.querySelector('#comparison-chart');\n"
+    "      if(localResult.status==='fulfilled')mountLocalYdbComparison(\n"
+    "        localTarget,localResult.value,localChartResult.status==='fulfilled'?localChartResult.value:null\n"
+    '      );\n'
+    '      else localTarget.innerHTML=displayError(localResult.reason);\n'
+    "      if(chartResult.status==='fulfilled')mountChartBuilder(chartTarget,chartResult.value);\n"
+    '      else chartTarget.innerHTML=displayError(chartResult.reason)\n'
+    '    }\n'
     "  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}\n"
     '}\n'
     "async function compose(){const current=route();if(current==='runs')return renderRuns();if(current==='new')return renderN"
@@ -1847,15 +1912,18 @@ def _add_memory_fairness_rows(grouped, dimension_fields):
     return derived_count
 
 
-def chart_data(output, run_ids):
+def chart_data(output, run_ids, benchmark_filter=None):
     """Read bounded profile summaries into UI-facing affinity series."""
     if not isinstance(run_ids, list) or not run_ids or len(run_ids) > 20:
         raise BenchmarkError("charts require between 1 and 20 run ids")
+    if benchmark_filter is not None and benchmark_filter not in BENCHMARKS:
+        raise BenchmarkError("unknown chart benchmark: {}".format(benchmark_filter))
     result = []
     dimensions, metrics, metric_metadata, dimension_metadata = set(), set(), {}, {}
     for run_id in run_ids:
         root = _run_directory(output, run_id)
-        for path in sorted(root.glob("*/*/summary.csv")):
+        pattern = "{}/*/summary.csv".format(benchmark_filter) if benchmark_filter else "*/*/summary.csv"
+        for path in sorted(root.glob(pattern)):
             if path.stat().st_size > 16 * 1024 * 1024:
                 raise BenchmarkError("summary CSV is too large: {}".format(path.relative_to(root)))
             affinity_cpus = {}
@@ -2431,8 +2499,8 @@ class RunService:
     def archive(self, run_id):
         return export_archive(_run_directory(self.output, run_id))
 
-    def chart_data(self, run_ids):
-        return chart_data(self.output, run_ids)
+    def chart_data(self, run_ids, benchmark_filter=None):
+        return chart_data(self.output, run_ids, benchmark_filter)
 
     def local_ydb_profile(self, run_id, profile):
         root = _run_directory(self.output, run_id)
@@ -3014,7 +3082,12 @@ def _handler(service):
             if path == "/api/comparisons":
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
-                return self._json(200, service.chart_data(parse_qs(parsed.query).get("run", [])))
+                query = parse_qs(parsed.query)
+                try:
+                    value = service.chart_data(query.get("run", []), query.get("benchmark", [None])[-1])
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
+                return self._json(200, value)
             if path == "/api/local-ydb-comparison":
                 try:
                     value = service.local_ydb_comparison(parse_qs(parsed.query).get("run", []))

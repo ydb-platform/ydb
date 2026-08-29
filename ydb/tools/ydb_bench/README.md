@@ -340,7 +340,12 @@ deltas. Deltas are suppressed for semantically incompatible workload,
 load-parameter, or latency-percentile combinations. Configuration,
 environment, affinity, and binary differences remain visible next to every
 candidate so that a confounded comparison is not mistaken for a regression.
-Generic summary charts remain available below the baseline table.
+Compatible local YDB profiles also get synchronized search curves for
+throughput, latency, CPU by process role, and errors. Curves use the actual
+searched load on the X axis, split geometry stages by dynamic-node count, and
+connect only each profile's own measured loads; another profile's intermediate
+load does not create a false gap or a synthesized value.
+Generic configurable summary charts remain available below the baseline table.
 # Result manifest compatibility
 
 Run manifests use schema version 4. Earlier manifests are intentionally not

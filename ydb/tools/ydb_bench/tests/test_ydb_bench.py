@@ -289,7 +289,9 @@ class YdbBenchTest(unittest.TestCase):
         latency_transaction="Payment",
         selected_ok=300,
     ):
-        percentile_values = {"50": 1, "90": 2, "95": 3, "99": 4, "99.9": 5}
+        full_percentile_values = {"50": 101, "90": 102, "95": 103, "99": 104, "99.9": 105}
+        admitted_percentile_values = {"50": 11, "90": 12, "95": 13, "99": 14, "99.9": 15}
+        pure_percentile_values = {"50": 1, "90": 2, "95": 3, "99": 4, "99.9": 5}
         transactions = {}
         for index, name in enumerate(("NewOrder", "Delivery", "OrderStatus", "Payment", "StockLevel")):
             ok_count = new_orders if name == "NewOrder" else 100 + index
@@ -298,9 +300,9 @@ class YdbBenchTest(unittest.TestCase):
             transactions[name] = {
                 "ok_count": ok_count,
                 "failed_count": index,
-                "percentiles": dict(percentile_values),
-                "percentiles_ms": dict(percentile_values),
-                "percentiles_pure": dict(percentile_values),
+                "percentiles": dict(full_percentile_values),
+                "percentiles_ms": dict(admitted_percentile_values),
+                "percentiles_pure": dict(pure_percentile_values),
             }
         return {
             "summary": {
@@ -485,7 +487,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[2]["options"][4]["choices"], ["row", "column"])
         self.assertEqual(
             [item["result_schema_id"] for item in catalog],
-            ["generic-total-v1"] * 3 + ["tpcc-json-v1", "topic-total-v1"],
+            ["generic-total-v1"] * 3 + ["tpcc-json-v2", "topic-total-v1"],
         )
         self.assertEqual(
             [item["throughput_unit"] for item in catalog],
@@ -1429,7 +1431,7 @@ class YdbBenchTest(unittest.TestCase):
         for call in monitor.summary.call_args_list:
             self.assertEqual(call.kwargs, {"started_at_unix": 1001.0, "finished_at_unix": 1010.0})
         details = json.loads((self.root / "tpcc-repeat-1" / "workload-result.json").read_text(encoding="utf-8"))
-        self.assertEqual(details["schema_id"], "tpcc-json-v1")
+        self.assertEqual(details["schema_id"], "tpcc-json-v2")
         self.assertEqual(details["details"], payload)
         self.assertEqual(
             [item["phase"] for item in progress],
@@ -2146,7 +2148,7 @@ class YdbBenchTest(unittest.TestCase):
                 20 nan 0 0 1 2 3 4
             """)
 
-    def test_local_ydb_tpcc_json_result_is_strict_and_uses_uncapped_throughput(self):
+    def test_local_ydb_tpcc_json_result_uses_uncapped_throughput_and_admitted_latency(self):
         workload = local_ydb_workloads.normalize_workload(
             {
                 "type": "tpcc",
@@ -2171,17 +2173,17 @@ class YdbBenchTest(unittest.TestCase):
                 "tpcc_tpmc": 25.5,
                 "efficiency_pct": 80.25,
                 "errors": 10,
-                "p50_ms": 1,
-                "p90_ms": 2,
-                "p95_ms": 3,
-                "p99_ms": 4,
-                "p999_ms": 5,
+                "p50_ms": 11,
+                "p90_ms": 12,
+                "p95_ms": 13,
+                "p99_ms": 14,
+                "p999_ms": 15,
             },
         )
         self.assertEqual(result.details, payload)
         self.assertEqual(result.measurement_window, (1001.0, 1010.0))
         schema = local_ydb_workloads.workload_result_schema("tpcc")
-        self.assertEqual(schema["schema_id"], "tpcc-json-v1")
+        self.assertEqual(schema["schema_id"], "tpcc-json-v2")
         self.assertEqual(schema["throughput_unit"], "new orders/s")
         self.assertEqual(schema["slo_metrics"]["p999"], "p999_ms")
         self.assertNotIn("p99.9", schema["slo_metrics"])
@@ -2214,7 +2216,7 @@ class YdbBenchTest(unittest.TestCase):
             request,
         )
         self.assertEqual(no_new_orders_result.metrics["transactions"], 0)
-        self.assertEqual(no_new_orders_result.metrics["p99_ms"], 4)
+        self.assertEqual(no_new_orders_result.metrics["p99_ms"], 14)
         aggregated = local_ydb._aggregate_measurements(
             [no_new_orders_result.metrics],
             local_ydb_workloads.workload_definition("tpcc").result_adapter.metrics,

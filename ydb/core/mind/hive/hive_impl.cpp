@@ -4539,17 +4539,10 @@ bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
     if (tabletsToMoveData.empty()) {
         return false;
     } else {
-<<<<<<< HEAD
         YDB_LOG_INFO("ShrinkPool: starting move data for tablets",
             {"logPrefix", GetLogPrefix()},
             {"tabletsToMoveDataCount", tabletsToMoveData.size()});
         StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, pool.Name);
-=======
-        YDB_LOG_INFO("ShrinkPool: starting compact for tablets",
-            {"logPrefix", GetLogPrefix()},
-            {"tabletsToCompactCount", tabletsToCompact.size()});
-        StartCompactActor(std::move(tabletsToCompact), pool.InactiveGroups, pool.Name);
->>>>>>> b02c94bde0d ([YDB_LOG] Migrate ydb/core/mind/hive (#43618))
         return true;
     }
 }

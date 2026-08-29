@@ -524,7 +524,6 @@ public:
                     if (!tablet.LockedToActor || !Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
                         tablet.BecomeStopped();
                     }
-                    tablet.BecomeStopped();
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
                     if (it != Self->Nodes.end() && it->second.IsUnknown()) {

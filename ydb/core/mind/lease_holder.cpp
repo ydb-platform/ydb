@@ -188,14 +188,9 @@ private:
         // Node is either already expired or its ID is banned.
         Y_ABORT_UNLESS(rec.GetNodeId() == ctx.SelfID.NodeId());
         if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
-<<<<<<< HEAD
-            LOG_ERROR(ctx, NKikimrServices::NODE_BROKER, "Cannot extend lease: %s",
-                      rec.GetStatus().GetReason().data());
-            PingErrorsCounter->Inc();
-=======
             YDB_LOG_ERROR_CTX(ctx, "TLeaseHolder::Handle TEvNodeBroker::TEvExtendLeaseResponse: cannot extend lease",
                 {"reason", rec.GetStatus().GetReason().data()});
->>>>>>> 284010bf225 ([YDB_LOG] Migrate ydb/core/mind (without hive) (#43615))
+            PingErrorsCounter->Inc();
             return;
         }
 

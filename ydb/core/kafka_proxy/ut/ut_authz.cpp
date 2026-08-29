@@ -381,6 +381,30 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
             static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
     }
 
+    // Apache Kafka ListOffsets: DESCRIBE is enough; READ (SelectRow) is not required.
+    Y_UNIT_TEST(ListOffsetsWithDescribeOnlySucceeds) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TString topicName = "/Root/topic-listoffsets-describe-only";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            topicName,
+            "usernorights",
+            {"ydb.granular.describe_schema"},
+            true);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        UNIT_ASSERT_VALUES_EQUAL(
+            ListOffsetsPartitionError(client, topicName),
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
     // Matches Apache Kafka OffsetFetch v1+: missing topic → NONE + committedOffset -1,
     // no auto-create. See https://issues.apache.org/jira/browse/KAFKA-20165
     Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneAfterSasl) {

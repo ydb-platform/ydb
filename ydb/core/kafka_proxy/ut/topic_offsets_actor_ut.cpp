@@ -385,6 +385,7 @@ Y_UNIT_TEST(SelectRowUsesDedicatedTokenWhenDescriberIsAnonymous) {
     settings.SelectRowToken = token->GetSerializedToken();
     auto ev = RunTopicOffsets(runtime, std::move(settings));
     UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT(ev->Issues.ToString().Contains("access denied"));
 }
 
 Y_UNIT_TEST(ParsesConsumerOffsetsAndSkipsErrors) {

@@ -148,7 +148,7 @@ private:
             }
             TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(selectRowToken);
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *userToken)) {
-                return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "unauthenticated access is forbidden");
+                return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "access denied");
             }
         }
 

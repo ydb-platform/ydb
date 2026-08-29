@@ -45,6 +45,8 @@ public:
     }
 
     void Bootstrap() {
+        // Unauthenticated Metadata is rejected in kafka_connection (SASL) before this
+        // actor is created. Per-request ACL is DescribeSchema via the describer.
         RequestStart = TActivationContext::Now();
         Schedule(RequestTimeout, new TEvents::TEvWakeup(TimeoutTag));
 

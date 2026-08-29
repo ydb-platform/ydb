@@ -48,8 +48,8 @@ def evaluate_load(config, load, metrics):
     if invalid_reason is not None:
         return False, invalid_reason
 
+    errors = metrics.get("errors", 0)
     if "values" in config:
-        errors = metrics["errors"]
         passed = config.get("allow_errors", False) or not errors
         if errors:
             reason = "{} workload errors {}".format(
@@ -63,7 +63,8 @@ def evaluate_load(config, load, metrics):
     objective = config["objective"]
     objective_type = objective["type"]
     if objective_type == "maximize-throughput":
-        errors = metrics["errors"]
+        if "errors" not in metrics:
+            return True, "workload does not report request errors"
         if errors and not config.get("allow_errors", False):
             return False, "workload reported errors"
         if errors:
@@ -71,13 +72,13 @@ def evaluate_load(config, load, metrics):
         return True, "workload completed without errors"
 
     if objective_type == "latency-slo":
-        latency = metrics[objective["percentile"] + "_ms"]
+        latency = metrics[objective.get("latency_metric", objective["percentile"] + "_ms")]
         if latency > objective["max_ms"]:
             return False, "{} latency {:.3f} ms exceeds {:.3f} ms".format(
                 objective["percentile"], latency, objective["max_ms"]
             )
-        if not config.get("allow_errors", False) and metrics["errors"] > objective["max_errors"]:
-            return False, "errors {} exceed {}".format(metrics["errors"], objective["max_errors"])
+        if not config.get("allow_errors", False) and errors > objective["max_errors"]:
+            return False, "errors {} exceed {}".format(errors, objective["max_errors"])
         if config["parameter"] == "rate":
             ratio = metrics["throughput"] / load
             if ratio < objective["min_achieved_rate_ratio"]:
@@ -85,8 +86,10 @@ def evaluate_load(config, load, metrics):
                     ratio, objective["min_achieved_rate_ratio"]
                 )
         reason = "latency SLO satisfied"
-        if metrics["errors"]:
-            reason += "; {} workload errors allowed".format(metrics["errors"])
+        if "errors" not in metrics:
+            reason += "; workload does not report request errors"
+        elif errors:
+            reason += "; {} workload errors allowed".format(errors)
         return True, reason
 
     raise BenchmarkError("unsupported load objective: {}".format(objective_type))
@@ -169,7 +172,7 @@ def _run_throughput(config, measure, on_attempt):
                 decision += "; throughput increased from zero baseline"
             elif gain is not None:
                 decision += "; throughput gain {:.3f}%".format(gain)
-            if metrics["errors"]:
+            if "errors" not in metrics or metrics.get("errors", 0):
                 decision += "; " + evaluation_reason
         search_interval = {}
         if search_low is not None:

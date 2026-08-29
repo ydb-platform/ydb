@@ -30,6 +30,7 @@ from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
 from ydb.tools.ydb_bench.lib.common import extract_executable
 from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, export_archive, import_archive
 from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
+from ydb.tools.ydb_bench.lib.local_ydb_workloads import web_workload_catalog
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
@@ -227,8 +228,7 @@ _JS = (
     'et index=0;index<numbers.length;){let end=index;while(end+1<numbers.length&&numbers[end+1]===numbers[end]+1)end++;parts.'
     "push(index===end?String(numbers[index]):numbers[index]+'-'+numbers[end]);index=end+1}return parts.join(', ')}\n"
     "function yamlArray(values){return '['+values.map(value=>String(value)).join(', ')+']'}\n"
-    "const localYdbOperations={kv:['upsert','select','read-rows','mixed'],stock:['user-hist','rand-user-hist','add-rand-"
-    "order','put-rand-order','put-same-order']};\n"
+    "function yamlScalar(value){return typeof value==='string'?JSON.stringify(value):String(value)}\n"
     "const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-"
     "nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};\n"
     "const localYdbSearchKeys={resolution_percent:'resolution-percent'};\n"
@@ -236,10 +236,12 @@ _JS = (
     "lateau-points',cpu_saturation_percent:'cpu-saturation-percent'};\n"
     "const localYdbSloKeys={max_ms:'max-ms',max_errors:'max-errors',min_achieved_rate_ratio:'min-achieved-rate-ratio'};\n"
     "const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};\n"
-    "function defaultLocalYdbWorkload(type){return type==='stock'?{type:'stock',operation:'put-rand-order',options:{'min-p"
-    "artitions':40,products:100,quantity:1000,orders:100,'auto-partition':1,limit:10}}:{type:'kv',operation:'upsert',options"
-    ":{'min-partitions':40,'max-partitions':1000,'partition-size-mb':2000,'init-upserts':0,'max-first-key':65536,'value-siz"
-    "e':64,columns:2,'rows-per-query':1}}}\n"
+    "function localYdbWorkloadDefinition(type){const definition=(editor.model?.local_ydb_workloads||[]).find(item=>item.type"
+    "===type);if(!definition)throw Error('Unknown local YDB workload: '+type);return definition}\n"
+    "function defaultLocalYdbWorkload(type){const definition=localYdbWorkloadDefinition(type),operation=definition.default_"
+    "operation,options=Object.fromEntries(definition.options.map(option=>[option.name,Object.prototype.hasOwnProperty.call("
+    "option.operation_defaults,operation)?option.operation_defaults[operation]:option.default]));return {type,operation,opt"
+    "ions}}\n"
     "function defaultLocalYdb(){return {workload:defaultLocalYdbWorkload('kv'),"
     "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
     ":{threads:64},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:10,duration:30,rep"
@@ -247,7 +249,7 @@ _JS = (
     ",cpus:null},dynamic_nodes:{mode:'none',cpus:null}}}}\n"
     "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;lines.push('    work"
     "load:','      type: '+workload.type,'      operation: '+workload.operation,'      options:');for(const [key,value] of "
-    "Object.entries(workload.options))lines.push('        '+key+': '+value);lines.push('    geometry:','      preset: '+conf"
+    "Object.entries(workload.options))lines.push('        '+key+': '+yamlScalar(value));lines.push('    geometry:','      preset: '+conf"
     "ig.geometry.preset);for(const [key,yamlKey] of Object.entries(localYdbGeometryKeys))lines.push('      '+yamlKey+': '+c"
     "onfig.geometry[key]);lines.push('    client:','      threads: '+config.client.threads,'    load:','      parameter: '"
     "+config.load.parameter,'      allow-errors: '+Boolean(config.load.allow_errors));if(config.load.values)lines.push('      values: '+yamlArray(config.load.values));else{lines."
@@ -340,15 +342,43 @@ function localSelect(id,label,value,choices,help=''){
 function localCheck(id,label,checked,help=''){
   return '<div class=field><label><input id="'+id+'" type=checkbox '+(checked?'checked':'')+'> '+esc(label)+'</label><small class=muted>'+esc(help)+'</small></div>'
 }
+function localYdbOptionField(option,value){
+  const id='local-option-'+option.name;
+  if(option.choices.length)return localSelect(id,option.name,value,option.choices);
+  if(option.kind==='boolean')return localCheck(id,option.name,Boolean(value));
+  if(option.kind==='integer'){
+    const maximum=option.maximum===null?'':' max='+option.maximum;
+    return localField(id,option.name,value,'','type=number min='+option.minimum+maximum)
+  }
+  return localField(id,option.name,value,'','type=text')
+}
+function localYdbOptionValue(option){
+  const id='local-option-'+option.name,input=document.querySelector('#'+id);
+  let value;
+  if(option.choices.length){
+    value=option.kind==='integer'?Number(input.value):option.kind==='boolean'?input.value==='true':input.value
+  }else if(option.kind==='boolean'){
+    value=input.checked
+  }else if(option.kind==='integer'){
+    value=localInteger(id,option.allow_zero?0:1)
+  }else{
+    value=input.value
+  }
+  if((option.kind==='string'||option.kind==='duration')&&!option.allow_empty&&!value.length){
+    throw Error(option.name+' must not be empty.')
+  }
+  return value
+}
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
+  const definition=localYdbWorkloadDefinition(workload.type);
   const loadMode=load.values?'points':load.objective.type;
-  const options=Object.entries(workload.options).map(([key,value])=>localField('local-option-'+key,key,value)).join('');
+  const options=definition.options.map(option=>localYdbOptionField(option,workload.options[option.name])).join('');
   const geometryFields=Object.entries(localYdbGeometryKeys)
     .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
   const loadCommon=
     localSelect('local-load-mode','Objective',loadMode,['points','maximize-throughput','latency-slo'])+
-    localSelect('local-load-parameter','Parameter',load.parameter,['rate','threads'])+
+    localSelect('local-load-parameter','Parameter',load.parameter,definition.load_parameters)+
     localCheck(
       'local-load-allow-errors','Allow failed workload requests',Boolean(load.allow_errors),
       'Failed requests remain visible in results but do not limit load search.'
@@ -404,9 +434,9 @@ function localYdbProfileEditor(profile){
       'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
     )+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div>'+
     '<h3>Workload</h3><div class=form-grid>'+localSelect(
-      'local-workload-type','Type',workload.type,['kv','stock']
+      'local-workload-type','Type',workload.type,editor.model.local_ydb_workloads.map(item=>item.type)
     )+localSelect(
-      'local-workload-operation','Operation',workload.operation,localYdbOperations[workload.type]
+      'local-workload-operation','Operation',workload.operation,definition.operations
     )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
     localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
     '</div><h3>Client and load</h3><div class=form-grid>'+
@@ -467,6 +497,8 @@ function bindLocalYdbEditor(profile){
     profile.name=name;profile.key=benchmarkName+'/'+name;const config=profile.local_ydb;
     if(event.target.id==='local-workload-type'){
       config.workload=defaultLocalYdbWorkload(event.target.value);editor.selected=profile.key;
+      const parameters=localYdbWorkloadDefinition(event.target.value).load_parameters;
+      if(!parameters.includes(config.load.parameter))config.load.parameter=parameters[0];
       editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
     }
     if(event.target.id==='local-geometry-preset'){
@@ -506,10 +538,12 @@ function bindLocalYdbEditor(profile){
       editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
     }
     config.workload.operation=document.querySelector('#local-workload-operation').value;
-    for(const input of document.querySelectorAll('[id^=local-option-]')){
-      const key=input.id.slice('local-option-'.length);
-      const minimum=['init-upserts','orders','auto-partition'].includes(key)?0:1;
-      config.workload.options[key]=localInteger(input.id,minimum)
+    const workloadDefinition=localYdbWorkloadDefinition(config.workload.type);
+    for(const option of workloadDefinition.options){
+      const key=option.name,value=localYdbOptionValue(option);
+      if(option.maximum!==null&&value>option.maximum)throw Error(key+' must be <= '+option.maximum+'.');
+      if(option.choices.length&&!option.choices.includes(value))throw Error(key+' must be one of '+option.choices.join(', ')+'.');
+      config.workload.options[key]=value
     }
     config.geometry.preset=document.querySelector('#local-geometry-preset').value;
     for(const key of Object.keys(localYdbGeometryKeys)){
@@ -1971,6 +2005,7 @@ def editor_model(loaded, output):
         "benchmarks": benchmark_catalog(),
         "affinity_modes": list(AFFINITY_MODES),
         "background_load_modes": list(BACKGROUND_LOAD_MODES),
+        "local_ydb_workloads": web_workload_catalog(),
         "profiles": profiles,
     }
 

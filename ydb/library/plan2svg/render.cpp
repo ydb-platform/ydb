@@ -1081,7 +1081,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             if (d) {
                 title << " " << FormatBytes(s->IngressBytes->Details.Sum * 1000 / d) << "/s";
                 if (s->IngressRows) {
-                    title << ", Rows " << FormatInteger(s->IngressRows->Details.Sum / d) << "/s";
+                    title << ", Rows " << FormatInteger(s->IngressRows->Details.Sum * 1000 / d) << "/s";
                 }
             }
 

@@ -819,7 +819,7 @@
 <rect x='413' y='69' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='77'>2.29MB</text>
 </g>
-<g><title>Ingress 3.89MB/s, Rows 134/s, Duration: 0:00.59 (0:01.00 | 0:01.13 | 0:01.23 - 0:01.07 | 0:01.29 | 0:01.59)</title><rect x='768' y='66' width='101' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+<g><title>Ingress 3.89MB/s, Rows 134.90K/s, Duration: 0:00.59 (0:01.00 | 0:01.13 | 0:01.23 - 0:01.07 | 0:01.29 | 0:01.59)</title><rect x='768' y='66' width='101' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
 </g>
   <line x1='768' y1='68' x2='806' y2='68' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='790' y1='66' x2='790' y2='73' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
@@ -962,7 +962,7 @@
 <rect x='413' y='53' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>1.78GB</text>
 </g>
-<g><title>Ingress 546.25MB/s, Rows 23.86K/s, Duration: 0:03.35 (0:00.18 | 0:00.26 | 0:00.31 - 0:03.30 | 0:03.40 | 0:03.53)</title><rect x='628' y='50' width='568' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+<g><title>Ingress 546.25MB/s, Rows 23.86M/s, Duration: 0:03.35 (0:00.18 | 0:00.26 | 0:00.31 - 0:03.30 | 0:03.40 | 0:03.53)</title><rect x='628' y='50' width='568' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
 </g>
   <line x1='628' y1='52' x2='651' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='642' y1='50' x2='642' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
@@ -1114,7 +1114,7 @@
 <rect x='413' y='53' width='44' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='413' y='61'>153.05MB</text>
 </g>
-<g><title>Ingress 718.58MB/s, Rows 4.69K/s, Duration: 0:00.21 (0:00.11 | 0:00.13 | 0:00.19 - 0:00.15 | 0:00.19 | 0:00.32)</title><rect x='617' y='50' width='37' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+<g><title>Ingress 718.58MB/s, Rows 4.69M/s, Duration: 0:00.21 (0:00.11 | 0:00.13 | 0:00.19 - 0:00.15 | 0:00.19 | 0:00.32)</title><rect x='617' y='50' width='37' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
 </g>
   <line x1='617' y1='52' x2='631' y2='52' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='620' y1='50' x2='620' y2='57' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />

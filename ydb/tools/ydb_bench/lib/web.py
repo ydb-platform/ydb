@@ -1115,7 +1115,11 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localResultMetrics(result){\n'
     "  const verified=Boolean(result?.metrics_source==='verification'&&result?.verified_metrics&&\n"
     "    typeof result.verified_metrics==='object');\n"
-    "  return {metrics:(verified?result.verified_metrics:result?.selected_metrics)||{},verified,source:verified?'Holdout':'Search'}\n"
+    "  const raw=(verified?result.verified_metrics:result?.selected_metrics)||{};\n"
+    '  const metrics=Number(raw.empty_repetitions)>0?{\n'
+    '    ...raw,p50_ms:null,p95_ms:null,p99_ms:null,pmax_ms:null\n'
+    '  }:raw;\n'
+    "  return {metrics,verified,source:verified?'Holdout':'Search'}\n"
     '}\n'
     'function localVerificationCount(result,parameters={},verification={}){\n'
     '  return result?.verification_repetitions??verification?.configured_repetitions??verification?.completed_repetitions??\n'
@@ -1395,6 +1399,7 @@ function localOutcomeLabel(outcome){
     'boundary-found':'SLO boundary found','plateau-found':'Throughput plateau found',
     'lower-bound':'Capacity lower bound','best-observed':'Best observed point',
     'no-feasible-point':'No feasible point','bounded-by-errors':'Bounded by workload errors',
+    'bounded-by-invalid-sample':'Bounded by invalid measurement',
     'search-limit-reached':'Search limit reached'
   })[outcome]||outcome||'Search in progress'
 }
@@ -1406,7 +1411,14 @@ function localSearchAxisLabel(parameter,workload){
 function localYdbThroughputUnit(workload){
   return {kv:'requests/s',stock:'transactions/s',log:'batches/s'}[workload]||'operations/s'
 }
-function localAttemptRows(attempts,xField='attempt'){return new Map(attempts.map(item=>[String(item[xField]),item]))}
+function localAttemptLatency(item,metric='p99_ms'){
+  return Number(item.empty_repetitions)>0?'—':item[metric]
+}
+function localAttemptRows(attempts,xField='attempt'){
+  return new Map(attempts.map(item=>[String(item[xField]),Number(item.empty_repetitions)>0?{
+    ...item,p50_ms:null,p95_ms:null,p99_ms:null,pmax_ms:null
+  }:item]))
+}
 function localChart(title,metric,xName,xValues,series){
   return '<section class=chart-panel data-metric="'+esc(metric)+'"><h3>'+esc(title)+'</h3>'+
     svgChart(metric,xName,xValues,series,chartColors)+'</section>'
@@ -1509,7 +1521,7 @@ function renderLocalYdbProfile(container,data){
     )+localKpi(
       'Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—',throughputUnit
     )+localKpi(
-      'Latest p99',attempts.length?metricLabel(attempts.at(-1).p99_ms):'—','ms'
+      'Latest p99',attempts.length?metricLabel(localAttemptLatency(attempts.at(-1))):'—','ms'
     )+'</div>'
   }
   const currentStage=Number(progress.search_stage||0);
@@ -1625,7 +1637,7 @@ function renderLocalYdbProfile(container,data){
       '<th>Verdict</th><th>Decision</th><th>Duration</th><th>Commands</th></tr></thead><tbody>'+
       attempts.map(item=>'<tr><td>'+esc(item.attempt)+'</td><td>'+esc(item.search_stage)+'</td><td>'+
         esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td><td>'+esc(metricLabel(item.throughput))+
-        '</td><td>'+esc(metricLabel(item.p99_ms))+' ms</td><td>'+esc(item.errors)+'</td><td>'+
+        '</td><td>'+esc(metricLabel(localAttemptLatency(item)))+' ms</td><td>'+esc(item.errors)+'</td><td>'+
         esc(metricLabel(item.static_cpu_mean))+'%</td><td>'+esc(metricLabel(item.dynamic_cpu_mean))+
         '%</td><td>'+esc(metricLabel(item.cli_cpu_mean))+'%</td><td class="'+
         (item.passed?'attempt-pass':'attempt-fail')+'">'+(item.passed?'PASS':'FAIL')+'</td><td>'+esc(item.decision)+
@@ -3260,14 +3272,14 @@ class RunService:
                     metrics = result.get("selected_metrics")
                     if isinstance(metrics, dict):
                         metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
-                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated"))
+                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated", "empty_repetitions"))
                         compact_result["selected_metrics"] = {
                             name: metrics[name] for name in metric_names if name in metrics
                         }
                     verified_metrics = result.get("verified_metrics")
                     if isinstance(verified_metrics, dict):
                         metric_names = {metric.name for metric in BENCHMARKS["local-ydb"].metrics}
-                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated"))
+                        metric_names.update(("load", "dynamic_nodes", "target_cpu_saturated", "empty_repetitions"))
                         compact_result["verified_metrics"] = {
                             name: verified_metrics[name] for name in metric_names if name in verified_metrics
                         }

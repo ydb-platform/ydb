@@ -1,6 +1,6 @@
 # Рекомендации по безопасности Developer UI
 
-Эта статья — чеклист требований безопасности для разработчиков и контрибьюторов {{ ydb-short-name }}, которые пишут на C++ страницы мониторинга ([Developer UI](../../reference/embedded-ui/index.md)). Такие страницы генерируются во время выполнения кода с помощью макросов `HTML(str) { ... }` и отдаются встроенным HTTP-сервером мониторинга.
+Эта статья — чеклист требований безопасности для разработчиков и контрибьюторов {{ ydb-short-name }}, которые пишут на C++ страницы мониторинга ([Developer UI](../reference/ydb-ui/index.md)). Такие страницы генерируются во время выполнения кода с помощью макросов `HTML(str) { ... }` и отдаются встроенным HTTP-сервером мониторинга.
 
 Механизмы [политики безопасности контента](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) (Content Security Policy, CSP), включая `nonce`, и защиты от [межсайтовой подделки запросов](https://ru.wikipedia.org/wiki/Межсайтовая_подделка_запроса) (Cross-Site Request Forgery, CSRF) в HTTP-слое мониторинга описаны ниже по текущему поведению кода. Они появились в pull-запросе [#36981](https://github.com/ydb-platform/ydb/pull/36981).
 
@@ -68,7 +68,7 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 }
 ```
 
-Для страниц локального мониторинга, отдаваемых через `TEvHttpInfoRes` без проксирования через [таблетки](../../concepts/glossary.md#tablet), действует то же присваивание `res->Nonce = nonce`. Подробнее можно ознакомиться в `Notify(...)` в [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
+Для страниц локального мониторинга, отдаваемых через `TEvHttpInfoRes` без проксирования через [таблетки](../concepts/glossary.md#tablet), действует то же присваивание `res->Nonce = nonce`. Подробнее можно ознакомиться в `Notify(...)` в [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
 
 При пересылке ответа между узлами nonce сохраняется: [TEvRemoteHttpInfoRes::SerializeToArcadiaStream](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.cpp) упаковывает его вместе с HTML, поэтому тот же подход работает для удалённого мониторинга таблеток.
 
@@ -492,8 +492,8 @@ ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html", htmlContent));     // �
 
 ## См. также {#see-also}
 
-- [{#T}](../../reference/embedded-ui/index.md)
-- [{#T}](../../security/index.md)
+- [{#T}](../reference/ydb-ui/index.md)
+- [{#T}](../security/index.md)
 - [OWASP CSP Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
 - [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
 - [MDN: Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)

@@ -1,6 +1,6 @@
 # Developer UI Security Guidelines
 
-This article is a security checklist for {{ ydb-short-name }} developers and contributors who write C++ monitoring pages ([Developer UI](../../reference/embedded-ui/index.md)). These pages are generated at runtime using `HTML(str) { ... }` macros and are served by the built-in monitoring HTTP server.
+This article is a security checklist for {{ ydb-short-name }} developers and contributors who write C++ monitoring pages ([Developer UI](../reference/ydb-ui/index.md)). These pages are generated at runtime using `HTML(str) { ... }` macros and are served by the built-in monitoring HTTP server.
 
 This article covers [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) (CSP), [Cross-Site Request Forgery](https://en.wikipedia.org/wiki/Cross-site_request_forgery) (CSRF) protection, and safe HTML output.
 
@@ -72,7 +72,7 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 }
 ```
 
-For pages served via `TEvHttpInfoRes` (local mon, without proxying through [tablets](../../concepts/glossary.md#tablet)), the same `res->Nonce = nonce` assignment applies — see `Notify(...)` in [`tablet_monitoring_proxy.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce values are not reused between responses: a new value is generated for each `OnRenderAppHtmlPage` call.
+For pages served via `TEvHttpInfoRes` (local mon, without proxying through [tablets](../concepts/glossary.md#tablet)), the same `res->Nonce = nonce` assignment applies — see `Notify(...)` in [`tablet_monitoring_proxy.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce values are not reused between responses: a new value is generated for each `OnRenderAppHtmlPage` call.
 
 When a response is forwarded between nodes, the nonce is preserved: [`TEvRemoteHttpInfoRes::SerializeToArcadiaStream`](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.cpp) packs it together with the HTML, so the same approach works for remote tablet monitoring.
 
@@ -496,8 +496,8 @@ ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html", htmlContent));     // n
 
 ## See also {#see-also}
 
-- [{#T}](../../reference/embedded-ui/index.md)
-- [{#T}](../../security/index.md)
+- [{#T}](../reference/ydb-ui/index.md)
+- [{#T}](../security/index.md)
 - [OWASP CSP Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
 - [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
 - [MDN: Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)

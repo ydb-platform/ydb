@@ -4752,20 +4752,15 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
     def test_local_ydb_database_status_requires_running_state(self):
         status = """Database /Root/bench status:
   State: RUNNING
+  Allocated pools:
+    ssd: 1/1
+  Allocated units:
   Registered units:
-    host:1234 - dynamic
-    host:5678 - dynamic
   Data size hard quota: 0
+  Data size soft quota: 0
 """
-        self.assertEqual(local_ydb._registered_database_units(status), {"host:1234", "host:5678"})
-        self.assertTrue(local_ydb._database_status_ready(status, {"host:1234", "host:5678"}))
-        self.assertFalse(local_ydb._database_status_ready(status, {"host:1234", "host:9999"}))
-        self.assertFalse(
-            local_ydb._database_status_ready(
-                status.replace("RUNNING", "PENDING_RESOURCES"),
-                {"host:1234"},
-            )
-        )
+        self.assertTrue(local_ydb._database_status_ready(status))
+        self.assertFalse(local_ydb._database_status_ready(status.replace("RUNNING", "PENDING_RESOURCES")))
 
     def test_local_ydb_static_nodes_use_self_management(self):
         config = local_ydb._cluster_config(
@@ -4815,7 +4810,7 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
         self.assertEqual(config["config"]["host_configs"][0]["ssd"], ["SectorMap:map_0:64:NONE"])
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
 
-    def test_local_ydb_scaling_waits_for_every_new_registered_node(self):
+    def test_local_ydb_scaling_waits_for_database_and_every_new_node(self):
         cluster_directory = self.root / "scaling-cluster"
         cluster_directory.mkdir()
         cluster = local_ydb.LocalYdbCluster(
@@ -4843,7 +4838,7 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
             cluster, "_wait_for_port"
         ) as wait_for_port, mock.patch.object(cluster, "_wait_database_ready") as wait_database, mock.patch.object(
             cluster, "_wait_tenant_ready"
-        ), mock.patch.object(
+        ) as wait_tenant, mock.patch.object(
             local_ydb, "start_managed_process", side_effect=(mock.Mock(pid=101), mock.Mock(pid=102))
         ):
             cluster.add_dynamic_nodes(2)
@@ -4852,7 +4847,8 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
             wait_for_port.call_args_list,
             [mock.call(2136, "dynamic node 1"), mock.call(2137, "dynamic node 2")],
         )
-        wait_database.assert_called_once_with({"benchmark-host:19002", "benchmark-host:19003"})
+        wait_database.assert_called_once_with()
+        wait_tenant.assert_called_once_with(30)
 
     def test_local_ydb_tenant_readiness_checks_every_dynamic_node(self):
         cluster_directory = self.root / "tenant-ready-cluster"

@@ -308,6 +308,16 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
 
     COUNTER_RUNNING_STREAMING_QUERY_COUNT = 239           [(CounterOpts) = {Name: "RunningStreamingQueryCount"}];
+
+    // Scheme change outbox. DDL is rejected once depth reaches
+    // MaxSchemeChangeRecords; only an admin force-advance releases it.
+    COUNTER_SCHEME_CHANGE_OUTBOX_DEPTH = 240              [(CounterOpts) = {Name: "SchemeChangeOutboxDepth"}];
+    COUNTER_SCHEME_CHANGE_SUBSCRIBERS = 241               [(CounterOpts) = {Name: "SchemeChangeSubscribers"}];
+    // Has an unrecoverable hole in its stream; must resync from a full snapshot.
+    COUNTER_SCHEME_CHANGE_SUBSCRIBERS_LOST = 242          [(CounterOpts) = {Name: "SchemeChangeSubscribersLost"}];
+    // Idle beyond the stale TTL. Records are still retained, so unlike Lost
+    // this subscriber has lost nothing.
+    COUNTER_SCHEME_CHANGE_SUBSCRIBERS_STALE = 243         [(CounterOpts) = {Name: "SchemeChangeSubscribersStale"}];
 }
 
 enum ECumulativeCounters {
@@ -512,6 +522,17 @@ enum ECumulativeCounters {
 
     // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
     COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
+
+    // Scheme change outbox.
+    COUNTER_SCHEME_CHANGE_DDL_REJECTED = 152             [(CounterOpts) = {Name: "SchemeChangeDdlRejectedByOutbox"}];
+    // Rows the outbox transactions actually walk. Bounded work keeps this
+    // proportional to rows delivered; a regression that reintroduces an
+    // unbounded scan shows up here as a rate spike with no matching delivery.
+    COUNTER_SCHEME_CHANGE_ROWS_SCANNED = 153             [(CounterOpts) = {Name: "SchemeChangeOutboxRowsScanned"}];
+    COUNTER_SCHEME_CHANGE_DESCRIPTION_BYTES = 154        [(CounterOpts) = {Name: "SchemeChangeDescriptionBytes"}];
+    // An op resolved to no path at propose, so no record was written for it.
+    // Any non-zero value is an extraction gap in the outbox, not a client error.
+    COUNTER_SCHEME_CHANGE_PATH_MISSING = 155             [(CounterOpts) = {Name: "SchemeChangePathMissing"}];
 }
 
 enum EPercentileCounters {
@@ -841,4 +862,13 @@ enum ETxTypes {
     TXTYPE_LIST_SET_COLUMN_CONSTRAINT = 127             [(TxTypeOpts) = {Name: "TxListSetColumnConstraint"}];
     TXTYPE_FORGET_SET_COLUMN_CONSTRAINT = 128          [(TxTypeOpts) = {Name: "TxForgetSetColumnConstraint"}];
     TXTYPE_CANCEL_SET_COLUMN_CONSTRAINT = 129             [(TxTypeOpts) = {Name: "TxCancelSetColumnConstraint"}];
+
+    // Scheme change records subscriber protocol + maintenance.
+    TXTYPE_REGISTER_SCHEME_CHANGE_SUBSCRIBER = 130   [(TxTypeOpts) = {Name: "TxRegisterSchemeChangeSubscriber"}];
+    TXTYPE_UNREGISTER_SCHEME_CHANGE_SUBSCRIBER = 131 [(TxTypeOpts) = {Name: "TxUnregisterSchemeChangeSubscriber"}];
+    TXTYPE_FETCH_SCHEME_CHANGE_RECORDS = 132         [(TxTypeOpts) = {Name: "TxFetchSchemeChangeRecords"}];
+    TXTYPE_FETCH_SCHEME_CHANGE_RECORD_BODIES = 133   [(TxTypeOpts) = {Name: "TxFetchSchemeChangeRecordBodies"}];
+    TXTYPE_ACK_SCHEME_CHANGE_RECORDS = 134           [(TxTypeOpts) = {Name: "TxAckSchemeChangeRecords"}];
+    TXTYPE_SCHEME_CHANGE_RECORDS_CLEANUP = 135       [(TxTypeOpts) = {Name: "TxSchemeChangeRecordsCleanup"}];
+    TXTYPE_FORCE_ADVANCE_SCHEME_CHANGE_SUBSCRIBER = 136 [(TxTypeOpts) = {Name: "TxForceAdvanceSchemeChangeSubscriber"}];
 }

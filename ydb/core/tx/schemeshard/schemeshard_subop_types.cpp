@@ -339,6 +339,20 @@ bool IsDrop(ETxType t) {
     }
 }
 
+bool IsChurnOp(NKikimrSchemeOp::EOperationType opType) {
+    switch (opType) {
+        case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// None today. Never add an entry to silence a resolution failure.
+bool IsPathlessOp(NKikimrSchemeOp::EOperationType) {
+    return false;
+}
+
 bool CanDeleteParts(ETxType t) {
     switch (t) {
         case TxDropTable:

@@ -14,6 +14,25 @@ struct TOperation: TSimpleRefCount<TOperation> {
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
+    struct TSchemeChangeTarget {
+        TString Path;
+        TVector<TString> SourcePaths;
+    };
+
+    struct TSchemeChangeSlot {
+        ui32 RequestIdx = 0;
+        ui64 Order = 0;
+        // Carried in memory because finalisation cannot re-read it.
+        TVector<TSchemeChangeTarget> Targets;
+        TString UserSid;
+    };
+    TVector<TSchemeChangeSlot> SchemeChangeSlots;
+
+    // Abort rewinds NextSchemeChangeOrder to this. The flag is needed because
+    // base 0 is a valid value.
+    ui64 SchemeChangeOrderBase = 0;
+    bool SchemeChangeOrdersReserved = false;
+
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;
     THashSet<TTxId> WaitOperations;

@@ -123,6 +123,7 @@ struct TCgi {
     // static const TParam FixAccessDatabaseInheritanceDryRun;
     static const TParam Page;
     static const TParam BuildIndexId;
+    static const TParam SubscriberId;
     static const TParam UpdateCoordinatorsConfig;
     static const TParam UpdateCoordinatorsConfigDryRun;
     static const TParam Action;
@@ -153,6 +154,7 @@ struct TCgi {
         static constexpr TStringBuf TablePartitionsFormatSwitch = "TablePartitionsFormatSwitch";
         static constexpr TStringBuf TablePartitionsFormatSweep = "TablePartitionsFormatSweep";
         static constexpr TStringBuf MoveToStoragePool = "MoveToStoragePool";
+        static constexpr TStringBuf ForceAdvanceSchemeChangeSubscriber = "ForceAdvanceSchemeChangeSubscriber";
     };
 };
 
@@ -173,6 +175,7 @@ const TCgi::TParam TCgi::IsReadOnlyMode = TStringBuf("IsReadOnlyMode");
 // const TCgi::TParam TCgi::FixAccessDatabaseInheritanceDryRun = TStringBuf("FixAccessDatabaseInheritanceDryRun");
 const TCgi::TParam TCgi::Page = TStringBuf("Page");
 const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
+const TCgi::TParam TCgi::SubscriberId = TStringBuf("SubscriberId");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
 const TCgi::TParam TCgi::TablePartitionsFormat = TStringBuf("format");
@@ -2257,6 +2260,26 @@ private:
             }
 
             ctx.Register(new TMonitoringForceDropUnsafe(std::move(Ev), Self->TabletID(), path.PathString()));
+
+        } else if (action == TCgi::TActions::ForceAdvanceSchemeChangeSubscriber) {
+            const TString subscriberId = params.Get(TCgi::SubscriberId);
+            if (subscriberId.empty()) {
+                SendBadRequest("SubscriberId must be specified", ctx);
+                return;
+            }
+            if (!Self->Subscribers.contains(subscriberId)) {
+                SendBadRequest(TStringBuilder()
+                    << "No scheme change subscriber '" << subscriberId << "'", ctx);
+                return;
+            }
+            // Escape hatch for a dead subscriber wedging DDL.
+            Self->Execute(Self->CreateTxForceAdvanceSubscriberFromMonitoring(
+                subscriberId, TActorId()), ctx);
+            ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                TStringBuilder() << "HTTP/1.1 200 Ok\r\nConnection: Close\r\n\r\n"
+                    << "Force-advancing scheme change subscriber '" << subscriberId
+                    << "'; it will be marked Lost.\r\n"));
+            return;
 
         } else if (action == TCgi::TActions::MoveToStoragePool) {
             const TTabletId tabletId = TTabletId(TryParseTabletId(params.Get(TCgi::ShardID)));

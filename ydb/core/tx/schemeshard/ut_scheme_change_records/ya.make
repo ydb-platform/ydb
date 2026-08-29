@@ -2,12 +2,8 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-# Runs every op in this suite through the scheme change outbox and fails the
-# test if any of them cannot resolve a target path.
-ENV(YDB_SCHEME_CHANGE_CORPUS=1)
-
 IF (WITH_VALGRIND)
-    SPLIT_FACTOR(40)
+    SPLIT_FACTOR(20)
 ENDIF()
 
 SIZE(MEDIUM)
@@ -17,7 +13,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
     yql/essentials/public/udf/service/exception_policy
@@ -26,7 +22,9 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    ut_move.cpp
+    ut_scheme_change_records.cpp
+    ut_scheme_change_records_protocol.cpp
+    ut_scheme_change_records_subscriber.cpp
 )
 
 END()

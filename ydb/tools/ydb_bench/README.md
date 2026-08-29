@@ -163,6 +163,9 @@ that dataset for every search and verification sample at the geometry, then
 runs both `tpcc clean` and recursive `scheme rmdir` cleanup. `client.threads`
 maps to the TPC-C runner's `--threads`; it defaults to 2, while
 `import-threads: 0` asks the CLI to select import concurrency automatically.
+The result is rejected if the CLI reports a different number of execution
+threads than `client.threads`, which prevents CPU-based CLI clamping from
+silently changing the configuration being compared.
 
 TPC-C warmup is inline. The CLI receives the explicit value
 `max(measurement.warmup, floor(warehouses / 10) + 1)` so terminal startup is

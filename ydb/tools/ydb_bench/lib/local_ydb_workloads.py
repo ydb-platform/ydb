@@ -232,7 +232,7 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
     tpcc_tpmc = _tpcc_number(summary["tpmc"], "summary.tpmc")
     efficiency = _tpcc_number(summary["efficiency"], "summary.efficiency", maximum=100)
     max_sessions = _tpcc_integer(summary["max_sessions"], "summary.max_sessions", 1)
-    _tpcc_integer(summary["threads"], "summary.threads", 1)
+    threads = _tpcc_integer(summary["threads"], "summary.threads", 1)
     warmup_seconds = _tpcc_integer(summary["warmup_seconds"], "summary.warmup_seconds", 1)
 
     options = normalized_workload["options"]
@@ -241,6 +241,8 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
         _tpcc_result_error("field summary.warehouses does not match the configured warehouses")
     if max_sessions != request.load:
         _tpcc_result_error("field summary.max_sessions does not match the requested load")
+    if threads != request.client_threads:
+        _tpcc_result_error("field summary.threads does not match the requested client threads")
     if warmup_seconds != expected_warmup:
         _tpcc_result_error("field summary.warmup_seconds does not match the effective warmup")
     if measured_seconds < request.duration_seconds or measured_seconds > request.duration_seconds + 60:

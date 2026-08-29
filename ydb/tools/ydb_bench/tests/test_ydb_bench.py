@@ -2280,6 +2280,10 @@ class YdbBenchTest(unittest.TestCase):
                 "summary.max_sessions.*requested load",
             ),
             (
+                changed(lambda value: value["summary"].__setitem__("threads", 1)),
+                "summary.threads.*requested client threads",
+            ),
+            (
                 changed(lambda value: value["summary"].__setitem__("warmup_seconds", 3)),
                 "summary.warmup_seconds.*effective warmup",
             ),

@@ -4,6 +4,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
@@ -346,6 +347,207 @@ TPCC_JSON_RESULT = WorkloadResultAdapter(
         ),
     ),
     slo_metrics=_TPCC_SLO_METRICS,
+)
+
+_TOPIC_CONSUMER_PREFIX = "ydb-bench-consumer"
+_TOPIC_PERCENTILE = 99
+_TOPIC_OUTPUT_MAX_BYTES = 1024 * 1024
+_TOPIC_METRIC_MAX = (1 << 64) - 1
+_TOPIC_TIMESTAMP_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+
+
+def _topic_result_error(message):
+    raise BenchmarkError("YDB CLI Topic output {}".format(message))
+
+
+def _topic_timestamp(value, location):
+    if not isinstance(value, str) or _TOPIC_TIMESTAMP_PATTERN.fullmatch(value) is None:
+        _topic_result_error("{} must be an ISO UTC timestamp".format(location))
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+        timestamp = parsed.timestamp()
+    except (OSError, OverflowError, TypeError, ValueError) as error:
+        raise BenchmarkError("YDB CLI Topic output {} must be an ISO UTC timestamp".format(location)) from error
+    if not math.isfinite(timestamp):
+        _topic_result_error("{} must be a finite timestamp".format(location))
+    return timestamp
+
+
+def _topic_stats_row(values, location):
+    if len(values) != 11:
+        _topic_result_error("{} must contain exactly 11 columns".format(location))
+    metric_values = []
+    for value in values[1:10]:
+        if re.fullmatch("[0-9]+", value) is None or len(value) > 20:
+            _topic_result_error("{} metrics must be unsigned 64-bit decimal integers".format(location))
+        parsed = int(value)
+        if parsed > _TOPIC_METRIC_MAX:
+            _topic_result_error("{} metrics must be unsigned 64-bit decimal integers".format(location))
+        metric_values.append(parsed)
+    timestamp = _topic_timestamp(values[10], "{} timestamp".format(location))
+    return metric_values, timestamp
+
+
+def _parse_topic_total_result(command_result, normalized_workload, request):
+    stdout = command_result.stdout
+    if not isinstance(stdout, str):
+        _topic_result_error("is not text or exceeds {} bytes".format(_TOPIC_OUTPUT_MAX_BYTES))
+    try:
+        output_size = len(stdout.encode("utf-8"))
+    except UnicodeEncodeError as error:
+        raise BenchmarkError("YDB CLI Topic output is not valid UTF-8 text") from error
+    if output_size > _TOPIC_OUTPUT_MAX_BYTES:
+        _topic_result_error("is not text or exceeds {} bytes".format(_TOPIC_OUTPUT_MAX_BYTES))
+
+    start_index = request.warmup_seconds + 1
+    finish_index = request.warmup_seconds + request.duration_seconds
+    if start_index >= finish_index:
+        _topic_result_error("requires a measurement duration of at least two seconds")
+    boundary_rows = {str(start_index): [], str(finish_index): []}
+    total_rows = []
+    for line in stdout.splitlines():
+        values = line.split()
+        if not values:
+            continue
+        if values[0] == "Total":
+            total_rows.append(values)
+        elif values[0] in boundary_rows:
+            boundary_rows[values[0]].append(values)
+    if len(total_rows) != 1:
+        _topic_result_error("must contain exactly one Total row")
+    for index, rows in boundary_rows.items():
+        if len(rows) != 1:
+            _topic_result_error("must contain exactly one window row for index {}".format(index))
+    metric_values, _total_timestamp = _topic_stats_row(total_rows[0], "Total row")
+    _start_metrics, measurement_started_at = _topic_stats_row(
+        boundary_rows[str(start_index)][0],
+        "window row {}".format(start_index),
+    )
+    _finish_metrics, measurement_finished_at = _topic_stats_row(
+        boundary_rows[str(finish_index)][0],
+        "window row {}".format(finish_index),
+    )
+    if measurement_started_at >= measurement_finished_at:
+        _topic_result_error("measurement window timestamps must be increasing")
+
+    (
+        write_messages_s,
+        write_mib_s,
+        write_p99_ms,
+        inflight_p99_messages,
+        lag_p99_messages,
+        lag_p99_ms,
+        read_messages_s,
+        read_mib_s,
+        full_p99_ms,
+    ) = metric_values
+    consumers = normalized_workload["options"]["consumers"]
+    read_per_consumer_messages_s = read_messages_s / consumers
+    throughput = min(write_messages_s, read_per_consumer_messages_s)
+    metrics = {
+        "transactions": int(throughput * request.duration_seconds),
+        "throughput": throughput,
+        "write_messages_s": write_messages_s,
+        "write_mib_s": write_mib_s,
+        "write_p99_ms": write_p99_ms,
+        "inflight_p99_messages": inflight_p99_messages,
+        "lag_p99_messages": lag_p99_messages,
+        "lag_p99_ms": lag_p99_ms,
+        "read_messages_s": read_messages_s,
+        "read_per_consumer_messages_s": read_per_consumer_messages_s,
+        "read_mib_s": read_mib_s,
+        "full_p99_ms": full_p99_ms,
+    }
+    return WorkloadResult(
+        metrics,
+        details={"percentile": _TOPIC_PERCENTILE, "total": metrics},
+        measurement_window=(
+            measurement_started_at,
+            measurement_finished_at,
+        ),
+    )
+
+
+TOPIC_TOTAL_RESULT = WorkloadResultAdapter(
+    schema_id="topic-total-v1",
+    parse=_parse_topic_total_result,
+    metrics=(
+        WorkloadMetric(
+            "transactions",
+            "estimated messages",
+            required=True,
+            description=(
+                "Conservative completed-message estimate derived from truncated CLI rates; used to reject empty samples"
+            ),
+        ),
+        WorkloadMetric(
+            "throughput",
+            "messages/s",
+            required=True,
+            description="Minimum of write rate and aggregate read rate divided by the number of consumers",
+        ),
+        WorkloadMetric(
+            "write_messages_s",
+            "messages/s",
+            required=True,
+            description="CLI-reported successful write rate",
+        ),
+        WorkloadMetric(
+            "read_messages_s",
+            "deliveries/s",
+            required=True,
+            description="CLI-reported aggregate delivery rate across all consumers",
+        ),
+        WorkloadMetric(
+            "read_per_consumer_messages_s",
+            "messages/s",
+            required=True,
+            description="Aggregate delivery rate divided by the configured number of consumers",
+        ),
+        WorkloadMetric(
+            "write_mib_s",
+            "logical MiB/s",
+            required=True,
+            description="CLI-reported uncompressed logical write bandwidth",
+        ),
+        WorkloadMetric(
+            "read_mib_s",
+            "logical MiB/s",
+            required=True,
+            description="CLI-reported aggregate uncompressed logical read bandwidth",
+        ),
+        WorkloadMetric(
+            "write_p99_ms",
+            "ms",
+            required=True,
+            description="p99 time from scheduled message creation to write acknowledgement",
+        ),
+        WorkloadMetric(
+            "inflight_p99_messages",
+            "messages",
+            required=True,
+            description="p99 number of messages awaiting write acknowledgement",
+        ),
+        WorkloadMetric(
+            "lag_p99_messages",
+            "messages",
+            required=True,
+            description="p99 unread-message lag across consumers",
+        ),
+        WorkloadMetric(
+            "lag_p99_ms",
+            "ms",
+            required=True,
+            description="p99 consumer lag time",
+        ),
+        WorkloadMetric(
+            "full_p99_ms",
+            "ms",
+            required=True,
+            description="p99 end-to-end time from scheduled message creation to delivery",
+        ),
+    ),
+    slo_metrics=(("p99", "full_p99_ms"),),
 )
 
 _RESERVED_RESULT_METRIC_NAMES = frozenset(
@@ -761,6 +963,115 @@ def _tpcc_cleanup_plan_builder(cli, definition, path, workload):
     )
 
 
+def _topic_init_builder(cli, definition, path, workload):
+    options = workload["options"]
+    return _workload_base(cli, definition, None) + [
+        "init",
+        "--topic",
+        path,
+        "--partitions",
+        options["partitions"],
+        "--consumers",
+        options["consumers"],
+        "--consumer-prefix",
+        _TOPIC_CONSUMER_PREFIX,
+    ]
+
+
+def _topic_run_command(
+    cli,
+    definition,
+    path,
+    workload,
+    load,
+    total_seconds,
+    client_threads,
+    warmup_seconds,
+):
+    options = workload["options"]
+    return _workload_base(cli, definition, None) + [
+        "run",
+        workload["operation"],
+        "--topic",
+        path,
+        "--seconds",
+        total_seconds,
+        "--warmup",
+        warmup_seconds,
+        "--window",
+        1,
+        "--print-timestamp",
+        "--percentile",
+        _TOPIC_PERCENTILE,
+        "--producer-threads",
+        client_threads,
+        "--consumer-threads",
+        client_threads,
+        "--consumers",
+        options["consumers"],
+        "--consumer-prefix",
+        _TOPIC_CONSUMER_PREFIX,
+        "--message-size",
+        options["message-size"],
+        "--message-rate",
+        load,
+        "--codec",
+        options["codec"],
+    ]
+
+
+def _topic_run_builder(cli, definition, path, workload, load_parameter, load, seconds, client_threads):
+    del load_parameter
+    return _topic_run_command(cli, definition, path, workload, load, seconds, client_threads, 0)
+
+
+def _topic_prepare_plan_builder(cli, definition, path, workload):
+    return (WorkloadCommandPlan("init", tuple(_topic_init_builder(cli, definition, path, workload)), 120),)
+
+
+def _topic_run_plan_builder(
+    cli,
+    definition,
+    path,
+    workload,
+    load_parameter,
+    load,
+    seconds,
+    client_threads,
+    warmup_seconds,
+):
+    del load_parameter
+    total_seconds = warmup_seconds + seconds
+    return WorkloadCommandPlan(
+        "run",
+        tuple(
+            _topic_run_command(
+                cli,
+                definition,
+                path,
+                workload,
+                load,
+                total_seconds,
+                client_threads,
+                warmup_seconds,
+            )
+        ),
+        total_seconds + 30,
+        progress_duration_seconds=total_seconds,
+    )
+
+
+def _topic_cleanup_plan_builder(cli, definition, path, workload):
+    del workload
+    return (
+        WorkloadCommandPlan(
+            "clean",
+            tuple(_workload_base(cli, definition, None) + ["clean", "--topic", path]),
+            120,
+        ),
+    )
+
+
 def _validate_kv_options(options, location):
     if options["max-partitions"] < options["min-partitions"]:
         _config_error(location + ".max-partitions", "must not be below min-partitions")
@@ -784,6 +1095,10 @@ def _validate_tpcc_options(options, location):
     del options, location
 
 
+def _validate_topic_options(options, location):
+    del options, location
+
+
 def _validate_tpcc_profile(workload, load, measurement, location):
     maximum_sessions = workload["options"]["warehouses"] * _TPCC_TERMINALS_PER_WAREHOUSE
     if "values" in load:
@@ -801,6 +1116,18 @@ def _validate_tpcc_profile(workload, load, measurement, location):
                     "{}.load.search.{}".format(location, name),
                     "must not exceed warehouses * 10 ({})".format(maximum_sessions),
                 )
+
+
+def _validate_topic_profile(workload, load, measurement, location):
+    del workload, measurement
+    if load["allow_errors"]:
+        _config_error(location + ".load.allow-errors", "must be false because Topic does not report errors")
+    objective = load.get("objective")
+    if objective is not None and objective["type"] == "latency-slo" and objective["max_errors"] > 0:
+        _config_error(
+            location + ".load.objective.max-errors",
+            "must be zero because Topic does not report errors",
+        )
 
 
 def _validate_option_value(option, value, location):
@@ -1150,6 +1477,33 @@ _DEFINITIONS = (
         minimum_duration_seconds=2,
         load_limits=(("max-sessions", "warehouses", _TPCC_TERMINALS_PER_WAREHOUSE),),
         default_client_threads=2,
+    ),
+    WorkloadDefinition(
+        name="topic",
+        default_operation="full",
+        operations=("full",),
+        load_parameters=("rate",),
+        options=(
+            WorkloadOption("partitions", 128),
+            WorkloadOption("consumers", 1),
+            WorkloadOption("message-size", 10240),
+            WorkloadOption("codec", "raw", kind="string", choices=("raw", "gzip", "zstd")),
+        ),
+        uses_path=False,
+        table_name=None,
+        init_builder=_topic_init_builder,
+        run_builder=_topic_run_builder,
+        options_validator=_validate_topic_options,
+        dataset_scope="sample",
+        warmup_mode="inline",
+        prepare_plan_builder=_topic_prepare_plan_builder,
+        run_plan_builder=_topic_run_plan_builder,
+        cleanup_plan_builder=_topic_cleanup_plan_builder,
+        result_adapter=TOPIC_TOTAL_RESULT,
+        throughput_unit="messages/s",
+        profile_validator=_validate_topic_profile,
+        minimum_duration_seconds=2,
+        default_client_threads=1,
     ),
 )
 _validate_catalog(_DEFINITIONS)

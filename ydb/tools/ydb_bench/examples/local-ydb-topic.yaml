@@ -1,0 +1,32 @@
+local-ydb:
+  topic-smoke:
+    workload:
+      type: topic
+      operation: full
+      options:
+        partitions: 1
+        consumers: 1
+        message-size: 1024
+        codec: raw
+    geometry:
+      preset: single
+      static-nodes: 1
+      disk-size-gb: 64
+      storage-groups: 1
+    client:
+      threads: 1
+    load:
+      parameter: rate
+      values: [10]
+    measurement:
+      warmup: 1
+      duration: 2
+      repetitions: 1
+      verification-repetitions: 0
+    affinity:
+      ydb-cli:
+        mode: none
+      static-nodes:
+        mode: none
+      dynamic-nodes:
+        mode: none

@@ -426,6 +426,8 @@ function localYdbSloPercentile(definition,requested=null){
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
   const definition=localYdbWorkloadDefinition(workload.type);
+  const clientThreadsHelp=workload.type==='topic'?
+    'Applied to both producer and consumer thread counts; every consumer gets this many reader threads.':'';
   const loadMode=load.values?'points':load.objective.type;
   const sloPercentiles=Object.keys(definition.slo_metrics||{});
   const objectiveChoices=['points','maximize-throughput',...(sloPercentiles.length?['latency-slo']:[])];
@@ -496,7 +498,7 @@ function localYdbProfileEditor(profile){
     )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
     localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
     '</div><h3>Client and load</h3><div class=form-grid>'+
-    localField('local-client-threads','YDB CLI threads',config.client.threads,'','type=number min=1')+
+    localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
     loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
     localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,'','type=number min=0')+
     localField(
@@ -563,7 +565,10 @@ function bindLocalYdbEditor(profile){
       config.measurement.duration=Math.max(
         config.measurement.duration,nextDefinition.minimum_duration_seconds||1
       );
-      if(!nextDefinition.reports_errors)config.load.allow_errors=false;
+      if(!nextDefinition.reports_errors){
+        config.load.allow_errors=false;
+        if(config.load.objective?.type==='latency-slo')config.load.objective.max_errors=0
+      }
       if(config.load.objective?.type==='latency-slo'){
         const percentile=localYdbSloPercentile(nextDefinition,config.load.objective.percentile);
         if(percentile)config.load.objective.percentile=percentile;
@@ -1526,11 +1531,12 @@ function localOutcomeLabel(outcome){
 function localSearchAxisLabel(parameter,workload){
   if(parameter==='threads')return 'YDB CLI threads';
   if(parameter==='max-sessions')return 'Maximum sessions';
-  if(parameter==='rate')return workload==='stock'?'Offered rate (transactions/s)':'Offered rate (requests/s)';
+  if(parameter==='rate')return workload==='stock'?'Offered rate (transactions/s)':
+    workload==='topic'?'Offered rate (messages/s)':'Offered rate (requests/s)';
   return parameter||'Search value'
 }
 function localLegacyResultSchema(workload){
-  const throughputUnit={kv:'requests/s',stock:'transactions/s',log:'batches/s'}[workload]||'operations/s';
+  const throughputUnit={kv:'requests/s',stock:'transactions/s',log:'batches/s',topic:'messages/s'}[workload]||'operations/s';
   return {
     schema_id:'generic-total-v1',throughput_unit:throughputUnit,reports_errors:true,
     metrics:[

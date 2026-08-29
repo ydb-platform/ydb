@@ -95,8 +95,9 @@ private:
         const auto pendingExpired = PendingBySession.Expire(now);
         const auto retiredExpired = RetiredSessions.Expire(now);
         if (pendingExpired || retiredExpired) {
-            PQ_CPROXY_LOG_I("expired deadline map entries: pending=" << pendingExpired
-                            << ", retired=" << retiredExpired);
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: expired deadline map entries",
+                {"pending", pendingExpired},
+                {"retired", retiredExpired});
         }
         ctx.Schedule(DeadlineMapWakeupPeriod, new TEvents::TEvWakeup(ExpireDeadlineMapsWakeupTag));
     }
@@ -248,9 +249,6 @@ private:
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
             if (IsSessionGenerationRetired(key, generation)) {
-                PQ_CPROXY_LOG_I("drop publish for retired session generation: sessionId=" << key.SessionId
-                                << ", partitionSessionId=" << key.PartitionSessionId
-                                << ", readId=" << readId << ", generation=" << generation);
                 YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop publish for retired session generation",
                     {"sessionId", key.SessionId},
                     {"partitionSessionId", key.PartitionSessionId},
@@ -391,21 +389,26 @@ private:
             return;
         }
         if (sessionIter->second.Generation != tabletGeneration) {
-            PQ_CPROXY_LOG_A("Stage generation mismatch for session " << sessionIter->first.SessionId
-                            << ", TabletGeneration=" << tabletGeneration
-                            << ", previously had generation=" << sessionIter->second.Generation << ". Data ignored");
+            YDB_LOG_ALERT_CTX(ctx, "Direct read cache: Stage generation mismatch, data ignored",
+                {"sessionId", sessionIter->first.SessionId},
+                {"tabletGeneration", tabletGeneration},
+                {"previouslyGeneration", sessionIter->second.Generation});
             return;
         }
         auto ins = sessionIter->second.StagedReads.insert(std::make_pair(readId, response));
         if (!ins.second) {
-            PQ_CPROXY_LOG_W("tried to stage duplicate direct read for session " << sessionIter->first.SessionId
-                            << " with id " << readId << ", new data ignored");
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: tried to stage duplicate direct read, new data ignored",
+                {"sessionId", sessionIter->first.SessionId},
+                {"readId", readId});
+
             return;
         }
         ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
         ChangeCounterValue("StagedReadsCount", 1, false);
         ChangeCounterValue("StagedReadsRate", 1, false, true);
-        PQ_CPROXY_LOG_D("staged direct read id " << readId << " for session: " << sessionIter->first.SessionId);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: staged direct",
+                {"sessionId", sessionIter->first.SessionId},
+                {"readId", readId});
     }
 
     // Returns true if the read was published (or already published). False if generation
@@ -420,8 +423,9 @@ private:
 
         auto stagedIter = iter->second.StagedReads.find(readId);
         if (stagedIter == iter->second.StagedReads.end()) {
-            PQ_CPROXY_LOG_E("attempt to publish unknown read id " << readId << " from session: "
-                            << iter->first.SessionId << " ignored");
+            YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish unknown read id ignored",
+                {"sessionId", iter->first.SessionId},
+                {"readId", readId});
             return false;
         }
         auto inserted = iter->second.Reads.insert(std::make_pair(readId, stagedIter->second)).second;
@@ -452,11 +456,13 @@ private:
 
         const ui32 sessionGeneration = sessionIter->second.Generation;
         const auto& ctx = ActorContext();
-        PQ_CPROXY_LOG_D("flush pending stage/publish after register: sessionId=" << key.SessionId
-                        << ", partitionSessionId=" << key.PartitionSessionId
-                        << ", sessionGeneration=" << sessionGeneration
-                        << ", stages=" << pending->Stages.size()
-                        << ", publishes=" << pending->Publishes.size());
+
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: flush pending stage/publish after register",
+            {"sessionId", key.SessionId},
+            {"partitionSessionId", key.PartitionSessionId},
+            {"sessionGeneration", sessionGeneration},
+            {"stages", pending->Stages.size()},
+            {"publishes", pending->Publishes.size()});
 
         // Apply only matching generation. Drop stale lower gens; keep higher gens for a later Register.
         for (auto it = pending->Stages.begin(); it != pending->Stages.end(); ) {

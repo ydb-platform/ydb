@@ -4,6 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(2)
 
+# Runs every op in this suite through the scheme change outbox and fails the
+# test if any of them cannot resolve a target path.
+ENV(YDB_SCHEME_CHANGE_CORPUS=1)
+
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

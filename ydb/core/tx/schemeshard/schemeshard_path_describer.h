@@ -6,9 +6,15 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+// Descends into nested messages.
+void ClearSensitiveFields(google::protobuf::Message* message);
+
+void ClearSensitiveFields(google::protobuf::Message* message, TVector<TString>& clearedFields);
 
 class TPathDescriber {
     void FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl,

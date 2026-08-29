@@ -22,9 +22,7 @@ void TPlan::Load(const NJson::TJsonValue& node) {
     if (auto* subNode = node.GetValueByPath("Plans")) {
         for (auto& plan : subNode->GetArray()) {
             TString nodeType;
-            if (auto* nodeTypeNode = plan.GetValueByPath("Node Type")) {
-                nodeType = nodeTypeNode->GetStringSafe();
-            }
+            ReadString(plan, "Node Type", nodeType);
             if (auto* planNodeTypeNode = plan.GetValueByPath("PlanNodeType")) {
                 auto planNodeType = planNodeTypeNode->GetStringSafe();
                 ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
@@ -56,12 +54,8 @@ void TPlan::Load(const NJson::TJsonValue& node) {
 void TPlan::LoadNode(const NJson::TJsonValue& node) {
     if (auto* nodeIdNode = node.GetValueByPath("NodeId")) {
         auto clusterNode = std::make_shared<TClusterNode>(nodeIdNode->GetIntegerSafe());
-        if (auto* tasksNode = node.GetValueByPath("Tasks")) {
-            clusterNode->Tasks = tasksNode->GetIntegerSafe();
-        }
-        if (auto* finishedTasksNode = node.GetValueByPath("FinishedTasks")) {
-            clusterNode->FinishedTasks = finishedTasksNode->GetIntegerSafe();
-        }
+        ReadUi64(node, "Tasks", clusterNode->Tasks);
+        ReadUi64(node, "FinishedTasks", clusterNode->FinishedTasks);
         /*
         if (auto* outputBytesNode = node.GetValueByPath("OutputBytes")) {
             clusterNode->OutputBytes = std::make_shared<TSingleMetric>(NodeOutputBytes, *outputBytesNode);
@@ -194,9 +188,7 @@ void TPlan::ResolveCteRefs() {
                                     Max0(MaxTime, stats.Bytes->MaxTime);
                                 }
                             }
-                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
-                                cteRef.second->InputLocalBytes = localBytesNode->GetIntegerSafe();
-                            }
+                            ReadUi64(subNode, "LocalBytes", cteRef.second->InputLocalBytes);
                         }
                     }
                 }
@@ -226,9 +218,7 @@ void TPlan::ResolveCteRefs() {
                                     cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *stats.RowsNode);
                                 }
                             }
-                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
-                                cteRef.second->CteOutputLocalBytes = localBytesNode->GetIntegerSafe();
-                            }
+                            ReadUi64(subNode, "LocalBytes", cteRef.second->CteOutputLocalBytes);
                         }
                     }
                 }
@@ -295,9 +285,7 @@ void TPlan::MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime) {
 
 void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection) {
 
-    if (auto* planNodeIdNode = node.GetValueByPath("PlanNodeId")) {
-        stage->PlanNodeId = planNodeIdNode->GetIntegerSafe();
-    }
+    ReadUi64(node, "PlanNodeId", stage->PlanNodeId);
 
     if (outputConnection) {
         stage->OutputPlanNodeId = outputConnection->PlanNodeId;
@@ -334,9 +322,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     continue;
                 }
 
-                if (auto* blocksNode = subNode.GetValueByPath("Blocks")) {
-                    blocks = blocksNode->GetStringSafe() == "True";
-                }
+                ReadBoolString(subNode, "Blocks", blocks);
 
                 if (name == "Filter" && prevFilter) {
                     if (auto* predicateNode = subNode.GetValueByPath("Predicate")) {
@@ -351,9 +337,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 TStringBuilder builder;
 
                 if (name == "Limit") {
-                    if (auto* limitNode = subNode.GetValueByPath("Limit")) {
-                        info = limitNode->GetStringSafe();
-                    }
+                    ReadString(subNode, "Limit", info);
                 } else if (name == "Sort") {
                     if (auto* sortByNode = subNode.GetValueByPath("SortBy")) {
                         auto sortBy = sortByNode->GetStringSafe();
@@ -390,9 +374,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                         info = filter;
                     }
-                    if (auto* pushdownNode = subNode.GetValueByPath("Pushdown")) {
-                        externalOperator = pushdownNode->GetStringSafe() == "True";
-                    }
+                    ReadBoolString(subNode, "Pushdown", externalOperator);
                 } else if (name == "Aggregate") {
                     operatorType = "Aggregation";
                     TStringBuilder builder;
@@ -467,9 +449,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     info = builder;
-                    if (auto* pushdownNode = subNode.GetValueByPath("Pushdown")) {
-                        externalOperator = pushdownNode->GetStringSafe() == "True";
-                    }
+                    ReadBoolString(subNode, "Pushdown", externalOperator);
                 } else if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                     TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {
@@ -518,9 +498,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     info = builder;
                 } else if (name.Contains("Join")) {
                     operatorType = "Join";
-                    if (auto* conditionNode = subNode.GetValueByPath("Condition")) {
-                        info = conditionNode->GetStringSafe();
-                    }
+                    ReadString(subNode, "Condition", info);
                 }
 
                 std::vector<TOperatorInput> inputs;
@@ -600,13 +578,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 TStringBuilder builder;
                                 for (const auto& subNode : operatorNode->GetArray()) {
                                     TString id = "";
-                                    if (auto* idNode = subNode.GetValueByPath("Id")) {
-                                        id = idNode->GetStringSafe();
-                                    }
+                                    ReadString(subNode, "Id", id);
                                     TString type = "";
-                                    if (auto* typeNode = subNode.GetValueByPath("Type")) {
-                                        type = typeNode->GetStringSafe();
-                                    }
+                                    ReadString(subNode, "Type", type);
                                     if (operatorType == type && operatorId == id) {
                                         if (operatorStatNode) {
                                             // collision
@@ -717,12 +691,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         externalStage->CpuTime = std::make_shared<TSingleMetric>(ExternalCpuTime, *cpuTimeNode);
                         MergeTotalCpu(externalStage->CpuTime);
                     }
-                    if (auto* partitionCountNode = externalNode->GetValueByPath("PartitionCount")) {
-                        externalStage->Tasks = partitionCountNode->GetIntegerSafe();
-                    }
-                    if (auto* finishedPartitionCountNode = externalNode->GetValueByPath("FinishedPartitionCount")) {
-                        externalStage->FinishedTasks = finishedPartitionCountNode->GetIntegerSafe();
-                    }
+                    ReadUi64(*externalNode, "PartitionCount", externalStage->Tasks);
+                    ReadUi64(*externalNode, "FinishedPartitionCount", externalStage->FinishedTasks);
                 }
             }
         }
@@ -731,13 +701,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             stage->Tasks = tasksNode->GetIntegerSafe();
             Tasks += stage->Tasks;
         }
-        if (auto* finishedTasksNode = stage->StatsNode->GetValueByPath("FinishedTasks")) {
-            stage->FinishedTasks = finishedTasksNode->GetIntegerSafe();
-        }
-
-        if (auto* physicalStageIdNode = stage->StatsNode->GetValueByPath("PhysicalStageId")) {
-            stage->PhysicalStageId = physicalStageIdNode->GetIntegerSafe();
-        }
+        ReadUi64(*stage->StatsNode, "FinishedTasks", stage->FinishedTasks);
+        ReadUi64(*stage->StatsNode, "PhysicalStageId", stage->PhysicalStageId);
 
         if (auto* baseTimeNode = stage->StatsNode->GetValueByPath("BaseTimeMs")) {
             stage->BaseTime = baseTimeNode->GetIntegerSafe();
@@ -773,9 +738,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     : std::make_shared<TSingleMetric>(OperatorOutputRows);
                             }
                         }
-                        if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
-                            stage->OutputLocalBytes = localBytesNode->GetIntegerSafe();
-                        }
+                        ReadUi64(subNode, "LocalBytes", stage->OutputLocalBytes);
                     }
                 }
             }
@@ -845,9 +808,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             }
                         }
                         connection = std::make_shared<TConnection>(Viz.NextGroupId(), *stage, subNodeType, connectionPlanNodeId);
-                        if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
-                            connection->Blocks = blocksNode->GetStringSafe() == "True";
-                        }
+                        ReadBoolString(plan, "Blocks", connection->Blocks);
                         NodeToConnection[connectionPlanNodeId] = connection.get();
                         stage->Connections.push_back(connection);
 
@@ -882,9 +843,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                     }
                                                 }
                                             }
-                                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
-                                                connection->InputLocalBytes = localBytesNode->GetIntegerSafe();
-                                            }
+                                            ReadUi64(subNode, "LocalBytes", connection->InputLocalBytes);
                                         }
                                     }
                                 }
@@ -916,9 +875,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (auto* cteNameNode = plan.GetValueByPath("CTE Name")) {
                     auto cteName = "CTE " + cteNameNode->GetStringSafe();
                     connection = std::make_shared<TConnection>(Viz.NextGroupId(), *stage, subNodeType, connectionPlanNodeId);
-                    if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
-                        connection->Blocks = blocksNode->GetStringSafe() == "True";
-                    }
+                    ReadBoolString(plan, "Blocks", connection->Blocks);
                     NodeToConnection[connectionPlanNodeId] = connection.get();
                     connection->CteConnection = true;
                     stage->Connections.push_back(connection);
@@ -940,9 +897,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     if (auto* hashFuncNode = plan.GetValueByPath("HashFunc")) {
                         connection->HashFunc = hashFuncNode->GetStringSafe();
                     }
-                    if (auto* parallelNode = plan.GetValueByPath("Parallel")) {
-                        connection->Parallel = parallelNode->GetStringSafe() == "True";
-                    }
+                    ReadBoolString(plan, "Parallel", connection->Parallel);
                 }
             } else if (planNodeType == "") {
                 if (subNodeType == "Source") {
@@ -1037,9 +992,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             stage->WaitOutputTime = std::make_shared<TSingleMetric>(WaitOutputTime, *wotNode, stage->MinTime, stage->MaxTime);
         }
 
-        if (auto* updateTimeNode = stage->StatsNode->GetValueByPath("UpdateTimeMs")) {
-            stage->UpdateTime = updateTimeNode->GetIntegerSafe();
-        }
+        ReadUi64(*stage->StatsNode, "UpdateTimeMs", stage->UpdateTime);
     }
 
     if (stage->IngressBytes) {

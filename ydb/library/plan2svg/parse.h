@@ -10,6 +10,34 @@
 
 namespace NPlan2Svg {
 
+// The plan JSON omits absent fields rather than nulling them, so every read is
+// an existence check followed by an assignment that has to leave the target
+// alone when the field is missing. These three wrap that shape; they are inline
+// because each is smaller than its own call.
+
+// Templated only because the fields these land in are declared with a mix of
+// integer widths.
+template <typename T>
+void ReadUi64(const NJson::TJsonValue& node, TStringBuf path, T& target) {
+    if (auto* valueNode = node.GetValueByPath(path)) {
+        target = valueNode->GetIntegerSafe();
+    }
+}
+
+inline void ReadString(const NJson::TJsonValue& node, TStringBuf path, TString& target) {
+    if (auto* valueNode = node.GetValueByPath(path)) {
+        target = valueNode->GetStringSafe();
+    }
+}
+
+// Flags such as Blocks, Parallel and Pushdown arrive as the strings "True" and
+// "False", not as JSON booleans.
+inline void ReadBoolString(const NJson::TJsonValue& node, TStringBuf path, bool& target) {
+    if (auto* valueNode = node.GetValueByPath(path)) {
+        target = valueNode->GetStringSafe() == "True";
+    }
+}
+
 TString GetEstimation(const NJson::TJsonValue& node);
 const NJson::TJsonValue* GetOutputStatNode(const NJson::TJsonValue& node);
 const NJson::TJsonValue* GetInputStatNode(const NJson::TJsonValue& node);

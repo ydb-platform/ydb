@@ -575,7 +575,7 @@ public:
     }
 private:
 
-    bool ValidateObjectRefs(const NKikimr::NMiniKQL::TType* type, const NYql::NUdf::TUnboxedValue& value, i32 expectedRefs = 1) {
+    bool ValidateObjectRefs(const NKikimr::NMiniKQL::TType* type, const NYql::NUdf::TUnboxedValuePod& value, i32 expectedRefs = 1) {
         if (value.RefCount() == -1) { // NULL/POD/Embedded String
             return true;
         }
@@ -654,7 +654,7 @@ private:
                 auto listIterator = value.GetListIterator();
 
                 for(NYql::NUdf::TUnboxedValue itemValue; listIterator.Next(itemValue); ) {
-                    if (!ValidateObjectRefs(itemType, itemValue, 2)) { // two refs expected: one from object, one from itemValue
+                    if (!ValidateObjectRefs(itemType, itemValue.Release())) {
                         Y_DEBUG_ABORT();
                         return false;
                     }
@@ -680,11 +680,11 @@ private:
                 auto dictIterator = value.GetDictIterator();
 
                 for(NYql::NUdf::TUnboxedValue keyValue, payload; dictIterator.NextPair(keyValue, payload); ) {
-                    if (!ValidateObjectRefs(keyType, keyValue, 2)) { // two refs expected: one from object, one from keyValue
+                    if (!ValidateObjectRefs(keyType, keyValue.Release())) {
                         Y_DEBUG_ABORT();
                         return false;
                     }
-                    if (!ValidateObjectRefs(valueType, payload, 2)) { // two refs expected: one from object, one from payload
+                    if (!ValidateObjectRefs(valueType, payload.Release())) {
                         Y_DEBUG_ABORT();
                         return false;
                     }
@@ -700,7 +700,7 @@ private:
                     return false;
                 }
                 auto variantItem = value.GetVariantItem();
-                if (!ValidateObjectRefs(variantType->GetAlternativeType(index), variantItem, 2)) { // two refs expected: one from object, one from variantItem
+                if (!ValidateObjectRefs(variantType->GetAlternativeType(index), variantItem.Release())) {
                     Y_DEBUG_ABORT();
                     return false;
                 }

@@ -21,4 +21,24 @@ TString FormatMCpu(ui64 mCpu);
 TString FormatTooltip(TStringBuilder& builder, const TString& prefix, TSingleMetric* metric, TString (*format)(ui64), ui64 total = 0);
 TString FormatTooltip(TString& tooltip, const TString& prefix, TSingleMetric* metric, TString (*format)(ui64), ui64 total = 0);
 
+// The tooltip every data flow shows above its summary bar: bytes, then the
+// optional local share, row count and width, then the optional chunk count and
+// mean chunk size. Returns the summary text drawn inside the bar.
+//
+// localBytes and chunks are 0 for flows that do not report them (egress and
+// ingress). withWidth is false only for egress, which has never shown a width.
+TString FormatDataFlowTooltip(TStringBuilder& tooltip, const TString& label,
+    const std::shared_ptr<TSingleMetric>& bytes,
+    const std::shared_ptr<TSingleMetric>& rows,
+    ui64 localBytes,
+    ui64 chunks,
+    const std::shared_ptr<TScalarMetric>& chunkSize,
+    bool withWidth = true);
+
+// The data flow's timeline title: its label plus throughput over the window it
+// was actually active, label alone when that window is empty.
+TString FormatDataFlowRate(const TString& label,
+    const std::shared_ptr<TSingleMetric>& bytes,
+    const std::shared_ptr<TSingleMetric>& rows);
+
 } // namespace NPlan2Svg

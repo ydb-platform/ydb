@@ -330,6 +330,24 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
 }
 
 
+void TPlan::PrintDataFlowTimeline(TStringBuilder& builder, const TString& title, const std::shared_ptr<TSingleMetric>& bytes,
+    ui32 x, ui32 y, ui32 w, const TString& mediumColor, const TString& lightColor, const TString& darkColor, bool backgroundRect)
+{
+    TStringBuilder connCanvas;
+
+    PrintTimeline(builder, connCanvas, title, bytes->FirstMessage, bytes->LastMessage, x, y, w, INTERNAL_HEIGHT, mediumColor, backgroundRect);
+
+    if (!bytes->WaitTime.Deriv.empty()) {
+        PrintWaitTime(builder, bytes, x, y, w, INTERNAL_HEIGHT, lightColor);
+    }
+
+    builder << connCanvas;
+
+    if (!bytes->History.Deriv.empty()) {
+        PrintDeriv(builder, bytes->History, x, y, w, INTERNAL_HEIGHT, "", darkColor);
+    }
+}
+
 void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     OffsetY = offsetY;
 
@@ -576,35 +594,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             builder << "<g data-group='g" << (s->External ? StageToExternalConnection[s.get()]->GroupId : s->GroupId) << "' class='selectable'><title>Egress</title>" << Endl;
 
             TStringBuilder tooltip;
-            auto textSum = FormatTooltip(tooltip, "Egress", s->EgressBytes.get(), FormatBytes);
-            if (s->EgressRows) {
-                FormatTooltip(tooltip, ", Rows", s->EgressRows.get(), FormatInteger);
-            }
+            auto textSum = FormatDataFlowTooltip(tooltip, "Egress", s->EgressBytes, s->EgressRows, 0, 0, nullptr, false);
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->EgressBytes, Config.Palette.EgressMedium, Config.Palette.EgressLight, textSum, tooltip, s->Tasks, "#icon_egress", Config.Palette.EgressMedium, "0.9 0.9", s->External);
 
-            auto d = s->EgressBytes->MaxTime - s->EgressBytes->MinTime;
-            TStringBuilder title;
-            title << "Egress";
-            if (d) {
-                title << " " << FormatBytes(s->EgressBytes->Details.Sum * 1000 / d) << "/s";
-                if (s->EgressRows) {
-                    title << ", Rows " << FormatInteger(s->EgressRows->Details.Sum * 1000 / d) << "/s";
-                }
-            }
+            auto title = FormatDataFlowRate("Egress", s->EgressBytes, s->EgressRows);
 
-            TStringBuilder connCanvas;
-
-            PrintTimeline(builder, connCanvas, title, s->EgressBytes->FirstMessage, s->EgressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.EgressMedium, false);
-
-            if (!s->EgressBytes->WaitTime.Deriv.empty()) {
-                PrintWaitTime(builder, s->EgressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.EgressLight);
-            }
-
-            builder << connCanvas;
-
-            if (!s->EgressBytes->History.Deriv.empty()) {
-                PrintDeriv(builder, s->EgressBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.EgressDark);
-            }
+            PrintDataFlowTimeline(builder, title, s->EgressBytes, px, y0, pw,
+                Config.Palette.EgressMedium, Config.Palette.EgressLight, Config.Palette.EgressDark);
 
             builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -615,22 +611,8 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             builder << "<g data-group='g" << (s->OutputPlanNodeId ? NodeToConnection[s->OutputPlanNodeId]->GroupId : GroupId) << "' class='selectable'><title>Output</title>" << Endl;
 
             TStringBuilder tooltip;
-            auto textSum = FormatTooltip(tooltip, "Output", s->OutputBytes.get(), FormatBytes);
-            if (s->OutputLocalBytes && s->OutputBytes->Details.Sum) {
-                tooltip << ", Local " << s->OutputLocalBytes * 100 / s->OutputBytes->Details.Sum << "%, \u2211" << FormatBytes(s->OutputLocalBytes);
-            }
-            if (s->OutputRows) {
-                FormatTooltip(tooltip, ", Rows", s->OutputRows.get(), FormatInteger);
-                if (s->OutputRows->Details.Sum) {
-                    tooltip << ", Width " << FormatBytes(s->OutputBytes->Details.Sum / s->OutputRows->Details.Sum);
-                }
-            }
-            if (s->OutputChunks) {
-                tooltip << ", Chunks \u2211" << FormatInteger(s->OutputChunks);
-                if (s->OutputChunkSize) {
-                    tooltip << " ~ " << FormatBytes(s->OutputChunkSize->Value);
-                }
-            }
+            auto textSum = FormatDataFlowTooltip(tooltip, "Output", s->OutputBytes, s->OutputRows,
+                s->OutputLocalBytes, s->OutputChunks, s->OutputChunkSize);
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "", s->OutputLocalBytes, s->OutputChunkSize);
 
             if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
@@ -651,29 +633,10 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 << "</g>" << Endl;
             }
 
-            auto d = s->OutputBytes->MaxTime - s->OutputBytes->MinTime;
-            TStringBuilder title;
-            title << "Output";
-            if (d) {
-                title << " " << FormatBytes(s->OutputBytes->Details.Sum * 1000 / d) << "/s";
-                if (s->OutputRows) {
-                    title << ", Rows " << FormatInteger(s->OutputRows->Details.Sum * 1000 / d) << "/s";
-                }
-            }
+            auto title = FormatDataFlowRate("Output", s->OutputBytes, s->OutputRows);
 
-            TStringBuilder connCanvas;
-
-            PrintTimeline(builder, connCanvas, title, s->OutputBytes->FirstMessage, s->OutputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.OutputMedium, false);
-
-            if (!s->OutputBytes->WaitTime.Deriv.empty()) {
-                PrintWaitTime(builder, s->OutputBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.OutputLight);
-            }
-
-            builder << connCanvas;
-
-            if (!s->OutputBytes->History.Deriv.empty()) {
-                PrintDeriv(builder, s->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputDark);
-            }
+            PrintDataFlowTimeline(builder, title, s->OutputBytes, px, y0, pw,
+                Config.Palette.OutputMedium, Config.Palette.OutputLight, Config.Palette.OutputDark);
 
             builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -934,47 +897,14 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                     c->_CteBuilder << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Output</title>" << Endl;
 
                     TStringBuilder tooltip;
-                    auto textSum = FormatTooltip(tooltip, "Output", c->CteOutputBytes.get(), FormatBytes);
-                    if (c->CteOutputLocalBytes && c->CteOutputBytes->Details.Sum) {
-                        tooltip << ", Local " << c->CteOutputLocalBytes * 100 / c->CteOutputBytes->Details.Sum << "%, \u2211" << FormatBytes(c->CteOutputLocalBytes);
-                    }
-                    if (c->CteOutputRows) {
-                        FormatTooltip(tooltip, ", Rows", c->CteOutputRows.get(), FormatInteger);
-                        if (c->CteOutputRows->Details.Sum) {
-                            tooltip << ", Width " << FormatBytes(c->CteOutputBytes->Details.Sum / c->CteOutputRows->Details.Sum);
-                        }
-                    }
-                    if (c->CteOutputChunks) {
-                        tooltip << ", Chunks \u2211" << FormatInteger(c->CteOutputChunks);
-                        if (c->CteOutputChunkSize) {
-                            tooltip << " ~ " << FormatBytes(c->CteOutputChunkSize->Value);
-                        }
-                    }
+                    auto textSum = FormatDataFlowTooltip(tooltip, "Output", c->CteOutputBytes, c->CteOutputRows,
+                        c->CteOutputLocalBytes, c->CteOutputChunks, c->CteOutputChunkSize);
                     PrintStageSummary(c->_CteBuilder, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId), c->CteOutputLocalBytes, c->CteOutputChunkSize);
 
-                    auto d = c->CteOutputBytes->MaxTime - c->CteOutputBytes->MinTime;
-                    TStringBuilder title;
-                    title << "Output";
-                    if (d) {
-                        title << " " << FormatBytes(c->CteOutputBytes->Details.Sum * 1000 / d) << "/s";
-                        if (c->CteOutputRows) {
-                            title << ", Rows " << FormatInteger(c->CteOutputRows->Details.Sum * 1000 / d) << "/s";
-                        }
-                    }
+                    auto title = FormatDataFlowRate("Output", c->CteOutputBytes, c->CteOutputRows);
 
-                    TStringBuilder connCanvas;
-
-                    PrintTimeline(c->_CteBuilder, connCanvas, title, c->CteOutputBytes->FirstMessage, c->CteOutputBytes->LastMessage, px, y + INTERNAL_GAP_Y, pw, INTERNAL_HEIGHT, Config.Palette.OutputMedium, true);
-
-                    if (!c->CteOutputBytes->WaitTime.Deriv.empty()) {
-                        PrintWaitTime(c->_CteBuilder, c->CteOutputBytes, px, y + INTERNAL_GAP_Y, pw, INTERNAL_HEIGHT, Config.Palette.OutputLight);
-                    }
-
-                    c->_CteBuilder << connCanvas;
-
-                    if (!c->CteOutputBytes->History.Deriv.empty()) {
-                        PrintDeriv(c->_CteBuilder, c->CteOutputBytes->History, px, y + INTERNAL_GAP_Y, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputDark);
-                    }
+                    PrintDataFlowTimeline(c->_CteBuilder, title, c->CteOutputBytes, px, y + INTERNAL_GAP_Y, pw,
+                        Config.Palette.OutputMedium, Config.Palette.OutputLight, Config.Palette.OutputDark, true);
                     c->_CteBuilder << "</g>" << Endl;
                 }
             }
@@ -1013,47 +943,14 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 s->_Builder << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl;
 
                 TStringBuilder tooltip;
-                auto textSum = FormatTooltip(tooltip, "Input", c->InputBytes.get(), FormatBytes);
-                if (c->InputLocalBytes && c->InputBytes->Details.Sum) {
-                    tooltip << ", Local " << c->InputLocalBytes * 100 / c->InputBytes->Details.Sum << "%, \u2211" << FormatBytes(c->InputLocalBytes);
-                }
-                if (c->InputRows) {
-                    FormatTooltip(tooltip, ", Rows", c->InputRows.get(), FormatInteger);
-                    if (c->InputRows->Details.Sum) {
-                        tooltip << ", Width " << FormatBytes(c->InputBytes->Details.Sum / c->InputRows->Details.Sum);
-                    }
-                }
-                if (c->InputChunks) {
-                    tooltip << ", Chunks \u2211" << FormatInteger(c->InputChunks);
-                    if (c->InputChunkSize) {
-                        tooltip << " ~ " << FormatBytes(c->InputChunkSize->Value);
-                    }
-                }
+                auto textSum = FormatDataFlowTooltip(tooltip, "Input", c->InputBytes, c->InputRows,
+                    c->InputLocalBytes, c->InputChunks, c->InputChunkSize);
                 PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId), c->InputLocalBytes, c->InputChunkSize);
 
-                auto d = c->InputBytes->MaxTime - c->InputBytes->MinTime;
-                TStringBuilder title;
-                title << "Input";
-                if (d) {
-                    title << " " << FormatBytes(c->InputBytes->Details.Sum * 1000 / d) << "/s";
-                    if (c->InputRows) {
-                        title << ", Rows " << FormatInteger(c->InputRows->Details.Sum * 1000 / d) << "/s";
-                    }
-                }
+                auto title = FormatDataFlowRate("Input", c->InputBytes, c->InputRows);
 
-                TStringBuilder connCanvas;
-
-                PrintTimeline(s->_Builder, connCanvas, title, c->InputBytes->FirstMessage, c->InputBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.InputMedium, false);
-
-                if (!c->InputBytes->WaitTime.Deriv.empty()) {
-                    PrintWaitTime(s->_Builder, c->InputBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.InputLight);
-                }
-
-                s->_Builder << connCanvas;
-
-                if (!c->InputBytes->History.Deriv.empty()) {
-                    PrintDeriv(s->_Builder, c->InputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputDark);
-                }
+                PrintDataFlowTimeline(s->_Builder, title, c->InputBytes, px, y0, pw,
+                    Config.Palette.InputMedium, Config.Palette.InputLight, Config.Palette.InputDark);
 
                 y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
@@ -1066,38 +963,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             builder << "<g data-group='g" << (s->IngressConnection ? s->IngressConnection->GroupId : s->GroupId) << "' class='selectable'><title>Ingress</title>" << Endl;
 
             TStringBuilder tooltip;
-            auto textSum = FormatTooltip(tooltip, "Ingress", s->IngressBytes.get(), FormatBytes);
-            if (s->IngressRows) {
-                FormatTooltip(tooltip, ", Rows", s->IngressRows.get(), FormatInteger);
-                if (s->IngressRows->Details.Sum) {
-                    tooltip << ", Width " << FormatBytes(s->IngressBytes->Details.Sum / s->IngressRows->Details.Sum);
-                }
-            }
+            auto textSum = FormatDataFlowTooltip(tooltip, "Ingress", s->IngressBytes, s->IngressRows, 0, 0, nullptr);
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->IngressBytes, Config.Palette.IngressMedium, Config.Palette.IngressLight, textSum, tooltip, s->Tasks, "#icon_ingress", Config.Palette.IngressMedium, "0.9 0.9", s->IngressConnection);
 
-            auto d = s->IngressBytes->MaxTime - s->IngressBytes->MinTime;
-            TStringBuilder title;
-            title << "Ingress";
-            if (d) {
-                title << " " << FormatBytes(s->IngressBytes->Details.Sum * 1000 / d) << "/s";
-                if (s->IngressRows) {
-                    title << ", Rows " << FormatInteger(s->IngressRows->Details.Sum * 1000 / d) << "/s";
-                }
-            }
+            auto title = FormatDataFlowRate("Ingress", s->IngressBytes, s->IngressRows);
 
-            TStringBuilder connCanvas;
-
-            PrintTimeline(builder, connCanvas, title, s->IngressBytes->FirstMessage, s->IngressBytes->LastMessage, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressMedium, false);
-
-            if (!s->IngressBytes->WaitTime.Deriv.empty()) {
-                PrintWaitTime(builder, s->IngressBytes, px, y0, pw, INTERNAL_HEIGHT, Config.Palette.IngressLight);
-            }
-
-            builder << connCanvas;
-
-            if (!s->IngressBytes->History.Deriv.empty()) {
-                PrintDeriv(builder, s->IngressBytes->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.IngressDark);
-            }
+            PrintDataFlowTimeline(builder, title, s->IngressBytes, px, y0, pw,
+                Config.Palette.IngressMedium, Config.Palette.IngressLight, Config.Palette.IngressDark);
 
             builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;

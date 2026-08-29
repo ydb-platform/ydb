@@ -138,4 +138,46 @@ TString FormatTooltip(TString& tooltip, const TString& prefix, TSingleMetric* me
     return result;
 }
 
+TString FormatDataFlowTooltip(TStringBuilder& tooltip, const TString& label,
+    const std::shared_ptr<TSingleMetric>& bytes,
+    const std::shared_ptr<TSingleMetric>& rows,
+    ui64 localBytes,
+    ui64 chunks,
+    const std::shared_ptr<TScalarMetric>& chunkSize,
+    bool withWidth)
+{
+    auto textSum = FormatTooltip(tooltip, label, bytes.get(), FormatBytes);
+    if (localBytes && bytes->Details.Sum) {
+        tooltip << ", Local " << localBytes * 100 / bytes->Details.Sum << "%, \u2211" << FormatBytes(localBytes);
+    }
+    if (rows) {
+        FormatTooltip(tooltip, ", Rows", rows.get(), FormatInteger);
+        if (withWidth && rows->Details.Sum) {
+            tooltip << ", Width " << FormatBytes(bytes->Details.Sum / rows->Details.Sum);
+        }
+    }
+    if (chunks) {
+        tooltip << ", Chunks \u2211" << FormatInteger(chunks);
+        if (chunkSize) {
+            tooltip << " ~ " << FormatBytes(chunkSize->Value);
+        }
+    }
+    return textSum;
+}
+
+TString FormatDataFlowRate(const TString& label,
+    const std::shared_ptr<TSingleMetric>& bytes,
+    const std::shared_ptr<TSingleMetric>& rows)
+{
+    TStringBuilder title;
+    title << label;
+    if (auto d = bytes->MaxTime - bytes->MinTime) {
+        title << " " << FormatBytes(bytes->Details.Sum * 1000 / d) << "/s";
+        if (rows) {
+            title << ", Rows " << FormatInteger(rows->Details.Sum * 1000 / d) << "/s";
+        }
+    }
+    return title;
+}
+
 } // namespace NPlan2Svg

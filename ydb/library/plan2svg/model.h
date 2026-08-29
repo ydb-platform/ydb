@@ -51,6 +51,14 @@ public:
     bool Blocks = false;
 };
 
+// What one operator entry in the plan says about itself, as read out of the JSON
+// before any of it is attached to a stage.
+struct TOperatorDescription {
+    TString Info;
+    TString OperatorType;
+    bool External = false;
+};
+
 class TOperatorInput {
 
 public:

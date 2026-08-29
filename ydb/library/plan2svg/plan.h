@@ -63,6 +63,13 @@ public:
     void Load(const NJson::TJsonValue& node);
     void MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime);
     void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection);
+    void LoadOperators(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue& operators, std::vector<TOperatorInfo>& externalOperators);
+    void LoadTableIngress(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue& subNode, const TString& name, std::vector<TOperatorInfo>& externalOperators);
+    const NJson::TJsonValue* LoadStageStats(const std::shared_ptr<TStage>& stage, TStage* externalStage, TConnection* outputConnection);
+    void LoadSubPlans(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue& plans, const NJson::TJsonValue* inputNode, TConnection* outputConnection, ui64& inputBytes);
+    void LoadConnection(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue& plan, TString subNodeType, ui32 connectionPlanNodeId, const NJson::TJsonValue* inputNode, ui64& inputBytes);
+    void LoadBuiltInIngress(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue& plan, const TString& subNodeType, ui32 connectionPlanNodeId);
+    void LoadStageTimings(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue* inputNode);
     void LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode);
     void LoadNode(const NJson::TJsonValue& node);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);

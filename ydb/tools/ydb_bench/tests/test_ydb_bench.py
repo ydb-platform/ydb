@@ -2759,6 +2759,94 @@ class WebTest(unittest.TestCase):
         (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
         (directory / "artifact.txt").write_text("artifact", encoding="utf-8")
 
+    def _local_ydb_result(self, directory, throughput, operation="put"):
+        self._manifest(directory)
+        main_path = directory / "run.json"
+        main = json.loads(main_path.read_text(encoding="utf-8"))
+        relative = Path("local-ydb") / "capacity"
+        main["runs"] = [
+            {
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "status": "completed",
+                "directory": str(relative),
+                "manifest": str(relative / "run.json"),
+            }
+        ]
+        main["steps"] = [
+            {
+                "id": "step-1",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "affinity": "roles",
+                "threads": 64,
+                "case": 1,
+                "parameters": {},
+                "repeat": 1,
+                "state": "passed",
+                "artifacts": [str(relative / "run.json")],
+            }
+        ]
+        main_path.write_text(json.dumps(main), encoding="utf-8")
+        profile_root = directory / relative
+        profile_root.mkdir(parents=True)
+        selected_metrics = {
+            "throughput": throughput,
+            "p99_ms": 10,
+            "errors": 0,
+            "static_cpu_mean": 50,
+            "dynamic_cpu_mean": 80,
+            "cli_cpu_mean": 30,
+            "commands": [{"argv": ["must", "not", "leak"]}],
+        }
+        profile = {
+            "schema_version": SCHEMA_VERSION,
+            "benchmark": "local-ydb",
+            "profile": "capacity",
+            "status": "completed",
+            "state": "passed",
+            "started_at": "2025-01-01T00:00:00+00:00",
+            "finished_at": "2025-01-01T00:01:00+00:00",
+            "tool_revision": "test-revision",
+            "binaries": {
+                "ydbd": {"sha256": "server-sha"},
+                "ydb_cli": {"sha256": "cli-sha"},
+                "process_guard": {"sha256": "guard-sha", "private": "not projected"},
+            },
+            "platform": {
+                "cpu_model": "test CPU",
+                "uname": {"node": "test-host", "release": "test-kernel"},
+                "private": "not projected",
+            },
+            "cpu_topology": {"version": 2, "allowed_cpus": [0, 1, 2], "private": "not projected"},
+            "parameters": {
+                "workload": {"type": "kv", "operation": operation, "options": {"partitions": 16}},
+                "geometry": {
+                    "preset": "single",
+                    "static_nodes": 1,
+                    "dynamic_nodes": 1,
+                    "max_dynamic_nodes": 1,
+                    "storage_groups": 1,
+                    "disk_size_gb": 64,
+                },
+                "client": {"threads": 64},
+                "load": {"parameter": "rate", "values": [100]},
+                "measurement": {"warmup": 1, "duration": 10, "repetitions": 3},
+                "private": "not projected",
+            },
+            "role_affinity": {"ydb_cli": [0], "static_nodes": [1], "dynamic_nodes": [2]},
+            "attempts": [],
+            "searches": [],
+            "result": {
+                "outcome": "best-observed",
+                "parameter": "rate",
+                "dynamic_nodes": 1,
+                "selected_load": 100,
+                "selected_metrics": selected_metrics,
+            },
+        }
+        (profile_root / "run.json").write_text(json.dumps(profile), encoding="utf-8")
+
     def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False, run_updates=None):
         run = {
             "schema_version": version,
@@ -3113,6 +3201,44 @@ class WebTest(unittest.TestCase):
         finally:
             service.shutdown()
 
+    def test_local_ydb_comparison_returns_bounded_profile_results(self):
+        self._local_ydb_result(self.root / "baseline", 1000)
+        self._local_ydb_result(self.root / "candidate", 1100, operation="mixed")
+        service = RunService(self.root)
+        try:
+            comparison = service.local_ydb_comparison(["baseline", "candidate"])
+            self.assertEqual(
+                [(item["run"], item["profile"]) for item in comparison["entries"]],
+                [("baseline", "capacity"), ("candidate", "capacity")],
+            )
+            self.assertEqual(comparison["entries"][0]["result"]["selected_metrics"]["throughput"], 1000)
+            self.assertEqual(comparison["entries"][0]["binaries"]["ydbd"]["sha256"], "server-sha")
+            self.assertEqual(comparison["entries"][0]["cpu_topology"]["allowed_cpus"], [0, 1, 2])
+            self.assertNotIn("process_guard", comparison["entries"][0]["binaries"])
+            self.assertNotIn("private", comparison["entries"][0]["platform"])
+            self.assertNotIn("private", comparison["entries"][0]["cpu_topology"])
+            self.assertNotIn("private", comparison["entries"][0]["parameters"])
+            self.assertNotIn("attempts", comparison["entries"][0])
+            self.assertNotIn("commands", comparison["entries"][0]["result"]["selected_metrics"])
+            self.assertEqual(comparison["entries"][1]["parameters"]["workload"]["operation"], "mixed")
+            with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
+                service.local_ydb_comparison([])
+            with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
+                service.local_ydb_comparison(["baseline"] * 21)
+            with self.assertRaisesRegex(BenchmarkError, "must be unique"):
+                service.local_ydb_comparison(["baseline", "baseline"])
+            with self.assertRaisesRegex(BenchmarkError, "run not found"):
+                service.local_ydb_comparison(["missing"])
+            with mock.patch.object(
+                service,
+                "local_ydb_profile",
+                return_value={"tool_revision": "x" * (4 * 1024 * 1024)},
+            ):
+                with self.assertRaisesRegex(BenchmarkError, "response is too large"):
+                    service.local_ydb_comparison(["baseline"])
+        finally:
+            service.shutdown()
+
     def test_local_ydb_profile_projection_preserves_terminal_state_without_nested_manifest(self):
         run_root = self.root / "terminal-local-ydb-run"
         self._manifest(run_root)
@@ -3427,6 +3553,15 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"local-ydb-profile?profile=", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)
+                self.assertIn(b"Local YDB baseline comparison", script)
+                self.assertIn(b"function mountLocalYdbComparison", script)
+                self.assertIn(b"function localComparisonSemantic", script)
+                self.assertIn(b"function localComparisonKey", script)
+                self.assertIn(b"Incompatible", script)
+                self.assertIn(b"reference===0", script)
+                self.assertIn(b"value===null", script)
+                self.assertIn(b"Load values", script)
+                self.assertIn(b"...Object.keys(config)", script)
                 self.assertIn(b"function defaultChartScope", script)
                 self.assertIn(b"['actorPairs','in_flight']", script)
                 self.assertIn(b"['actorPairs','star_multiply']", script)
@@ -3473,6 +3608,12 @@ class WebTest(unittest.TestCase):
                 self.assertNotIn(b".local-attempts{display:block", stylesheet)
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")
+            with urllib.request.urlopen(base + "/api/local-ydb-comparison?run=complete") as response:
+                self.assertEqual(json.loads(response.read()), {"entries": []})
+            with self.assertRaises(HTTPError) as context:
+                urllib.request.urlopen(base + "/api/local-ydb-comparison?run=missing")
+            self.assertEqual(context.exception.code, 400)
+            self.assertIn("run not found", json.loads(context.exception.read())["error"])
             request = urllib.request.Request(base + "/api/import", data=self._portable_archive(), method="POST")
             with urllib.request.urlopen(request) as response:
                 self.assertEqual(json.loads(response.read())["source"], "imported")

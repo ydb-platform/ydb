@@ -1205,11 +1205,16 @@ namespace NActors {
         } else if (msg->Result < 0) {
             int err = -msg->Result;
             if (err != ECANCELED) {
-                LOG_NOTICE_NET(Proxy->PeerNodeId, "uring write error: %s", strerror(err));
+                YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT_NETWORK, "Uring write error",
+                    {"selfNodeId", ::NActors::TActivationContext::AsActorContext().SelfID.NodeId()},
+                    {"peerNodeId", Proxy->PeerNodeId},
+                    {"error", strerror(err)});
                 ReestablishConnectionWithHandshake(TDisconnectReason::FromErrno(err));
             }
         } else {
-            LOG_NOTICE_NET(Proxy->PeerNodeId, "uring write: connection closed by peer%s", "");
+            YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT_NETWORK, "Uring uring write: connection closed by peer",
+                {"selfNodeId", ::NActors::TActivationContext::AsActorContext().SelfID.NodeId()},
+                {"peerNodeId", Proxy->PeerNodeId});
             if (!NumEventsInQueue && LastConfirmed == OutputCounter) {
                 Terminate(TDisconnectReason::EndOfStream());
             } else {

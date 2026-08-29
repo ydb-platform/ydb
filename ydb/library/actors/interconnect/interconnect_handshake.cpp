@@ -878,8 +878,8 @@ namespace NActors {
         }
 
         void PerformOutgoingHandshake() {
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH01", NLog::PRI_DEBUG,
-                "starting outgoing handshake");
+            YDB_LOG_DEBUG_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Starting outgoing handshake",
+                {"marker", "ICH01"});
 
             // perform connection and log its result
             MainChannel.Connect(&PeerAddr);
@@ -1076,8 +1076,9 @@ namespace NActors {
                 if (Rdma) {
                     if (success.HasQpPrepared()) {
                         const auto& remoteQpPrepared = success.GetQpPrepared();
-                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_TRACE,
-                            "peer has prepared qp: %d", remoteQpPrepared.GetQpNum());
+                        YDB_LOG_TRACE_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Peer has prepared",
+                            {"marker", "ICRDMA"},
+                            {"qp", remoteQpPrepared.GetQpNum()});
                         NInterconnect::NRdma::THandshakeData hd {
                             .QpNum = remoteQpPrepared.GetQpNum(),
                             .SubnetPrefix = remoteQpPrepared.GetSubnetPrefix(),
@@ -1088,8 +1089,11 @@ namespace NActors {
                         if (err) {
                             TStringBuilder sb;
                             sb << hd;
-                            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                                    "Unable to promote QP to RTS, err: %d (%s), handshake data: %s", err, strerror(err), sb.data());
+                            YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Unable to promote QP to RTS",
+                                {"marker", "ICRDMA"},
+                                {"errorCode", err},
+                                {"error", strerror(err)},
+                                {"sb", sb.data()});
                             Rdma.HandShakeMemRegion.Reset();
                             Rdma.Clear();
                         } else {

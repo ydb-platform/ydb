@@ -4,7 +4,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
-namespace NKikimr::NPQ {
+namespace NKikimr::NPQ::NDataplane::NWrite {
 
 struct TCachedPartitionWriter {
     TCachedPartitionWriter() = default;
@@ -40,4 +40,4 @@ struct TCachedPartitionWriter {
     TDeque<TSentRequest> AcceptedRequests;
 };
 
-} // namespace NKikimr::NPQ
+} // namespace NKikimr::NPQ::NDataplane::NWrite

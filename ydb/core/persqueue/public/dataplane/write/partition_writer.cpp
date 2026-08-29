@@ -1,6 +1,6 @@
 #include "partition_writer.h"
 
-namespace NKikimr::NPQ {
+namespace NKikimr::NPQ::NDataplane::NWrite {
 
 const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
@@ -80,4 +80,4 @@ ui64 TCachedPartitionWriter::FrontPendingCookie() const
     return 0;
 }
 
-} // namespace NKikimr::NPQ
+} // namespace NKikimr::NPQ::NDataplane::NWrite

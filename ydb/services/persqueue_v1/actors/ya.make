@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/dataplane
+    ydb/core/persqueue/public/dataplane/write
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
@@ -59,7 +60,10 @@ SRCS(
     direct_read_actor.h
     direct_read_actor.cpp
     write_session_actor.h
-    write_session_actor.cpp
+    write_session_pqv1_actor.h
+    write_session_pqv1_actor.cpp
+    write_session_topic_api_actor.h
+    write_session_topic_api_actor.cpp
     schema_actors.h
     schema_actors.cpp
     update_offsets_in_transaction_actor.cpp

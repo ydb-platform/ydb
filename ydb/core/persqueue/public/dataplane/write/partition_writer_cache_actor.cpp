@@ -1,10 +1,10 @@
 #include "partition_writer_cache_actor.h"
 #include "deferred_destination_upsert_actor.h"
+#include "actors.h"
 
-#include <ydb/core/persqueue/public/dataplane/dataplane.h>
 #include <ydb/core/persqueue/writer/writer.h>
 
-namespace NKikimr::NPQ {
+namespace NKikimr::NPQ::NDataplane::NWrite {
 
 using namespace NActors;
 
@@ -54,7 +54,7 @@ void TPartitionWriterCacheActor::PassAway() {
 void TPartitionWriterCacheActor::RegisterPartitionWriter(
     const TString& sessionId,
     const TString& txId,
-    const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+    const std::optional<TDeferredPublishWriterOpts>& deferredPublish,
     const TActorContext& ctx)
 {
     std::pair<TString, TString> key(sessionId, txId);
@@ -68,7 +68,7 @@ void TPartitionWriterCacheActor::RegisterPartitionWriter(
 
 void TPartitionWriterCacheActor::RegisterDefaultPartitionWriter(const TActorContext& ctx)
 {
-    RegisterPartitionWriter("", "", Nothing(), ctx);
+    RegisterPartitionWriter("", "", std::nullopt, ctx);
 }
 
 STFUNC(TPartitionWriterCacheActor::StateWork)
@@ -100,7 +100,12 @@ void TPartitionWriterCacheActor::Handle(TEvPartitionWriter::TEvTxWriteRequest::T
 {
     auto& event = *ev->Get();
 
-    if (auto* writer = GetPartitionWriter(event.SessionId, event.TxId, event.DeferredPublish, ctx); writer) {
+    std::optional<TDeferredPublishWriterOpts> deferredPublish;
+    if (event.DeferredPublish) {
+        deferredPublish = *event.DeferredPublish;
+    }
+
+    if (auto* writer = GetPartitionWriter(event.SessionId, event.TxId, deferredPublish, ctx); writer) {
         if (PendingWriteAccepted.Expected == Max<ui64>()) {
             AFL_ENSURE(PendingWriteResponse.Expected == Max<ui64>());
 
@@ -264,7 +269,7 @@ void TPartitionWriterCacheActor::Handle(TEvents::TEvPoisonPill::TPtr& ev, const 
 auto TPartitionWriterCacheActor::GetPartitionWriter(
     const TString& sessionId,
     const TString& txId,
-    const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+    const std::optional<TDeferredPublishWriterOpts>& deferredPublish,
     const TActorContext& ctx) -> TCachedPartitionWriter*
 {
     auto key = std::make_pair(sessionId, txId);
@@ -322,7 +327,7 @@ bool TPartitionWriterCacheActor::TryDeleteOldestWriter(const TActorContext& ctx)
 TActorId TPartitionWriterCacheActor::CreatePartitionWriter(
     const TString& sessionId,
     const TString& txId,
-    const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+    const std::optional<TDeferredPublishWriterOpts>& deferredPublish,
     const TActorContext& ctx)
 {
     TPartitionWriterOpts opts = Opts;
@@ -361,4 +366,4 @@ NActors::IActor* CreatePartitionWriterCacheActor(
     return new TPartitionWriterCacheActor(owner, partition, tabletId, opts);
 }
 
-} // namespace NKikimr::NPQ
+} // namespace NKikimr::NPQ::NDataplane::NWrite

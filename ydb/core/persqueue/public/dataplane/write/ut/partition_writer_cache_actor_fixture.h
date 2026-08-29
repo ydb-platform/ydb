@@ -34,8 +34,8 @@ struct TEnsurePartitionWriterExistParams {
 };
 
 struct TWaitForPartitionWriterOpsParams {
-    TMaybe<size_t> CreateCount;
-    TMaybe<size_t> DeleteCount;
+    std::optional<size_t> CreateCount;
+    std::optional<size_t> DeleteCount;
 };
 
 class TPartitionWriterCacheActorFixture : public NUnitTest::TBaseFixture {
@@ -68,8 +68,8 @@ protected:
 
     static TTxId MakeTxId(const TString& sessionId, const TString& txId);
 
-    TMaybe<NPQ::TTestContext> Ctx;
-    TMaybe<NPQ::TFinalizer> Finalizer;
+    std::optional<NPQ::TTestContext> Ctx;
+    std::optional<NPQ::TFinalizer> Finalizer;
 
     const ui64 PQTabletId = 12345;
     TPQTabletMock* PQTablet = nullptr;

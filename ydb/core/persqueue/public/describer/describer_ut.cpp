@@ -208,6 +208,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto& topicInfo = topics["/Root/topic1"];
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
+        UNIT_ASSERT(!topicInfo.IsServerless);
     }
 
     Y_UNIT_TEST(TopicNotExists) {

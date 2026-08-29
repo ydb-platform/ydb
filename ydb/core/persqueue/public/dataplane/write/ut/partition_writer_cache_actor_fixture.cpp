@@ -2,7 +2,7 @@
 #include "kqp_mock.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/persqueue/public/dataplane/dataplane.h>
+#include <ydb/core/persqueue/public/dataplane/write/actors.h>
 #include <ydb/core/persqueue/public/write_id.h>
 
 namespace NKikimr::NPersQueueTests {
@@ -22,8 +22,8 @@ void TPartitionWriterCacheActorFixture::TearDown(NUnitTest::TTestContext&)
 
 void TPartitionWriterCacheActorFixture::SetupContext()
 {
-    Ctx.ConstructInPlace();
-    Finalizer.ConstructInPlace(*Ctx);
+    Ctx.emplace();
+    Finalizer.emplace(*Ctx);
 
     Ctx->Prepare();
 }
@@ -56,8 +56,8 @@ void TPartitionWriterCacheActorFixture::SetupPQTabletMock(ui64 tabletId)
 
 void TPartitionWriterCacheActorFixture::CleanupContext()
 {
-    Finalizer.Clear();
-    Ctx.Clear();
+    Finalizer.reset();
+    Ctx.reset();
 }
 
 TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(const TCreatePartitionWriterCacheActorParams& params)
@@ -68,7 +68,7 @@ TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(cons
     options.WithExpectedGeneration(params.Generation);
     options.WithSourceId(params.SourceId);
 
-    TActorId actorId = Ctx->Runtime->Register(NPQ::CreatePartitionWriterCacheActor(
+    TActorId actorId = Ctx->Runtime->Register(NPQ::NDataplane::NWrite::CreatePartitionWriterCacheActor(
         Ctx->Edge,
         params.Partition,
         PQTabletId,

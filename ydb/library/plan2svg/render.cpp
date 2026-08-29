@@ -385,9 +385,9 @@ void TPlan::PrintSpillingBadge(TStringBuilder& builder, ui32 top, const TString&
     << "</g>" << Endl;
 }
 
-void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
-    OffsetY = offsetY;
-
+// The plan-wide row above its stages: totals for every metric the stages break
+// down, and the two critical paths the totals link to.
+void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     auto* p = this;
     auto planName = NodeType;
 
@@ -495,539 +495,593 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         p->PrintDeriv(SummaryBuilder, p->TotalCpuTime, xmin, titleHeight + INTERNAL_GAP_Y, xmax - xmin, TIME_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.Cpu.Medium, Config.Palette.Cpu.Light);
     }
     offsetY += TIME_HEIGHT;
+}
 
-    for (auto& s : Stages) {
+// The operator column: one box per operator, with the estimates and row counts
+// it reported and the lines linking it to the operators feeding it.
+void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
+    ui32 y0 = INTERNAL_GAP_Y;
+    ui32 index = 0;
+    for (auto op : s->Operators) {
+        ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
         s->Svg
-            << "<g data-group='g" << s->GroupId << "' class='selectable'><title>Stage " << (s->External ? "E" : ToString(s->PhysicalStageId)) << "</title>" << Endl;
-        auto stageClass = s->External ? "clone" : "stage";
-
-        s->Svg
-            << SvgRect(Config.HeaderLeft + s->IndentX, 0, Config.HeaderWidth - s->IndentX, "100%", stageClass)
-            << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", stageClass)
-            << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", stageClass)
-            << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", stageClass)
-            << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", stageClass);
-
-        {
-            ui32 y0 = INTERNAL_GAP_Y;
-            ui32 index = 0;
-            for (auto op : s->Operators) {
-                ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
-                s->Svg
-                    << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
-                if (op.Blocks) {
-                    auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y * 2;
-                    if (index == s->Operators.size() - 1) {
-                        h = s->Height - yt;
-                    }
-                    s->Svg
-                    << SvgRect(Config.HeaderLeft + s->IndentX, yt, INTERNAL_WIDTH * 2, h, "blocks");
-                }
-
-                s->Svg
-                    << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, yt + INTERNAL_TEXT_HEIGHT, "texts clipped", op.Name + ": " + op.Info);
-                if (op.OutputRows) {
-                    TStringBuilder tooltip;
-                    auto textSum = FormatTooltip(tooltip, "Output Rows", op.OutputRows.get(), FormatInteger);
-                    if (op.Estimations) {
-                        tooltip
-                        << ", " << op.Estimations;
-                    }
-                    PrintStageSummary(s->Svg, {Config.OperatorLeft, Config.OperatorWidth, y0, INTERNAL_HEIGHT}, {
-                        .Metric = op.OutputRows.get(),
-                        .Colors = Config.Palette.Output,
-                        .Text = textSum,
-                        .Tooltip = tooltip,
-                        .TaskCount = s->Tasks,
-                    });
-                }
-                s->Svg
-                    << "</g>" << Endl;
-
-                if (!op.Inputs.empty()) {
-                    auto opX = Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * (op.Inputs.size() - 1)) / 2;
-                    auto opY = y0 + INTERNAL_HEIGHT / 2;
-                    for (auto& input : op.Inputs) {
-                        if (input.StageId) {
-                            s->Svg
-                                << "<g data-group='g" << NodeToConnection.at(input.PlanNodeId)->GroupId << "' class='selectable'><title>Input from Stage " << *input.StageId << "</title>" << Endl
-                                << SvgStageId(opX, opY, ToString(*input.StageId))
-                                << "</g>" << Endl;
-                        } else if (input.PrecomputeRef) {
-                            auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
-                            if (it != Viz.CteSubPlans.end()) {
-                                s->Svg
-                                << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
-                                << SvgStageId(opX, opY, "P")
-                                << "</g>" << Endl;
-                            }
-                        }
-                        opX += INTERNAL_WIDTH;
-                    }
-                }
-
-                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-                index++;
+            << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
+        if (op.Blocks) {
+            auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y * 2;
+            if (index == s->Operators.size() - 1) {
+                h = s->Height - yt;
             }
-        }
-
-        s->Svg
-            << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, s->External ? "E" : ToString(s->PhysicalStageId));
-
-        // timeline backgrounds
-        {
-            ui32 y0 = INTERNAL_GAP_Y;
-            if (s->EgressBytes) {
-                if (s->External) {
-                    s->Svg
-                    << "<g data-group='g" << StageToExternalConnection[s.get()]->GroupId << "' class='selectable'><title>Egress</title>" << Endl
-                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
-                    << "</g>" << Endl;
-                }
-                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-            }
-            if (s->OutputBytes) {
-                if (s->OutputPlanNodeId) {
-                    s->Svg
-                    << "<g data-group='g" << NodeToConnection[s->OutputPlanNodeId]->GroupId << "' class='selectable'><title>Output</title>" << Endl
-                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
-                    << "</g>" << Endl;
-                }
-                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-            }
-            // memory
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-            // cpu
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-            for (auto& c : s->Connections) {
-                if (c->InputBytes) {
-                    s->Svg
-                    << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl
-                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
-                    << "</g>" << Endl;
-                    y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-                }
-            }
-            if (s->IngressBytes) {
-                if (s->IngressConnection) {
-                    s->Svg
-                    << "<g data-group='g" << s->IngressConnection->GroupId << "' class='selectable'><title>Ingress</title>" << Endl
-                    << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
-                    << "</g>" << Endl;
-                }
-                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-            }
-        }
-
-        for (auto& region : s->HotRegions) {
-            auto px = Config.TimelineLeft + region.first * (Config.TimelineWidth - timelineDelta) / maxTime;
-            auto pw = (region.second - region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
             s->Svg
-            << SvgRect(px, 0, pw, "100%", "hot");
+            << SvgRect(Config.HeaderLeft + s->IndentX, yt, INTERNAL_WIDTH * 2, h, "blocks");
         }
 
-        ui32 y0 = INTERNAL_GAP_Y;
-
-        auto tx0 = Config.TimelineLeft;
-        auto px = tx0 + TimeOffset * (Config.TimelineWidth - timelineDelta) / maxTime;
-        auto pw = MaxTime * (Config.TimelineWidth - timelineDelta) / maxTime;
-
-        if (s->EgressBytes) {
-            TStringBuilder& builder = s->Svg;
-            builder << "<g data-group='g" << (s->External ? StageToExternalConnection[s.get()]->GroupId : s->GroupId) << "' class='selectable'><title>Egress</title>" << Endl;
-
+        s->Svg
+            << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, yt + INTERNAL_TEXT_HEIGHT, "texts clipped", op.Name + ": " + op.Info);
+        if (op.OutputRows) {
             TStringBuilder tooltip;
-            auto textSum = FormatDataFlowTooltip(tooltip, "Egress", s->EgressBytes, s->EgressRows, 0, 0, nullptr);
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = s->EgressBytes.get(),
-                .Colors = Config.Palette.Egress,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .TaskCount = s->Tasks,
-                .Icon = {"#icon_egress", Config.Palette.Egress.Medium, "0.9 0.9"},
-                .BackgroundRect = s->External,
-            });
-
-            auto title = FormatDataFlowRate("Egress", s->EgressBytes, s->EgressRows);
-
-            PrintDataFlowTimeline(builder, title, s->EgressBytes, px, y0, pw,
-                Config.Palette.Egress);
-
-            builder << "</g>" << Endl;
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-
-        if (s->OutputBytes) {
-            TStringBuilder& builder = s->Svg;
-            builder << "<g data-group='g" << (s->OutputPlanNodeId ? NodeToConnection[s->OutputPlanNodeId]->GroupId : GroupId) << "' class='selectable'><title>Output</title>" << Endl;
-
-            TStringBuilder tooltip;
-            auto textSum = FormatDataFlowTooltip(tooltip, "Output", s->OutputBytes, s->OutputRows,
-                s->OutputLocalBytes, s->OutputChunks, s->OutputChunkSize);
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = s->OutputBytes.get(),
+            auto textSum = FormatTooltip(tooltip, "Output Rows", op.OutputRows.get(), FormatInteger);
+            if (op.Estimations) {
+                tooltip
+                << ", " << op.Estimations;
+            }
+            PrintStageSummary(s->Svg, {Config.OperatorLeft, Config.OperatorWidth, y0, INTERNAL_HEIGHT}, {
+                .Metric = op.OutputRows.get(),
                 .Colors = Config.Palette.Output,
                 .Text = textSum,
                 .Tooltip = tooltip,
                 .TaskCount = s->Tasks,
-                .Icon = {"#icon_output", Config.Palette.Output.Light, "0.0325 0.0325"},
-                .BackgroundRect = true,
-                .PeerId = s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "",
-                .Split = s->OutputLocalBytes,
-                .Scalar = s->OutputChunkSize.get(),
             });
-
-            PrintSpillingBadge(builder, y0, "Channel Spilling", s->SpillingChannelBytes.get());
-
-            auto title = FormatDataFlowRate("Output", s->OutputBytes, s->OutputRows);
-
-            PrintDataFlowTimeline(builder, title, s->OutputBytes, px, y0, pw,
-                Config.Palette.Output);
-
-            builder << "</g>" << Endl;
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
+        s->Svg
+            << "</g>" << Endl;
 
-        if (s->MaxMemoryUsage) {
-            TString tooltip;
-            auto textSum = FormatTooltip(tooltip, "Memory", s->MaxMemoryUsage.get(), FormatBytes);
-            PrintStageSummary(s->Svg, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = s->MaxMemoryUsage.get(),
-                .Colors = Config.Palette.Mem,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .TaskCount = s->Tasks,
-                .Icon = {"#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6"},
-            });
-
-            PrintSpillingBadge(s->Svg, y0, "Compute Spilling", s->SpillingComputeBytes.get());
-        }
-
-        if (s->MemoryUsage && !s->MemoryUsage->History.Values.empty()) {
-            PrintValues(s->Svg, s->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MemoryUsage->History.MaxValue * 1_MB), Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
-        } else if (s->MaxMemoryUsage && !s->MaxMemoryUsage->History.Values.empty()) {
-            PrintValues(s->Svg, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
-        }
-
-        if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-            PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytes.Medium, Config.Palette.SpillingBytes.Light);
+        if (!op.Inputs.empty()) {
+            auto opX = Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * (op.Inputs.size() - 1)) / 2;
+            auto opY = y0 + INTERNAL_HEIGHT / 2;
+            for (auto& input : op.Inputs) {
+                if (input.StageId) {
+                    s->Svg
+                        << "<g data-group='g" << NodeToConnection.at(input.PlanNodeId)->GroupId << "' class='selectable'><title>Input from Stage " << *input.StageId << "</title>" << Endl
+                        << SvgStageId(opX, opY, ToString(*input.StageId))
+                        << "</g>" << Endl;
+                } else if (input.PrecomputeRef) {
+                    auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
+                    if (it != Viz.CteSubPlans.end()) {
+                        s->Svg
+                        << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
+                        << SvgStageId(opX, opY, "P")
+                        << "</g>" << Endl;
+                    }
+                }
+                opX += INTERNAL_WIDTH;
+            }
         }
 
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        index++;
+    }
+}
 
-        if (s->CpuTime) {
-            TString tooltip;
-            auto textSum = FormatTooltip(tooltip, "CPU Usage", s->CpuTime.get(), FormatUsage);
-            PrintStageSummary(s->Svg, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = s->CpuTime.get(),
-                .Colors = Config.Palette.Cpu,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .TaskCount = s->Tasks,
-                .Icon = {"#icon_cpu", Config.Palette.Cpu.Medium, "0.6 0.6"},
-            });
+// The strips behind the timeline, one per data flow the stage will draw over
+// them, marking where each flow is expected to be busy.
+void TPlan::PrintStageBackground(const std::shared_ptr<TStage>& s) {
+    ui32 y0 = INTERNAL_GAP_Y;
+    if (s->EgressBytes) {
+        if (s->External) {
+            s->Svg
+            << "<g data-group='g" << StageToExternalConnection[s.get()]->GroupId << "' class='selectable'><title>Egress</title>" << Endl
+            << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+            << "</g>" << Endl;
+        }
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    }
+    if (s->OutputBytes) {
+        if (s->OutputPlanNodeId) {
+            s->Svg
+            << "<g data-group='g" << NodeToConnection[s->OutputPlanNodeId]->GroupId << "' class='selectable'><title>Output</title>" << Endl
+            << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+            << "</g>" << Endl;
+        }
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    }
+    // memory
+    y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    // cpu
+    y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    for (auto& c : s->Connections) {
+        if (c->InputBytes) {
+            s->Svg
+            << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl
+            << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+            << "</g>" << Endl;
+            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        }
+    }
+    if (s->IngressBytes) {
+        if (s->IngressConnection) {
+            s->Svg
+            << "<g data-group='g" << s->IngressConnection->GroupId << "' class='selectable'><title>Ingress</title>" << Endl
+            << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
+            << "</g>" << Endl;
+        }
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    }
+}
 
-            auto totalTime = s->CpuTime->Details.Sum;
-            if (s->WaitInputTime) {
-                totalTime += s->WaitInputTime->Details.Sum;
-            }
-            if (s->WaitOutputTime) {
-                totalTime += s->WaitOutputTime->Details.Sum;
-            }
+// Egress leaves the cluster, so it has a summary bar and a timeline but no
+// receiving stage to link to.
+void TPlan::PrintEgressStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw) {
+    if (s->EgressBytes) {
+        TStringBuilder& builder = s->Svg;
+        builder << "<g data-group='g" << (s->External ? StageToExternalConnection[s.get()]->GroupId : s->GroupId) << "' class='selectable'><title>Egress</title>" << Endl;
 
-            ui32 activePercentsMin = 0;
-            ui32 activePercentsMax = 100;
+        TStringBuilder tooltip;
+        auto textSum = FormatDataFlowTooltip(tooltip, "Egress", s->EgressBytes, s->EgressRows, 0, 0, nullptr);
+        PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
+            .Metric = s->EgressBytes.get(),
+            .Colors = Config.Palette.Egress,
+            .Text = textSum,
+            .Tooltip = tooltip,
+            .TaskCount = s->Tasks,
+            .Icon = {"#icon_egress", Config.Palette.Egress.Medium, "0.9 0.9"},
+            .BackgroundRect = s->External,
+        });
 
-            if (s->WaitInputTime) {
-                if (totalTime) {
-                    auto heightPercents = s->WaitInputTime->Details.Sum * 100 / totalTime;
-                    activePercentsMax -= heightPercents;
-                s->Svg
-                    << "<g><title>";
-                    FormatTooltip(s->Svg, "Wait Input Time", s->WaitInputTime.get(), FormatUsage, totalTime);
-                s->Svg
-                    << "</title>" << Endl
-                    << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMax
-                    << "%' width='" << Config.TaskWidth << "' height='" << heightPercents
-                    << "%' stroke-width='0' fill='" << Config.Palette.Input.Light << "'/>" << Endl
-                    << "</g>" << Endl;
-                }
-                if(!s->WaitInputTime->History.Deriv.empty()) {
-                    PrintDeriv(s->Svg, s->WaitInputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Input.Medium, Config.Palette.Input.Light);
-                }
+        auto title = FormatDataFlowRate("Egress", s->EgressBytes, s->EgressRows);
 
-                // consider only 10% or more waiting times
-                if (totalTime && s->WaitInputTime->Details.Sum * 10 > totalTime) {
-                    TStringBuilder waitOutputPeers;
-                    for (auto& c : s->Connections) {
-                        if (c->FromStage && c->FromStage->WaitOutputTime) {
-                            auto peerTotalTime = c->FromStage->WaitOutputTime->Details.Sum;
-                            if (c->FromStage->WaitInputTime) {
-                                peerTotalTime += c->FromStage->WaitInputTime->Details.Sum;
-                            }
-                            if (c->FromStage->CpuTime) {
-                                peerTotalTime += c->FromStage->CpuTime->Details.Sum;
-                            }
-                            if (peerTotalTime && c->FromStage->WaitOutputTime->Details.Sum * 10 > peerTotalTime) {
-                                if (waitOutputPeers) {
-                                    waitOutputPeers << ", ";
-                                }
-                                waitOutputPeers << c->FromStage->PhysicalStageId;
-                            }
-                        }
-                    }
-                    if (waitOutputPeers) {
-                        PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2,
-                            s->OffsetY + offsetY + s->Height,
-                            TStringBuilder() << "Wait input with peer stage(s) " << waitOutputPeers << " wait output", "W");
-                    }
-                }
-            }
+        PrintDataFlowTimeline(builder, title, s->EgressBytes, px, y0, pw,
+            Config.Palette.Egress);
 
-            if (s->WaitOutputTime) {
-                if (totalTime) {
-                    auto heightPercents = s->WaitOutputTime->Details.Sum * 100 / totalTime;
-                    activePercentsMin += heightPercents;
-                s->Svg
-                    << "<g><title>";
-                    FormatTooltip(s->Svg, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage, totalTime);
-                s->Svg
-                    << "</title>" << Endl
-                    << "  <rect x='" << Config.TaskLeft << "' y='0%' width='" << Config.TaskWidth << "' height='" << heightPercents
-                    << "%' stroke-width='0' fill='" << Config.Palette.Output.Light << "'/>" << Endl
-                    << "</g>" << Endl;
-                }
-                if (!s->WaitOutputTime->History.Deriv.empty()) {
-                    PrintDeriv(s->Svg, s->WaitOutputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Output.Medium, Config.Palette.Output.Light);
-                }
-            }
+        builder << "</g>" << Endl;
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    }
+}
 
-            if (activePercentsMax > activePercentsMin && s->InputThroughput) {
-                auto opacity = s->InputThroughput->Details.Sum / static_cast<double>(s->InputThroughput->Summary->Max * 2);
-                s->Svg
-                << "<g><title>Input Throughput " << FormatInteger(s->InputThroughput->Details.Sum) << "/s</title>" << Endl
-                << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMin
-                << "%' width='" << Config.TaskWidth << "' height='" << activePercentsMax - activePercentsMin
-                << "%' stroke-width='0' fill='" << Config.Palette.Cpu.Light << "' opacity='" << opacity  << "'/>" << Endl
+// Output goes to another stage, so its bar also carries that peer stage id, the
+// local/remote split, and the chunk size dashes.
+void TPlan::PrintOutputStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw) {
+    if (s->OutputBytes) {
+        TStringBuilder& builder = s->Svg;
+        builder << "<g data-group='g" << (s->OutputPlanNodeId ? NodeToConnection[s->OutputPlanNodeId]->GroupId : GroupId) << "' class='selectable'><title>Output</title>" << Endl;
+
+        TStringBuilder tooltip;
+        auto textSum = FormatDataFlowTooltip(tooltip, "Output", s->OutputBytes, s->OutputRows,
+            s->OutputLocalBytes, s->OutputChunks, s->OutputChunkSize);
+        PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
+            .Metric = s->OutputBytes.get(),
+            .Colors = Config.Palette.Output,
+            .Text = textSum,
+            .Tooltip = tooltip,
+            .TaskCount = s->Tasks,
+            .Icon = {"#icon_output", Config.Palette.Output.Light, "0.0325 0.0325"},
+            .BackgroundRect = true,
+            .PeerId = s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "",
+            .Split = s->OutputLocalBytes,
+            .Scalar = s->OutputChunkSize.get(),
+        });
+
+        PrintSpillingBadge(builder, y0, "Channel Spilling", s->SpillingChannelBytes.get());
+
+        auto title = FormatDataFlowRate("Output", s->OutputBytes, s->OutputRows);
+
+        PrintDataFlowTimeline(builder, title, s->OutputBytes, px, y0, pw,
+            Config.Palette.Output);
+
+        builder << "</g>" << Endl;
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    }
+}
+
+// Memory: the peak as a bar, the usage over time as a curve, and whatever the
+// stage had to spill because the memory was not enough.
+void TPlan::PrintMemoryStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw) {
+    if (s->MaxMemoryUsage) {
+        TString tooltip;
+        auto textSum = FormatTooltip(tooltip, "Memory", s->MaxMemoryUsage.get(), FormatBytes);
+        PrintStageSummary(s->Svg, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
+            .Metric = s->MaxMemoryUsage.get(),
+            .Colors = Config.Palette.Mem,
+            .Text = textSum,
+            .Tooltip = tooltip,
+            .TaskCount = s->Tasks,
+            .Icon = {"#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6"},
+        });
+
+        PrintSpillingBadge(s->Svg, y0, "Compute Spilling", s->SpillingComputeBytes.get());
+    }
+
+    if (s->MemoryUsage && !s->MemoryUsage->History.Values.empty()) {
+        PrintValues(s->Svg, s->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MemoryUsage->History.MaxValue * 1_MB), Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
+    } else if (s->MaxMemoryUsage && !s->MaxMemoryUsage->History.Values.empty()) {
+        PrintValues(s->Svg, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.Mem.Medium, Config.Palette.Mem.Medium);
+    }
+
+    if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
+        PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytes.Medium, Config.Palette.SpillingBytes.Light);
+    }
+
+    y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+}
+
+// CPU: usage as a bar, the derivative as a curve, and the wait times that
+// explain the gaps in it. offsetY places the wait-output badge, which hangs off
+// the bottom of the whole stage rather than off this strip.
+void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw, ui32 offsetY) {
+    if (s->CpuTime) {
+        TString tooltip;
+        auto textSum = FormatTooltip(tooltip, "CPU Usage", s->CpuTime.get(), FormatUsage);
+        PrintStageSummary(s->Svg, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
+            .Metric = s->CpuTime.get(),
+            .Colors = Config.Palette.Cpu,
+            .Text = textSum,
+            .Tooltip = tooltip,
+            .TaskCount = s->Tasks,
+            .Icon = {"#icon_cpu", Config.Palette.Cpu.Medium, "0.6 0.6"},
+        });
+
+        auto totalTime = s->CpuTime->Details.Sum;
+        if (s->WaitInputTime) {
+            totalTime += s->WaitInputTime->Details.Sum;
+        }
+        if (s->WaitOutputTime) {
+            totalTime += s->WaitOutputTime->Details.Sum;
+        }
+
+        ui32 activePercentsMin = 0;
+        ui32 activePercentsMax = 100;
+
+        if (s->WaitInputTime) {
+            if (totalTime) {
+                auto heightPercents = s->WaitInputTime->Details.Sum * 100 / totalTime;
+                activePercentsMax -= heightPercents;
+            s->Svg
+                << "<g><title>";
+                FormatTooltip(s->Svg, "Wait Input Time", s->WaitInputTime.get(), FormatUsage, totalTime);
+            s->Svg
+                << "</title>" << Endl
+                << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMax
+                << "%' width='" << Config.TaskWidth << "' height='" << heightPercents
+                << "%' stroke-width='0' fill='" << Config.Palette.Input.Light << "'/>" << Endl
                 << "</g>" << Endl;
             }
-
-            if (!s->CpuTime->History.Deriv.empty() && s->CpuTime->History.MaxTime > s->CpuTime->History.MinTime) {
-                auto maxCpu = s->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (s->CpuTime->History.MaxTime - s->CpuTime->History.MinTime);
-                PrintDeriv(s->Svg, s->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.Cpu.Medium, Config.Palette.Cpu.Light);
+            if(!s->WaitInputTime->History.Deriv.empty()) {
+                PrintDeriv(s->Svg, s->WaitInputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Input.Medium, Config.Palette.Input.Light);
             }
 
-            if (s->SpillingComputeTime && !s->SpillingComputeTime->History.Deriv.empty()) {
-                PrintDeriv(s->Svg, s->SpillingComputeTime->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingTimeMedium);
+            // consider only 10% or more waiting times
+            if (totalTime && s->WaitInputTime->Details.Sum * 10 > totalTime) {
+                TStringBuilder waitOutputPeers;
+                for (auto& c : s->Connections) {
+                    if (c->FromStage && c->FromStage->WaitOutputTime) {
+                        auto peerTotalTime = c->FromStage->WaitOutputTime->Details.Sum;
+                        if (c->FromStage->WaitInputTime) {
+                            peerTotalTime += c->FromStage->WaitInputTime->Details.Sum;
+                        }
+                        if (c->FromStage->CpuTime) {
+                            peerTotalTime += c->FromStage->CpuTime->Details.Sum;
+                        }
+                        if (peerTotalTime && c->FromStage->WaitOutputTime->Details.Sum * 10 > peerTotalTime) {
+                            if (waitOutputPeers) {
+                                waitOutputPeers << ", ";
+                            }
+                            waitOutputPeers << c->FromStage->PhysicalStageId;
+                        }
+                    }
+                }
+                if (waitOutputPeers) {
+                    PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2,
+                        s->OffsetY + offsetY + s->Height,
+                        TStringBuilder() << "Wait input with peer stage(s) " << waitOutputPeers << " wait output", "W");
+                }
             }
         }
 
-        if (s->Tasks) {
-            s->Svg << "<g><title>";
-            if (s->External) {
-                s->Svg << "External Source, partitions: " << s->Tasks;
-            } else {
-                s->Svg << "Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks;
-            }
-            s->Svg << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-            PrintUnfinishedTasks(s->Svg, s->Tasks, s->FinishedTasks);
+        if (s->WaitOutputTime) {
+            if (totalTime) {
+                auto heightPercents = s->WaitOutputTime->Details.Sum * 100 / totalTime;
+                activePercentsMin += heightPercents;
             s->Svg
-            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
+                << "<g><title>";
+                FormatTooltip(s->Svg, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage, totalTime);
+            s->Svg
+                << "</title>" << Endl
+                << "  <rect x='" << Config.TaskLeft << "' y='0%' width='" << Config.TaskWidth << "' height='" << heightPercents
+                << "%' stroke-width='0' fill='" << Config.Palette.Output.Light << "'/>" << Endl
+                << "</g>" << Endl;
+            }
+            if (!s->WaitOutputTime->History.Deriv.empty()) {
+                PrintDeriv(s->Svg, s->WaitOutputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.Output.Medium, Config.Palette.Output.Light);
+            }
+        }
+
+        if (activePercentsMax > activePercentsMin && s->InputThroughput) {
+            auto opacity = s->InputThroughput->Details.Sum / static_cast<double>(s->InputThroughput->Summary->Max * 2);
+            s->Svg
+            << "<g><title>Input Throughput " << FormatInteger(s->InputThroughput->Details.Sum) << "/s</title>" << Endl
+            << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMin
+            << "%' width='" << Config.TaskWidth << "' height='" << activePercentsMax - activePercentsMin
+            << "%' stroke-width='0' fill='" << Config.Palette.Cpu.Light << "' opacity='" << opacity  << "'/>" << Endl
             << "</g>" << Endl;
         }
 
-        if (!s->Connections.empty()) {
-            s->Svg
-            << "<g class='plus button'>"
-            << SvgRect(s->IndentX + INTERNAL_GAP_X, INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT, CONN_SIZE, CONN_SIZE, "transparent")
-            << "<use href='#icon_minus' class='icon_minus' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/>" << Endl
-            << "<use href='#icon_plus' class='icon_plus' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
+        if (!s->CpuTime->History.Deriv.empty() && s->CpuTime->History.MaxTime > s->CpuTime->History.MinTime) {
+            auto maxCpu = s->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (s->CpuTime->History.MaxTime - s->CpuTime->History.MinTime);
+            PrintDeriv(s->Svg, s->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.Cpu.Medium, Config.Palette.Cpu.Light);
         }
-        s->Svg
-            << "<g class='arup button'>"
-            << SvgRect(s->IndentX + INTERNAL_GAP_X, s->Height - (INTERNAL_GAP_Y + CONN_SIZE), CONN_SIZE, CONN_SIZE, "transparent")
-            << "<use href='#icon_arrowup' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << s->Height - (INTERNAL_GAP_Y + CONN_SIZE) << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
 
-        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+        if (s->SpillingComputeTime && !s->SpillingComputeTime->History.Deriv.empty()) {
+            PrintDeriv(s->Svg, s->SpillingComputeTime->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingTimeMedium);
+        }
+    }
+}
 
-        for (auto& c : s->Connections) {
+// One strip per incoming connection: the bar, the timeline, and the box in the
+// header column naming the connection and the stage on the other end.
+void TPlan::PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw) {
+    for (auto& c : s->Connections) {
 
-            auto x = c->CteConnection ? c->CteIndentX : c->FromStage->IndentX;
-            ui32 y = 0;
+        auto x = c->CteConnection ? c->CteIndentX : c->FromStage->IndentX;
+        ui32 y = 0;
 
-            c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
-            if (!c->KeyColumns.empty()) {
-                c->Svg << " KeyColumns: ";
-                bool first = true;
-                for (auto k : c->KeyColumns) {
-                    if (first) {
-                        first = false;
-                    } else {
-                        c->Svg << ", ";
-                    }
-                    c->Svg << k;
+        c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
+        if (!c->KeyColumns.empty()) {
+            c->Svg << " KeyColumns: ";
+            bool first = true;
+            for (auto k : c->KeyColumns) {
+                if (first) {
+                    first = false;
+                } else {
+                    c->Svg << ", ";
                 }
+                c->Svg << k;
             }
-            if (!c->SortColumns.empty()) {
-                c->Svg << " SortColumns: ";
-                bool first = true;
-                for (auto s : c->SortColumns) {
-                    if (first) {
-                        first = false;
-                    } else {
-                        c->Svg << ", ";
-                    }
-                    c->Svg << s;
+        }
+        if (!c->SortColumns.empty()) {
+            c->Svg << " SortColumns: ";
+            bool first = true;
+            for (auto s : c->SortColumns) {
+                if (first) {
+                    first = false;
+                } else {
+                    c->Svg << ", ";
                 }
+                c->Svg << s;
             }
-            if (c->Blocks) {
-                c->Svg << " Blocks: True";
-            }
-            if (c->HashFunc) {
-                c->Svg << " HashFunc: " << c->HashFunc;
-            }
-            if (c->Parallel) {
-                c->Svg << " Parallel: True";
-            }
-            c->Svg
-                << "</title>" << Endl;
+        }
+        if (c->Blocks) {
+            c->Svg << " Blocks: True";
+        }
+        if (c->HashFunc) {
+            c->Svg << " HashFunc: " << c->HashFunc;
+        }
+        if (c->Parallel) {
+            c->Svg << " Parallel: True";
+        }
+        c->Svg
+            << "</title>" << Endl;
 
-            if (c->CteConnection) {
-                c->CteSvg
-                    << "<g data-group='g" << c->FromStage->GroupId << "' class='selectable'><title>Stage " << (c->FromStage->External ? "E" : ToString(c->FromStage->PhysicalStageId)) << "</title>" << Endl
-                    << SvgRect(Config.TaskLeft, y, Config.TaskWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
-                    << SvgRect(Config.HeaderLeft + x, y, Config.HeaderWidth - x, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
-                    << SvgRect(Config.SummaryLeft, y, Config.SummaryWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
-                    << SvgRect(Config.OperatorLeft, y, Config.OperatorWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone");
+        if (c->CteConnection) {
+            c->CteSvg
+                << "<g data-group='g" << c->FromStage->GroupId << "' class='selectable'><title>Stage " << (c->FromStage->External ? "E" : ToString(c->FromStage->PhysicalStageId)) << "</title>" << Endl
+                << SvgRect(Config.TaskLeft, y, Config.TaskWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
+                << SvgRect(Config.HeaderLeft + x, y, Config.HeaderWidth - x, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
+                << SvgRect(Config.SummaryLeft, y, Config.SummaryWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
+                << SvgRect(Config.OperatorLeft, y, Config.OperatorWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone");
 
-                if (c->CteOperatorOutputRows) {
-                    TStringBuilder tooltip;
-                    auto textSum = FormatTooltip(tooltip, "Output Rows", c->CteOperatorOutputRows.get(), FormatInteger);
-                    PrintStageSummary(c->CteSvg, {Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT}, {
-                        .Metric = c->CteOperatorOutputRows.get(),
-                        .Colors = Config.Palette.Output,
-                        .Text = textSum,
-                        .Tooltip = tooltip,
-                    });
-                }
-
-                c->CteSvg
-                    << SvgRect(Config.TimelineLeft, y, Config.TimelineWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
-                    << SvgStageId(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, y + INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, ToString(c->FromStage->PhysicalStageId))
-                    << SvgText(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "texts clipped", c->FromStage->Operators[0].Name + ": " + c->FromStage->Operators[0].Info)
-                    << "</g>" << Endl;
-
-                if (c->CteOutputBytes) {
-                    c->CteSvg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Output</title>" << Endl;
-
-                    TStringBuilder tooltip;
-                    auto textSum = FormatDataFlowTooltip(tooltip, "Output", c->CteOutputBytes, c->CteOutputRows,
-                        c->CteOutputLocalBytes, c->CteOutputChunks, c->CteOutputChunkSize);
-                    PrintStageSummary(c->CteSvg, {Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT}, {
-                        .Metric = c->CteOutputBytes.get(),
-                        .Colors = Config.Palette.Output,
-                        .Text = textSum,
-                        .Tooltip = tooltip,
-                        .Icon = {"#icon_output", Config.Palette.Output.Light, "0.0325 0.0325"},
-                        .BackgroundRect = true,
-                        .PeerId = ToString(s->PhysicalStageId),
-                        .Split = c->CteOutputLocalBytes,
-                        .Scalar = c->CteOutputChunkSize.get(),
-                    });
-
-                    auto title = FormatDataFlowRate("Output", c->CteOutputBytes, c->CteOutputRows);
-
-                    PrintDataFlowTimeline(c->CteSvg, title, c->CteOutputBytes, px, y + INTERNAL_GAP_Y, pw,
-                        Config.Palette.Output, true);
-                    c->CteSvg << "</g>" << Endl;
-                }
-            }
-
-            TString mark;
-            if (c->NodeType == "HashShuffle")     mark = "H";
-            else if (c->NodeType == "Merge")      mark = "Me";
-            else if (c->NodeType == "Map")        mark = "Ma";
-            else if (c->NodeType == "UnionAll")   mark = "U";
-            else if (c->NodeType == "Broadcast")  mark = "B";
-            else if (c->NodeType == "External")   mark = "E";
-            else if (c->NodeType == "Table")      mark = "T";
-            else if (c->NodeType == "Lookup")     mark = "L";
-            else if (c->NodeType == "LookupJoin") mark = "LJ";
-            else                                  mark = "?";
-
-            if (s->Connections.size() == 1) {
-                c->Svg
-                << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_HEIGHT << "l-" << CONN_SIZE << ",0"
-                << "l0,-" << CONN_SIZE << "l" << CONN_SIZE / 2 << ",-" << CONN_ARROW << 'l' << CONN_SIZE / 2 << ',' << CONN_ARROW
-                << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
-            } else {
-                c->Svg
-                << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_HEIGHT << "l-" << CONN_SIZE << ",0"
-                << "l-" << CONN_ARROW << ",-" << CONN_SIZE / 2 << 'l' << CONN_ARROW << ",-" << CONN_SIZE / 2 << 'l' << CONN_SIZE << ",0"
-                << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
-            }
-
-            c->Svg
-                << SvgText(Config.HeaderLeft + x + INTERNAL_WIDTH - CONN_SIZE / 2, y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT  + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "conn", mark);
-
-            c->Svg << "</g>" << Endl;
-
-            if (c->InputBytes) {
-
-                s->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl;
-
+            if (c->CteOperatorOutputRows) {
                 TStringBuilder tooltip;
-                auto textSum = FormatDataFlowTooltip(tooltip, "Input", c->InputBytes, c->InputRows,
-                    c->InputLocalBytes, c->InputChunks, c->InputChunkSize);
-                PrintStageSummary(s->Svg, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                    .Metric = c->InputBytes.get(),
-                    .Colors = Config.Palette.Input,
+                auto textSum = FormatTooltip(tooltip, "Output Rows", c->CteOperatorOutputRows.get(), FormatInteger);
+                PrintStageSummary(c->CteSvg, {Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT}, {
+                    .Metric = c->CteOperatorOutputRows.get(),
+                    .Colors = Config.Palette.Output,
                     .Text = textSum,
                     .Tooltip = tooltip,
-                    .TaskCount = s->Tasks,
-                    .Icon = {"#icon_input", Config.Palette.Input.Light, "0.0325 0.0325"},
+                });
+            }
+
+            c->CteSvg
+                << SvgRect(Config.TimelineLeft, y, Config.TimelineWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
+                << SvgStageId(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, y + INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, ToString(c->FromStage->PhysicalStageId))
+                << SvgText(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "texts clipped", c->FromStage->Operators[0].Name + ": " + c->FromStage->Operators[0].Info)
+                << "</g>" << Endl;
+
+            if (c->CteOutputBytes) {
+                c->CteSvg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Output</title>" << Endl;
+
+                TStringBuilder tooltip;
+                auto textSum = FormatDataFlowTooltip(tooltip, "Output", c->CteOutputBytes, c->CteOutputRows,
+                    c->CteOutputLocalBytes, c->CteOutputChunks, c->CteOutputChunkSize);
+                PrintStageSummary(c->CteSvg, {Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT}, {
+                    .Metric = c->CteOutputBytes.get(),
+                    .Colors = Config.Palette.Output,
+                    .Text = textSum,
+                    .Tooltip = tooltip,
+                    .Icon = {"#icon_output", Config.Palette.Output.Light, "0.0325 0.0325"},
                     .BackgroundRect = true,
-                    .PeerId = ToString(c->FromStage->PhysicalStageId),
-                    .Split = c->InputLocalBytes,
-                    .Scalar = c->InputChunkSize.get(),
+                    .PeerId = ToString(s->PhysicalStageId),
+                    .Split = c->CteOutputLocalBytes,
+                    .Scalar = c->CteOutputChunkSize.get(),
                 });
 
-                auto title = FormatDataFlowRate("Input", c->InputBytes, c->InputRows);
+                auto title = FormatDataFlowRate("Output", c->CteOutputBytes, c->CteOutputRows);
 
-                PrintDataFlowTimeline(s->Svg, title, c->InputBytes, px, y0, pw,
-                    Config.Palette.Input);
-
-                y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-
-                s->Svg << "</g>" << Endl;
+                PrintDataFlowTimeline(c->CteSvg, title, c->CteOutputBytes, px, y + INTERNAL_GAP_Y, pw,
+                    Config.Palette.Output, true);
+                c->CteSvg << "</g>" << Endl;
             }
         }
 
-        if (s->IngressBytes) {
-            TStringBuilder& builder = s->Svg;
-            builder << "<g data-group='g" << (s->IngressConnection ? s->IngressConnection->GroupId : s->GroupId) << "' class='selectable'><title>Ingress</title>" << Endl;
+        TString mark;
+        if (c->NodeType == "HashShuffle")     mark = "H";
+        else if (c->NodeType == "Merge")      mark = "Me";
+        else if (c->NodeType == "Map")        mark = "Ma";
+        else if (c->NodeType == "UnionAll")   mark = "U";
+        else if (c->NodeType == "Broadcast")  mark = "B";
+        else if (c->NodeType == "External")   mark = "E";
+        else if (c->NodeType == "Table")      mark = "T";
+        else if (c->NodeType == "Lookup")     mark = "L";
+        else if (c->NodeType == "LookupJoin") mark = "LJ";
+        else                                  mark = "?";
+
+        if (s->Connections.size() == 1) {
+            c->Svg
+            << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_HEIGHT << "l-" << CONN_SIZE << ",0"
+            << "l0,-" << CONN_SIZE << "l" << CONN_SIZE / 2 << ",-" << CONN_ARROW << 'l' << CONN_SIZE / 2 << ',' << CONN_ARROW
+            << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
+        } else {
+            c->Svg
+            << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_HEIGHT << "l-" << CONN_SIZE << ",0"
+            << "l-" << CONN_ARROW << ",-" << CONN_SIZE / 2 << 'l' << CONN_ARROW << ",-" << CONN_SIZE / 2 << 'l' << CONN_SIZE << ",0"
+            << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
+        }
+
+        c->Svg
+            << SvgText(Config.HeaderLeft + x + INTERNAL_WIDTH - CONN_SIZE / 2, y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT  + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "conn", mark);
+
+        c->Svg << "</g>" << Endl;
+
+        if (c->InputBytes) {
+
+            s->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl;
 
             TStringBuilder tooltip;
-            auto textSum = FormatDataFlowTooltip(tooltip, "Ingress", s->IngressBytes, s->IngressRows, 0, 0, nullptr);
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = s->IngressBytes.get(),
-                .Colors = Config.Palette.Ingress,
+            auto textSum = FormatDataFlowTooltip(tooltip, "Input", c->InputBytes, c->InputRows,
+                c->InputLocalBytes, c->InputChunks, c->InputChunkSize);
+            PrintStageSummary(s->Svg, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
+                .Metric = c->InputBytes.get(),
+                .Colors = Config.Palette.Input,
                 .Text = textSum,
                 .Tooltip = tooltip,
                 .TaskCount = s->Tasks,
-                .Icon = {"#icon_ingress", Config.Palette.Ingress.Medium, "0.9 0.9"},
-                .BackgroundRect = s->IngressConnection != nullptr,
+                .Icon = {"#icon_input", Config.Palette.Input.Light, "0.0325 0.0325"},
+                .BackgroundRect = true,
+                .PeerId = ToString(c->FromStage->PhysicalStageId),
+                .Split = c->InputLocalBytes,
+                .Scalar = c->InputChunkSize.get(),
             });
 
-            auto title = FormatDataFlowRate("Ingress", s->IngressBytes, s->IngressRows);
+            auto title = FormatDataFlowRate("Input", c->InputBytes, c->InputRows);
 
-            PrintDataFlowTimeline(builder, title, s->IngressBytes, px, y0, pw,
-                Config.Palette.Ingress);
+            PrintDataFlowTimeline(s->Svg, title, c->InputBytes, px, y0, pw,
+                Config.Palette.Input);
 
-            builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+            s->Svg << "</g>" << Endl;
         }
-        s->Svg << "</g>" << Endl;
+    }
+}
+
+// Ingress enters the cluster, either through a source built into the stage or
+// over the External connection standing in for the storage layer.
+void TPlan::PrintIngressStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw) {
+    if (s->IngressBytes) {
+        TStringBuilder& builder = s->Svg;
+        builder << "<g data-group='g" << (s->IngressConnection ? s->IngressConnection->GroupId : s->GroupId) << "' class='selectable'><title>Ingress</title>" << Endl;
+
+        TStringBuilder tooltip;
+        auto textSum = FormatDataFlowTooltip(tooltip, "Ingress", s->IngressBytes, s->IngressRows, 0, 0, nullptr);
+        PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
+            .Metric = s->IngressBytes.get(),
+            .Colors = Config.Palette.Ingress,
+            .Text = textSum,
+            .Tooltip = tooltip,
+            .TaskCount = s->Tasks,
+            .Icon = {"#icon_ingress", Config.Palette.Ingress.Medium, "0.9 0.9"},
+            .BackgroundRect = s->IngressConnection != nullptr,
+        });
+
+        auto title = FormatDataFlowRate("Ingress", s->IngressBytes, s->IngressRows);
+
+        PrintDataFlowTimeline(builder, title, s->IngressBytes, px, y0, pw,
+            Config.Palette.Ingress);
+
+        builder << "</g>" << Endl;
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    }
+}
+
+// One stage: the boxes it occupies in every column, then a strip for each of
+// its data flows, memory and CPU, then its incoming connections.
+void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32 timelineDelta, ui32 offsetY) {
+    s->Svg
+        << "<g data-group='g" << s->GroupId << "' class='selectable'><title>Stage " << (s->External ? "E" : ToString(s->PhysicalStageId)) << "</title>" << Endl;
+    auto stageClass = s->External ? "clone" : "stage";
+
+    s->Svg
+        << SvgRect(Config.HeaderLeft + s->IndentX, 0, Config.HeaderWidth - s->IndentX, "100%", stageClass)
+        << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", stageClass)
+        << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", stageClass)
+        << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", stageClass)
+        << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", stageClass);
+
+    PrintStageOperators(s);
+
+    s->Svg
+        << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, s->External ? "E" : ToString(s->PhysicalStageId));
+
+    PrintStageBackground(s);
+
+    for (auto& region : s->HotRegions) {
+        auto px = Config.TimelineLeft + region.first * (Config.TimelineWidth - timelineDelta) / maxTime;
+        auto pw = (region.second - region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
+        s->Svg
+        << SvgRect(px, 0, pw, "100%", "hot");
+    }
+
+    ui32 y0 = INTERNAL_GAP_Y;
+
+    auto tx0 = Config.TimelineLeft;
+    auto px = tx0 + TimeOffset * (Config.TimelineWidth - timelineDelta) / maxTime;
+    auto pw = MaxTime * (Config.TimelineWidth - timelineDelta) / maxTime;
+
+    PrintEgressStrip(s, y0, px, pw);
+    PrintOutputStrip(s, y0, px, pw);
+    PrintMemoryStrip(s, y0, px, pw);
+    PrintCpuStrip(s, y0, px, pw, offsetY);
+
+    if (s->Tasks) {
+        s->Svg << "<g><title>";
+        if (s->External) {
+            s->Svg << "External Source, partitions: " << s->Tasks;
+        } else {
+            s->Svg << "Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks;
+        }
+        s->Svg << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+        PrintUnfinishedTasks(s->Svg, s->Tasks, s->FinishedTasks);
+        s->Svg
+        << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
+        << "</g>" << Endl;
+    }
+
+    if (!s->Connections.empty()) {
+        s->Svg
+        << "<g class='plus button'>"
+        << SvgRect(s->IndentX + INTERNAL_GAP_X, INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT, CONN_SIZE, CONN_SIZE, "transparent")
+        << "<use href='#icon_minus' class='icon_minus' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/>" << Endl
+        << "<use href='#icon_plus' class='icon_plus' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
+    }
+    s->Svg
+        << "<g class='arup button'>"
+        << SvgRect(s->IndentX + INTERNAL_GAP_X, s->Height - (INTERNAL_GAP_Y + CONN_SIZE), CONN_SIZE, CONN_SIZE, "transparent")
+        << "<use href='#icon_arrowup' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << s->Height - (INTERNAL_GAP_Y + CONN_SIZE) << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
+
+    y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+    PrintStageConnections(s, y0, px, pw);
+
+    PrintIngressStrip(s, y0, px, pw);
+    s->Svg << "</g>" << Endl;
+}
+
+void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
+
+    OffsetY = offsetY;
+
+    PrintPlanSummary(maxTime, timelineDelta, offsetY);
+
+    for (auto& s : Stages) {
+        PrepareStageSvg(s, maxTime, timelineDelta, offsetY);
     }
 
     offsetY += Height;

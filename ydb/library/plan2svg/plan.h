@@ -95,6 +95,16 @@ public:
     // The highlighted amount a stage spilled, right aligned over its summary bar.
     void PrintSpillingBadge(TStringBuilder& builder, ui32 top, const TString& label, TSingleMetric* bytes);
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
+    void PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
+    void PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32 timelineDelta, ui32 offsetY);
+    void PrintStageOperators(const std::shared_ptr<TStage>& s);
+    void PrintStageBackground(const std::shared_ptr<TStage>& s);
+    void PrintEgressStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw);
+    void PrintOutputStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw);
+    void PrintMemoryStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw);
+    void PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw, ui32 offsetY);
+    void PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw);
+    void PrintIngressStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw);
     void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
     void PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);

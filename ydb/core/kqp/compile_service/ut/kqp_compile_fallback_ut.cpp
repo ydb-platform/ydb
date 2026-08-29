@@ -25,13 +25,13 @@ namespace {
         };
     }
 
-    std::pair<ui32, ui32> TestDataQueryWithSqlVersion(TMaybe<ui32> sqlVersion, const TString& query) {
+    std::pair<ui32, ui32> TestDataQueryWithSqlVersion(TMaybe<ui32> sqlVersion, const TString& query, bool enforceSqlVersionV1 = true) {
         NKikimrConfig::TAppConfig appConfig;
         if (sqlVersion) {
             appConfig.MutableTableServiceConfig()->SetSqlVersion(*sqlVersion);
         }
 
-        appConfig.MutableTableServiceConfig()->SetEnforceSqlVersionV1(true);
+        appConfig.MutableTableServiceConfig()->SetEnforceSqlVersionV1(enforceSqlVersionV1);
 
         TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
         EnableCompileDebugLogging(kikimr);
@@ -54,6 +54,14 @@ Y_UNIT_TEST_SUITE(KqpCompileFallback) {
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )");
         UNIT_ASSERT(success > 0);
+        UNIT_ASSERT_VALUES_EQUAL(failed, 0);
+    }
+
+    Y_UNIT_TEST(SqlVersionZeroUsesV1WithoutEnforcement) {
+        auto [success, failed] = TestDataQueryWithSqlVersion(0, R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", false);
+        UNIT_ASSERT_VALUES_EQUAL(success, 0);
         UNIT_ASSERT_VALUES_EQUAL(failed, 0);
     }
 

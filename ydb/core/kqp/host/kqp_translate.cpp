@@ -384,6 +384,12 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         auto settings = settingsBuilder.Build(ctx);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
+        auto parsedSettings = settings;
+        NYql::TIssues settingsIssues;
+        if (!ParseTranslationSettings(queryText, parsedSettings, settingsIssues)) {
+            auto parseResult = MakeRejectedSyntaxResult(settingsIssues.ToOneLineString());
+            return {{std::make_shared<NYql::TAstParseResult>(std::move(parseResult)), {}, {}, false, {}}};
+        }
         ui16 actualSyntaxVersion = 1;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
         auto astStatements = NSQLTranslation::SqlToAstStatements(translators, queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);

@@ -281,23 +281,23 @@ Y_UNIT_TEST_SUITE(TPlan2SvgParse) {
 
     Y_UNIT_TEST(MinMaxIgnoreZero) {
         ui64 m = 0;
-        Min0(m, 0);
+        UpdateMin(m, 0);
         UNIT_ASSERT_VALUES_EQUAL(m, 0);
-        Min0(m, 5);
+        UpdateMin(m, 5);
         UNIT_ASSERT_VALUES_EQUAL(m, 5);
-        Min0(m, 7);
+        UpdateMin(m, 7);
         UNIT_ASSERT_VALUES_EQUAL(m, 5);
-        Min0(m, 3);
+        UpdateMin(m, 3);
         UNIT_ASSERT_VALUES_EQUAL(m, 3);
 
         ui64 x = 0;
-        Max0(x, 0);
+        UpdateMax(x, 0);
         UNIT_ASSERT_VALUES_EQUAL(x, 0);
-        Max0(x, 5);
+        UpdateMax(x, 5);
         UNIT_ASSERT_VALUES_EQUAL(x, 5);
-        Max0(x, 3);
+        UpdateMax(x, 3);
         UNIT_ASSERT_VALUES_EQUAL(x, 5);
-        Max0(x, 7);
+        UpdateMax(x, 7);
         UNIT_ASSERT_VALUES_EQUAL(x, 7);
     }
 }

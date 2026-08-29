@@ -179,13 +179,13 @@ ui64 TMetricHistory::Average() {
     return AvgValue;
 }
 
-void Min0(ui64& m, ui64 v) {
+void UpdateMin(ui64& m, ui64 v) {
     if (v) {
         m = m ? std::min(m, v) : v;
     }
 }
 
-void Max0(ui64& m, ui64 v) {
+void UpdateMax(ui64& m, ui64 v) {
     if (v) {
         m = m ? std::max(m, v) : v;
     }
@@ -199,26 +199,26 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJso
 
     if (firstMessageNode) {
         FirstMessage.Load(*firstMessageNode);
-        Min0(MinTime, FirstMessage.Min);
+        UpdateMin(MinTime, FirstMessage.Min);
     }
 
     if (lastMessageNode) {
         LastMessage.Load(*lastMessageNode);
-        Max0(MaxTime, LastMessage.Max);
+        UpdateMax(MaxTime, LastMessage.Max);
     }
 
     if (waitTimeUsNode) {
         WaitTime.Load(*waitTimeUsNode, MinTime, MaxTime);
-        Min0(MinTime, WaitTime.MinTime);
-        Max0(MaxTime, WaitTime.MaxTime);
+        UpdateMin(MinTime, WaitTime.MinTime);
+        UpdateMax(MaxTime, WaitTime.MaxTime);
     }
 
     if (Details.Load(node)) {
         Summary->Add(Details.Sum);
         if (auto* historyNode = node.GetValueByPath("History")) {
             History.Load(*historyNode, MinTime, MaxTime);
-            Min0(MinTime, History.MinTime);
-            Max0(MaxTime, History.MaxTime);
+            UpdateMin(MinTime, History.MinTime);
+            UpdateMax(MaxTime, History.MaxTime);
         }
     }
 }

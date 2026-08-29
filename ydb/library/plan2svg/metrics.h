@@ -98,7 +98,7 @@ struct TMutableMetric : public TMetricHistory {
     ui64 DisplayMaxValue = 0;
 };
 
-void Min0(ui64& m, ui64 v);
-void Max0(ui64& m, ui64 v);
+void UpdateMin(ui64& m, ui64 v);
+void UpdateMax(ui64& m, ui64 v);
 
 } // namespace NPlan2Svg

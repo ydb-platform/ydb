@@ -460,11 +460,11 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     offsetY += TIME_HEIGHT;
 
     for (auto& s : Stages) {
-        s->_Builder
+        s->Svg
             << "<g data-group='g" << s->GroupId << "' class='selectable'><title>Stage " << (s->External ? "E" : ToString(s->PhysicalStageId)) << "</title>" << Endl;
         auto stageClass = s->External ? "clone" : "stage";
 
-        s->_Builder
+        s->Svg
             << SvgRect(Config.HeaderLeft + s->IndentX, 0, Config.HeaderWidth - s->IndentX, "100%", stageClass)
             << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", stageClass)
             << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", stageClass)
@@ -476,18 +476,18 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             ui32 index = 0;
             for (auto op : s->Operators) {
                 ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
-                s->_Builder
+                s->Svg
                     << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
                 if (op.Blocks) {
                     auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y * 2;
                     if (index == s->Operators.size() - 1) {
                         h = s->Height - yt;
                     }
-                    s->_Builder
+                    s->Svg
                     << SvgRect(Config.HeaderLeft + s->IndentX, yt, INTERNAL_WIDTH * 2, h, "blocks");
                 }
 
-                s->_Builder
+                s->Svg
                     << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, yt + INTERNAL_TEXT_HEIGHT, "texts clipped", op.Name + ": " + op.Info);
                 if (op.OutputRows) {
                     TStringBuilder tooltip;
@@ -496,9 +496,9 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                         tooltip
                         << ", " << op.Estimations;
                     }
-                    PrintStageSummary(s->_Builder, Config.OperatorLeft, Config.OperatorWidth, y0, INTERNAL_HEIGHT, op.OutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "", "", "");
+                    PrintStageSummary(s->Svg, Config.OperatorLeft, Config.OperatorWidth, y0, INTERNAL_HEIGHT, op.OutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "", "", "");
                 }
-                s->_Builder
+                s->Svg
                     << "</g>" << Endl;
 
                 if (!op.Inputs.empty()) {
@@ -506,14 +506,14 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                     auto opY = y0 + INTERNAL_HEIGHT / 2;
                     for (auto& input : op.Inputs) {
                         if (input.StageId) {
-                            s->_Builder
+                            s->Svg
                                 << "<g data-group='g" << NodeToConnection.at(input.PlanNodeId)->GroupId << "' class='selectable'><title>Input from Stage " << *input.StageId << "</title>" << Endl
                                 << SvgStageId(opX, opY, ToString(*input.StageId))
                                 << "</g>" << Endl;
                         } else if (input.PrecomputeRef) {
                             auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
                             if (it != Viz.CteSubPlans.end()) {
-                                s->_Builder
+                                s->Svg
                                 << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
                                 << SvgStageId(opX, opY, "P")
                                 << "</g>" << Endl;
@@ -528,7 +528,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             }
         }
 
-        s->_Builder
+        s->Svg
             << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, s->External ? "E" : ToString(s->PhysicalStageId));
 
         // timeline backgrounds
@@ -536,7 +536,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             ui32 y0 = INTERNAL_GAP_Y;
             if (s->EgressBytes) {
                 if (s->External) {
-                    s->_Builder
+                    s->Svg
                     << "<g data-group='g" << StageToExternalConnection[s.get()]->GroupId << "' class='selectable'><title>Egress</title>" << Endl
                     << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
                     << "</g>" << Endl;
@@ -545,7 +545,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             }
             if (s->OutputBytes) {
                 if (s->OutputPlanNodeId) {
-                    s->_Builder
+                    s->Svg
                     << "<g data-group='g" << NodeToConnection[s->OutputPlanNodeId]->GroupId << "' class='selectable'><title>Output</title>" << Endl
                     << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
                     << "</g>" << Endl;
@@ -558,7 +558,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
             for (auto& c : s->Connections) {
                 if (c->InputBytes) {
-                    s->_Builder
+                    s->Svg
                     << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl
                     << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
                     << "</g>" << Endl;
@@ -567,7 +567,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             }
             if (s->IngressBytes) {
                 if (s->IngressConnection) {
-                    s->_Builder
+                    s->Svg
                     << "<g data-group='g" << s->IngressConnection->GroupId << "' class='selectable'><title>Ingress</title>" << Endl
                     << SvgRect(Config.TimelineLeft, y0, Config.TimelineWidth, INTERNAL_HEIGHT, "background")
                     << "</g>" << Endl;
@@ -579,7 +579,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         for (auto& region : s->HotRegions) {
             auto px = Config.TimelineLeft + region.first * (Config.TimelineWidth - timelineDelta) / maxTime;
             auto pw = (region.second - region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
-            s->_Builder
+            s->Svg
             << SvgRect(px, 0, pw, "100%", "hot");
         }
 
@@ -590,7 +590,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         auto pw = MaxTime * (Config.TimelineWidth - timelineDelta) / maxTime;
 
         if (s->EgressBytes) {
-            TStringBuilder& builder = s->_Builder;
+            TStringBuilder& builder = s->Svg;
             builder << "<g data-group='g" << (s->External ? StageToExternalConnection[s.get()]->GroupId : s->GroupId) << "' class='selectable'><title>Egress</title>" << Endl;
 
             TStringBuilder tooltip;
@@ -607,7 +607,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         }
 
         if (s->OutputBytes) {
-            TStringBuilder& builder = s->_Builder;
+            TStringBuilder& builder = s->Svg;
             builder << "<g data-group='g" << (s->OutputPlanNodeId ? NodeToConnection[s->OutputPlanNodeId]->GroupId : GroupId) << "' class='selectable'><title>Output</title>" << Endl;
 
             TStringBuilder tooltip;
@@ -645,17 +645,17 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         if (s->MaxMemoryUsage) {
             TString tooltip;
             auto textSum = FormatTooltip(tooltip, "Memory", s->MaxMemoryUsage.get(), FormatBytes);
-            PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, s->Tasks, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+            PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, s->Tasks, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
 
             if (s->SpillingComputeBytes && s->SpillingComputeBytes->Details.Sum) {
-                s->_Builder
+                s->Svg
                 << "<g><title>";
 
-                auto textSum = FormatTooltip(s->_Builder, "Compute Spilling", s->SpillingComputeBytes.get(), FormatBytes);
+                auto textSum = FormatTooltip(s->Svg, "Compute Spilling", s->SpillingComputeBytes.get(), FormatBytes);
                 auto x1 = Config.SummaryLeft + Config.SummaryWidth - INTERNAL_GAP_X;
                 auto x0 = x1 - textSum.size() * INTERNAL_TEXT_HEIGHT * 7 / 10;
 
-                s->_Builder
+                s->Svg
                 << "</title>" << Endl
                 << "<rect x='" << x0 << "' y='" << y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
                 << "' width='" << x1 - x0 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
@@ -667,13 +667,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         }
 
         if (s->MemoryUsage && !s->MemoryUsage->History.Values.empty()) {
-            PrintValues(s->_Builder, s->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MemoryUsage->History.MaxValue * 1_MB), Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintValues(s->Svg, s->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MemoryUsage->History.MaxValue * 1_MB), Config.Palette.MemMedium, Config.Palette.MemMedium);
         } else if (s->MaxMemoryUsage && !s->MaxMemoryUsage->History.Values.empty()) {
-            PrintValues(s->_Builder, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintValues(s->Svg, s->MaxMemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(s->MaxMemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
         }
 
         if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-            PrintDeriv(s->_Builder, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
+            PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
         }
 
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -681,7 +681,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         if (s->CpuTime) {
             TString tooltip;
             auto textSum = FormatTooltip(tooltip, "CPU Usage", s->CpuTime.get(), FormatUsage);
-            PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip, s->Tasks, "#icon_cpu", Config.Palette.CpuMedium, "0.6 0.6");
+            PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->CpuTime, Config.Palette.CpuMedium, Config.Palette.CpuLight, textSum, tooltip, s->Tasks, "#icon_cpu", Config.Palette.CpuMedium, "0.6 0.6");
 
             auto totalTime = s->CpuTime->Details.Sum;
             if (s->WaitInputTime) {
@@ -698,10 +698,10 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 if (totalTime) {
                     auto heightPercents = s->WaitInputTime->Details.Sum * 100 / totalTime;
                     activePercentsMax -= heightPercents;
-                s->_Builder
+                s->Svg
                     << "<g><title>";
-                    FormatTooltip(s->_Builder, "Wait Input Time", s->WaitInputTime.get(), FormatUsage, totalTime);
-                s->_Builder
+                    FormatTooltip(s->Svg, "Wait Input Time", s->WaitInputTime.get(), FormatUsage, totalTime);
+                s->Svg
                     << "</title>" << Endl
                     << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMax
                     << "%' width='" << Config.TaskWidth << "' height='" << heightPercents
@@ -709,7 +709,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                     << "</g>" << Endl;
                 }
                 if(!s->WaitInputTime->History.Deriv.empty()) {
-                    PrintDeriv(s->_Builder, s->WaitInputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputLight);
+                    PrintDeriv(s->Svg, s->WaitInputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputLight);
                 }
 
                 // consider only 10% or more waiting times
@@ -733,7 +733,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                         }
                     }
                     if (waitOutputPeers) {
-                    s->_Builder
+                    s->Svg
                         << "<g><title>" << "Wait input with peer stage(s) " << waitOutputPeers << " wait output" << "</title>" << Endl
                         << "  <circle cx='" << Config.TaskLeft + Config.TaskWidth / 2
                         << "' cy='" << s->OffsetY + offsetY + s->Height - INTERNAL_WIDTH / 2
@@ -753,23 +753,23 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 if (totalTime) {
                     auto heightPercents = s->WaitOutputTime->Details.Sum * 100 / totalTime;
                     activePercentsMin += heightPercents;
-                s->_Builder
+                s->Svg
                     << "<g><title>";
-                    FormatTooltip(s->_Builder, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage, totalTime);
-                s->_Builder
+                    FormatTooltip(s->Svg, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage, totalTime);
+                s->Svg
                     << "</title>" << Endl
                     << "  <rect x='" << Config.TaskLeft << "' y='0%' width='" << Config.TaskWidth << "' height='" << heightPercents
                     << "%' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
                     << "</g>" << Endl;
                 }
                 if (!s->WaitOutputTime->History.Deriv.empty()) {
-                    PrintDeriv(s->_Builder, s->WaitOutputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputLight);
+                    PrintDeriv(s->Svg, s->WaitOutputTime->History, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputLight);
                 }
             }
 
             if (activePercentsMax > activePercentsMin && s->InputThroughput) {
                 auto opacity = s->InputThroughput->Details.Sum / static_cast<double>(s->InputThroughput->Summary->Max * 2);
-                s->_Builder
+                s->Svg
                 << "<g><title>Input Throughput " << FormatInteger(s->InputThroughput->Details.Sum) << "/s</title>" << Endl
                 << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMin
                 << "%' width='" << Config.TaskWidth << "' height='" << activePercentsMax - activePercentsMin
@@ -779,52 +779,52 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             if (!s->CpuTime->History.Deriv.empty() && s->CpuTime->History.MaxTime > s->CpuTime->History.MinTime) {
                 auto maxCpu = s->CpuTime->History.MaxDeriv * TIME_SERIES_RANGES / (s->CpuTime->History.MaxTime - s->CpuTime->History.MinTime);
-                PrintDeriv(s->_Builder, s->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+                PrintDeriv(s->Svg, s->CpuTime->History, px, y0, pw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
             }
 
             if (s->SpillingComputeTime && !s->SpillingComputeTime->History.Deriv.empty()) {
-                PrintDeriv(s->_Builder, s->SpillingComputeTime->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingTimeMedium);
+                PrintDeriv(s->Svg, s->SpillingComputeTime->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingTimeMedium);
             }
         }
 
         if (s->Tasks) {
             if (s->External) {
-                s->_Builder
+                s->Svg
                 << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
                 if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
                     auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
                     auto xx = Config.TaskLeft + Config.TaskWidth / 8;
-                    s->_Builder
+                    s->Svg
                     << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
                     << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
                 }
-                s->_Builder
+                s->Svg
                 << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
                 << "</g>" << Endl;
             } else {
-                s->_Builder
+                s->Svg
                 << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
                 if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
                     auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
                     auto xx = Config.TaskLeft + Config.TaskWidth / 8;
-                    s->_Builder
+                    s->Svg
                     << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
                     << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
                 }
-                s->_Builder
+                s->Svg
                 << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
                 << "</g>" << Endl;
             }
         }
 
         if (!s->Connections.empty()) {
-            s->_Builder
+            s->Svg
             << "<g class='plus button'>"
             << SvgRect(s->IndentX + INTERNAL_GAP_X, INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT, CONN_SIZE, CONN_SIZE, "transparent")
             << "<use href='#icon_minus' class='icon_minus' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/>" << Endl
             << "<use href='#icon_plus' class='icon_plus' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << INTERNAL_GAP_Y * 3 + INTERNAL_HEIGHT << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
         }
-        s->_Builder
+        s->Svg
             << "<g class='arup button'>"
             << SvgRect(s->IndentX + INTERNAL_GAP_X, s->Height - (INTERNAL_GAP_Y + CONN_SIZE), CONN_SIZE, CONN_SIZE, "transparent")
             << "<use href='#icon_arrowup' transform='translate(" << s->IndentX + INTERNAL_GAP_X << ' ' << s->Height - (INTERNAL_GAP_Y + CONN_SIZE) << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
@@ -836,45 +836,45 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             auto x = c->CteConnection ? c->CteIndentX : c->FromStage->IndentX;
             auto y = 0;
 
-            c->_Builder << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
+            c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
             if (!c->KeyColumns.empty()) {
-                c->_Builder << " KeyColumns: ";
+                c->Svg << " KeyColumns: ";
                 bool first = true;
                 for (auto k : c->KeyColumns) {
                     if (first) {
                         first = false;
                     } else {
-                        c->_Builder << ", ";
+                        c->Svg << ", ";
                     }
-                    c->_Builder << k;
+                    c->Svg << k;
                 }
             }
             if (!c->SortColumns.empty()) {
-                c->_Builder << " SortColumns: ";
+                c->Svg << " SortColumns: ";
                 bool first = true;
                 for (auto s : c->SortColumns) {
                     if (first) {
                         first = false;
                     } else {
-                        c->_Builder << ", ";
+                        c->Svg << ", ";
                     }
-                    c->_Builder << s;
+                    c->Svg << s;
                 }
             }
             if (c->Blocks) {
-                c->_Builder << " Blocks: True";
+                c->Svg << " Blocks: True";
             }
             if (c->HashFunc) {
-                c->_Builder << " HashFunc: " << c->HashFunc;
+                c->Svg << " HashFunc: " << c->HashFunc;
             }
             if (c->Parallel) {
-                c->_Builder << " Parallel: True";
+                c->Svg << " Parallel: True";
             }
-            c->_Builder
+            c->Svg
                 << "</title>" << Endl;
 
             if (c->CteConnection) {
-                c->_CteBuilder
+                c->CteSvg
                     << "<g data-group='g" << c->FromStage->GroupId << "' class='selectable'><title>Stage " << (c->FromStage->External ? "E" : ToString(c->FromStage->PhysicalStageId)) << "</title>" << Endl
                     << SvgRect(Config.TaskLeft, y, Config.TaskWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgRect(Config.HeaderLeft + x, y, Config.HeaderWidth - x, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
@@ -884,28 +884,28 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 if (c->CteOperatorOutputRows) {
                     TStringBuilder tooltip;
                     auto textSum = FormatTooltip(tooltip, "Output Rows", c->CteOperatorOutputRows.get(), FormatInteger);
-                    PrintStageSummary(c->_CteBuilder, Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT, c->CteOperatorOutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "", "", "");
+                    PrintStageSummary(c->CteSvg, Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT, c->CteOperatorOutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "", "", "");
                 }
 
-                c->_CteBuilder
+                c->CteSvg
                     << SvgRect(Config.TimelineLeft, y, Config.TimelineWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgStageId(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, y + INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, ToString(c->FromStage->PhysicalStageId))
                     << SvgText(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "texts clipped", c->FromStage->Operators[0].Name + ": " + c->FromStage->Operators[0].Info)
                     << "</g>" << Endl;
 
                 if (c->CteOutputBytes) {
-                    c->_CteBuilder << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Output</title>" << Endl;
+                    c->CteSvg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Output</title>" << Endl;
 
                     TStringBuilder tooltip;
                     auto textSum = FormatDataFlowTooltip(tooltip, "Output", c->CteOutputBytes, c->CteOutputRows,
                         c->CteOutputLocalBytes, c->CteOutputChunks, c->CteOutputChunkSize);
-                    PrintStageSummary(c->_CteBuilder, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId), c->CteOutputLocalBytes, c->CteOutputChunkSize);
+                    PrintStageSummary(c->CteSvg, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId), c->CteOutputLocalBytes, c->CteOutputChunkSize);
 
                     auto title = FormatDataFlowRate("Output", c->CteOutputBytes, c->CteOutputRows);
 
-                    PrintDataFlowTimeline(c->_CteBuilder, title, c->CteOutputBytes, px, y + INTERNAL_GAP_Y, pw,
+                    PrintDataFlowTimeline(c->CteSvg, title, c->CteOutputBytes, px, y + INTERNAL_GAP_Y, pw,
                         Config.Palette.OutputMedium, Config.Palette.OutputLight, Config.Palette.OutputDark, true);
-                    c->_CteBuilder << "</g>" << Endl;
+                    c->CteSvg << "</g>" << Endl;
                 }
             }
 
@@ -922,44 +922,44 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             else                                  mark = "?";
 
             if (s->Connections.size() == 1) {
-                c->_Builder
+                c->Svg
                 << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_HEIGHT << "l-" << CONN_SIZE << ",0"
                 << "l0,-" << CONN_SIZE << "l" << CONN_SIZE / 2 << ",-" << CONN_ARROW << 'l' << CONN_SIZE / 2 << ',' << CONN_ARROW
                 << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
             } else {
-                c->_Builder
+                c->Svg
                 << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_HEIGHT << "l-" << CONN_SIZE << ",0"
                 << "l-" << CONN_ARROW << ",-" << CONN_SIZE / 2 << 'l' << CONN_ARROW << ",-" << CONN_SIZE / 2 << 'l' << CONN_SIZE << ",0"
                 << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
             }
 
-            c->_Builder
+            c->Svg
                 << SvgText(Config.HeaderLeft + x + INTERNAL_WIDTH - CONN_SIZE / 2, y + GAP_Y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT  + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "conn", mark);
 
-            c->_Builder << "</g>" << Endl;
+            c->Svg << "</g>" << Endl;
 
             if (c->InputBytes) {
 
-                s->_Builder << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl;
+                s->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>Input</title>" << Endl;
 
                 TStringBuilder tooltip;
                 auto textSum = FormatDataFlowTooltip(tooltip, "Input", c->InputBytes, c->InputRows,
                     c->InputLocalBytes, c->InputChunks, c->InputChunkSize);
-                PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId), c->InputLocalBytes, c->InputChunkSize);
+                PrintStageSummary(s->Svg, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId), c->InputLocalBytes, c->InputChunkSize);
 
                 auto title = FormatDataFlowRate("Input", c->InputBytes, c->InputRows);
 
-                PrintDataFlowTimeline(s->_Builder, title, c->InputBytes, px, y0, pw,
+                PrintDataFlowTimeline(s->Svg, title, c->InputBytes, px, y0, pw,
                     Config.Palette.InputMedium, Config.Palette.InputLight, Config.Palette.InputDark);
 
                 y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
-                s->_Builder << "</g>" << Endl;
+                s->Svg << "</g>" << Endl;
             }
         }
 
         if (s->IngressBytes) {
-            TStringBuilder& builder = s->_Builder;
+            TStringBuilder& builder = s->Svg;
             builder << "<g data-group='g" << (s->IngressConnection ? s->IngressConnection->GroupId : s->GroupId) << "' class='selectable'><title>Ingress</title>" << Endl;
 
             TStringBuilder tooltip;
@@ -974,7 +974,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             builder << "</g>" << Endl;
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
-        s->_Builder << "</g>" << Endl;
+        s->Svg << "</g>" << Endl;
     }
 
     offsetY += Height;
@@ -990,7 +990,7 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
     }
 
     builder << "<svg class='slimable' data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
-    builder << stage->_Builder;
+    builder << stage->Svg;
     builder << "</svg>" << Endl;
 
     auto y = stage->Height + GAP_Y;
@@ -998,9 +998,9 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
         if (c->CteConnection) {
             builder << "<svg data-stage='outer cte' data-height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << y << "'>" << Endl;
             builder << "<svg data-stage='inner cte' data-height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << GAP_Y << "'>" << Endl;
-            builder << c->_CteBuilder;
+            builder << c->CteSvg;
             builder << "</svg>" << Endl;
-            builder << c->_Builder;
+            builder << c->Svg;
             builder << "</svg>" << Endl;
             y += INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 + GAP_Y;
         } else {
@@ -1012,7 +1012,7 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
     }
 
     if (c) {
-        builder << c->_Builder;
+        builder << c->Svg;
     }
 }
 
@@ -1104,7 +1104,7 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
 
 /*
             if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-                PrintDeriv(s->_Builder, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
+                PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
             }
 */
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;

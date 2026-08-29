@@ -46,8 +46,8 @@ public:
     std::shared_ptr<TScalarMetric> CteOutputChunkSize;
     const NJson::TJsonValue* StatsNode = nullptr;
     const ui32 PlanNodeId;
-    TStringBuilder _Builder;
-    TStringBuilder _CteBuilder;
+    TStringBuilder Svg;
+    TStringBuilder CteSvg;
     bool Blocks = false;
 };
 
@@ -129,7 +129,7 @@ public:
     ui64 MaxTime = 0;
     ui64 UpdateTime = 0;
     bool External = false;
-    TStringBuilder _Builder;
+    TStringBuilder Svg;
     TConnection* IngressConnection = nullptr;
     std::vector<std::pair<ui64, ui64>> HotRegions;
     ui64 CriticalCpuTotal = 0;

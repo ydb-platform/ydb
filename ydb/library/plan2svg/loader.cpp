@@ -183,9 +183,9 @@ void TPlan::ResolveCteRefs() {
                                     cteRef.second->InputChunkSize = stats.ChunkSize;
                                 }
                                 if (stats.BytesNode) {
-                                    Min0(cteRef.second->Stage.MinTime, stats.Bytes->MinTime);
-                                    Max0(cteRef.second->Stage.MaxTime, stats.Bytes->MaxTime);
-                                    Max0(MaxTime, stats.Bytes->MaxTime);
+                                    UpdateMin(cteRef.second->Stage.MinTime, stats.Bytes->MinTime);
+                                    UpdateMax(cteRef.second->Stage.MaxTime, stats.Bytes->MaxTime);
+                                    UpdateMax(MaxTime, stats.Bytes->MaxTime);
                                 }
                             }
                             ReadUi64(subNode, "LocalBytes", cteRef.second->InputLocalBytes);
@@ -210,9 +210,9 @@ void TPlan::ResolveCteRefs() {
                                     cteRef.second->CteOutputChunkSize = stats.ChunkSize;
                                 }
                                 if (stats.BytesNode) {
-                                    Min0(cteRef.second->FromStage->MinTime, stats.Bytes->MinTime);
-                                    Max0(cteRef.second->FromStage->MaxTime, stats.Bytes->MaxTime);
-                                    Max0(MaxTime, stats.Bytes->MaxTime);
+                                    UpdateMin(cteRef.second->FromStage->MinTime, stats.Bytes->MinTime);
+                                    UpdateMax(cteRef.second->FromStage->MaxTime, stats.Bytes->MaxTime);
+                                    UpdateMax(MaxTime, stats.Bytes->MaxTime);
                                 }
                                 if (stats.RowsNode) {
                                     cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *stats.RowsNode);
@@ -635,8 +635,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     stage->IngressBytes = stats.Bytes;
                                     stage->IngressRows = stats.Rows;
                                     if (stats.BytesNode) {
-                                        Min0(stage->MinTime, stats.Bytes->MinTime);
-                                        Max0(stage->MaxTime, stats.Bytes->MaxTime);
+                                        UpdateMin(stage->MinTime, stats.Bytes->MinTime);
+                                        UpdateMax(stage->MaxTime, stats.Bytes->MaxTime);
                                     }
                                 }
                             }
@@ -729,8 +729,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 stage->OutputChunkSize = stats.ChunkSize;
                             }
                             if (stats.BytesNode) {
-                                Min0(stage->MinTime, stats.Bytes->MinTime);
-                                Max0(stage->MaxTime, stats.Bytes->MaxTime);
+                                UpdateMin(stage->MinTime, stats.Bytes->MinTime);
+                                UpdateMax(stage->MaxTime, stats.Bytes->MaxTime);
                             }
                             if (!stage->Operators.front().OutputRows) {
                                 stage->Operators.front().OutputRows = stats.RowsNode
@@ -829,8 +829,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                     connection->InputChunkSize = stats.ChunkSize;
                                                 }
                                                 if (stats.BytesNode) {
-                                                    Min0(stage->MinTime, stats.Bytes->MinTime);
-                                                    Max0(stage->MaxTime, stats.Bytes->MaxTime);
+                                                    UpdateMin(stage->MinTime, stats.Bytes->MinTime);
+                                                    UpdateMax(stage->MaxTime, stats.Bytes->MaxTime);
                                                     inputBytes += stats.Bytes->Details.Sum;
                                                 }
                                                 if (stats.RowsNode) {
@@ -928,8 +928,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 stage->IngressBytes = stats.Bytes;
                                 stage->IngressRows = stats.Rows;
                                 if (stats.BytesNode) {
-                                    Min0(stage->MinTime, stats.Bytes->MinTime);
-                                    Max0(stage->MaxTime, stats.Bytes->MaxTime);
+                                    UpdateMin(stage->MinTime, stats.Bytes->MinTime);
+                                    UpdateMax(stage->MaxTime, stats.Bytes->MaxTime);
                                 }
                                 if (stats.RowsNode) {
                                     ingressRowsNode = stats.RowsNode;
@@ -962,10 +962,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             for (const auto& subNode : inputNode->GetArray()) {
                 if (auto* statNode = GetInputStatNode(subNode)) {
                     if (auto* firstMessageMaxNode = statNode->GetValueByPath("FirstMessageMs.Min")) {
-                        Min0(stage->MinTime, firstMessageMaxNode->GetIntegerSafe());
+                        UpdateMin(stage->MinTime, firstMessageMaxNode->GetIntegerSafe());
                     }
                     if (auto* lastMessageMaxNode = statNode->GetValueByPath("LastMessageMs.Max")) {
-                        Max0(stage->MaxTime, lastMessageMaxNode->GetIntegerSafe());
+                        UpdateMax(stage->MaxTime, lastMessageMaxNode->GetIntegerSafe());
                     }
                 }
             }
@@ -1004,8 +1004,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         stage->InputThroughput = std::make_shared<TSingleMetric>(StageInputThroughput, inputBytes * 1000 / stageDuration);
     }
 
-    Max0(MaxTime, stage->MaxTime);
-    Max0(UpdateTime, stage->UpdateTime);
+    UpdateMax(MaxTime, stage->MaxTime);
+    UpdateMax(UpdateTime, stage->UpdateTime);
 }
 
 void TPlan::LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode) {

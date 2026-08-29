@@ -66,7 +66,7 @@ void TPlan::MarkLayout() {
     }
 }
 
-struct TVS {
+struct TCpuSample {
     ui64 Time;
     ui64 Value;
     ui32 StageId;
@@ -135,7 +135,7 @@ void TPlan::CalcCriticals(TStage& stage) {
 }
 
 void TPlan::CalcHotPath() {
-    std::vector<TVS> cpuTimes;
+    std::vector<TCpuSample> cpuTimes;
     std::unordered_map<ui32, TStage*> StageIdToStage;
     if (!Stages.empty()) {
         CalcCriticals(*Stages[0]);
@@ -145,15 +145,15 @@ void TPlan::CalcHotPath() {
             auto stageId = s->PhysicalStageId;
             StageIdToStage.emplace(stageId, s.get());
             for (const auto& [t, v] : s->CpuTime->History.Values) {
-                cpuTimes.push_back(TVS{.Time = t, .Value = v / s->Tasks, .StageId = stageId});
+                cpuTimes.push_back(TCpuSample{.Time = t, .Value = v / s->Tasks, .StageId = stageId});
             }
-            cpuTimes.push_back(TVS{.Time = s->CpuTime->History.Values.back().first + 1, .Value = 0, .StageId = stageId});
+            cpuTimes.push_back(TCpuSample{.Time = s->CpuTime->History.Values.back().first + 1, .Value = 0, .StageId = stageId});
         }
     }
     if (cpuTimes.size() < 2) {
         return;
     }
-    std::sort(cpuTimes.begin(), cpuTimes.end(), [](const TVS& a, const TVS& b) { return a.Time < b.Time; });
+    std::sort(cpuTimes.begin(), cpuTimes.end(), [](const TCpuSample& a, const TCpuSample& b) { return a.Time < b.Time; });
     auto first = true;
     ui32 currentStageId = 0;
     ui64 leftTime = 0;

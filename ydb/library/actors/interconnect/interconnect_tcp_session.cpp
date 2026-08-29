@@ -448,31 +448,17 @@ namespace NActors {
 
         // register our socket with the appropriate I/O backend
         if (Proxy->Common->Settings.UseUring && !Params.Encryption && TUringContext::IsSupported()) {
-            LOG_DEBUG_IC_SESSION("ICS11", "registering socket with UringPollerActor");
+            YDB_LOG_DEBUG("Registering socket with UringPollerActor",
+                {"marker", "ICS11"});
             // Both the main and XDC sockets are driven entirely by io_uring: the input session
             // arms recv (main multishot, XDC readv) and the output session submits writes/send_zc.
             // Neither socket is registered with the epoll TPollerActor anymore (Caveat 3).
             Send(MakeUringPollerActorId(), new TEvUringRegister(Socket, XdcSocket, ReceiverId, SelfId()));
         } else {
-<<<<<<< HEAD
-            LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
+            YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Registering socket in PollerActor",
+                {"marker", "ICS11"});
             const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
-=======
-            inputSession = new TInputSessionTCP(Proxy->Common, RdmaQp, std::move(cq));
-            ReceiverId = RegisterWithSameMailbox(inputSession);
-        }
 
-        IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::StartRecieve, SelfId(), Socket, XdcSocket,
-            ReceiveContext, Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams));
-
-        // register our socket in poller actor
-        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Registering socket in PollerActor",
-            {"marker", "ICS11"});
-        const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
-        Y_ABORT_UNLESS(success);
-        if (XdcSocket) {
-            const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
->>>>>>> e5337030699 ([YDB_LOG] Migrate library/actors/interconnect (#48896))
             Y_ABORT_UNLESS(success);
             if (XdcSocket) {
                 const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
@@ -1045,16 +1031,18 @@ namespace NActors {
                     if (now - UringMainWriteInFlightSince > TDuration::Seconds(2) &&
                         now - UringMainWriteStuckReported > TDuration::Seconds(2)) {
                         UringMainWriteStuckReported = now;
-                        LOG_NOTICE_IC_SESSION("ICS41", "uring main write latch stuck for %.3fs"
-                            " submitted# %" PRIu64 " completed# %" PRIu64 " pendingWrites# %" PRIu32
-                            " oobSize# %zu submitCalls# %" PRIu64 " submitErrors# %" PRIu64
-                            " submitPartials# %" PRIu64 " lastSubmitRet# %d sqeFull# %" PRIu64,
-                            (now - UringMainWriteInFlightSince).SecondsFloat(),
-                            UringMainWritevSubmitted, UringMainWriteCompleted,
-                            UringContext->GetPendingWrites(), OutOfBandStream.CalculateOutgoingSize(),
-                            UringContext->GetSubmitCalls(), UringContext->GetSubmitErrors(),
-                            UringContext->GetSubmitPartials(), UringContext->GetLastSubmitRet(),
-                            UringContext->GetSqeFull());
+                        YDB_LOG_NOTICE("Uring main write latch stuck",
+                            {"marker", "ICS41"},
+                            {"seconds", (now - UringMainWriteInFlightSince).SecondsFloat()},
+                            {"submitted", UringMainWritevSubmitted},
+                            {"completed", UringMainWriteCompleted},
+                            {"pendingWrites", UringContext->GetPendingWrites()},
+                            {"oobSize", OutOfBandStream.CalculateOutgoingSize()},
+                            {"submitCalls", UringContext->GetSubmitCalls()},
+                            {"subnitErrors", UringContext->GetSubmitErrors()},
+                            {"submitPartials", UringContext->GetSubmitPartials()},
+                            {"lastSubmitRet", UringContext->GetLastSubmitRet()},
+                            {"sqeFull", UringContext->GetSqeFull()});
                     }
                 }
                 return;
@@ -1118,7 +1106,8 @@ namespace NActors {
         if (UringContext || !Socket) {
             return; // already have a backend, or socket already gone
         }
-        LOG_NOTICE_IC_SESSION("ICS11", "uring registration failed, falling back to epoll PollerActor");
+        YDB_LOG_NOTICE("Uring registration failed, falling back to epoll PollerActor",
+            {"marker", "ICS11"});
         const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
         Y_ABORT_UNLESS(success);
         if (XdcSocket) {
@@ -1360,13 +1349,18 @@ namespace NActors {
         if (UringContext) {
             const double latchHeldS = (UringMainWriteInFlight && UringMainWriteInFlightSince != TMonotonic::Zero())
                 ? (now - UringMainWriteInFlightSince).SecondsFloat() : 0.0;
-            LOG_DEBUG_IC_SESSION("ICS42", "uring send hb submitted# %" PRIu64 " completed# %" PRIu64
-                " mainInFlight# %d latchHeld# %.3fs pendingWrites# %" PRIu32 " oobSize# %zu"
-                " submitErrors# %" PRIu64 " submitPartials# %" PRIu64 " sqeFull# %" PRIu64,
-                UringMainWritevSubmitted, UringMainWriteCompleted, (int)UringMainWriteInFlight,
-                latchHeldS, UringContext->GetPendingWrites(), OutOfBandStream.CalculateOutgoingSize(),
-                UringContext->GetSubmitErrors(), UringContext->GetSubmitPartials(),
-                UringContext->GetSqeFull());
+            YDB_LOG_DEBUG("Uring send hb",
+                {"marker", "ICS42"},
+                {"submitted", UringMainWritevSubmitted},
+                {"completed", UringMainWriteCompleted},
+                {"mainInFlight", (int)UringMainWriteInFlight},
+                {"latchHeld", latchHeldS},
+                {"pendingWrites", UringContext->GetPendingWrites()},
+                {"oobSize", OutOfBandStream.CalculateOutgoingSize()},
+                {"submitErrors", UringContext->GetSubmitErrors()},
+                {"submitPartials", UringContext->GetSubmitPartials()},
+                {"sqeFull", UringContext->GetSqeFull()}
+            );
         }
         if (Socket) {
             if (now >= ForcePacketTimestamp) {

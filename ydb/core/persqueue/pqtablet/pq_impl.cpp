@@ -4130,30 +4130,20 @@ bool TPersQueue::CanProcessTxWrites() const
 void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
-<<<<<<< HEAD
-    PQ_LOG_TX_D("send TEvSubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
-=======
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvSubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
->>>>>>> 5102c1d5de1 ([YDB_LOG] Migrate ydb/core/persqueue/pqtablet (#45808))
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
-<<<<<<< HEAD
-    PQ_LOG_TX_D("send TEvUnsubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
-=======
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvUnsubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
->>>>>>> 5102c1d5de1 ([YDB_LOG] Migrate ydb/core/persqueue/pqtablet (#45808))
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 

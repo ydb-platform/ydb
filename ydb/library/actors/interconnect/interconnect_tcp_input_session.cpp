@@ -10,8 +10,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
 
-#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
-
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -1643,19 +1641,20 @@ namespace NActors {
                 // dead. On the idle-keepalive failure this shows whether ANY recv completion ever
                 // arrived (peer truly silent / recv not armed) and whether the multishot is still
                 // active, plus the ring's submit accounting.
-                LOG_NOTICE_IC_SESSION("ICIS30", "DeadPeer snapshot uring# %d lastRecvAge# %.3fs"
-                    " bytesRead# %" PRIu64 " mainRecvCompletions# %" PRIu64 " mainRecvBytes# %" PRIu64
-                    " mainMsActive# %d pendingRecvs# %" PRIu32 " submitCalls# %" PRIu64
-                    " submitErrors# %" PRIu64 " submitPartials# %" PRIu64 " lastSubmitRet# %d sqeFull# %" PRIu64,
-                    (UringContext ? 1 : 0), (now - LastReceiveTimestamp).SecondsFloat(),
-                    BytesReadFromSocket, UringMainRecvCompletions, UringMainRecvBytes,
-                    (int)MainRecvMultishotActive,
-                    (UringContext ? UringContext->GetPendingRecvs() : 0),
-                    (UringContext ? UringContext->GetSubmitCalls() : 0),
-                    (UringContext ? UringContext->GetSubmitErrors() : 0),
-                    (UringContext ? UringContext->GetSubmitPartials() : 0),
-                    (UringContext ? UringContext->GetLastSubmitRet() : 0),
-                    (UringContext ? UringContext->GetSqeFull() : 0));
+                YDB_LOG_NOTICE("DeadPeer snapshot",
+                    {"marker", "ICIS30"},
+                    {"uring", (UringContext ? 1 : 0)},
+                    {"lastRecvAgeSeconds", (now - LastReceiveTimestamp).SecondsFloat()},
+                    {"bytesRead", BytesReadFromSocket},
+                    {"mainRecvCompletions", UringMainRecvCompletions},
+                    {"mainRecvBytes", UringMainRecvBytes},
+                    {"mainMsActive", (int)MainRecvMultishotActive},
+                    {"pendingRecvs", (UringContext ? UringContext->GetPendingRecvs() : 0)},
+                    {"submitCalls", (UringContext ? UringContext->GetSubmitCalls() : 0)},
+                    {"submitErrors", (UringContext ? UringContext->GetSubmitErrors() : 0)},
+                    {"submitPartials", (UringContext ? UringContext->GetSubmitPartials() : 0)},
+                    {"lastSubmitRet", (UringContext ? UringContext->GetLastSubmitRet() : 0)},
+                    {"sqeFull", (UringContext ? UringContext->GetSqeFull() : 0)});
                 // nothing has changed, terminate session
                 throw TExDestroySession{TDisconnectReason::DeadPeer()};
             }
@@ -1663,12 +1662,14 @@ namespace NActors {
         // Recv-side heartbeat (DEBUG): fires roughly once per DeadPeerTimeout on a healthy idle
         // session. Paired with the output ICS42 send heartbeat to confirm keepalives are flowing.
         if (UringContext) {
-            LOG_DEBUG_IC_SESSION("ICIS31", "uring recv hb lastRecvAge# %.3fs bytesRead# %" PRIu64
-                " mainRecvCompletions# %" PRIu64 " mainRecvBytes# %" PRIu64 " mainMsActive# %d"
-                " pendingRecvs# %" PRIu32,
-                (now - LastReceiveTimestamp).SecondsFloat(), BytesReadFromSocket,
-                UringMainRecvCompletions, UringMainRecvBytes, (int)MainRecvMultishotActive,
-                UringContext->GetPendingRecvs());
+            YDB_LOG_DEBUG("Uring recv hb",
+                {"marker", "ICIS31"},
+                {"lastRecvAge", (now - LastReceiveTimestamp).SecondsFloat()},
+                {"bytesRead", BytesReadFromSocket},
+                {"mainRecvCompletions", UringMainRecvCompletions},
+                {"mainRecvBytes", UringMainRecvBytes},
+                {"mainMsActive", (int)MainRecvMultishotActive},
+                {"pendingRecvs", UringContext->GetPendingRecvs()});
         }
         Schedule(LastReceiveTimestamp + DeadPeerTimeout, new TEvCheckDeadPeer);
     }

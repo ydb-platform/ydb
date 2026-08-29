@@ -19,17 +19,10 @@ namespace NActors {
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
-<<<<<<< HEAD
-        LOG_INFO_IC_SESSION("ICS90", "v2 session created");
-        DirectSession = std::make_shared<TDirectSessionV2>();
-=======
-        if (const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
-                interval != TDuration::Zero()) {
-            Schedule(interval, new TEvPrivate::TEvCheckSubscriberLiveness);
-        }
+
         YDB_LOG_INFO("V2 session created",
             {"marker", "ICS90"});
->>>>>>> e5337030699 ([YDB_LOG] Migrate library/actors/interconnect (#48896))
+        DirectSession = std::make_shared<TDirectSessionV2>();
     }
 
     void TInterconnectSessionTCPv2::SetNewConnection(TEvHandshakeDone::TPtr& ev) {
@@ -48,26 +41,8 @@ namespace NActors {
 
         Proxy->Metrics->SetConnected(1);
 
-<<<<<<< HEAD
         // NOTE: data-plane setup (input session, poller registration, traffic generation) is stubbed.
         // Subscribers receive the direct interface through TEvNodeConnected upon subscription.
-=======
-        // Register the socket with the shared io_uring engine and start driving traffic.
-        Y_ABORT_UNLESS(Proxy->Common->UringEngineV2);
-        auto onDisconnectCallback = [selfId = SelfId(), as = TActivationContext::ActorSystem()](TDisconnectReason reason) {
-            as->Send(selfId, new TEvPrivate::TEvTerminate(reason));
-        };
-        SetNonBlock(*Socket, false);
-        EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(), Params.PeerScopeId,
-            onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
-        if (!EngineHandle) {
-            YDB_LOG_ERROR("V2 io_uring engine failed to register the connection",
-                {"marker", "ICS99"});
-            return Terminate(TDisconnectReason::LostConnection());
-        }
-
-        DirectSession = std::make_shared<TDirectSessionV2>(Proxy->Common->UringEngineV2, EngineHandle);
->>>>>>> e5337030699 ([YDB_LOG] Migrate library/actors/interconnect (#48896))
     }
 
     void TInterconnectSessionTCPv2::Terminate(TDisconnectReason reason) {
@@ -139,7 +114,9 @@ namespace NActors {
             Send(ev->Sender, MakeNodeConnectedEvent(), 0, ev->Cookie);
         }
         // data-plane stub: the payload event is dropped for now
-        LOG_DEBUG_IC_SESSION("ICS95", "v2 stub dropping forwarded event to %s", ev->Recipient.ToString().data());
+        YDB_LOG_DEBUG("V2 stub dropping forwarded event to",
+            {"marker", "ICS95"},
+            {"recepient", ev->Recipient.ToString().data()});
     }
 
     void TInterconnectSessionTCPv2::ForwardWithSubscribe(STATEFN_SIG) {

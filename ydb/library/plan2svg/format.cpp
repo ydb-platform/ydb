@@ -143,8 +143,7 @@ TString FormatDataFlowTooltip(TStringBuilder& tooltip, const TString& label,
     const std::shared_ptr<TSingleMetric>& rows,
     ui64 localBytes,
     ui64 chunks,
-    const std::shared_ptr<TScalarMetric>& chunkSize,
-    bool withWidth)
+    const std::shared_ptr<TScalarMetric>& chunkSize)
 {
     auto textSum = FormatTooltip(tooltip, label, bytes.get(), FormatBytes);
     if (localBytes && bytes->Details.Sum) {
@@ -152,7 +151,7 @@ TString FormatDataFlowTooltip(TStringBuilder& tooltip, const TString& label,
     }
     if (rows) {
         FormatTooltip(tooltip, ", Rows", rows.get(), FormatInteger);
-        if (withWidth && rows->Details.Sum) {
+        if (rows->Details.Sum) {
             tooltip << ", Width " << FormatBytes(bytes->Details.Sum / rows->Details.Sum);
         }
     }

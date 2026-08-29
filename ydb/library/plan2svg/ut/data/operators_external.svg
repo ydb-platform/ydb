@@ -852,7 +852,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g9' class='selectable'><title>Egress</title>
-<g><title>Egress 0%, ∑2.29MB, 34.87KB | 36.74KB | 39.38KB, Rows 0%, ∑79.59K, 1.18K | 1.24K | 1.33K</title>
+<g><title>Egress 0%, ∑2.29MB, 34.87KB | 36.74KB | 39.38KB, Rows 0%, ∑79.59K, 1.18K | 1.24K | 1.33K, Width 30B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 413,3 414,4 414,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
@@ -993,7 +993,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g13' class='selectable'><title>Egress</title>
-<g><title>Egress 92%, ∑1.78GB, 28.54MB | 28.60MB | 28.64MB, Rows 98%, ∑80.00M, 1.24M | 1.25M | 1.25M</title>
+<g><title>Egress 92%, ∑1.78GB, 28.54MB | 28.60MB | 28.64MB, Rows 98%, ∑80.00M, 1.24M | 1.25M | 1.25M, Width 24B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='180' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 528,3 593,3 593,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
@@ -1145,7 +1145,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g17' class='selectable'><title>Egress</title>
-<g><title>Egress 7%, ∑153.05MB, 2.35MB | 2.39MB | 2.44MB, Rows 1%, ∑1.00M, 15.42K | 15.62K | 16.00K</title>
+<g><title>Egress 7%, ∑153.05MB, 2.35MB | 2.39MB | 2.44MB, Rows 1%, ∑1.00M, 15.42K | 15.62K | 16.00K, Width 160B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='15' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 418,3 428,3 428,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
@@ -1332,7 +1332,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g21' class='selectable'><title>Egress</title>
-<g><title>Egress 0%, 677B, Rows 0%, 25</title>
+<g><title>Egress 0%, 677B, Rows 0%, 25, Width 27B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 413,2 414,2 414,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
@@ -1464,7 +1464,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g25' class='selectable'><title>Egress</title>
-<g><title>Egress 0%, 13B, Rows 0%, 1</title>
+<g><title>Egress 0%, 13B, Rows 0%, 1, Width 13B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 413,2 414,2 414,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>

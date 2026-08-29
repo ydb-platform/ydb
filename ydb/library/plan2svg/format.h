@@ -26,14 +26,13 @@ TString FormatTooltip(TString& tooltip, const TString& prefix, TSingleMetric* me
 // mean chunk size. Returns the summary text drawn inside the bar.
 //
 // localBytes and chunks are 0 for flows that do not report them (egress and
-// ingress). withWidth is false only for egress, which has never shown a width.
+// ingress).
 TString FormatDataFlowTooltip(TStringBuilder& tooltip, const TString& label,
     const std::shared_ptr<TSingleMetric>& bytes,
     const std::shared_ptr<TSingleMetric>& rows,
     ui64 localBytes,
     ui64 chunks,
-    const std::shared_ptr<TScalarMetric>& chunkSize,
-    bool withWidth = true);
+    const std::shared_ptr<TScalarMetric>& chunkSize);
 
 // The data flow's timeline title: its label plus throughput over the window it
 // was actually active, label alone when that window is empty.

@@ -916,7 +916,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g11' class='selectable'><title>Egress</title>
-<g><title>Egress 71%, ∑9.75GB, 155.95MB | 156.06MB | 156.21MB, Rows 67%, ∑323.49M, 5.05M | 5.05M | 5.05M</title>
+<g><title>Egress 71%, ∑9.75GB, 155.95MB | 156.06MB | 156.21MB, Rows 67%, ∑323.49M, 5.05M | 5.05M | 5.05M, Width 32B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='180' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 486,3 593,3 593,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
@@ -1066,7 +1066,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g15' class='selectable'><title>Egress</title>
-<g><title>Egress 28%, ∑3.91GB, 62.49MB | 62.58MB | 62.69MB, Rows 31%, ∑150.00M, 2.34M | 2.34M | 2.34M</title>
+<g><title>Egress 28%, ∑3.91GB, 62.49MB | 62.58MB | 62.69MB, Rows 31%, ∑150.00M, 2.34M | 2.34M | 2.34M, Width 28B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='72' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 446,3 485,3 485,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>
@@ -1218,7 +1218,7 @@
 <rect x='598' y='2' width='682' height='14' class='background'/>
 </g>
 <g data-group='g19' class='selectable'><title>Egress</title>
-<g><title>Egress 0%, ∑34.69MB, 549.21KB | 555.07KB | 560.71KB, Rows 0%, ∑3.00M, 46.38K | 46.87K | 47.35K</title>
+<g><title>Egress 0%, ∑34.69MB, 549.21KB | 555.07KB | 560.71KB, Rows 0%, ∑3.00M, 46.38K | 46.87K | 47.35K, Width 12B</title>
 <rect x='395' y='2' width='200' height='14' class='background'/>
 <use href='#icon_egress' transform='translate(395 2) scale(0.9 0.9)' fill='var(--egress-medium, #3C6090)'/>
   <rect x='413' y='2' width='1' height='14' stroke-width='0' fill='var(--egress-light, #4B78B4)'/>  <polygon points='413,2 413,3 414,3 414,16 413,16' stroke='none' fill='var(--egress-medium, #3C6090)'/>

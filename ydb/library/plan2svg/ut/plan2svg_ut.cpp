@@ -1,3 +1,6 @@
+#include <ydb/library/plan2svg/format.h>
+#include <ydb/library/plan2svg/metrics.h>
+#include <ydb/library/plan2svg/parse.h>
 #include <ydb/library/plan2svg/plan2svg.h>
 
 #include <library/cpp/testing/common/env.h>
@@ -6,24 +9,6 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/system/env.h>
-
-namespace NPlan2Svg {
-
-// These helpers have external linkage but are not declared in plan2svg.h.
-// Redeclared here so that they can be covered directly; keep in sync with plan2svg.cpp.
-TString FormatDurationMs(ui64 durationMs);
-TString FormatDurationUs(ui64 durationUs);
-TString FormatIntegerValue(ui64 i, ui32 scale, const TString& suffix);
-TString FormatBytes(ui64 bytes);
-TString FormatInteger(ui64 bytes);
-TString FormatTimeMs(ui64 time);
-TString FormatTimeAgg(const TAggregation& agg);
-TString FormatMCpu(ui64 mCpu);
-TString ParseTableOrIndexName(const TString& table);
-void Min0(ui64& m, ui64 v);
-void Max0(ui64& m, ui64 v);
-
-} // namespace NPlan2Svg
 
 using namespace NPlan2Svg;
 

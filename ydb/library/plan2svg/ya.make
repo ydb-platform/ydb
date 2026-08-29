@@ -1,12 +1,25 @@
 LIBRARY()
 
 SRCS(
-    plan2svg.cpp
+    config.cpp
+    format.cpp
+    layout.cpp
+    loader.cpp
+    metrics.cpp
+    parse.cpp
+    render.cpp
+    svg.cpp
 )
 
 PEERDIR(
     library/cpp/json
     library/cpp/json/yson
+    library/cpp/resource
+)
+
+RESOURCE(
+    assets/icons.svg plan2svg/icons.svg
+    assets/plan2svg.js plan2svg/plan2svg.js
 )
 
 END()

@@ -117,4 +117,48 @@ TString ParseColumns(const NJson::TJsonValue* node) {
     return builder;
 }
 
+TChannelStats LoadChannelStats(const NJson::TJsonValue& statNode,
+    const std::shared_ptr<TSummaryMetric>& bytesSummary,
+    const std::shared_ptr<TSummaryMetric>& rowsSummary,
+    const std::shared_ptr<TSummaryMetric>& chunkSizeSummary)
+{
+    TChannelStats stats;
+
+    if (auto* bytesNode = statNode.GetValueByPath("Bytes")) {
+        stats.BytesNode = bytesNode;
+        stats.Bytes = std::make_shared<TSingleMetric>(bytesSummary,
+            *bytesNode, 0, 0,
+            statNode.GetValueByPath("FirstMessageMs"),
+            statNode.GetValueByPath("LastMessageMs"),
+            statNode.GetValueByPath("WaitTimeUs.History")
+        );
+    } else {
+        stats.Bytes = std::make_shared<TSingleMetric>(bytesSummary);
+    }
+
+    if (auto* rowsNode = statNode.GetValueByPath("Rows")) {
+        stats.RowsNode = rowsNode;
+        stats.Rows = std::make_shared<TSingleMetric>(rowsSummary, *rowsNode);
+    } else {
+        stats.Rows = std::make_shared<TSingleMetric>(rowsSummary);
+    }
+
+    if (!chunkSizeSummary) {
+        return stats;
+    }
+
+    if (auto* chunksNode = statNode.GetValueByPath("Chunks")) {
+        if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+            stats.Chunks = sumNode->GetIntegerSafe();
+            stats.HasChunks = true;
+            if (stats.Chunks) {
+                stats.ChunkSize = std::make_shared<TScalarMetric>(chunkSizeSummary,
+                    stats.Bytes->Details.Sum / stats.Chunks);
+            }
+        }
+    }
+
+    return stats;
+}
+
 } // namespace NPlan2Svg

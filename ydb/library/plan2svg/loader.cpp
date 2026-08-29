@@ -179,32 +179,19 @@ void TPlan::ResolveCteRefs() {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(it->second->PlanNodeId) == nameNode->GetStringSafe()) {
                             if (auto* statNode = GetInputStatNode(subNode)) {
-                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
-                                    cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
-                                        *bytesNode, 0, 0,
-                                        statNode->GetValueByPath("FirstMessageMs"),
-                                        statNode->GetValueByPath("LastMessageMs"),
-                                        statNode->GetValueByPath("WaitTimeUs.History")
-                                    );
-                                    Min0(cteRef.second->Stage.MinTime, cteRef.second->InputBytes->MinTime);
-                                    Max0(cteRef.second->Stage.MaxTime, cteRef.second->InputBytes->MaxTime);
-                                    Max0(MaxTime, cteRef.second->InputBytes->MaxTime);
-                                } else {
-                                    cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
+                                auto stats = LoadChannelStats(*statNode, InputBytes, InputRows, InputChunkSize);
+                                cteRef.second->InputBytes = stats.Bytes;
+                                cteRef.second->InputRows = stats.Rows;
+                                if (stats.HasChunks) {
+                                    cteRef.second->InputChunks = stats.Chunks;
                                 }
-                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
-                                    cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
-                                } else {
-                                    cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows);
+                                if (stats.ChunkSize) {
+                                    cteRef.second->InputChunkSize = stats.ChunkSize;
                                 }
-                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
-                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
-                                        cteRef.second->InputChunks = sumNode->GetIntegerSafe();
-                                        if (cteRef.second->InputChunks) {
-                                            cteRef.second->InputChunkSize = std::make_shared<TScalarMetric>(InputChunkSize,
-                                                cteRef.second->InputBytes->Details.Sum / cteRef.second->InputChunks);
-                                        }
-                                    }
+                                if (stats.BytesNode) {
+                                    Min0(cteRef.second->Stage.MinTime, stats.Bytes->MinTime);
+                                    Max0(cteRef.second->Stage.MaxTime, stats.Bytes->MaxTime);
+                                    Max0(MaxTime, stats.Bytes->MaxTime);
                                 }
                             }
                             if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
@@ -221,33 +208,22 @@ void TPlan::ResolveCteRefs() {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(cteRef.second->Stage.PlanNodeId) == nameNode->GetStringSafe()) {
                             if (auto* statNode = GetOutputStatNode(subNode)) {
-                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
-                                    cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
-                                        *bytesNode, 0, 0,
-                                        statNode->GetValueByPath("FirstMessageMs"),
-                                        statNode->GetValueByPath("LastMessageMs"),
-                                        statNode->GetValueByPath("WaitTimeUs.History")
-                                    );
-                                    Min0(cteRef.second->FromStage->MinTime, cteRef.second->CteOutputBytes->MinTime);
-                                    Max0(cteRef.second->FromStage->MaxTime, cteRef.second->CteOutputBytes->MaxTime);
-                                    Max0(MaxTime, cteRef.second->CteOutputBytes->MaxTime);
-                                } else {
-                                    cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
+                                auto stats = LoadChannelStats(*statNode, OutputBytes, OutputRows, OutputChunkSize);
+                                cteRef.second->CteOutputBytes = stats.Bytes;
+                                cteRef.second->CteOutputRows = stats.Rows;
+                                if (stats.HasChunks) {
+                                    cteRef.second->CteOutputChunks = stats.Chunks;
                                 }
-                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
-                                    cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
-                                    cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
-                                } else {
-                                    cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows);
+                                if (stats.ChunkSize) {
+                                    cteRef.second->CteOutputChunkSize = stats.ChunkSize;
                                 }
-                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
-                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
-                                        cteRef.second->CteOutputChunks = sumNode->GetIntegerSafe();
-                                        if (cteRef.second->CteOutputChunks) {
-                                            cteRef.second->CteOutputChunkSize = std::make_shared<TScalarMetric>(OutputChunkSize,
-                                                cteRef.second->CteOutputBytes->Details.Sum / cteRef.second->CteOutputChunks);
-                                        }
-                                    }
+                                if (stats.BytesNode) {
+                                    Min0(cteRef.second->FromStage->MinTime, stats.Bytes->MinTime);
+                                    Max0(cteRef.second->FromStage->MaxTime, stats.Bytes->MaxTime);
+                                    Max0(MaxTime, stats.Bytes->MaxTime);
+                                }
+                                if (stats.RowsNode) {
+                                    cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *stats.RowsNode);
                                 }
                             }
                             if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
@@ -681,22 +657,12 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     ingressNode = GetInputStatNode(ingress0);
                                 }
                                 if (ingressNode) {
-                                    if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
-                                        stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
-                                            *bytesNode, 0, 0,
-                                            ingressNode->GetValueByPath("FirstMessageMs"),
-                                            ingressNode->GetValueByPath("LastMessageMs"),
-                                            ingressNode->GetValueByPath("WaitTimeUs.History")
-                                        );
-                                        Min0(stage->MinTime, stage->IngressBytes->MinTime);
-                                        Max0(stage->MaxTime, stage->IngressBytes->MaxTime);
-                                    } else {
-                                        stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes);
-                                    }
-                                    if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
-                                        stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
-                                    } else {
-                                        stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows);
+                                    auto stats = LoadChannelStats(*ingressNode, IngressBytes, IngressRows, nullptr);
+                                    stage->IngressBytes = stats.Bytes;
+                                    stage->IngressRows = stats.Rows;
+                                    if (stats.BytesNode) {
+                                        Min0(stage->MinTime, stats.Bytes->MinTime);
+                                        Max0(stage->MaxTime, stats.Bytes->MaxTime);
                                     }
                                 }
                             }
@@ -788,39 +754,23 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     auto name = nameNode->GetStringSafe();
                     if ((outputConnection && name == ToString(outputConnection->Stage.PlanNodeId)) || name == "RESULT") {
                         if (auto* statNode = GetOutputStatNode(subNode)) {
-                            if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
-                                stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
-                                    *bytesNode, 0, 0,
-                                    statNode->GetValueByPath("FirstMessageMs"),
-                                    statNode->GetValueByPath("LastMessageMs"),
-                                    statNode->GetValueByPath("WaitTimeUs.History")
-                                );
-                                Min0(stage->MinTime, stage->OutputBytes->MinTime);
-                                Max0(stage->MaxTime, stage->OutputBytes->MaxTime);
-                            } else {
-                                stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
+                            auto stats = LoadChannelStats(*statNode, OutputBytes, OutputRows, OutputChunkSize);
+                            stage->OutputBytes = stats.Bytes;
+                            stage->OutputRows = stats.Rows;
+                            if (stats.HasChunks) {
+                                stage->OutputChunks = stats.Chunks;
                             }
-                            if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
-                                stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
-
-                                if (!stage->Operators.front().OutputRows) {
-                                    stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
-                                }
-                            } else {
-                                stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows);
-
-                                if (!stage->Operators.front().OutputRows) {
-                                    stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows);
-                                }
+                            if (stats.ChunkSize) {
+                                stage->OutputChunkSize = stats.ChunkSize;
                             }
-                            if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
-                                if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
-                                    stage->OutputChunks = sumNode->GetIntegerSafe();
-                                    if (stage->OutputChunks) {
-                                        stage->OutputChunkSize = std::make_shared<TScalarMetric>(OutputChunkSize,
-                                            stage->OutputBytes->Details.Sum / stage->OutputChunks);
-                                    }
-                                }
+                            if (stats.BytesNode) {
+                                Min0(stage->MinTime, stats.Bytes->MinTime);
+                                Max0(stage->MaxTime, stats.Bytes->MaxTime);
+                            }
+                            if (!stage->Operators.front().OutputRows) {
+                                stage->Operators.front().OutputRows = stats.RowsNode
+                                    ? std::make_shared<TSingleMetric>(OperatorOutputRows, *stats.RowsNode)
+                                    : std::make_shared<TSingleMetric>(OperatorOutputRows);
                             }
                         }
                         if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
@@ -908,37 +858,26 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                                         if (planNodeId == nameNode->GetStringSafe()) {
                                             if (auto* statNode = GetInputStatNode(subNode)) {
-                                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
-                                                    connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
-                                                        *bytesNode, 0, 0,
-                                                        statNode->GetValueByPath("FirstMessageMs"),
-                                                        statNode->GetValueByPath("LastMessageMs"),
-                                                        statNode->GetValueByPath("WaitTimeUs.History")
-                                                    );
-                                                    Min0(stage->MinTime, connection->InputBytes->MinTime);
-                                                    Max0(stage->MaxTime, connection->InputBytes->MaxTime);
-                                                    inputBytes += connection->InputBytes->Details.Sum;
-                                                } else {
-                                                    connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
+                                                auto stats = LoadChannelStats(*statNode, InputBytes, InputRows, InputChunkSize);
+                                                connection->InputBytes = stats.Bytes;
+                                                connection->InputRows = stats.Rows;
+                                                if (stats.HasChunks) {
+                                                    connection->InputChunks = stats.Chunks;
                                                 }
-                                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
-                                                    connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
+                                                if (stats.ChunkSize) {
+                                                    connection->InputChunkSize = stats.ChunkSize;
+                                                }
+                                                if (stats.BytesNode) {
+                                                    Min0(stage->MinTime, stats.Bytes->MinTime);
+                                                    Max0(stage->MaxTime, stats.Bytes->MaxTime);
+                                                    inputBytes += stats.Bytes->Details.Sum;
+                                                }
+                                                if (stats.RowsNode) {
                                                     for (auto& op : stage->Operators) {
                                                         for(auto& input : op.Inputs) {
                                                             if (input.PlanNodeId == connectionPlanNodeId) {
-                                                                input.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
+                                                                input.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *stats.RowsNode);
                                                             }
-                                                        }
-                                                    }
-                                                } else {
-                                                    connection->InputRows = std::make_shared<TSingleMetric>(InputRows);
-                                                }
-                                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
-                                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
-                                                        connection->InputChunks = sumNode->GetIntegerSafe();
-                                                        if (connection->InputChunks) {
-                                                            connection->InputChunkSize = std::make_shared<TScalarMetric>(InputChunkSize,
-                                                                connection->InputBytes->Details.Sum / connection->InputChunks);
                                                         }
                                                     }
                                                 }
@@ -1030,23 +969,15 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 ingressNode = GetInputStatNode(ingress0);
                             }
                             if (ingressNode) {
-                                if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
-                                    stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
-                                        *bytesNode, 0, 0,
-                                        ingressNode->GetValueByPath("FirstMessageMs"),
-                                        ingressNode->GetValueByPath("LastMessageMs"),
-                                        ingressNode->GetValueByPath("WaitTimeUs.History")
-                                    );
-                                    Min0(stage->MinTime, stage->IngressBytes->MinTime);
-                                    Max0(stage->MaxTime, stage->IngressBytes->MaxTime);
-                                } else {
-                                    stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes);
+                                auto stats = LoadChannelStats(*ingressNode, IngressBytes, IngressRows, nullptr);
+                                stage->IngressBytes = stats.Bytes;
+                                stage->IngressRows = stats.Rows;
+                                if (stats.BytesNode) {
+                                    Min0(stage->MinTime, stats.Bytes->MinTime);
+                                    Max0(stage->MaxTime, stats.Bytes->MaxTime);
                                 }
-                                if (auto* rowsNode = ingressNode->GetValueByPath("Rows")) {
-                                    stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows, *rowsNode);
-                                    ingressRowsNode = rowsNode;
-                                } else {
-                                    stage->IngressRows = std::make_shared<TSingleMetric>(IngressRows);
+                                if (stats.RowsNode) {
+                                    ingressRowsNode = stats.RowsNode;
                                 }
                             }
                         }

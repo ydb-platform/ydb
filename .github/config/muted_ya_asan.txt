@@ -85,7 +85,6 @@ ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable
 ydb/core/kqp/ut/tli unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TBrokenLocksReadAfterUpsertOlap
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CallDropViewOnTable
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CreateViewIfNotExists
@@ -107,7 +106,6 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestTest.ShouldWrite
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
-ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithEmptyDatabase
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithFederationRoot
@@ -194,7 +192,6 @@ ydb/core/tx/datashard/ut_lock_rows unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_stats DataShardStats.BackupTableStatsReportInterval
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-1-0
-ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-1-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-0
@@ -248,7 +245,6 @@ ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnknownCodecRejec
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnknownFormatRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ZeroPartitionsRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut unittest.sole chunk
-ydb/services/persqueue_v1/actors/schema/topic/ut SchemaOps_TopicAPI.AlterTopicAddAndDropConsumer
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.FailWithoutGrants
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/services/sqs_topic/ut unittest.sole chunk
@@ -267,7 +263,6 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_stable-26-3-1_to_stable-26-2-1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_stable-26-3-1_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_stable-26-3-1_to_stable-26-3-1-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-4_to_prestable-26-4-codec1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-4_to_prestable-26-4-codec5-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-4_to_stable-26-3-1-codec0-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-4_to_stable-26-3-1-codec1-ROW]
@@ -277,29 +272,23 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_prestable-26-4-codec1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_prestable-26-4-codec2-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_prestable-26-4-codec3-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_prestable-26-4-codec4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-2-1-codec0-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-2-1-codec2-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-2-1-codec3-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-2-1-codec4-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-2-1-codec5-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-3-1-codec0-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-3-1-codec3-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-3-1-codec4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-3-1-codec5-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_empty_result[restart_prestable-26-4_to_prestable-26-4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_prestable-26-4_to_prestable-26-4-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_prestable-26-4_to_prestable-26-4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_prestable-26-4_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_stable-26-3-1_to_prestable-26-4-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_stable-26-3-1_to_stable-26-2-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_stable-26-3-1_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_prestable-26-4_to_stable-26-3-1-2-True-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_stable-26-3-1_to_prestable-26-4-1-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_stable-26-3-1_to_prestable-26-4-2-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_stable-26-3-1_to_stable-26-2-1-1-True-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_stable-26-3-1_to_stable-26-2-1-2-True-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_stable-26-3-1_to_stable-26-3-1-2-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_prestable-26-4-0-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_prestable-26-4-0-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_prestable-26-4-1-2048-COLUMN]
@@ -310,26 +299,18 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_prestable-26-4-2-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-0-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-0-8388608-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-0-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-2048-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-8388608-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-8388608-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-2048-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-0-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-0-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-0-8388608-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-2-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-2-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-0-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-0-2048-ROW]
@@ -349,7 +330,6 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_prestable-26-4_to_prestable-26-4-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_prestable-26-4_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_stable-26-3-1_to_prestable-26-4-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_stable-26-3-1_to_stable-26-3-1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_empty_result[restart_stable-26-3-1_to_prestable-26-4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_empty_result[restart_stable-26-3-1_to_stable-26-2-1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_empty_result[restart_stable-26-3-1_to_stable-26-3-1-ROW]
@@ -358,17 +338,11 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_stable-26-3-1_to_prestable-26-4-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_stable-26-3-1_to_prestable-26-4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_stable-26-3-1_to_stable-26-3-1-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_stable-26-3-1_to_stable-26-3-1-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_prestable-26-4-1-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_prestable-26-4-1-True-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_prestable-26-4-2-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_stable-26-3-1-2-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_prestable-26-4_to_stable-26-3-1-2-True-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_prestable-26-4-1-True-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_prestable-26-4-2-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_prestable-26-4-2-True-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_stable-26-2-1-1-False-2048-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_stable-26-2-1-1-True-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_stable-26-3-1-1-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_stable-26-3-1-1-True-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_multistatement[restart_stable-26-3-1_to_stable-26-3-1-2-False-2048-ROW]
@@ -388,7 +362,6 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-0-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-0-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-2048-COLUMN]
@@ -397,15 +370,11 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-8388608-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-2-8388608-ROW]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-0-2048-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-0-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-0-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-2-2048-COLUMN]
-ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-0-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-0-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-1-2048-COLUMN]

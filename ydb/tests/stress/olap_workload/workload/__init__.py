@@ -30,10 +30,8 @@ class WorkloadRunner:
 
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")
-        # Workloads that restart tablets or decommission storage (move_data,
-        # cut_history) can still have restarts landing when the run ends; a plain
-        # remove then dies on transient Unavailable ("Connection to tablet was
-        # lost"), which failed release-asan three retries in a row.
+        # move_data and cut_history can still have tablet restarts landing when the run
+        # ends, and a plain remove then dies on transient Unavailable.
         deadline = time.time() + 120
         while True:
             try:

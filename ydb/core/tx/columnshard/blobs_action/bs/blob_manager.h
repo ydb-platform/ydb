@@ -179,8 +179,7 @@ private:
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
-    // Returns true if any blob in the pending keep/delete queues belongs to one of
-    // the specified BS groups.  Used by the MoveData completion predicate.
+    // Scans the pending keep/delete queues, not live portions.
     bool HasBlobsForGroups(const THashSet<ui32>& groups) const;
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {

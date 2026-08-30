@@ -10,9 +10,12 @@
 namespace NKikimr::NOlap::NActualizer {
 
 void TGranuleActualizationIndex::ExtractActualizationTasks(
-    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
+    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, const bool moveDataOnly) const {
     TInternalTasksContext internalContext;
     for (auto&& i : Actualizers) {
+        if (moveDataOnly && i != MoveDataActualizer) {
+            continue;
+        }
         i->ExtractTasks(tasksContext, externalContext, internalContext);
     }
 }
@@ -80,12 +83,10 @@ TMoveDataQueueSizes TGranuleActualizationIndex::GetMoveDataQueueSizes() const {
 }
 
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {
-    std::vector<TCSMetadataRequest> result;
-    if (TieringActualizer) {
-        auto requests = TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
-        result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
+    if (!TieringActualizer) {
+        return {};
     }
-    return result;
+    return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
 }
 
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {

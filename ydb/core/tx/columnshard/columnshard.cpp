@@ -666,10 +666,10 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     }
 
     const auto& record = ev->Get()->Record;
+    MoveDataState.HiveSender = ev->Sender;
 
     if (MoveDataState.Active) {
         // Hive retry or re-assignment.
-        MoveDataState.HiveSender = ev->Sender;
         bool newGroupsAdded = false;
         for (const auto groupId : record.GetGroups()) {
             newGroupsAdded |= MoveDataState.TargetGroups.emplace(groupId).second;
@@ -679,13 +679,13 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         if (newGroupsAdded && HasIndex()) {
             // Restart actualization with the extended group set. The vacuum leg is not restarted:
             // its scope is local-DB cleanup, independent of which data groups are targeted.
-            MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
-            MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
+            auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
+            index.StopMoveData();
+            index.StartMoveData(MoveDataState.TargetGroups);
         }
         return;
     }
 
-    MoveDataState.HiveSender = ev->Sender;
     MoveDataState.TargetGroups.clear();
     for (const auto groupId : record.GetGroups()) {
         MoveDataState.TargetGroups.emplace(groupId);

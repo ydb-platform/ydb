@@ -1,5 +1,4 @@
 #pragma once
-
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
@@ -43,7 +42,8 @@ public:
     TGranuleActualizationIndex(
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
-    void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
+    void ExtractActualizationTasks(
+        TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, const bool moveDataOnly = false) const;
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);

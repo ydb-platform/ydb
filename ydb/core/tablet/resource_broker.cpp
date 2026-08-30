@@ -1482,8 +1482,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();
-    // Group decommission shares the TTL queue: same limits, separate accounting. Without an
-    // entry here the name would fall through to the unknown task config.
+    // Unregistered names fall through to the unknown task config, so this entry is required.
     task->SetName("CS::MOVE_DATA");
     task->SetQueueName(NLocalDb::ColumnShardCompactionTtlQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());

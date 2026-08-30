@@ -33,10 +33,8 @@ private:
     // Portions confirmed to have blobs in TargetGroups; ready to be rewritten.
     THashMap<TRWAddress, THashSet<ui64>> PortionsToMove;
     THashMap<ui64, TRWAddress> PortionAddress;
-    // Portions whose rewrite task was submitted but has not finished yet. They must
-    // keep counting towards GetMoveDataPortionsCount(): the old blobs enter the
-    // delete queues only when the change commits, so dropping them from the count
-    // at submission would open a premature-TEvMoveDataResponse window.
+    // Submitted but not yet committed. Still counted: the old blobs reach the delete queues
+    // only on commit, so uncounting at submission would open a premature-response window.
     THashSet<ui64> InFlightPortionIds;
     ui64 RejectedPortions = 0;
 

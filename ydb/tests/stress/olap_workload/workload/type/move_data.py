@@ -133,11 +133,9 @@ class WorkloadMoveData(WorkloadBase):
         self._settle_on_stop()
 
     def _settle_on_stop(self):
-        # A stop can land mid-cycle, leaving a decommission in flight; the runner's
-        # cleanup then races the tablet restarts that decommission causes and dies on
-        # transient Unavailable. Restore the pool and give it a bounded window to
-        # converge — best-effort: the cleanup retry is the backstop, this just makes
-        # the common case quiet.
+        # A stop can land mid-cycle with a decommission in flight, and the runner's cleanup
+        # then races the tablet restarts it causes. Best-effort restore; the cleanup retry
+        # is the real backstop.
         try:
             units = self._storage_units()
             if units is not None and units.count < 2:

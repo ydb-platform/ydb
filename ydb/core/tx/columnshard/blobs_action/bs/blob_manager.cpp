@@ -523,6 +523,8 @@ bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
 }
 
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
+    // We assume here that all the channels have the same group type.
+    // So, just in case, in the future 0, 1 channels be different from the rest, the code will still work.
     if (TabletInfo && TabletInfo->Channels.size() > NBlobOperations::TGlobal::FirstDataChannel) {
         return TabletInfo->Channels[NBlobOperations::TGlobal::FirstDataChannel].Type;
     }

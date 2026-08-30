@@ -103,9 +103,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
-    // Spelled out like the other CS task types (CS::SCAN_READ, CS::NORMALIZER) rather than
-    // pulled from the actualizer header. Registered in resource_broker.cpp against the same
-    // queue as CS::TTL: scheduling is unchanged, only the accounting is separated.
+    // Literal like the other CS task types; registered in resource_broker.cpp.
     , MoveDataTaskSubscription("CS::MOVE_DATA", Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
@@ -833,10 +831,8 @@ private:
     NActors::TActorId TabletActorId;
     const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
     const ui64 Generation;
-    // Owned by the tablet, so the in-flight gate below is per-tablet. TObjectCounter counts
-    // instances process-wide: with several ColumnShards on a node, one tablet's request closed
-    // every other tablet's gate, and a tablet re-opens it only when its own request finishes -
-    // which it never got to issue.
+    // Per-tablet on purpose: TObjectCounter counts process-wide, so on a node with several
+    // ColumnShards one tablet's request closed every other tablet's gate permanently.
     const std::shared_ptr<TAtomicCounter> InFlight;
 
     virtual void DoOnRequestsFinished(
@@ -921,21 +917,23 @@ void TColumnShard::SetupMoveDataMetadata() {
 }
 
 bool TColumnShard::SetupTtl() {
-    // This loop is also where the move actualizer extracts its rewrite tasks, so an operator
-    // turning TTL off must not silently turn decommission off with it.
-    if (!MoveDataState.Active &&
-        (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() ||
-            !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL))) {
+    const bool ttlEnabled = AppDataVerified().ColumnShardConfig.GetTTLEnabled() &&
+                            NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL);
+    // The move actualizer extracts its rewrite tasks from this same loop, so turning TTL off
+    // must not turn decommission off with it. It must not turn TTL back ON either: with TTL
+    // disabled the extraction is narrowed to the move, leaving tiering eviction stopped.
+    if (!ttlEnabled && !MoveDataState.Active) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_ttl"},
             {"reason", "disabled"});
         return false;
     }
+    const bool moveDataOnly = !ttlEnabled;
     Counters.GetCSCounters().OnSetupTtl();
 
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges =
-        TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit);
+        TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit, moveDataOnly);
 
     if (indexChanges.empty()) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
@@ -1284,10 +1282,9 @@ void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const 
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
-    // Re-arm the move only. The generic SetupMetadata() is gated on this tablet having no request
-    // in flight, and the subscriber that just delivered this result may still be holding that gate
-    // open - which would silently end the move's request chain. Everything else re-arms on the
-    // periodic wakeup.
+    // Move only: the generic SetupMetadata() is gated on having no request in flight, and the
+    // subscriber that just delivered this result may still hold that gate. Everything else
+    // re-arms on the periodic wakeup.
     SetupMoveDataMetadata();
 }
 

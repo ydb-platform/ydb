@@ -12,7 +12,10 @@ inline TIntrusivePtr<TTabletStorageInfo> MakeTabletInfo(const ui64 tabletId, con
     auto info = MakeIntrusive<TTabletStorageInfo>();
     info->TabletID = tabletId;
     info->TabletType = TTabletTypes::ColumnShard;
-    info->Channels.resize(5);
+    // 0 log, 1 local DB, 2..4 data: more than one data channel so StartBlobBatch's
+    // round-robin actually spreads blobs across them.
+    constexpr ui32 channelCount = 5;
+    info->Channels.resize(channelCount);
     for (ui64 channel = 0; channel < info->Channels.size(); ++channel) {
         info->Channels[channel].Channel = channel;
         info->Channels[channel].Type = TBlobStorageGroupType(erasure);

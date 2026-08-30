@@ -121,7 +121,6 @@ class TestMoveData(RollingUpgradeAndDowngradeFixture):
             time.sleep(2)
         return False
 
-    # ---- data ----
 
     def _create_table(self, table_name):
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -192,7 +191,6 @@ class TestMoveData(RollingUpgradeAndDowngradeFixture):
             f"pool did not converge to {initial_count - 1} units after the roll"
         )
 
-        # Put the pool back and confirm the table survives the growth too.
         self._alter_units(unit_kind, 1)
         assert self._wait_units(initial_count), "pool did not return to its initial size"
         self._assert_readable(table_name, self.rows_count)

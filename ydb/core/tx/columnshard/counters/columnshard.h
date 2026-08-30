@@ -236,8 +236,6 @@ public:
     }
 
     // A portion left the queues because none of its blobs resolved into a target group.
-    // Silent before: a move that selected everything and confirmed nothing looked the
-    // same as a move that was never asked to do anything.
     void OnMoveDataPortionsRejected(const ui64 count) const {
         MoveDataPortionsRejectedCount->Add(count);
     }

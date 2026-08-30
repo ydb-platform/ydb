@@ -203,10 +203,8 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
 }
 
 TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
-    TMoveDataQueueSizes result;
-    result.Pending = PendingPortionIds.size();
-    result.InFlight = InFlightPortionIds.size();
-    result.Rejected = RejectedPortions;
+    TMoveDataQueueSizes result{ .Pending = PendingPortionIds.size(), .ConfirmedToMove = 0, .InFlight = InFlightPortionIds.size(),
+        .Rejected = RejectedPortions };
     for (auto& [addr, portions] : PortionsToMove) {
         result.ConfirmedToMove += portions.size();
     }

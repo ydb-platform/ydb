@@ -3,6 +3,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_race GroupReconfigurationRace.Test_block4
 ydb/core/blobstorage/ut_blobstorage/ut_race unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/kafka_proxy/ut unittest.sole chunk
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeStrings
 ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion

@@ -14,7 +14,6 @@ from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.types import Erasure
-from ydb.public.tools.federation_recipe import cm_requests
 
 
 PRE_INSTALLED_ACCOUNTS = ("prod", "test")
@@ -29,6 +28,39 @@ def _setenv(varname, value):
     except Exception:
         pass
 
+_PQ_TABLES_DDL = [
+    """
+--!syntax_v1
+CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Cluster` (
+    name Utf8,
+    enabled Bool,
+    local Bool,
+    balancer Utf8,
+    weight Uint64,
+    advisable Bool,
+    kikimrHost Utf8,
+    kikimrMessageBusMaxInFlight Int32,
+    kikimrMessageBusMaxMessageSize Int64,
+    kikimrPort Int32,
+    zookeeperAddress Utf8,
+    PRIMARY KEY (name)
+)
+""",
+    """
+--!syntax_v1
+CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Versions` (
+    name Utf8,
+    version Int64,
+    PRIMARY KEY (name)
+)
+""",
+]
+
+
+def _exec_queries(pool, queries):
+    for q in queries:
+        pool.execute_with_retries(q)
+
 
 class FederationRecipe(object):
     def __init__(self, ydb_cluster_names=("cluster_a", "cluster_b")):
@@ -40,7 +72,6 @@ class FederationRecipe(object):
         self.__port_manager = port_manager.PortManager()
         self.__cm_pid = None
         self.__cm_stderr_file = None
-        self.__cm = None
 
         for name in ydb_cluster_names:
             self.__clusters[name] = None
@@ -125,23 +156,257 @@ class FederationRecipe(object):
             commit_tx=True,
         )
 
-    def _init_cm(self, cm_port):
-        actions = [
-            cm_requests.request_create_account_template(),
-            cm_requests.request_create_consumer_template(),
-            cm_requests.request_create_topic_template(),
-            cm_requests.request_create_account('admin'),
-        ]
-        for cluster_name, cluster_port in self.__cluster_ports.items():
-            actions.append(cm_requests.request_create_cluster(cluster_name, cluster_port))
+    def _pre_init_cm(self, meta_port):
+        """
+        Populate CM and pqdiscovery tables after CM's first run has created them.
+        CM will restore in-memory state from these tables on its second run.
+        """
+        logger.info("Populating CM tables via YQL")
+        endpoint = "localhost:{}".format(meta_port)
+        now_ms = int(time.time() * 1000)
 
-        try:
-            cm = cm_requests.CMApiHelper('localhost:{}'.format(cm_port))
-            cm.exec_request(actions)
-            return True, cm
-        except Exception as e:
-            logger.debug("CM init failed: {}".format(e))
-            return False, None
+        driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                _exec_queries(pool, _PQ_TABLES_DDL)
+
+                pool.execute_with_retries("""
+                    --!syntax_v1
+                    UPSERT INTO `/Root/AccountTemplates`
+                        (Name, TopicPartitionsCountMax, TopicPartitionsCountSum, TopicsCount,
+                         TopicTemplatesCount, ConsumersCount, ConsumerTemplatesCount,
+                         ClustersCount, AccountsCount, AccountTemplatesCount, PathsCount,
+                         MaxMetadataPerEntry, WriteSpeedNotifyThreshold, AbcServiceValidated,
+                         FolderId, SwitchedToDatabase, AbcFolderId, MonitoringProjectId,
+                         CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                    VALUES
+                        ('default', 10, 100, 10, 1, 20, 10, 3, 100, 1, 10, 10,
+                         0, false, '', false, '', '',
+                         {now_ms}, {now_ms}, 'admin', 'admin');
+                """.format(now_ms=now_ms))
+
+                pool.execute_with_retries("""
+                    --!syntax_v1
+                    UPSERT INTO `/Root/TopicTemplates`
+                        (Name, PartitionsCount, RetentionTimeSec, FormatVersion, Codecs,
+                         MaxMessageSize, MaxDiskSize, PartitionsPerTablet,
+                         AllowUnauthorizedRead, AllowUnauthorizedWrite,
+                         MaxPartitionWriteSpeed, MaxPartitionsCount,
+                         ScaleThresholdTime, ScaleUpThresholdPercent, ScaleDownThresholdPercent,
+                         ScaleStrategy, PartitionMetricsEnabled, ContentBasedDeduplication,
+                         CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                    VALUES
+                        ('default', 1, 129600, 0, 'raw, gzip, lzop',
+                         12582912, 9223372036854775807, 2,
+                         true, true, 2097152, 0,
+                         0, 0, 0, 'disabled', false, false,
+                         {now_ms}, {now_ms}, 'admin', 'admin');
+                """.format(now_ms=now_ms))
+
+                pool.execute_with_retries("""
+                    --!syntax_v1
+                    UPSERT INTO `/Root/ConsumerTemplates`
+                        (Name, Important, FormatVersion, Codecs,
+                         MaxDelayThreshold, MaxMessageLags, LimitsMode, AllowedDatacenter,
+                         MaxReadRules, MaxPartitions, AvailabilityPeriod,
+                         PartitionMetricsEnabled, ConsumerType, KeepMessagesOrder,
+                         DeadLetterPolicyEnabled, DeadLetterPolicy, MaxProcessingAttempts,
+                         DefaultProcessingTimeoutSeconds, DeadLetterQueue,
+                         DefaultDelayMessageTimeMs, DefaultReceiveMessageWaitTimeMs,
+                         CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                    VALUES
+                        ('default', false, 0, 'raw, gzip, lzop',
+                         86400000000000, 100000000000000, 'wait', '',
+                         2000, 20000, 0,
+                         false, 0, false,
+                         false, 0, 0, 0, '',
+                         0, 0,
+                         {now_ms}, {now_ms}, 'admin', 'admin');
+                """.format(now_ms=now_ms))
+
+                for account_name in ('admin',) + PRE_INSTALLED_ACCOUNTS:
+                    pool.execute_with_retries("""
+                        --!syntax_v1
+                        UPSERT INTO `/Root/Accounts`
+                            (Name, Owner, Parent,
+                             TopicPartitionsCountMax, TopicPartitionsCountSum, TopicsCount,
+                             TopicTemplatesCount, ConsumersCount, ConsumerTemplatesCount,
+                             ClustersCount, AccountsCount, AccountTemplatesCount, PathsCount,
+                             MaxMetadataPerEntry, WriteSpeedNotifyThreshold, AbcServiceValidated,
+                             FolderId, SwitchedToDatabase, AbcFolderId, MonitoringProjectId,
+                             AbcService, AbcId, Responsible, MailingList,
+                             CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                        VALUES
+                            ('{name}', 'admin', 'default',
+                             10, 100, 10, 1, 20, 10, 3, 100, 1, 10, 10,
+                             0, false, '', false, '', '',
+                             'abc_service', 1, '{name}', '',
+                             {now_ms}, {now_ms}, 'admin', 'admin');
+                    """.format(name=account_name, now_ms=now_ms))
+
+                cluster_names = list(self.__cluster_ports.keys())
+                for cluster_name, cluster_port in self.__cluster_ports.items():
+                    balancer = 'localhost:{}'.format(cluster_port)
+                    pool.execute_with_retries("""
+                        --!syntax_v1
+                        UPSERT INTO `/Root/Clusters`
+                            (Name, Balancer, ZkProxy, Enabled, ApplyChangesEnabled,
+                             WriteSpeedCapacity, ReadSpeedCapacity,
+                             KikimrHost, KikimrPort, KikimrMBusInflight, KikimrMBusMaxSize,
+                             MirroringEnabled, MirroringMaxDelayThreshold,
+                             MirroringMaxMsgLag, MirroringMaxPartsPerFetcher,
+                             Weight, YdbLocation,
+                             CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                        VALUES
+                            ('{name}', '{balancer}', '', true, true,
+                             1000000000000000, 1000000000000000,
+                             '', 0, 1024, 136314880,
+                             false, 499999, 1200, 0, 1000, 'test',
+                             {now_ms}, {now_ms}, 'admin', 'admin');
+                    """.format(name=cluster_name, balancer=balancer, now_ms=now_ms))
+
+                    is_local = (cluster_name == cluster_names[0])
+                    pool.execute_with_retries("""
+                        --!syntax_v1
+                        UPSERT INTO `/Root/PQ/Config/V2/Cluster`
+                            (name, enabled, local, balancer, weight)
+                        VALUES
+                            ('{name}', true, {local}, '{balancer}', 1000);
+                    """.format(
+                        name=cluster_name,
+                        local='true' if is_local else 'false',
+                        balancer='localhost',
+                    ))
+
+                pool.execute_with_retries("""
+                    --!syntax_v1
+                    UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version)
+                    VALUES ('Cluster', 1);
+                """)
+
+        logger.info("CM tables pre-initialized")
+
+    def _setup_pqdiscovery(self, cluster_port, local_cluster_name):
+        """
+        Create and populate pqdiscovery tables on a single cluster.
+        Marks local_cluster_name as local=true so ClusterTracker knows the local DC.
+        """
+        endpoint = "localhost:{}".format(cluster_port)
+        driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                _exec_queries(pool, _PQ_TABLES_DDL)
+                for cname in self.__cluster_ports:
+                    pool.execute_with_retries("""
+                        --!syntax_v1
+                        UPSERT INTO `/Root/PQ/Config/V2/Cluster`
+                            (name, enabled, local, balancer, weight)
+                        VALUES
+                            ('{name}', true, {local}, 'localhost', 1000);
+                    """.format(
+                        name=cname,
+                        local='true' if cname == local_cluster_name else 'false',
+                    ))
+                pool.execute_with_retries("""
+                    --!syntax_v1
+                    UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version)
+                    VALUES ('Cluster', 1);
+                """)
+        logger.info("pqdiscovery tables set up on cluster={} (local={})".format(
+            local_cluster_name, local_cluster_name))
+
+    def _setup_cm_topics_consumers(self, cluster_ports):
+        """
+        Create YDB topics and consumers on all clusters, and record them in CM's tables.
+        """
+        logger.info("Setting up topics and consumers")
+        now_ms = int(time.time() * 1000)
+
+        # Set up pqdiscovery on each cluster (ClusterTracker needs local=true for topic creation)
+        for cluster_name, cluster_port in cluster_ports.items():
+            self._setup_pqdiscovery(cluster_port, cluster_name)
+
+        # Wait for ClusterTracker to poll the freshly written tables (polls every 1s in tests)
+        time.sleep(3)
+
+        for cluster_name, cluster_port in cluster_ports.items():
+            endpoint = "localhost:{}".format(cluster_port)
+            for account in PRE_INSTALLED_ACCOUNTS:
+                database = "/Root/logbroker-federation/{}".format(account)
+                driver_config = ydb.DriverConfig(endpoint=endpoint, database=database)
+                with ydb.Driver(driver_config) as driver:
+                    driver.wait(timeout=10)
+                    tc = ydb.TopicClient(driver, ydb.TopicClientSettings())
+                    tc.create_topic(
+                        "topic",
+                        consumers=["consumer"],
+                        attributes={"_federation_account": account},
+                    )
+                logger.info("Created topic/consumer on cluster={} account={}".format(
+                    cluster_name, account))
+
+        meta_port = list(cluster_ports.values())[0]
+        endpoint = "localhost:{}".format(meta_port)
+        driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                for account in PRE_INSTALLED_ACCOUNTS:
+                    topic_path = "{}/topic".format(account)
+                    consumer_path = "{}/consumer".format(account)
+
+                    pool.execute_with_retries("""
+                        --!syntax_v1
+                        UPSERT INTO `/Root/Topics`
+                            (Path, Owner, Parent,
+                             PartitionsCount, RetentionTimeSec, FormatVersion, Codecs,
+                             MaxMessageSize, MaxDiskSize, PartitionsPerTablet,
+                             AllowUnauthorizedRead, AllowUnauthorizedWrite,
+                             MaxPartitionWriteSpeed, MaxPartitionsCount,
+                             ScaleThresholdTime, ScaleUpThresholdPercent,
+                             ScaleDownThresholdPercent, ScaleStrategy,
+                             PartitionMetricsEnabled, ContentBasedDeduplication,
+                             AbcService, AbcId, Responsible, MailingList,
+                             CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                        VALUES
+                            ('{path}', 'admin', 'default',
+                             1, 129600, 0, 'raw, gzip, lzop',
+                             12582912, 9223372036854775807, 2,
+                             true, true, 2097152, 0,
+                             0, 0, 0, 'disabled',
+                             false, false,
+                             '', 0, '', '',
+                             {now_ms}, {now_ms}, 'admin', 'admin');
+                    """.format(path=topic_path, now_ms=now_ms))
+
+                    pool.execute_with_retries("""
+                        --!syntax_v1
+                        UPSERT INTO `/Root/Consumers`
+                            (Path, Owner, Parent,
+                             Important, FormatVersion, Codecs,
+                             MaxDelayThreshold, MaxMessageLags, LimitsMode, AllowedDatacenter,
+                             MaxReadRules, MaxPartitions, AvailabilityPeriod,
+                             PartitionMetricsEnabled, ConsumerType, KeepMessagesOrder,
+                             DeadLetterPolicyEnabled, DeadLetterPolicy, MaxProcessingAttempts,
+                             DefaultProcessingTimeoutSeconds, DeadLetterQueue,
+                             DefaultDelayMessageTimeMs, DefaultReceiveMessageWaitTimeMs,
+                             AbcService, AbcId, Responsible, MailingList,
+                             CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                        VALUES
+                            ('{path}', 'admin', 'default',
+                             false, 0, 'raw, gzip, lzop',
+                             86400000000000, 100000000000000, 'wait', '',
+                             2000, 20000, 0,
+                             false, 0, false,
+                             false, 0, 0, 0, '',
+                             0, 0,
+                             '', 0, '', '',
+                             {now_ms}, {now_ms}, 'admin', 'admin');
+                    """.format(path=consumer_path, now_ms=now_ms))
+
+        logger.info("Topics and consumers registered")
 
     def _start_cm(self):
         assert self.__clusters
@@ -210,6 +475,23 @@ class FederationRecipe(object):
             "--config", "cm_config.yaml",
         ]
 
+        logger.info("Starting CM (first run) to create tables")
+        init_daemon = process.execute(
+            command,
+            check_exit_code=False,
+            cwd=yatest.common.work_path(),
+            stderr=self.__cm_stderr_file,
+            wait=False,
+        )
+        time.sleep(10)
+        try:
+            os.kill(init_daemon.process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+        self._pre_init_cm(meta_port)
+
+        logger.info("Starting CM (second run) with pre-populated tables")
         retries_count = 5
         while retries_count:
             try:
@@ -232,34 +514,13 @@ class FederationRecipe(object):
         _setenv("CM_PORT", str(grpc_port))
         logger.info("CM started on port {}".format(grpc_port))
 
-        retries_count = 10
-        cm = None
-        while retries_count:
-            init_ok, cm = self._init_cm(grpc_port)
-            if init_ok:
-                break
-            time.sleep(5)
-            retries_count -= 1
-
-        assert retries_count, "Failed to init CM"
-        self.__cm = cm
-
-    def _setup_cm_accounts(self):
-        actions = []
-        for account in PRE_INSTALLED_ACCOUNTS:
-            actions.append(cm_requests.request_create_account(account))
-            actions.append(cm_requests.request_create_topic("{}/topic".format(account)))
-            actions.append(cm_requests.request_create_consumer("{}/consumer".format(account)))
-
-        logger.info("Setup CM accounts")
-        self.__cm.exec_request(actions)
-
     def start(self, args):
         for name in list(self.__clusters.keys()):
             cluster, port = self._start_single_ydb(name)
             self._setup_ydb_cluster(name, cluster, port)
         self._start_cm()
-        self._setup_cm_accounts()
+        self._setup_cm_topics_consumers(self.__cluster_ports)
+        time.sleep(100)
 
     def stop(self, args):
         if self.__cm_pid is not None:

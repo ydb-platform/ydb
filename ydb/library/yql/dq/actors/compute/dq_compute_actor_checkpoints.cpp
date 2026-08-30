@@ -776,11 +776,17 @@ bool IsIngress(const TDqTaskSettings& task) {
 }
 
 bool IsEgress(const TDqTaskSettings& task) {
-    for (const auto& output : task.GetOutputs()) {
+    const auto& outputs = task.GetOutputs();
+    if (outputs.empty()) {
+        return true;
+    }
+
+    for (const auto& output : outputs) {
         if (output.HasSink()) {
             return true;
         }
     }
+
     return false;
 }
 

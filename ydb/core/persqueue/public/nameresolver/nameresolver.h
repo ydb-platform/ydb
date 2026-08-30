@@ -223,10 +223,11 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const char
 /** CDC: override ClientsideName with the stream path (not streamImpl). */
 TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clientsideName);
 
-/** Analog of TTopicNameConverter::ForFederation for schema create. */
+/**
+ * Analog of TTopicNameConverter::ForFederation for schema create.
+ * Reads PQ Root and TestDatabaseRoot from AppData()->PQConfig.
+ */
 TTopicNames NamesForCreate(
-    const TString& pqRoot,
-    const TString& ydbTestDatabaseRoot,
     const TString& schemeName,
     const TString& schemeDir,
     const TString& database,

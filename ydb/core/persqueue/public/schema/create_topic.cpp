@@ -97,8 +97,6 @@ TResult ApplyChangesInt(
 
     if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto names = NNameResolver::NamesForCreate(
-                pqConfig.GetRoot(),
-                pqConfig.GetTestDatabaseRoot(),
                 name,
                 path,
                 database,

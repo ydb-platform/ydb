@@ -795,7 +795,7 @@ Y_UNIT_TEST_F(NamesFromConfigFccTopicWhenFederationEnabled, TNameResolverFixture
 
 Y_UNIT_TEST_F(NamesForCreateLegacyAndModern, TNameResolverFixture) {
     SetFcc(false);
-    auto legacy = NamesForCreate("/Root/PQ", "", "rt3.sas--account--topic", "/Root/PQ", "", true);
+    auto legacy = NamesForCreate("rt3.sas--account--topic", "/Root/PQ", "", true);
     UNIT_ASSERT_C(legacy.IsValid(), legacy.GetReason());
     UNIT_ASSERT_VALUES_EQUAL(legacy.GetCluster(), "sas");
     UNIT_ASSERT_VALUES_EQUAL(legacy.GetLegacyProducer(), "account");
@@ -803,7 +803,7 @@ Y_UNIT_TEST_F(NamesForCreateLegacyAndModern, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(legacy.GetAccount(), "account");
 
     auto modern = NamesForCreate(
-        "/Root/PQ", "", "topic", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account");
+        "topic", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account");
     UNIT_ASSERT_C(modern.IsValid(), modern.GetReason());
     UNIT_ASSERT_VALUES_EQUAL(modern.GetCluster(), "sas");
     UNIT_ASSERT_VALUES_EQUAL(modern.GetLegacyProducer(), "account");
@@ -811,7 +811,7 @@ Y_UNIT_TEST_F(NamesForCreateLegacyAndModern, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(modern.GetPrimaryPath(), "/LbCommunal/account/topic");
 
     auto mirrored = NamesForCreate(
-        "/Root/PQ", "", "topic-mirrored-from-sas", "/LbCommunal/account/dir", "/LbCommunal/account",
+        "topic-mirrored-from-sas", "/LbCommunal/account/dir", "/LbCommunal/account",
         false, "", "account");
     UNIT_ASSERT_C(mirrored.IsValid(), mirrored.GetReason());
     UNIT_ASSERT_VALUES_EQUAL(mirrored.GetCluster(), "sas");
@@ -938,33 +938,38 @@ Y_UNIT_TEST_F(WithClientsideNameOverride, TNameResolverFixture) {
 }
 
 Y_UNIT_TEST_F(NamesForCreateBadLegacy, TNameResolverFixture) {
-    UNIT_ASSERT(!NamesForCreate("", "", "rt3.sas--account--topic", "/Root/PQ", "", true).IsValid());
-    UNIT_ASSERT(!NamesForCreate("/Root/PQ2", "", "rt3.sas--account--topic", "/Root/PQ", "", true).IsValid());
-    UNIT_ASSERT(!NamesForCreate("/Root/PQ", "", "account/topic", "/Root/PQ", "", true).IsValid());
+    ActorSystemStub.AppData.PQConfig.SetRoot("");
+    UNIT_ASSERT(!NamesForCreate("rt3.sas--account--topic", "/Root/PQ", "", true).IsValid());
+
+    ActorSystemStub.AppData.PQConfig.SetRoot("/Root/PQ2");
+    UNIT_ASSERT(!NamesForCreate("rt3.sas--account--topic", "/Root/PQ", "", true).IsValid());
+
+    ActorSystemStub.AppData.PQConfig.SetRoot("/Root/PQ");
+    UNIT_ASSERT(!NamesForCreate("account/topic", "/Root/PQ", "", true).IsValid());
 }
 
 Y_UNIT_TEST_F(NamesForCreateModernAndErrors, TNameResolverFixture) {
     auto converter = NamesForCreate(
-        "/Root/PQ", "", "topic", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account");
+        "topic", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account");
     UNIT_ASSERT_C(converter.IsValid(), converter.GetReason());
     UNIT_ASSERT_VALUES_EQUAL(converter.GetPrimaryPath(), "/LbCommunal/account/topic");
     UNIT_ASSERT_VALUES_EQUAL(converter.GetAccount(), "account");
 
     converter = NamesForCreate(
-        "/Root/PQ", "", "topic-mirrored-from-sas", "/LbCommunal/account/dir", "/LbCommunal/account",
+        "topic-mirrored-from-sas", "/LbCommunal/account/dir", "/LbCommunal/account",
         false, "", "account");
     UNIT_ASSERT_C(converter.IsValid(), converter.GetReason());
     UNIT_ASSERT_VALUES_EQUAL(converter.GetPrimaryPath(), "/LbCommunal/account/dir/topic-mirrored-from-sas");
     UNIT_ASSERT_VALUES_EQUAL(converter.GetLegacyProducer(), "account@dir");
 
     UNIT_ASSERT(!NamesForCreate(
-        "", "", "topic", "/LbCommunal/account", "/LbCommunal/account", false, "sas", "account").IsValid());
+        "topic", "/LbCommunal/account", "/LbCommunal/account", false, "sas", "account").IsValid());
     UNIT_ASSERT(!NamesForCreate(
-        "", "", "mirrored-from-sas", "/LbCommunal/account/.topic", "/LbCommunal/account", false, "sas", "account").IsValid());
+        "mirrored-from-sas", "/LbCommunal/account/.topic", "/LbCommunal/account", false, "sas", "account").IsValid());
     UNIT_ASSERT(NamesForCreate(
-        "", "", "topic-mirrored-from-sas", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account").IsValid());
+        "topic-mirrored-from-sas", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account").IsValid());
     UNIT_ASSERT(!NamesForCreate(
-        "", "", "topic-mirrored-from-", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account").IsValid());
+        "topic-mirrored-from-", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account").IsValid());
 }
 
 Y_UNIT_TEST_F(ExpandReadTopicsInvalidName, TNameResolverFixture) {

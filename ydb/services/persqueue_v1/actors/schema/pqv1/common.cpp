@@ -250,8 +250,6 @@ TResult ApplyChangesInt( // create and alter
 
     if (operation == EOperation::Create && !pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto names = NPQ::NNameResolver::NamesForCreate(
-                pqConfig.GetRoot(),
-                pqConfig.GetTestDatabaseRoot(),
                 name,
                 modifyScheme.GetWorkingDir(),
                 database,

@@ -1152,8 +1152,6 @@ TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clients
 }
 
 TTopicNames NamesForCreate(
-    const TString& pqRoot,
-    const TString& ydbTestDatabaseRoot,
     const TString& schemeName,
     const TString& schemeDir,
     const TString& database,
@@ -1161,9 +1159,17 @@ TTopicNames NamesForCreate(
     const TString& localDc,
     const TString& federationAccount
 ) {
+    const auto& pqConfig = AppData()->PQConfig;
     TNameBuilder builder;
     builder.InitForCreate(
-        pqRoot, ydbTestDatabaseRoot, schemeName, schemeDir, database, isLocal, localDc, federationAccount);
+        pqConfig.GetRoot(),
+        pqConfig.GetTestDatabaseRoot(),
+        schemeName,
+        schemeDir,
+        database,
+        isLocal,
+        localDc,
+        federationAccount);
     return builder.ToTopicNames(false);
 }
 

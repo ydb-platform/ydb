@@ -393,7 +393,9 @@ void TKafkaMetadataActor::ApplyPendingTopicResponses() {
             auto topicNodes = CheckTopicNodes(ev.Get());
             if (topicNodes.empty()) {
                 // Already tried YDB discovery. Throw error
-                KAFKA_LOG_ERROR("Could not discovery kafka port for topic '" << topic.Name);
+                YDB_LOG_ERROR("Could not discovery kafka port for topic",
+                    {LogPrefix()},
+                    {"topicName", topic.Name});
                 AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
             } else {
                 AddTopicResponse(topic, ev.Get(), topicNodes);

@@ -579,6 +579,10 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         ev->Record.SetUseBatchPool(true);
     }
 
+    if (Meta.HasSystemColumnsFilter()) {
+        *ev->Record.MutableSystemColumnsFilter() = Meta.GetSystemColumnsFilter();
+    }
+
     ev->Record.SetDataFormat(Meta.GetDataFormat());
     return ev;
 }

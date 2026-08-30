@@ -3,12 +3,16 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <yql/essentials/utils/log/log.h>
+#include <util/memory/pool.h>
 
 namespace NKikimr::NKqp {
 
@@ -528,6 +532,79 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpReadRangesSource& source,
     return shardInfoMap;
 }
 
+static const Ydb::TypedValue* GetBoundLiteral(const NKqpProto::TKqpPhyValue& value) {
+    if (value.GetKindCase() == NKqpProto::TKqpPhyValue::kLiteralValue) {
+        return &value.GetLiteralValue();
+    }
+    return nullptr;
+}
+
+static bool TypedBoundAllows(const NKqpProto::TKqpPhySystemColumnBound& bound, const bool isFrom, const TCell& value,
+    const NScheme::TTypeInfo type)
+{
+    const auto* literal = GetBoundLiteral(bound.GetValue());
+    if (!literal) {
+        return true;
+    }
+    NScheme::TTypeInfoMod typeMod;
+    TString err;
+    if (!NScheme::TypeInfoFromProto(literal->GetType(), typeMod, err)) {
+        return true;
+    }
+    if (typeMod.TypeInfo.GetTypeId() != type.GetTypeId()) {
+        return false;
+    }
+    TMemoryPool pool(256);
+    TCell boundCell;
+    if (!CellFromProtoVal(typeMod.TypeInfo, 0, &literal->GetValue(), false, boundCell, err, pool)) {
+        return true;
+    }
+    TString owned;
+    if (!boundCell.IsNull() && !boundCell.IsInline()) {
+        owned.assign(boundCell.Data(), boundCell.Size());
+        boundCell = TCell(owned.data(), owned.size());
+    }
+    const int cmp = CompareTypedCells(value, boundCell, type);
+    if (isFrom) {
+        return cmp > 0 || (cmp == 0 && bound.GetInclusive());
+    }
+    return cmp < 0 || (cmp == 0 && bound.GetInclusive());
+}
+
+static bool RangeContainsUint64(const NKqpProto::TKqpPhySystemColumnRange& range, const ui64 value) {
+    const ui64 copy = value;
+    const TCell cell = TCell::Make(copy);
+    const NScheme::TTypeInfo type{NScheme::NTypeIds::Uint64};
+    if (range.HasFrom() && !TypedBoundAllows(range.GetFrom(), true, cell, type)) {
+        return false;
+    }
+    if (range.HasTo() && !TypedBoundAllows(range.GetTo(), false, cell, type)) {
+        return false;
+    }
+    return true;
+}
+
+static bool TabletMatchesSystemColumnsFilter(const NKqpProto::TKqpPhySystemColumnsFilter& filter, const ui64 tabletId) {
+    for (const auto& constraint : filter.GetConstraints()) {
+        if (constraint.GetColumnId() != static_cast<ui32>(TKeyDesc::EColumnIdDataShard)) {
+            continue;
+        }
+        if (constraint.RangesSize() == 0) {
+            return false;
+        }
+        bool matched = false;
+        for (const auto& range : constraint.GetRanges()) {
+            if (RangeContainsUint64(range, tabletId)) {
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            return false;
+        }
+    }
+    return true;
+}
 
 TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
@@ -551,7 +628,10 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRanges& read
         return shardInfoMap;
 
     for (const auto& partition :  stageInfo.Meta.ShardKey->GetPartitions()) {
-        if (!readRanges.HasTabletId() || readRanges.GetTabletId() == partition.ShardId) {
+        const bool tabletIdOk = !readRanges.HasTabletId() || readRanges.GetTabletId() == partition.ShardId;
+        const bool systemFilterOk = !readRanges.HasSystemColumnsFilter() ||
+            TabletMatchesSystemColumnsFilter(readRanges.GetSystemColumnsFilter(), partition.ShardId);
+        if (tabletIdOk && systemFilterOk) {
             auto& shardInfo = shardInfoMap[partition.ShardId];
 
             YQL_ENSURE(!shardInfo.KeyReadRanges);

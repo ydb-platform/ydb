@@ -46,6 +46,7 @@ class TPortionsSelector {
     const TInternalPathId PathId;
     const TSnapshot Snapshot;
     const TPKRangesFilter& PkRangesFilter;
+    const TSystemColumnsFilter& SystemColumnsFilter;
     const bool WithNonconflicting;
     const bool WithConflicting;
     const std::optional<THashSet<TInsertWriteId>>& OwnPortions;
@@ -67,6 +68,7 @@ public:
         , PathId(pathId)
         , Snapshot(read.GetSnapshot())
         , PkRangesFilter(*read.PKRangesFilter)
+        , SystemColumnsFilter(*read.SystemColumnsFilter)
         , WithNonconflicting(read.readNonconflictingPortions)
         , WithConflicting(read.readConflictingPortions)
         , OwnPortions(read.ownPortions)
@@ -120,7 +122,7 @@ private:
                 continue;
             }
 
-            bool takePortion = PkRangesFilter.IsUsed(*portion);
+            bool takePortion = PkRangesFilter.IsUsed(*portion) && SystemColumnsFilter.IsUsed(portion->GetPortionId(), TabletId);
             if (takePortion) {
                 takePortion = !DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan);
             }
@@ -156,7 +158,7 @@ private:
                 continue;
             }
 
-            bool takePortion = PkRangesFilter.IsUsed(*portion);
+            bool takePortion = PkRangesFilter.IsUsed(*portion) && SystemColumnsFilter.IsUsed(portion->GetPortionId(), TabletId);
             if (takePortion) {
                 takePortion = !DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan);
             }
@@ -198,6 +200,10 @@ private:
             }
 
             if (DataLocksManager->IsLocked(*portion, NDataLocks::ELockCategory::Scan)) {
+                return true;
+            }
+
+            if (!SystemColumnsFilter.IsUsed(portion->GetPortionId(), TabletId)) {
                 return true;
             }
 

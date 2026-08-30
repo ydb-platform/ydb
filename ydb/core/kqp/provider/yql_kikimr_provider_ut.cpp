@@ -12,6 +12,8 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <util/generic/ylimits.h>
+
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
@@ -662,6 +664,14 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         UNIT_ASSERT_VALUES_EQUAL(
             static_cast<ui32>(partitionColumn->ColumnId),
             static_cast<ui32>(NKikimr::TKeyDesc::EColumnIdDataShard));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(NKikimr::TKeyDesc::EColumnIdDataShard), Max<ui32>() - 999);
+
+        const auto* portionColumn = schemeColumns.FindPtr(NKikimr::YqlPortionColumnName);
+        UNIT_ASSERT(portionColumn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<ui32>(portionColumn->ColumnId),
+            static_cast<ui32>(NKikimr::TKeyDesc::EColumnIdPortion));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(NKikimr::TKeyDesc::EColumnIdPortion), Max<ui32>() - 998);
     }
 
     Y_UNIT_TEST(TestFillAuthPropertiesNone) {

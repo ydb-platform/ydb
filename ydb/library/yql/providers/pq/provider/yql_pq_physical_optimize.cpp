@@ -532,7 +532,7 @@ public:
         auto outputsBuilder = Build<TDqStageOutputsList>(ctx, topicNode.Pos());
         if (const auto outputs = inputStage.Outputs()) {
             outputsBuilder.InitFrom(outputs.Cast());
-            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
         }
         outputsBuilder.Add(dqSink);
 

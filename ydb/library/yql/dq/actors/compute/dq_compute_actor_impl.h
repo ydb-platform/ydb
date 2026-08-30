@@ -446,7 +446,7 @@ protected:
                 ProcessOutputsState.ChannelsReady = false;
                 ProcessOutputsState.HasDataToSend = true;
                 ProcessOutputsState.AllOutputsFinished = false;
-                CA_LOG_T("Can not drain channelId: " << channelId << ", no dst actor id");
+                CA_LOG_T("Cannot drain channelId: " << channelId << ", no dst actor id");
                 if (Y_UNLIKELY(outputChannel.Stats)) {
                     outputChannel.Stats->NoDstActorId++;
                 }
@@ -552,7 +552,9 @@ protected:
                 for (auto& [channelId, inputChannel] : InputChannelsMap) {
                     pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
                 }
+
                 if (!pollSent) {
+                    CA_LOG_T("Cannot poll input channels, continue execute, data was sent: " << ProcessOutputsState.DataWasSent);
                     if (ProcessOutputsState.DataWasSent) {
                         ContinueExecute(EResumeSource::CADataSent);
                     }
@@ -861,7 +863,7 @@ protected:
     }
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
-    //bool ReadyToCheckpoint() is pure and must be overriden in a derived class
+    //bool ReadyToCheckpoint() is pure and must be overridden in a derived class
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override final {
         CA_LOG_D("Commit state, sources count: " << SourcesMap.size() << ", sinks count: " << SinksMap.size());
@@ -877,7 +879,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
     }
 
-    // void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) is pure and must be overriden in a derived class
+    // void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) is pure and must be overridden in a derived class
 
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {

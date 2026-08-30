@@ -631,7 +631,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             ALTER RESOURCE POOL )" << poolId << R"( SET (
                 CONCURRENT_QUERY_LIMIT=0
             );
-        )", EStatus::PRECONDITION_FAILED, "Can not change property concurrent_query_limit for default pool");
+        )", EStatus::PRECONDITION_FAILED, "Cannot change property concurrent_query_limit for default pool");
     }
 
     Y_UNIT_TEST(TestAlterResourcePool) {

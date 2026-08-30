@@ -421,10 +421,10 @@ private:
             UpdateStorageMeta();
         } else {
             if (it->second.GetType() != tenantInfo.GetType()) {
-                ythrow yexception() << "Can not change tenant " << absolutePath << " type without formatting storage, current type " << TStorageMeta::TTenant::EType_Name(it->second.GetType()) << ", please use --format-storage";
+                ythrow yexception() << "Cannot change tenant " << absolutePath << " type without formatting storage, current type " << TStorageMeta::TTenant::EType_Name(it->second.GetType()) << ", please use --format-storage";
             }
             if (it->second.GetSharedTenant() != tenantInfo.GetSharedTenant()) {
-                ythrow yexception() << "Can not change tenant " << absolutePath << " shared resources without formatting storage from '" << it->second.GetSharedTenant() << "', please use --format-storage";
+                ythrow yexception() << "Cannot change tenant " << absolutePath << " shared resources without formatting storage from '" << it->second.GetSharedTenant() << "', please use --format-storage";
             }
             if (it->second.GetNodesCount() != tenantInfo.GetNodesCount() || it->second.GetStorageGroupsCount() != tenantInfo.GetStorageGroupsCount()) {
                 it->second.SetNodesCount(tenantInfo.GetNodesCount());
@@ -477,10 +477,10 @@ private:
         for (auto [tenantPath, tenantInfo] : serverlessTenants) {
             if (!tenantInfo.GetSharedTenant()) {
                 if (sharedTenants.empty()) {
-                    ythrow yexception() << "Can not create serverless tenant, there is no shared tenants, please use `--shared <shared name>`";
+                    ythrow yexception() << "Cannot create serverless tenant, there is no shared tenants, please use `--shared <shared name>`";
                 }
                 if (sharedTenants.size() > 1) {
-                    ythrow yexception() << "Can not create serverless tenant, there is more than one shared tenant, please use `--serverless " << tenantPath << "@<shared name>`";
+                    ythrow yexception() << "Cannot create serverless tenant, there is more than one shared tenant, please use `--serverless " << tenantPath << "@<shared name>`";
                 }
                 tenantInfo.SetSharedTenant(*sharedTenants.begin());
             }
@@ -768,7 +768,7 @@ public:
 
     TString GetDefaultDatabase() const {
         if (StorageMeta_.TenantsSize() > 1) {
-            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
+            ythrow yexception() << "Cannot choose default database, there is more than one tenants, please use `-D <database name>`";
         }
         if (StorageMeta_.TenantsSize() == 1) {
             return GetTenantPath(StorageMeta_.GetTenants().begin()->first);

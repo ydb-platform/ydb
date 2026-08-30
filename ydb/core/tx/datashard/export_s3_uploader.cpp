@@ -666,7 +666,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"selfId", this->SelfId()});
+            {"result", result});
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -677,7 +677,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear();
             Retry();
         } else {
-            Error = TStringBuilder() << LogPrefix() << " error: " << error;
+            NActors::NStructuredLog::TTextWriter writer;
+
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Error = errorBuilder;
             PassAway();
         }
     }

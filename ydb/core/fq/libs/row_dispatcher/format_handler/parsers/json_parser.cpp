@@ -308,6 +308,10 @@ public:
                         return true;
                     }
                     if (doc.error() != simdjson::error_code::UNINITIALIZED) {
+                        if (!doc->is_alive()) {
+                            // json parsing error, unrecoverable, not safe to continue
+                            break;
+                        }
                         doc.rewind();
                     }
                     resultValue = NYql::NUdf::TUnboxedValue();

@@ -65,7 +65,7 @@ private:
     std::optional<TString> StorageId;
 
     virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
-        AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
+        AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()) && !IIndexInfo::IsVirtualColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
         for (auto&& i : ColumnChunks) {
             chunks.emplace_back(i.ExtractDataVerified());

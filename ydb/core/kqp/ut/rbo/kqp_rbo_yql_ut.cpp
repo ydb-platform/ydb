@@ -1229,9 +1229,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             where t1.a = (select max(t2.a) from `/Root/t2` as t2);
         )");
         const auto simplifiedScalarSubplanPlan = GetSimplifiedPlan(scalarSubplanPlan);
-        const auto* orderedUnionOp = FindOperatorByStringField(simplifiedScalarSubplanPlan, "Name", "UnionAll");
-        UNIT_ASSERT_C(orderedUnionOp, scalarSubplanPlan);
-        UNIT_ASSERT_C(GetBoolField(*orderedUnionOp, "Ordered"), scalarSubplanPlan);
+        // The subplan is reduced to a single row by an aggregate that counts its rows along the way, so
+        // that a subquery returning several rows fails the query instead of picking one of them.
+        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Aggregation", ": max("), scalarSubplanPlan);
+        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Aggregation", ": count("), scalarSubplanPlan);
+        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Name", "Join"), scalarSubplanPlan);
     }
 
     Y_UNIT_TEST(ExplainAnalyzeScalarSubquery) {
@@ -1248,10 +1250,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
         const auto& planMap = planJson.GetMapSafe();
         const auto& simplifiedPlan = planMap.at("SimplifiedPlan");
-
-        const auto* emptySource = FindOperatorByStringField(simplifiedPlan, "Name", "EmptySource");
-        UNIT_ASSERT_C(emptySource, plan);
-        UNIT_ASSERT_C(!emptySource->GetMapSafe().contains("OperatorId"), plan);
 
         const auto* unionAll = FindConnectionNode(simplifiedPlan, "UnionAll");
         UNIT_ASSERT_C(unionAll, plan);
@@ -8916,6 +8914,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 SELECT bar.id FROM `/Root/bar` as bar where (NOT EXISTS(SELECT foo.id FROM `/Root/foo` as foo where foo.id == bar.id)) OR bar.id == 1;
             )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where (NOT EXISTS(SELECT foo.id FROM `/Root/foo` as foo where foo.id == bar.id AND foo.id == 1)) OR bar.id == 2 order by bar.id;
+            )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where (NOT EXISTS(SELECT foo.id FROM `/Root/foo` as foo where foo.id == bar.id AND foo.id2 > bar.id2)) OR bar.id == 0 order by bar.id;
+            )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where (bar.id2 NOT IN (SELECT foo.id2 FROM `/Root/foo` as foo where foo.id == bar.id AND foo.id == 1)) OR bar.id == 2 order by bar.id;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
@@ -8927,15 +8934,353 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[0];[1];[2];[3]])",
             R"([[3]])",
             R"([[1]])",
+            R"([[0];[2];[3]])",
+            R"([[0];[1];[2];[3]])",
+            R"([[0];[2];[3]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder() << "query " << i << ": " << result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), results[i], "query " << i);
         }
+    }
+
+    void TestDecorrelation(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemeQuery;
+        for (const auto* table : {"t1", "t2", "t3"}) {
+            schemeQuery += TStringBuilder() << R"(
+                CREATE TABLE `/Root/)" << table << R"(` (
+                    a   Int64   NOT NULL,
+                    b   Int64   NOT NULL,
+                    c   Int64   NOT NULL,
+                    d   String,
+                    e   Int64,
+                    primary key(a)
+                ))" << (columnTables ? " WITH (STORE = column)" : "") << ";\n";
+        }
+
+        auto schemeResult = session.ExecuteSchemeQuery(schemeQuery).GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        //   t1: a in [1, 12], b = a % 4, c = 10 * a, d = 'g' || (a % 3), e = a % 4 except null for a == 1
+        //   a | 1   2   3   4   5   6   7   8   9   10  11  12
+        //   b | 1   2   3   0   1   2   3   0   1   2   3   0
+        //   c | 10  20  30  40  50  60  70  80  90  100 110 120
+        //   d | g1  g2  g0  g1  g2  g0  g1  g2  g0  g1  g2  g0
+        //   e | -   2   3   0   1   2   3   0   1   2   3   0
+        //
+        //   t2: a in [1, 12], b = a % 3, c = a * a, d = 'g' || (a % 4), e = a % 4 except null for a == 1
+        //   a | 1   2   3   4   5   6   7   8   9   10  11  12
+        //   b | 1   2   0   1   2   0   1   2   0   1   2   0
+        //   c | 1   4   9   16  25  36  49  64  81  100 121 144
+        //   d | g1  g2  g3  g0  g1  g2  g3  g0  g1  g2  g3  g0
+        //   e | -   2   3   0   1   2   3   0   1   2   3   0
+        //
+        //   t3: a in [1, 6], b = a % 2, c = a, d = 'g' || (a % 2), e as above
+        auto fill = [&](const TString& table, i64 rowCount, auto&& b, auto&& c, auto&& d) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (i64 a = 1; a <= rowCount; ++a) {
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("a").Int64(a)
+                    .AddMember("b").Int64(b(a))
+                    .AddMember("c").Int64(c(a))
+                    .AddMember("d").String(d(a))
+                    .AddMember("e").OptionalInt64(a == 1 ? std::nullopt : std::make_optional(a % 4))
+                    .EndStruct();
+            }
+            rows.EndList();
+
+            auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        auto group = [](i64 n) { return TString("g") + std::to_string(n); };
+        fill("/Root/t1", 12, [](i64 a) { return a % 4; }, [](i64 a) { return 10 * a; }, [&](i64 a) { return group(a % 3); });
+        fill("/Root/t2", 12, [](i64 a) { return a % 3; }, [](i64 a) { return a * a; }, [&](i64 a) { return group(a % 4); });
+        fill("/Root/t3", 6, [](i64 a) { return a % 2; }, [](i64 a) { return a; }, [&](i64 a) { return group(a % 2); });
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        std::vector<std::pair<std::string, std::string>> cases = {
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT max(t2.c) - 44 FROM `/Root/t2` as t2)
+                ORDER BY t1.a;
+             )",
+             R"([[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c * 2 >= (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t2.b == t1.b)
+                ORDER BY t1.a;
+             )",
+             R"([[5];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t2.a <= t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6];[7];[8];[9]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT max(t2.c - t1.b) FROM `/Root/t2` as t2 WHERE t2.a <= t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[10]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (SELECT t2.a - t1.a FROM `/Root/t2` as t2 WHERE t2.a >= t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.a IN (SELECT t2.a + t1.b FROM `/Root/t2` as t2 WHERE t2.b == t1.b)
+                ORDER BY t1.a;
+             )",
+             R"([[5];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (SELECT CAST(count(*) AS Int64) FROM `/Root/t2` as t2 WHERE t2.a <= t1.a GROUP BY t2.b)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[5];[6];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.a <= t1.a GROUP BY t2.b HAVING count(*) > 3)
+                ORDER BY t1.a;
+             )",
+             R"([[10];[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (NOT EXISTS (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.a == t1.a AND t2.b == 0)) OR t1.a == 1
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[7];[8];[10];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (t1.a NOT IN (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.a == t1.a AND t2.b == 0)) OR t1.a == 3
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[7];[8];[10];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.a IN (
+                    SELECT t2.a + t1.b FROM `/Root/t2` as t2 WHERE t2.b == 0
+                    UNION ALL
+                    SELECT t3.a * 2 FROM `/Root/t3` as t3 WHERE t3.a <= t1.b
+                )
+                ORDER BY t1.a;
+             )",
+             R"([[2];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (
+                    SELECT t2.a FROM `/Root/t2` as t2 JOIN `/Root/t3` as t3 ON t2.b == t3.b
+                    WHERE t2.a > t1.a * 2 GROUP BY t2.a
+                )
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (
+                    SELECT max(t2.c) FROM `/Root/t2` as t2
+                    WHERE t2.a <= t1.a AND t2.b IN (SELECT t3.b FROM `/Root/t3` as t3 WHERE t3.a <= t2.a)
+                )
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.d IN (SELECT t2.d FROM `/Root/t2` as t2 WHERE t2.a == t1.a + 1)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[4];[5]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (t1.d NOT IN (SELECT t2.d FROM `/Root/t2` as t2 WHERE t2.a == t1.a + 1)) OR t1.a == 3
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[6];[7];[8];[9];[10];[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (t1.b NOT IN (SELECT IF(t2.a == 1, NULL, t2.b) FROM `/Root/t2` as t2)) OR t1.a == 3
+                ORDER BY t1.a;
+             )",
+             R"([[3]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (t1.b NOT IN (SELECT IF(t2.a == 3, NULL, t2.b) FROM `/Root/t2` as t2 WHERE t2.a == t1.a)) OR t1.a == 1
+                ORDER BY t1.a;
+             )",
+             R"([[1];[4];[5];[6];[7];[8];[9];[10];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (t1.e NOT IN (SELECT t2.b FROM `/Root/t2` as t2)) OR t1.a == 12
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (t1.e NOT IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.a > 100)) OR t1.a == 12
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[10];[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (t1.e NOT IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.a == t1.a)) OR t1.a == 12
+                ORDER BY t1.a;
+             )",
+             R"([[3];[4];[5];[6];[7];[8];[9];[10];[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (
+                    SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.a > t1.a * 2 GROUP BY t2.a
+                )
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (
+                    SELECT t2.d FROM `/Root/t2` as t2 WHERE t2.b == t1.b GROUP BY t2.d HAVING count(*) > 0
+                )
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2 WHERE t2.a == t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6];[7];[8];[9]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t2.b == t1.e) IS NULL
+                ORDER BY t1.a;
+             )",
+             R"([[1];[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t1.e IS NULL OR t2.b == t1.e) == 144
+                ORDER BY t1.a;
+             )",
+             R"([[1];[4];[8];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (SELECT count(*) FROM `/Root/t2` as t2 WHERE t2.b == t1.b) == 4
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (SELECT count(*) FROM `/Root/t2` as t2 WHERE t2.b == t1.b) == 0
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == t1.b)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.e == t1.e)
+                ORDER BY t1.a;
+             )",
+             R"([[2];[3];[4];[5];[6];[7];[8];[9];[10];[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t2.e == t1.e) IS NULL
+                ORDER BY t1.a;
+             )",
+             R"([[1]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE (SELECT count(*) FROM `/Root/t2` as t2 WHERE t2.e == t1.e) == 0
+                ORDER BY t1.a;
+             )",
+             R"([[1]])"},
+        };
+
+        for (ui32 i = 0; i < cases.size(); ++i) {
+            const auto& [query, expected] = cases[i];
+            auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder() << "query " << i << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, "query " << i);
+        }
+
+        const std::vector<std::string> multiRowQueries = {
+            R"(SELECT t1.a FROM `/Root/t1` as t1 WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2) ORDER BY t1.a;)",
+
+            R"(SELECT t1.a FROM `/Root/t1` as t1
+               WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2 WHERE t2.b == t1.b)
+               ORDER BY t1.a;)",
+
+            R"(SELECT t1.a FROM `/Root/t1` as t1
+               WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2 WHERE t2.b == t1.b GROUP BY t2.c)
+               ORDER BY t1.a;)",
+        };
+
+        for (ui32 i = 0; i < multiRowQueries.size(); ++i) {
+            auto errorSession = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                errorSession.ExecuteQuery(TString(multiRowQueries[i]), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "multi row query " << i << " unexpectedly succeeded");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Scalar subquery returned more than one row",
+                                          "multi row query " << i);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(Decorrelation, ColumnStore) {
+        TestDecorrelation(ColumnStore);
     }
 
     Y_UNIT_TEST(OrderBy) {

@@ -434,8 +434,10 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
 
 void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
     TimeoutTimerActorId = {};
-    KAFKA_LOG_ERROR("Metadata request timed out, correlationId=" << CorrelationId
-        << ", pendingResponses=" << PendingResponses);
+    YDB_LOG_ERROR("Metadata request timed out",
+        {LogPrefix()},
+        {"correlationId", CorrelationId},
+        {"pendingResponses", PendingResponses});
     RespondWithTimeout(ctx);
 }
 

@@ -26,8 +26,8 @@ class TStorageSharedBlobsManager;
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 struct TEntryKey {
-    ui32 Channel;
-    ui32 FromGeneration;
+    ui32 Channel = 0;
+    ui32 FromGeneration = 0;
 
     bool operator==(const TEntryKey& o) const noexcept {
         return Channel == o.Channel && FromGeneration == o.FromGeneration;
@@ -76,9 +76,8 @@ public:
         return SweepCandidates ? SweepCandidates : empty;
     }
 
-    // Candidates still alive in the current sweep: entries disproved by earlier
-    // batches are excluded, so later batches neither re-examine nor re-disprove
-    // them (which would also inflate the disproval backoff counter).
+    // Excludes entries disproved by earlier batches, so later batches neither re-examine
+    // nor re-disprove them.
     std::shared_ptr<const TVector<TEntryKey>> GetActiveSweepCandidates() const {
         return std::make_shared<const TVector<TEntryKey>>(SweepSurvivors);
     }
@@ -92,9 +91,13 @@ public:
         return Min(cooldown, DisprovedRetryMaxCooldown);
     }
 
-    static constexpr TDuration NominateCadence = TDuration::Minutes(1);
-    // With NominateCadence this bounds IsDrained() queue scans to 8 per minute.
-    static constexpr ui32 MaxDrainChecksPerNomination = 8;
+    // Defaults for TColumnShardConfig.CutHistory*; together they bound IsDrained() queue
+    // scans per tablet, which is the cost that scales with ColumnShards per node.
+    static constexpr TDuration DefaultNominateCadence = TDuration::Minutes(1);
+    static constexpr ui32 DefaultMaxDrainChecksPerNomination = 8;
+
+    static TDuration GetNominateCadence();
+    static ui32 GetMaxDrainChecksPerNomination();
 
 protected:
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
@@ -125,8 +128,7 @@ protected:
         return count ? *count : 0;
     }
 
-    // Protected rather than private so unit tests can force the underflow branch
-    // (no public call sequence reaches it: OnPortionRemoved is fenced by PortionKeys).
+    // protected for tests: no public call sequence reaches the underflow branch.
     void DecrementCounter(const TEntryKey& key);
 
 public:
@@ -145,15 +147,13 @@ public:
     }
 
     bool HasPortionSnapshot() const {
-        // True from SetPortionSnapshot until the cursor is fully consumed AND reset:
-        // a non-empty vector covers the not-yet-started case, a positive offset covers
-        // the tail where GetNextBatch already handed out every id.
+        // Non-empty vector covers the not-yet-started case; a positive offset covers the
+        // tail where GetNextBatch already handed out every id.
         return SweepPortionOffset > 0 || !SweepPortionIds.empty();
     }
 
     // True when no earlier entry shares the target's GroupID. Already-cut entries are
-    // transparent: they survive in the boot-time TTabletStorageInfo and would otherwise
-    // block a later same-group entry until the next restart.
+    // transparent: they survive in the boot-time TTabletStorageInfo.
     static bool SeenGroupsCheckPasses(
         const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration, const THashSet<ui32>& cutFromGenerations = {});
 
@@ -181,7 +181,6 @@ private:
 
     TPublishedLevels Published;
 
-    // Named Signals because `Counters` below is the per-entry portion refcount map.
     const NColumnShard::THistoryCutterCounters Signals;
 
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
@@ -205,10 +204,8 @@ private:
     // Shared with per-batch sweep callbacks — one allocation per sweep, not per batch.
     std::shared_ptr<const TVector<TEntryKey>> SweepCandidates;
 
-    // Sweep-disproved entries: re-nomination is pointless until state changes, so it
-    // is suppressed with exponential backoff (base cooldown doubling per consecutive
-    // disproval, capped) — an entry pinned by long-lived portions converges to one
-    // sweep per DisprovedRetryMaxCooldown instead of one per base cooldown forever.
+    // Sweep-disproved entries, suppressed with exponential backoff: an entry pinned by
+    // long-lived portions converges to one sweep per DisprovedRetryMaxCooldown.
     struct TDisprovalState {
         TInstant At;
         ui32 Attempts = 0;
@@ -217,8 +214,6 @@ private:
     THashMap<TEntryKey, TDisprovalState> DisprovedAt;
 
     TInstant LastNominateAt;
-    // First channel to service in the next nomination round (rotation under the
-    // MaxDrainChecksPerNomination cap).
     ui32 NextChannelToCheck = TGlobal::FirstDataChannel;
     TVector<TEntryKey> SweepSurvivors;
 

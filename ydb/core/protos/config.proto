@@ -2951,6 +2951,17 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+
+    // 75 and 76 held MoveDataEnabled/CutHistoryEnabled as bools in an earlier iteration of
+    // this feature; both moved to FeatureFlags. Not reused: an old binary in a rolling
+    // upgrade would misparse a uint32 written under a number it still reads as a bool.
+    reserved 75, 76;
+
+    // CutHistory nomination pacing. Defaults match the previous hardcoded constants; they
+    // bound IsDrained() queue scans to CutHistoryMaxDrainChecksPerNomination per cadence
+    // per tablet, which is the cost that scales with ColumnShards per node.
+    optional uint32 CutHistoryNominateCadenceSeconds = 77 [default = 60];
+    optional uint32 CutHistoryMaxDrainChecksPerNomination = 78 [default = 8];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

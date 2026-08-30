@@ -854,7 +854,7 @@ Y_UNIT_TEST(LegacySimplifiedPlanMultiOperatorCpuOwner) {
     UNIT_ASSERT_C(filter.IsDefined(), simplifiedPlan);
     AssertCpuValues(filter, 7, 7, simplifiedPlan);
 
-    const auto aggregate = FindPlanNodeByKv(filter, "Name", "Aggregate");
+    const auto aggregate = FindPlanNodeByKv(simplifiedPlan, "Name", "Aggregate");
     UNIT_ASSERT_C(aggregate.IsDefined(), simplifiedPlan);
     UNIT_ASSERT_C(!aggregate.GetMapSafe().contains("A-SelfCpu"), simplifiedPlan);
     UNIT_ASSERT_C(!aggregate.GetMapSafe().contains("A-Cpu"), simplifiedPlan);

@@ -78,10 +78,11 @@ private:
     static constexpr int MaxRetries = 3;
 
     void SendBarrier(const TActorContext& ctx) {
-        auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, 0, Channel, /*collect=*/true,
+        const ui32 perGenerationCounter =
+            TBlobManager::AllocateGCPerGenerationCounter(TEvBlobStorage::TEvCollectGarbage::PerGenerationCounterStepSize(nullptr, nullptr));
+        auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, perGenerationCounter, Channel, /*collect=*/true,
             /*collectGeneration=*/NextFromGen - 1, /*collectStep=*/Max<ui32>(), /*keep=*/nullptr, /*doNotKeep=*/nullptr, TInstant::Max(),
             /*issueKeepFlag=*/false, TWriteSource::ColumnShardGC, /*hard=*/true);
-        ev->PerGenerationCounter = TBlobManager::AllocateGCPerGenerationCounter(ev->PerGenerationCounterStepSize());
         SendToBSProxy(ctx, Group, ev.Release());
     }
 
@@ -108,6 +109,22 @@ THistoryCutterWrapper::THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageI
     , SharedBlobs(sharedBlobs)
     , TabletActorId(tabletActorId)
 {
+}
+
+TDuration THistoryCutterWrapper::GetNominateCadence() {
+    if (!HasAppData()) {
+        return DefaultNominateCadence;
+    }
+    const ui32 seconds = AppDataVerified().ColumnShardConfig.GetCutHistoryNominateCadenceSeconds();
+    return seconds ? TDuration::Seconds(seconds) : DefaultNominateCadence;
+}
+
+ui32 THistoryCutterWrapper::GetMaxDrainChecksPerNomination() {
+    if (!HasAppData()) {
+        return DefaultMaxDrainChecksPerNomination;
+    }
+    const ui32 checks = AppDataVerified().ColumnShardConfig.GetCutHistoryMaxDrainChecksPerNomination();
+    return checks ? checks : DefaultMaxDrainChecksPerNomination;
 }
 
 bool THistoryCutterWrapper::IsEnabled() const {
@@ -304,7 +321,7 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     }
     // Evaluating candidates scans the GC queues, and background enqueues fire every few
     // seconds: rate-limit rather than scan per enqueue.
-    if (LastNominateAt && ctx.Now() - LastNominateAt < NominateCadence) {
+    if (LastNominateAt && ctx.Now() - LastNominateAt < GetNominateCadence()) {
         return false;
     }
     LastNominateAt = ctx.Now();
@@ -323,7 +340,7 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     TVector<TEntryKey> batch;
     for (ui32 idx = 0; idx < dataChannels; ++idx) {
         const ui32 ch = TGlobal::FirstDataChannel + (firstChannel - TGlobal::FirstDataChannel + idx) % dataChannels;
-        if (drainChecks >= MaxDrainChecksPerNomination) {
+        if (drainChecks >= GetMaxDrainChecksPerNomination()) {
             NextChannelToCheck = ch;
             break;
         }
@@ -347,7 +364,7 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
             if (!SeenGroupsCheckPasses(key)) {
                 continue;
             }
-            if (drainChecks >= MaxDrainChecksPerNomination) {
+            if (drainChecks >= GetMaxDrainChecksPerNomination()) {
                 break;
             }
             ++drainChecks;

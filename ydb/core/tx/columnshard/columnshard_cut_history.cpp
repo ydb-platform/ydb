@@ -110,14 +110,9 @@ void TColumnShard::SetupCutHistory() {
     }
     cutter->SetLauncherActorId(LauncherID());
     CutHistoryCutter = cutter;
-    // Boot feed starts with EMPTY counters, and that is safe by direction of drift:
-    //   • OnPortionAdded hooks fire only for portions written after boot (compaction/TTL
-    //     output via TChangesWithAppend); boot-loaded portions are NOT counted. Undercount
-    //     can cause a spurious nomination, which the tier-2 sweep then disproves — wasted
-    //     work (bounded by DisprovedRetryCooldown), never an unsafe cut.
-    //   • Removal of an uncounted portion drives the counter to zero/poison — poisoning
-    //     excludes the channel (fail-safe liveness loss, not a safety loss).
-    //   • The authoritative check before any barrier is the tier-2 sweep + final re-check.
+    // Boot feed starts with EMPTY counters: boot-loaded portions are not counted, so the
+    // tier-1 counter can only undercount. Undercount causes a spurious nomination that the
+    // tier-2 sweep disproves, or poisons the channel — both fail-safe, never an unsafe cut.
     cutter->OnBootComplete({});
 }
 
@@ -150,8 +145,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
-    // The snapshot may name portions deleted since the sweep started; a deleted portion
-    // cannot pin blobs in an old group, so skipping it is correct.
+    // A portion deleted since the sweep started cannot pin blobs in an old group.
     if (!HasIndex()) {
         CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, ctx);
         return;

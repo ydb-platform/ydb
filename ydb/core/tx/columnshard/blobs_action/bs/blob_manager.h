@@ -249,8 +249,7 @@ public:
     // Scans BlobsToKeep, BlobsToDelete and BlobsToDeleteDelayed.
     bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
 
-    // One monotonic counter for every TEvCollectGarbage this tablet sends, regular GC and
-    // CutHistory barriers alike; pass PerGenerationCounterStepSize() as `step`.
+    // Shared by regular GC and CutHistory barriers alike; pass PerGenerationCounterStepSize().
     static ui32 AllocateGCPerGenerationCounter(ui32 step);
 
     NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
@@ -260,7 +259,6 @@ public:
         const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, const TActorId& tabletActorId);
 
 private:
-    // Forward-declared to avoid circular include; defined in blob_manager.cpp.
     std::unique_ptr<NBlobOperations::NBlobStorage::THistoryCutterWrapper> HistoryCutter;
     std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);

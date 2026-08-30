@@ -43,10 +43,8 @@ public:
     }
 };
 
-// A stalled cut has several externally indistinguishable causes: GC queues not
-// drained, blobs still shared out, an entry in disproval backoff, a poisoned
-// channel. These separate them. Aggregate rather than per-channel labels — the
-// channel is already in the poison warning.
+// A stalled cut has several externally indistinguishable causes; these separate them.
+// Aggregate labels: the channel is already in the poison warning.
 class THistoryCutterCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;

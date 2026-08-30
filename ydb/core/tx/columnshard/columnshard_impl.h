@@ -541,7 +541,7 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
-    // Non-owning pointer to the cut-history engine; set in SetupCutHistory() once per boot.
+    // Non-owning; set in SetupCutHistory() once per boot.
     NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper* CutHistoryCutter = nullptr;
 
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring

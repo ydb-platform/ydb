@@ -432,6 +432,37 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     Respond();
 }
 
+void TKafkaMetadataActor::HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    TimeoutTimerActorId = {};
+    KAFKA_LOG_ERROR("Metadata request timed out, correlationId=" << CorrelationId
+        << ", pendingResponses=" << PendingResponses);
+    RespondWithTimeout(ctx);
+}
+
+void TKafkaMetadataActor::RespondWithTimeout(const TActorContext& ctx) {
+    ApplyPendingTopicResponses();
+    EnsureBrokersAndController();
+
+    ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+    for (auto& topic : Response->Topics) {
+        // Keep already completed topics (success or earlier error); fail only unfinished ones.
+        if (topic.ErrorCode == EKafkaErrors::NONE_ERROR && topic.Partitions.empty()) {
+            topic.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+        }
+    }
+
+    CancelRequestTimeout();
+    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
+    Die(ctx);
+}
+
+void TKafkaMetadataActor::CancelRequestTimeout() {
+    if (TimeoutTimerActorId) {
+        Send(TimeoutTimerActorId, new TEvents::TEvPoison());
+        TimeoutTimerActorId = {};
+    }
+}
+
 NStructuredLog::TStructuredMessage TKafkaMetadataActor::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"actorClassName", "TKafkaMetadataActor"},

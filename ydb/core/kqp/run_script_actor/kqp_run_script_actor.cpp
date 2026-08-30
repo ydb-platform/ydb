@@ -363,10 +363,11 @@ private:
             }, issues), /* flags */ 0, request->Cookie);
         }
 
-        LOG_I("Exit"
-            << ", finish status: " << FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
-            << ", issues: " << FinishInfo.Issues.ToOneLineString()
-            << ", transient issues: " << FinishInfo.TransientIssues.ToOneLineString());
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit",
+            {"logPrefix", LogPrefix()},
+            {"finishStatus", FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)},
+            {"issues", FinishInfo.Issues.ToOneLineString()},
+            {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
     }
 
     void Finish() {

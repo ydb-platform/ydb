@@ -3,11 +3,16 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/engines/predicate/system_columns_filter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/operations/manager.h>
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+
+#include <util/generic/hash_set.h>
+
+#include <optional>
 
 namespace NLWTrace {
 class TOrbit;
@@ -45,6 +50,7 @@ public:
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
+    std::shared_ptr<NOlap::TSystemColumnsFilter> SystemColumnsFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
@@ -117,6 +123,7 @@ public:
         , Sorting(sorting)
         , TabletId(tabletId)
         , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
+        , SystemColumnsFilter(std::make_shared<TSystemColumnsFilter>(TSystemColumnsFilter::BuildEmpty()))
     {
     }
 

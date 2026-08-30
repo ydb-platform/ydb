@@ -1,7 +1,11 @@
 #include "kqp_olap_compiler.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -10,7 +14,13 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <util/memory/pool.h>
+#include <algorithm>
 #include <memory>
+#include <optional>
+#include <vector>
+#include <util/generic/hash_set.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -51,6 +61,9 @@ public:
         for (const auto& [_, columnMeta] : tableMeta.Columns) {
             YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second);
             MaxColumnId = std::max(MaxColumnId, columnMeta.Id);
+        }
+        for (const auto& [name, sysColumn] : GetSystemColumns()) {
+            YQL_ENSURE(ReadColumns.emplace(name, static_cast<ui32>(sysColumn.ColumnId)).second);
         }
     }
 
@@ -200,6 +213,9 @@ public:
         ReadProto.SetOlapProgram(programBytes);
     }
 
+    void IntersectSystemColumnRanges(ui32 columnId, const TString& name, std::vector<NKqpProto::TKqpPhySystemColumnRange> ranges);
+    void SyncTabletIdFromPartitionConstraint();
+
     EAggFunctionType GetAggFuncType(const std::string& funcName) const {
         YQL_ENSURE(AggFuncTypesMap.find(funcName) != AggFuncTypesMap.end());
         return AggFuncTypesMap.at(funcName);
@@ -312,6 +328,424 @@ std::unordered_set<std::string> YqlKernelCmpFuncs = {
 
 ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx);
+
+TExprBase UnwrapLiteralNode(TExprBase node) {
+    if (const auto maybeJust = node.Maybe<TCoJust>()) {
+        node = maybeJust.Cast().Input();
+    }
+    if (const auto maybeCast = node.Maybe<TCoSafeCast>()) {
+        node = maybeCast.Cast().Value();
+    }
+    return node;
+}
+
+bool IsNamedColumn(const TExprBase& node, const TStringBuf name) {
+    const auto maybeAtom = node.Maybe<TCoAtom>();
+    return maybeAtom && maybeAtom.Cast().StringValue() == name;
+}
+
+std::optional<Ydb::TypedValue> TryMakeTypedValue(const TCoDataCtor& literal) {
+    const auto* type = literal.Ref().GetTypeAnn();
+    if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
+        return std::nullopt;
+    }
+    const auto slot = type->Cast<TDataExprType>()->GetSlot();
+    const auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
+    if (!NKikimr::NScheme::NTypeIds::IsYqlType(typeId)) {
+        return std::nullopt;
+    }
+
+    Ydb::TypedValue proto;
+    proto.mutable_type()->set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(typeId));
+    auto& protoValue = *proto.mutable_value();
+    const auto value = literal.Literal().Value();
+    try {
+        switch (slot) {
+            case EDataSlot::Bool:
+                protoValue.set_bool_value(FromString<bool>(value));
+                break;
+            case EDataSlot::Uint8:
+            case EDataSlot::Uint16:
+            case EDataSlot::Uint32:
+            case EDataSlot::Date:
+            case EDataSlot::Datetime:
+                protoValue.set_uint32_value(FromString<ui32>(value));
+                break;
+            case EDataSlot::Int8:
+            case EDataSlot::Int16:
+            case EDataSlot::Int32:
+            case EDataSlot::Date32:
+                protoValue.set_int32_value(FromString<i32>(value));
+                break;
+            case EDataSlot::Int64:
+            case EDataSlot::Interval:
+            case EDataSlot::Datetime64:
+            case EDataSlot::Timestamp64:
+            case EDataSlot::Interval64:
+                protoValue.set_int64_value(FromString<i64>(value));
+                break;
+            case EDataSlot::Uint64:
+            case EDataSlot::Timestamp:
+                protoValue.set_uint64_value(FromString<ui64>(value));
+                break;
+            case EDataSlot::String:
+            case EDataSlot::Yson:
+                protoValue.set_bytes_value(TString(value));
+                break;
+            case EDataSlot::Utf8:
+            case EDataSlot::Json:
+            case EDataSlot::DyNumber:
+            case EDataSlot::JsonDocument:
+                protoValue.set_text_value(TString(value));
+                break;
+            case EDataSlot::Double:
+                protoValue.set_double_value(FromString<double>(value));
+                break;
+            case EDataSlot::Float:
+                protoValue.set_float_value(FromString<float>(value));
+                break;
+            default:
+                return std::nullopt;
+        }
+    } catch (const yexception&) {
+        return std::nullopt;
+    }
+    return proto;
+}
+
+std::optional<Ydb::TypedValue> TryGetTypedLiteral(const TExprBase& node) {
+    const auto unwrapped = UnwrapLiteralNode(node);
+    if (const auto maybeData = unwrapped.Maybe<TCoDataCtor>()) {
+        return TryMakeTypedValue(maybeData.Cast());
+    }
+    return std::nullopt;
+}
+
+const Ydb::TypedValue* GetBoundLiteral(const NKqpProto::TKqpPhySystemColumnBound& bound) {
+    if (bound.GetValue().GetKindCase() == NKqpProto::TKqpPhyValue::kLiteralValue) {
+        return &bound.GetValue().GetLiteralValue();
+    }
+    return nullptr;
+}
+
+std::optional<int> CompareTypedValues(const Ydb::TypedValue& left, const Ydb::TypedValue& right) {
+    NScheme::TTypeInfoMod leftType;
+    NScheme::TTypeInfoMod rightType;
+    TString err;
+    if (!NScheme::TypeInfoFromProto(left.GetType(), leftType, err) || !NScheme::TypeInfoFromProto(right.GetType(), rightType, err)) {
+        return std::nullopt;
+    }
+    if (leftType.TypeInfo.GetTypeId() != rightType.TypeInfo.GetTypeId()) {
+        return std::nullopt;
+    }
+    TMemoryPool pool(256);
+    TCell leftCell;
+    TCell rightCell;
+    if (!CellFromProtoVal(leftType.TypeInfo, 0, &left.GetValue(), false, leftCell, err, pool) ||
+        !CellFromProtoVal(rightType.TypeInfo, 0, &right.GetValue(), false, rightCell, err, pool))
+    {
+        return std::nullopt;
+    }
+    TString leftOwned;
+    TString rightOwned;
+    if (!leftCell.IsNull() && !leftCell.IsInline()) {
+        leftOwned.assign(leftCell.Data(), leftCell.Size());
+        leftCell = TCell(leftOwned.data(), leftOwned.size());
+    }
+    if (!rightCell.IsNull() && !rightCell.IsInline()) {
+        rightOwned.assign(rightCell.Data(), rightCell.Size());
+        rightCell = TCell(rightOwned.data(), rightOwned.size());
+    }
+    return CompareTypedCells(leftCell, rightCell, leftType.TypeInfo);
+}
+
+using TPhyRange = NKqpProto::TKqpPhySystemColumnRange;
+using TPhyRangeSet = std::vector<TPhyRange>;
+
+void SetLiteralBound(NKqpProto::TKqpPhySystemColumnBound* bound, const Ydb::TypedValue& value, const bool inclusive) {
+    *bound->MutableValue()->MutableLiteralValue() = value;
+    bound->SetInclusive(inclusive);
+}
+
+TPhyRange MakeTypedRange(const std::optional<Ydb::TypedValue>& from, const bool fromInclusive,
+    const std::optional<Ydb::TypedValue>& to, const bool toInclusive)
+{
+    TPhyRange range;
+    if (from) {
+        SetLiteralBound(range.MutableFrom(), *from, fromInclusive);
+    }
+    if (to) {
+        SetLiteralBound(range.MutableTo(), *to, toInclusive);
+    }
+    return range;
+}
+
+std::optional<TPhyRange> RangeFromCompareOp(const TStringBuf op, const Ydb::TypedValue& value, const bool columnOnLeft) {
+    TStringBuf realOp = op;
+    if (!columnOnLeft) {
+        if (op == "lt") {
+            realOp = "gt";
+        } else if (op == "lte") {
+            realOp = "gte";
+        } else if (op == "gt") {
+            realOp = "lt";
+        } else if (op == "gte") {
+            realOp = "lte";
+        } else if (op != "eq") {
+            return std::nullopt;
+        }
+    }
+    if (realOp == "eq") {
+        return MakeTypedRange(value, true, value, true);
+    }
+    if (realOp == "lt") {
+        return MakeTypedRange(std::nullopt, true, value, false);
+    }
+    if (realOp == "lte") {
+        return MakeTypedRange(std::nullopt, true, value, true);
+    }
+    if (realOp == "gt") {
+        return MakeTypedRange(value, false, std::nullopt, true);
+    }
+    if (realOp == "gte") {
+        return MakeTypedRange(value, true, std::nullopt, true);
+    }
+    return std::nullopt;
+}
+
+std::optional<int> CompareFromBounds(const TPhyRange& l, const TPhyRange& r) {
+    if (!l.HasFrom()) {
+        return r.HasFrom() ? std::optional<int>(-1) : std::optional<int>(0);
+    }
+    if (!r.HasFrom()) {
+        return 1;
+    }
+    const auto* left = GetBoundLiteral(l.GetFrom());
+    const auto* right = GetBoundLiteral(r.GetFrom());
+    if (!left || !right) {
+        return std::nullopt;
+    }
+    return CompareTypedValues(*left, *right);
+}
+
+bool RangeIsPoint(const TPhyRange& range) {
+    if (!range.HasFrom() || !range.HasTo() || !range.GetFrom().GetInclusive() || !range.GetTo().GetInclusive()) {
+        return false;
+    }
+    const auto* from = GetBoundLiteral(range.GetFrom());
+    const auto* to = GetBoundLiteral(range.GetTo());
+    if (!from || !to) {
+        return false;
+    }
+    const auto cmp = CompareTypedValues(*from, *to);
+    return cmp && *cmp == 0;
+}
+
+std::optional<ui64> TryGetUint64Bound(const NKqpProto::TKqpPhySystemColumnBound& bound) {
+    const auto* literal = GetBoundLiteral(bound);
+    if (!literal) {
+        return std::nullopt;
+    }
+    switch (literal->GetType().type_id()) {
+        case Ydb::Type::UINT64:
+        case Ydb::Type::TIMESTAMP:
+            return literal->GetValue().uint64_value();
+        case Ydb::Type::UINT32:
+        case Ydb::Type::DATETIME:
+            return literal->GetValue().uint32_value();
+        default:
+            return std::nullopt;
+    }
+}
+
+std::optional<TPhyRangeSet> TryExtractColumnCompare(const TKqpOlapFilterBinaryOp& op, const TStringBuf colName) {
+    std::optional<Ydb::TypedValue> value;
+    bool columnOnLeft = false;
+    if (IsNamedColumn(op.Left(), colName)) {
+        value = TryGetTypedLiteral(op.Right());
+        columnOnLeft = true;
+    } else if (IsNamedColumn(op.Right(), colName)) {
+        value = TryGetTypedLiteral(op.Left());
+        columnOnLeft = false;
+    }
+    if (!value) {
+        return std::nullopt;
+    }
+    auto range = RangeFromCompareOp(op.Operator().Value(), *value, columnOnLeft);
+    if (!range) {
+        return std::nullopt;
+    }
+    return TPhyRangeSet{std::move(*range)};
+}
+
+TPhyRangeSet UnionRangeSets(TPhyRangeSet left, const TPhyRangeSet& right) {
+    left.insert(left.end(), right.begin(), right.end());
+    return left;
+}
+
+TPhyRangeSet IntersectRangeSets(const TPhyRangeSet& left, const TPhyRangeSet& right) {
+    TPhyRangeSet result;
+    for (const auto& l : left) {
+        for (const auto& r : right) {
+            TPhyRange item;
+            if (l.HasFrom() && r.HasFrom()) {
+                const auto* leftLiteral = GetBoundLiteral(l.GetFrom());
+                const auto* rightLiteral = GetBoundLiteral(r.GetFrom());
+                if (!leftLiteral || !rightLiteral) {
+                    continue;
+                }
+                const auto cmp = CompareTypedValues(*leftLiteral, *rightLiteral);
+                if (!cmp) {
+                    continue;
+                }
+                if (*cmp > 0) {
+                    *item.MutableFrom() = l.GetFrom();
+                } else if (*cmp < 0) {
+                    *item.MutableFrom() = r.GetFrom();
+                } else {
+                    SetLiteralBound(item.MutableFrom(), *leftLiteral, l.GetFrom().GetInclusive() && r.GetFrom().GetInclusive());
+                }
+            } else if (l.HasFrom()) {
+                *item.MutableFrom() = l.GetFrom();
+            } else if (r.HasFrom()) {
+                *item.MutableFrom() = r.GetFrom();
+            }
+            if (l.HasTo() && r.HasTo()) {
+                const auto* leftLiteral = GetBoundLiteral(l.GetTo());
+                const auto* rightLiteral = GetBoundLiteral(r.GetTo());
+                if (!leftLiteral || !rightLiteral) {
+                    continue;
+                }
+                const auto cmp = CompareTypedValues(*leftLiteral, *rightLiteral);
+                if (!cmp) {
+                    continue;
+                }
+                if (*cmp < 0) {
+                    *item.MutableTo() = l.GetTo();
+                } else if (*cmp > 0) {
+                    *item.MutableTo() = r.GetTo();
+                } else {
+                    SetLiteralBound(item.MutableTo(), *leftLiteral, l.GetTo().GetInclusive() && r.GetTo().GetInclusive());
+                }
+            } else if (l.HasTo()) {
+                *item.MutableTo() = l.GetTo();
+            } else if (r.HasTo()) {
+                *item.MutableTo() = r.GetTo();
+            }
+            result.emplace_back(std::move(item));
+        }
+    }
+    return result;
+}
+
+std::optional<TPhyRangeSet> TryExtractColumnRanges(const TExprBase& condition, const TStringBuf colName) {
+    if (const auto maybeCompare = condition.Maybe<TKqpOlapFilterBinaryOp>()) {
+        return TryExtractColumnCompare(maybeCompare.Cast(), colName);
+    }
+    if (const auto maybeAnd = condition.Maybe<TKqpOlapAnd>()) {
+        std::optional<TPhyRangeSet> result;
+        for (const auto& child : maybeAnd.Ref().Children()) {
+            auto extracted = TryExtractColumnRanges(TExprBase(child), colName);
+            if (!extracted) {
+                continue;
+            }
+            if (!result) {
+                result = std::move(extracted);
+            } else {
+                result = IntersectRangeSets(*result, *extracted);
+            }
+        }
+        return result;
+    }
+    if (const auto maybeOr = condition.Maybe<TKqpOlapOr>()) {
+        TPhyRangeSet result;
+        bool any = false;
+        for (const auto& child : maybeOr.Ref().Children()) {
+            auto extracted = TryExtractColumnRanges(TExprBase(child), colName);
+            if (!extracted) {
+                return std::nullopt;
+            }
+            any = true;
+            result = UnionRangeSets(std::move(result), *extracted);
+        }
+        if (!any) {
+            return std::nullopt;
+        }
+        return result;
+    }
+    return std::nullopt;
+}
+
+NKqpProto::TKqpPhySystemColumnConstraint* FindMutableConstraint(NKqpProto::TKqpPhySystemColumnsFilter& filter, const ui32 columnId) {
+    for (auto& constraint : *filter.MutableConstraints()) {
+        if (constraint.GetColumnId() == columnId) {
+            return &constraint;
+        }
+    }
+    return nullptr;
+}
+
+const NKqpProto::TKqpPhySystemColumnConstraint* FindConstraint(
+    const NKqpProto::TKqpPhySystemColumnsFilter& filter, const ui32 columnId)
+{
+    for (const auto& constraint : filter.GetConstraints()) {
+        if (constraint.GetColumnId() == columnId) {
+            return &constraint;
+        }
+    }
+    return nullptr;
+}
+
+void TKqpOlapCompileContext::IntersectSystemColumnRanges(
+    const ui32 columnId, const TString& name, std::vector<NKqpProto::TKqpPhySystemColumnRange> ranges)
+{
+    auto* filter = ReadProto.MutableSystemColumnsFilter();
+    auto* constraint = FindMutableConstraint(*filter, columnId);
+    if (!constraint) {
+        constraint = filter->AddConstraints();
+        constraint->SetColumnId(columnId);
+        constraint->SetName(name);
+        for (auto& range : ranges) {
+            *constraint->AddRanges() = std::move(range);
+        }
+    } else {
+        TPhyRangeSet existing;
+        existing.reserve(constraint->RangesSize());
+        for (const auto& range : constraint->GetRanges()) {
+            existing.push_back(range);
+        }
+        auto intersected = IntersectRangeSets(existing, ranges);
+        constraint->ClearRanges();
+        for (auto& range : intersected) {
+            *constraint->AddRanges() = std::move(range);
+        }
+    }
+
+    if (columnId == static_cast<ui32>(TKeyDesc::EColumnIdDataShard)) {
+        SyncTabletIdFromPartitionConstraint();
+    }
+}
+
+void TKqpOlapCompileContext::SyncTabletIdFromPartitionConstraint() {
+    if (!ReadProto.HasSystemColumnsFilter()) {
+        return;
+    }
+    const auto* constraint = FindConstraint(ReadProto.GetSystemColumnsFilter(), static_cast<ui32>(TKeyDesc::EColumnIdDataShard));
+    if (!constraint) {
+        return;
+    }
+    if (constraint->RangesSize() == 0) {
+        ReadProto.SetTabletId(0);
+        return;
+    }
+    if (constraint->RangesSize() == 1 && RangeIsPoint(constraint->GetRanges(0))) {
+        if (auto tabletId = TryGetUint64Bound(constraint->GetRanges(0).GetFrom())) {
+            ReadProto.SetTabletId(*tabletId);
+            return;
+        }
+    }
+    ReadProto.ClearTabletId();
+}
 
 ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
 {
@@ -925,6 +1359,11 @@ ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
 }
 
 void CompileFilter(const TKqpOlapFilter& filterNode, TKqpOlapCompileContext& ctx) {
+    for (const auto& [name, sysColumn] : GetSystemColumns()) {
+        if (auto extracted = TryExtractColumnRanges(filterNode.Condition(), name)) {
+            ctx.IntersectSystemColumnRanges(static_cast<ui32>(sysColumn.ColumnId), TString(name), std::move(*extracted));
+        }
+    }
     const auto condition = CompileCondition(filterNode.Condition(), ctx);
     auto* filter = ctx.CreateFilter();
     filter->MutablePredicate()->SetId(condition);

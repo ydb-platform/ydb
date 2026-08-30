@@ -3,6 +3,8 @@
 #include "shard_key_ranges.h"
 
 #include <memory>
+#include <optional>
+#include <util/generic/hash_set.h>
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -368,6 +370,7 @@ struct TTaskMeta {
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
         std::vector<std::string> GroupByColumnNames;
+        std::optional<NKqpProto::TKqpPhySystemColumnsFilter> SystemColumnsFilter;
     };
 
     TReadInfo ReadInfo;

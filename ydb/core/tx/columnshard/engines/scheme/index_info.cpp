@@ -405,7 +405,7 @@ std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
     const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (const ui32 id : ids) {
-        AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id));
+        AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id) && !TIndexInfo::IsVirtualColumn(id));
         auto it = columns.find(id);
         AFL_VERIFY(it != columns.end());
         auto f = TIndexInfo::BuildArrowField(it->second, cache);
@@ -594,14 +594,14 @@ std::vector<ui32> TIndexInfo::GetEntityIds() const {
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
     const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const {
-    AFL_VERIFY(!IsSpecialColumn(column.Id));
+    AFL_VERIFY(!IsSpecialColumn(column.Id) && !IsVirtualColumn(column.Id));
     return std::make_shared<TColumnFeatures>(column.Id, GetColumnFieldVerified(column.Id), DefaultSerializer, operators->GetDefaultOperator(),
         NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder(), column.PType);
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
     const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const {
-    if (IsSpecialColumn(columnId)) {
+    if (IsSpecialColumn(columnId) || IsVirtualColumn(columnId)) {
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
             false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt);
     } else {
@@ -628,7 +628,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size());
             const ui32 originalColId = original.SchemaColumnIdsWithSpecials[index];
             SchemaColumnIdsWithSpecials.emplace_back(originalColId);
-            if (!IIndexInfo::IsSpecialColumn(originalColId)) {
+            if (!IIndexInfo::IsSpecialColumn(originalColId) && !IIndexInfo::IsVirtualColumn(originalColId)) {
                 AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount);
                 auto it = original.Columns.find(originalColId);
                 AFL_VERIFY(it != original.Columns.end())("column_id", originalColId);
@@ -639,7 +639,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
 
         const auto addFromDiff = [&](const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> /*originalIndex*/) {
             const ui32 colId = col.GetId();
-            AFL_VERIFY(!IIndexInfo::IsSpecialColumn(colId));
+            AFL_VERIFY(!IIndexInfo::IsSpecialColumn(colId) && !IIndexInfo::IsVirtualColumn(colId));
             SchemaColumnIdsWithSpecials.emplace_back(colId);
             auto tableCol = BuildColumnFromProto(col, cache);
             Columns.emplace(colId, TNameTypeInfo(tableCol.Name, tableCol.PType));

@@ -14,6 +14,8 @@ using TColumnSaver = NArrow::NAccessor::TColumnSaver;
 class IIndexInfo {
 public:
     enum class ESpecialColumn: ui32 {
+        PARTITION_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_PARTITION_ID_INDEX,
+        PORTION_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_PORTION_ID_INDEX,
         PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
         TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX,
         WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX,
@@ -31,11 +33,15 @@ public:
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
     static constexpr const char* SPEC_COL_WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID;
     static constexpr const char* SPEC_COL_DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG;
-    static constexpr ui32 SpecialColumnsCount = 4;
+    static constexpr const char* SPEC_COL_PARTITION_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_PARTITION_ID;
+    static constexpr const char* SPEC_COL_PORTION_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_PORTION_ID;
+    static constexpr ui32 SpecialColumnsCount = 6;
 
     static const inline std::shared_ptr<arrow::Field> PlanStepField = arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64());
     static const inline std::shared_ptr<arrow::Field> TxIdField = arrow::field(SPEC_COL_TX_ID, arrow::uint64());
     static const inline std::shared_ptr<arrow::Field> WriteIdField = arrow::field(SPEC_COL_WRITE_ID, arrow::uint64());
+    static const inline std::shared_ptr<arrow::Field> PartitionIdField = arrow::field(SPEC_COL_PARTITION_ID, arrow::uint64());
+    static const inline std::shared_ptr<arrow::Field> PortionIdField = arrow::field(SPEC_COL_PORTION_ID, arrow::uint64());
 
     static const char* GetDeleteFlagColumnName() {
         return SPEC_COL_DELETE_FLAG;
@@ -86,6 +92,8 @@ public:
     }
 
     static void AddSpecialFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
+        fields.push_back(PartitionIdField);
+        fields.push_back(PortionIdField);
         AddSnapshotFields(fields);
         static const std::shared_ptr<arrow::Field> f = arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean());
         fields.push_back(f);
@@ -114,14 +122,14 @@ public:
     }
 
     static const std::vector<std::string>& GetSystemColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
-            std::string(SPEC_COL_WRITE_ID), std::string(SPEC_COL_DELETE_FLAG) };
+        static const std::vector<std::string> result = { std::string(SPEC_COL_PARTITION_ID), std::string(SPEC_COL_PORTION_ID),
+            std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID), std::string(SPEC_COL_WRITE_ID), std::string(SPEC_COL_DELETE_FLAG) };
         return result;
     }
 
     static const std::vector<ui32>& GetSystemColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID,
-            (ui32)ESpecialColumn::DELETE_FLAG };
+        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PARTITION_ID, (ui32)ESpecialColumn::PORTION_ID,
+            (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID, (ui32)ESpecialColumn::DELETE_FLAG };
         return result;
     }
 
@@ -165,6 +173,8 @@ public:
 
     static void AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId);
     static void AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete);
+    static void AddPartitionIdColumn(NArrow::TGeneralContainer& batch, const ui64 tabletId);
+    static void AddPortionIdColumn(NArrow::TGeneralContainer& batch, const ui64 portionId);
 
     static ui64 GetSpecialColumnsRecordSize() {
         return sizeof(ui64) + sizeof(ui64) + sizeof(bool);
@@ -183,6 +193,18 @@ public:
         return result;
     }
 
+    static std::shared_ptr<arrow::Schema> ArrowSchemaPortionId() {
+        static std::shared_ptr<arrow::Schema> result =
+            std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PORTION_ID, arrow::uint64()) });
+        return result;
+    }
+
+    static std::shared_ptr<arrow::Schema> ArrowSchemaPartitionId() {
+        static std::shared_ptr<arrow::Schema> result =
+            std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PARTITION_ID, arrow::uint64()) });
+        return result;
+    }
+
     static bool IsSpecialColumn(const arrow::Field& field) {
         return IsSpecialColumn(field.name());
     }
@@ -195,6 +217,18 @@ public:
     static bool IsSpecialColumn(const ui32 fieldId) {
         return fieldId == (ui32)ESpecialColumn::PLAN_STEP || fieldId == (ui32)ESpecialColumn::TX_ID ||
                fieldId == (ui32)ESpecialColumn::WRITE_ID || fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
+    }
+
+    static bool IsVirtualColumn(const arrow::Field& field) {
+        return IsVirtualColumn(field.name());
+    }
+
+    static bool IsVirtualColumn(const std::string& fieldName) {
+        return fieldName == SPEC_COL_PARTITION_ID || fieldName == SPEC_COL_PORTION_ID;
+    }
+
+    static bool IsVirtualColumn(const ui32 fieldId) {
+        return fieldId == (ui32)ESpecialColumn::PARTITION_ID || fieldId == (ui32)ESpecialColumn::PORTION_ID;
     }
 
     static bool IsNullableVerified(const ui32 /*fieldId*/) {

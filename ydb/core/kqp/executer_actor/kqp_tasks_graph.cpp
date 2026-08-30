@@ -159,6 +159,9 @@ void FillOlapReadInfo(TTaskMeta& taskMeta, NKikimr::NMiniKQL::TType* resultType,
     for (const auto& name: readOlapRange->GetOlapProgramParameterNames()) {
         taskMeta.ReadInfo.OlapProgram.ParameterNames.insert(name);
     }
+    if (readOlapRange->HasSystemColumnsFilter()) {
+        taskMeta.ReadInfo.SystemColumnsFilter = readOlapRange->GetSystemColumnsFilter();
+    }
 }
 
 void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRanges>& keyReadRanges,
@@ -404,6 +407,9 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 
                 olapProgram->SetParametersSchema(schema);
                 olapProgram->SetParameters(parameters);
+                if (task.Meta.ReadInfo.SystemColumnsFilter) {
+                    *protoTaskMeta.MutableSystemColumnsFilter() = *task.Meta.ReadInfo.SystemColumnsFilter;
+                }
             } else {
                 YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
             }
@@ -2090,6 +2096,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             readInfo.ItemsLimit = meta.GetItemsLimit();
             readInfo.GroupByColumnNames.assign(meta.GetGroupByColumnNames().begin(), meta.GetGroupByColumnNames().end());
             readInfo.OlapProgram.Program = meta.GetOlapProgram().GetProgram();
+
+            if (meta.HasSystemColumnsFilter()) {
+                readInfo.SystemColumnsFilter = meta.GetSystemColumnsFilter();
+            }
 
             readInfo.ResultColumnsTypes.reserve(meta.ResultColumnsSize());
             for (const auto& column : meta.GetResultColumns()) {

@@ -160,7 +160,8 @@ struct TKikimrData {
             TYdbOperation::TruncateTable;
 
         SystemColumns = {
-            {NKikimr::YqlPartitionColumnName, NKikimr::NUdf::EDataSlot::Uint64}
+            {NKikimr::YqlPartitionColumnName, NKikimr::NUdf::EDataSlot::Uint64},
+            {NKikimr::YqlPortionColumnName, NKikimr::NUdf::EDataSlot::Uint64}
         };
     }
 };
@@ -354,7 +355,11 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     }
 
     if (withSystemColumns) {
+        const bool isOlap = Metadata->IsOlap();
         for (const auto& [name, type] : KikimrSystemColumns()) {
+            if (!IsKikimrSystemColumn(name, isOlap)) {
+                continue;
+            }
             const TOptionalExprType* optType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(type));
             items.push_back(ctx.MakeType<TItemExprType>(name, optType));
 
@@ -629,7 +634,11 @@ TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHand
     }
 
     if (withSystemColumns) {
+        const bool isOlap = table.Metadata->IsOlap();
         for (const auto& pair : KikimrSystemColumns()) {
+            if (!IsKikimrSystemColumn(pair.first, isOlap)) {
+                continue;
+            }
             auto atom = Build<TCoAtom>(ctx, pos)
                 .Value(pair.first)
                 .Done();
@@ -973,6 +982,16 @@ const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
 
 bool IsKikimrSystemColumn(const TStringBuf columnName) {
     return KikimrSystemColumns().FindPtr(columnName);
+}
+
+bool IsKikimrSystemColumn(const TStringBuf columnName, bool isOlapTable) {
+    if (!IsKikimrSystemColumn(columnName)) {
+        return false;
+    }
+    if (columnName == NKikimr::YqlPortionColumnName) {
+        return isOlapTable;
+    }
+    return true;
 }
 
 namespace {

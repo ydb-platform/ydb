@@ -20,6 +20,7 @@ SRCS(
     scan_cleanup_ut.cpp
     optimizer_ut.cpp
     peephole_ut.cpp
+    portion_id_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
 )

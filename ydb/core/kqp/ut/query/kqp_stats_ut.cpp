@@ -796,16 +796,16 @@ Y_UNIT_TEST(LegacySimplifiedPlanDuplicateIndexesUseLastValue) {
                     "Node Type": "Precompute",
                     "Subplan Name": "precompute_duplicate",
                     "Plans": [{
-                        "Node Type": "FirstPrecompute",
-                        "Operators": [{"Name": "FirstPrecompute", "Inputs": []}]
+                        "Node Type": "FirstValue",
+                        "Operators": [{"Name": "FirstValue", "Inputs": []}]
                     }]
                 },
                 {
                     "Node Type": "Precompute",
                     "Subplan Name": "precompute_duplicate",
                     "Plans": [{
-                        "Node Type": "LastPrecompute",
-                        "Operators": [{"Name": "LastPrecompute", "Inputs": []}]
+                        "Node Type": "LastValue",
+                        "Operators": [{"Name": "LastValue", "Inputs": []}]
                     }]
                 },
                 {
@@ -827,8 +827,8 @@ Y_UNIT_TEST(LegacySimplifiedPlanDuplicateIndexesUseLastValue) {
 
     const auto cteOwner = FindPlanNodeByKv(simplifiedPlan, "Node Type", "CteOwner");
     UNIT_ASSERT_C(cteOwner.IsDefined(), simplifiedPlan);
-    UNIT_ASSERT_C(FindPlanNodeByKv(cteOwner, "Name", "LastPrecompute").IsDefined(), simplifiedPlan);
-    UNIT_ASSERT_C(!FindPlanNodeByKv(cteOwner, "Name", "FirstPrecompute").IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(FindPlanNodeByKv(cteOwner, "Name", "LastValue").IsDefined(), simplifiedPlan);
+    UNIT_ASSERT_C(!FindPlanNodeByKv(cteOwner, "Name", "FirstValue").IsDefined(), simplifiedPlan);
 }
 
 Y_UNIT_TEST(LegacySimplifiedPlanMultiOperatorCpuOwner) {

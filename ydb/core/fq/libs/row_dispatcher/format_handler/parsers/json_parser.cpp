@@ -278,6 +278,7 @@ public:
                     }
                     --validAlternativesLimit;
                 }
+                auto innerJsonValue = jsonValue;
                 for (ui32 index = 0; index != validAlternativesLimit; ++index) {
                     auto alternativeType = variantType->GetAlternativeType(index);
                     if (!ValidateJsonType(alternativeType, cellType, jsonValue)) {
@@ -297,13 +298,13 @@ public:
                         doc = parser.iterate(simdjson::padded_string_view(rawJson, rawJson.size() + simdjson::SIMDJSON_PADDING)); // as rawJson points to original document, we *know* padding is present
                     }
                     if (doc.error() != simdjson::error_code::UNINITIALIZED) {
-                        CHECK_JSON_ERROR(doc.get(jsonValue)) {
+                        CHECK_JSON_ERROR(doc.get(innerJsonValue)) {
                             SetParsingError(error, jsonValue, "reparse as json", status, isQuiet);
                             return false;
                         }
                     }
                     status = TStatus::Success();
-                    if (ParseNestedValue(jsonValue, resultValue, status, alternativeType, false, index + 1 != validAlternativesLimit || isQuiet)) {
+                    if (ParseNestedValue(innerJsonValue, resultValue, status, alternativeType, false, index + 1 != validAlternativesLimit || isQuiet)) {
                         resultValue = HolderFactory->CreateVariantHolder(std::move(resultValue.Release()), index);
                         return true;
                     }

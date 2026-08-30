@@ -39,6 +39,11 @@ struct TSpillerSettings {
 // 3};
 constexpr TSpillerSettings TestStorageSettings{.Buckets = 64, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 8};
 
+enum class EBucketAssign {
+    Hash,
+    RoundRobin,
+};
+
 enum ESpillResult {
     Spilling,
     FinishedSpilling,
@@ -95,17 +100,17 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     }
 
   public:
-    TBucketsSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, bool roundRobin = false)
+    TBucketsSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout,
+                    EBucketAssign assign = EBucketAssign::Hash)
         : Buckets_(Settings.Buckets)
         , Spiller_(spiller)
         , Layout_(layout)
-        , RoundRobin_(roundRobin)
+        , Assign_(assign)
     {}
 
     void AddRow(TSingleTuple tuple) {
-        // Cross has no keys, so hashing would pile every row into one bucket. Round robin keeps the
-        // buckets even, which is what lets the join load the build side bucket by bucket.
-        int bucketIndex = RoundRobin_ ? NextRoundRobinBucket() : Settings.BucketIndex(tuple);
+        const int bucketIndex =
+            Assign_ == EBucketAssign::RoundRobin ? NextRoundRobinBucket() : Settings.BucketIndex(tuple);
         TBucket& thisBucket = Buckets_[bucketIndex];
         thisBucket.BuildingPage.AppendTuple(tuple, Layout_);
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
@@ -164,7 +169,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     ISpiller::TPtr Spiller_;
     std::optional<TMKQLVector<BlobIdAndBucketIndex>> SpillingPages_;
     const NPackedTuple::TTupleLayout* Layout_;
-    bool RoundRobin_ = false;
+    EBucketAssign Assign_ = EBucketAssign::Hash;
     int RoundRobinCursor_ = 0;
 };
 
@@ -245,8 +250,17 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         }
     }
 
-    bool IsBucketSpilled(int index) {
+    bool IsBucketSpilled(int index) const {
         return std::holds_alternative<TSides<TBucket>>(State_.Buckets[index]);
+    }
+
+    std::optional<int> FirstSpilledBucket() const {
+        for (int index = 0; index < std::ssize(State_.Buckets); ++index) {
+            if (IsBucketSpilled(index)) {
+                return index;
+            }
+        }
+        return std::nullopt;
     }
 
     State& GetState() {

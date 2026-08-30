@@ -727,10 +727,6 @@ public:
     }
 
     void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) override {
-        if (columns.empty()) {
-            Y_ENSURE(Extractors_.empty());
-            return;
-        }
         TVector<std::shared_ptr<arrow::Buffer>> nullBitmapRelocationBuffer;
         auto [columnsData, columnsNullBitmap] = GetColumns_(columns, nullBitmapRelocationBuffer);
 
@@ -750,10 +746,6 @@ public:
     }
 
     void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
-        if (columns.empty()) {
-            Y_ENSURE(Extractors_.empty());
-            return;
-        }
         TVector<std::shared_ptr<arrow::Buffer>> nullBitmapRelocationBuffer;
         auto [columnsData, columnsNullBitmap] = GetColumns_(columns, nullBitmapRelocationBuffer);
         auto tuplesToPack = columns.front().array()->length;

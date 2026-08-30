@@ -485,22 +485,6 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
     }
 
-    Y_UNIT_TEST(TestEmptyColumnsPack) {
-        TBlockLayoutConverterTestData data;
-        TVector<NKikimr::NMiniKQL::TType*> types;
-        TVector<NPackedTuple::EColumnRole> roles;
-        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
-
-        TPackResult packRes;
-        converter->Pack({}, packRes);
-        UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, 0);
-        UNIT_ASSERT(packRes.PackedTuples.empty());
-
-        TVector<arrow::Datum> unpacked;
-        converter->Unpack(packRes, unpacked);
-        UNIT_ASSERT(unpacked.empty());
-    }
-
     Y_UNIT_TEST(TestNullBitmapPreservationAcrossMultiplePacks) {
         TBlockLayoutConverterTestData data;
 

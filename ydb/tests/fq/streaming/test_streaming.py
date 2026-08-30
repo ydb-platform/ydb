@@ -2006,6 +2006,108 @@ FROM `{table_name}`"""
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name))
 
+    @pytest.mark.parametrize("local_topics", [False])
+    @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_structured_json_parsing": True}], indirect=["kikimr"])
+    def test_read_topic_shared_reading_nested_variant_parsing(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"nested_variant_json{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        query_name = f"test_nested_variant_json_{local_topics!s:.1}"
+
+        sql = Rf'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $i =
+                SELECT
+                        foo.`0` as f0, foo.`1` as f1, foo.`2` as f2,
+                        bar, baz,
+                        Way(bar.`0`) AS barw,
+                        Way(baz) AS bazw,
+                        Way(foo) as w, Way(foo.1) as w1, Way(foo.`1`.`1`) as w11,
+                        case when foo.`1`.`3` IS NOT NULL THEN Way(Unwrap(foo.`1`.`3`)) ELSE NULL END AS w13
+                  FROM {inp} WITH (
+                    STREAMING = "TRUE",
+                    FORMAT = "json_each_row",
+                    SCHEMA = (
+                        foo Variant<
+                                Bool,
+                                Variant<Int,
+                                    Variant<
+                                        List<Int>,
+                                        Tuple<String, String>,
+                                        List<String>,
+                                        String>,
+                                    List<List<Int>>,
+                                    Variant<
+                                        List<Tuple<Bool, String>>,
+                                        List<Tuple<String>>>?>,
+                                Tuple<Int,String>>,
+                        bar Variant<Variant<
+                                {",".join(["Tuple<String>"]*70)},
+                                Tuple<Int>, Variant<Tuple<Bool>, Bool>
+                        >>,
+                        baz Variant<
+                                {",".join(["Tuple<String>"]*70)},
+                                Tuple<Int>, Variant<Tuple<Bool>, Bool>
+                        >
+                    )
+                )
+                WHERE foo.`1` IS DISTINCT FROM NULL OR foo.`0` IS NOT NULL
+                    OR foo.`2`.`0` IS NOT NULL OR (foo.`1`.`0` = 5)
+                    --OR foo.`2`[0] IS NOT NULL
+                ;
+                INSERT INTO {out}
+                SELECT ToBytes(Unwrap(Yson2::SerializeJson(Yson::From(TableRow()))))
+                FROM $i
+            END DO;'''
+        kikimr.ydb_client.query(sql)
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Check that streaming.query.tasks.count metric exists for both queries
+        self.wait_streaming_query_metric(kikimr, path, "streaming.query.tasks.count", expected_value=1)
+
+        data = [
+            R'{"foo":"bar","bar":["1stringstringstring"],"baz":["2stringstringstring"]}',
+            R'{"foo":[1],"bar":["str1"],"baz":["str2"]}',
+            R'{"foo":["1\"strstrstrstrstrstrstrstrstrstr\u0022str"],"bar":[1234],"baz":[5678]}',
+            R'{"foo":["2strstrstrstrstrstrstrstrstr\u0022str","22strstrstrstrstrstrstrstrstr\u0022str"],"bar":[true],"baz":[false]}',
+            R'{"foo":[123,"3strstrstrstrstrstrstrstrstrstrstr"],"bar":false,"baz":true}',
+            R'{"foo":["4strstrstrstrstrstrstrstr\u0022strstr","42strstrstrstrstrstrstrstrstrstr","44strstrstrstrstrstrstrstrstr\u0022strstr"]}',
+            R'{"foo":[[1]]}',
+            R'{"foo":[["1\u0022xxxxxxxxxxxxxxxxxxxxx"]]}',
+            R'{"foo":[]}',
+            R'{"foo":[[]]}',
+            R'{"foo":[[true, "xyz"]]}',
+            R'{"foo":123}',
+        ]
+        expected_data = [
+            R'{"bar":["1stringstringstring"],"barw":0,"baz":["2stringstringstring"],"bazw":0,"f0":null,"f1":"bar","f2":null,"w":1,"w1":1,"w11":3,"w13":null}',
+            R'{"bar":["str1"],"barw":0,"baz":["str2"],"bazw":0,"f0":null,"f1":[1],"f2":null,"w":1,"w1":1,"w11":0,"w13":null}',
+            R'{"bar":[1234],"barw":70,"baz":[5678],"bazw":70,"f0":null,"f1":["1\"strstrstrstrstrstrstrstrstrstr\"str"],"f2":null,"w":1,"w1":1,"w11":2,"w13":null}',
+            R'{"bar":[true],"barw":71,"baz":[false],"bazw":71,"f0":null,"f1":["2strstrstrstrstrstrstrstrstr\"str","22strstrstrstrstrstrstrstrstr\"str"],"f2":null,"w":1,"w1":1,"w11":1,"w13":null}',
+            R'{"bar":false,"barw":71,"baz":true,"bazw":71,"f0":null,"f1":null,"f2":[123,"3strstrstrstrstrstrstrstrstrstrstr"],"w":2,"w1":null,"w11":null,"w13":null}',
+            R'{"bar":null,"barw":null,"baz":null,"bazw":null,"f0":null,"f1":["4strstrstrstrstrstrstrstr\"strstr","42strstrstrstrstrstrstrstrstrstr"],"f2":null,"w":1,"w1":1,"w11":1,"w13":null}',
+            R'{"bar":null,"barw":null,"baz":null,"bazw":null,"f0":null,"f1":[[1]],"f2":null,"w":1,"w1":2,"w11":null,"w13":null}',
+            R'{"bar":null,"barw":null,"baz":null,"bazw":null,"f0":null,"f1":[["1\"xxxxxxxxxxxxxxxxxxxxx"]],"f2":null,"w":1,"w1":3,"w11":null,"w13":1}',
+            R'{"bar":null,"barw":null,"baz":null,"bazw":null,"f0":null,"f1":[],"f2":null,"w":1,"w1":1,"w11":0,"w13":null}',
+            R'{"bar":null,"barw":null,"baz":null,"bazw":null,"f0":null,"f1":[[]],"f2":null,"w":1,"w1":2,"w11":null,"w13":null}',
+            R'{"bar":null,"barw":null,"baz":null,"bazw":null,"f0":null,"f1":[[true,"xyz"]],"f2":null,"w":1,"w1":3,"w11":null,"w13":0}',
+            R'{"bar":null,"barw":null,"baz":null,"bazw":null,"f0":null,"f1":123,"f2":null,"w":1,"w1":0,"w11":null,"w13":null}',
+        ]
+
+        self.write_stream(data, endpoint=endpoint)
+        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data)
+
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name))
+
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("kikimr", [{"enable_discovery": False, "lease_duration_sec": "30"}], indirect=["kikimr"])
     def test_streaming_query_stop_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:

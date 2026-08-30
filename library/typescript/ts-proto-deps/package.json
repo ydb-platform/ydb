@@ -9,7 +9,7 @@
   "devDependencies": {
     "@types/node": "24.10.2",
     "ts-proto": "2.8.3",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "files": [
     "pnpm-lock.yaml",

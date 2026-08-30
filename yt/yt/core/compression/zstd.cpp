@@ -37,7 +37,7 @@ void VerifyError(size_t result)
         return;
     }
 
-    if (result == ZSTD_error_memory_allocation) {
+    if (ZSTD_getErrorCode(result) == ZSTD_error_memory_allocation) {
         AbortProcessDramatically(
             EProcessExitCode::OutOfMemory,
             "Zstd codec failed with memory allocation error");
@@ -63,6 +63,11 @@ void ZstdCompress(int level, TSource* source, TBlob* output)
     }
 
     auto context = ZSTD_createCCtx();
+    if (!context) {
+        AbortProcessDramatically(
+            EProcessExitCode::OutOfMemory,
+            "Zstd codec failed to allocate compression context");
+    }
     auto contextGuard = Finally([&] {
         ZSTD_freeCCtx(context);
     });

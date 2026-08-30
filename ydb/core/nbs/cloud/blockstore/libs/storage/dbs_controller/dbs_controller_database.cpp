@@ -29,6 +29,29 @@ TVector<ui64> ExtractPartitions(auto& dbIterator)
     return {tabletIds.begin(), tabletIds.end()};
 }
 
+TVector<TDbsControllerDatabase::TDirectKey> ExtractGroups(auto& dbIterator)
+{
+    TVector<TDbsControllerDatabase::TDirectKey> groups;
+    NProto::TDDiskDirectBlockGroups record;
+
+    while (dbIterator.IsValid()) {
+        const bool success = record.ParseFromString(
+            dbIterator.template GetValue<
+                TDbsControllerSchema::InverseMap::DirectBlockGroups>());
+        Y_ABORT_UNLESS(success);
+
+        for (const auto& entry: record.GetPartitionDirectBlockGroups()) {
+            for (const ui64 dbgIndex: entry.GetDirectBlockGroupIndex()) {
+                groups.emplace_back(entry.GetPartitionTabletId(), dbgIndex);
+            }
+        }
+
+        dbIterator.Next();
+    }
+
+    return groups;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -244,6 +267,48 @@ bool TDbsControllerDatabase::GetPartitionsForDDisk(
     }
 
     outPartitions = ExtractPartitions(it);
+
+    return true;
+}
+
+bool TDbsControllerDatabase::GetAffectedDBGsWithNodeCounts(
+    const TVector<ui32>& nodeIds,
+    THashMap<TDirectKey, ui64>& outDbgs)
+{
+    using TTable = TDbsControllerSchema::InverseMap;
+
+    outDbgs.clear();
+
+    const TSet<ui32> nodeIdsSet{nodeIds.begin(), nodeIds.end()};
+
+    for (const ui32 nodeId: nodeIds) {
+        auto it =
+            Table<TTable>().Prefix(nodeId).Select<TTable::DirectBlockGroups>();
+
+        if (!it.IsReady()) {
+            return false;
+        }
+
+        for (const auto& key: ExtractGroups(it)) {
+            NProto::TDirectBlockGroupDDisks record;
+            if (!LoadDirectRecord(key, record)) {
+                return false;
+            }
+            auto& logicalNodes = *record.MutableDDiskIds();
+            for (int i = 0; i < logicalNodes.size(); ++i) {
+                if (nodeIdsSet.contains(
+                        logicalNodes.Get(i).GetDDisk().GetNodeId()) ||
+                    nodeIdsSet.contains(
+                        logicalNodes.Get(i).GetPersistentBuffer().GetNodeId()))
+                {
+                    logicalNodes.SwapElements(i, logicalNodes.size() - 1);
+                    logicalNodes.RemoveLast();
+                    --i;
+                }
+            }
+            outDbgs[key] = logicalNodes.size();
+        }
+    }
 
     return true;
 }

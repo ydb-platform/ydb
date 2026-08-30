@@ -1605,6 +1605,51 @@ TJoinTestData CrossJoinSpillingTestData() {
     return td;
 }
 
+TJoinTestData CrossJoinZeroWidthRightTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2};
+    TVector<TString> leftValues = {"a", "b"};
+
+    TVector<ui64> expectedKeys = {1, 1, 1, 2, 2, 2};
+    TVector<TString> expectedValues = {"a", "a", "a", "b", "b", "b"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = MakeZeroWidthRows(setup, 3);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData CrossJoinZeroWidthLeftTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> rightKeys = {10, 20, 30};
+    TVector<TString> rightValues = {"x", "y", "z"};
+
+    TVector<ui64> expectedKeys = {10, 20, 30, 10, 20, 30};
+    TVector<TString> expectedValues = {"x", "y", "z", "x", "y", "z"};
+
+    td.Left = MakeZeroWidthRows(setup, 2);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData CrossJoinZeroWidthBothEmptyOutputTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    td.Left = MakeZeroWidthRows(setup, 2);
+    td.Right = MakeZeroWidthRows(setup, 3);
+    td.Result = MakeZeroWidthRows(setup, 6);
+    td.Renames = {};
+    AsCrossJoin(td);
+    return td;
+}
+
 // Shape of a probe side produced by a chain of LEFT JOINs in the new optimizer:
 // several 4-byte payload columns interleaved with 1-byte flag columns, with the
 // join key sitting in the middle. Such a row is short enough for the small-tuple
@@ -2012,6 +2057,18 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinSpilling, BlockJoin) {
         Test(CrossJoinSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthRight, BlockJoin) {
+        Test(CrossJoinZeroWidthRightTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthLeft, BlockJoin) {
+        Test(CrossJoinZeroWidthLeftTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthBothEmptyOutput, BlockJoin) {
+        Test(CrossJoinZeroWidthBothEmptyOutputTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

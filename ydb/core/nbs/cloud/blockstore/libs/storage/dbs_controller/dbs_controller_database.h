@@ -64,6 +64,10 @@ public:
         ui32 pdiskId,
         ui32 slotId,
         TVector<ui64>& outPartitions);
+
+    bool GetAffectedDBGsWithNodeCounts(
+        const TVector<ui32>& nodeIds,
+        THashMap<TDirectKey, ui64>& outDbgs);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NDbsController

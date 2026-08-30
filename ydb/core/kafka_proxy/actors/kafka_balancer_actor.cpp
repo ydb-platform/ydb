@@ -1,5 +1,6 @@
 #include "kafka_balancer_actor.h"
 #include "kafka_metadata_service.h"
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -1516,6 +1517,11 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
             member.Metadata = member.MetaStr;
             response->Members.push_back(std::move(member));
         }
+
+        Send(MakeKafkaMetricsServiceID(),
+               new TEvKafka::TEvSetCounter(
+                   static_cast<i64>(AllWorkerStates.size()),
+                   BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count")));
     }
 
     Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
@@ -1542,6 +1548,7 @@ void TKafkaBalancerActor::SendLeaveGroupResponseOk(const TActorContext& ctx, ui6
     auto response = std::make_shared<TLeaveGroupResponseData>();
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
+    Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(-1, BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count")));
     Die(ctx);
 }
 

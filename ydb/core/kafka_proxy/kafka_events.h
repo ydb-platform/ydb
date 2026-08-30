@@ -48,6 +48,7 @@ struct TEvKafka {
         EvFetchActorStateResponse,
         EvMtlsAuthRequest,
         EvTokenRecheck,
+        EvSetCounter,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -252,6 +253,16 @@ struct TEvKafka {
 
         TEvUpdateCounter(const i64 delta, const TVector<std::pair<TString, TString>> labels)
         : Delta(delta)
+        , Labels(labels)
+        {}
+    };
+
+    struct TEvSetCounter : public TEventLocal<TEvSetCounter, EvSetCounter> {
+        i64 Value;
+        TVector<std::pair<TString, TString>> Labels;
+
+        TEvSetCounter(const i64 value, const TVector<std::pair<TString, TString>> labels)
+        : Value(value)
         , Labels(labels)
         {}
     };

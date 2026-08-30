@@ -6049,4 +6049,109 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(getCounterValue("unknown", "api.kafka.produce.total_messages"), 1);
         }
     } // Y_UNIT_TEST(ProduceScenario)
+
+
+    Y_UNIT_TEST(ConsumerGroupMembersCountMetric) {
+        TInsecureTestServer testServer("1", false, true);
+
+        TString topicName = "/Root/topic-0";
+        TString groupId = "consumer-0";
+        TString protocolType = "consumer";
+        TString protocolName = "range";
+        i32 heartbeatTimeout = 15000;
+        i32 rebalanceTimeout = 5000;
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient
+                .CreateTopic(
+                    topicName,
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .PartitioningSettings(2, 100)
+                        .BeginAddConsumer(groupId).EndAddConsumer()
+                )
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+        TKafkaTestClient clientB(testServer.Port, "ClientB");
+
+        {
+            TString user = "ouruser@/Root";
+            TString pass = "ourUserPassword";
+            UNIT_ASSERT_VALUES_EQUAL(clientA.ApiVersions()->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(clientB.ApiVersions()->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(clientA.SaslHandshake("PLAIN")->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(clientB.SaslHandshake("PLAIN")->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(clientA.SaslPlainAuthenticate(user, pass)->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(clientB.SaslPlainAuthenticate(user, pass)->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        }
+
+        auto getMembersCount = [&]() -> i64 {
+            auto sender = testServer.KikimrServer->GetRuntime()->AllocateEdgeActor();
+            testServer.KikimrServer->GetRuntime()->Send(
+                MakeKafkaMetricsServiceID(), sender, new TEvKafka::TEvGetCountersRequest());
+            TAutoPtr<IEventHandle> handle;
+            auto ev = testServer.KikimrServer->GetRuntime()->GrabEdgeEvents<TEvKafka::TEvGetCountersResponse>(
+                handle, TDuration::Seconds(1));
+            auto* event = std::get<TEvKafka::TEvGetCountersResponse*>(ev);
+            UNIT_ASSERT_C(event, "No counters response");
+            return event->Counters
+                ->GetSubgroup("counters", "datastreams")
+                ->GetSubgroup("database", "/Root")
+                ->GetSubgroup("cloud_id", "somecloud")
+                ->GetSubgroup("folder_id", "somefolder")
+                ->GetSubgroup("database_id", "root")
+                ->GetSubgroup("consumer_group", groupId)
+                ->GetNamedCounter("name", "api.kafka.consumer_group.members_count", true)
+                ->Val();
+        };
+
+        TJoinGroupRequestData joinReq;
+        joinReq.GroupId = groupId;
+        joinReq.ProtocolType = protocolType;
+        joinReq.SessionTimeoutMs = heartbeatTimeout;
+        joinReq.RebalanceTimeoutMs = rebalanceTimeout;
+
+        NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
+        protocol.Name = protocolName;
+
+        TConsumerProtocolSubscription subscription;
+        subscription.Topics.push_back(topicName);
+        TKafkaVersion version = 3;
+        TKafkaWriteBuffer buf(subscription.Size(version) + sizeof(version));
+        TKafkaWritable writable(buf);
+        writable << version;
+        subscription.Write(writable, version);
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+        joinReq.Protocols.push_back(protocol);
+
+        TJoinGroupRequestData joinReqA = joinReq;
+        joinReqA.GroupInstanceId = "instanceA";
+        TJoinGroupRequestData joinReqB = joinReq;
+        joinReqB.GroupInstanceId = "instanceB";
+
+        // Both clients join simultaneously so they end up in the same generation
+        TRequestHeaderData headerAJoin = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TRequestHeaderData headerBJoin = clientB.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+
+        clientA.WriteToSocket(headerAJoin, joinReqA);
+        clientB.WriteToSocket(headerBJoin, joinReqB);
+
+        auto joinRespA = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin);
+        auto joinRespB = clientB.ReadResponse<TJoinGroupResponseData>(headerBJoin);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinRespA->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(joinRespB->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        UNIT_ASSERT_VALUES_EQUAL(getMembersCount(), 2);
+
+        TString memberIdB = joinRespB->MemberId.value();
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientB.LeaveGroup(memberIdB, groupId)->ErrorCode,
+            (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        UNIT_ASSERT_VALUES_EQUAL(getMembersCount(), 1);
+    } // Y_UNIT_TEST(ConsumerGroupMembersCountMetric)
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

@@ -55,7 +55,7 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         {"component", "Grpc"},
         {"sessionId", request.session_id()},
         {"traceId", traceId},
-        {"type", "BeginTransactionRequest"},
+        {"type", "BeginTransactionResponse"},
         {"txId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty"},
         {"status", record.GetYdbStatus()},
         {"issues", record.GetResponse().GetQueryIssues()});

@@ -124,7 +124,7 @@ inline TStructuredMessage ToStructuredMessage(const NKikimrDataEvents::TLock& lo
     }
 
     if (lock.HasPathId()) {
-        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetPathId()});
+        YDB_LOG_UPDATE_MESSAGE(result , {"pathId", lock.GetPathId()});
     }
     return result;
 }
@@ -137,7 +137,7 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
     NYql::IssuesFromMessage(record.GetIssues(), issues);
 
     auto message = YDB_LOG_CREATE_MESSAGE({"component", "Executer"},
-        {"type", "Request"},
+        {"type", "Response"},
         {"state", state},
         {"traceId", traceId},
         {"phyTxId", ToString(record.GetTxId())},

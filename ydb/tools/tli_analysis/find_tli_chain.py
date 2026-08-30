@@ -81,9 +81,9 @@ def unescape_and_format_query_text(s: Optional[str]) -> str:
 
 
 def extract_field(line: str, field: str) -> Optional[str]:
-    """Extract and field value from log line.
+    """Extract a field value from log line.
 
-    Field value can have one of followin formats
+    Field value can have one of following formats
         value=text
         value="escaped text"
     """

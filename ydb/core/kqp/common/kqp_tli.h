@@ -181,8 +181,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
 
     auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", params.Component},
-        {"message", params.Message},
-    );
+        {"message", params.Message});
 
     if (!params.TraceId.empty()) {
         YDB_LOG_UPDATE_MESSAGE(message, {"traceId", params.TraceId});

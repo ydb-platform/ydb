@@ -70,7 +70,6 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
     if (IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
         if (keys.HasWrites()) {
             const int batchSize = 10;
-            bool first = true;
             for (size_t offset = 0; offset < keys.Keys.size(); offset += batchSize) {
                 auto message = YDB_LOG_CREATE_MESSAGE(
                     {"component", "DataShard"},
@@ -85,10 +84,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                         continue;
                     }
 
-                    if (first) {
-                        YDB_LOG_UPDATE_MESSAGE(message, {"tableId", ToString(keyDef->TableId)});
-                        first = false;
-                    }
+                    YDB_LOG_UPDATE_MESSAGE(message, {"tableId", ToString(keyDef->TableId)});
 
                     auto& range = keyDef->Range;
                     TString rowOp;
@@ -115,7 +111,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 
                     YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
                         message,
-                        {"op", ToString(keyDef->TableId)},
+                        {"op", rowOp},
                         {"keys", keysStr.Str()});
                 }
             }

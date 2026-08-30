@@ -23,6 +23,8 @@
 
 #include <library/cpp/retry/retry_policy.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
+
 namespace NKikimr::NPQ {
 
 #if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)

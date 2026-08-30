@@ -11,7 +11,7 @@ bool TProcessGuard::SendTaskToExecute(const std::shared_ptr<ITask>& task) const 
     AFL_VERIFY(!Finished);
     if (ServiceActorId && NActors::TlsActivationContext) {
         auto& context = NActors::TActorContext::AsActorContext();
-        context.Send(*ServiceActorId, new TEvExecution::TEvNewTask(task, Category, InternalProcessId));
+        context.Send(*ServiceActorId, new TEvExecution::TEvNewTask(task, Category, InternalProcessId, WorkloadContext));
         return true;
     } else {
         task->Execute(nullptr, task);
@@ -29,10 +29,11 @@ void TProcessGuard::Finish() {
 }
 
 TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
-    const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId)
+    const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId, TWorkloadContext workloadContext)
     : Category(category)
     , ScopeId(scopeId)
     , ExternalProcessId(externalProcessId)
+    , WorkloadContext(std::move(workloadContext))
     , ServiceActorId(actorId) {
     if (ServiceActorId) {
         NActors::TActorContext::AsActorContext().Send(

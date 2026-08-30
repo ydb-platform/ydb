@@ -21,12 +21,12 @@ public:
 
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId,
-        const bool useBatchPool = false) {
+        const bool useBatchPool = false, TWorkloadContext workloadContext = {}) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
             context.Send(MakeServiceId(selfId.NodeId(), useBatchPool),
-                new NConveyorComposite::TEvExecution::TEvNewTask(task, category, internalProcessId));
+                new NConveyorComposite::TEvExecution::TEvNewTask(task, category, internalProcessId, std::move(workloadContext)));
             return true;
         } else {
             task->Execute(nullptr, task);
@@ -44,55 +44,60 @@ public:
     }
     static TProcessGuard StartProcess(
         const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits,
-        const bool useBatchPool = false) {
+        const bool useBatchPool = false, TWorkloadContext workloadContext = {}) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, MakeServiceId(selfId.NodeId(), useBatchPool));
+            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, MakeServiceId(selfId.NodeId(), useBatchPool),
+                std::move(workloadContext));
         } else {
-            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, {});
+            return TProcessGuard(category, scopeId, externalProcessId, cpuLimits, {}, std::move(workloadContext));
         }
     }
 };
 
 class TInsertServiceOperator {
 public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, 0);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, TWorkloadContext workloadContext = {}) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, 0, false, std::move(workloadContext));
     }
 };
 
 class TNormalizerServiceOperator {
 public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Normalizer, 0);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, TWorkloadContext workloadContext = {}) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Normalizer, 0, false, std::move(workloadContext));
     }
 };
 
 class TCompServiceOperator {
 public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, 0);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, TWorkloadContext workloadContext = {}) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, 0, false, std::move(workloadContext));
     }
 };
 
 class TScanServiceOperator {
 public:
     static bool SendTaskToExecute(
-        const std::shared_ptr<ITask>& task, const ui64 internalProcessId, const bool useBatchPool = false) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Scan, internalProcessId, useBatchPool);
+        const std::shared_ptr<ITask>& task, const ui64 internalProcessId, const bool useBatchPool = false,
+        TWorkloadContext workloadContext = {}) {
+        return TServiceOperator::SendTaskToExecute(
+            task, ESpecialTaskCategory::Scan, internalProcessId, useBatchPool, std::move(workloadContext));
     }
 
     static TProcessGuard StartProcess(
-        const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits, const bool useBatchPool = false) {
-        return TServiceOperator::StartProcess(ESpecialTaskCategory::Scan, scopeId, externalProcessId, cpuLimits, useBatchPool);
+        const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits, const bool useBatchPool = false,
+        TWorkloadContext workloadContext = {}) {
+        return TServiceOperator::StartProcess(
+            ESpecialTaskCategory::Scan, scopeId, externalProcessId, cpuLimits, useBatchPool, std::move(workloadContext));
     }
 };
 
 class TDeduplicationServiceOperator {
 public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Deduplication, 0);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, TWorkloadContext workloadContext = {}) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Deduplication, 0, false, std::move(workloadContext));
     }
 };
 

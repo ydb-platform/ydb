@@ -13,15 +13,17 @@ namespace NKikimr::NConveyorComposite {
 
 LWTRACE_USING(YDB_CONVEYOR_COMPOSITE_PROVIDER);
 
-TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
+TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals,
+    NKqp::NScheduler::TComputeSchedulerPtr scheduler)
     : Config(config)
     , ConveyorName("COMPOSITE_CONVEYOR")
-    , Counters(ConveyorName, conveyorSignals) {
+    , Counters(ConveyorName, conveyorSignals)
+    , Scheduler(std::move(scheduler)) {
 }
 
 void TDistributor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CONVEYOR_COMPOSITE_PROVIDER));
-    Manager = std::make_unique<TTasksManager>(ConveyorName, Config, SelfId(), Counters);
+    Manager = std::make_unique<TTasksManager>(ConveyorName, Config, SelfId(), Counters, Scheduler);
     YDB_LOG_NOTICE("",
         {"name", ConveyorName},
         {"action", "conveyor_registered"},
@@ -97,7 +99,7 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
     if (updateConclusion.DetachResult()) {
         CompleteConfigUpdate();
     }
-    Y_UNUSED(Manager->DrainTasks());
+    DrainTasks();
 }
 
 void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -200,9 +202,54 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
     Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
-    Y_UNUSED(Manager->DrainTasks());
+    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask(), ev->Get()->GetWorkloadContext());
+    DrainTasks();
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
+}
+
+void TDistributor::DrainTasks() {
+    constexpr auto kWakeupEventDeliveryLag = TDuration::MilliSeconds(1);
+
+    bool retriedExpiredDeadline = false;
+    while (true) {
+        Y_UNUSED(Manager->DrainTasks());
+        const auto deadline = Manager->ExtractNextWorkloadWakeup();
+        if (!deadline) {
+            return;
+        }
+        if (*deadline <= TMonotonic::Now()) {
+            if (!retriedExpiredDeadline) {
+                retriedExpiredDeadline = true;
+                continue;
+            }
+            ScheduleWorkloadQuotaWakeup(TMonotonic::Now() + kWakeupEventDeliveryLag);
+            return;
+        }
+        ScheduleWorkloadQuotaWakeup(*deadline);
+        return;
+    }
+}
+
+void TDistributor::ScheduleWorkloadQuotaWakeup(TMonotonic deadline) {
+    const auto now = TMonotonic::Now();
+    AFL_VERIFY(now < deadline);
+    if (ScheduledWorkloadQuotaWakeupAt && *ScheduledWorkloadQuotaWakeupAt <= now) {
+        ScheduledWorkloadQuotaWakeupAt.reset();
+    }
+    if (ScheduledWorkloadQuotaWakeupAt && *ScheduledWorkloadQuotaWakeupAt <= deadline) {
+        return;
+    }
+
+    ScheduledWorkloadQuotaWakeupAt = deadline;
+    Schedule(deadline - now, new TEvInternal::TEvWorkloadQuotaWakeup(deadline));
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvWorkloadQuotaWakeup::TPtr& ev) {
+    if (!ScheduledWorkloadQuotaWakeupAt || ev->Get()->Deadline != *ScheduledWorkloadQuotaWakeupAt) {
+        return;
+    }
+    ScheduledWorkloadQuotaWakeupAt.reset();
+    DrainTasks();
 }
 
 }   // namespace NKikimr::NConveyorComposite

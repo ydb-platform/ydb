@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/cms/console
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/kqp/runtime
     ydb/core/tx/columnshard/counters
     yql/essentials/sql/pg_dummy
     yql/essentials/core/arrow_kernels/request
@@ -37,6 +38,7 @@ SRCS(
     ut_config_subscription.cpp
     ut_runtime_update.cpp
     ut_simple.cpp
+    ut_workload_manager.cpp
 )
 
 END()

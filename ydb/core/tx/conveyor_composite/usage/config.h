@@ -161,6 +161,7 @@ class TCPULimitsConfig {
     YDB_OPT(double, CPUGroupThreadsLimit);
     YDB_OPT(TString, CPUGroupName);
     YDB_READONLY(double, Weight, 1);
+    YDB_READONLY_DEF(TWorkloadContext, WorkloadContext);
 
 public:
     TCPULimitsConfig() = default;
@@ -168,6 +169,10 @@ public:
 
     TConclusionStatus DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config);
     TString DebugString() const;
+
+    void SetWorkloadContext(TWorkloadContext workloadContext) {
+        WorkloadContext = std::move(workloadContext);
+    }
 };
 
 }   // namespace NKikimr::NConveyorComposite

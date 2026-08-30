@@ -30,7 +30,7 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ComputeShardingPolicy(computeShardingPolicy)
     , ConveyorProcessGuard(
           NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits,
-              HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId))
+              HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId, cpuLimits.GetWorkloadContext()))
     , ScanOrbit(scanOrbit)
 {
     Y_ABORT_UNLESS(ReadMetadata);

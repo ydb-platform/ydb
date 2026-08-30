@@ -1,5 +1,6 @@
 #pragma once
 #include "category.h"
+#include "workload.h"
 #include "workers_pool.h"
 
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
@@ -15,6 +16,7 @@ private:
     THashMap<TString, ui64> WorkerPoolNameToIndex;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
     NConfig::TConfig Config;
+    std::shared_ptr<TWorkloadQuotaController> WorkloadQuota;
 
     auto BuildWorkerPools() const {
         return WorkerPools | std::views::filter([](const auto& value) {
@@ -60,15 +62,21 @@ public:
         return sb;
     }
 
-    TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
+    TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId,
+        TCounters& counters, NKqp::NScheduler::TComputeSchedulerPtr scheduler)
         : Config(config)
+        , WorkloadQuota(std::make_shared<TWorkloadQuotaController>(std::move(scheduler)))
     {
         for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
-            Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), counters));
+            Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), counters, WorkloadQuota));
         }
         for (const auto& poolConfig : Config.GetWorkerPools()) {
             AddWorkerPool(poolConfig, distributorActorId, counters);
         }
+    }
+
+    std::optional<TMonotonic> ExtractNextWorkloadWakeup() {
+        return WorkloadQuota->ExtractNextWakeup();
     }
 
     TWorkersPool& MutableWorkersPool(const ui64 workersPoolId) {

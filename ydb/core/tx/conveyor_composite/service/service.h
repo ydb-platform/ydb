@@ -7,6 +7,7 @@
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -30,6 +31,8 @@ private:
 
     NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr PendingConfigNotification;
     NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr QueuedConfigNotification;
+    NKqp::NScheduler::TComputeSchedulerPtr Scheduler;
+    std::optional<TMonotonic> ScheduledWorkloadQuotaWakeupAt;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
@@ -39,11 +42,14 @@ private:
     void HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& ev);
+    void HandleMain(TEvInternal::TEvWorkloadQuotaWakeup::TPtr& ev);
 
     void SubscribeToCompositeConveyorConfig();
     void ScheduleConfigSubscriptionRetry();
     void ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void CompleteConfigUpdate();
+    void DrainTasks();
+    void ScheduleWorkloadQuotaWakeup(TMonotonic deadline);
 
 public:
     STATEFN(StateMain) {
@@ -58,6 +64,7 @@ public:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleMain);
             hFunc(NActors::TEvents::TEvUndelivered, HandleMain);
             hFunc(TEvInternal::TEvRetryConfigSubscription, HandleMain);
+            hFunc(TEvInternal::TEvWorkloadQuotaWakeup, HandleMain);
             default:
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "",
                     {"problem", "unexpected event for task executor"},
@@ -66,15 +73,17 @@ public:
         }
     }
 
-    TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
+    TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals,
+        NKqp::NScheduler::TComputeSchedulerPtr scheduler);
 
     void Bootstrap();
 };
 
 inline NActors::IActor* CreateService(
-    const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
+    const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals,
+    NKqp::NScheduler::TComputeSchedulerPtr scheduler = {}) {
     TServiceOperator::Register(config);
-    return new TDistributor(config, conveyorSignals);
+    return new TDistributor(config, conveyorSignals, std::move(scheduler));
 }
 
 }   // namespace NKikimr::NConveyorComposite

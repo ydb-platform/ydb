@@ -25,12 +25,14 @@ struct TEvExecution {
         YDB_ACCESSOR_DEF(ITask::TPtr, Task);
         YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
         YDB_READONLY(ui64, InternalProcessId, 0);
+        YDB_READONLY_DEF(TWorkloadContext, WorkloadContext);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
 
     public:
         TEvNewTask() = default;
 
-        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId);
+        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId,
+            TWorkloadContext workloadContext = {});
     };
 
     class TEvRegisterProcess: public NActors::TEventLocal<TEvRegisterProcess, EvRegisterProcess> {

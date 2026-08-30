@@ -17,7 +17,7 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
     for (auto&& t : workerTasks) {
         const TMonotonic start = TMonotonic::Now();
         t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
-        results.emplace_back(t.GetResult(start, TMonotonic::Now()));
+        results.emplace_back(std::move(t).GetResult(start, TMonotonic::Now()));
     }
     if (CPULimit < 1) {
         YDB_LOG_DEBUG("",

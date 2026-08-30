@@ -4,10 +4,12 @@
 
 namespace NKikimr::NConveyorComposite {
 
-TEvExecution::TEvNewTask::TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 internalProcessId)
+TEvExecution::TEvNewTask::TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 internalProcessId,
+    TWorkloadContext workloadContext)
     : Task(task)
     , Category(category)
-    , InternalProcessId(internalProcessId) {
+    , InternalProcessId(internalProcessId)
+    , WorkloadContext(std::move(workloadContext)) {
     AFL_VERIFY(Task);
 }
 

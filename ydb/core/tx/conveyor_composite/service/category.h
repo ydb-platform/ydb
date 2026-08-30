@@ -18,6 +18,7 @@ private:
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
+    const std::shared_ptr<TWorkloadQuotaController> WorkloadQuota;
 
     [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
 
@@ -26,8 +27,11 @@ public:
         return WaitingTasksCount->Val();
     }
 
-    TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
-        : Category(config.GetCategory()) {
+    TProcessCategory(const NConfig::TCategory& config, TCounters& counters,
+        std::shared_ptr<TWorkloadQuotaController> workloadQuota)
+        : Category(config.GetCategory())
+        , WorkloadQuota(std::move(workloadQuota)) {
+        AFL_VERIFY(WorkloadQuota);
         Counters = counters.GetCategorySignals(Category);
         RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)));
     }
@@ -36,7 +40,7 @@ public:
         UnregisterProcess(0);
     }
 
-    void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task) {
+    void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task, TWorkloadContext workloadContext) {
         auto it = Processes.find(internalProcessId);
         AFL_VERIFY(it != Processes.end())("process_id", internalProcessId);
         if (!it->second->GetTasks().size()) {
@@ -45,7 +49,7 @@ public:
             }
             WeightedProcesses[it->second->GetWeightedUsage()].emplace_back(it->second);
         }
-        it->second->RegisterTask(std::move(task), Category);
+        it->second->RegisterTask(std::move(task), Category, std::move(workloadContext));
     }
 
     void PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds);

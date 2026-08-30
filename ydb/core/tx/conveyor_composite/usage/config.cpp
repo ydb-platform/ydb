@@ -262,6 +262,12 @@ TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShar
         CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
         CPUGroupName = config.GetCpuGroupName();
     }
+    if (config.HasDatabaseId() && config.HasResourcePoolId()) {
+        WorkloadContext = {
+            .DatabaseId = config.GetDatabaseId(),
+            .PoolId = config.GetResourcePoolId(),
+        };
+    }
     return TConclusionStatus::Success();
 }
 
@@ -271,6 +277,10 @@ TString TCPULimitsConfig::DebugString() const {
         sb << "CPUGroupThreadsLimit=" << *CPUGroupThreadsLimit << ";";
     } else {
         sb << "Disabled;";
+    }
+    if (WorkloadContext.IsDefined()) {
+        sb << "DatabaseId=" << WorkloadContext.DatabaseId << ";";
+        sb << "PoolId=" << WorkloadContext.PoolId << ";";
     }
     return sb;
 }

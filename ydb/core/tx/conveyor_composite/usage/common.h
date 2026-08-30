@@ -13,6 +13,17 @@ enum class ESpecialTaskCategory {
     Deduplication = 4 /* "deduplication" */
 };
 
+struct TWorkloadContext {
+    TString DatabaseId;
+    TString PoolId;
+
+    bool IsDefined() const {
+        return DatabaseId && PoolId;
+    }
+
+    bool operator==(const TWorkloadContext&) const = default;
+};
+
 class TProcessGuard: TNonCopyable {
 private:
     const ESpecialTaskCategory Category;
@@ -20,6 +31,7 @@ private:
     const ui64 ExternalProcessId;
     static inline TAtomicCounter InternalCounter = 0;
     const ui64 InternalProcessId = InternalCounter.Inc();
+    const TWorkloadContext WorkloadContext;
     bool Finished = false;
     std::optional<NActors::TActorId> ServiceActorId;
 
@@ -29,7 +41,8 @@ public:
     }
 
     explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
-        const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
+        const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId,
+        TWorkloadContext workloadContext = {});
 
     bool SendTaskToExecute(const std::shared_ptr<ITask>& task) const;
 
@@ -40,6 +53,7 @@ public:
         , ScopeId(other.ScopeId)
         , ExternalProcessId(other.ExternalProcessId)
         , InternalProcessId(other.InternalProcessId)
+        , WorkloadContext(std::move(other.WorkloadContext))
         , Finished(other.Finished)
         , ServiceActorId(std::move(other.ServiceActorId)) {
         other.Finished = true;

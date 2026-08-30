@@ -1,5 +1,7 @@
 #include "category.h"
 
+#include <ranges>
+
 namespace NKikimr::NConveyorComposite {
 
 bool TProcessCategory::HasTasks() const {
@@ -7,36 +9,30 @@ bool TProcessCategory::HasTasks() const {
 }
 
 std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
-    std::shared_ptr<TProcess> pMin;
-    for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
-        for (ui32 i = 0; i < it->second.size(); ++i) {
-            if (!it->second[i]->GetScope()->CheckToRun()) {
-                continue;
-            }
-            pMin = it->second[i];
-            std::swap(it->second[i], it->second.back());
-            it->second.pop_back();
-            if (it->second.empty()) {
-                WeightedProcesses.erase(it);
-            }
-            break;
-        }
-        if (pMin) {
-            break;
+    std::vector<std::shared_ptr<TProcess>> candidates;
+    for (const auto& [_, processes] : WeightedProcesses) {
+        for (const auto& process :
+                processes | std::views::filter([](const auto& process) { return process->GetScope()->CheckToRun(); })) {
+            candidates.emplace_back(process);
         }
     }
-    if (!pMin) {
-        return std::nullopt;
+
+    for (const auto& process : candidates) {
+        Y_UNUSED(RemoveWeightedProcess(process));
+        auto result = process->ExtractTaskWithPrediction(counters, *WorkloadQuota);
+        if (process->GetTasksCount()) {
+            WeightedProcesses[process->GetWeightedUsage()].emplace_back(process);
+        }
+        if (!result) {
+            continue;
+        }
+        if (scopeIds.emplace(process->GetScope()->GetScopeId()).second) {
+            process->GetScope()->IncInFlight();
+        }
+        Counters->WaitingQueueSize->Set(WaitingTasksCount->Val());
+        return result;
     }
-    auto result = pMin->ExtractTaskWithPrediction(counters);
-    if (pMin->GetTasksCount()) {
-        WeightedProcesses[pMin->GetWeightedUsage()].emplace_back(pMin);
-    }
-    if (scopeIds.emplace(pMin->GetScope()->GetScopeId()).second) {
-        pMin->GetScope()->IncInFlight();
-    }
-    Counters->WaitingQueueSize->Set(WaitingTasksCount->Val());
-    return result;
+    return std::nullopt;
 }
 
 TProcessScope& TProcessCategory::MutableProcessScope(const TString& scopeName) {
@@ -88,6 +84,7 @@ void TProcessCategory::UnregisterScope(const TString& name) {
 }
 
 void TProcessCategory::PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds) {
+    WorkloadQuota->Finish(result.DetachWorkloadReservation(), result.GetDuration());
     const ui64 internalProcessId = result.GetProcessId();
     auto it = Processes.find(internalProcessId);
     if (scopeIds.emplace(result.GetScope()->GetScopeId()).second) {

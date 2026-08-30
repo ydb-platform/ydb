@@ -15,6 +15,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <queue>
+#include <ranges>
 
 namespace NKikimr::NConveyorComposite {
 
@@ -29,15 +30,30 @@ public:
         Tasks[priority].emplace_back(std::move(task));
         ++Size;
     }
-    TWorkerTaskPrepare pop() {
-        Y_ABORT_UNLESS(Size);
-        auto result = std::move(Tasks.rbegin()->second.front());
-        Tasks.rbegin()->second.pop_front();
-        if (Tasks.rbegin()->second.size() == 0) {
-            Tasks.erase(--Tasks.end());
+    template <class TPredicate>
+    std::optional<TWorkerTaskPrepare> pop(TPredicate&& predicate) {
+        for (auto&& [priority, queue] : Tasks | std::views::reverse) {
+            auto filtered = queue | std::views::filter([&](auto& task) {
+                return predicate(task);
+            });
+            auto filteredIt = filtered.begin();
+            if (filteredIt == filtered.end()) {
+                continue;
+            }
+            auto result = std::move(*filteredIt);
+            queue.erase(filteredIt.base());
+            if (queue.empty()) {
+                Tasks.erase(priority);
+            }
+            --Size;
+            return result;
         }
-        --Size;
-        return result;
+        return std::nullopt;
+    }
+    std::optional<TWorkerTaskPrepare> pop() {
+        return pop([](const auto&) {
+            return true;
+        });
     }
     ui32 size() const {
         return Size;
@@ -80,13 +96,24 @@ public:
         return Tasks.size();
     }
 
-    TWorkerTask ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& signals) {
-        auto result = Tasks.pop();
-        CPUUsage->AddPredicted(result.GetPredictedDuration());
+    std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& signals,
+        TWorkloadQuotaController& workloadQuota) {
+        auto result = Tasks.pop([&](TWorkerTaskPrepare& task) {
+            auto reservation = workloadQuota.TryReserve(task.GetWorkloadContext(), task.GetPredictedDuration());
+            if (!reservation.Allowed) {
+                return false;
+            }
+            task.SetWorkloadReservation(std::move(reservation.Reservation));
+            return true;
+        });
+        if (!result) {
+            return std::nullopt;
+        }
+        CPUUsage->AddPredicted(result->GetPredictedDuration());
         WaitingTasksCount->Dec();
         InProgressTasksCount.Inc();
-        const auto taskClass = result.GetTask()->GetTaskClassIdentifier();
-        return std::move(result).BuildTask(signals->GetTaskSignals(taskClass));
+        const auto taskClass = result->GetTask()->GetTaskClassIdentifier();
+        return std::move(*result).BuildTask(signals->GetTaskSignals(taskClass));
     }
 
     void PutTaskResult(TWorkerTaskResult&& result) {
@@ -108,8 +135,9 @@ public:
         CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
     }
 
-    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category) {
-        TWorkerTaskPrepare wTask(std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId);
+    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category, TWorkloadContext workloadContext) {
+        TWorkerTaskPrepare wTask(
+            std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId, std::move(workloadContext));
         Tasks.push(std::move(wTask));
         WaitingTasksCount->Inc();
     }

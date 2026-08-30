@@ -1,6 +1,7 @@
 #pragma once
 #include "counters.h"
 #include "scope.h"
+#include "workload.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
 
@@ -18,14 +19,26 @@ private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
     YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY_DEF(TWorkloadContext, WorkloadContext);
+    TWorkloadQuotaController::TReservationPtr WorkloadReservation;
 
 public:
     TWorkerTaskContext(
-        const TDuration prediction, const ESpecialTaskCategory category, const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
+        const TDuration prediction, const ESpecialTaskCategory category, const std::shared_ptr<TProcessScope>& scope, const ui64 processId,
+        TWorkloadContext workloadContext)
         : PredictedDuration(prediction)
         , Category(category)
         , Scope(scope)
-        , ProcessId(processId) {
+        , ProcessId(processId)
+        , WorkloadContext(std::move(workloadContext)) {
+    }
+
+    void SetWorkloadReservation(TWorkloadQuotaController::TReservationPtr reservation) {
+        WorkloadReservation = std::move(reservation);
+    }
+
+    TWorkloadQuotaController::TReservationPtr DetachWorkloadReservation() {
+        return std::exchange(WorkloadReservation, {});
     }
 };
 
@@ -37,7 +50,7 @@ private:
     YDB_READONLY_DEF(TMonotonic, Start);
     YDB_READONLY_DEF(TMonotonic, Finish);
 
-    TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish);
+    TWorkerTaskResult(TWorkerTaskContext&& context, const TMonotonic start, const TMonotonic finish);
     friend class TWorkerTask;
 
 public:
@@ -53,13 +66,13 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
 
 public:
-    TWorkerTaskResult GetResult(const TMonotonic start, const TMonotonic finish) const {
-        return TWorkerTaskResult(*this, start, finish);
+    TWorkerTaskResult GetResult(const TMonotonic start, const TMonotonic finish) && {
+        return TWorkerTaskResult(std::move(*this), start, finish);
     }
 
     TWorkerTask(const ITask::TPtr& task, const TDuration prediction, const ESpecialTaskCategory category,
         const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
-        : TBase(prediction, category, scope, processId)
+        : TBase(prediction, category, scope, processId, {})
         , Task(task)
         , TaskSignals(taskSignals) {
         Y_ABORT_UNLESS(task);
@@ -85,8 +98,8 @@ public:
     }
 
     TWorkerTaskPrepare(ITask::TPtr&& task, const TDuration prediction, const ESpecialTaskCategory category,
-        const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
-        : TBase(prediction, category, scope, processId)
+        const std::shared_ptr<TProcessScope>& scope, const ui64 processId, TWorkloadContext workloadContext)
+        : TBase(prediction, category, scope, processId, std::move(workloadContext))
         , Task(std::move(task)) {
         AFL_VERIFY(Task);
     }
@@ -101,6 +114,7 @@ struct TEvInternal {
         EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
         EvRetryConfigSubscription,
+        EvWorkloadQuotaWakeup,
         EvEnd
     };
 
@@ -147,6 +161,15 @@ struct TEvInternal {
     };
 
     class TEvRetryConfigSubscription: public NActors::TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
+
+    class TEvWorkloadQuotaWakeup: public NActors::TEventLocal<TEvWorkloadQuotaWakeup, EvWorkloadQuotaWakeup> {
+    public:
+        explicit TEvWorkloadQuotaWakeup(TMonotonic deadline)
+            : Deadline(deadline)
+        {}
+
+        const TMonotonic Deadline;
+    };
 };
 
 }   // namespace NKikimr::NConveyorComposite

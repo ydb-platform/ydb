@@ -13,8 +13,8 @@ TEvInternal::TEvTaskProcessedResult::TEvTaskProcessedResult(
     AFL_VERIFY(Results.size());
 }
 
-TWorkerTaskResult::TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish)
-    : TBase(context)
+TWorkerTaskResult::TWorkerTaskResult(TWorkerTaskContext&& context, const TMonotonic start, const TMonotonic finish)
+    : TBase(std::move(context))
     , Start(start)
     , Finish(finish) {
     AFL_VERIFY(Start <= Finish);

@@ -169,6 +169,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, TruncateJournal, (const TYPath&, i64, const TTruncateJournalOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (const std::string&, const TGetFileFromCacheOptions&));
     UNSUPPORTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const TYPath&, const std::string&, const TPutFileToCacheOptions&));
+    UNSUPPORTED_METHOD(TFuture<TFilePartitions>, PartitionFile, (const TYPath&, const std::vector<TFileReadRange>&, const TPartitionFileOptions&));
+    UNSUPPORTED_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (const TFilePartitionCookiePtr&, const TReadFilePartitionOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (const TGetCurrentUserOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AddMember, (const std::string&, const std::string&, const TAddMemberOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RemoveMember, (const std::string&, const std::string&, const TRemoveMemberOptions&));

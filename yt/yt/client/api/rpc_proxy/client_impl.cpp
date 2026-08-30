@@ -2005,6 +2005,21 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
     }));
 }
 
+TFuture<TFilePartitions> TClient::PartitionFile(
+    const NYPath::TYPath& /*path*/,
+    const std::vector<TFileReadRange>& /*ranges*/,
+    const TPartitionFileOptions& /*options*/)
+{
+    THROW_ERROR_EXCEPTION("PartitionFile is not implemented yet");
+}
+
+TFuture<IFileReaderPtr> TClient::CreateFilePartitionReader(
+    const TFilePartitionCookiePtr& /*cookie*/,
+    const TReadFilePartitionOptions& /*options*/)
+{
+    THROW_ERROR_EXCEPTION("CreateFilePartitionReader is not implemented yet");
+}
+
 TFuture<TClusterMeta> TClient::GetClusterMeta(
     const TGetClusterMetaOptions& /*options*/)
 {

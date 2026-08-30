@@ -49,6 +49,9 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
     auto it = portionData.GetRecordsVerified().begin();
 
     for (auto&& i : resultSchema.GetColumnIds()) {
+        if (IIndexInfo::IsVirtualColumn(i)) {
+            continue;
+        }
         while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() < i) {
             ++it;
             continue;

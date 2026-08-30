@@ -9,6 +9,8 @@
 
 namespace NKikimr::NOlap {
 
+static_assert((ui32)IIndexInfo::ESpecialColumn::PARTITION_ID + 1 == (ui32)IIndexInfo::ESpecialColumn::PORTION_ID);
+
 const std::shared_ptr<TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
     const auto& result = GetColumnLoaderOptional(columnId);
     AFL_VERIFY(result);
@@ -32,6 +34,20 @@ void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSna
     batch.AddField(WriteIdField, NArrow::MakeUI64Array(insertWriteId, numRows)).Validate();
 }
 
+void IIndexInfo::AddPartitionIdColumn(NArrow::TGeneralContainer& batch, const ui64 tabletId) {
+    if (batch.HasColumn(SPEC_COL_PARTITION_ID)) {
+        return;
+    }
+    batch.AddField(PartitionIdField, NArrow::MakeUI64Array(tabletId, batch.num_rows())).Validate();
+}
+
+void IIndexInfo::AddPortionIdColumn(NArrow::TGeneralContainer& batch, const ui64 portionId) {
+    if (batch.HasColumn(SPEC_COL_PORTION_ID)) {
+        return;
+    }
+    batch.AddField(PortionIdField, NArrow::MakeUI64Array(portionId, batch.num_rows())).Validate();
+}
+
 void IIndexInfo::NormalizeDeletionColumn(NArrow::TGeneralContainer& batch) {
     if (batch.HasColumn(SPEC_COL_DELETE_FLAG)) {
         return;
@@ -40,7 +56,11 @@ void IIndexInfo::NormalizeDeletionColumn(NArrow::TGeneralContainer& batch) {
 }
 
 std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) {
-    if (name == SPEC_COL_PLAN_STEP) {
+    if (name == SPEC_COL_PARTITION_ID) {
+        return ui32(ESpecialColumn::PARTITION_ID);
+    } else if (name == SPEC_COL_PORTION_ID) {
+        return ui32(ESpecialColumn::PORTION_ID);
+    } else if (name == SPEC_COL_PLAN_STEP) {
         return ui32(ESpecialColumn::PLAN_STEP);
     } else if (name == SPEC_COL_TX_ID) {
         return ui32(ESpecialColumn::TX_ID);
@@ -53,20 +73,28 @@ std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) {
 }
 
 std::optional<ui32> IIndexInfo::GetColumnIndexOptional(const std::string& name, const ui32 shift) const {
-    if (name == SPEC_COL_PLAN_STEP) {
+    if (name == SPEC_COL_PARTITION_ID) {
         return shift + 0;
-    } else if (name == SPEC_COL_TX_ID) {
+    } else if (name == SPEC_COL_PORTION_ID) {
         return shift + 1;
-    } else if (name == SPEC_COL_WRITE_ID) {
+    } else if (name == SPEC_COL_PLAN_STEP) {
         return shift + 2;
-    } else if (name == SPEC_COL_DELETE_FLAG) {
+    } else if (name == SPEC_COL_TX_ID) {
         return shift + 3;
+    } else if (name == SPEC_COL_WRITE_ID) {
+        return shift + 4;
+    } else if (name == SPEC_COL_DELETE_FLAG) {
+        return shift + 5;
     }
     return {};
 }
 
 TString IIndexInfo::GetColumnName(const ui32 id, const bool required) const {
-    if (ESpecialColumn(id) == ESpecialColumn::PLAN_STEP) {
+    if (ESpecialColumn(id) == ESpecialColumn::PARTITION_ID) {
+        return SPEC_COL_PARTITION_ID;
+    } else if (ESpecialColumn(id) == ESpecialColumn::PORTION_ID) {
+        return SPEC_COL_PORTION_ID;
+    } else if (ESpecialColumn(id) == ESpecialColumn::PLAN_STEP) {
         return SPEC_COL_PLAN_STEP;
     } else if (ESpecialColumn(id) == ESpecialColumn::TX_ID) {
         return SPEC_COL_TX_ID;
@@ -94,7 +122,11 @@ ui32 IIndexInfo::CalcDeletions(const std::shared_ptr<arrow::RecordBatch>& batch,
 }
 
 std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldOptional(const ui32 columnId) {
-    if (ESpecialColumn(columnId) == ESpecialColumn::PLAN_STEP) {
+    if (ESpecialColumn(columnId) == ESpecialColumn::PARTITION_ID) {
+        return ArrowSchemaPartitionId()->field(0);
+    } else if (ESpecialColumn(columnId) == ESpecialColumn::PORTION_ID) {
+        return ArrowSchemaPortionId()->field(0);
+    } else if (ESpecialColumn(columnId) == ESpecialColumn::PLAN_STEP) {
         return ArrowSchemaSnapshot()->field(0);
     } else if (ESpecialColumn(columnId) == ESpecialColumn::TX_ID) {
         return ArrowSchemaSnapshot()->field(1);
@@ -114,7 +146,11 @@ std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldVerified(const ui32 colu
 }
 
 std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnValue(const ui32 colId) {
-    if (colId == (ui32)ESpecialColumn::PLAN_STEP) {
+    if (colId == (ui32)ESpecialColumn::PARTITION_ID) {
+        return nullptr;
+    } else if (colId == (ui32)ESpecialColumn::PORTION_ID) {
+        return nullptr;
+    } else if (colId == (ui32)ESpecialColumn::PLAN_STEP) {
         return nullptr;
     } else if (colId == (ui32)ESpecialColumn::TX_ID) {
         return nullptr;

@@ -433,7 +433,7 @@ std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
     const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (const ui32 id : ids) {
-        AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id));
+        AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id) && !TIndexInfo::IsVirtualColumn(id));
         auto it = columns.find(id);
         AFL_VERIFY(it != columns.end());
         auto f = TIndexInfo::BuildArrowField(it->second, cache);
@@ -622,14 +622,14 @@ std::vector<ui32> TIndexInfo::GetEntityIds() const {
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
     const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const {
-    AFL_VERIFY(!IsSpecialColumn(column.Id));
+    AFL_VERIFY(!IsSpecialColumn(column.Id) && !IsVirtualColumn(column.Id));
     return std::make_shared<TColumnFeatures>(column.Id, GetColumnFieldVerified(column.Id), DefaultSerializer, operators->GetDefaultOperator(),
         NArrow::IsPrimitiveYqlType(column.PType), column.Id == GetPKFirstColumnId(), false, nullptr, column.GetCorrectKeyOrder(), column.PType);
 }
 
 std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnFeatures(
     const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const {
-    if (IsSpecialColumn(columnId)) {
+    if (IsSpecialColumn(columnId) || IsVirtualColumn(columnId)) {
         return std::make_shared<TColumnFeatures>(columnId, GetColumnFieldVerified(columnId), DefaultSerializer, operators->GetDefaultOperator(),
             false, false, false, IIndexInfo::DefaultColumnValue(columnId), std::nullopt);
     } else {
@@ -718,7 +718,7 @@ void TIndexInfo::ApplyDefaultSerializer() {
 
 void TIndexInfo::EraseColumn(const ui32 position) {
     const ui32 columnId = SchemaColumnIdsWithSpecials[position];
-    AFL_VERIFY(!IIndexInfo::IsSpecialColumn(columnId));
+    AFL_VERIFY(!IIndexInfo::IsSpecialColumn(columnId) && !IIndexInfo::IsVirtualColumn(columnId));
     SchemaColumnIdsWithSpecials.erase(SchemaColumnIdsWithSpecials.begin() + position);
     Columns.erase(columnId);
     std::vector<std::shared_ptr<arrow::Field>> fields = SchemaWithSpecials->fields();
@@ -736,7 +736,7 @@ void TIndexInfo::EraseColumn(const ui32 position) {
 
 void TIndexInfo::InsertColumn(const NKikimrSchemeOp::TOlapColumnDescription& columnProto, const std::optional<ui32> keyOrder,
     const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    AFL_VERIFY(!IIndexInfo::IsSpecialColumn(columnProto.GetId()));
+    AFL_VERIFY(!IIndexInfo::IsSpecialColumn(columnProto.GetId()) && !IIndexInfo::IsVirtualColumn(columnProto.GetId()));
     auto tableCol = BuildColumnFromProto(columnProto, cache);
     if (keyOrder) {
         tableCol.KeyOrder = *keyOrder;

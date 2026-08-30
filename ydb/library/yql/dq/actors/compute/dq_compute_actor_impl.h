@@ -507,6 +507,12 @@ protected:
             return;
         }
 
+        CA_LOG_T("Check run status"
+            << ". LastRunStatus: " << ProcessOutputsState.LastRunStatus
+            << ". ChannelsReady: " << ProcessOutputsState.ChannelsReady
+            << ". DataWasSent: " << ProcessOutputsState.DataWasSent
+            << ". HasDataToSend: " << ProcessOutputsState.HasDataToSend);
+
         auto status = ProcessOutputsState.LastRunStatus;
 
         if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished && !HasEffectsOutputs) {
@@ -583,6 +589,7 @@ protected:
                         finished &= info.Channel->IsFinished();
                     }
                     if (!finished) {
+                        CA_LOG_T("Continue execution, not all input channels are finished");
                         for (auto& [channelId, info] : InputChannelsMap) {
                             info.Channel->Finish();
                         }
@@ -857,7 +864,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
     //bool ReadyToCheckpoint() is pure and must be overriden in a derived class
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override final {
-        CA_LOG_D("Commit state");
+        CA_LOG_D("Commit state, sources count: " << SourcesMap.size() << ", sinks count: " << SinksMap.size());
 
         for (auto& [_, source] : SourcesMap) {
             Y_ABORT_UNLESS(source.AsyncInput);
@@ -1031,8 +1038,9 @@ protected:
         NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
 
         TOutputChannelInfo(ui64 channelId, ui32 dstStageId)
-            : ChannelId(channelId), DstStageId(dstStageId)
-        { }
+            : ChannelId(channelId)
+            , DstStageId(dstStageId)
+        {}
 
         struct TStats {
             ui64 BlockedByCapacity = 0;
@@ -1070,6 +1078,7 @@ protected:
             const NDqProto::TWatermark* GetWatermarkOptional() const {
                 return HasWatermark ? &Watermark : nullptr;
             }
+
             const NDqProto::TCheckpoint* GetCheckpointOptional() const {
                 return HasCheckpoint ? &Checkpoint : nullptr;
             }
@@ -1119,17 +1128,21 @@ protected:
                 Y_ABORT_UNLESS(Channel->IsFinished());
                 return result;
             }
+
             result.reserve(countLimit);
             for (ui32 i = 0; i < countLimit && !Finished; ++i) {
                 TDrainedChannelMessage message;
                 if (!message.ReadData(*this)) {
                     break;
                 }
+
                 result.emplace_back(std::move(message));
+
                 if (Channel->IsFinished()) {
                     Finished = true;
                 }
             }
+
             return result;
         }
     };

@@ -127,6 +127,12 @@ void TCheckpointCoordinator::ScheduleNextCheckpoint() {
         ScheduleCheckpointContext.MetricsReportedAt = now;
     }
 
+    YDB_LOG_DEBUG("Try to schedule next checkpoint",
+        {"coordinatorId", CoordinatorId},
+        {"monotonicNow", TInstant::FromValue(now.MicroSeconds())},
+        {"nextCheckpointStartAt", TInstant::FromValue(ScheduleCheckpointContext.NextCheckpointStartAt.MicroSeconds())},
+        {"waitScheduleNextCheckpointEventForCheckpointStartAt", ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt});
+
     if (ScheduleCheckpointContext.NextCheckpointStartAt > now) {
         // Checkpoint time in the future
 

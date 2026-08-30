@@ -666,8 +666,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("[Export]",
-            {"selfId", this->SelfId()},
-            {"result", result});
+            {"selfId", this->SelfId()});
 
         if (result.IsSuccess()) {
             return PassAway();

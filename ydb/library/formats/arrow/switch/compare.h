@@ -79,7 +79,7 @@ public:
 
     template <bool notNull>
     static std::partial_ordering TypedCompare(const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
-        AFL_VERIFY(lhs.type_id() == rhs.type_id())("lhs", lhs.type_id())("rhs", rhs.type_id());
+        AFL_VERIFY(lhs.type_id() == rhs.type_id())("lhs", lhs.type()->ToString())("rhs", rhs.type()->ToString());
         return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos);
     }
 

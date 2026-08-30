@@ -1,7 +1,6 @@
 #include "client_impl.h"
 
 #include "config.h"
-#include "chaos_lease.h"
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
@@ -15,6 +14,7 @@
 #include "timestamp_provider.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/chaos_lease.h>
 #include <yt/yt/client/api/formatted_table_reader.h>
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/table_partition_reader.h>
@@ -260,9 +260,7 @@ TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
     TChaosLeaseId chaosLeaseId,
     const TChaosLeaseAttachOptions& options)
 {
-    auto connection = GetRpcProxyConnection();
     auto client = GetRpcProxyClient();
-    auto channel = GetRetryingChannel();
 
     auto chaosLeasePath = Format("%v/@", FromObjectId(chaosLeaseId));
 
@@ -272,11 +270,10 @@ TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
 
         auto chaosLease = CreateChaosLease(
             std::move(client),
-            std::move(channel),
             chaosLeaseId,
             timeout,
             options.PingAncestors,
-            options.PingPeriod);
+            RpcProxyClientLogger());
 
         if (options.Ping) {
             return chaosLease->Ping({}).Apply(BIND([=] {
@@ -292,7 +289,6 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
 {
     auto connection = GetRpcProxyConnection();
     auto client = GetRpcProxyClient();
-    auto channel = GetRetryingChannel();
 
     auto createOptions = TCreateNodeOptions{};
     auto timeout = options.LeaseTimeout.value_or(connection->GetConfig()->DefaultChaosLeaseTimeout);
@@ -305,12 +301,26 @@ TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions
     return client->CreateObject(EObjectType::ChaosLease, {}).Apply(BIND([=] (const TChaosLeaseId& chaosLeaseId) {
         return CreateChaosLease(
             std::move(client),
-            std::move(channel),
             chaosLeaseId,
             timeout,
             options.PingAncestors,
-            options.PingPeriod);
+            RpcProxyClientLogger());
     }));
+}
+
+TFuture<void> TClient::PingChaosLease(
+    TChaosLeaseId chaosLeaseId,
+    const TChaosLeasePingOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PingChaosLease();
+    SetTimeoutOptions(*req, options);
+
+    ToProto(req->mutable_chaos_lease_id(), chaosLeaseId);
+    req->set_ping_ancestors(options.PingAncestors);
+
+    return req->Invoke().AsVoid();
 }
 
 TFuture<void> TClient::SetUserBanned(

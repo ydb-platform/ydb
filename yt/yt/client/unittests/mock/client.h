@@ -1036,6 +1036,11 @@ public:
         const TChaosLeaseAttachOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, PingChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options),
+        (override));
+
 private:
     NTabletClient::ITableMountCachePtr TableMountCache_;
     NTransactionClient::ITimestampProviderPtr TimestampProvider_;

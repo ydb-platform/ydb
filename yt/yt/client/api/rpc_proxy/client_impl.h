@@ -146,6 +146,10 @@ public:
     TFuture<NApi::IPrerequisitePtr> StartChaosLease(
         const TChaosLeaseStartOptions& options = {}) override;
 
+    TFuture<void> PingChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options = {}) override;
+
     TFuture<void> SetUserBanned(
         const std::string& user,
         bool isBanned,

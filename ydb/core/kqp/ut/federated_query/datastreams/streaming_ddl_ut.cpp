@@ -5279,7 +5279,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreateTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
+        constexpr char pqSourceNameNoAuth[] = "sourceNameNoAuth";
         CreatePqSource(pqSourceName);
+        CreatePqSource(pqSourceNameNoAuth);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithNoAuth AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceNameNoAuth,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Authorization is required for setting `DELIVERY_GUARANTEE` = 'exactly_once'");
 
         constexpr char queryName[] = "deliveryGuarantyWriteSetting";
         ExecQuery(fmt::format(R"(

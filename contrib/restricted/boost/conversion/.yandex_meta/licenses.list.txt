@@ -11,6 +11,11 @@
 
 
 ====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
 License
 
 Distributed under the [Boost Software License, Version 1.0](https://boost.org/LICENSE_1_0.txt).
@@ -18,18 +23,24 @@ Distributed under the [Boost Software License, Version 1.0](https://boost.org/LI
 ====================COPYRIGHT====================
 //  (C) Copyright Boris Rasin, 2014-2021.
 //  (C) Copyright Antony Polukhin, 2014-2026.
+//  (C) Copyright Fedor Osetrov, 2025-2026.
 //  Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
 
 
 ====================COPYRIGHT====================
-//  (C) Copyright Kevlin Henney and Dave Abrahams 1999.
-//  (C) Copyright Boris Rasin 2014.
+//  (C) Copyright David Abrahams, 2003.
+//  (C) Copyright Fedor Osetrov, 2025-2026.
+
+
+====================COPYRIGHT====================
+//  (C) Copyright Kevlin Henney and Dave Abrahams, 1999.
+//  (C) Copyright Boris Rasin, 2014.
+//  (C) Copyright Fedor Osetrov, 2025-2026.
 //  Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
 
 
 ====================COPYRIGHT====================
-// Copyright David Abrahams 2003.
-// Distributed under the Boost Software License, Version 1.0. (See
-// accompanying file LICENSE_1_0.txt or copy at
+// Copyright (c) 2025-2026 Antony Polukhin
+// Copyright (c) 2025-2026 Fedor Osetrov

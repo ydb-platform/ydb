@@ -1,11 +1,12 @@
-#include "chaos_lease_base.h"
+#include "chaos_lease.h"
 
 #include "connection.h"
 #include "client.h"
+#include "private.h"
 
 #include <yt/yt/client/object_client/helpers.h>
 
-#include <yt/yt/core/rpc/public.h>
+#include <yt/yt/client/transaction_client/public.h>
 
 namespace NYT::NApi {
 
@@ -13,47 +14,84 @@ using namespace NObjectClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChaosLeaseBase::TChaosLeaseBase(
+class TChaosLease
+    : public virtual IPrerequisite
+{
+public:
+    TChaosLease(
+        IClientPtr client,
+        NChaosClient::TChaosLeaseId id,
+        TDuration timeout,
+        bool pingAncestors,
+        const NLogging::TLogger& logger);
+
+    IClientPtr GetClient() const override;
+    NPrerequisiteClient::TPrerequisiteId GetId() const override;
+    TDuration GetTimeout() const override;
+
+    TFuture<void> Ping(const TPrerequisitePingOptions& options = {}) override;
+    TFuture<void> Abort(const TPrerequisiteAbortOptions& options = {}) override;
+
+    void SubscribeAborted(const TAbortedHandler& handler) override;
+    void UnsubscribeAborted(const TAbortedHandler& handler) override;
+
+private:
+    const IClientPtr Client_;
+    const NChaosClient::TChaosLeaseId Id_;
+    const TDuration Timeout_;
+    const bool PingAncestors_;
+
+    const NLogging::TLogger Logger;
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    TPromise<void> AbortPromise_;
+
+    TSingleShotCallbackList<TAbortedHandlerSignature> Aborted_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+TChaosLease::TChaosLease(
     IClientPtr client,
-    NRpc::IChannelPtr channel,
     NChaosClient::TChaosLeaseId id,
     TDuration timeout,
     bool pingAncestors,
-    std::optional<TDuration> pingPeriod,
     const NLogging::TLogger& logger)
     : Client_(std::move(client))
-    , Channel_(std::move(channel))
     , Id_(id)
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
-    , PingPeriod_(pingPeriod)
     , Logger(logger
         .WithTag("ChaosLeaseId", Id_)
         .WithTags(Client_->GetConnection()->GetLoggingTags()))
 { }
 
-NApi::IClientPtr TChaosLeaseBase::GetClient() const
+IClientPtr TChaosLease::GetClient() const
 {
     return Client_;
 }
 
-NPrerequisiteClient::TPrerequisiteId TChaosLeaseBase::GetId() const
+NPrerequisiteClient::TPrerequisiteId TChaosLease::GetId() const
 {
     return Id_;
 }
 
-TDuration TChaosLeaseBase::GetTimeout() const
+TDuration TChaosLease::GetTimeout() const
 {
     return Timeout_;
 }
 
-TFuture<void> TChaosLeaseBase::Ping(const TPrerequisitePingOptions& options)
+TFuture<void> TChaosLease::Ping(const TPrerequisitePingOptions& /*options*/)
 {
-    return DoPing(options).Apply(
+    return Client_->PingChaosLease(GetId(), TChaosLeasePingOptions{
+        .PingAncestors = PingAncestors_,
+    }).Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& resultOrError) {
             if (resultOrError.IsOK()) {
                 YT_TLOG_DEBUG("Chaos lease pinged");
-            } else if (resultOrError.FindMatching(NYTree::EErrorCode::ResolveError)) {
+            } else if (resultOrError.FindMatching(NYTree::EErrorCode::ResolveError) ||
+                resultOrError.FindMatching(NTransactionClient::EErrorCode::NoSuchTransaction))
+            {
                 // Hard error.
                 YT_TLOG_DEBUG("Chaos lease has expired or was aborted");
 
@@ -77,7 +115,7 @@ TFuture<void> TChaosLeaseBase::Ping(const TPrerequisitePingOptions& options)
         }));
 }
 
-TFuture<void> TChaosLeaseBase::Abort(const TPrerequisiteAbortOptions& options)
+TFuture<void> TChaosLease::Abort(const TPrerequisiteAbortOptions& options)
 {
     {
         auto guard = Guard(SpinLock_);
@@ -128,14 +166,31 @@ TFuture<void> TChaosLeaseBase::Abort(const TPrerequisiteAbortOptions& options)
         }));
 }
 
-void TChaosLeaseBase::SubscribeAborted(const TAbortedHandler& handler)
+void TChaosLease::SubscribeAborted(const TAbortedHandler& handler)
 {
     Aborted_.Subscribe(handler);
 }
 
-void TChaosLeaseBase::UnsubscribeAborted(const TAbortedHandler& handler)
+void TChaosLease::UnsubscribeAborted(const TAbortedHandler& handler)
 {
     Aborted_.Unsubscribe(handler);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+IPrerequisitePtr CreateChaosLease(
+    IClientPtr client,
+    NChaosClient::TChaosLeaseId id,
+    TDuration timeout,
+    bool pingAncestors,
+    const NLogging::TLogger& logger)
+{
+    return New<TChaosLease>(
+        std::move(client),
+        id,
+        timeout,
+        pingAncestors,
+        logger);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

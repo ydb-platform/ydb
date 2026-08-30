@@ -285,6 +285,10 @@ public:
         NChaosClient::TChaosLeaseId /*chaosLeaseId*/,
         const TChaosLeaseAttachOptions& /*options*/));
 
+    UNIMPLEMENTED_METHOD(TFuture<void>, PingChaosLease, (
+        NChaosClient::TChaosLeaseId /*chaosLeaseId*/,
+        const TChaosLeasePingOptions& /*options*/));
+
     UNIMPLEMENTED_METHOD(TFuture<void>, SetUserBanned, (
         const std::string& /*user*/,
         bool /*isBanned*/,

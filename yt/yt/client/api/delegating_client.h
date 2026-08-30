@@ -341,6 +341,11 @@ public:
         const TChaosLeaseAttachOptions& options),
         (chaosLeaseId, options));
 
+    DELEGATE_METHOD(TFuture<void>, PingChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options),
+        (chaosLeaseId, options));
+
     DELEGATE_METHOD(TFuture<void>, SetUserBanned, (
         const std::string& user,
         bool isBanned,

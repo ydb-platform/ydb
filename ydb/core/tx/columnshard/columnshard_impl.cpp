@@ -497,8 +497,8 @@ void TColumnShard::RunAlterStore(
     ApplyColumnShardConfig();
 }
 
-// Portions are written by TBlobManager, past the executor; channels 0 and 1 hold the log
-// and the local database and stay with the executor's cutter.
+// Portions go through TBlobManager, past the executor; channels 0 and 1 (log, local DB)
+// stay with the executor's cutter.
 bool TColumnShard::HasExternallyWrittenBlobs(ui32 channel) const {
     return channel >= NOlap::NBlobOperations::TGlobal::FirstDataChannel;
 }
@@ -1636,9 +1636,8 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
         for (auto&& i : PortionsByPath) {
-            // The requested path may have been dropped between the request and this
-            // tx execution (e.g. the cut-history sweep iterates a portion snapshot
-            // without holding a read snapshot) — skip it instead of aborting.
+            // The cut-history sweep iterates a portion snapshot without a read snapshot, so
+            // the path may have been dropped since the request: skip rather than abort.
             const auto granulePtr = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(i.first);
             if (!granulePtr) {
                 continue;
@@ -1663,10 +1662,8 @@ public:
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else if (rowset.EndOfSet()) {
-                            // The portion's rows are already erased by cleanup while the
-                            // in-memory object still lingers (remove-marked). Only such
-                            // portions may legitimately lack rows: requesters without a
-                            // read snapshot (cut-history sweep) can race the cleanup.
+                            // Rows erased by cleanup while the in-memory object lingers.
+                            // Only remove-marked portions may legitimately lack rows.
                             AFL_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
                             Constructors.erase(itPortionConstructor);

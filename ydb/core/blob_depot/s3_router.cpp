@@ -172,7 +172,7 @@ namespace NKikimr::NBlobDepot {
             enum {
                 EvBalancerTick = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvRefreshNow,
-                EvPushMetrics,
+                EvSweepRetiring,
             };
         };
 
@@ -235,7 +235,7 @@ namespace NKikimr::NBlobDepot {
             return TDuration::Seconds(Settings.GetMinRetireGracePeriodSec());
         }
 
-        TDuration MetricsPushInterval() const {
+        TDuration SweepRetiringInterval() const {
             const ui32 ms = Settings.GetMetricsPushIntervalMs();
             return TDuration::MilliSeconds(ms ? ms : 2500);
         }
@@ -464,7 +464,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void ScheduleSweepRetiring() {
-            TActivationContext::Schedule(MetricsPushInterval(), new IEventHandle(TEvPrivate::EvPushMetrics, 0,
+            TActivationContext::Schedule(SweepRetiringInterval(), new IEventHandle(TEvPrivate::EvSweepRetiring, 0,
                 SelfId(), {}, nullptr, 0));
         }
 
@@ -678,7 +678,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
                 cFunc(TEvPrivate::EvBalancerTick, HandleBalancerTick);
                 cFunc(TEvPrivate::EvRefreshNow, HandleRefreshNow);
-                cFunc(TEvPrivate::EvPushMetrics, HandleSweepRetiring);
+                cFunc(TEvPrivate::EvSweepRetiring, HandleSweepRetiring);
                 cFunc(TEvents::TSystem::Poison, PassAway);
             }
         }

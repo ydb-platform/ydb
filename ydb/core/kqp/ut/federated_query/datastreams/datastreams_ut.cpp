@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const std::string sourceName = "sourceName";
         const std::string inputTopicName = "inputTopicName";
-        const std::string outputTopicName = "outputTopicName";
+        const TString outputTopicName = "outputTopicName";
         const std::string tableName = "tableName";
 
         CreateTopic(outputTopicName);
@@ -2457,6 +2457,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
             ExecQuery(query, EStatus::GENERIC_ERROR);
         }
+    }
+
+    Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
+        const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT String::JoinFromList(ListReplicate("X", 10000000), "-");)",
+            "pq_source"_a = pqSourceName,
+            "output_topic"_a = outputTopic
+        ), EStatus::EXTERNAL_ERROR, "Max message size for YDS is 1048576 bytes but received message with size of");
     }
 }
 

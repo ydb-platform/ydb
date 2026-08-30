@@ -32,7 +32,7 @@ namespace NKikimr::NPQ {
 #endif
 
 
-#define LOG_PREFIX "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
+#define LOG_PREFIX TStringBuilder() << "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
 #define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 #define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);

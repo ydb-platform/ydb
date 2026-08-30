@@ -21,23 +21,6 @@ namespace {
 
 using namespace NSchemeCache;
 
-// Scheme description stores tablet config without TopicPath/TopicName (those are filled
-// only when schemeshard configures the tablet). NamesFromConfig requires a path.
-NKikimrPQ::TPQTabletConfig TabletConfigForNames(
-    const NKikimrPQ::TPQTabletConfig& src,
-    const TString& realPath,
-    const TString& ydbDatabaseFallback)
-{
-    auto cfg = src;
-    if (cfg.GetTopicPath().empty()) {
-        cfg.SetTopicPath(realPath);
-    }
-    if (cfg.GetYdbDatabasePath().empty() && !ydbDatabaseFallback.empty()) {
-        cfg.SetYdbDatabasePath(ydbDatabaseFallback);
-    }
-    return cfg;
-}
-
 bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject> securityObject) {
     if (!settings.UserToken) {
         return true;
@@ -208,10 +191,9 @@ public:
                                 YDB_LOG_DEBUG("Path SUCCESS",
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
-                                auto names = NNameResolver::NamesFromConfig(TabletConfigForNames(
+                                auto names = NNameResolver::NamesFromConfig(
                                     entry.PQGroupInfo->Description.GetPQTabletConfig(),
-                                    realPath,
-                                    RequestDatabaseName));
+                                    realPath);
                                 if (isCDCStream) {
                                     TString cdcPath = realPath;
                                     constexpr TStringBuf suffix = "/streamImpl";
@@ -223,7 +205,7 @@ public:
                                 auto info = MakeTopicInfo(EStatus::SUCCESS, entry, realPath);
                                 info.CdcStream = isCDCStream;
                                 info.CdcStreamName = cdcStreamName;
-                                info.Names = std::move(names);
+                                info.Names = NNameResolver::MakeTopicNamesPtr(std::move(names));
                                 SetTopicResults(originals, std::move(info));
                             }
                         }
@@ -340,7 +322,7 @@ private:
         info.Info = entry.PQGroupInfo;
         info.Self = entry.Self;
         info.SecurityObject = entry.SecurityObject;
-        info.IsServerless = entry.DomainInfo && entry.DomainInfo->IsServerless();
+        info.DomainInfo = entry.DomainInfo;
         return info;
     }
 

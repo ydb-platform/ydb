@@ -691,7 +691,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::NDescriber::TEvDescribeTopicsResp
     AFL_ENSURE(config.PartitionsSize() > 0);
     AFL_ENSURE(config.HasPQTabletConfig());
     InitialPQTabletConfig = config.GetPQTabletConfig();
-    FullConverter = NPQ::NNameResolver::MakeTopicNamesPtr(info.Names);
+    FullConverter = info.Names;
     if (!FullConverter || !FullConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", path.c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
@@ -710,7 +710,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::NDescriber::TEvDescribeTopicsResp
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = config.GetPQTabletConfig();
         SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
-                        tabletConfig.GetYdbDatabasePath(), info.IsServerless,
+                        tabletConfig.GetYdbDatabasePath(), info.IsServerless(),
                       tabletConfig.GetYcFolderId());
     } else {
         SetupCounters();

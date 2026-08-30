@@ -214,10 +214,11 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].RealPath, "/Root/topic1");
         UNIT_ASSERT(ev->Topics["/Root/topic1"].Info);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Info->Description.GetBalancerTabletID(), 42u);
-        UNIT_ASSERT_C(ev->Topics["/Root/topic1"].Names.IsValid(), ev->Topics["/Root/topic1"].Names.GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Names.GetClientsideName(), "topic1");
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Names.GetPrimaryPath(), "/Root/topic1");
-        UNIT_ASSERT(ev->Topics["/Root/topic1"].Names.GetAccount().empty());
+        UNIT_ASSERT(ev->Topics["/Root/topic1"].Names);
+        UNIT_ASSERT_C(ev->Topics["/Root/topic1"].Names->IsValid(), ev->Topics["/Root/topic1"].Names->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Names->GetClientsideName(), "topic1");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Names->GetPrimaryPath(), "/Root/topic1");
+        UNIT_ASSERT(ev->Topics["/Root/topic1"].Names->GetAccount().empty());
     }
 
     Y_UNIT_TEST(UnknownErrorFromSchemeCache) {
@@ -274,8 +275,9 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT(info.CdcStream);
         UNIT_ASSERT_VALUES_EQUAL(info.CdcStreamName, "feed");
         UNIT_ASSERT_VALUES_EQUAL(info.Info->Description.GetBalancerTabletID(), 99u);
-        UNIT_ASSERT_C(info.Names.IsValid(), info.Names.GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(info.Names.GetClientsideName(), "/Root/table1/feed");
+        UNIT_ASSERT(info.Names);
+        UNIT_ASSERT_C(info.Names->IsValid(), info.Names->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(info.Names->GetClientsideName(), "/Root/table1/feed");
     }
 
     Y_UNIT_TEST(CdcThenStreamImplNotFound) {
@@ -815,12 +817,13 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic"].Status, NDescriber::EStatus::SUCCESS);
         const auto& names = ev->Topics["account/topic"].Names;
-        UNIT_ASSERT_C(names.IsValid(), names.GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(names.GetAccount(), "account");
-        UNIT_ASSERT_VALUES_EQUAL(names.GetCluster(), "dc1");
-        UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account--topic");
-        UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/topic");
-        UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/Root/Federation/account/topic");
+        UNIT_ASSERT(names);
+        UNIT_ASSERT_C(names->IsValid(), names->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(names->GetAccount(), "account");
+        UNIT_ASSERT_VALUES_EQUAL(names->GetCluster(), "dc1");
+        UNIT_ASSERT_VALUES_EQUAL(names->GetClientsideName(), "rt3.dc1--account--topic");
+        UNIT_ASSERT_VALUES_EQUAL(names->GetFederationPath(), "account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(names->GetPrimaryPath(), "/Root/Federation/account/topic");
     }
 
     Y_UNIT_TEST(BadRequestLeavesNamesEmpty) {
@@ -833,7 +836,41 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/"].Status, NDescriber::EStatus::BAD_REQUEST);
-        UNIT_ASSERT(!ev->Topics["account/"].Names.IsValid());
+        UNIT_ASSERT(!ev->Topics["account/"].Names);
+    }
+
+    Y_UNIT_TEST(StoresDomainInfo) {
+        const TPathId serverlessDomain{1, 2};
+        const TPathId sharedDomain{1, 1};
+        TDescribeEnv env([=](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            FillOkTopic(entry, /*balancerTabletId=*/1);
+            const TString path = EntryPath(entry);
+            if (path == "/Root/serverless") {
+                entry.DomainInfo = MakeIntrusive<TDomainInfo>(serverlessDomain, sharedDomain);
+            } else if (path == "/Root/dedicated") {
+                entry.DomainInfo = MakeIntrusive<TDomainInfo>(sharedDomain, sharedDomain);
+            }
+        });
+
+        env.StartDescribe({"/Root/serverless", "/Root/dedicated", "/Root/none"});
+        auto ev = env.WaitResponse();
+
+        const auto& serverless = ev->Topics["/Root/serverless"];
+        UNIT_ASSERT_VALUES_EQUAL(serverless.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT(serverless.DomainInfo);
+        UNIT_ASSERT(serverless.DomainInfo->DomainKey == serverlessDomain);
+        UNIT_ASSERT(serverless.DomainInfo->ResourcesDomainKey == sharedDomain);
+        UNIT_ASSERT(serverless.IsServerless());
+
+        const auto& dedicated = ev->Topics["/Root/dedicated"];
+        UNIT_ASSERT_VALUES_EQUAL(dedicated.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT(dedicated.DomainInfo);
+        UNIT_ASSERT(!dedicated.IsServerless());
+
+        const auto& none = ev->Topics["/Root/none"];
+        UNIT_ASSERT_VALUES_EQUAL(none.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT(!none.DomainInfo);
+        UNIT_ASSERT(!none.IsServerless());
     }
 
 }

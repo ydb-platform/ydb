@@ -208,9 +208,10 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto& topicInfo = topics["/Root/topic1"];
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
-        UNIT_ASSERT_C(topicInfo.Names.IsValid(), topicInfo.Names.GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names.GetClientsideName(), "topic1");
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names.GetPrimaryPath(), "/Root/topic1");
+        UNIT_ASSERT(topicInfo.Names);
+        UNIT_ASSERT_C(topicInfo.Names->IsValid(), topicInfo.Names->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names->GetClientsideName(), "topic1");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names->GetPrimaryPath(), "/Root/topic1");
     }
 
     Y_UNIT_TEST(TopicNotExists) {
@@ -224,6 +225,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT(topics.contains("/Root/topic_not_exists"));
         auto& topicInfo = topics["/Root/topic_not_exists"];
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT(!topicInfo.Names);
     }
 
     Y_UNIT_TEST(TopicNotTopic) {
@@ -258,8 +260,9 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/table1/feed/streamImpl");
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
-        UNIT_ASSERT_C(topicInfo.Names.IsValid(), topicInfo.Names.GetReason());
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names.GetClientsideName(), "/Root/table1/feed");
+        UNIT_ASSERT(topicInfo.Names);
+        UNIT_ASSERT_C(topicInfo.Names->IsValid(), topicInfo.Names->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names->GetClientsideName(), "/Root/table1/feed");
     }
 
     Y_UNIT_TEST(TopicWithoutDatabase) {

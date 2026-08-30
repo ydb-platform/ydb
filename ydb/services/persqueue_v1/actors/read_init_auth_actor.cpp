@@ -140,9 +140,9 @@ bool TReadInitAndAuthActor::ProcessTopicInfo(
     holder.FolderId = pqDescr.GetPQTabletConfig().GetYcFolderId();
     holder.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     holder.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
-    holder.IsServerless = info.IsServerless;
+    holder.IsServerless = info.IsServerless();
     holder.SetPartitionGraph(info.Info->PartitionGraph);
-    holder.FullConverter = NPQ::NNameResolver::MakeTopicNamesPtr(info.Names);
+    holder.FullConverter = info.Names;
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         holder.Partitions[partitionDescription.GetPartitionId()] =

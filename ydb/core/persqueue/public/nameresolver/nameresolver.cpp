@@ -872,14 +872,14 @@ struct TNameBuilder {
         } else {
             Account = Account_.GetOrElse("");
         }
-        TStringBuf path = config.GetTopicPath();
+        TStringBuf path = OriginalTopic;
         TStringBuf db = config.GetYdbDatabasePath();
         path.SkipPrefix("/");
         db.SkipPrefix("/");
         db.ChopSuffix("/");
         Database = db;
         if (FstClass) {
-            AFL_ENSURE(!path.empty())("topic_path", config.GetTopicPath())("database", db);
+            AFL_ENSURE(!path.empty())("topic_path", OriginalTopic)("database", db);
             path.SkipPrefix(db);
             path.SkipPrefix("/");
             ClientsideName = path;
@@ -908,11 +908,12 @@ struct TNameBuilder {
         bool firstClass,
         const TString& pqNormalizedPrefix,
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-        const TString& ydbDatabaseRootOverride)
+        const TString& ydbDatabaseRootOverride,
+        const TString& topicPath)
     {
         PQPrefix = pqNormalizedPrefix;
         auto name = pqTabletConfig.GetTopicName();
-        auto path = pqTabletConfig.GetTopicPath();
+        auto path = topicPath.empty() ? pqTabletConfig.GetTopicPath() : topicPath;
         if (name.empty()) {
             AFL_ENSURE(!path.empty())("topic_path", path)("topic_name", name);
             TStringBuf pathBuf(path), fst, snd;
@@ -951,7 +952,7 @@ struct TNameBuilder {
             Account_ = acc;
         }
         if (FstClass) {
-            OriginalTopic = pqTabletConfig.GetTopicPath();
+            OriginalTopic = path;
             BuildFstClassNames();
         } else {
             BuildForFederation(*Database, path);
@@ -1110,25 +1111,37 @@ struct TNameBuilder {
 
 } // namespace
 
-TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen) {
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath, bool firstClassCitizen) {
     TNameBuilder builder;
-    builder.InitFromTabletConfig(firstClassCitizen, {}, config, "");
+    builder.InitFromTabletConfig(firstClassCitizen, {}, config, "", topicPath);
     return builder.ToTopicNames(true);
 }
 
-TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config) {
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen) {
+    return NamesFromConfig(config, TString(), firstClassCitizen);
+}
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath) {
     const auto& pqConfig = AppData()->PQConfig;
     const bool firstClassCitizen = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
     TNameBuilder builder;
     builder.InitFromTabletConfig(
-        firstClassCitizen, NormalizePqPrefix(pqConfig.GetRoot()), config, pqConfig.GetTestDatabaseRoot());
+        firstClassCitizen,
+        NormalizePqPrefix(pqConfig.GetRoot()),
+        config,
+        pqConfig.GetTestDatabaseRoot(),
+        topicPath);
     auto names = builder.ToTopicNames(true);
     // Request-side FCC converters used to keep names valid when AppData FCC is off
     // for a first-class tablet config (kafka BalanceScenarioForFederation).
     if (!names.IsValid() && !firstClassCitizen) {
-        return NamesFromConfig(config, true);
+        return NamesFromConfig(config, topicPath, true);
     }
     return names;
+}
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config) {
+    return NamesFromConfig(config, TString());
 }
 
 TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clientsideName) {

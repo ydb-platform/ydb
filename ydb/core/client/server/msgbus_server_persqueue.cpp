@@ -122,6 +122,7 @@ NSchemeCache::TSchemeCacheNavigate::TEntry EntryFromDescribedTopic(const NPQ::ND
     entry.PQGroupInfo = info.Info;
     entry.Self = info.Self;
     entry.SecurityObject = info.SecurityObject;
+    entry.DomainInfo = info.DomainInfo;
     if (!info.RealPath.empty()) {
         entry.Path = NKikimr::SplitPath(info.RealPath);
     }
@@ -348,9 +349,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
         if (!info.Info || info.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
             continue;
         }
-        auto names = info.Names.IsValid()
-            ? NPQ::NNameResolver::MakeTopicNamesPtr(info.Names)
-            : NPQ::NNameResolver::TTopicNamesPtr();
+        auto names = info.Names;
         auto name = names ? names->GetClientsideName() : TString();
         if (name.empty()) {
             name = originalName;

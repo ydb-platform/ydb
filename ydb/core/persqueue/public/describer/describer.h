@@ -60,9 +60,13 @@ struct TTopicInfo {
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;
-    // Filled on SUCCESS via NamesFromConfig. Empty on errors.
-    NNameResolver::TTopicNames Names;
-    bool IsServerless = false;
+    // Filled on SUCCESS via NamesFromConfig. Null if the topic was not found.
+    NNameResolver::TTopicNamesPtr Names;
+    NSchemeCache::TDomainInfo::TPtr DomainInfo;
+
+    bool IsServerless() const {
+        return DomainInfo && DomainInfo->IsServerless();
+    }
 };
 
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {

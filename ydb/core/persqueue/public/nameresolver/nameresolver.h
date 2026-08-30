@@ -196,15 +196,29 @@ inline TTopicNamesPtr MakeTopicNamesPtr(TTopicNames names) {
 
 /**
  * Tablet's only name entry. Reads firstClassCitizen, PQ Root and TestDatabaseRoot from AppData()->PQConfig.
- * Prefer this overload wherever an actor context is available.
+ * Prefer this overload wherever an actor context is available and the config already has TopicPath.
  */
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config);
+
+/**
+ * Same as NamesFromConfig(config), but uses topicPath instead of config.GetTopicPath().
+ * Does not modify config. Pass the scheme path when the stored tablet config has no TopicPath.
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath);
 
 /**
  * Same formation as NamesFromConfig, but firstClassCitizen is passed explicitly and AppData is not read.
  * Use when there is no actor TLS (unit tests) or when formation must not follow AppData.
  */
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen);
+
+/**
+ * NamesFromConfig(config, firstClassCitizen) with an explicit topicPath (does not modify config).
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath, bool firstClassCitizen);
+
+// const char* would convert to bool and skip topicPath. Pass TString.
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const char*) = delete;
 
 /** CDC: override ClientsideName with the stream path (not streamImpl). */
 TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clientsideName);

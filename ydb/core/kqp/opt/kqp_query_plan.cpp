@@ -2461,10 +2461,14 @@ void SetNonZero(NJson::TJsonValue& node, const TStringBuf& name, T value) {
     }
 }
 
-void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& planIndex, THashMap<TString, NJson::TJsonValue>& precomputes) {
+void BuildPlanIndex(
+    const NJson::TJsonValue& plan,
+    THashMap<int, const NJson::TJsonValue*>& planIndex,
+    THashMap<TString, const NJson::TJsonValue*>& precomputes
+) {
     if (plan.GetMapSafe().contains("PlanNodeId")){
         auto id = plan.GetMapSafe().at("PlanNodeId").GetIntegerSafe();
-        planIndex[id] = plan;
+        planIndex[id] = &plan;
     }
 
     if (plan.GetMapSafe().contains("Subplan Name")) {
@@ -2472,14 +2476,14 @@ void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& p
 
         auto pos = precomputeName.find("precompute");
         if (pos != TString::npos) {
-            precomputes[precomputeName.substr(pos)] = plan;
+            precomputes[precomputeName.substr(pos)] = &plan;
         } else if (precomputeName.size()>=4 && precomputeName.find("CTE ") != TString::npos) {
-            precomputes[precomputeName.substr(4)] = plan;
+            precomputes[precomputeName.substr(4)] = &plan;
         }
     }
 
     if (plan.GetMapSafe().contains("Plans")) {
-        for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+        for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
             BuildPlanIndex(p, planIndex, precomputes);
         }
     }
@@ -2536,8 +2540,8 @@ void CopySimplifiedConnectionFields(const NJson::TJsonValue& from, NJson::TJsonV
 class TQueryPlanReconstructor {
 public:
     TQueryPlanReconstructor(
-        const THashMap<int, NJson::TJsonValue>& planIndex,
-        const THashMap<TString, NJson::TJsonValue>& precomputes
+        const THashMap<int, const NJson::TJsonValue*>& planIndex,
+        const THashMap<TString, const NJson::TJsonValue*>& precomputes
     )
         : PlanIndex(planIndex)
         , Precomputes(precomputes)
@@ -2579,7 +2583,7 @@ private:
             if (stats.contains("Table")) {
                 ownTableStats = &stats.at("Table");
             }
-            if (stats.contains("CpuTimeUs")) {
+            if (operatorIndex == 0 && stats.contains("CpuTimeUs")) {
                 const auto& cpuTime = stats.at("CpuTimeUs");
                 const double cpuTimeUs = cpuTime.IsMap()
                     ? cpuTime.GetMapSafe().at("Max").GetDoubleSafe()
@@ -2664,7 +2668,7 @@ private:
             if (plan.GetMapSafe().contains("CTE Name")) {
                 auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
                 if (Precomputes.contains(precompute)) {
-                    planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
+                    planInputs.AppendValue(ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
                 }
             }
 
@@ -2705,21 +2709,23 @@ private:
                 const bool isCte = !childMap.contains("Operators") && childMap.contains("CTE Name");
                 return !isCte && childMap.at("Node Type").GetStringSafe().find("Precompute") == TString::npos;
             };
-            size_t regularPlansCount = 0;
-            for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
-                if (isRegularPlan(p)) {
-                    ++regularPlansCount;
+            TMaybe<double> childCpuTimeMs;
+            if (effectiveCpuTimeMs) {
+                size_t regularPlansCount = 0;
+                for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+                    if (isRegularPlan(p)) {
+                        ++regularPlansCount;
+                    }
+                }
+                if (regularPlansCount == 1) {
+                    childCpuTimeMs = effectiveCpuTimeMs;
                 }
             }
-            TMaybe<double> childCpuTimeMs;
-            if (regularPlansCount == 1) {
-                childCpuTimeMs = effectiveCpuTimeMs;
-            }
-            for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
                 if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                     auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
                     if (Precomputes.contains(precompute)) {
-                        planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
+                        planInputs.AppendValue(ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
                     }
                 } else if (isRegularPlan(p)) {
                     planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, effectiveTableStats, childCpuTimeMs));
@@ -2736,7 +2742,7 @@ private:
                 return result;
             }
 
-            return ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing());
+            return ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing());
         }
 
         auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
@@ -2758,7 +2764,7 @@ private:
                 }
                 processedExternalOperators.insert(inputPlanKey);
 
-                auto inputPlan = PlanIndex.at(inputPlanKey);
+                const auto& inputPlan = *PlanIndex.at(inputPlanKey);
                 planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast", ownTableStats, Nothing()) );
             } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
                 auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
@@ -2801,7 +2807,7 @@ private:
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
-                planInputs.push_back(ReconstructImpl(Precomputes.at(maybePrecompute), 0, taskCount, false, nullptr, Nothing()));
+                planInputs.push_back(ReconstructImpl(*Precomputes.at(maybePrecompute), 0, taskCount, false, nullptr, Nothing()));
             }
         }
 
@@ -2976,8 +2982,8 @@ private:
     }
 
 private:
-    const THashMap<int, NJson::TJsonValue>& PlanIndex;
-    const THashMap<TString, NJson::TJsonValue>& Precomputes;
+    const THashMap<int, const NJson::TJsonValue*>& PlanIndex;
+    const THashMap<TString, const NJson::TJsonValue*>& Precomputes;
     ui32 NodeIDCounter;
     i32 Budget; // Prevent bugs with inf recursion
 };
@@ -3019,15 +3025,17 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "CombineByKey"
     };
 
-    THashMap<int, NJson::TJsonValue> planIndex;
-    THashMap<TString, NJson::TJsonValue> precomputes;
+    NJson::TJsonValue reconstructedPlan;
+    {
+        THashMap<int, const NJson::TJsonValue*> planIndex;
+        THashMap<TString, const NJson::TJsonValue*> precomputes;
 
+        BuildPlanIndex(plan, planIndex, precomputes);
 
-    BuildPlanIndex(plan, planIndex, precomputes);
-
-    plan =
-        TQueryPlanReconstructor(planIndex, precomputes)
-            .Reconstruct(plan);
+        TQueryPlanReconstructor reconstructor(planIndex, precomputes);
+        reconstructedPlan = reconstructor.Reconstruct(plan);
+    }
+    plan = std::move(reconstructedPlan);
 
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);

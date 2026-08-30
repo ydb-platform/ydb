@@ -28,8 +28,8 @@ multiplying the production Block-4+2 state space:
 
 - `vpatch_erasure_none.pml`: one DIFF after successful `FoundParts`, with
   pre-accept rejection, application ERROR before or after a write,
-  post-accept disconnect, lost or stale results, BSQueue watchdog, DSProxy
-  `NeverTag`, and fallback.
+  post-accept disconnect, `PDiskError`, one bounded SkeletonFront restart,
+  lost or stale results, BSQueue watchdog, DSProxy `NeverTag`, and fallback.
 - `vpatch_block_2plus1_failures.pml`: reduced model starting after successful
   `FoundParts`, with BSQueue disconnect before/after VDisk acceptance,
   synthetic errors, stale late results, parity timeout, and fallback. A finite
@@ -43,16 +43,38 @@ the VDisk application as separate actors. SkeletonFront opens its request
 window and closes it on the local `TEvVDiskRequestCompleted` before the result
 can enter transport. A queue watchdog and the VPatch `NeverTag` independently
 prevent the client-side request from waiting for the remote result forever.
-Terminal actors do not wait for late events; buffered leftovers represent dead
-letters. Normal verification assumes reliable local actor delivery and a live
-SkeletonFront incarnation. It also assumes one logical request and an eventual
-full quiet watchdog interval; unrelated traffic that repeatedly moves the
-watchdog barrier is covered by the focused ForceEnd model instead.
 
-Defining `INJECT_LOCAL_COMPLETION_LOSS` adds a fault branch that drops the
-local completion after the VDisk operation has finished. This is a sensitivity
-check, not a supported production outcome: client and BSQueue liveness must
-still hold, while SkeletonFront accounting and complete cleanup must fail.
+Production BSQueue is long-lived, but this model projects it onto one queue
+item and stops observing it after that item becomes terminal. Buffered late
+results represent replies that production rejects through
+`InterconnectSession`, `IsReady()`, or `Queue.Expecting()`. The reconnect and
+next-request session automaton is an assumption of this one-item model, not a
+verified property.
+
+Local completion is reliable while the same SkeletonFront incarnation remains
+running. The model does not drop it independently. Instead, completion races
+with one request-level lifecycle outcome in the Front mailbox. If completion is
+handled first, Front closes both server windows before publishing the network
+result; a later `PDiskError` or restart still resets the connection, so result
+and reset race at BSQueue. If `PDiskError` is handled first, the old private
+request remains outstanding in the terminal Front and the late completion is
+ignored. `FRONT_RESTART` summarizes old-Front destruction and creation of a
+clean incarnation, including a possible `DB_ERROR -> stop -> restart` sequence.
+Completion addressed to the old actor cannot affect the new one.
+
+Only one logical request is modeled, so the new incarnation accepts no work.
+The epoch-0 request counters remain immutable history after restart, while
+`current_front_has_request` tracks the active incarnation: completion clears
+it, `PDiskError` preserves an uncompleted request in the terminal Front, and
+restart creates a Front without that old request. A second request and its full
+epoch-1 counters are outside the model.
+
+The model also assumes an eventual full quiet watchdog interval. A Front
+`DropConnection` may be lost; the watchdog still terminalizes the modeled item.
+Unrelated traffic that repeatedly moves the watchdog barrier is covered by the
+focused ForceEnd model. The VPatch actor's later
+`VPatchDyingRequest`/`VPatchDyingConfirm` handshake is outside this
+request-accounting model.
 
 The Block failure model applies an assumed BSQueue request/result contract to
 three `VPATCH_DIFF` and two `XOR_DIFF` requests. It checks VPatch against that
@@ -95,15 +117,10 @@ cc -O2 -DMEMLIM=1024 -DSAFETY -DNOCLAIM -o pan_safety pan.c
 ./pan_safety -m100000
 cc -O2 -DMEMLIM=1024 -DNFAIR=16 -o pan pan.c
 ./pan -a -N safe_vpatch_success_requires_accounted_write -m100000
-./pan -a -f -N live_accepted_request_accounted -m100000
-./pan -a -f -N live_eventual_cleanup -m100000
-
-# Expected accounting counterexample when local completion is lost.
-spin -DINJECT_LOCAL_COMPLETION_LOSS -a vpatch_erasure_none.pml
-cc -O2 -DMEMLIM=1024 -DNFAIR=16 -o pan_injected pan.c
-./pan_injected -a -f -N live_accepted_request_accounted -m100000
-spin -DINJECT_LOCAL_COMPLETION_LOSS -t -p -g -l \
-    vpatch_erasure_none.pml
+./pan -a -N safe_failure_has_exact_request_fate -m100000
+./pan -a -f -N live_accepted_request_resolves_or_retires -m100000
+./pan -a -f -N live_stable_front_accounts_request -m100000
+./pan -a -f -N live_eventual_client_item_settlement -m100000
 
 spin -a vpatch_block_2plus1_failures.pml
 cc -O2 -DMEMLIM=2048 -DNFAIR=16 -o pan pan.c
@@ -160,17 +177,16 @@ an exhaustive run with `errors: 0`; fair liveness uses weak process fairness.
 
 | Model | Check | Result | Stored states | Time |
 | --- | --- | --- | ---: | ---: |
-| ErasureNone failures | assertions/deadlocks | holds | 47,382 | 0.07 s |
-| ErasureNone failures | each safety LTL claim | holds | 47,382 | 0.08 s |
-| ErasureNone failures | client eventually replies | holds | 28,330 (311,883 visited) | 0.56 s |
-| ErasureNone failures | accepted DIFF is accounted | holds | 65,911 (249,440 visited) | 0.51 s |
-| ErasureNone failures | BSQueue item terminates | holds | 63,402 (232,827 visited) | 0.44 s |
-| ErasureNone failures | complete cleanup | holds | 44,045 (510,965 visited) | 0.99 s |
-| ErasureNone, completion loss | assertions/deadlocks | violated | 1,354 before trail | <0.01 s |
-| ErasureNone, completion loss | client eventually replies | holds | 30,806 (340,321 visited) | 0.61 s |
-| ErasureNone, completion loss | BSQueue item terminates | holds | 68,789 (254,692 visited) | 0.48 s |
-| ErasureNone, completion loss | accepted DIFF is accounted | violated | 544 (2,252 visited) before trail | 0.03 s |
-| ErasureNone, completion loss | complete cleanup | violated | 1,230 (9,868 visited) before trail | 0.01 s |
+| ErasureNone lifecycle | assertions/deadlocks | holds | 1,088,653 | 0.67 s |
+| ErasureNone lifecycle | each safety LTL claim | holds | 1,088,653 | <=0.87 s |
+| ErasureNone lifecycle | client eventually replies | holds | 626,076 (~7.26M visited) | 5.14 s |
+| ErasureNone lifecycle | accepted DIFF resolves or retires | holds | 1,327,450 (~3.92M visited) | 3.36 s |
+| ErasureNone lifecycle | stable Front accounts DIFF | holds | 1,167,284 (~1.50M visited) | 1.26 s |
+| ErasureNone lifecycle | local completion is settled | holds | 1,455,503 (~3.51M visited) | 2.98 s |
+| ErasureNone lifecycle | old completion becomes irrelevant | holds | 1,308,659 (~2.53M visited) | 2.13 s |
+| ErasureNone lifecycle | BSQueue item terminates | holds | 1,438,925 (~5.30M visited) | 4.08 s |
+| ErasureNone lifecycle | retired DIFF terminalizes its item | holds | 1,168,575 (~1.52M visited) | 1.23 s |
+| ErasureNone lifecycle | client/item settlement and request fate | holds | 1,010,390 (~12.3M visited) | 9.35 s |
 | Block 2+1 failures | assertions/deadlocks | holds | 1,406,757 | 1.51 s |
 | Block 2+1 failures | each safety LTL claim | holds | 1,406,757 | <=1.98 s |
 | Block 2+1 failures | client eventually replies | holds | 2,200,669 (~10.9M visited) | 17.0 s |
@@ -193,13 +209,16 @@ interval, queue reset drains the item and may return a collateral error to an
 unrelated waiting request. Forwarding the result closes the queue item while
 `ForceStopFlags` still prevents it from counting toward VPatch quorum.
 
-The injected ErasureNone trail separates client completion from server-side
-accounting. `NeverTag` starts fallback and the queue watchdog returns the sole
-BSQueue item, so the client has one reply and `queue_item_outstanding == 0`.
-The VDisk application has nevertheless dropped its local completion, leaving
-`front_accept_count == 1`, `front_complete_count == 0`, and
-`front_outstanding == 1` forever. The normal model excludes that local-message
-loss and exhaustively proves that every accepted DIFF is accounted.
+The ErasureNone lifecycle search separates a stable Front from a retired
+incarnation. In the stable branch every accepted DIFF is accounted before its
+result is published. When `PDiskError` or restart is handled before completion,
+the old request remains historically `accepted=1, completed=0, outstanding=1`;
+its late completion becomes irrelevant. In `DB_ERROR` the terminal Front still
+owns that request; after restart the new Front does not. When completion is
+handled first, the old request is already `completed=1, outstanding=0`, but the
+subsequent lifecycle reset still races with its published result. Independently,
+the BSQueue item and DSProxy finish through the first result, disconnect,
+watchdog, or `NeverTag`/fallback.
 
 The legacy Mirror-3-DC counterexample has `mode=2`, four selected writers,
 but returns success after acknowledgements distributed as DC0=2, DC1=1,

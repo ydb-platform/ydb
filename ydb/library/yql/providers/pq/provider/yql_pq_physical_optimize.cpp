@@ -391,7 +391,7 @@ public:
                 if (name == NDeliveryGuaranteeSetting::Name && value == NDeliveryGuaranteeSetting::ExactlyOnceValue && !State_->DeferredPublicationExtIdPrefix) {
                     TIssue issue(ctx.GetPosition(setting.Pos()), TStringBuilder()
                         << "`" << NDeliveryGuaranteeSetting::PrettyName << "` = '" << NDeliveryGuaranteeSetting::ExactlyOnceValue
-                        << "' can not be used in current query context, falling back to default '" << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"
+                        << "' cannot be used in current query context, falling back to default '" << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"
                     );
                     issue.Severity = TSeverityIds::S_WARNING;
                     ctx.AddWarning(issue);

@@ -144,7 +144,7 @@ void TCheckpointCoordinator::ScheduleNextCheckpoint() {
     }
 
     if (const auto report = now - ScheduleCheckpointContext.MetricsReportedAt >= checkpointPeriod; !CanStartNewCheckpoint(report)) {
-        // Checkpoint can not be created due to inflight limit, schedule metrics refresh and wait for current checkpoint completion
+        // Checkpoint cannot be created due to inflight limit, schedule metrics refresh and wait for current checkpoint completion
         if (report) {
             ScheduleCheckpointContext.MetricsReportedAt = now;
         }

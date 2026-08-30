@@ -316,7 +316,7 @@ private:
             if (usedSlots > totalSlots) {
                 ythrow yexception() << "Too many storage groups requested: " << usedSlots - 1 << ", try to format storage" << storageInfo;
             } else {
-                ythrow yexception() << "Too many tenants requested, can not allocate at least one storage group for " << tenantsToDistribute
+                ythrow yexception() << "Too many tenants requested, cannot allocate at least one storage group for " << tenantsToDistribute
                     << " tenants" << (usedSlots - 1 ? TStringBuilder() << ", already used storage groups: " << usedSlots - 1 : TStringBuilder()) << ", try to format storage" << storageInfo;
             }
         }

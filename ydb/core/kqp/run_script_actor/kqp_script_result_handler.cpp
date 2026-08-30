@@ -620,7 +620,7 @@ private:
                 {"issues", issues.ToOneLineString()},
                 {"from", ev->Sender});
 
-            // We can not finish query manually, consider it is already finished
+            // We cannot finish query manually, consider it is already finished
             QueryIsRunning = false;
             Finish(status, AddRootIssue(TStringBuilder() << "Failed to cancel query (" << status << ")", issues));
             return;

@@ -151,7 +151,7 @@ protected: //TDqComputeActorChannels::ICalbacks
         if (ack) {
             const auto freeSpace = channel->GetFreeSpace();
             this->Channels->SendChannelDataAck(channel->GetChannelId(), channel->GetFreeSpace());
-            CA_LOG_T("Got ack from input channel #" << channelId << ", send ree space: " << freeSpace);
+            CA_LOG_T("Got ack from input channel #" << channelId << ", send free space: " << freeSpace);
         }
 
         TBase::ContinueExecute(EResumeSource::CATakeInput);

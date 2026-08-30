@@ -2868,7 +2868,7 @@ private:
 // Script execution cancellation with handling runtime and retry cancellation
 // *Assumptions*:
 // 1. Retry backoff large enough to cancel script execution operation between retries
-// 2. System not under high load so data transaction can not be executed during backoff period
+// 2. System not under high load so data transaction cannot be executed during backoff period
 
 class TCancelScriptExecutionOperationActor final : public TActorBootstrapped<TCancelScriptExecutionOperationActor> {
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;

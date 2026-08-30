@@ -26,9 +26,9 @@ public:
 };
 
 template<bool fast>
-class TBufferredSerializer : public TPackedSerializer<fast> {
+class TBufferedSerializer : public TPackedSerializer<fast> {
 public:
-    TBufferredSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
+    TBufferedSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
         : TPackedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, bufferPageAllocSize)
         , MaxChunkBytes(maxChunkBytes) {
 
@@ -39,19 +39,19 @@ public:
 };
 
 template<bool fast>
-class TNarrowSerializer : public TBufferredSerializer<fast> {
+class TNarrowSerializer : public TBufferedSerializer<fast> {
 public:
     using TOutputSerializer::Buffer;
     using TOutputSerializer::RowType;
     using TOutputSerializer::TransportVersion;
     using TOutputSerializer::PackerVersion;
     using TOutputSerializer::BufferPageAllocSize;
-    using TBufferredSerializer<fast>::Packer;
-    using TBufferredSerializer<fast>::MaxChunkBytes;
-    using TBufferredSerializer<fast>::Rows;
+    using TBufferedSerializer<fast>::Packer;
+    using TBufferedSerializer<fast>::MaxChunkBytes;
+    using TBufferedSerializer<fast>::Rows;
 
     TNarrowSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
-        : TBufferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
+        : TBufferedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {
@@ -88,7 +88,7 @@ public:
 };
 
 template<bool fast>
-class TWideSerializer : public TBufferredSerializer<fast> {
+class TWideSerializer : public TBufferedSerializer<fast> {
 public:
     using TOutputSerializer::Buffer;
     using TOutputSerializer::RowType;
@@ -96,11 +96,11 @@ public:
     using TOutputSerializer::PackerVersion;
     using TOutputSerializer::BufferPageAllocSize;
     using TPackedSerializer<fast>::Packer;
-    using TBufferredSerializer<fast>::MaxChunkBytes;
-    using TBufferredSerializer<fast>::Rows;
+    using TBufferedSerializer<fast>::MaxChunkBytes;
+    using TBufferedSerializer<fast>::Rows;
 
     TWideSerializer(std::shared_ptr<IChannelBuffer> buffer, NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, NYql::EDatumValidationMode datumValidationMode, ui64 maxChunkBytes, TMaybe<size_t> bufferPageAllocSize)
-        : TBufferredSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
+        : TBufferedSerializer<fast>(buffer, rowType, transportVersion, packerVersion, datumValidationMode, maxChunkBytes, bufferPageAllocSize) {
     }
 
     void Flush(bool finished) override {

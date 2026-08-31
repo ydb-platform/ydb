@@ -325,9 +325,11 @@ namespace NKikimr {
 
                         if (forceError) {
                             front.GetExtQueue(rec->ExtQueueId).DroppedWithError(ctx, rec, now, front);
+                            rec->InFlightLatency.Reset();
                         } else if (now >= rec->Deadline) {
                             ++Deadlines;
                             front.GetExtQueue(rec->ExtQueueId).DeadlineHappened(ctx, rec, now, front);
+                            rec->InFlightLatency.Reset();
                         } else {
                             ctx.Send(rec->Ev.release());
 

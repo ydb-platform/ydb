@@ -583,7 +583,7 @@ namespace {
             TRequest request;
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), LookupToken.GetDatabase(), Token, actorSystem);
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), LookupSource.GetDatabase(), Token, actorSystem);
             result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
                 actorSystem->Send(selfId, new TEvQueryCreateSessionResponse(future, std::move(state)));
             });

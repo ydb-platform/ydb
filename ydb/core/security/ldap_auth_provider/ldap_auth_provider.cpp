@@ -278,7 +278,7 @@ private:
             if (!NKikimrLdap::IsSuccess(result)) {
                 TStringBuilder logErrorMessage;
                 logErrorMessage << "Could not set LDAP ca file \"" << caCertificateFile + "\": " << NKikimrLdap::ErrorToString(result);
-                YDB_LOG_DEBUG("Could not set LDAP ca file",
+                YDB_LOG_DEBUG("Could not set LDAP CA file",
                     {"caCertFile", caCertificateFile},
                     {"error", NKikimrLdap::ErrorToString(result)}
                 );

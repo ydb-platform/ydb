@@ -12,6 +12,7 @@
 #include <ydb/library/actors/core/events.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimr::NPersQueueTests {
 
@@ -55,7 +56,7 @@ private:
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCompleteDelayedGetOwnership::TPtr& ev, const TActorContext& ctx);
 
-    TMaybe<ui64> GetPartitionRequestCookie() const;
+    std::optional<ui64> GetPartitionRequestCookie() const;
 
     void PrepareGetOwnershipResponse();
     void PrepareGetMaxSeqNoResponse();

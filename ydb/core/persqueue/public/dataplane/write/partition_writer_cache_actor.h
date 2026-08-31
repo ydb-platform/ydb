@@ -4,7 +4,9 @@
 
 #include <ydb/core/persqueue/common/actor.h>
 
-namespace NKikimr::NPQ {
+#include <optional>
+
+namespace NKikimr::NPQ::NDataplane::NWrite {
 
 class TPartitionWriterCacheActor : public TBaseActor<TPartitionWriterCacheActor>
                                  , public TConstantLogPrefix {
@@ -60,15 +62,15 @@ private:
     void PoisonWriters();
 
     TCachedPartitionWriter* GetPartitionWriter(const TString& sessionId, const TString& txId,
-                                               const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+                                               const std::optional<TDeferredPublishWriterOpts>& deferredPublish,
                                                const TActorContext& ctx);
     bool TryDeleteOldestWriter(const TActorContext& ctx);
     void RegisterPartitionWriter(const TString& sessionId, const TString& txId,
-                                 const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+                                 const std::optional<TDeferredPublishWriterOpts>& deferredPublish,
                                  const TActorContext& ctx);
     void RegisterDefaultPartitionWriter(const TActorContext& ctx);
     TActorId CreatePartitionWriter(const TString& sessionId, const TString& txId,
-                                   const TMaybe<TDeferredPublishWriterOpts>& deferredPublish,
+                                   const std::optional<TDeferredPublishWriterOpts>& deferredPublish,
                                    const TActorContext& ctx);
 
     template <class TEvent>
@@ -87,4 +89,4 @@ private:
     TEventQueue<TEvPartitionWriter::TEvWriteResponse> PendingWriteResponse;
 };
 
-} // namespace NKikimr::NPQ
+} // namespace NKikimr::NPQ::NDataplane::NWrite

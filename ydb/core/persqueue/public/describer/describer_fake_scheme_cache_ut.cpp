@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -780,6 +781,52 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account2/topic"].Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account1/topic"].RealPath, "/Root/Federation/account1/topic");
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account2/topic"].RealPath, "/Root/Federation/account2/topic");
+    }
+
+    Y_UNIT_TEST(IsServerlessFromDomainInfo) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            FillOkTopic(entry, /*balancerTabletId=*/1);
+            entry.DomainInfo = MakeIntrusive<NSchemeCache::TDomainInfo>(TPathId(1, 1), TPathId(2, 2));
+        });
+
+        env.StartDescribe({"/Root/topic1"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT(ev->Topics["/Root/topic1"].IsServerless);
+    }
+
+    Y_UNIT_TEST(IsServerlessFalseWhenDomainKeysMatch) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            FillOkTopic(entry, /*balancerTabletId=*/1);
+            entry.DomainInfo = MakeIntrusive<NSchemeCache::TDomainInfo>(TPathId(1, 1), TPathId(1, 1));
+        });
+
+        env.StartDescribe({"/Root/topic1"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT(!ev->Topics["/Root/topic1"].IsServerless);
+    }
+
+    Y_UNIT_TEST(FillsEmptyTopicPathFromNavigatePath) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
+            entry.Status = TNavigate::EStatus::Ok;
+            entry.Kind = TNavigate::EKind::KindTopic;
+            auto pqInfo = MakeIntrusive<TNavigate::TPQGroupInfo>();
+            pqInfo->Description.SetBalancerTabletID(1);
+            pqInfo->Description.MutablePQTabletConfig();
+            entry.PQGroupInfo = pqInfo;
+            entry.CreateStep = 1;
+        });
+
+        env.StartDescribe({"/Root/topic1"});
+        auto ev = env.WaitResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ev->Topics["/Root/topic1"].Info->Description.GetPQTabletConfig().GetTopicPath(),
+            "/Root/topic1");
     }
 
 }

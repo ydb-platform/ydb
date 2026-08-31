@@ -4,7 +4,7 @@
 
 namespace NKikimr::NPersQueueTests {
 
-TMaybe<ui64> TPQTabletMock::GetPartitionRequestCookie() const
+std::optional<ui64> TPQTabletMock::GetPartitionRequestCookie() const
 {
     Y_ABORT_UNLESS(Request);
     Y_ABORT_UNLESS(Request->Record.HasPartitionRequest());

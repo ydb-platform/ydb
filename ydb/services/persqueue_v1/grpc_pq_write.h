@@ -1,16 +1,21 @@
 #pragma once
 
+#include "actors/events.h"
 #include "actors/write_session_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/system/mutex.h>
+
+#include <memory>
 
 namespace NKikimr {
 namespace NGRpcProxy {
@@ -85,73 +90,6 @@ private:
     NPersQueue::TConverterFactoryPtr ConverterFactory;
     std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// template methods implementation
-
-template <EProtocol Protocol>
-auto FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    using ServerMessage = typename std::conditional<Protocol == EProtocol::PQv1,
-                                                    PersQueue::V1::StreamingWriteServerMessage,
-                                                    Topic::StreamWriteMessage::FromServer>::type;
-    ServerMessage res;
-    FillIssue(res.add_issues(), code, errorReason);
-    res.set_status(ConvertPersQueueInternalCodeToStatus(code));
-    return res;
-}
-
-template <typename WriteRequest>
-void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const TActorContext& ctx) {
-    constexpr EProtocol Protocol = std::is_same_v<WriteRequest, NGRpcService::TEvStreamPQWriteRequest> ? EProtocol::PQv1 : EProtocol::Topic;
-
-    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection");
-
-    if (TooMuchSessions()) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - too much sessions");
-        ev->Get()->Attach(ctx.SelfID);
-        ev->Get()->WriteAndFinish(
-            FillWriteResponse<Protocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
-            Ydb::StatusIds::OVERLOADED); // CANCELLED
-        return;
-    }
-
-    TString localCluster = AvailableLocalCluster(ctx);
-
-    if (HaveClusters && localCluster.empty()) {
-        ev->Get()->Attach(ctx.SelfID);
-        if (LocalCluster) {
-            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - cluster disabled");
-            ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
-        } else {
-            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - initializing");
-            ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
-        }
-        return;
-    } else {
-        if (ConverterFactory == nullptr) {
-            ConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-                    AppData(ctx)->PQConfig, localCluster
-            );
-        }
-        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-                ConverterFactory, TVector<TString>{}
-        );
-        const ui64 cookie = NextCookie();
-
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New session created cookie",
-            {"cookie", cookie});
-
-        auto ip = ev->Get()->GetPeerName();
-        TActorId worker = ctx.Register(new TWriteSessionActor<Protocol>(
-                ev->Release().Release(), cookie, SchemeCache, Counters,
-                DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
-                *TopicsHandler
-        ));
-
-        Sessions[cookie] = worker;
-    }
-}
-
 
 }
 }

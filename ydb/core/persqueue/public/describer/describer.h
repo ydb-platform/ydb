@@ -2,7 +2,9 @@
 
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
@@ -56,6 +58,7 @@ struct TTopicInfo {
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;
+    bool IsServerless = false;
 };
 
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
@@ -75,6 +78,7 @@ struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAccessRights AccessRights;
     bool ForceSyncVersion = false;
+    NWilson::TTraceId TraceId;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

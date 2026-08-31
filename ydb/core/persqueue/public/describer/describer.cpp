@@ -7,6 +7,7 @@
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <util/generic/ptr.h>
 #include <util/string/join.h>
 
 #include <optional>
@@ -20,6 +21,23 @@ namespace NKikimr::NPQ::NDescriber {
 namespace {
 
 using namespace NSchemeCache;
+
+TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> EnsureTopicPath(
+    TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> info,
+    const TString& realPath)
+{
+    // Same as PQ metacache CheckEntrySetHasTopicPath: tablet config from scheme cache
+    // often has an empty TopicPath. UpgradeToFullConverter needs it.
+    if (!info || !info->Description.HasPQTabletConfig()) {
+        return info;
+    }
+    if (!info->Description.GetPQTabletConfig().GetTopicPath().empty() || realPath.empty()) {
+        return info;
+    }
+    auto copy = MakeIntrusive<TSchemeCacheNavigate::TPQGroupInfo>(*info);
+    copy->Description.MutablePQTabletConfig()->SetTopicPath(realPath);
+    return copy;
+}
 
 bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject> securityObject) {
     if (!settings.UserToken) {
@@ -96,7 +114,8 @@ public:
             entry.ShowPrivatePath = true;
         }
 
-        Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeRequest.release()));
+        Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeRequest.release()),
+             0, 0, Settings.TraceId.Clone());
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -195,9 +214,10 @@ public:
                                     .CdcStream = isCDCStream,
                                     .CdcStreamName = cdcStreamName,
                                     .CreateStep = entry.CreateStep,
-                                    .Info = entry.PQGroupInfo,
+                                    .Info = EnsureTopicPath(entry.PQGroupInfo, realPath),
                                     .Self = entry.Self,
-                                    .SecurityObject = entry.SecurityObject
+                                    .SecurityObject = entry.SecurityObject,
+                                    .IsServerless = entry.DomainInfo && entry.DomainInfo->IsServerless(),
                                 });
                             }
                         }

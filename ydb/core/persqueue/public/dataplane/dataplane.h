@@ -1,14 +1,36 @@
 #pragma once
 
-#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/persqueue/events/events.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
-namespace NKikimr::NPQ {
+namespace NKikimr::NPQ::NDataplane {
 
-NActors::IActor* CreatePartitionWriterCacheActor(
-    const NActors::TActorId& owner,
-    ui32 partition,
-    ui64 tabletId,
-    const TPartitionWriterOpts& opts);
+enum EEv : ui32 {
+    EvWriteInit = InternalEventSpaceBegin(NEvents::EServices::DATAPLANE),
+    EvWrite,
+    EvWriteUpdateToken,
+    EvWriteTokenRefreshed,
+    EvWriteClientDone,
+    EvWriteDieCommand,
+    EvWriteInitAck,
+    EvWriteAck,
+    EvWriteUpdateTokenAck,
+    EvWriteRefreshToken,
+    EvWriteUnauthenticated,
+    EvWriteClosed,
+    EvWriteReadNext,
+    EvWriteConsumedRequestUnits,
+    EvEnd
+};
 
-} // namespace NKikimr::NPQ
+static_assert(EvEnd <= InternalEventSpaceBegin(NEvents::EServices::MLP));
+
+namespace NWrite {
+
+struct TWriteSessionSettings;
+
+NActors::IActor* CreateWriteSessionLogicActor(TWriteSessionSettings settings);
+
+} // namespace NWrite
+
+} // namespace NKikimr::NPQ::NDataplane

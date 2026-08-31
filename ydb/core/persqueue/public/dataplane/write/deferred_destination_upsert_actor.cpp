@@ -8,7 +8,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-namespace NKikimr::NPQ {
+namespace NKikimr::NPQ::NDataplane::NWrite {
 
 namespace {
 
@@ -150,4 +150,4 @@ NActors::IActor* CreateDeferredDestinationUpsertActor(
     return new TDeferredDestinationUpsertActor(writer, std::move(params));
 }
 
-} // namespace NKikimr::NPQ
+} // namespace NKikimr::NPQ::NDataplane::NWrite

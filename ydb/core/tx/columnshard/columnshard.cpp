@@ -660,7 +660,7 @@ void TColumnShard::ScheduleExecutorStatistics() {
 }
 
 void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&) {
-    if (!HasAppData() || !AppData()->FeatureFlags.GetEnableColumnshardMoveData()) {
+    if (!HasAppData() || !AppData()->FeatureFlags.GetEnableColumnshardGroupDecommission()) {
         TTabletExecutedFlat::Handle(ev);
         return;
     }

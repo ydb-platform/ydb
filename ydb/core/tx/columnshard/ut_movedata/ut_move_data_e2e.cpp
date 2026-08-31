@@ -52,7 +52,7 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
     TIntrusivePtr<NFake::TProxyDS> newGroupProxy = new NFake::TProxyDS(TGroupId::FromValue(NewGroup));
     TTester::Setup(runtime,
         { new NFake::TProxyDS(TGroupId::FromValue(0)), oldGroupProxy, newGroupProxy, new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
-    runtime.GetAppData().FeatureFlags.SetEnableColumnshardMoveData(moveDataEnabled);
+    runtime.GetAppData().FeatureFlags.SetEnableColumnshardGroupDecommission(moveDataEnabled);
     auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
     if (ttlBackgroundDisabled) {
         controller->DisableBackground(NYDBTest::ICSController::EBackground::TTL);

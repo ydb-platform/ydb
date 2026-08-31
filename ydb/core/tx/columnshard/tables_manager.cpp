@@ -857,6 +857,8 @@ void TTablesManager::MoveTableProgress(
     table->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
     GenerationIndex.Rename(oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
+    // Propose already ForgetLive'd the source; Rename does not recreate Live. Restore under dst.
+    GenerationIndex.SetLive(newSchemeShardLocalPathId, internalPathId, /*isDropped=*/false);
     // Rename each historical table's SS path so HasSchemeShardLocalPathId / path-local drop versions
     // keep working for time-travel reads after MOVE.
     if (const auto* generations = GenerationIndex.Generations(newSchemeShardLocalPathId)) {

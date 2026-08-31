@@ -332,23 +332,6 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     return result;
 }
 
-std::string FullTopicPath(const std::string& dbPath, std::string_view topic) {
-    if (topic.starts_with(dbPath)) {
-        return std::string(topic);
-    }
-    std::string full;
-    full.reserve(dbPath.size() + 1 + topic.size());
-    full.append(dbPath);
-    if (!full.ends_with('/')) {
-        full.push_back('/');
-    }
-    if (topic.starts_with('/')) {
-        topic = topic.substr(1);
-    }
-    full.append(topic);
-    return full;
-}
-
 void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& delay)
 {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -377,8 +360,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     Cancel(prevDescribePartitionContext);
 
     Ydb::Topic::DescribePartitionRequest request;
-    // Currently, the whole topic path needs to be sent in the DescribePartitionRequest.
-    request.set_path(FullTopicPath(DbDriverState->Database, Settings.Path_));
+    request.set_path(Settings.Path_);
     request.set_partition_id(partition_id);
     request.set_include_location(true);
 

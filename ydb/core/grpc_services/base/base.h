@@ -25,6 +25,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/util/rope.h>
@@ -74,6 +75,20 @@ inline void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::S
 
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
+
+inline TString ResolvePathToDatabase(const TMaybe<TString>& database, TStringBuf path) {
+    if (path.empty()) {
+        return {};
+    }
+
+    const TString canonizedPath = CanonizePath(TString(path));
+    if (path.StartsWith('/')) {
+        return canonizedPath;
+    }
+
+    return NormalizePath(CanonizePath(database.GetOrElse(TString())), canonizedPath);
+}
+
 TString DatabaseFromDomain(const TAppData* appdata);
 
 inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedResult) {
@@ -518,6 +533,10 @@ public:
 
     const TMaybe<TString> GetDatabaseName() const final {
         return ResolvedDatabaseName ? ResolvedDatabaseName : GetDatabaseNameFromRequest();
+    }
+
+    TString GetDatabaseRelativePath(TStringBuf path) const {
+        return ResolvePathToDatabase(GetDatabaseName(), path);
     }
 
     // Store the resolved database for request processing without updating counters.

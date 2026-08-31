@@ -105,7 +105,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
             TExpectedTrace expected{
                 "InitRequest !partition_id !partition_with_generation",
                 "InitResponse partition_id=0 session_id",
-                "DescribePartitionRequest partition_id=0",
+                "DescribePartitionRequest path=test-topic partition_id=0",
                 std::format("DescribePartitionResponse partition_id=0 pl_generation=1 pl_node_id={}", node0_id),
                 std::format("PreferredPartitionLocation Generation=1 NodeId={}", node0_id),
                 "InitRequest !partition_id pwg_partition_id=0 pwg_generation=1",
@@ -113,7 +113,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
                 "Error status=UNAVAILABLE",
 
                 // The tablet has been killed, find out the partition node the tablet ends up.
-                "DescribePartitionRequest partition_id=0",
+                "DescribePartitionRequest path=test-topic partition_id=0",
                 std::format("DescribePartitionResponse partition_id=0 pl_generation=2 pl_node_id={}", node0_id),
                 std::format("PreferredPartitionLocation Generation=2 NodeId={}", node0_id),
                 "InitRequest !partition_id pwg_partition_id=0 pwg_generation=2",

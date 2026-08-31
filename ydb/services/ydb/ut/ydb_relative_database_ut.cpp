@@ -1,6 +1,8 @@
 #include "../ydb_common_ut.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -43,6 +45,11 @@ void AssertSuccess(const TDiscoveryResult& result) {
         result.Response.operation().DebugString());
 }
 
+template <class TResult>
+void AssertSuccess(const TResult& result) {
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(YdbRelativeDatabase) {
@@ -80,40 +87,142 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
         .SetEndpoint(TStringBuilder() << "localhost:" << tenantGrpcPort)
         .SetDatabase("mydb")
         .SetDiscoveryMode(EDiscoveryMode::Sync));
-    // Every SDK request below keeps using the relative database after synchronous discovery.
-    NYdb::NTable::TTableClient tableClient(driver);
+    // Resource paths below are relative after discovery unless explicitly testing absolute compatibility.
+    NScheme::TSchemeClient schemeClient(driver);
+    AssertSuccess(schemeClient.MakeDirectory("relative_dir").GetValueSync());
+    AssertSuccess(schemeClient.DescribePath("relative_dir").GetValueSync());
+    AssertSuccess(schemeClient.ListDirectory("relative_dir").GetValueSync());
+
+    NTable::TTableClient tableClient(driver);
     const auto sessionResult = tableClient.CreateSession().GetValueSync();
-    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    AssertSuccess(sessionResult);
     auto session = sessionResult.GetSession();
 
-    const auto createTableResult = session.ExecuteSchemeQuery(R"(
-        --!syntax_v1
-        CREATE TABLE relative_path_test (
-            Id Uint64,
-            Payload Utf8,
-            PRIMARY KEY (Id)
-        );
-    )").GetValueSync();
-    UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+    auto tableBuilder = tableClient.GetTableBuilder();
+    tableBuilder
+        .AddNullableColumn("Id", EPrimitiveType::Uint64)
+        .AddNullableColumn("Payload", EPrimitiveType::Utf8)
+        .SetPrimaryKeyColumn("Id");
+    AssertSuccess(session.CreateTable(
+        "relative_dir/relative_path_test",
+        tableBuilder.Build()).GetValueSync());
 
-    const auto upsertResult = session.ExecuteDataQuery(R"(
-        --!syntax_v1
-        UPSERT INTO relative_path_test (Id, Payload) VALUES (1u, "value");
-    )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-    UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+    AssertSuccess(session.DescribeTable("relative_dir/relative_path_test").GetValueSync());
 
-    const auto selectResult = session.ExecuteDataQuery(R"(
-        --!syntax_v1
-        SELECT Payload FROM relative_path_test WHERE Id = 1u;
-    )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-    UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+    TValueBuilder rows;
+    rows.BeginList();
+    rows.AddListItem()
+        .BeginStruct()
+            .AddMember("Id").Uint64(1)
+            .AddMember("Payload").Utf8("value")
+        .EndStruct();
+    rows.EndList();
+    AssertSuccess(tableClient.BulkUpsert(
+        "relative_dir/relative_path_test",
+        rows.Build()).GetValueSync());
 
-    TResultSetParser parser(selectResult.GetResultSet(0));
-    UNIT_ASSERT(parser.TryNextRow());
-    const auto payload = parser.ColumnParser("Payload").GetOptionalUtf8();
-    UNIT_ASSERT(payload);
-    UNIT_ASSERT_VALUES_EQUAL(*payload, "value");
-    UNIT_ASSERT(!parser.TryNextRow());
+    AssertSuccess(tableClient.BulkUpsert(
+        "relative_dir/relative_path_test",
+        NTable::EDataFormat::CSV,
+        "2,2\n").GetValueSync());
+
+    auto extraType = TTypeBuilder()
+        .BeginOptional()
+            .Primitive(EPrimitiveType::Uint64)
+        .EndOptional()
+        .Build();
+    AssertSuccess(session.AlterTable(
+        "relative_dir/relative_path_test",
+        NTable::TAlterTableSettings().AppendAddColumns(
+            NTable::TColumn("Extra", extraType))).GetValueSync());
+
+    TValueBuilder keys;
+    keys.BeginList();
+    keys.AddListItem()
+        .BeginStruct()
+            .AddMember("Id").Uint64(1)
+        .EndStruct();
+    keys.AddListItem()
+        .BeginStruct()
+            .AddMember("Id").Uint64(2)
+        .EndStruct();
+    keys.EndList();
+    auto readRowsResult = tableClient.ReadRows(
+        "relative_dir/relative_path_test",
+        keys.Build()).GetValueSync();
+    AssertSuccess(readRowsResult);
+    TResultSetParser readRowsParser(readRowsResult.GetResultSet());
+    ui32 readRowsCount = 0;
+    while (readRowsParser.TryNextRow()) {
+        ++readRowsCount;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(readRowsCount, 2u);
+
+    const auto assertReadTable = [&](TStringBuf path) {
+        auto iterator = session.ReadTable(TString(path)).GetValueSync();
+        AssertSuccess(iterator);
+
+        ui32 rowCount = 0;
+        while (true) {
+            auto part = iterator.ReadNext().GetValueSync();
+            if (part.EOS()) {
+                break;
+            }
+            AssertSuccess(part);
+
+            TResultSetParser readParser(part.ExtractPart());
+            while (readParser.TryNextRow()) {
+                ++rowCount;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rowCount, 2u);
+    };
+
+    assertReadTable("/Root/mydb/relative_dir/relative_path_test");
+    assertReadTable("relative_dir/relative_path_test");
+
+    AssertSuccess(session.CopyTable(
+        "relative_dir/relative_path_test",
+        "relative_dir/copied_once").GetValueSync());
+    AssertSuccess(session.CopyTables({{
+        "relative_dir/relative_path_test",
+        "relative_dir/copied_twice"}}).GetValueSync());
+    AssertSuccess(session.RenameTables({{
+        "relative_dir/copied_twice",
+        "relative_dir/renamed"}}).GetValueSync());
+
+    AssertSuccess(session.DescribeSystemView(".sys/partition_stats").GetValueSync());
+
+    NCoordination::TClient coordinationClient(driver);
+    AssertSuccess(coordinationClient.CreateNode(
+        "relative_dir/coordination",
+        NCoordination::TCreateNodeSettings()
+            .SelfCheckPeriod(TDuration::MilliSeconds(1234))).GetValueSync());
+    AssertSuccess(coordinationClient.AlterNode(
+        "relative_dir/coordination",
+        NCoordination::TAlterNodeSettings()
+            .SessionGracePeriod(TDuration::MilliSeconds(5678))).GetValueSync());
+    const auto describeNodeResult = coordinationClient.DescribeNode(
+        "relative_dir/coordination").GetValueSync();
+    AssertSuccess(describeNodeResult);
+    UNIT_ASSERT_VALUES_EQUAL(
+        describeNodeResult.GetResult().GetSessionGracePeriod().value(),
+        TDuration::MilliSeconds(5678));
+
+    auto startSessionResult = coordinationClient.StartSession(
+        "relative_dir/coordination").GetValueSync();
+    AssertSuccess(startSessionResult);
+    auto coordinationSession = startSessionResult.ExtractResult();
+    AssertSuccess(coordinationSession.Close().GetValueSync());
+    AssertSuccess(coordinationClient.DropNode("relative_dir/coordination").GetValueSync());
+
+    AssertSuccess(session.DropTable("relative_dir/relative_path_test").GetValueSync());
+    AssertSuccess(session.DropTable("relative_dir/copied_once").GetValueSync());
+    AssertSuccess(session.DropTable("relative_dir/renamed").GetValueSync());
+    AssertSuccess(schemeClient.ModifyPermissions(
+        "relative_dir",
+        NScheme::TModifyPermissionsSettings().AddInterruptInheritance(true)).GetValueSync());
+    AssertSuccess(schemeClient.RemoveDirectory("relative_dir").GetValueSync());
 }
 
 } // YdbRelativeDatabase

@@ -347,7 +347,14 @@ private:
     }
 
     void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto* req = GetProtoRequest();
+        Ydb::Table::CreateTableRequest requestWithResolvedPaths;
+        if (req->has_ttl_settings() && req->ttl_settings().has_tiered_ttl()) {
+            requestWithResolvedPaths.CopyFrom(*req);
+            ResolveTtlStoragePaths(*requestWithResolvedPaths.mutable_ttl_settings(), Request_->GetDatabaseName());
+            req = &requestWithResolvedPaths;
+        }
+
         std::pair<TString, TString> pathPair;
         try {
             pathPair = SplitPath(Request_->GetDatabaseName(), req->path());

@@ -3,10 +3,9 @@
 #include "flat_page_btree_index.h"
 #include "flat_part_iface.h"
 
-#include <variant>
-
 namespace NKikimr::NTable::NPage {
 
+    template <typename TChildT = TBtreeIndexNode::TChild>
     class TBtreeIndexNodeWriter {
         using THeader = TBtreeIndexNode::THeader;
         using TIsNullBitmap = TBtreeIndexNode::TIsNullBitmap;
@@ -14,15 +13,13 @@ namespace NKikimr::NTable::NPage {
         using TChild = TBtreeIndexNode::TChild;
         using TShortChildV2 = TBtreeIndexNode::TShortChildV2;
         using TChildV2 = TBtreeIndexNode::TChildV2;
-        using TChildren = std::variant<TVector<TChild>, TVector<TChildV2>>;
+        static constexpr bool WriteV2 = std::is_same_v<TChildT, TChildV2>;
 
     public:
-        TBtreeIndexNodeWriter(TIntrusiveConstPtr<TPartScheme> scheme, TGroupId groupId, bool writeV2 = false)
+        TBtreeIndexNodeWriter(TIntrusiveConstPtr<TPartScheme> scheme, TGroupId groupId)
             : Scheme(std::move(scheme))
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
-            , Children(writeV2 ? TChildren(std::in_place_index<1>) : TChildren(std::in_place_index<0>))
-            , WriteV2(writeV2)
         {
             if (GroupId.IsMain()) {
                 // TODO: some main groups without nulls and var-sized cells also may use fixed format
@@ -56,22 +53,15 @@ namespace NKikimr::NTable::NPage {
             Keys.emplace_back(std::move(key));
         }
 
-        void AddChild(TChild child) {
-            Y_ENSURE(!WriteV2, "Use AddChild(TChildV2) for v2 format");
+        void AddChild(TChildT child) {
             Y_ENSURE(child.GetErasedRowCount() == 0 || !IsShortChildFormat(), "Short format can't have ErasedRowCount");
-            std::get<TVector<TChild>>(Children).push_back(std::move(child));
-        }
-
-        void AddChild(TChildV2 child) {
-            Y_ENSURE(WriteV2, "Use AddChild(TChild) for v1 format");
-            Y_ENSURE(child.GetErasedRowCount() == 0 || !IsShortChildFormat(), "Short format can't have ErasedRowCount");
-            std::get<TVector<TChildV2>>(Children).push_back(std::move(child));
+            Children.push_back(std::move(child));
         }
 
         void EnsureEmpty() {
             Y_ENSURE(!Keys);
             Y_ENSURE(!KeysSize);
-            Y_ENSURE(std::visit([](const auto& v) { return v.empty(); }, Children));
+            Y_ENSURE(!Children);
             Y_ENSURE(!Ptr);
             Y_ENSURE(!End);
         }
@@ -79,7 +69,7 @@ namespace NKikimr::NTable::NPage {
         void Reset() {
             Keys.clear();
             KeysSize = 0;
-            std::visit([](auto& v) { v.clear(); }, Children);
+            Children.clear();
             Ptr = 0;
             End = 0;
         }
@@ -111,7 +101,7 @@ namespace NKikimr::NTable::NPage {
 
         TSharedData Finish() {
             Y_ENSURE(Keys.size());
-            Y_ENSURE(std::visit([](const auto& v) { return v.size(); }, Children) == Keys.size() + 1);
+            Y_ENSURE(Children.size() == Keys.size() + 1);
 
             size_t pageSize = CalcPageSize();
             TSharedData buf = TSharedData::Uninitialized(pageSize);
@@ -150,12 +140,10 @@ namespace NKikimr::NTable::NPage {
             Keys.clear();
             KeysSize = 0;
 
-            std::visit([this](auto& vec) {
-                for (const auto& c : vec) {
-                    PlaceChild(c);
-                }
-                vec.clear();
-            }, Children);
+            for (auto& c : Children) {
+                PlaceChild(c);
+            }
+            Children.clear();
 
             Y_ENSURE(Ptr == End);
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
@@ -324,8 +312,7 @@ namespace NKikimr::NTable::NPage {
         TVector<TString> Keys;
         size_t KeysSize = 0;
 
-        TChildren Children;
-        const bool WriteV2;
+        TVector<TChildT> Children;
 
         char* Ptr = 0;
         const char* End = 0;
@@ -390,7 +377,7 @@ namespace NKikimr::NTable::NPage {
             : Scheme(std::move(scheme))
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
-            , Writer(Scheme, groupId, WriteV2)
+            , Writer(Scheme, groupId)
             , Levels(1)
             , NodeTargetSize(nodeTargetSize)
             , NodeKeysMin(nodeKeysMin)
@@ -599,7 +586,7 @@ namespace NKikimr::NTable::NPage {
     private:
         ui64 IndexSize = 0;
 
-        TBtreeIndexNodeWriter Writer;
+        TBtreeIndexNodeWriter<TChildT> Writer;
         TVector<TLevel> Levels; // from bottom to top
 
         const ui32 NodeTargetSize;

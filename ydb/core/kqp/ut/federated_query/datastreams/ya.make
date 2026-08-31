@@ -14,6 +14,7 @@ ENDIF()
 
 SRCS(
     common.cpp
+    datastreams_checkpoints_ut.cpp
     datastreams_ut.cpp
     datastreams_table_mode_ut.cpp
     datastreams_queries_restart_ut.cpp

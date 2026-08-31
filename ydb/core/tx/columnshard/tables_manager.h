@@ -472,9 +472,9 @@ public:
         }
     }
 
-    // Move the entire generation history from @p fromSs to @p toSs and update the live mapping.
+    // Move generation history fromSs → toSs. Live is moved only if still present; after
+    // MoveTablePropose (ForgetLive) the caller must SetLive the destination.
     void Rename(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
-        // Move live mapping.
         auto itLive = Live.find(fromSs);
         if (itLive != Live.end()) {
             Live[toSs] = itLive->second;

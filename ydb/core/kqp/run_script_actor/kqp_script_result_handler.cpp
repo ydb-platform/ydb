@@ -484,7 +484,10 @@ private:
                     meta.set_truncated(true);
                 }
             }
-            resultSetInfo.UpdateMetaOnComplete();
+
+            if (!SaveResultsState.WaitSaveResult) {
+                resultSetInfo.UpdateMetaOnComplete();
+            }
         } else {
             YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Skip truncated result part",
                 {"logPrefix", LogPrefix()},
@@ -846,7 +849,7 @@ private:
             return;
         }
 
-        if (FinishInfo.IsSuccess() && SaveResultsState.HasResultsToSave()) {
+        if (FinishInfo.IsSuccess() && (SaveResultsState.HasResultsToSave() || SaveResultsState.WaitSaveResult)) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Wait for results to save",
                 {"logPrefix", LogPrefix()});
             ContinueExecute();

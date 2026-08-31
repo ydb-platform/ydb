@@ -33,7 +33,7 @@ Consumer parameters:
 * `metering_mode` — resource metering mode (`RESERVED_CAPACITY` - based on allocated resources or `REQUEST_UNITS` - based on actual usage). Applies to topics in serverless databases. Value type - `String`.
 * `min_active_partitions` — minimum number of active topic partitions. [Autopartitioning](../../../concepts/datamodel/topic#autopartitioning) will not decrease the number of active partitions below this value. Value type — `integer`, default value — `1`.
 * `max_active_partitions` — maximum number of active topic partitions. [Autopartitioning](../../../concepts/datamodel/topic#autopartitioning) will not increase the number of active partitions above this value. Value type — `integer`, by default equal to `min_active_partitions`.
-* `retention_period` — data retention period in the topic. Value type — `Interval`, default value — `18h`.
+* `retention_period` — data retention period in the topic. Value type — `Interval`, default value — `24h`.
 * `retention_storage_mb` — limit on the maximum disk space occupied by topic data. When this value is exceeded, older data is deleted as under retention. With automatic partitioning enabled, the consumed space may exceed the set value. Value type — `integer`, default value — `0` (unlimited).
 * `partition_write_burst_bytes` — size of the write quota reserve for a partition in case of write bursts. When set to `0`, the actual write_burst value is taken equal to the quota value (which allows write bursts of up to 1 second). Value type — `integer`, default value: `0`.
 * `partition_write_speed_bytes_per_second` — maximum allowed write speed to 1 partition. If the write stream to a partition exceeds this value, writes will be throttled. Value type — `integer`, default value — `2097152` (2 MB).

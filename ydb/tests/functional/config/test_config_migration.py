@@ -165,8 +165,11 @@ def verify_configuration_version(cluster, dynconfig_client, expected_v1, expecte
                 last_result.v1_nodes, last_result.v2_nodes, last_result.unknown_nodes,
                 expected_v1, expected_v2, expected_unknown,
             )
-            verify_configuration_version_counters(cluster, expected_v1, expected_v2)
-            return last_result
+            try:
+                verify_configuration_version_counters(cluster, expected_v1, expected_v2)
+                return last_result
+            except requests.RequestException:
+                pass
         logger.debug(
             "configuration version not ready yet: v1=%s v2=%s unknown=%s (expected v1=%s v2=%s unknown=%s)",
             last_result.v1_nodes, last_result.v2_nodes, last_result.unknown_nodes,
@@ -183,6 +186,7 @@ def verify_configuration_version(cluster, dynconfig_client, expected_v1, expecte
     assert_that(last_result.v1_nodes == expected_v1)
     assert_that(last_result.v2_nodes == expected_v2)
     assert_that(last_result.unknown_nodes == expected_unknown)
+    verify_configuration_version_counters(cluster, expected_v1, expected_v2)
     return last_result
 
 

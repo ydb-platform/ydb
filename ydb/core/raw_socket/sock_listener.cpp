@@ -79,12 +79,12 @@ public:
                 Become(&TThis::StateWorking);
                 return;
             } else {
-                YDB_LOG_ERROR("Failed to listen",
+                YDB_LOG_WARN("Failed to listen",
                     {"bindAddress", bindAddress->ToString()},
                     {"error", strerror(-err)});
             }
         } else {
-            YDB_LOG_ERROR("Failed to bind",
+            YDB_LOG_WARN("Failed to bind",
                 {"bindAddress", bindAddress->ToString()},
                 {"error", strerror(-err)});
         }
@@ -96,6 +96,7 @@ public:
         for (const NActors::TActorId& connection : Connections) {
             Send(connection, new NActors::TEvents::TEvPoison());
         }
+        TBase::PassAway();
     }
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev) {

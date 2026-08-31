@@ -68,4 +68,42 @@ Y_UNIT_TEST_SUITE(TSocketListener) {
         UNIT_ASSERT_C(probe.Bind(&probeAddr) != 0,
             "listener should own the port after the occupying socket is closed");
     }
+
+    Y_UNIT_TEST(PoisonStopsRetryWhilePortIsBusy) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        TInet6StreamSocket occupying;
+        occupying.CheckSock();
+        TSockAddrInet6 addr("::", 0);
+        UNIT_ASSERT_VALUES_EQUAL(occupying.Bind(&addr), 0);
+        UNIT_ASSERT_VALUES_EQUAL(occupying.Listen(10), 0);
+        const ui16 port = addr.GetPort();
+        UNIT_ASSERT(port != 0);
+
+        const TActorId pollerId = runtime.Register(CreatePollerActor());
+        TListenerSettings settings;
+        settings.Port = port;
+        settings.Address = "::";
+
+        const TActorId listenerId = runtime.Register(CreateSocketListener(
+            pollerId,
+            settings,
+            [](const TActorId&, TIntrusivePtr<TSocketDescriptor>, TNetworkConfig::TSocketAddressType) -> IActor* {
+                return new TDummyConnectionActor();
+            },
+            NKikimrServices::KAFKA_PROXY));
+        runtime.EnableScheduleForActor(listenerId, true);
+        runtime.SimulateSleep(TDuration::Zero());
+
+        runtime.Send(new IEventHandle(listenerId, TActorId(), new TEvents::TEvPoison()));
+        occupying.Close();
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        TInet6StreamSocket probe;
+        probe.CheckSock();
+        TSockAddrInet6 probeAddr("::", port);
+        UNIT_ASSERT_C(probe.Bind(&probeAddr) == 0,
+            "poisoned listener must not bind the port after a scheduled retry");
+    }
 }

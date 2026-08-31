@@ -390,16 +390,14 @@ public:
                 const auto& httpGatewayConfig = QueryServiceConfig.GetHttpGateway();
                 const size_t maxHandlers = httpGatewayConfig.HasMaxInFlightCount()
                     ? httpGatewayConfig.GetMaxInFlightCount() : 1024;
-                const auto period = TDuration::MilliSeconds(
-                    httpGatewayConfig.HasPoolCapsPushPeriodMs() ? httpGatewayConfig.GetPoolCapsPushPeriodMs() : 500);
-                const double minDefaultFraction = httpGatewayConfig.HasMinDefaultPoolShare()
-                    ? httpGatewayConfig.GetMinDefaultPoolShare() : 0.1;
+                const auto PoolCapsPushPeriod = TDuration::MilliSeconds(500);
+                const double MinDefaultPoolShare = 0.1;
                 auto* pusher = NYql::CreateHttpPoolCapPusher(
                     [scheduler]() { return scheduler->GetLeafPoolFairShares(); },
                     gateway,
-                    period,
+                    PoolCapsPushPeriod,
                     maxHandlers,
-                    minDefaultFraction);
+                    MinDefaultPoolShare);
                 TActivationContext::Register(pusher);
             }
         }

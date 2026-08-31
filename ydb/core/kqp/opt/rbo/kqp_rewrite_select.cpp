@@ -476,35 +476,6 @@ void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& join
     }
 }
 
-void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates, const TVector<TString>& leftSideAliases, const TString& rightSideAlias,
-                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates, TVector<TExprNode::TPtr>& joinFilters) {
-    for (const auto& predicate : joinPredicates) {
-        TVector<TInfoUnit> members;
-        GetAllMembers(predicate, members);
-        bool isLeftSidePredicate = false;
-        bool isRightSidePredicate = false;
-        for (const auto& member : members) {
-            const auto alias = member.GetAlias();
-            if (std::find(leftSideAliases.begin(), leftSideAliases.end(), alias) != leftSideAliases.end()) {
-                isLeftSidePredicate = true;
-            } else if (alias == rightSideAlias) {
-                isRightSidePredicate = true;
-            } else {
-                Y_ENSURE(false, "Invalid alias in join predicate" + member.GetAlias());
-            }
-        }
-
-        if (isLeftSidePredicate && isRightSidePredicate) {
-            joinFilters.push_back(predicate);
-        }
-        else if (isLeftSidePredicate) {
-            leftSidePredicates.push_back(predicate);
-        } else {
-            rightSidePredicates.push_back(predicate);
-        }
-    }
-}
-
 TExprNode::TPtr CombineByAnd(TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
     Y_ENSURE(predicates.size());
     if (predicates.size() == 1) {
@@ -518,6 +489,7 @@ TExprNode::TPtr CombineByAnd(TVector<TExprNode::TPtr> &predicates, TExprContext 
     // clang-format on
 }
 
+[[maybe_unused]]
 TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
     auto predicate = CombineByAnd(predicates, ctx, pos);
     // clang-format off
@@ -1188,14 +1160,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
                     if (joinLambda) {
                         auto lambdaArg = TCoLambda(joinLambda).Args().Arg(0).Ptr();
-                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAliases, rightSideAlias, leftSidePredicates, rightSidePredicates, joinFilterPredicates);
-                        if (leftSidePredicates.size()) {
-                            leftInput = BuildFilter(leftInput, lambdaArg, leftSidePredicates, ctx, node->Pos());
-                        }
-                        if (rightSidePredicates.size()) {
-                            rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
-                        }
-                        for (auto & joinFilter : joinFilterPredicates) {
+
+                        for (auto & joinFilter : joinPredicates) {
                             auto joinF = BuildJoinFilter(leftInput, rightInput, lambdaArg, joinFilter, ctx, node->Pos());
                             joinFilters.push_back(joinF);
                         }
@@ -1406,7 +1372,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                                         distinctAggregationTraitsPostAggregate, havingFilterLambda, uniqueAggColumnId, distinctAll, ctx, node->Pos());
         }
 
+        auto values = GetSetting(setItem->Tail(), "values");
+        Y_ENSURE(!values, "New RBO does not support 'values' set items");
+
         auto result = GetSetting(setItem->Tail(), "result");
+        Y_ENSURE(result || values, "New RBO expects either 'values' or 'result' at a set item");
+        
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
                                          distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());

@@ -24,6 +24,7 @@ from typing import (
 
 import attr
 import yarl
+from propcache import under_cached_property
 
 from .abc import AbstractAccessLogger, AbstractStreamWriter
 from .base_protocol import BaseProtocol
@@ -35,6 +36,7 @@ from .http import (
     RawRequestMessage,
     StreamWriter,
 )
+from .http_exceptions import BadHttpMethod
 from .log import access_logger, server_logger
 from .streams import EMPTY_PAYLOAD, StreamReader
 from .tcp_helpers import tcp_keepalive
@@ -46,6 +48,8 @@ from .web_response import Response, StreamResponse
 __all__ = ("RequestHandler", "RequestPayloadError", "PayloadAccessError")
 
 if TYPE_CHECKING:
+    import ssl
+
     from .web_server import Server
 
 
@@ -166,6 +170,8 @@ class RequestHandler(BaseProtocol):
         "_current_request",
         "_timeout_ceil_threshold",
         "_request_in_progress",
+        "_logging_enabled",
+        "_cache",
     )
 
     def __init__(
@@ -173,7 +179,8 @@ class RequestHandler(BaseProtocol):
         manager: "Server",
         *,
         loop: asyncio.AbstractEventLoop,
-        keepalive_timeout: float = 75.0,  # NGINX default is 75 secs
+        # Default should be high enough that it's likely longer than a reverse proxy.
+        keepalive_timeout: float = 3630,
         tcp_keepalive: bool = True,
         logger: Logger = server_logger,
         access_log_class: Type[AbstractAccessLogger] = AccessLogger,
@@ -190,6 +197,7 @@ class RequestHandler(BaseProtocol):
     ):
         super().__init__(loop)
 
+        # _request_count is the number of requests processed with the same connection.
         self._request_count = 0
         self._keepalive = False
         self._current_request: Optional[BaseRequest] = None
@@ -237,17 +245,40 @@ class RequestHandler(BaseProtocol):
             self.access_logger: Optional[AbstractAccessLogger] = access_log_class(
                 access_log, access_log_format
             )
+            self._logging_enabled = self.access_logger.enabled
         else:
             self.access_logger = None
+            self._logging_enabled = False
 
         self._close = False
         self._force_close = False
         self._request_in_progress = False
+        self._cache: dict[str, Any] = {}
 
     def __repr__(self) -> str:
         return "<{} {}>".format(
             self.__class__.__name__,
             "connected" if self.transport is not None else "disconnected",
+        )
+
+    @under_cached_property
+    def ssl_context(self) -> Optional["ssl.SSLContext"]:
+        """Return SSLContext if available."""
+        return (
+            None
+            if self.transport is None
+            else self.transport.get_extra_info("sslcontext")
+        )
+
+    @under_cached_property
+    def peername(
+        self,
+    ) -> Optional[Union[str, Tuple[str, int, int, int], Tuple[str, int]]]:
+        """Return peername if available."""
+        return (
+            None
+            if self.transport is None
+            else self.transport.get_extra_info("peername")
         )
 
     @property
@@ -435,9 +466,11 @@ class RequestHandler(BaseProtocol):
             self.transport = None
 
     def log_access(
-        self, request: BaseRequest, response: StreamResponse, time: float
+        self, request: BaseRequest, response: StreamResponse, time: Optional[float]
     ) -> None:
-        if self.access_logger is not None:
+        if self.access_logger is not None and self.access_logger.enabled:
+            if TYPE_CHECKING:
+                assert time is not None
             self.access_logger.log(request, response, self._loop.time() - time)
 
     def log_debug(self, *args: Any, **kw: Any) -> None:
@@ -455,7 +488,7 @@ class RequestHandler(BaseProtocol):
         loop = self._loop
         now = loop.time()
         close_time = self._next_keepalive_close_time
-        if now <= close_time:
+        if now < close_time:
             # Keep alive close check fired too early, reschedule
             self._keepalive_handle = loop.call_at(close_time, self._process_keepalive)
             return
@@ -467,7 +500,7 @@ class RequestHandler(BaseProtocol):
     async def _handle_request(
         self,
         request: BaseRequest,
-        start_time: float,
+        start_time: Optional[float],
         request_handler: Callable[[BaseRequest], Awaitable[StreamResponse]],
     ) -> Tuple[StreamResponse, bool]:
         self._request_in_progress = True
@@ -517,8 +550,6 @@ class RequestHandler(BaseProtocol):
         keep_alive(True) specified.
         """
         loop = self._loop
-        handler = asyncio.current_task(loop)
-        assert handler is not None
         manager = self._manager
         assert manager is not None
         keepalive_timeout = self._keepalive_timeout
@@ -537,7 +568,9 @@ class RequestHandler(BaseProtocol):
 
             message, payload = self._messages.popleft()
 
-            start = loop.time()
+            # time is only fetched if logging is enabled as otherwise
+            # its thrown away and never used.
+            start = loop.time() if self._logging_enabled else None
 
             manager.requests_count += 1
             writer = StreamWriter(self, loop)
@@ -548,7 +581,16 @@ class RequestHandler(BaseProtocol):
             else:
                 request_handler = self._request_handler
 
-            request = self._request_factory(message, payload, self, writer, handler)
+            # Important don't hold a reference to the current task
+            # as on traceback it will prevent the task from being
+            # collected and will cause a memory leak.
+            request = self._request_factory(
+                message,
+                payload,
+                self,
+                writer,
+                self._task_handler or asyncio.current_task(loop),  # type: ignore[arg-type]
+            )
             try:
                 # a new task is used for copy context vars (#3406)
                 coro = self._handle_request(request, start, request_handler)
@@ -605,26 +647,29 @@ class RequestHandler(BaseProtocol):
 
             except asyncio.CancelledError:
                 self.log_debug("Ignored premature client disconnection")
+                self.force_close()
                 raise
             except Exception as exc:
                 self.log_exception("Unhandled exception", exc_info=exc)
                 self.force_close()
+            except BaseException:
+                self.force_close()
+                raise
             finally:
+                request._task = None  # type: ignore[assignment] # Break reference cycle in case of exception
                 if self.transport is None and resp is not None:
                     self.log_debug("Ignored premature client disconnection.")
-                elif not self._force_close:
-                    if self._keepalive and not self._close:
-                        # start keep-alive timer
-                        if keepalive_timeout is not None:
-                            now = loop.time()
-                            close_time = now + keepalive_timeout
-                            self._next_keepalive_close_time = close_time
-                            if self._keepalive_handle is None:
-                                self._keepalive_handle = loop.call_at(
-                                    close_time, self._process_keepalive
-                                )
-                    else:
-                        break
+
+            if self._keepalive and not self._close and not self._force_close:
+                # start keep-alive timer
+                close_time = loop.time() + keepalive_timeout
+                self._next_keepalive_close_time = close_time
+                if self._keepalive_handle is None:
+                    self._keepalive_handle = loop.call_at(
+                        close_time, self._process_keepalive
+                    )
+            else:
+                break
 
         # remove handler, close transport if no handlers left
         if not self._force_close:
@@ -633,7 +678,7 @@ class RequestHandler(BaseProtocol):
                 self.transport.close()
 
     async def finish_response(
-        self, request: BaseRequest, resp: StreamResponse, start_time: float
+        self, request: BaseRequest, resp: StreamResponse, start_time: Optional[float]
     ) -> Tuple[StreamResponse, bool]:
         """Prepare the response and write_eof, then log access.
 
@@ -686,7 +731,18 @@ class RequestHandler(BaseProtocol):
         Returns HTTP response with specific status code. Logs additional
         information. It always closes current connection.
         """
-        self.log_exception("Error handling request", exc_info=exc)
+        if self._request_count == 1 and isinstance(exc, BadHttpMethod):
+            # BadHttpMethod is common when a client sends non-HTTP
+            # or encrypted traffic to an HTTP port. This is expected
+            # to happen when connected to the public internet so we log
+            # it at the debug level as to not fill logs with noise.
+            self.logger.debug(
+                "Error handling request from %s", request.remote, exc_info=exc
+            )
+        else:
+            self.log_exception(
+                "Error handling request from %s", request.remote, exc_info=exc
+            )
 
         # some data already got sent, connection is broken
         if request.writer.output_size > 0:

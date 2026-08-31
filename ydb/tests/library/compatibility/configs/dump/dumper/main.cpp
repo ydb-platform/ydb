@@ -71,6 +71,30 @@ NJson::TJsonValue GetRepeatedFieldValue(const FieldDescriptor& field, const TSet
     }
 }
 
+// Immediate controls (TImmediateControlsConfig) keep their real runtime default,
+// as well as the allowed range, in the (ControlOptions) field option rather than
+// in the protobuf default value: the control board code generator
+// (ydb/core/control/lib/generated/codegen/main.cpp) builds every TControl from
+// these options. Without this the dump reports 0 for all of them.
+// Returns true if the default value has been taken from the options.
+bool PrintImmediateControlOptions(const FieldDescriptor& field, NJson::TJsonValue& json) {
+    if (!field.options().HasExtension(NKikimrConfig::ControlOptions)) {
+        return false;
+    }
+    const auto& controlOptions = field.options().GetExtension(NKikimrConfig::ControlOptions);
+    if (controlOptions.HasMinValue()) {
+        json["min-value"] = controlOptions.GetMinValue();
+    }
+    if (controlOptions.HasMaxValue()) {
+        json["max-value"] = controlOptions.GetMaxValue();
+    }
+    if (!controlOptions.HasDefaultValue()) {
+        return false;
+    }
+    json["default-value"] = controlOptions.GetDefaultValue();
+    return true;
+}
+
 void PrintSingleField(const Message& proto,
                      const TSet<TString>& printedMessages,
                      const FieldDescriptor& field,
@@ -78,7 +102,9 @@ void PrintSingleField(const Message& proto,
         Y_ABORT_UNLESS(!field.is_repeated(), "field is repeated.");
         json[key]["id"] = field.number();
         json[key]["file"] = field.file()->name();
-        PrintSingleFieldValue(proto, printedMessages, field, json[key]["default-value"]);
+        if (!PrintImmediateControlOptions(field, json[key])) {
+            PrintSingleFieldValue(proto, printedMessages, field, json[key]["default-value"]);
+        }
 }
 
 void PrintRepeatedField(const FieldDescriptor& field, const TSet<TString>& printedMessages,

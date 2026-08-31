@@ -1,11 +1,341 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_block_test_helper.h"
 #include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
+#include <yql/essentials/utils/strong_alias.h>
+
+#include <util/string/builder.h>
+
+#include <concepts>
+#include <functional>
+#include <variant>
 
 namespace NKikimr::NMiniKQL {
+
+namespace {
+
+class TDecimalType {
+public:
+    explicit TDecimalType(ui8 precision, ui8 scale)
+        : Precision_(precision)
+        , Scale_(scale)
+    {
+    }
+
+    ui8 GetPrecision() const {
+        return Precision_;
+    }
+    ui8 GetScale() const {
+        return Scale_;
+    }
+
+private:
+    const ui8 Precision_;
+    const ui8 Scale_;
+};
+
+class TDecimal {
+public:
+    explicit TDecimal(TDecimalType type, TStringBuf decimalValue)
+        : Type_(type)
+        , Value_(NYql::NDecimal::FromString(decimalValue, type.GetPrecision(), type.GetScale()))
+        , IsOptional_(false)
+    {
+        MKQL_ENSURE(!NYql::NDecimal::IsError(Value_), "Invalid decimal input " << decimalValue);
+    }
+
+    TDecimal AsOptional() const {
+        return TDecimal(Type_, Value_, /*isOptional=*/true);
+    }
+
+    const TDecimalType& GetType() const {
+        return Type_;
+    }
+
+    NYql::NDecimal::TInt128 GetValue() const {
+        return Value_;
+    }
+
+    bool IsOptional() const {
+        return IsOptional_;
+    }
+
+private:
+    TDecimal(TDecimalType type, NYql::NDecimal::TInt128 value, bool isOptional)
+        : Type_(type)
+        , Value_(value)
+        , IsOptional_(isOptional)
+    {
+    }
+
+    const TDecimalType Type_;
+    const NYql::NDecimal::TInt128 Value_;
+    const bool IsOptional_;
+};
+
+using TNullDecimal = NYql::TStrongAlias<class TNullDecimalTag, TDecimalType>;
+using TPositiveInf = NYql::TStrongAlias<class TPositiveInfTag, TDecimalType>;
+using TNegativeInf = NYql::TStrongAlias<class TNegativeInfTag, TDecimalType>;
+using TNaN = NYql::TStrongAlias<class TNaNTag, TDecimalType>;
+using TComparisonInputValue = std::variant<
+    TDecimal,
+    TNullDecimal,
+    TPositiveInf,
+    TNegativeInf,
+    TNaN,
+    i8,
+    ui8,
+    i16,
+    ui16,
+    i32,
+    ui32,
+    i64,
+    ui64>;
+
+struct TDecimalComparisonCase {
+    TComparisonInputValue Left;
+    TComparisonInputValue Right;
+    TStringBuf Operation;
+    TMaybe<bool> Expected;
+};
+
+class TComparisonInput {
+public:
+    explicit TComparisonInput(TRuntimeNode node, bool isOptional)
+        : Node_(node)
+        , IsOptional_(isOptional)
+    {
+    }
+
+    const TRuntimeNode& GetNode() const {
+        return Node_;
+    }
+    bool IsOptional() const {
+        return IsOptional_;
+    }
+
+private:
+    const TRuntimeNode Node_;
+    const bool IsOptional_;
+};
+
+class TComparisonProgram {
+public:
+    explicit TComparisonProgram(TRuntimeNode node, bool isOptionalResult)
+        : Node_(node)
+        , IsOptionalResult_(isOptionalResult)
+    {
+    }
+
+    const TRuntimeNode& GetNode() const {
+        return Node_;
+    }
+    bool IsOptionalResult() const {
+        return IsOptionalResult_;
+    }
+
+private:
+    const TRuntimeNode Node_;
+    const bool IsOptionalResult_;
+};
+
+TComparisonInput BuildComparisonInput(TProgramBuilder& builder, const TDecimal& input) {
+    const auto& type = input.GetType();
+    auto node = builder.NewDecimalLiteral(input.GetValue(), type.GetPrecision(), type.GetScale());
+    if (input.IsOptional()) {
+        node = builder.NewOptional(node);
+    }
+    return TComparisonInput{node, input.IsOptional()};
+}
+
+TComparisonInput BuildComparisonInput(TProgramBuilder& builder, const TNullDecimal& input) {
+    const auto& type = input.Value();
+    auto node = builder.NewDecimalLiteral(0, type.GetPrecision(), type.GetScale());
+    node = builder.NewEmptyOptional(builder.NewOptionalType(node.GetStaticType()));
+    return TComparisonInput{node, /*isOptional=*/true};
+}
+
+TComparisonInput BuildSpecialDecimalInput(
+    TProgramBuilder& builder,
+    const TDecimalType& type,
+    NYql::NDecimal::TInt128 value)
+{
+    return TComparisonInput{
+        builder.NewDecimalLiteral(value, type.GetPrecision(), type.GetScale()), /*isOptional=*/false};
+}
+
+TComparisonInput BuildComparisonInput(TProgramBuilder& builder, const TPositiveInf& input) {
+    return BuildSpecialDecimalInput(builder, input.Value(), NYql::NDecimal::Inf());
+}
+
+TComparisonInput BuildComparisonInput(TProgramBuilder& builder, const TNegativeInf& input) {
+    return BuildSpecialDecimalInput(builder, input.Value(), -NYql::NDecimal::Inf());
+}
+
+TComparisonInput BuildComparisonInput(TProgramBuilder& builder, const TNaN& input) {
+    return BuildSpecialDecimalInput(builder, input.Value(), NYql::NDecimal::Nan());
+}
+
+template <std::integral T>
+TComparisonInput BuildComparisonInput(TProgramBuilder& builder, T input) {
+    return TComparisonInput{NTest::ConvertValueToLiteralNode(builder, input), /*isOptional=*/false};
+}
+
+TComparisonInput BuildComparisonInput(TProgramBuilder& builder, const TComparisonInputValue& input) {
+    return std::visit(
+        [&builder](const auto& value) { return BuildComparisonInput(builder, value); }, input);
+}
+
+TString DescribeComparisonInput(const TDecimal& input) {
+    const auto& type = input.GetType();
+    return NYql::NDecimal::ToString(input.GetValue(), type.GetPrecision(), type.GetScale());
+}
+
+TString DescribeComparisonInput(const TNullDecimal&) {
+    return "null";
+}
+
+TString DescribeSpecialDecimal(const TDecimalType& type, NYql::NDecimal::TInt128 value) {
+    return NYql::NDecimal::ToString(value, type.GetPrecision(), type.GetScale());
+}
+
+TString DescribeComparisonInput(const TPositiveInf& input) {
+    return DescribeSpecialDecimal(input.Value(), NYql::NDecimal::Inf());
+}
+
+TString DescribeComparisonInput(const TNegativeInf& input) {
+    return DescribeSpecialDecimal(input.Value(), -NYql::NDecimal::Inf());
+}
+
+TString DescribeComparisonInput(const TNaN& input) {
+    return DescribeSpecialDecimal(input.Value(), NYql::NDecimal::Nan());
+}
+
+template <std::integral T>
+TString DescribeComparisonInput(T input) {
+    TStringBuilder description;
+    description << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(NUdf::TDataType<T>::Id)).Name
+                << '(' << +input << ')';
+    return description;
+}
+
+TString DescribeComparisonInput(const TComparisonInputValue& input) {
+    return std::visit([](const auto& value) { return DescribeComparisonInput(value); }, input);
+}
+
+TString DescribeComparison(const TDecimalComparisonCase& testCase) {
+    return DescribeComparisonInput(testCase.Left) + " " + testCase.Operation + " " +
+           DescribeComparisonInput(testCase.Right);
+}
+
+TRuntimeNode BuildRegularComparison(
+    TProgramBuilder& builder, TStringBuf operation, TRuntimeNode left, TRuntimeNode right)
+{
+    if (operation == "==") {
+        return builder.Equals(left, right);
+    }
+    if (operation == "!=") {
+        return builder.NotEquals(left, right);
+    }
+    if (operation == "<") {
+        return builder.Less(left, right);
+    }
+    if (operation == "<=") {
+        return builder.LessOrEqual(left, right);
+    }
+    if (operation == ">") {
+        return builder.Greater(left, right);
+    }
+    if (operation == ">=") {
+        return builder.GreaterOrEqual(left, right);
+    }
+    MKQL_ENSURE(false, "Unknown comparison operation " << operation);
+}
+
+TComparisonProgram BuildComparisonProgram(
+    TProgramBuilder& builder, const TDecimalComparisonCase& testCase)
+{
+    const auto left = BuildComparisonInput(builder, testCase.Left);
+    const auto right = BuildComparisonInput(builder, testCase.Right);
+    const auto node = BuildRegularComparison(
+        builder, testCase.Operation, left.GetNode(), right.GetNode());
+    return TComparisonProgram{node, left.IsOptional() || right.IsOptional()};
+}
+
+using TBuildGraph = std::function<THolder<IComputationGraph>(TRuntimeNode)>;
+
+void RunComparisonCasesNonBlocks(
+    TProgramBuilder& builder,
+    const TVector<TDecimalComparisonCase>& cases,
+    const TBuildGraph& buildGraph)
+{
+    MKQL_ENSURE(!cases.empty(), "Comparison cases must not be empty");
+    TVector<TRuntimeNode> nodes;
+    TVector<std::tuple<TString, bool>> expected;
+    TVector<std::tuple<TString, TMaybe<bool>>> optionalExpected;
+    TMaybe<bool> isOptional;
+    for (const auto& testCase : cases) {
+        const auto program = BuildComparisonProgram(builder, testCase);
+        const TString description = DescribeComparison(testCase);
+        MKQL_ENSURE(!isOptional || *isOptional == program.IsOptionalResult(),
+                    "A test group must have one result type");
+        isOptional = program.IsOptionalResult();
+        nodes.push_back(builder.NewTuple({NTest::ConvertValueToLiteralNode(builder, description), program.GetNode()}));
+        if (program.IsOptionalResult()) {
+            optionalExpected.emplace_back(description, testCase.Expected);
+        } else {
+            MKQL_ENSURE(testCase.Expected, "Expected a non-null Boolean result");
+            expected.emplace_back(description, *testCase.Expected);
+        }
+    }
+    const auto graph = buildGraph(builder.NewList(nodes.front().GetStaticType(), nodes));
+    if (*isOptional) {
+        AssertUnboxedValueElementEqual(graph->GetValue(), optionalExpected);
+    } else {
+        AssertUnboxedValueElementEqual(graph->GetValue(), expected);
+    }
+}
+
+using TBlockLeftDecimal = NTest::TDecimalLiteral<3, 2>;
+using TBlockRightDecimal = NTest::TDecimalLiteral<5, 4>;
+using TBlockComparisonCase =
+    std::tuple<TString, TBlockLeftDecimal, TBlockRightDecimal, bool>;
+
+void RunComparisonCasesBlocks(
+    TStringBuf callable, const TVector<TBlockComparisonCase>& cases)
+{
+    TVector<std::tuple<TString, TBlockLeftDecimal>> left;
+    TVector<TBlockRightDecimal> right;
+    TVector<std::tuple<TString, bool>> expected;
+    left.reserve(cases.size());
+    right.reserve(cases.size());
+    expected.reserve(cases.size());
+    for (const auto& [description, leftValue, rightValue, result] : cases) {
+        left.emplace_back(description, leftValue);
+        right.push_back(rightValue);
+        expected.emplace_back(description, result);
+    }
+
+    TBlockHelper().TestKernelFuzzied(
+        left, right, expected,
+        [callable](TSetup<false>& setup, TRuntimeNode describedLeft, TRuntimeNode right) {
+            auto& builder = *setup.PgmBuilder;
+            const auto left = builder.BlockNth(describedLeft, 1U);
+            const auto shape = AS_TYPE(TBlockType, left.GetStaticType())->GetShape();
+            const auto resultType = builder.NewBlockType(
+                builder.NewDataType(NUdf::TDataType<bool>::Id), shape);
+            return builder.BlockAsTuple({
+                builder.BlockNth(describedLeft, 0U),
+                builder.BlockFunc(callable, resultType, {left, right}),
+            });
+        },
+        /*iterations=*/1);
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
 Y_UNIT_TEST_LLVM(TestNanvl) {
@@ -687,6 +1017,533 @@ Y_UNIT_TEST_LLVM(TestCompares) {
                                                       });
 }
 
+Y_UNIT_TEST_LLVM(TestDecimalComparisonFiniteEquality) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "!=", .Expected = false},
+        {.Left = TDecimal{TDecimalType{3, 2}, "-1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "-1.23"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2301"}, .Operation = "==", .Expected = false},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2301"}, .Operation = "!=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 0}, "123"}, .Right = TDecimal{TDecimalType{7, 4}, "123.0"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 14}, "-749999999999999999999.99999999999999"},
+         .Right = TDecimal{TDecimalType{35, 14}, "-749999999999999999999.99999999999999"},
+         .Operation = "==",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonFiniteOrdering) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2301"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2301"}, .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2299"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2299"}, .Operation = ">=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "<", .Expected = false},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "-1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "-1.2301"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "-1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "-1.2299"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 17}, "-499999999999999999.99999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 17}, "-499999999999999999.99999999999999998"},
+         .Operation = "<",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonScaleDirection) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2301"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 4}, "1.2301"}, .Right = TDecimal{TDecimalType{3, 2}, "1.23"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2299"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 4}, "1.2299"}, .Right = TDecimal{TDecimalType{3, 2}, "1.23"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "-1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "-1.2301"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 4}, "-1.2301"}, .Right = TDecimal{TDecimalType{3, 2}, "-1.23"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 14}, "249999999999999999999.99999999999999"},
+         .Right = TDecimal{TDecimalType{35, 12}, "249999999999999999999.999999999999"},
+         .Operation = ">",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonPrecisionExtremes) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {
+            .Left = TDecimal{TDecimalType{35, 35}, "0.00000000000000000000000000000000001"},
+            .Right = TDecimal{TDecimalType{1, 1}, "0.1"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 1}, "0.1"},
+            .Right = TDecimal{TDecimalType{35, 35}, "0.00000000000000000000000000000000001"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{35, 35}, "0.1"}, .Right = TDecimal{TDecimalType{1, 1}, "0.1"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 34}, "1.0"}, .Right = TDecimal{TDecimalType{1, 0}, "1"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 2}, "100.0"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 2}, "999.99"}, .Right = TDecimal{TDecimalType{3, 2}, "1.0"}, .Operation = ">", .Expected = true},
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "9"},
+            .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "-9"},
+            .Right = TDecimal{TDecimalType{35, 35}, "-0.99999999999999999999999999999999999"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{35, 23}, "714285714285.71428571428571428571427"},
+         .Right = TDecimal{TDecimalType{35, 23}, "714285714285.71428571428571428571426"},
+         .Operation = ">",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonEqualPrecisionAndScale) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{1, 0}, "1"}, .Right = TDecimal{TDecimalType{1, 0}, "2"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 0}, "9"}, .Right = TDecimal{TDecimalType{1, 0}, "-9"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 0}, "0"}, .Right = TDecimal{TDecimalType{1, 0}, "0"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 1}, "0.1"}, .Right = TDecimal{TDecimalType{1, 1}, "0.2"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 1}, "-0.9"}, .Right = TDecimal{TDecimalType{1, 1}, "-0.8"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{3, 2}, "1.24"}, .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "-1.23"}, .Right = TDecimal{TDecimalType{3, 2}, "-1.24"}, .Operation = ">=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 27}, "-99999999.999999999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 27}, "-99999999.999999999999999999999999999"},
+         .Operation = "==",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonSameScaleDifferentPrecision) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{1, 0}, "1"}, .Right = TDecimal{TDecimalType{35, 0}, "1"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 0}, "-1"}, .Right = TDecimal{TDecimalType{35, 0}, "-1"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{2, 1}, "1.2"}, .Right = TDecimal{TDecimalType{35, 1}, "1.2"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{35, 2}, "1.23"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "9.99"}, .Right = TDecimal{TDecimalType{5, 2}, "999.99"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "-9.99"}, .Right = TDecimal{TDecimalType{5, 2}, "-999.99"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 30}, "74999.999999999999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 30}, "74999.999999999999999999999999999998"},
+         .Operation = ">",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonSamePrecisionDifferentScale) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.2"}, .Right = TDecimal{TDecimalType{3, 1}, "1.2"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "-1.2"}, .Right = TDecimal{TDecimalType{3, 1}, "-1.2"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 3}, "12.3"}, .Right = TDecimal{TDecimalType{5, 1}, "12.3"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 3}, "-12.3"}, .Right = TDecimal{TDecimalType{5, 1}, "-12.3"}, .Operation = "!=", .Expected = false},
+        {.Left = TDecimal{TDecimalType{35, 0}, "1"},
+         .Right = TDecimal{TDecimalType{35, 34}, "1.0"},
+         .Operation = "==",
+         .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 0}, "99999999999999999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+         .Operation = ">",
+         .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 33}, "49.999999999999999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 30}, "49.999999999999999999999999999999"},
+         .Operation = ">",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonPrecisionEqualsScale) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{1, 1}, "0.1"}, .Right = TDecimal{TDecimalType{2, 2}, "0.1"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{2, 2}, "0.1"}, .Right = TDecimal{TDecimalType{3, 3}, "0.1"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 1}, "-0.1"}, .Right = TDecimal{TDecimalType{2, 2}, "-0.1"}, .Operation = "!=", .Expected = false},
+        {.Left = TDecimal{TDecimalType{1, 1}, "0.1"}, .Right = TDecimal{TDecimalType{35, 35}, "0.1"}, .Operation = "==", .Expected = true},
+        {
+            .Left = TDecimal{TDecimalType{35, 35}, "0.00000000000000000000000000000000001"},
+            .Right = TDecimal{TDecimalType{1, 1}, "0.1"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+            .Right = TDecimal{TDecimalType{1, 1}, "0.9"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{7, 7}, "0.2499999"}, .Right = TDecimal{TDecimalType{7, 7}, "0.2499998"}, .Operation = ">", .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonScaleGapCorners) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{35, 0}, "1"},
+         .Right = TDecimal{TDecimalType{35, 34}, "1.0"},
+         .Operation = "==",
+         .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 0}, "99999999999999999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+         .Operation = ">",
+         .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 0}, "-99999999999999999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 35}, "-0.99999999999999999999999999999999999"},
+         .Operation = "<",
+         .Expected = true},
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "1"},
+            .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "-1"},
+            .Right = TDecimal{TDecimalType{35, 35}, "-0.99999999999999999999999999999999999"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{35, 14}, "71.42857142857142"},
+         .Right = TDecimal{TDecimalType{35, 33}, "71.428571428571428571428571428571427"},
+         .Operation = "<",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonMultiplicationLimits) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {
+            .Left = TDecimal{TDecimalType{34, 0}, "9999999999999999999999999999999999"},
+            .Right = TDecimal{TDecimalType{35, 1}, "9999999999999999999999999999999999.0"},
+            .Operation = "==",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{34, 0}, "9999999999999999999999999999999999"},
+            .Right = TDecimal{TDecimalType{35, 1}, "9999999999999999999999999999999999.9"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{35, 0}, "10000000000000000000000000000000000"},
+            .Right = TDecimal{TDecimalType{35, 1}, "9999999999999999999999999999999999.9"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{35, 1}, "9999999999999999999999999999999999.9"},
+            .Right = TDecimal{TDecimalType{35, 0}, "10000000000000000000000000000000000"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{35, 0}, "-10000000000000000000000000000000000"},
+            .Right = TDecimal{TDecimalType{35, 1}, "-9999999999999999999999999999999999.9"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{18, 0}, "999999999999999999"},
+            .Right = TDecimal{TDecimalType{35, 17}, "999999999999999999.0"},
+            .Operation = "==",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{19, 0}, "1000000000000000000"},
+            .Right = TDecimal{TDecimalType{35, 17}, "999999999999999999.99999999999999999"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "9"},
+            .Right = TDecimal{TDecimalType{35, 34}, "9.0"},
+            .Operation = "==",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "9"},
+            .Right = TDecimal{TDecimalType{35, 34}, "9.9999999999999999999999999999999999"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{2, 0}, "10"},
+            .Right = TDecimal{TDecimalType{35, 34}, "9.9999999999999999999999999999999999"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{2, 0}, "-10"},
+            .Right = TDecimal{TDecimalType{35, 34}, "-9.9999999999999999999999999999999999"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "0"},
+            .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "1"},
+            .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{1, 0}, "-1"},
+            .Right = TDecimal{TDecimalType{35, 35}, "-0.99999999999999999999999999999999999"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{35, 17}, "-999999999999999999.99999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 0}, "-1000000000000000000"},
+         .Operation = ">",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonPositiveBounds) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {
+            .Left = TDecimal{TDecimalType{35, 0}, "99999999999999999999999999999999999"},
+            .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"},
+            .Operation = ">",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{34, 0}, "9999999999999999999999999999999999"},
+            .Right = TDecimal{TDecimalType{35, 1}, "9999999999999999999999999999999999.0"},
+            .Operation = "==",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{35, 12}, "99999999999999999999999.999999999999"},
+         .Right = TDecimal{TDecimalType{35, 12}, "99999999999999999999999.999999999998"},
+         .Operation = ">",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonNegativeBounds) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {
+            .Left = TDecimal{TDecimalType{35, 0}, "-99999999999999999999999999999999999"},
+            .Right = TDecimal{TDecimalType{35, 35}, "-0.99999999999999999999999999999999999"},
+            .Operation = "<",
+            .Expected = true,
+        },
+        {
+            .Left = TDecimal{TDecimalType{34, 0}, "-9999999999999999999999999999999999"},
+            .Right = TDecimal{TDecimalType{35, 1}, "-9999999999999999999999999999999999.0"},
+            .Operation = "==",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{35, 23}, "-999999999999.99999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 23}, "-999999999999.99999999999999999999998"},
+         .Operation = "<",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonZeroAndSigns) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{2, 2}, "-0.0"}, .Right = TDecimal{TDecimalType{4, 4}, "0.0"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{2, 2}, "-0.0"}, .Right = TDecimal{TDecimalType{4, 4}, "0.0"}, .Operation = "!=", .Expected = false},
+        {.Left = TDecimal{TDecimalType{1, 0}, "0"}, .Right = TDecimal{TDecimalType{4, 4}, "0.0001"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 0}, "0"}, .Right = TDecimal{TDecimalType{4, 4}, "-0.0001"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{2, 2}, "-0.01"}, .Right = TDecimal{TDecimalType{1, 0}, "0"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{2, 2}, "0.01"}, .Right = TDecimal{TDecimalType{1, 0}, "0"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 27}, "-49999999.999999999999999999999999999"},
+         .Right = TDecimal{TDecimalType{35, 27}, "49999999.999999999999999999999999999"},
+         .Operation = "<",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonSpecialValues) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TNaN{TDecimalType{35, 0}}, .Right = TNaN{TDecimalType{5, 2}}, .Operation = "==", .Expected = false},
+        {.Left = TNaN{TDecimalType{35, 0}}, .Right = TNaN{TDecimalType{5, 2}}, .Operation = "!=", .Expected = true},
+        {.Left = TNaN{TDecimalType{35, 0}}, .Right = TNaN{TDecimalType{5, 2}}, .Operation = "<", .Expected = false},
+        {.Left = TNaN{TDecimalType{35, 0}}, .Right = TNaN{TDecimalType{5, 2}}, .Operation = "<=", .Expected = false},
+        {.Left = TNaN{TDecimalType{35, 0}}, .Right = TNaN{TDecimalType{5, 2}}, .Operation = ">", .Expected = false},
+        {.Left = TNaN{TDecimalType{35, 0}}, .Right = TNaN{TDecimalType{5, 2}}, .Operation = ">=", .Expected = false},
+        {.Left = TPositiveInf{TDecimalType{35, 0}}, .Right = TDecimal{TDecimalType{5, 2}, "999.99"}, .Operation = ">", .Expected = true},
+        {.Left = TNegativeInf{TDecimalType{35, 0}}, .Right = TDecimal{TDecimalType{5, 2}, "-999.99"}, .Operation = "<", .Expected = true},
+        {.Left = TPositiveInf{TDecimalType{35, 0}}, .Right = TPositiveInf{TDecimalType{35, 0}}, .Operation = "==", .Expected = true},
+        {.Left = TNegativeInf{TDecimalType{35, 0}}, .Right = TNegativeInf{TDecimalType{35, 0}}, .Operation = "==", .Expected = true},
+        {.Left = TPositiveInf{TDecimalType{35, 0}}, .Right = TNegativeInf{TDecimalType{35, 0}}, .Operation = "!=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 2}, "999.99"}, .Right = TPositiveInf{TDecimalType{35, 0}}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{5, 2}, "-999.99"}, .Right = TNegativeInf{TDecimalType{35, 0}}, .Operation = ">", .Expected = true},
+        {.Left = TNegativeInf{TDecimalType{35, 30}},
+         .Right = TDecimal{TDecimalType{35, 30}, "-74999.999999999999999999999999999999"},
+         .Operation = "<",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonOptionalValues) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}.AsOptional(), .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}.AsOptional(), .Right = TDecimal{TDecimalType{5, 4}, "1.2301"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}.AsOptional(), .Right = TDecimal{TDecimalType{5, 4}, "1.2299"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}.AsOptional(), .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TDecimal{TDecimalType{5, 4}, "1.2299"}.AsOptional(), .Operation = "<=", .Expected = false},
+        {
+            .Left = TDecimal{TDecimalType{3, 2}, "-1.23"}.AsOptional(),
+            .Right = TDecimal{TDecimalType{5, 4}, "-1.2301"}.AsOptional(),
+            .Operation = ">=",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{1, 0}, "0"}.AsOptional(), .Right = TDecimal{TDecimalType{4, 4}, "0.0"}.AsOptional(), .Operation = "!=", .Expected = false},
+        {.Left = TDecimal{TDecimalType{4, 4}, "0.0001"}.AsOptional(), .Right = TDecimal{TDecimalType{1, 0}, "0"}.AsOptional(), .Operation = ">", .Expected = true},
+        {.Left = TDecimal{TDecimalType{35, 33}, "-24.999999999999999999999999999999999"}.AsOptional(),
+         .Right = TDecimal{TDecimalType{35, 33}, "-24.999999999999999999999999999999998"}.AsOptional(),
+         .Operation = "<",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonOptionalPrecisionScaleCorners) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TDecimal{TDecimalType{1, 0}, "1"}.AsOptional(), .Right = TDecimal{TDecimalType{35, 0}, "1"}.AsOptional(), .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{2, 1}, "1.2"}.AsOptional(), .Right = TDecimal{TDecimalType{35, 1}, "1.2"}.AsOptional(), .Operation = "==", .Expected = true},
+        {.Left = TDecimal{TDecimalType{1, 1}, "0.1"}.AsOptional(), .Right = TDecimal{TDecimalType{35, 35}, "0.1"}.AsOptional(), .Operation = "==", .Expected = true},
+        {
+            .Left = TDecimal{TDecimalType{35, 35}, "0.00000000000000000000000000000000001"}.AsOptional(),
+            .Right = TDecimal{TDecimalType{1, 1}, "0.1"}.AsOptional(),
+            .Operation = "<",
+            .Expected = true,
+        },
+        {.Left = TDecimal{TDecimalType{35, 0}, "99999999999999999999999999999999999"}.AsOptional(),
+         .Right = TDecimal{TDecimalType{35, 35}, "0.99999999999999999999999999999999999"}.AsOptional(),
+         .Operation = ">",
+         .Expected = true},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}.AsOptional(), .Right = TDecimal{TDecimalType{35, 2}, "1.24"}.AsOptional(), .Operation = "<", .Expected = true},
+        {.Left = TNullDecimal{TDecimalType{35, 35}}, .Right = TDecimal{TDecimalType{1, 1}, "0.1"}.AsOptional(), .Operation = "<", .Expected = {}},
+        {.Left = TDecimal{TDecimalType{1, 1}, "0.1"}.AsOptional(), .Right = TNullDecimal{TDecimalType{35, 35}}, .Operation = ">=", .Expected = {}},
+        {.Left = TDecimal{TDecimalType{35, 7}, "7142857142857142857142857142.8571427"}.AsOptional(),
+         .Right = TDecimal{TDecimalType{35, 7}, "7142857142857142857142857142.8571427"}.AsOptional(),
+         .Operation = "==",
+         .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalComparisonOptionalNulls) {
+    TSetup<LLVM> setup;
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = TNullDecimal{TDecimalType{3, 2}}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "==", .Expected = {}},
+        {.Left = TNullDecimal{TDecimalType{3, 2}}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "!=", .Expected = {}},
+        {.Left = TNullDecimal{TDecimalType{3, 2}}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "<", .Expected = {}},
+        {.Left = TNullDecimal{TDecimalType{3, 2}}, .Right = TDecimal{TDecimalType{5, 4}, "1.23"}, .Operation = "<=", .Expected = {}},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TNullDecimal{TDecimalType{5, 4}}, .Operation = ">", .Expected = {}},
+        {.Left = TDecimal{TDecimalType{3, 2}, "1.23"}, .Right = TNullDecimal{TDecimalType{5, 4}}, .Operation = ">=", .Expected = {}},
+        {.Left = TNullDecimal{TDecimalType{3, 2}}, .Right = TNullDecimal{TDecimalType{5, 4}}, .Operation = "==", .Expected = {}},
+        {.Left = TNullDecimal{TDecimalType{3, 2}}, .Right = TDecimal{TDecimalType{5, 4}, "-1.23"}.AsOptional(), .Operation = "<", .Expected = {}},
+        {.Left = TNullDecimal{TDecimalType{35, 14}},
+         .Right = TDecimal{TDecimalType{35, 14}, "-499999999999999999999.99999999999999"}.AsOptional(),
+         .Operation = "==",
+         .Expected = {}},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST(TestDecimalComparisonBlocks) {
+    const TVector<TBlockComparisonCase> equalsCases = {
+        {"1.23 == 1.2300", {123}, {12300}, true},
+    };
+    RunComparisonCasesBlocks("Equals", equalsCases);
+
+    const TVector<TBlockComparisonCase> notEqualsCases = {
+        {"1.23 != 1.2301", {123}, {12301}, true},
+    };
+    RunComparisonCasesBlocks("NotEquals", notEqualsCases);
+
+    const TVector<TBlockComparisonCase> lessCases = {
+        {"1.23 < 1.2301", {123}, {12301}, true},
+    };
+    RunComparisonCasesBlocks("Less", lessCases);
+
+    const TVector<TBlockComparisonCase> greaterCases = {
+        {"1.23 > 1.2299", {123}, {12299}, true},
+    };
+    RunComparisonCasesBlocks("Greater", greaterCases);
+
+    const TVector<TBlockComparisonCase> lessOrEqualCases = {
+        {"1.23 <= 1.2300", {123}, {12300}, true},
+    };
+    RunComparisonCasesBlocks("LessOrEqual", lessOrEqualCases);
+
+    const TVector<TBlockComparisonCase> greaterOrEqualCases = {
+        {"1.23 >= 1.2300", {123}, {12300}, true},
+    };
+    RunComparisonCasesBlocks("GreaterOrEqual", greaterOrEqualCases);
+}
+
 Y_UNIT_TEST_LLVM(TestComparesWithIntegral) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -755,14 +1612,170 @@ Y_UNIT_TEST_LLVM(TestComparesWithIntegral) {
                                                           {false, true, true, true, false, false},
                                                           {false, true, true, true, false, false},
                                                           {false, true, false, false, false, false},
-                                                          {true, false, false, true, false, true},
+                                                          {false, true, false, false, true, true},
                                                           {false, true, true, true, false, false},
                                                           {false, true, false, false, true, true},
                                                           {false, true, false, false, true, true},
                                                           {false, true, false, false, false, false},
                                                           {false, true, false, false, true, true},
-                                                          {true, false, false, true, false, true},
+                                                          {false, true, true, true, false, false},
                                                       });
+}
+
+Y_UNIT_TEST_LLVM(TestEqualsWithIntegral) {
+    TSetup<LLVM> setup;
+    const TDecimalType decimalType{35, 15};
+    const TDecimalType overflowDecimalType{20, 18};
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = Max<i8>(), .Right = TDecimal{decimalType, "127"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "127"}, .Right = Max<i8>(), .Operation = "==", .Expected = true},
+        {.Left = Max<ui8>(), .Right = TDecimal{decimalType, "255"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "255"}, .Right = Max<ui8>(), .Operation = "==", .Expected = true},
+        {.Left = Max<i16>(), .Right = TDecimal{decimalType, "32767"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "32767"}, .Right = Max<i16>(), .Operation = "==", .Expected = true},
+        {.Left = Max<ui16>(), .Right = TDecimal{decimalType, "65535"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "65535"}, .Right = Max<ui16>(), .Operation = "==", .Expected = true},
+        {.Left = Max<i32>(), .Right = TDecimal{decimalType, "2147483647"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "2147483647"}, .Right = Max<i32>(), .Operation = "==", .Expected = true},
+        {.Left = Max<ui32>(), .Right = TDecimal{decimalType, "4294967295"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "4294967295"}, .Right = Max<ui32>(), .Operation = "==", .Expected = true},
+        {.Left = Max<i64>(), .Right = TDecimal{decimalType, "9223372036854775807"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "9223372036854775807"}, .Right = Max<i64>(), .Operation = "==", .Expected = true},
+        {.Left = Max<ui64>(), .Right = TDecimal{decimalType, "18446744073709551615"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "18446744073709551615"}, .Right = Max<ui64>(), .Operation = "==", .Expected = true},
+        {.Left = i8{-7}, .Right = TDecimal{decimalType, "-7"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "-128"}, .Right = Min<i8>(), .Operation = "==", .Expected = true},
+        {.Left = static_cast<ui8>(Max<ui8>() / 2), .Right = TDecimal{decimalType, "127"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "10922"}, .Right = static_cast<i16>(Max<i16>() / 3), .Operation = "==", .Expected = true},
+        {.Left = static_cast<ui16>(Max<ui16>() - 1), .Right = TDecimal{decimalType, "65534"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "2147483640"}, .Right = static_cast<i32>(Max<i32>() - 7), .Operation = "==", .Expected = true},
+        {.Left = static_cast<ui32>(Max<ui32>() / 2), .Right = TDecimal{decimalType, "2147483647"}, .Operation = "==", .Expected = true},
+        {.Left = TDecimal{decimalType, "9223372036854775806"}, .Right = Max<i64>() - 1, .Operation = "==", .Expected = true},
+        {.Left = Max<ui64>() - 7, .Right = TDecimal{decimalType, "18446744073709551608"}, .Operation = "==", .Expected = true},
+        {.Left = i8{7}, .Right = TDecimal{decimalType, "7.5"}, .Operation = "==", .Expected = false},
+        {.Left = TDecimal{decimalType, "-7.5"}, .Right = i16{-7}, .Operation = "==", .Expected = false},
+        {.Left = Max<i64>(), .Right = TPositiveInf{overflowDecimalType}, .Operation = "==", .Expected = false},
+        {.Left = TPositiveInf{overflowDecimalType}, .Right = Max<ui64>(), .Operation = "==", .Expected = false},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&setup](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestNotEqualsWithIntegral) {
+    TSetup<LLVM> setup;
+    const TDecimalType decimalType{35, 15};
+    const TDecimalType overflowDecimalType{20, 18};
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = i8{-7}, .Right = TDecimal{decimalType, "-6"}, .Operation = "!=", .Expected = true},
+        {.Left = TDecimal{decimalType, "-7"}, .Right = i16{-7}, .Operation = "!=", .Expected = false},
+        {.Left = static_cast<ui8>(Max<ui8>() / 2), .Right = TDecimal{decimalType, "126"}, .Operation = "!=", .Expected = true},
+        {.Left = TDecimal{decimalType, "10922"}, .Right = static_cast<i16>(Max<i16>() / 3), .Operation = "!=", .Expected = false},
+        {.Left = static_cast<ui16>(Max<ui16>() - 1), .Right = TDecimal{decimalType, "65535"}, .Operation = "!=", .Expected = true},
+        {.Left = TDecimal{decimalType, "2147483640"}, .Right = static_cast<i32>(Max<i32>() - 7), .Operation = "!=", .Expected = false},
+        {.Left = static_cast<ui32>(Max<ui32>() / 2), .Right = TDecimal{decimalType, "2147483646"}, .Operation = "!=", .Expected = true},
+        {.Left = TDecimal{decimalType, "9223372036854775806"}, .Right = Max<i64>() - 1, .Operation = "!=", .Expected = false},
+        {.Left = Max<ui64>() - 7, .Right = TDecimal{decimalType, "18446744073709551614"}, .Operation = "!=", .Expected = true},
+        {.Left = i16{42}, .Right = TDecimal{decimalType, "42.25"}, .Operation = "!=", .Expected = true},
+        {.Left = TDecimal{decimalType, "-42.25"}, .Right = i32{-42}, .Operation = "!=", .Expected = true},
+        {.Left = Max<i64>(), .Right = TPositiveInf{overflowDecimalType}, .Operation = "!=", .Expected = true},
+        {.Left = TPositiveInf{overflowDecimalType}, .Right = Max<ui64>(), .Operation = "!=", .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&setup](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestLessWithIntegral) {
+    TSetup<LLVM> setup;
+    const TDecimalType decimalType{35, 15};
+    const TDecimalType overflowDecimalType{20, 18};
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = i8{-7}, .Right = TDecimal{decimalType, "-6"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{decimalType, "-7"}, .Right = i16{-7}, .Operation = "<", .Expected = false},
+        {.Left = static_cast<ui8>(Max<ui8>() / 2), .Right = TDecimal{decimalType, "128"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{decimalType, "10921"}, .Right = static_cast<i16>(Max<i16>() / 3), .Operation = "<", .Expected = true},
+        {.Left = static_cast<ui16>(Max<ui16>() - 1), .Right = TDecimal{decimalType, "65533"}, .Operation = "<", .Expected = false},
+        {.Left = TDecimal{decimalType, "2147483640"}, .Right = Max<i32>() - 1, .Operation = "<", .Expected = true},
+        {.Left = static_cast<ui32>(Max<ui32>() / 2), .Right = TDecimal{decimalType, "2147483647"}, .Operation = "<", .Expected = false},
+        {.Left = TDecimal{decimalType, "9223372036854775806"}, .Right = Max<i64>(), .Operation = "<", .Expected = true},
+        {.Left = Max<ui64>() - 7, .Right = TDecimal{decimalType, "18446744073709551614"}, .Operation = "<", .Expected = true},
+        {.Left = ui8{7}, .Right = TDecimal{decimalType, "7.5"}, .Operation = "<", .Expected = true},
+        {.Left = TDecimal{decimalType, "-7.5"}, .Right = i64{-7}, .Operation = "<", .Expected = true},
+        {.Left = Max<i64>(), .Right = TPositiveInf{overflowDecimalType}, .Operation = "<", .Expected = true},
+        {.Left = Max<ui64>(), .Right = TPositiveInf{overflowDecimalType}, .Operation = "<", .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&setup](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestLessOrEqualWithIntegral) {
+    TSetup<LLVM> setup;
+    const TDecimalType decimalType{35, 15};
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = i8{-7}, .Right = TDecimal{decimalType, "-7"}, .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{decimalType, "-6"}, .Right = i16{-7}, .Operation = "<=", .Expected = false},
+        {.Left = static_cast<ui8>(Max<ui8>() / 2), .Right = TDecimal{decimalType, "127"}, .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{decimalType, "10921"}, .Right = static_cast<i16>(Max<i16>() / 3), .Operation = "<=", .Expected = true},
+        {.Left = static_cast<ui16>(Max<ui16>() - 1), .Right = TDecimal{decimalType, "65533"}, .Operation = "<=", .Expected = false},
+        {.Left = TDecimal{decimalType, "2147483640"}, .Right = Max<i32>() - 7, .Operation = "<=", .Expected = true},
+        {.Left = static_cast<ui32>(Max<ui32>() / 2), .Right = TDecimal{decimalType, "2147483646"}, .Operation = "<=", .Expected = false},
+        {.Left = TDecimal{decimalType, "9223372036854775806"}, .Right = Max<i64>(), .Operation = "<=", .Expected = true},
+        {.Left = Max<ui64>() - 7, .Right = TDecimal{decimalType, "18446744073709551608"}, .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{decimalType, "18446744073709551614"}, .Right = Max<ui64>() - 7, .Operation = "<=", .Expected = false},
+        {.Left = i32{7}, .Right = TDecimal{decimalType, "7.5"}, .Operation = "<=", .Expected = true},
+        {.Left = TDecimal{decimalType, "-6.5"}, .Right = i16{-7}, .Operation = "<=", .Expected = false},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&setup](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestGreaterWithIntegral) {
+    TSetup<LLVM> setup;
+    const TDecimalType decimalType{35, 15};
+    const TDecimalType overflowDecimalType{20, 18};
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = i8{-7}, .Right = TDecimal{decimalType, "-8"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{decimalType, "-7"}, .Right = i16{-7}, .Operation = ">", .Expected = false},
+        {.Left = static_cast<ui8>(Max<ui8>() / 2), .Right = TDecimal{decimalType, "126"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{decimalType, "10923"}, .Right = static_cast<i16>(Max<i16>() / 3), .Operation = ">", .Expected = true},
+        {.Left = static_cast<ui16>(Max<ui16>() - 1), .Right = TDecimal{decimalType, "65535"}, .Operation = ">", .Expected = false},
+        {.Left = TDecimal{decimalType, "2147483640"}, .Right = Max<i32>() - 1, .Operation = ">", .Expected = false},
+        {.Left = static_cast<ui32>(Max<ui32>() / 2), .Right = TDecimal{decimalType, "2147483647"}, .Operation = ">", .Expected = false},
+        {.Left = TDecimal{decimalType, "9223372036854775806"}, .Right = Max<i64>() - 7, .Operation = ">", .Expected = true},
+        {.Left = Max<ui64>() - 1, .Right = TDecimal{decimalType, "18446744073709551608"}, .Operation = ">", .Expected = true},
+        {.Left = TDecimal{decimalType, "7.5"}, .Right = ui16{7}, .Operation = ">", .Expected = true},
+        {.Left = i64{-7}, .Right = TDecimal{decimalType, "-7.5"}, .Operation = ">", .Expected = true},
+        {.Left = TPositiveInf{overflowDecimalType}, .Right = Max<i64>(), .Operation = ">", .Expected = true},
+        {.Left = TPositiveInf{overflowDecimalType}, .Right = Max<ui64>(), .Operation = ">", .Expected = true},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&setup](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
+}
+
+Y_UNIT_TEST_LLVM(TestGreaterOrEqualWithIntegral) {
+    TSetup<LLVM> setup;
+    const TDecimalType decimalType{35, 15};
+    const TVector<TDecimalComparisonCase> cases = {
+        {.Left = i8{-7}, .Right = TDecimal{decimalType, "-7"}, .Operation = ">=", .Expected = true},
+        {.Left = TDecimal{decimalType, "-8"}, .Right = i16{-7}, .Operation = ">=", .Expected = false},
+        {.Left = static_cast<ui8>(Max<ui8>() / 2), .Right = TDecimal{decimalType, "127"}, .Operation = ">=", .Expected = true},
+        {.Left = TDecimal{decimalType, "10923"}, .Right = static_cast<i16>(Max<i16>() / 3), .Operation = ">=", .Expected = true},
+        {.Left = static_cast<ui16>(Max<ui16>() - 1), .Right = TDecimal{decimalType, "65535"}, .Operation = ">=", .Expected = false},
+        {.Left = TDecimal{decimalType, "2147483640"}, .Right = Max<i32>() - 7, .Operation = ">=", .Expected = true},
+        {.Left = static_cast<ui32>(Max<ui32>() / 2), .Right = TDecimal{decimalType, "2147483648"}, .Operation = ">=", .Expected = false},
+        {.Left = TDecimal{decimalType, "9223372036854775806"}, .Right = Max<i64>() - 7, .Operation = ">=", .Expected = true},
+        {.Left = Max<ui64>() - 7, .Right = TDecimal{decimalType, "18446744073709551608"}, .Operation = ">=", .Expected = true},
+        {.Left = TDecimal{decimalType, "18446744073709551614"}, .Right = Max<ui64>() - 7, .Operation = ">=", .Expected = true},
+        {.Left = TDecimal{decimalType, "7.5"}, .Right = ui32{7}, .Operation = ">=", .Expected = true},
+        {.Left = i8{-8}, .Right = TDecimal{decimalType, "-7.5"}, .Operation = ">=", .Expected = false},
+    };
+    RunComparisonCasesNonBlocks(*setup.PgmBuilder, cases, [&setup](TRuntimeNode program) {
+        return setup.BuildGraph(program);
+    });
 }
 
 Y_UNIT_TEST_LLVM(TestAggrCompares) {

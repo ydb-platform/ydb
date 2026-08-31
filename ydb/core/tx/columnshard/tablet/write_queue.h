@@ -83,6 +83,7 @@ public:
 class TWriteTasksQueue {
 private:
     bool WriteTasksOverloadCheckerScheduled = false;
+    bool CompactionOverloadReported = false;
     std::set<TWriteTask> WriteTasks;
     TColumnShard* Owner;
 

@@ -8,6 +8,7 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
+#include <ydb/core/tablet/resource_broker.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
@@ -81,6 +82,7 @@ struct TEnvironmentSetup {
         const bool StartFakeWilsonCollectors = false;
         const bool EnableChunkKeeper = true;
         const bool EnablePersistentPhantomFlagStorage = false;
+        const bool SetupResourceBroker = false;
     };
 
     const TSettings Settings;
@@ -602,6 +604,9 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnableChecksumWriteValidationOnVDisk, false, false, true, false);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyMaxSsts, 8, 0, 64, 8);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyChunkReserve, 1, 0, 64, 1);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyEnableAtColor, 15, 0, 60, 15);
 #undef ADD_ICB_CONTROL
 
                 {
@@ -627,6 +632,12 @@ config:
             }
             Runtime->RegisterService(NRetroTracing::MakeRetroCollectorId(),
                     Runtime->Register(CreateDistributedRetroCollector(), nodeId));
+            if (Settings.SetupResourceBroker) {
+                NKikimrResourceBroker::TResourceBrokerConfig brokerConfig = NResourceBroker::MakeDefaultConfig();
+                Runtime->RegisterService(NResourceBroker::MakeResourceBrokerID(),
+                    Runtime->Register(NResourceBroker::CreateResourceBrokerActor(
+                        brokerConfig, MakeIntrusive<::NMonitoring::TDynamicCounters>()), nodeId));
+            }
         }
     }
 

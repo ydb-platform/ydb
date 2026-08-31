@@ -1,0 +1,18 @@
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+
+USE plato;
+
+INSERT INTO @x (a, b)
+SELECT *
+FROM (VALUES (1, 1), (2, 2)) AS x(a, b)
+UNION
+SELECT *
+FROM (VALUES (3, 3), (4, 4)) AS y(a, b)
+ORDER BY a
+LIMIT 2 OFFSET 1;
+
+COMMIT;
+
+SELECT * FROM @x;

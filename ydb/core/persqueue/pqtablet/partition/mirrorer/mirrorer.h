@@ -93,7 +93,8 @@ private:
     bool AddToWriteRequest(
         NKikimrClient::TPersQueuePartitionRequest& request,
         NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
-        bool& incorrectRequest
+        bool& incorrectRequest,
+        ui64& nextOffset
     );
     void ProcessError(const TActorContext& ctx, const TString& msg);
     void ProcessError(const TActorContext& ctx, const TString& msg, const NKikimrClient::TResponse& response);
@@ -197,6 +198,13 @@ private:
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
 };
+
+bool AppendToWriteRequest(
+    NKikimrClient::TPersQueuePartitionRequest& request,
+    NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
+    bool& incorrectRequest,
+    ui64& nextOffset
+);
 
 }// NPQ
 }// NKikimr

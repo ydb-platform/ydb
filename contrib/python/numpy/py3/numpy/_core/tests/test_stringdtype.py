@@ -1,8 +1,9 @@
 import concurrent.futures
+import copy
 import itertools
 import os
-import pickle
 import string
+import pickle
 import sys
 import tempfile
 
@@ -116,13 +117,13 @@ def test_dtype_repr(dtype):
     if not hasattr(dtype, "na_object") and dtype.coerce:
         assert repr(dtype) == "StringDType()"
     elif dtype.coerce:
-        assert repr(dtype) == f"StringDType(na_object={repr(dtype.na_object)})"
+        assert repr(dtype) == f"StringDType(na_object={dtype.na_object!r})"
     elif not hasattr(dtype, "na_object"):
         assert repr(dtype) == "StringDType(coerce=False)"
     else:
         assert (
             repr(dtype)
-            == f"StringDType(na_object={repr(dtype.na_object)}, coerce=False)"
+            == f"StringDType(na_object={dtype.na_object!r}, coerce=False)"
         )
 
 
@@ -190,10 +191,14 @@ def test_array_creation_utf8(dtype, data):
     ],
 )
 def test_scalars_string_conversion(data, dtype):
+    try:
+        str_vals = [str(d.decode('utf-8')) for d in data]
+    except AttributeError:
+        str_vals = [str(d) for d in data]
     if dtype.coerce:
         assert_array_equal(
             np.array(data, dtype=dtype),
-            np.array([str(d) for d in data], dtype=dtype),
+            np.array(str_vals, dtype=dtype),
         )
     else:
         with pytest.raises(ValueError):
@@ -284,6 +289,14 @@ class TestStringLikeCasts:
             barr = np.array(utf8_bytes, dtype=bytes_dtype)
             assert_array_equal(barr, sarr.astype(bytes_dtype))
             assert_array_equal(barr.astype(dtype), sarr)
+            if dtype.coerce:
+                barr = np.array(utf8_bytes, dtype=dtype)
+                assert_array_equal(barr, sarr)
+                barr = np.array(utf8_bytes, dtype="O")
+                assert_array_equal(barr.astype(dtype), sarr)
+            else:
+                with pytest.raises(ValueError):
+                    np.array(utf8_bytes, dtype=dtype)
         except UnicodeEncodeError:
             with pytest.raises(UnicodeEncodeError):
                 sarr.astype("S20")
@@ -393,6 +406,13 @@ def test_pickle(dtype, string_list):
     os.remove(f.name)
 
 
+def test_stdlib_copy(dtype, string_list):
+    arr = np.array(string_list, dtype=dtype)
+
+    assert_array_equal(copy.copy(arr), arr)
+    assert_array_equal(copy.deepcopy(arr), arr)
+
+
 @pytest.mark.parametrize(
     "strings",
     [
@@ -415,8 +435,19 @@ def test_sort(dtype, strings):
 
     def test_sort(strings, arr_sorted):
         arr = np.array(strings, dtype=dtype)
-        np.random.default_rng().shuffle(arr)
         na_object = getattr(arr.dtype, "na_object", "")
+        if na_object is None and None in strings:
+            with pytest.raises(
+                ValueError,
+                match="Cannot compare null that is not a nan-like value",
+            ):
+                np.argsort(arr)
+            argsorted = None
+        elif na_object is pd_NA or na_object != '':
+            argsorted = None
+        else:
+            argsorted = np.argsort(arr)
+        np.random.default_rng().shuffle(arr)
         if na_object is None and None in strings:
             with pytest.raises(
                 ValueError,
@@ -426,6 +457,9 @@ def test_sort(dtype, strings):
         else:
             arr.sort()
             assert np.array_equal(arr, arr_sorted, equal_nan=True)
+        if argsorted is not None:
+            assert np.array_equal(argsorted, np.argsort(strings))
+
 
     # make a copy so we don't mutate the lists in the fixture
     strings = strings.copy()
@@ -495,15 +529,30 @@ def test_fancy_indexing(string_list):
     sarr = np.array(string_list, dtype="T")
     assert_array_equal(sarr, sarr[np.arange(sarr.shape[0])])
 
+    inds = [
+        [True, True],
+        [0, 1],
+        ...,
+        np.array([0, 1], dtype='uint8'),
+    ]
+
+    lops = [
+        ['a'*25, 'b'*25],
+        ['', ''],
+        ['hello', 'world'],
+        ['hello', 'world'*25],
+    ]
+
     # see gh-27003 and gh-27053
-    for ind in [[True, True], [0, 1], ...]:
-        for lop in [['a'*16, 'b'*16], ['', '']]:
+    for ind in inds:
+        for lop in lops:
             a = np.array(lop, dtype="T")
-            rop = ['d'*16, 'e'*16]
+            assert_array_equal(a[ind], a)
+            rop = ['d'*25, 'e'*25]
             for b in [rop, np.array(rop, dtype="T")]:
                 a[ind] = b
                 assert_array_equal(a, b)
-                assert a[0] == 'd'*16
+                assert a[0] == 'd'*25
 
 
 def test_creation_functions():
@@ -1559,6 +1608,40 @@ def test_unset_na_coercion():
             arr == op
 
 
+def test_repeat(string_array):
+    res = string_array.repeat(1000)
+    # Create an empty array with expanded dimension, and fill it.  Then,
+    # reshape it to the expected result.
+    expected = np.empty_like(string_array, shape=string_array.shape + (1000,))
+    expected[...] = string_array[:, np.newaxis]
+    expected = expected.reshape(-1)
+
+    assert_array_equal(res, expected, strict=True)
+
+
+@pytest.mark.parametrize("tile", [1, 6, (2, 5)])
+def test_accumulation(string_array, tile):
+    """Accumulation is odd for StringDType but tests dtypes with references.
+    """
+    # Fill with mostly empty strings to not create absurdly big strings
+    arr = np.zeros_like(string_array, shape=(100,))
+    arr[:len(string_array)] = string_array
+    arr[-len(string_array):] = string_array
+
+    # Bloat size a bit (get above thresholds and test >1 ndim).
+    arr = np.tile(string_array, tile)
+
+    res = np.add.accumulate(arr, axis=0)
+    res_obj = np.add.accumulate(arr.astype(object), axis=0)
+    assert_array_equal(res, res_obj.astype(arr.dtype), strict=True)
+
+    if arr.ndim > 1:
+        res = np.add.accumulate(arr, axis=-1)
+        res_obj = np.add.accumulate(arr.astype(object), axis=-1)
+
+        assert_array_equal(res, res_obj.astype(arr.dtype), strict=True)
+
+
 class TestImplementation:
     """Check that strings are stored in the arena when possible.
 
@@ -1653,12 +1736,12 @@ class TestImplementation:
         assert_array_equal(z, "")
 
     def test_copy(self):
-        c = self.a.copy()
-        assert_array_equal(self.get_flags(c), self.get_flags(self.a))
-        assert_array_equal(c, self.a)
-        offsets = self.get_view(c)['offset']
-        assert offsets[2] == 1
-        assert offsets[3] == 1 + len(self.s_medium) + self.sizeofstr // 2
+        for c in [self.a.copy(), copy.copy(self.a), copy.deepcopy(self.a)]:
+            assert_array_equal(self.get_flags(c), self.get_flags(self.a))
+            assert_array_equal(c, self.a)
+            offsets = self.get_view(c)['offset']
+            assert offsets[2] == 1
+            assert offsets[3] == 1 + len(self.s_medium) + self.sizeofstr // 2
 
     def test_arena_use_with_setting(self):
         c = np.zeros_like(self.a)

@@ -8,6 +8,7 @@ from hamcrest import assert_that
 
 from ydb.core.protos import blobstorage_base3_pb2 as bsbase
 from ydb.core.protos import blobstorage_config_pb2 as bsconfig
+from ydb.core.protos import msgbus_pb2
 from ydb.public.api.grpc.draft import ydb_distributed_storage_v1_pb2_grpc as distributed_storage_grpc
 from ydb.public.api.protos.draft import ydb_distributed_storage_pb2 as distributed_storage
 import ydb.public.api.protos.ydb_config_pb2 as config_pb
@@ -22,8 +23,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 STATIC_GROUP_ID = 0
 
 
-@pytest.fixture(scope="function")
-def cluster():
+def create_cluster(dynamic_pdisks=None):
     log_configs = {
         'BS_NODE': LogLevels.DEBUG,
         'BS_CONTROLLER': LogLevels.DEBUG,
@@ -43,6 +43,7 @@ def cluster():
         separate_node_configs=True,
         simple_config=True,
         use_self_management=True,
+        dynamic_pdisks=dynamic_pdisks or [],
         extra_grpc_services=['config', 'distributed_storage'],
         additional_log_configs=log_configs,
     )
@@ -50,10 +51,26 @@ def cluster():
     cluster = KiKiMR(configurator=configurator)
     cluster.start()
     cms.request_increase_ratio_limit(cluster.client)
+    return cluster
 
-    yield cluster
 
-    cluster.stop()
+def running_cluster(dynamic_pdisks=None):
+    cluster = create_cluster(dynamic_pdisks)
+
+    try:
+        yield cluster
+    finally:
+        cluster.stop()
+
+
+@pytest.fixture(scope="function")
+def cluster():
+    yield from running_cluster()
+
+
+@pytest.fixture(scope="function")
+def cluster_with_local_spare_pdisk():
+    yield from running_cluster([{}])
 
 
 def fetch_config(cluster):
@@ -111,6 +128,14 @@ def set_pdisk_faulty(cluster, node, path):
     raise RuntimeError("Failed to set PDisk FAULTY after 10 attempts")
 
 
+def set_use_self_heal_local_policy(cluster, value):
+    request = msgbus_pb2.TBlobStorageConfigRequest()
+    request.Domain = 1
+    request.Request.Command.add().UpdateSettings.UseSelfHealLocalPolicy.append(value)
+    response = cluster.client.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+    assert_that(response.Success, "UpdateSettings failed: %s" % response)
+
+
 def wait_static_group_relocated(cluster, victim_node_id, timeout=180):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -161,22 +186,43 @@ def wait_static_vdisks_ready(stub, timeout=180):
     raise TimeoutError("Static group VDisks did not become ready within %s seconds" % timeout)
 
 
-def wait_static_vdisk_reassigned(stub, previous_vdisk, target_slot, timeout=180):
+def wait_static_vdisk_reassignment(stub, previous_vdisk, predicate, description, timeout=180):
     position = vdisk_position(previous_vdisk.id)
-    target = vslot_id(target_slot)
     deadline = time.time() + timeout
     while time.time() < deadline:
         for vdisk in stream_static_vdisks(stub):
             if (
                 vdisk_position(vdisk.id) == position
                 and vdisk.id.group_generation > previous_vdisk.id.group_generation
-                and vslot_id(vdisk.slot_id) == target
+                and predicate(vdisk)
             ):
                 return vdisk
         time.sleep(2)
     raise TimeoutError(
-        "Static VDisk %s was not reassigned to VSlot %s within %s seconds"
-        % (position, target, timeout)
+        "Static VDisk %s was not %s within %s seconds"
+        % (position, description, timeout)
+    )
+
+
+def wait_static_vdisk_reassigned(stub, previous_vdisk, target_slot, timeout=180):
+    target = vslot_id(target_slot)
+    return wait_static_vdisk_reassignment(
+        stub,
+        previous_vdisk,
+        lambda vdisk: vslot_id(vdisk.slot_id) == target,
+        "reassigned to VSlot %s" % (target,),
+        timeout,
+    )
+
+
+def wait_static_vdisk_self_healed(stub, previous_vdisk, timeout=180):
+    source = vslot_id(previous_vdisk.slot_id)
+    return wait_static_vdisk_reassignment(
+        stub,
+        previous_vdisk,
+        lambda vdisk: vslot_id(vdisk.slot_id) != source,
+        "self-healed away from VSlot %s" % (source,),
+        timeout,
     )
 
 
@@ -286,3 +332,45 @@ class TestStaticGroupSelfHealAllowedNodes:
                     % (forbidden_node_id, sorted(new_group_nodes)))
         assert_that(victim_node_id not in new_group_nodes,
                     "static group vdisk still present on the faulty victim node %d" % victim_node_id)
+
+
+class TestStaticGroupSelfHealPlacementPolicy:
+
+    def test_local_policy_relocates_to_spare_pdisk_on_same_node(self, cluster_with_local_spare_pdisk):
+        cluster = cluster_with_local_spare_pdisk
+        config = fetch_config(cluster)
+        smc = config["config"].setdefault("self_management_config", {})
+        smc["enabled"] = True
+        smc["automatic_static_group_management"] = True
+        apply_config(cluster, config)
+        set_use_self_heal_local_policy(cluster, True)
+
+        node = cluster.nodes[1]
+        with grpc.insecure_channel("%s:%s" % (node.host, node.grpc_port)) as channel:
+            stub = distributed_storage_grpc.DistributedStorageServiceStub(channel)
+            vdisks = wait_static_vdisks_ready(stub)
+            previous_vdisk = min(vdisks, key=lambda vdisk: vdisk_position(vdisk.id))
+            source = vslot_id(previous_vdisk.slot_id)
+
+            base_config = cluster.client.query_base_config().BaseConfig
+            local_spares = [
+                pdisk.PDiskId
+                for pdisk in base_config.PDisk
+                if (
+                    pdisk.NodeId == source[0]
+                    and pdisk.PDiskId != source[1]
+                    and pdisk.DriveStatus == bsconfig.EDriveStatus.ACTIVE
+                )
+            ]
+            assert_that(local_spares, "No local spare PDisk is available")
+
+            victim = cluster.nodes[source[0]]
+            path = pdisk_path(cluster, source[0], source[1])
+            set_pdisk_faulty(cluster, victim, path)
+
+            replacement = wait_static_vdisk_self_healed(stub, previous_vdisk)
+            target = vslot_id(replacement.slot_id)
+            assert_that(target[0] == source[0],
+                        "local self-heal moved VDisk to another node: %s -> %s" % (source, target))
+            assert_that(target[1] in local_spares,
+                        "local self-heal did not use a spare PDisk: %s -> %s" % (source, target))

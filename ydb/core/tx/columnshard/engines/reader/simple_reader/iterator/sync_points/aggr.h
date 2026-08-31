@@ -160,9 +160,9 @@ private:
             }
             cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
                          ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
-                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), source->GetPortionIdOptional()))
+                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), aggrSource->GetLastPortionIdOptional()))
                          : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
-                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount()));
+                               aggrSource->GetLastDeprecatedPortionId(), aggrSource->GetLastSourceRecordsCount()));
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);

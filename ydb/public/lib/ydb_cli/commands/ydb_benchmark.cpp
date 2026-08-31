@@ -651,7 +651,7 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {
-            TPlanVisualizer pv;
+            NPlan2Svg::TPlanVisualizer pv;
             TFileOutput out(planFName + "svg");
             try {
                 pv.LoadPlans(res.GetQueryPlan());

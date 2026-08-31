@@ -3,6 +3,7 @@
 #include "local_topic_read_session.h"
 #include "local_topic_write_session.h"
 
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -22,14 +23,12 @@ public:
     using TBase::TBase;
 
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
-        using TDescribeTopicRequest = TGrpcRequestOperationCall<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>;
-
-        TDescribeTopicRequest::TRequest request;
+        TEvDescribeTopicRequest::TRequest request;
         request.set_path(path);
         request.set_include_stats(settings.IncludeStats_);
         request.set_include_location(settings.IncludeLocation_);
 
-        return DoLocalRpcRequest<TDescribeTopicRequest, TDescribeTopicSettings>(std::move(request), settings, &DoDescribeTopicRequest).Apply([](const NThreading::TFuture<TLocalRpcOperationResult>& f) {
+        return DoLocalRpcRequest<TEvDescribeTopicRequest, TDescribeTopicSettings>(std::move(request), settings, &DoDescribeTopicRequest).Apply([](const NThreading::TFuture<TLocalRpcOperationResult>& f) {
             const auto& [status, response] = f.GetValue();
             Ydb::Topic::DescribeTopicResult result;
             response.UnpackTo(&result);

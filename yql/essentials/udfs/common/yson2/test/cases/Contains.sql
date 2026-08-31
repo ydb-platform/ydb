@@ -1,5 +1,3 @@
-/* syntax version 1 */
-
 select
 Yson::Contains(Yson::Parse('{a=1}'),'a'),
 Yson::Contains(Yson::Parse('{a=1}'),'b'),

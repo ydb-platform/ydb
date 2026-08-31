@@ -5497,5 +5497,102 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(MovingTableStoreTablesNotSupported) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                CREATE TABLESTORE `/Root/TableStore` (
+                    timestamp Timestamp NOT NULL,
+                    uid Utf8 NOT NULL,
+                    value Int32,
+                    PRIMARY KEY (timestamp, uid)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT=1
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/TableStore/InStoreTable` (
+                    timestamp Timestamp NOT NULL,
+                    uid Utf8 NOT NULL,
+                    value Int32,
+                    PRIMARY KEY (timestamp, uid)
+                )
+                PARTITION BY HASH(timestamp)
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT=1
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/StandaloneTable` (
+                    timestamp Timestamp NOT NULL,
+                    uid Utf8 NOT NULL,
+                    value Int32,
+                    PRIMARY KEY (timestamp, uid)
+                )
+                PARTITION BY HASH(timestamp)
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT=1
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        // Case 1: Move in-store table within the TABLESTORE — should fail
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                ALTER TABLE `/Root/TableStore/InStoreTable` RENAME TO `/Root/TableStore/InStoreTable_renamed`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!status.IsSuccess(), "Moving tables inside a TABLESTORE should fail");
+        }
+
+        // Case 2: Move in-store table out of the TABLESTORE — should fail
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                ALTER TABLE `/Root/TableStore/InStoreTable` RENAME TO `/Root/InStoreTable_moved`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!status.IsSuccess(), "Moving tables from a TABLESTORE should fail");
+        }
+
+        // Case 3: Move standalone table into the TABLESTORE — should fail
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                ALTER TABLE `/Root/StandaloneTable` RENAME TO `/Root/TableStore/MovedTable`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!status.IsSuccess(), "Moving tables into a TABLESTORE should fail");
+        }
+
+        // Verify the in-store table is still accessible (all moves were rejected)
+        {
+            auto it = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/TableStore/InStoreTable`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        // Verify the standalone table is still accessible (move was rejected)
+        {
+            auto it = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/StandaloneTable`;
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+    }
+
 }
 }

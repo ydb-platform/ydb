@@ -1169,6 +1169,9 @@ private:
         programProto.SetLangVer(Config->GetDefaultLangVer());
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
+        for (const auto& module : stagePredictor.GetWasmUdfModules()) {
+            stageProto.AddWasmUdfModules(module);
+        }
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());
@@ -1189,6 +1192,7 @@ private:
         txProto.SetType(GetPhyTxType(*txSettings.Type));
 
         bool hasEffectStage = false;
+        bool hasPqSources = false;
 
         TMap<ui64, ui32> stagesMap;
         THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
@@ -1200,13 +1204,24 @@ private:
             CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
             hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
+            const auto* compiledStage = physicalStageByID[stage.Ref().UniqueId()];
+            for (const auto& src : compiledStage->GetSources()) {
+                if (src.HasExternalSource() && src.GetExternalSource().GetType() == "PqSource") {
+                    hasPqSources = true;
+                    break;
+                }
+            }
         }
         for (auto&& i : *txProto.MutableStages()) {
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination()));
+        // Map connections produced by either optimization need partition-preserving task layout.
+        const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination())
+            || Config->OptShuffleEliminationForAggregation.Get().GetOrElse(Config->GetDefaultEnableShuffleEliminationForAggregation());
+        txProto.SetEnableShuffleElimination(enableShuffleElimination);
         txProto.SetHasEffects(hasEffectStage);
+        txProto.SetHasPqSources(hasPqSources);
         txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
@@ -1926,6 +1941,15 @@ private:
         THashSet<size_t> AffectedKeys;
     };
 
+    static bool AnyColumnAffected(TConstArrayRef<TString> columns, const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet) {
+        for (auto& col: columns) {
+            if (columnsSet.contains(col) && !mainKeyColumnsSet.contains(col)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     TAffectedIndexes ComputeAffectedIndexes(const TKqpTableSinkSettings& settings, const TKikimrTableMetadataPtr& tableMeta,
             const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet) {
         const auto mode = settings.Mode().StringValue();
@@ -1936,30 +1960,34 @@ private:
 
             if (indexDescription.Type == TIndexDescription::EType::GlobalSync ||
                 indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
-                const auto& implTable = tableMeta->ImplTables[index];
-
                 if (mode == "update" || mode == "update_conditional") {
+                    const auto& implTable = tableMeta->ImplTables[index];
                     if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
                             return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
                         })) {
-                            result.Affected.push_back(index);
-                    }
-                    if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
-                            return columnsSet.contains(column) && !mainKeyColumnsSet.contains(column);
-                        })) {
-                            result.AffectedKeys.insert(index);
-                        }
-                    } else {
                         result.Affected.push_back(index);
+                    }
+                    if (AnyColumnAffected(implTable->KeyColumnNames, columnsSet, mainKeyColumnsSet)) {
                         result.AffectedKeys.insert(index);
                     }
+                } else {
+                    result.Affected.push_back(index);
+                    result.AffectedKeys.insert(index);
+                }
             } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
                 indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
                 indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {
-                if (mode != "update" &&
-                    mode != "update_conditional" ||
-                    columnsSet.contains(indexDescription.KeyColumns[0])) {
+                if (mode == "update" || mode == "update_conditional") {
+                    if (AnyColumnAffected(indexDescription.KeyColumns, columnsSet, mainKeyColumnsSet)) {
+                        result.Affected.push_back(index);
+                        result.AffectedKeys.insert(index);
+                    } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance &&
+                        AnyColumnAffected(indexDescription.DataColumns, columnsSet, mainKeyColumnsSet)) {
+                        result.Affected.push_back(index);
+                    }
+                } else {
                     result.Affected.push_back(index);
+                    result.AffectedKeys.insert(index);
                 }
             }
         }
@@ -2057,6 +2085,11 @@ private:
                 for (const auto& col: indexDescription.KeyColumns) {
                     lookupColumnsSet.insert(col);
                 }
+                if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    for (const auto& col: indexDescription.DataColumns) {
+                        lookupColumnsSet.insert(col);
+                    }
+                }
                 // In rowid mode the doc_id is the synthetic __ydb_row_id column, which for UPSERT/UPDATE
                 // must be read back from the existing row (it is not part of the user-supplied columns).
                 const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);
@@ -2130,6 +2163,7 @@ private:
     // sub-tables for the relevance variant).
     void FillFulltextIndexSettings(size_t index, const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns) {
+        YQL_ENSURE(indexDescription.KeyColumns.size() > 0);
         if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact) {
             indexSettings->SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact);
             *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
@@ -2140,23 +2174,33 @@ private:
             *indexSettings->MutableFulltextSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDescription.SpecializedIndexDescription).GetSettings();
             // Get dict, docs, stats tables
             auto dictTable = tableMeta->ImplTables[index];
-            YQL_ENSURE(dictTable->Name.EndsWith(NTableIndex::NFulltext::DictTable));
-            auto docsTable = dictTable->Next;
+            if (!dictTable->Name.EndsWith(NTableIndex::NFulltext::DictTable)) {
+                dictTable = nullptr;
+            }
+            auto docsTable = dictTable ? dictTable->Next : tableMeta->ImplTables[index];
             YQL_ENSURE(docsTable->Name.EndsWith(NTableIndex::NFulltext::DocsTable));
             auto statsTable = docsTable->Next;
             YQL_ENSURE(statsTable->Name.EndsWith(NTableIndex::NFulltext::StatsTable));
             // And pass their metadata
-            FillTableId(*dictTable, *indexSettings->MutableDictTable());
-            FillTablesMap(dictTable->Name, tablesMap);
-            for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::FreqColumn}) {
-                const auto& columnMeta = dictTable->Columns.at(columnName);
-                FillColumnProto(columnName, &columnMeta, indexSettings->AddDictColumns());
-                tablesMap[dictTable->Name].emplace(columnName);
+            if (dictTable) {
+                FillTableId(*dictTable, *indexSettings->MutableDictTable());
+                FillTablesMap(dictTable->Name, tablesMap);
+                for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::FreqColumn}) {
+                    const auto& columnMeta = dictTable->Columns.at(columnName);
+                    FillColumnProto(columnName, &columnMeta, indexSettings->AddDictColumns());
+                    tablesMap[dictTable->Name].emplace(columnName);
+                }
             }
             FillTableId(*statsTable, *indexSettings->MutableStatsTable());
             FillTablesMap(statsTable->Name, tablesMap);
-            for (const auto& columnName: {NTableIndex::NFulltext::IdColumn,
-                NTableIndex::NFulltext::DocCountColumn, NTableIndex::NFulltext::SumDocLengthColumn}) {
+            TVector<TString> statsCols = {indexDescription.KeyColumns.begin(),
+                indexDescription.KeyColumns.end()-1};
+            if (!statsCols.size()) {
+                statsCols.push_back(NTableIndex::NFulltext::IdColumn);
+            }
+            statsCols.push_back(NTableIndex::NFulltext::DocCountColumn);
+            statsCols.push_back(NTableIndex::NFulltext::SumDocLengthColumn);
+            for (const auto& columnName: statsCols) {
                 const auto& columnMeta = statsTable->Columns.at(columnName);
                 FillColumnProto(columnName, &columnMeta, indexSettings->AddStatsColumns());
                 tablesMap[statsTable->Name].emplace(columnName);
@@ -2164,7 +2208,7 @@ private:
             FillTableId(*docsTable, *indexSettings->MutableDocsTable());
             FillTablesMap(docsTable->Name, tablesMap);
             TVector<TStringBuf> docsColumns;
-            YQL_ENSURE(docsTable->KeyColumnNames.size() == 1);
+            YQL_ENSURE(docsTable->KeyColumnNames.size() == 1); // real PK or __ydb_row_id
             docsColumns.emplace_back(docsTable->KeyColumnNames[0]);
             docsColumns.emplace_back(NTableIndex::NFulltext::DocLengthColumn);
             for (const auto& columnName : indexDescription.DataColumns) {
@@ -2180,6 +2224,13 @@ private:
         }
 
         FillTablesMap(implTable->Name, tablesMap);
+        for (size_t i = 0; i < indexDescription.KeyColumns.size()-1; i++) {
+            // Add prefix columns
+            const auto& columnName = indexDescription.KeyColumns[i];
+            const auto& columnMeta = implTable->Columns.at(columnName);
+            FillColumnProto(columnName, &columnMeta, indexSettings->AddImplColumns());
+            tablesMap[implTable->Name].emplace(columnName);
+        }
         for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn,
             NTableIndex::NFulltext::GenColumn,
             NTableIndex::NFulltext::MaxIdColumn,
@@ -2231,8 +2282,10 @@ private:
             }
             indexColumnsSet.emplace(columnName);
         }
+        ui32 dataColumns = 0;
         for (const auto& columnName : indexDescription.DataColumns) {
             if (updateColumnSet.contains(columnName) && !indexColumnsSet.contains(columnName)) {
+                dataColumns++;
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
                 // FIXME: Remove WriteIndexes and do not pass it at all
@@ -2241,6 +2294,7 @@ private:
                 indexColumnsSet.emplace(columnName);
             }
         }
+        indexSettings->SetDataColumnCount(dataColumns);
     }
 
     // Sets per-index OperationType and NeedDeleteOldRows.
@@ -2283,9 +2337,9 @@ private:
                 indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact);
             auto implTable = tableMeta->ImplTables[index];
             if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
-                // Alphabetically impl (posting) is the last table, after Dict, Docs and Stats
-                YQL_ENSURE(implTable->Next && implTable->Next->Next && implTable->Next->Next->Next);
-                implTable = implTable->Next->Next->Next;
+                // Alphabetically impl (posting) is the last table, after Docs and Stats
+                YQL_ENSURE(implTable->Next && implTable->Next->Next);
+                implTable = implTable->Next->Next;
                 YQL_ENSURE(implTable->Name.EndsWith(NTableIndex::ImplTable));
             }
 
@@ -3176,6 +3230,21 @@ private:
 
             if (const auto maybeFullscanLimit = streamLookup.FullscanLimit().Maybe<TCoAtom>()) {
                 dqSourceLookupCn.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
+            }
+
+            if (const auto maybeShuffleMode = streamLookup.ShuffleMode().Maybe<TCoAtom>()) {
+                switch (FromString<NDq::EShuffleMode>(maybeShuffleMode.Cast().StringValue())) {
+#define TRANSLATE(Id, PROTO) \
+                    case NDq::EShuffleMode::Id: \
+                        static_assert(static_cast<ui32>(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO) == static_cast<ui32>(NDq::EShuffleMode::Id)); \
+                        dqSourceLookupCn.SetShuffleMode(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO); \
+                        break
+                    TRANSLATE(Default, DEFAULT);
+                    TRANSLATE(Off, OFF);
+                    TRANSLATE(Map, MAP);
+                    TRANSLATE(Hash, HASH);
+#undef TRANSLATE
+                }
             }
 
             for (const auto& key : streamLookup.LeftJoinKeyNames()) {

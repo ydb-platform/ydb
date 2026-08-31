@@ -35,7 +35,7 @@ from clickhouse_connect.driver._backend.httpcommon import (
     summary_from_headers,
 )
 from clickhouse_connect.driver._backend.models import Capabilities, CommandExecution, QueryExecution, QueryRuntime
-from clickhouse_connect.driver.common import dict_copy
+from clickhouse_connect.driver.common import ShowClickHouseErrors, dict_copy
 from clickhouse_connect.driver.exceptions import OperationalError, ProgrammingError
 from clickhouse_connect.driver.httputil import ResponseSource, all_managers, check_conn_expiration, get_response_data
 
@@ -94,7 +94,7 @@ class HttpSyncBackend:
         self.http_retries = http_retries
         self.read_format = read_format
         self.form_encode_query_params = form_encode_query_params
-        self.show_clickhouse_errors = True
+        self.show_clickhouse_errors: ShowClickHouseErrors = True
         self.compression: str | None = None
         self.send_comp_setting = False
         self.send_progress: bool | None = None
@@ -131,6 +131,7 @@ class HttpSyncBackend:
     def execute_query(self, context: QueryContext, runtime: QueryRuntime, prepped_query: str | bytes) -> QueryExecution:
         """Execute a query context, returning either a streaming byte source or
         the column metadata from a columns-only probe."""
+        context.show_clickhouse_errors = self.show_clickhouse_errors
         plan = plan_query_request(
             context,
             runtime,
@@ -346,9 +347,11 @@ class HttpSyncBackend:
                         time.sleep(0.1 * attempts)
                         continue
                 logger.debug("Non-retryable HTTP transport error type=%s", type(ex).__name__)
-                logger.warning("Unexpected Http Driver Exception")
-                err_url = f" ({self.url})" if self.show_clickhouse_errors else ""
-                raise OperationalError(f"Error {ex} executing HTTP request attempt {attempts}{err_url}") from ex
+                if self.show_clickhouse_errors is True:
+                    logger.warning("Unexpected Http Driver Exception")
+                    raise OperationalError(f"Error {ex} executing HTTP request attempt {attempts} ({self.url})") from ex
+                logger.warning("Unexpected Http Driver Exception", exc_info=True)
+                raise OperationalError("Error executing HTTP request") from ex
             finally:
                 if query_session:
                     self._active_session = None  # Make sure we always clear this

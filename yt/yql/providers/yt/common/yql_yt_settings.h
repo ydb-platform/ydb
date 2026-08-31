@@ -135,6 +135,7 @@ public:
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
     NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
+    NCommon::TConfSetting<bool, StaticPerCluster> ApplyMaxJobCountToAll;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -406,8 +407,8 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
     TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext = {});
     TYtConfiguration(const TYtConfiguration&) = delete;
 
-    template <class TProtoConfig, typename TFilter>
-    void Init(const TProtoConfig& config, const TFilter& filter, TTypeAnnotationContext& typeCtx) {
+    template <class TProtoConfig, typename TActivationPolicy>
+    void Init(const TProtoConfig& config, const TActivationPolicy& activationPolicy, TTypeAnnotationContext& typeCtx) {
         TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
@@ -422,9 +423,9 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
         this->SetValidClusters(clusters);
 
         // Init settings from config
-        this->Dispatch(config.GetDefaultSettings(), filter);
+        this->DispatchWithActivationPolicy(config.GetDefaultSettings(), activationPolicy);
         for (auto& cluster: config.GetClusterMapping()) {
-            this->Dispatch(cluster.GetName(), cluster.GetSettings(), filter);
+            this->DispatchWithActivationPolicy(cluster.GetName(), cluster.GetSettings(), activationPolicy);
         }
         this->FreezeDefaults();
     }

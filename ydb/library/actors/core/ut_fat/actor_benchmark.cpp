@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
             duration = TDuration::Seconds(FromString<ui64>(durationStr));
         }
 
-        TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, inflights, duration);
+        TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, inflights, duration, 1);
     }
 
     Y_UNIT_TEST(StarSendActivateReceiveCSVManual) {
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
             duration = TDuration::Seconds(FromString<ui64>(durationStr));
         }
 
-        TActorBenchmark::RunStarSendActivateReceiveCSV(threadsList, actorPairsList, starsList, duration);
+        TActorBenchmark::RunStarSendActivateReceiveCSV(threadsList, actorPairsList, starsList, duration, 1);
     }
 
     Y_UNIT_TEST(SendActivateReceiveCSV) {

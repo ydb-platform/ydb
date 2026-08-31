@@ -38,7 +38,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .InflightByOperation = inflightByOperation,
             .Errors =
                 {.ConsecutiveErrorCount = 1, .ConsecutiveSuccessCount = 7},
-            .PBufferUsedSize = 4096,
+            .PBuffersUsage{.Count = 1, .Size = 4096},
+            .AheadBlocks{.Count = 2, .Size = 8192},
+            .BehindBlocks{.Count = 3, .Size = 12288},
         };
         THostSnapshot sufferer{
             .Index = 1,
@@ -70,8 +72,10 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=chaos");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunkcounters");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=latency");
         UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
@@ -175,8 +179,35 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Online");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Sufferer");
         UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive success");
+        UNIT_ASSERT_STRING_CONTAINS(html, "PBuffers usage");
+        UNIT_ASSERT_STRING_CONTAINS(html, "1 / 4.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "2 / 8.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "3 / 12.00 KiB");
         // The add-host button lives on the detail page only.
         UNIT_ASSERT(!html.Contains("action=addhost"));
+    }
+
+    Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
+    {
+        constexpr ui32 BlockSize = 4096;
+        auto dbg = MakeDbg(0);
+        auto config = TVChunkConfig::MakeDefault(
+            /*vChunkIndex*/ 17,
+            /*hostCount*/ 5,
+            /*primaryCount*/ 3);
+        config.PromoteHost(3);
+        config.SetWatermark(3, 42 * BlockSize);
+        dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
+
+        const TMonPageData data{
+            .Page = EMonPage::Dbg,
+            .TabletInfo = {.TabletId = 42, .BlockSize = BlockSize},
+            .Dbgs = {std::move(dbg)},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Fresh");
+        UNIT_ASSERT_STRING_CONTAINS(html, "17[H3:42]");
     }
 
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
@@ -196,6 +227,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "back to DBGs");
         // Host indexes render in the log format ("H0"), not as raw ui8 bytes.
         UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "1 / 4.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "2 / 8.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "3 / 12.00 KiB");
         // The add-host form: POST with parameters both in the URL (read by
         // the tablet) and as hidden fields (read by the mon proxy router).
         UNIT_ASSERT_STRING_CONTAINS(html, "<form method='post'");
@@ -211,7 +245,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "<input type='hidden' name='action' value='addhost'/>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
         UNIT_ASSERT_STRING_CONTAINS(html, "Connections");
-        UNIT_ASSERT_STRING_CONTAINS(html, "DDisk session");
         // The DDisk id links to its actor page on the owning node (1).
         UNIT_ASSERT_STRING_CONTAINS(
             html,
@@ -224,7 +257,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "/node/1/actors/persistent_buffer?pb=");
         UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Locked");
-        UNIT_ASSERT_STRING_CONTAINS(html, "yes");
+        UNIT_ASSERT_STRING_CONTAINS(html, "connected");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)
@@ -269,7 +302,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .VChunk =
                 TVChunkSnapshot{
                     .VChunkConfig = config,
-                    .SafeBarrier = 100,
+                    .SafeBarrier = TPBufferKey{.Generation = 1, .Lsn = 100},
                     .DirtyMapDump = "DDiskStates: dump-text",
                 },
         };
@@ -306,7 +339,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .LocalDb =
                 TLocalDbContents{
                     .VolumeConfig = "DiskId: vol-1",
-                    .VChunkConfigs = {TVChunkConfig::MakeDefault(3, 5, 3)},
+                    .VChunkConfigs = {{3, TVChunkConfig::MakeDefault(3, 5, 3)}},
                 },
         };
 
@@ -551,6 +584,116 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         // ReadFromDDisk appears as a heatmap column header, but not as a
         // detail-table cell value next to a count (no samples folded).
         UNIT_ASSERT(!html.Contains("<td>ReadFromDDisk</td>"));
+    }
+
+    TVChunkStats MakeWriteOk(ui64 ok)
+    {
+        TVChunkStats stats;
+        for (ui64 i = 0; i < ok; ++i) {
+            stats.RequestFinished(EVChunkOperation::Write, true);
+        }
+        return stats;
+    }
+
+    Y_UNIT_TEST(VChunkCountersShowsTotalsAndDbgRows)
+    {
+        TVChunkStatsGatherResult gathered;
+        gathered.PerDbg = {
+            {.DbgIndex = 0, .Stats = MakeWriteOk(5)},
+            {.DbgIndex = 1, .Stats = MakeWriteOk(3)},
+        };
+        gathered.Total.Accumulate(gathered.PerDbg[0].Stats);
+        gathered.Total.Accumulate(gathered.PerDbg[1].Stats);
+        gathered.PerVChunk = {
+            {.VChunkIndex = 2, .DbgIndex = 1, .Stats = MakeWriteOk(3)},
+            {.VChunkIndex = 1, .DbgIndex = 0, .Stats = MakeWriteOk(5)},
+        };
+
+        const TMonPageData data{
+            .Page = EMonPage::VChunkCounters,
+            .TabletInfo = {.TabletId = 42, .DiskId = "vol-1"},
+            .VChunkStats = gathered,
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk counters");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Disk totals");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Per DBG");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Per vchunk");
+        UNIT_ASSERT_STRING_CONTAINS(html, ">8<");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=0");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "vcShowVChunks");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Show data");
+        UNIT_ASSERT_STRING_CONTAINS(html, "vcDbgFilter");
+        UNIT_ASSERT(!html.Contains("id='vcCountersForm'"));
+        UNIT_ASSERT_STRING_CONTAINS(html, "lat-sortable");
+        UNIT_ASSERT_STRING_CONTAINS(html, "lat-hidden");
+        UNIT_ASSERT(!html.Contains("page=vchunk&vchunk=1"));
+        UNIT_ASSERT(!html.Contains("page=vchunk&vchunk=2"));
+    }
+
+    Y_UNIT_TEST(VChunkCountersShowsVChunksWhenRequested)
+    {
+        TVChunkStatsGatherResult gathered;
+        gathered.PerDbg = {{.DbgIndex = 0, .Stats = MakeWriteOk(5)}};
+        gathered.PerVChunk = {
+            {.VChunkIndex = 1, .DbgIndex = 0, .Stats = MakeWriteOk(5)},
+        };
+        gathered.Total = gathered.PerDbg[0].Stats;
+
+        const TMonPageData data{
+            .Page = EMonPage::VChunkCounters,
+            .TabletInfo = {.TabletId = 42},
+            .VChunkStats = gathered,
+            .SelectedVChunkDbg = 0,
+            .ShowVChunks = true,
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk&vchunk=1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "vcVChunksTable");
+        UNIT_ASSERT_STRING_CONTAINS(html, "checked");
+        UNIT_ASSERT_STRING_CONTAINS(html, "id='vcVChunksBody'>");
+        UNIT_ASSERT(!html.Contains("id='vcVChunksBody' class='lat-hidden'"));
+    }
+
+    Y_UNIT_TEST(VChunkCountersRespectsRowCap)
+    {
+        TVChunkStatsGatherResult gathered;
+        gathered.PerDbg = {{.DbgIndex = 0, .Stats = MakeWriteOk(6)}};
+        gathered.PerVChunk = {
+            {.VChunkIndex = 0, .DbgIndex = 0, .Stats = MakeWriteOk(1)},
+            {.VChunkIndex = 1, .DbgIndex = 0, .Stats = MakeWriteOk(2)},
+            {.VChunkIndex = 2, .DbgIndex = 0, .Stats = {}},
+            {.VChunkIndex = 3, .DbgIndex = 0, .Stats = MakeWriteOk(3)},
+        };
+        for (const auto& row: gathered.PerVChunk) {
+            gathered.Total.Accumulate(row.Stats);
+        }
+
+        TMonPageData data{
+            .Page = EMonPage::VChunkCounters,
+            .TabletInfo = {.TabletId = 42},
+            .VChunkStats = gathered,
+            .VChunkStatsLimit = 1,
+            .SelectedVChunkDbg = 0,
+            .ShowVChunks = true,
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk&vchunk=0");
+        UNIT_ASSERT(!html.Contains("page=vchunk&vchunk=1"));
+        UNIT_ASSERT(!html.Contains("page=vchunk&vchunk=3"));
+        UNIT_ASSERT_STRING_CONTAINS(html, "Showing 1 of 3 non-zero vchunks");
+        UNIT_ASSERT_STRING_CONTAINS(html, "&all=1");
+
+        data.VChunkStatsLimit = 0;
+        const TString all = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(all, "page=vchunk&vchunk=0");
+        UNIT_ASSERT_STRING_CONTAINS(all, "page=vchunk&vchunk=1");
+        UNIT_ASSERT_STRING_CONTAINS(all, "page=vchunk&vchunk=3");
+        UNIT_ASSERT(!all.Contains("Showing 1 of"));
     }
 }
 

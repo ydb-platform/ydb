@@ -161,6 +161,7 @@ TCounters InitializeCounters(
     const auto* config = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> result;
+    result.reserve(config->Size);
     for (size_t i = 0; i < config->Size; ++i) {
         TString name = config->GetSVNames()[i];
         if (skipPrefix) {

@@ -59,6 +59,11 @@ struct TCreatePartitionParams {
     TVector<TCreateConsumerParams> ExtraDiskConsumers;
     TInstant EndWriteTimestamp;
     bool FillHead = false;
+    // Meta has [Begin, End) but data range returns NODATA (issue #49507).
+    bool NoDataKeys = false;
+    // Meta has [Begin, End) but data range returns OK with zero pairs
+    // (FormHeadAndProceed empty-keys path).
+    bool EmptyDataRangeOk = false;
 };
 
 }
@@ -103,6 +108,24 @@ public:
 
     static bool CleanUpBlobs(TPartition& partition, const TActorContext& ctx) {
         return partition.CleanUpBlobs(nullptr, ctx);
+    }
+
+    static TInstant GetWriteTimeEstimate(TPartition& partition, ui64 offset) {
+        return partition.GetWriteTimeEstimate(offset);
+    }
+
+    static ui64 GetStartOffset(TPartition& partition) {
+        return partition.GetStartOffset();
+    }
+
+    static ui64 GetEndOffset(TPartition& partition) {
+        return partition.GetEndOffset();
+    }
+
+    static bool GetAnyCommits(TPartition& partition, const TString& consumer) {
+        const TUserInfo* userInfo = partition.UsersInfoStorage->GetIfExists(consumer);
+        UNIT_ASSERT(userInfo);
+        return userInfo->AnyCommits;
     }
 
 private:
@@ -304,6 +327,8 @@ protected:
     void WaitDataRangeRequest();
     void SendDataRangeResponse(ui32 partitionId,
                                ui64 begin, ui64 end, bool isHead);
+    void SendDataRangeNodataResponse();
+    void SendDataRangeEmptyOkResponse();
     void WaitDataReadRequest();
     void SendDataReadResponse();
     void WaitDeduplicatorRangeRequest();
@@ -516,11 +541,18 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         }
 
         WaitDataRangeRequest();
-        SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
+        if (params.NoDataKeys) {
+            UNIT_ASSERT_C(!params.EmptyDataRangeOk, "NoDataKeys and EmptyDataRangeOk are mutually exclusive");
+            SendDataRangeNodataResponse();
+        } else if (params.EmptyDataRangeOk) {
+            SendDataRangeEmptyOkResponse();
+        } else {
+            SendDataRangeResponse(params.Partition.InternalPartitionId, params.Begin, params.End, params.FillHead);
 
-        if (params.FillHead) {
-            WaitBlobReadRequest();
-            SendBlobReadResponse(params.Begin, params.End);
+            if (params.FillHead) {
+                WaitBlobReadRequest();
+                SendBlobReadResponse(params.Begin, params.End);
+            }
         }
 
         if (!params.Partition.IsSupportivePartition()) {
@@ -1087,6 +1119,29 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
     pair->SetKey(key.Data(), key.Size());
     pair->SetValueSize(684);
     pair->SetCreationUnixTime(TInstant::Now().Seconds());
+
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::SendDataRangeNodataResponse()
+{
+    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+
+    auto read = event->Record.AddReadRangeResult();
+    read->SetStatus(NKikimrProto::NODATA);
+
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::SendDataRangeEmptyOkResponse()
+{
+    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+
+    auto read = event->Record.AddReadRangeResult();
+    read->SetStatus(NKikimrProto::OK);
+    // No pairs — FillBlobsMetaData leaves meta offsets, FormHeadAndProceed sees empty keys.
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -7324,6 +7379,136 @@ private:
     TActorId Edge;
     std::function<void(const TActorContext&)> Body;
 };
+
+Y_UNIT_TEST_F(InitWithMetaOffsetsButNoDataKeysNormalizesEmptyPartition, TPartitionFixture) {
+    // Regression for #49507: meta says [0, 3804) but data range is NODATA.
+    // Without normalization InitComplete → ReportCounters → GetWriteTimeEstimate crashes.
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaEnd = 3804;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = 0,
+        .End = metaEnd,
+        .Config = {
+            // Offset within stale meta range: before normalize AnyCommits would be true
+            // (Offset > BlobEncoder.StartOffset == 0); after normalize StartOffset == metaEnd.
+            .Consumers = {{.Consumer = "user", .Offset = 100}},
+        },
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .NoDataKeys = true,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.Head.Offset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.Head.Offset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.NewHead.Offset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.NewHead.Offset, metaEnd);
+    UNIT_ASSERT(cz.IsEmpty());
+    UNIT_ASSERT(fwz.IsEmpty());
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, metaEnd), TInstant::Zero());
+    UNIT_ASSERT(!TPartitionTestWrapper::GetAnyCommits(*partition, "user"));
+}
+
+Y_UNIT_TEST_F(InitWithMetaOffsetsEmptyOkDataRangeNormalizesEmptyPartition, TPartitionFixture) {
+    // Same inconsistent meta as #49507, but data range returns OK with zero pairs —
+    // hits FormHeadAndProceed empty-keys → NormalizeOffsetsForEmptyData.
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaEnd = 3804;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = 0,
+        .End = metaEnd,
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .EmptyDataRangeOk = true,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
+    UNIT_ASSERT(TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty());
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(InitWithNonZeroMetaStartAndNoDataKeysNormalizesToEnd, TPartitionFixture) {
+    // Retention advanced StartOffset; meta [100, 3804) but blobs are gone.
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaStart = 100;
+    constexpr ui64 metaEnd = 3804;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = metaStart,
+        .End = metaEnd,
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .NoDataKeys = true,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateReturnsTimestampFromBodyKeys, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 begin = 0;
+    constexpr ui64 end = 10;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = begin,
+        .End = end,
+        .EndWriteTimestamp = TInstant::Seconds(1),
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), begin);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), end);
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty() ||
+                !TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
+
+    const TInstant ts = TPartitionTestWrapper::GetWriteTimeEstimate(*partition, begin);
+    UNIT_ASSERT_GT(ts, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, end), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(GetClientOffsetSurvivesInitWithMetaButNoDataKeys, TPartitionFixture) {
+    // E2E: InitComplete → ReportCounters and later GetClientOffset must not crash
+    // when meta offsets exist without data keys (#49507).
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaEnd = 3804;
+    const TString client = "user";
+    CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = 0,
+        .End = metaEnd,
+        .Config = {
+            .Consumers = {{.Consumer = client, .Offset = 0}},
+        },
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .NoDataKeys = true,
+    });
+
+    SendGetOffset(1, client);
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = 0});
+}
 
 Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());

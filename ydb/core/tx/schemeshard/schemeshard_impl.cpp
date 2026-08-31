@@ -5677,6 +5677,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
 
+    ctx.Send(StatsParserActorId, new TEvents::TEvPoisonPill());
+
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
@@ -5809,6 +5811,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
+
+    StatsParserActorId = Register(CreateStatsParserActor(SelfId()));
 
     SplitSettings.Register(appData->Icb);
 
@@ -6128,6 +6132,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         IgnoreFunc(TEvPrivate::TEvTestNotifySubdomainCleanup);
 
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
+        HFuncTraced(TEvPrivate::TEvPeriodicTableStatsParsed, Handle);
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
@@ -6485,9 +6490,17 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeSecret:
         TabletCounters->Simple()[COUNTER_SECRET_COUNT].Sub(1);
         break;
-    case TPathElement::EPathType::EPathTypeStreamingQuery:
+    case TPathElement::EPathType::EPathTypeStreamingQuery: {
         TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
+        const auto it = StreamingQueries.find(node->PathId);
+        if (it != StreamingQueries.end()) {
+            const auto& props = it->second->Properties.GetProperties();
+            if (const auto runIt = props.find("run"); runIt != props.end() && runIt->second == "true") {
+                TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Sub(1);
+            }
+        }
         break;
+    }
     case TPathElement::EPathType::EPathTypeTestShardSet:
         TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Sub(1);
         break;
@@ -6588,6 +6601,9 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             Y_ABORT("not implemented");
         case TPathElement::EPathType::EPathTypeTestShardSet:
             PersistRemoveTestShardSet(db, node->PathId);
+            break;
+        case TPathElement::EPathType::EPathTypeStreamingQuery:
+            PersistRemoveStreamingQuery(db, node->PathId);
             break;
         default:
             // not all path types support removal

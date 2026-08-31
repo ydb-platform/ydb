@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_TASKS_RUNNER
 
@@ -45,6 +46,22 @@ TKqpComputeActor::TKqpComputeActor(
 
 void TKqpComputeActor::DoBootstrap() {
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
+
+    const auto& taskParams = GetTask().GetTaskParams();
+    if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)); it != taskParams.end()) {
+        try {
+            WasmQueryCompartment_.emplace(NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second));
+        } catch (const std::exception& e) {
+            ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
+                << "Failed to acquire WASM query compartment: " << e.what());
+            return;
+        }
+    }
+
+    std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+        wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
+    }
 
     TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem)) {
@@ -164,6 +181,10 @@ STFUNC(TKqpComputeActor::StateFunc) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "CA StateFunc",
         {"logPrefix", this->LogPrefix},
         {"eventType", ev->GetTypeRewrite()});
+    std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+        wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
+    }
     try {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
@@ -247,6 +268,7 @@ void TKqpComputeActor::PassAway() {
         }
     }
 
+    WasmQueryCompartment_.reset();
     TBase::PassAway();
 }
 

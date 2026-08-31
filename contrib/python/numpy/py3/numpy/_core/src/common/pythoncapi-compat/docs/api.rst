@@ -10,7 +10,7 @@ Supported Python versions:
 * Python 3.6 - 3.14
 * PyPy 2.7 and PyPy 3.6 - 3.10
 
-Python 2.7 and Python 3.4 are no longer officially supported since GitHub
+Python 2.7 and Python 3.5 are no longer officially supported since GitHub
 Actions doesn't support them anymore: only best effort support is provided.
 
 C++03 and C++11 are supported on Python 3.6 and newer.
@@ -23,15 +23,140 @@ Some functions related to frame objects and ``PyThreadState`` are not available
 on PyPy.
 
 Latest version of the header file:
-`pythoncapi_compat.h <https://raw.githubusercontent.com/python/pythoncapi-compat/master/pythoncapi_compat.h>`_.
+`pythoncapi_compat.h <https://raw.githubusercontent.com/python/pythoncapi-compat/main/pythoncapi_compat.h>`_.
 
 
 Python 3.14
 -----------
 
+.. c:function:: int PyLong_IsPositive(PyObject *obj)
+
+   See `PyLong_IsPositive() documentation  <https://docs.python.org/dev/c-api/long.html#c.PyLong_IsPositive>`__.
+
+.. c:function:: int PyLong_IsNegative(PyObject *obj)
+
+   See `PyLong_IsNegative() documentation  <https://docs.python.org/dev/c-api/long.html#c.PyLong_IsNegative>`__.
+
+.. c:function:: int PyLong_IsZero(PyObject *obj)
+
+   See `PyLong_IsZero() documentation  <https://docs.python.org/dev/c-api/long.html#c.PyLong_IsZero>`__.
+
 .. c:function:: int PyLong_GetSign(PyObject *obj, int *sign)
 
    See `PyLong_GetSign() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_GetSign>`__.
+
+.. c:function:: PyObject* PyIter_NextItem(PyObject *sep, PyObject *iterable)
+
+   See `PyIter_NextItem() documentation <https://docs.python.org/dev/c-api/iter.html#c.PyIter_NextItem>`__.
+
+.. c:function:: PyObject* PyBytes_Join(PyObject *sep, PyObject *iterable)
+
+   See `PyBytes_Join() documentation <https://docs.python.org/dev/c-api/bytes.html#c.PyBytes_Join>`__.
+
+.. c:function:: Py_hash_t Py_HashBuffer(const void *ptr, Py_ssize_t len)
+
+   See `Py_HashBuffer() documentation <https://docs.python.org/dev/c-api/hash.html#c.Py_HashBuffer>`__.
+
+.. c:function:: int PyUnicode_Equal(PyObject *str1, PyObject *str2)
+
+   See `PyUnicode_Equal() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicode_Equal>`__.
+
+.. c:function:: PyUnicodeWriter* PyUnicodeWriter_Create(Py_ssize_t length)
+
+   See `PyUnicodeWriter_Create() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_Create>`__.
+
+.. c:function:: PyObject* PyUnicodeWriter_Finish(PyUnicodeWriter *writer)
+
+   See `PyUnicodeWriter_Finish() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_Finish>`__.
+
+.. c:function:: void PyUnicodeWriter_Discard(PyUnicodeWriter *writer)
+
+   See `PyUnicodeWriter_Discard() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_Discard>`__.
+
+.. c:function:: int PyUnicodeWriter_WriteChar(PyUnicodeWriter *writer, Py_UCS4 ch)
+
+   See `PyUnicodeWriter_WriteChar() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_WriteChar>`__.
+
+.. c:function:: int PyUnicodeWriter_WriteUTF8(PyUnicodeWriter *writer, const char *str, Py_ssize_t size)
+
+   See `PyUnicodeWriter_WriteUTF8() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_WriteUTF8>`__.
+
+.. c:function:: int PyUnicodeWriter_WriteWideChar(PyUnicodeWriter *writer, const wchar_t *str, Py_ssize_t size)
+
+   See `PyUnicodeWriter_WriteWideChar() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_WriteWideChar>`__.
+
+.. c:function:: int PyUnicodeWriter_WriteStr(PyUnicodeWriter *writer, PyObject *obj)
+
+   See `PyUnicodeWriter_WriteStr() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_WriteStr>`__.
+
+.. c:function:: int PyUnicodeWriter_WriteRepr(PyUnicodeWriter *writer, PyObject *obj)
+
+   See `PyUnicodeWriter_WriteRepr() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_WriteRepr>`__.
+
+.. c:function:: int PyUnicodeWriter_WriteSubstring(PyUnicodeWriter *writer, PyObject *str, Py_ssize_t start, Py_ssize_t end)
+
+   See `PyUnicodeWriter_WriteSubstring() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_WriteSubstring>`__.
+
+.. c:function:: int PyUnicodeWriter_Format(PyUnicodeWriter *writer, const char *format, ...)
+
+   See `PyUnicodeWriter_Format() documentation <https://docs.python.org/dev/c-api/unicode.html#c.PyUnicodeWriter_Format>`__.
+
+.. c:function:: int PyLong_AsInt32(PyObject *obj, int32_t *pvalue)
+
+   See `PyLong_AsInt32() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_AsInt32>`__.
+
+.. c:function:: int PyLong_AsInt64(PyObject *obj, int64_t *pvalue)
+
+   See `PyLong_AsInt64() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_AsInt64>`__.
+
+.. c:function:: int PyLong_AsUInt32(PyObject *obj, uint32_t *pvalue)
+
+   See `PyLong_AsUInt32() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_AsUInt32>`__.
+
+.. c:function:: int PyLong_AsUInt64(PyObject *obj, uint64_t *pvalue)
+
+   See `PyLong_AsUInt64() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_AsUInt64>`__.
+
+.. c:function:: PyObject* PyLong_FromInt32(int32_t value)
+
+   See `PyLong_FromInt32() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_FromInt32>`__.
+
+.. c:function:: PyObject* PyLong_FromInt64(int64_t value)
+
+   See `PyLong_FromInt64() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_FromInt64>`__.
+
+.. c:function:: PyObject* PyLong_FromUInt32(uint32_t value)
+
+   See `PyLong_FromUInt32() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_FromUInt32>`__.
+
+.. c:function:: PyObject* PyLong_FromUInt64(uint64_t value)
+
+   See `PyLong_FromUInt64() documentation <https://docs.python.org/dev/c-api/long.html#c.PyLong_FromUInt64>`__.
+
+
+Not supported:
+
+* ``PyConfig_Get()``
+* ``PyConfig_GetInt()``
+* ``PyConfig_Names()``
+* ``PyConfig_Set()``
+* ``PyInitConfig_AddModule()``
+* ``PyInitConfig_Create()``
+* ``PyInitConfig_Free()``
+* ``PyInitConfig_FreeStrList()``
+* ``PyInitConfig_GetError()``
+* ``PyInitConfig_GetExitCode()``
+* ``PyInitConfig_GetInt()``
+* ``PyInitConfig_GetStr()``
+* ``PyInitConfig_GetStrList()``
+* ``PyInitConfig_HasOption()``
+* ``PyInitConfig_SetInt()``
+* ``PyInitConfig_SetStr()``
+* ``PyInitConfig_SetStrList()``
+* ``PyType_GetBaseByToken()``
+* ``PyUnicodeWriter_DecodeUTF8Stateful()``
+* ``Py_InitializeFromInitConfig()``
+
 
 Python 3.13
 -----------

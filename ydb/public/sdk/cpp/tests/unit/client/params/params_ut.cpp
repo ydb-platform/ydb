@@ -181,6 +181,54 @@ TEST(ParamsBuilder, IncompleteParam) {
     ASSERT_THROW(paramsBuilder.Build(), TExpectedErrorException);
 }
 
+TEST(ParamsBuilder, EmptyListWithoutTypeIsRejectedAtBuild) {
+    auto paramsBuilder = TParamsBuilder();
+    paramsBuilder.AddParam("$key_list0")
+        .BeginList()
+        .EndList()
+        .Build();
+
+    try {
+        paramsBuilder.Build();
+        FAIL() << "Expected an incomplete parameter type to be rejected";
+    } catch (const TExpectedErrorException& e) {
+        EXPECT_STREQ(e.what(), "TParamsBuilder: Parameter '$key_list0' has an invalid type: protobuf type is not "
+            "set; check how the parameter value was built");
+    }
+}
+
+TEST(ParamsBuilder, EmptyListWithTypeInfo) {
+    auto keyListType = TTypeBuilder()
+        .BeginList()
+            .BeginTuple()
+            .AddElement()
+                .BeginOptional()
+                    .Primitive(EPrimitiveType::Uint32)
+                .EndOptional()
+            .AddElement()
+                .BeginOptional()
+                    .Primitive(EPrimitiveType::String)
+                .EndOptional()
+            .EndTuple()
+        .EndList()
+        .Build();
+
+    std::map<std::string, TType> paramsMap;
+    paramsMap.emplace("$key_list0", keyListType);
+
+    auto params = TParamsBuilder(paramsMap)
+        .AddParam("$key_list0")
+            .BeginList()
+            .EndList()
+            .Build()
+        .Build();
+
+    const auto keyList = params.GetValue("$key_list0");
+    ASSERT_TRUE(keyList);
+    EXPECT_EQ(FormatType(keyList->GetType()), "List<Tuple<Uint32?,String?>>");
+    EXPECT_EQ(keyList->GetProto().items_size(), 0);
+}
+
 TEST(ParamsBuilder, TypeMismatch) {
     auto param1Type = TTypeBuilder()
         .BeginList()

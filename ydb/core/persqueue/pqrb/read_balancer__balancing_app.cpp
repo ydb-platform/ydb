@@ -107,6 +107,9 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                             TABLED() {
                                 if (node) {
                                     for (auto* parent : node->DirectParents) {
+                                        if (!parent) {
+                                            continue;
+                                        }
                                         HREF("#" + partitionAnchor(parent->Id)) { __stream << parent->Id; }
                                         __stream << ", ";
                                     }

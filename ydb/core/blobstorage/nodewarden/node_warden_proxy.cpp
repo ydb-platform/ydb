@@ -280,6 +280,7 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
             .HandleClass = msg.Record.GetHandleClass(),
             .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .DataKind = item.GetDataKind(),
             .IssueKeepFlag = item.GetIssueKeepFlag(),
             .IgnoreBlock = item.GetIgnoreBlock(),
             .AlreadyEncrypted = item.GetAlreadyEncrypted(),

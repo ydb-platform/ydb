@@ -61,6 +61,9 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , FreshCompMaxInFlightWrites(10, 1, 1000)
     , FreshCompMaxInFlightReads(10, 1, 1000)
     , HullCompFreeSpaceThresholdPerMille(2000, 0, 100'000)
+    , HullCompEmergencyMaxSsts(8, 0, 64)
+    , HullCompEmergencyChunkReserve(1, 0, 64)
+    , HullCompEmergencyEnableAtColor(15, 0, 60)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
     , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
@@ -472,6 +475,9 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
         TControlBoard::RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, icb->VDiskControls.GarbageThresholdToRunFullCompactionPerMille);
         TControlBoard::RegisterSharedControl(HullCompFreeSpaceThresholdPerMille, icb->VDiskControls.HullCompFreeSpaceThresholdPerMille);
+        TControlBoard::RegisterSharedControl(HullCompEmergencyMaxSsts, icb->VDiskControls.HullCompEmergencyMaxSsts);
+        TControlBoard::RegisterSharedControl(HullCompEmergencyChunkReserve, icb->VDiskControls.HullCompEmergencyChunkReserve);
+        TControlBoard::RegisterSharedControl(HullCompEmergencyEnableAtColor, icb->VDiskControls.HullCompEmergencyEnableAtColor);
         TControlBoard::RegisterSharedControl(DefragThrottlerBytesRate, icb->VDiskControls.DefragThrottlerBytesRate);
 
         TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);

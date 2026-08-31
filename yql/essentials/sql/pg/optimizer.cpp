@@ -127,9 +127,7 @@ TPgOptimizer::TPgOptimizer(
     get_relation_stats_hook = RelationStatsHook;
 }
 
-TPgOptimizer::~TPgOptimizer()
-{
-}
+TPgOptimizer::~TPgOptimizer() = default;
 
 TPgOptimizer::TOutput TPgOptimizer::JoinSearch()
 {

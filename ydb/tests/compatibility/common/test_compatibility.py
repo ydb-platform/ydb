@@ -21,19 +21,10 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             }
         )
 
-    def execute_scan_query(self, query_body):
-        query = ydb.ScanQuery(query_body, {})
-        it = self.driver.table_client.scan_query(query)
-        result_set = []
-
-        try:
-            while True:
-                result = next(it)
-                result_set.extend(result.result_set.rows)
-        except StopIteration:
-            pass
-
-        return result_set
+    def execute_query(self, query_body):
+        with ydb.QuerySessionPool(self.driver) as pool:
+            result_sets = pool.execute_with_retries(query_body)
+        return result_sets[0].rows if result_sets else []
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple(self, store_type):
@@ -67,13 +58,10 @@ class TestCompatibility(RestartToAnotherVersionFixture):
                 )
 
             query_body = "SELECT SUM(value) as sum_value from `sample_table`"
-            assert self.execute_scan_query(query_body)[0]['sum_value'] == upsert_count * iteration_count + start_index
+            assert self.execute_query(query_body)[0]['sum_value'] == upsert_count * iteration_count + start_index
 
         def create_table(self, store_type):
-            with ydb.SessionPool(self.driver, size=1) as pool:
-                with pool.checkout() as session:
-                    session.execute_scheme(
-                        """create table `sample_table` (
+            query = """create table `sample_table` (
                             id Uint64 NOT NULL, value Uint64,
                             payload Utf8, income Decimal(22,9),
                             PRIMARY KEY(id)
@@ -81,14 +69,15 @@ class TestCompatibility(RestartToAnotherVersionFixture):
                             STORE = {store_type},
                             AUTO_PARTITIONING_BY_SIZE = ENABLED,
                             AUTO_PARTITIONING_PARTITION_SIZE_MB = 1);""".format(store_type=store_type.upper())
-                    )
+            with ydb.QuerySessionPool(self.driver) as pool:
+                pool.execute_with_retries(query)
 
         create_table(self, store_type)
         upsert_and_check_sum(self)
         self.change_cluster_version()
-        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 200, 'Expected 200 rows after update version'
+        assert self.execute_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 200, 'Expected 200 rows after update version'
         upsert_and_check_sum(self, iteration_count=2, start_index=100)
-        assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
+        assert self.execute_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
 
     @pytest.mark.parametrize("store_type, date64", [
         pytest.param("row",    False, id="row"),

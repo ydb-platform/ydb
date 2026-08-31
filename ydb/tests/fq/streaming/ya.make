@@ -30,6 +30,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
+    REQUIREMENTS(ram:12)
     SPLIT_FACTOR(20)
 ENDIF()
 
@@ -46,7 +47,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/tests/tools/pq_read
     yql/essentials/udfs/common/python/python3_small
 )
 

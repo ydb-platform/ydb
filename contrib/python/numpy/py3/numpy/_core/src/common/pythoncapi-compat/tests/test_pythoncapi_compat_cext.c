@@ -15,12 +15,14 @@
 #  define PYTHON3 1
 #endif
 
-#if defined(_MSC_VER) && defined(__cplusplus)
-#  define MODULE_NAME test_pythoncapi_compat_cppext
+#if defined(__cplusplus) && __cplusplus >= 201402
+#  define MODULE_NAME test_pythoncapi_compat_cpp14ext
 #elif defined(__cplusplus) && __cplusplus >= 201103
 #  define MODULE_NAME test_pythoncapi_compat_cpp11ext
-#elif defined(__cplusplus)
+#elif defined(__cplusplus) && !defined(_MSC_VER)
 #  define MODULE_NAME test_pythoncapi_compat_cpp03ext
+#elif defined(__cplusplus)
+#  define MODULE_NAME test_pythoncapi_compat_cppext
 #else
 #  define MODULE_NAME test_pythoncapi_compat_cext
 #endif
@@ -756,7 +758,7 @@ test_import(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
 static void
 gc_collect(void)
 {
-#if defined(PYPY_VERSION)
+#if defined(PYPY_VERSION) && PY_VERSION_HEX < 0x030B0000
     PyObject *mod = PyImport_ImportModule("gc");
     assert(mod != _Py_NULL);
 
@@ -1419,14 +1421,19 @@ test_long_api(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
     assert(PyLong_GetSign(obj, &sign) == 0);
     assert(sign == 1);
 
+    // test PyLong_IsPositive(), PyLong_IsNegative() and PyLong_IsZero()
+    assert(PyLong_IsPositive(obj) == 1);
+    assert(PyLong_IsNegative(obj) == 0);
+    assert(PyLong_IsZero(obj) == 0);
+
     Py_RETURN_NONE;
 }
 
 
 // --- HeapCTypeWithManagedDict --------------------------------------------
 
-// Py_TPFLAGS_MANAGED_DICT was added to Python 3.11.0a3
-#if PY_VERSION_HEX >= 0x030B00A3
+// Py_TPFLAGS_MANAGED_DICT was added to Python 3.11.0a3 but is not implemented on PyPy
+#if PY_VERSION_HEX >= 0x030B00A3 && ! defined(PYPY_VERSION)
 #  define TEST_MANAGED_DICT
 
 typedef struct {
@@ -1437,12 +1444,14 @@ static int
 heapmanaged_traverse(PyObject *self, visitproc visit, void *arg)
 {
     Py_VISIT(Py_TYPE(self));
+    // Test PyObject_VisitManagedDict()
     return PyObject_VisitManagedDict(self, visit, arg);
 }
 
 static int
 heapmanaged_clear(PyObject *self)
 {
+    // Test PyObject_ClearManagedDict()
     PyObject_ClearManagedDict(self);
     return 0;
 }
@@ -1475,6 +1484,7 @@ static PyType_Spec HeapCTypeWithManagedDict_spec = {
 static PyObject *
 test_managed_dict(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
 {
+    // Test PyObject_VisitManagedDict() and PyObject_ClearManagedDict()
     PyObject *type = PyType_FromSpec(&HeapCTypeWithManagedDict_spec);
     if (type == NULL) {
         return NULL;
@@ -1529,6 +1539,13 @@ test_unicode(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
     assert(PyUnicode_EqualToUTF8(abc0def, "abc\0def") == 0);
 
     assert(PyErr_ExceptionMatches(PyExc_MemoryError));
+    PyErr_Clear();
+
+    // Test PyUnicode_Equal()
+    assert(PyUnicode_Equal(abc, abc) == 1);
+    assert(PyUnicode_Equal(abc, abc0def) == 0);
+    assert(PyUnicode_Equal(abc, Py_True) == -1);
+    assert(PyErr_ExceptionMatches(PyExc_TypeError));
     PyErr_Clear();
 
     Py_DECREF(abc);
@@ -1599,7 +1616,7 @@ test_hash(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
 
 #if ((!defined(PYPY_VERSION) && PY_VERSION_HEX >= 0x030400B1) \
      || (defined(PYPY_VERSION) && PY_VERSION_HEX >= 0x03070000 \
-         && PYPY_VERSION_NUM >= 0x07090000))
+         && PYPY_VERSION_NUM >= 0x07030800))
     // Just check that constants are available
     size_t bits = PyHASH_BITS;
     assert(bits >= 8);
@@ -1610,6 +1627,20 @@ test_hash(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
     size_t imag = PyHASH_IMAG;
     assert(imag != 0);
 #endif
+
+    // Test Py_HashBuffer()
+    {
+        PyObject *abc = PyBytes_FromString("abc");
+        if (abc == NULL) {
+            return NULL;
+        }
+        Py_hash_t hash = Py_HashBuffer(PyBytes_AS_STRING(abc),
+                                       PyBytes_GET_SIZE(abc));
+        Py_hash_t hash2 = PyObject_Hash(abc);
+        assert(hash == hash2);
+
+        Py_DECREF(abc);
+    }
 
     Py_RETURN_NONE;
 }
@@ -1662,7 +1693,7 @@ check_get_constant(PyObject* (*get_constant)(unsigned int), int borrowed)
 
     // Py_CONSTANT_FALSE
     obj = get_constant(Py_CONSTANT_FALSE);
-    assert(obj = Py_False);
+    assert(obj == Py_False);
     CLEAR(obj);
 
     // Py_CONSTANT_TRUE
@@ -1874,6 +1905,120 @@ error:
 #endif
 
 
+static PyObject *
+test_bytes(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
+{
+    // Test PyBytes_Join()
+    PyObject *abc = PyBytes_FromString("a b c");
+    if (abc == NULL) {
+        return NULL;
+    }
+    PyObject *list = PyObject_CallMethod(abc, "split", NULL);
+    Py_DECREF(abc);
+    if (list == NULL) {
+        return NULL;
+    }
+    PyObject *sep = PyBytes_FromString("-");
+    if (sep == NULL) {
+        Py_DECREF(list);
+        return NULL;
+    }
+
+    PyObject *join = PyBytes_Join(sep, list);
+    assert(join != NULL);
+    assert(PyBytes_Check(join));
+    assert(memcmp(PyBytes_AS_STRING(join), "a-b-c", 5) == 0);
+    Py_DECREF(join);
+
+    Py_DECREF(list);
+    Py_DECREF(sep);
+    Py_RETURN_NONE;
+}
+
+
+static PyObject *
+test_iter(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
+{
+    // Test PyIter_NextItem()
+    PyObject *tuple = Py_BuildValue("(i)", 123);
+    if (tuple == NULL) {
+        return NULL;
+    }
+    PyObject *iter = PyObject_GetIter(tuple);
+    Py_DECREF(tuple);
+    if (iter == NULL) {
+        return NULL;
+    }
+
+    // first item
+    PyObject *item = UNINITIALIZED_OBJ;
+    assert(PyIter_NextItem(iter, &item) == 1);
+    {
+        PyObject *expected = PyLong_FromLong(123);
+        assert(PyObject_RichCompareBool(item, expected, Py_EQ) == 1);
+        assert(expected != NULL);
+        Py_DECREF(expected);
+    }
+
+    // StopIteration
+    item = UNINITIALIZED_OBJ;
+    assert(PyIter_NextItem(iter, &item) == 0);
+    assert(item == NULL);
+    assert(!PyErr_Occurred());
+
+    // non-iterable object
+    item = UNINITIALIZED_OBJ;
+    assert(PyIter_NextItem(Py_None, &item) == -1);
+    assert(item == NULL);
+    assert(PyErr_ExceptionMatches(PyExc_TypeError));
+    PyErr_Clear();
+
+    Py_DECREF(iter);
+    Py_RETURN_NONE;
+}
+
+
+static PyObject *
+test_long_stdint(PyObject *Py_UNUSED(module), PyObject *Py_UNUSED(args))
+{
+    PyObject *obj;
+
+    // Test PyLong_FromInt32() and PyLong_AsInt32()
+    obj = PyLong_FromInt32(INT32_C(-0x12345678));
+    assert(obj != NULL);
+    int32_t i32;
+    assert(PyLong_AsInt32(obj, &i32) == 0);
+    assert(i32 == INT32_C(-0x12345678));
+    Py_DECREF(obj);
+
+    // Test PyLong_FromUInt32() and PyLong_AsUInt32()
+    obj = PyLong_FromUInt32(UINT32_C(0xDEADBEEF));
+    assert(obj != NULL);
+    uint32_t u32;
+    assert(PyLong_AsUInt32(obj, &u32) == 0);
+    assert(u32 == UINT32_C(0xDEADBEEF));
+    Py_DECREF(obj);
+
+    // Test PyLong_FromInt64() and PyLong_AsInt64()
+    obj = PyLong_FromInt64(INT64_C(-0x12345678DEADBEEF));
+    assert(obj != NULL);
+    int64_t i64;
+    assert(PyLong_AsInt64(obj, &i64) == 0);
+    assert(i64 == INT64_C(-0x12345678DEADBEEF));
+    Py_DECREF(obj);
+
+    // Test PyLong_FromUInt64() and PyLong_AsUInt64()
+    obj = PyLong_FromUInt64(UINT64_C(0xDEADBEEF12345678));
+    assert(obj != NULL);
+    uint64_t u64;
+    assert(PyLong_AsUInt64(obj, &u64) == 0);
+    assert(u64 == UINT64_C(0xDEADBEEF12345678));
+    Py_DECREF(obj);
+
+    Py_RETURN_NONE;
+}
+
+
 static struct PyMethodDef methods[] = {
     {"test_object", test_object, METH_NOARGS, _Py_NULL},
     {"test_py_is", test_py_is, METH_NOARGS, _Py_NULL},
@@ -1917,6 +2062,9 @@ static struct PyMethodDef methods[] = {
     {"test_unicodewriter_widechar", test_unicodewriter_widechar, METH_NOARGS, _Py_NULL},
     {"test_unicodewriter_format", test_unicodewriter_format, METH_NOARGS, _Py_NULL},
 #endif
+    {"test_bytes", test_bytes, METH_NOARGS, _Py_NULL},
+    {"test_iter", test_iter, METH_NOARGS, _Py_NULL},
+    {"test_long_stdint", test_long_stdint, METH_NOARGS, _Py_NULL},
     {_Py_NULL, _Py_NULL, 0, _Py_NULL}
 };
 

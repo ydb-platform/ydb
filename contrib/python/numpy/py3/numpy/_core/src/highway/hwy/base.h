@@ -101,6 +101,7 @@
 #define HWY_NORETURN __declspec(noreturn)
 #define HWY_LIKELY(expr) (expr)
 #define HWY_UNLIKELY(expr) (expr)
+#define HWY_UNREACHABLE __assume(false)
 #define HWY_PRAGMA(tokens) __pragma(tokens)
 #define HWY_DIAGNOSTICS(tokens) HWY_PRAGMA(warning(tokens))
 #define HWY_DIAGNOSTICS_OFF(msc, gcc) HWY_DIAGNOSTICS(msc)
@@ -128,6 +129,11 @@
 #define HWY_NORETURN __attribute__((noreturn))
 #define HWY_LIKELY(expr) __builtin_expect(!!(expr), 1)
 #define HWY_UNLIKELY(expr) __builtin_expect(!!(expr), 0)
+#if HWY_COMPILER_GCC || HWY_HAS_BUILTIN(__builtin_unreachable)
+#define HWY_UNREACHABLE __builtin_unreachable()
+#else
+#define HWY_UNREACHABLE
+#endif
 #define HWY_PRAGMA(tokens) _Pragma(#tokens)
 #define HWY_DIAGNOSTICS(tokens) HWY_PRAGMA(GCC diagnostic tokens)
 #define HWY_DIAGNOSTICS_OFF(msc, gcc) HWY_DIAGNOSTICS(gcc)
@@ -250,6 +256,12 @@ namespace hwy {
 
 // 4 instances of a given literal value, useful as input to LoadDup128.
 #define HWY_REP4(literal) literal, literal, literal, literal
+
+HWY_DLLEXPORT void HWY_FORMAT(3, 4)
+    Warn(const char* file, int line, const char* format, ...);
+
+#define HWY_WARN(format, ...) \
+  ::hwy::Warn(__FILE__, __LINE__, format, ##__VA_ARGS__)
 
 HWY_DLLEXPORT HWY_NORETURN void HWY_FORMAT(3, 4)
     Abort(const char* file, int line, const char* format, ...);
@@ -2408,6 +2420,45 @@ constexpr MakeSigned<T> MaxExponentField() {
   return (MakeSigned<T>{1} << ExponentBits<T>()) - 1;
 }
 
+namespace detail {
+
+template <typename T>
+static HWY_INLINE HWY_MAYBE_UNUSED HWY_BITCASTSCALAR_CONSTEXPR T
+NegativeInfOrLowestValue(hwy::FloatTag /* tag */) {
+  return BitCastScalar<T>(
+      static_cast<MakeUnsigned<T>>(SignMask<T>() | ExponentMask<T>()));
+}
+
+template <typename T>
+static HWY_INLINE HWY_MAYBE_UNUSED HWY_BITCASTSCALAR_CONSTEXPR T
+NegativeInfOrLowestValue(hwy::NonFloatTag /* tag */) {
+  return LowestValue<T>();
+}
+
+template <typename T>
+static HWY_INLINE HWY_MAYBE_UNUSED HWY_BITCASTSCALAR_CONSTEXPR T
+PositiveInfOrHighestValue(hwy::FloatTag /* tag */) {
+  return BitCastScalar<T>(ExponentMask<T>());
+}
+
+template <typename T>
+static HWY_INLINE HWY_MAYBE_UNUSED HWY_BITCASTSCALAR_CONSTEXPR T
+PositiveInfOrHighestValue(hwy::NonFloatTag /* tag */) {
+  return HighestValue<T>();
+}
+
+}  // namespace detail
+
+template <typename T>
+HWY_API HWY_BITCASTSCALAR_CONSTEXPR T NegativeInfOrLowestValue() {
+  return detail::NegativeInfOrLowestValue<T>(IsFloatTag<T>());
+}
+
+template <typename T>
+HWY_API HWY_BITCASTSCALAR_CONSTEXPR T PositiveInfOrHighestValue() {
+  return detail::PositiveInfOrHighestValue<T>(IsFloatTag<T>());
+}
+
 //------------------------------------------------------------------------------
 // Additional F16/BF16 operators
 
@@ -2570,10 +2621,13 @@ HWY_API constexpr TTo ConvertScalarTo(TTo in) {
 
 template <typename T1, typename T2>
 constexpr inline T1 DivCeil(T1 a, T2 b) {
+#if HWY_CXX_LANG >= 201703L
+  HWY_DASSERT(b != 0);
+#endif
   return (a + b - 1) / b;
 }
 
-// Works for any `align`; if a power of two, compiler emits ADD+AND.
+// Works for any non-zero `align`; if a power of two, compiler emits ADD+AND.
 constexpr inline size_t RoundUpTo(size_t what, size_t align) {
   return DivCeil(what, align) * align;
 }

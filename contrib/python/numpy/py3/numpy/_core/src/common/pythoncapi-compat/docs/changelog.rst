@@ -1,6 +1,27 @@
 Changelog
 =========
 
+* 2024-11-12: Add functions:
+
+  * ``PyLong_IsPositive()``
+  * ``PyLong_IsNegative()``
+  * ``PyLong_IsZero()``
+
+* 2024-10-09: Add functions:
+
+  * ``PyBytes_Join()``
+  * ``PyIter_NextItem()``
+  * ``PyLong_AsInt32()``
+  * ``PyLong_AsInt64()``
+  * ``PyLong_AsUInt32()``
+  * ``PyLong_AsUInt64()``
+  * ``PyLong_FromInt32()``
+  * ``PyLong_FromInt64()``
+  * ``PyLong_FromUInt32()``
+  * ``PyLong_FromUInt64()``
+  * ``PyUnicode_Equal()``
+  * ``Py_HashBuffer()``
+
 * 2024-07-18: Add functions:
 
   * ``PyUnicodeWriter_Create()``

@@ -30,7 +30,6 @@ public:
 
     TUsedColumnsExtractor(TVector<THashSet<TString>>*, TVector<THashSet<TString>>&&, TString) = delete;
 
-public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
 

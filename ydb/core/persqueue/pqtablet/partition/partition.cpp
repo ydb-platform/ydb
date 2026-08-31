@@ -384,6 +384,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
+    , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
     , MessageIdDeduplicator(Partition, CreateDefaultTimeProvider(), TDuration::Minutes(5))
 {
@@ -944,6 +945,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (WriteResponses)");
     }
 
+    for (const auto& w : PendingSchemaChangeResponses) {
+        ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (PendingSchemaChangeResponses)");
+    }
+
     for (const auto& ri : ReadInfo) {
         ReplyError(ctx, ri.second.Destination, errorCode,
             TStringBuilder() << ss << " (ReadInfo) cookie " << ri.first);
@@ -1033,7 +1038,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     InitDone = true;
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
 
-    CreateCompacter();
     InitializeMLPConsumers();
 
     InitUserInfoForImportantClients(ctx);

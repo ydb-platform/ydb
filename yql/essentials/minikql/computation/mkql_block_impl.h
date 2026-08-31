@@ -85,7 +85,6 @@ private:
 
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
-private:
     NYql::EDatumValidationMode ValidateDatumMode_ = NYql::EDatumValidationMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;

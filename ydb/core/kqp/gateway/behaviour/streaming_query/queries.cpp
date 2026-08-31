@@ -5,6 +5,8 @@
 #include <library/cpp/retry/retry_policy.h>
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
@@ -24,8 +26,11 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <yql/essentials/core/sql_types/hopping.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <fmt/format.h>
+
+#include <google/protobuf/util/time_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 
@@ -212,6 +217,8 @@ class TPropertyValidator {
     using TProperties = google::protobuf::Map<TString, TString>;
 
 public:
+    static constexpr ui64 MAX_PROTOBUF_DURATION_MICROSECONDS = google::protobuf::util::TimeUtil::kDurationMaxSeconds * static_cast<i64>(1000000);
+
     using TValidator = std::function<TStatus(const TString& name, const TString& value)>;
 
     explicit TPropertyValidator(NKikimrSchemeOp::TStreamingQueryProperties& src)
@@ -300,6 +307,25 @@ public:
         return TStatus::Success();
     }
 
+    template<ui64 MaxMicrosecondsValue = std::numeric_limits<ui64>::max()>
+    static TStatus ValidateInterval(const TString& name, const TString& value) {
+        const auto duration = NMiniKQL::ValueFromString(NYql::NUdf::EDataSlot::Interval, value);
+        if (!duration) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property is not a valid ISO 8601 duration: " << value);
+        }
+
+        const i64 signedDuration = duration.Get<i64>();
+        if (signedDuration < 0) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property is should be non-negative interval, but got: " << value);
+        }
+
+        if (static_cast<ui64>(signedDuration) > MaxMicrosecondsValue) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property interval is too large: " << value);
+        }
+
+        return TStatus::Success();
+    }
+
 private:
     static TValueStatus<TString> Validate(const TString& name, const TString& value, TValidator validator) {
         if (validator) {
@@ -384,7 +410,7 @@ protected:
             YDB_LOG_DEBUG("[StreamingQueries] Successfully finished",
                 {"logPrefix", LogPrefix()});
         } else {
-            YDB_LOG_WARN("[StreamingQueries] Operation failed with errors",
+            YDB_LOG_WARN("[StreamingQueries] Operation failed",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", Issues.ToOneLineString()});
@@ -861,8 +887,8 @@ private:
         YDB_LOG_DEBUG("[StreamingQueries] Subscribing to scheme transaction completion on scheme pipe",
             {"logPrefix", LogPrefix()},
             {"tx", TxId},
-            {"shard", SchemeShardTabletId},
-            {"id", SchemePipeActorId});
+            {"schemeShardTabletId", SchemeShardTabletId},
+            {"schemePipeActorId", SchemePipeActorId});
     }
 
     void ClosePipeClient() {
@@ -1030,6 +1056,9 @@ protected:
 // Lock / unlock query row in table .metadata/streaming/queries to prevent concurrent modifications.
 // Updates OperationName, OperationActorId and OperationStartedAt according to current operation.
 // If OperationActorId already filled, actor will be checked.
+//
+// **note:** Lock may be lost during operation execution, stale operation will be
+//           stopped on TUpdateStreamingQueryStateRequestActor fail.
 
 class TLockStreamingQueryRequestActor final : public TQueryBase<TLockStreamingQueryRequestActor, TEvPrivate::TEvLockStreamingQueryResult> {
     static constexpr TDuration LOCK_TIMEOUT = TDuration::Seconds(10);
@@ -1163,7 +1192,7 @@ public:
 
 private:
     void FinishUnderOperation() {
-        Finish(Ydb::StatusIds::ABORTED, TStringBuilder() << "Streaming query " << QueryPath << " already under operation " << PreviousOperationName << " started at " << PreviousOperationStartedAt << ", try repeat request later");
+        Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Streaming query " << QueryPath << " already under operation " << PreviousOperationName << " started at " << PreviousOperationStartedAt << ", please retry later");
     }
 
 private:
@@ -1274,7 +1303,7 @@ public:
             YDB_LOG_INFO("[StreamingQueries] Previous query owner is alive",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender});
-            FatalError(Ydb::StatusIds::ABORTED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", try repeat request later")});
+            FatalError(Ydb::StatusIds::PRECONDITION_FAILED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", please retry later")});
         }
     }
 
@@ -1444,13 +1473,13 @@ public:
                     {"logPrefix", LogPrefix()},
                     {"currentOperationOwner", currentOperationOwner},
                     {"owner", OperationOwner});
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+                Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
                 return;
             }
         } else {
             YDB_LOG_ERROR("[StreamingQueries] Streaming query lock was lost",
                 {"logPrefix", LogPrefix()});
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
 
@@ -1543,8 +1572,8 @@ public:
             YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
                 {"logPrefix", LogPrefix()},
                 {"currentOwner", currentOwner},
-                {"owner", previousOwner});
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+                {"previousOwner", previousOwner});
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
 
@@ -1721,9 +1750,11 @@ public:
     struct TSettings {
         NKikimrKqp::TStreamingQueryState InitialState;
         TPathId QueryPathId;
+        ui64 QueryPathVersion = 0;
         ui64 QueryTextRevision = 0;
         TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
+        std::optional<TDuration> CheckpointInterval;
     };
 
     TStartStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
@@ -1966,12 +1997,12 @@ private:
         }
 
         // Execution id for streaming queries:
-        // <GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>
+        // <GUID part>-<GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>-<Path version in SS>
         // Checkpoint id for streaming queries:
         // <Execution id>-<Query path>
 
         const auto& pathId = Settings.QueryPathId;
-        State.SetCurrentExecutionId(TStringBuilder() << CreateGuidAsString() << '-' << pathId.OwnerId << '-' << pathId.LocalPathId);
+        State.SetCurrentExecutionId(TStringBuilder() << CreateGuidAsString() << '-' << pathId.OwnerId << '-' << pathId.LocalPathId << '-' << Settings.QueryPathVersion);
 
         if (!State.GetCheckpointId()) {
             State.SetCheckpointId(TStringBuilder() << State.GetCurrentExecutionId() << '-' << QueryPath);
@@ -1992,9 +2023,11 @@ private:
         ev->Generation = PreviousGeneration + 1;
         ev->CheckpointId = State.GetCheckpointId();
         ev->StreamingQueryPath = QueryPath;
+        ev->StreamingQueryOperationId = State.GetOperationActorId();
         ev->CustomerSuppliedId = State.GetCurrentExecutionId();
         ev->WatermarkLateEventsPolicy = Settings.WatermarkLateEventsPolicy;
         ev->StreamingDisposition = Settings.StreamingDisposition;
+        ev->CheckpointInterval = Settings.CheckpointInterval;
 
         if (const auto statsPeriod = AppData()->QueryServiceConfig.GetProgressStatsPeriodMs()) {
             ev->ProgressStatsPeriod = TDuration::MilliSeconds(statsPeriod);
@@ -2012,6 +2045,7 @@ private:
 
         auto& request = *record.MutableRequest();
         request.SetDatabase(Context.GetDatabase());
+        request.SetDatabaseId(Context.GetDatabaseId());
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
@@ -2118,6 +2152,7 @@ public:
             {"status", NKikimrKqp::TStreamingQueryState::EStatus_Name(State.GetStatus())});
 
         if (!Settings.SchemeInfo || State.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_DELETING) {
+            // Continue registered drop operation
             RemoveQuery();
             return;
         }
@@ -2137,6 +2172,7 @@ public:
         hFunc(TEvPrivate::TEvCleanupStreamingQueryResult, HandleRemove);
         hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, HandleRemove);
         hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, HandleRemove);
+        hFunc(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse, HandleRemove);
     )
 
     void HandleRemove(TEvPrivate::TEvCleanupStreamingQueryResult::TPtr& ev) {
@@ -2160,6 +2196,14 @@ public:
 
     void HandleRemove(TEvPrivate::TEvUpdateStreamingQueryResult::TPtr& ev) {
         if (HandleResult(ev, "Update streaming query state (remove query)")) {
+            return;
+        }
+
+        RemoveQuery();
+    }
+
+    void HandleRemove(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
+        if (HandleResult(ev, "Delete checkpoints (recovery path)")) {
             return;
         }
 
@@ -2261,6 +2305,16 @@ private:
             return;
         }
 
+        if (State.HasCheckpointId() && !CheckpointDeletionRequested) {
+            CheckpointDeletionRequested = true;
+            YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest (recovery path)",
+                {"logPrefix", LogPrefix()},
+                {"graphId", State.GetCheckpointId()});
+            Send(NYql::NDq::MakeCheckpointStorageID(),
+                 new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(State.GetCheckpointId()));
+            return;
+        }
+
         if (ExistsInSS) {
             // Remove query from SS
             std::pair<TString, TString> pathPair;
@@ -2341,9 +2395,11 @@ private:
         const auto& startActorId = Register(new TStartStreamingQueryTableActor(Context, QueryPath, {
             .InitialState = State,
             .QueryPathId = SchemeInfo.PathId,
+            .QueryPathVersion = SchemeInfo.Version,
             .QueryTextRevision = QuerySettings.QueryTextRevision,
             .WatermarkLateEventsPolicy = QuerySettings.WatermarkLateEventsPolicy,
             .StreamingDisposition = QuerySettings.StreamingDisposition,
+            .CheckpointInterval = QuerySettings.CheckpointInterval,
         }));
         YDB_LOG_DEBUG("[StreamingQueries] Start TStartStreamingQueryTableActor",
             {"logPrefix", LogPrefix()},
@@ -2385,6 +2441,7 @@ private:
     const TSettings Settings;
     NKikimrKqp::TStreamingQueryState State;
     bool ExistsInSS = false;
+    bool CheckpointDeletionRequested = false;
 
     // Current settings from scheme shard
     TSchemeInfo SchemeInfo;
@@ -2399,6 +2456,14 @@ private:
 // Describe -> Lock -> (perform actions) -> Unlock
 //                             |
 //          TableActors / RequestActors / SchemeActors
+//
+// Each operation execution includes stages:
+// - Register new operation
+// - Perform operation
+//
+// Operation may be registered as:
+// - Scheme shard path version increment
+// - Setting status DELETING to streaming query table row
 
 template <typename TDerived>
 class TRequestHandlerBase : public TActionActorBase<TDerived> {
@@ -2591,6 +2656,8 @@ protected:
 // [Base handler] -> Describe -> Sync -> (perform actions) -> [Base handler]
 //                                               |
 //                            TableActors / RequestActors / SchemeActors
+//
+// Each operation execution also include Complete previous registered and unfinished operations stage
 
 template <typename TDerived>
 class TRequestHandlerWithSync : public TRequestHandlerBase<TDerived> {
@@ -2623,9 +2690,9 @@ public:
         }
 
         TBase::SchemeInfo = ev->Get()->Info;
-        YDB_LOG_DEBUG("[StreamingQueries] Describe streaming query success, scheme",
+        YDB_LOG_DEBUG("[StreamingQueries] Describe streaming query success",
             {"logPrefix", LogPrefix()},
-            {"info", (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null")});
+            {"schemeInfo", (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null")});
 
         const auto& syncActorId = TBase::Register(new TSyncStreamingQueryTableActor(TBase::Context, TBase::QueryPath, {
             .InitialState = TBase::QueryState,
@@ -2661,10 +2728,14 @@ protected:
 
 protected:
     void OnQueryLocked(bool queryExists) final {
-        if ((TBase::SchemeInfo || queryExists) && (!TBase::SchemeInfo || !queryExists || TBase::SchemeInfo->IsChanged(TBase::QueryState))) {
+        const bool entryExists = TBase::SchemeInfo || queryExists;
+        const bool schemeInfoChanged = !TBase::SchemeInfo || !queryExists || TBase::SchemeInfo->IsChanged(TBase::QueryState);
+        const bool underDropOperation = queryExists && TBase::QueryState.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_DELETING;
+        if ((entryExists && schemeInfoChanged) || underDropOperation) {
             // Query state changed between describe query and lock query:
             // - query exists either in SS or table
             // - query info in SS is not same as stored in table
+            // - there was successfully registered drop operation
             // In this case we should redescribe query before synchronization
             TBase::Become(&TRequestHandlerWithSync::StateFuncSync);
             TBase::DescribeQuery("sync previous state");
@@ -2724,7 +2795,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard after creation succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);
@@ -2807,6 +2878,7 @@ private:
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, ""));
         CHECK_STATUS(validator.SaveDefault(EName::WatermarkLateEventsPolicy, "drop", &TPropertyValidator::ValidateEnum<NYql::NHoppingWindow::EPolicy>));
         CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
+        CHECK_STATUS(validator.SaveDefault(EName::CheckpointInterval, "", &TPropertyValidator::ValidateInterval<TPropertyValidator::MAX_PROTOBUF_DURATION_MICROSECONDS>));
         CHECK_STATUS(validator.Save(
             EName::QueryTextRevision,
             ToString(SchemeInfo ? TStreamingQuerySettings().FromProto(SchemeInfo->Properties).QueryTextRevision + 1 : 1)
@@ -2876,7 +2948,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard after alter succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);
@@ -2922,6 +2994,7 @@ private:
         TPropertyValidator validator(*SchemeTx.MutableCreateStreamingQuery()->MutableProperties());
         CHECK_STATUS(validator.SaveDefault(EName::Run, previousSettings.Run ? "true" : "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, previousSettings.ResourcePool));
+        CHECK_STATUS(validator.SaveDefault(EName::CheckpointInterval, previousSettings.CheckpointIntervalString, &TPropertyValidator::ValidateInterval<TPropertyValidator::MAX_PROTOBUF_DURATION_MICROSECONDS>));
         CHECK_STATUS_RET(force, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS_RET(queryText, validator.ExtractOptional(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS_RET(streamingDisposition, validator.ExtractOptional(EName::StreamingDisposition));
@@ -2976,6 +3049,7 @@ public:
             hFunc(TEvPrivate::TEvCleanupStreamingQueryResult, Handle);
             hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, Handle);
             hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, Handle);
+            hFunc(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse, Handle);
             default:
                 StateFuncBase(ev);
         }
@@ -2989,6 +3063,13 @@ public:
         }
 
         QueryExistsInTable = false;
+        CleanupQuery();
+    }
+
+    void Handle(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
+        if (HandleResult(ev, "Delete checkpoints")) {
+            return;
+        }
         CleanupQuery();
     }
 
@@ -3027,6 +3108,12 @@ protected:
             return;
         }
 
+        // Checkpoint storage uses CheckpointId as graphId (set once on first execution start
+        // and reused across all restarts for the same query).
+        if (QueryExistsInTable && QueryState.HasCheckpointId()) {
+            CheckpointIdToDelete = QueryState.GetCheckpointId();
+        }
+
         CleanupQuery();
     }
 
@@ -3038,6 +3125,17 @@ private:
             YDB_LOG_DEBUG("[StreamingQueries] Start TCleanupStreamingQueryStateTableActor",
                 {"logPrefix", LogPrefix()},
                 {"cleanupActorId", cleanupActorId});
+            return;
+        }
+
+        if (CheckpointIdToDelete) {
+            // Delete checkpoints
+            YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest",
+                {"logPrefix", LogPrefix()},
+                {"graphId", *CheckpointIdToDelete});
+            Send(NYql::NDq::MakeCheckpointStorageID(),
+                 new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(*CheckpointIdToDelete));
+            CheckpointIdToDelete = std::nullopt;
             return;
         }
 
@@ -3072,6 +3170,7 @@ private:
     const bool SuccessOnNotExist = false;
     bool QueryExistsInSS = false;
     bool QueryExistsInTable = false;
+    std::optional<TString> CheckpointIdToDelete;
 };
 
 }  // anonymous namespace

@@ -157,6 +157,7 @@ public:
 private:
     void FillBlobsMetaData(const TActorContext& ctx);
     void FormHeadAndProceed();
+    void NormalizeOffsetsForEmptyData();
 
     TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> Ranges;
 };

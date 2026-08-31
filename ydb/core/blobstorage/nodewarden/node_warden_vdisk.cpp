@@ -221,6 +221,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
                     ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
                 }
+                if (Cfg->DDiskConfig->HasEnableChecksums()) {
+                    ddiskConfig.EnableChecksums = Cfg->DDiskConfig->GetEnableChecksums();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
@@ -326,6 +329,9 @@ namespace NKikimr::NStorage {
             vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
             vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
             vdiskConfig->HullCompFreeSpaceThresholdPerMille = HullCompFreeSpaceThresholdPerMille;
+            vdiskConfig->HullCompEmergencyMaxSsts = HullCompEmergencyMaxSsts;
+            vdiskConfig->HullCompEmergencyChunkReserve = HullCompEmergencyChunkReserve;
+            vdiskConfig->HullCompEmergencyEnableAtColor = HullCompEmergencyEnableAtColor;
             vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;

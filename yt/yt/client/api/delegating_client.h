@@ -341,6 +341,11 @@ public:
         const TChaosLeaseAttachOptions& options),
         (chaosLeaseId, options));
 
+    DELEGATE_METHOD(TFuture<void>, PingChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options),
+        (chaosLeaseId, options));
+
     DELEGATE_METHOD(TFuture<void>, SetUserBanned, (
         const std::string& user,
         bool isBanned,
@@ -458,6 +463,17 @@ public:
         const std::string& expectedMD5,
         const TPutFileToCacheOptions& options),
         (path, expectedMD5, options))
+
+    DELEGATE_METHOD(TFuture<TFilePartitions>, PartitionFile, (
+        const NYPath::TYPath& path,
+        const std::vector<TFileReadRange>& ranges,
+        const TPartitionFileOptions& options),
+        (path, ranges, options))
+
+    DELEGATE_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (
+        const TFilePartitionCookiePtr& cookie,
+        const TReadFilePartitionOptions& options),
+        (cookie, options))
 
     // Security
     DELEGATE_METHOD(TFuture<void>, AddMember, (

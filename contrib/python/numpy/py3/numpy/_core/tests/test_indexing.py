@@ -367,7 +367,7 @@ class TestIndexing:
         assert_array_equal(a[idx], idx)
 
         # this case must not go into the fast path, note that idx is
-        # a non-contiuguous none 1D array here.
+        # a non-contiguous none 1D array here.
         a[idx] = -1
         res = np.arange(6)
         res[0] = -1
@@ -409,15 +409,19 @@ class TestIndexing:
         a[...] = memoryview(s)
         assert_array_equal(a, s)
 
-    def test_subclass_writeable(self):
+    @pytest.mark.parametrize("writeable", [True, False])
+    def test_subclass_writeable(self, writeable):
         d = np.rec.array([('NGC1001', 11), ('NGC1002', 1.), ('NGC1003', 1.)],
                          dtype=[('target', 'S20'), ('V_mag', '>f4')])
+        d.flags.writeable = writeable
+        # Advanced indexing results are always writeable:
         ind = np.array([False,  True,  True], dtype=bool)
-        assert_(d[ind].flags.writeable)
+        assert d[ind].flags.writeable
         ind = np.array([0, 1])
-        assert_(d[ind].flags.writeable)
-        assert_(d[...].flags.writeable)
-        assert_(d[0].flags.writeable)
+        assert d[ind].flags.writeable
+        # Views should be writeable if the original array is:
+        assert d[...].flags.writeable == writeable
+        assert d[0].flags.writeable == writeable
 
     def test_memory_order(self):
         # This is not necessary to preserve. Memory layouts for
@@ -668,12 +672,12 @@ class TestBroadcastedAssignments:
             ([0, 1], ..., 0),
             (..., [1, 2], [1, 2])])
     def test_broadcast_error_reports_correct_shape(self, index):
-        values = np.zeros((100, 100))  # will never broadcast below  
+        values = np.zeros((100, 100))  # will never broadcast below
 
         arr = np.zeros((3, 4, 5, 6, 7))
         # We currently report without any spaces (could be changed)
         shape_str = str(arr[index].shape).replace(" ", "")
-        
+
         with pytest.raises(ValueError) as e:
             arr[index] = values
 

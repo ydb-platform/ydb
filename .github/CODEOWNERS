@@ -16,21 +16,22 @@
 /.github/TESTOWNERS
 /.github/docker @ydb-platform/appteam
 
-/build @ydb-platform/ci
-/certs @ydb-platform/ci
-/contrib @ydb-platform/ci
-/devtools @ydb-platform/ci
-/library @ydb-platform/ci
-/scripts @ydb-platform/ci
-/tools @ydb-platform/ci
-/util @ydb-platform/ci
-/vendor @ydb-platform/ci
-/yql @ydb-platform/ci
-/yt @ydb-platform/ci
+/build @ydb-platform/synced-dirs
+/certs @ydb-platform/synced-dirs
+/contrib @ydb-platform/synced-dirs
+/devtools @ydb-platform/synced-dirs
+/library @ydb-platform/synced-dirs
+/scripts @ydb-platform/synced-dirs
+/tools @ydb-platform/synced-dirs
+/util @ydb-platform/synced-dirs
+/vendor @ydb-platform/synced-dirs
+/yql @ydb-platform/synced-dirs
+/yt @ydb-platform/synced-dirs
 
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/federated_query/ @ydb-platform/fq
+/ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp
@@ -67,6 +68,7 @@
 /ydb/services/workload_manager @ydb-platform/fq
 /ydb/core/resource_pools @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
+/ydb/tests/workload_manager @ydb-platform/fq
 
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics

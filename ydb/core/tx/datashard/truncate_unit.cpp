@@ -72,6 +72,11 @@ EExecutionStatus TTruncateUnit::Execute(
 
     txc.DB.Truncate(localTid);
 
+    // Truncate drops every row version, so nothing below this operation can be read any more.
+    // Advancing the low watermark keeps a stale snapshot read failing loudly instead of silently
+    // returning no rows.
+    DataShard.GetSnapshotManager().AdvanceWatermark(txc.DB, DataShard.GetMvccVersion(op.Get()));
+
     auto userTable = DataShard.AlterTableSchemaVersion(actorCtx, txc, pathId, version);
 
     // We must set these flags here for the following reasons:

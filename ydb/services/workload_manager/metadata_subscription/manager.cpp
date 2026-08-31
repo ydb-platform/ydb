@@ -9,7 +9,11 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
-#include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
+#include <ydb/services/metadata/service.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
+
+#include <util/generic/algorithm.h>
+#include <util/string/join.h>
 
 
 namespace NKikimr::NWorkloadManager {
@@ -86,6 +90,75 @@ struct TFeatureFlagExtractor : public NKqp::IFeatureFlagExtractor {
         }
     }
     return TYqlConclusionStatus::Success();
+}
+
+class TClassifiersCheckResult {
+public:
+    // Interface required by NYql::NCommon::ResultFromIssues/ResultFromError
+    void SetStatus(NYql::EYqlIssueCode status) {
+        Status = status;
+    }
+
+    void AddIssue(NYql::TIssue issue) {
+        Issues.AddIssue(std::move(issue));
+    }
+
+    void AddIssues(NYql::TIssues issues) {
+        Issues.AddIssues(std::move(issues));
+    }
+
+    // ResultFromError leaves Status untouched, so non-empty issues mean failure even with SUCCESS status
+    TYqlConclusionStatus ToConclusion() const {
+        if (Status == NYql::TIssuesIds::SUCCESS && Issues.Empty()) {
+            return TYqlConclusionStatus::Success();
+        }
+        return TYqlConclusionStatus::Fail(Status != NYql::TIssuesIds::SUCCESS ? Status : NYql::TIssuesIds::DEFAULT_ERROR, Issues.ToString());
+    }
+
+private:
+    NYql::EYqlIssueCode Status = NYql::TIssuesIds::SUCCESS;
+    NYql::TIssues Issues;
+};
+
+TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nodeId, const TResourcePoolManager::TExternalModificationContext& context) {
+    // The default pool is recreated on demand, so a dangling classifier reference to it is not possible
+    if (poolId == NResourcePool::DEFAULT_POOL_ID || !NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
+    }
+
+    using TRequest = NMetadata::NProvider::TEvAskSnapshot;
+    using TResponse = NMetadata::NProvider::TEvRefreshSubscriberData;
+    auto event = std::make_unique<TRequest>(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>());
+
+    auto promise = NThreading::NewPromise<TClassifiersCheckResult>();
+    context.GetActorSystem()->Register(new NKqp::TActorRequestHandler<TRequest, TResponse, TClassifiersCheckResult>(
+        NMetadata::NProvider::MakeServiceId(nodeId), event.release(), promise,
+        [databaseId = context.GetDatabaseId(), poolId](NThreading::TPromise<TClassifiersCheckResult> promise, TResponse&& response) {
+            TVector<TString> referencingClassifiers;
+            const auto snapshot = response.GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>();
+            const auto& configs = snapshot->GetResourcePoolClassifierConfigs();
+            if (const auto it = configs.find(databaseId); it != configs.end()) {
+                for (const auto& [name, config] : it->second.ByName) {
+                    if (config.GetClassifierSettings().ResourcePool == poolId) {
+                        referencingClassifiers.push_back(name);
+                    }
+                }
+            }
+
+            TClassifiersCheckResult result;
+            if (!referencingClassifiers.empty()) {
+                Sort(referencingClassifiers);
+                result.SetStatus(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED);
+                result.AddIssue(NYql::TIssue(TStringBuilder() << "Cannot drop resource pool " << poolId
+                    << ", it is referenced by resource pool classifiers: " << JoinSeq(", ", referencingClassifiers)));
+            }
+            promise.SetValue(std::move(result));
+        }
+    ));
+
+    return promise.GetFuture().Apply([](const NThreading::TFuture<TClassifiersCheckResult>& f) {
+        return f.GetValue().ToConclusion();
+    });
 }
 
 [[nodiscard]] TYqlConclusionStatus ErrorFromActivityType(TResourcePoolManager::EActivityType activityType) {
@@ -225,7 +298,11 @@ TAsyncStatus TResourcePoolManager::ExecutePrepared(const NKqpProto::TKqpSchemeOp
 
 TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, ui32 nodeId, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
-    if (operationCase != NKqpProto::TKqpSchemeOperation::kDropResourcePool) {
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropResourcePool) {
+        validationFuture = NKqp::ChainFeatures(validationFuture, [poolId = schemeTx.GetDrop().GetName(), nodeId, context] {
+            return CheckPoolNotReferencedByClassifiers(poolId, nodeId, context);
+        });
+    } else {
         validationFuture = NKqp::ChainFeatures(validationFuture, [context, nodeId] {
             return CheckFeatureFlag(nodeId, MakeIntrusive<TFeatureFlagExtractor>(), context);
         });

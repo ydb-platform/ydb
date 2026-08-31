@@ -18,7 +18,7 @@
 #include "space.h"
 #include "bunit.h"
 #include "testdataset.h"
-#include "space_sqfd.h"
+#include "space/space_sqfd.h"
 
 namespace similarity {
 
@@ -121,4 +121,3 @@ TEST(Sqfd) {
 }  // namespace similarity
 
 #endif
-

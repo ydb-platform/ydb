@@ -1,8 +1,8 @@
 #pragma once
 
-#include "defs.h"
-
 #include <ydb/library/actors/util/rope.h>
+
+#include <util/generic/size_literals.h>
 
 #include <vector>
 
@@ -11,12 +11,12 @@ namespace NKikimr::NDDisk {
 // Checksum unit size (4 KiB), independent of LBA format. Matches MinSectorSize / DataAlignment.
 constexpr size_t IntegrityUnitSize = 4096;
 constexpr size_t IntegritySubBlockSize = 512;
+constexpr ui32 IntegrityPairSlots = 2;
 
-// DataChunk / IntegrityChunk are PDisk chunks (default 128 MiB). IntegrityChunk reserves
-// 128 KiB at the front for its own metadata (TIntegrityChunkHeader replicas, etc.).
-constexpr size_t IntegrityChunkSize = 128_MB;
+// DataChunk / IntegrityChunk are PDisk chunks whose size comes from the PDisk format at runtime.
+// IntegrityChunk reserves a fixed 128 KiB region at the front for its own metadata
+// (TIntegrityChunkHeader replicas, etc.).
 constexpr size_t IntegrityChunkHeaderRegionSize = 128_KB;
-constexpr ui32 DataBlocksPerChunk = IntegrityChunkSize / IntegrityUnitSize;
 
 // Placeholder magics (PDisk-style unique values); not yet finalized for production format.
 constexpr ui64 MagicIntegrityBlock = 0x1B71E6A7B10C4E55ull;
@@ -33,6 +33,11 @@ enum class EIntegrityFormatVersion : ui16 {
 // or salt mixed in.
 ui64 CalculateBlockChecksum(TRope::TConstIterator it, size_t numBytes);
 
+// Raw XXH3-64 over a contiguous buffer. Unlike the TRope variant above there are no alignment or
+// size restrictions; used for self-checksums of integrity metadata blocks (BlockChecksum /
+// HeaderChecksum fields computed with the field itself zeroed).
+ui64 CalculateRawChecksum(const void* data, size_t size);
+
 // Splits payload into IntegrityUnitSize (4 KiB) blocks and computes a checksum for each block, in order.
 // payload.size() must be a non-zero multiple of IntegrityUnitSize (same as MinSectorSize).
 std::vector<ui64> CalculatePayloadChecksums(const TRope& payload);
@@ -42,6 +47,19 @@ std::vector<ui64> CalculatePayloadChecksums(const TRope& payload);
 // XORs in the new one.
 ui64 Contribution(ui64 vchunkGeneration, ui64 blockIdx, ui64 blockChecksum);
 void UpdateRoot(ui64& integrityBlockDigest, ui64 vchunkGeneration, ui64 idx, ui64 oldCsum, ui64 newCsum);
+
+// On-disk checksums are salted with their logical identity. The wire protocol and the in-memory
+// cache always carry pure XXH3_64(data) values; sealing/unsealing happens only at the integrity
+// block boundary. XOR makes the operation reversible without recomputing data checksums.
+ui64 CalculateChecksumIdentitySalt(ui64 ddiskId, ui64 pdiskGuid, ui64 tabletId,
+    ui64 vChunkIndex, ui64 blockIdx);
+ui64 SealBlockChecksum(ui64 pureChecksum, ui64 ddiskId, ui64 pdiskGuid, ui64 tabletId,
+    ui64 vChunkIndex, ui64 blockIdx);
+ui64 UnsealBlockChecksum(ui64 storedChecksum, ui64 ddiskId, ui64 pdiskGuid, ui64 tabletId,
+    ui64 vChunkIndex, ui64 blockIdx);
+
+// Pure checksum returned for a never-written data block.
+ui64 GetZeroBlockChecksum();
 
 #pragma pack(push, 1)
 
@@ -64,16 +82,21 @@ struct TIntegrityBlockHeader {
 
     ui64 IntegrityBlockDigest; // Incremental checksum of data block checksums
 
-    ui8 UsedBlocksBitmap[2]; // which of 500 blocks are used
-    ui8 Reserved[14]; // pad so packed sizeof == 96
+    ui64 PairSequenceNumber; // per-pair monotonic sequence number (ping-pong slots): write max(seqA, seqB) + 1
+
+    ui8 UsedBlocksBitmap[62]; // 496 bits: which of the covered data blocks are used (492 in base format)
+    ui8 Reserved[10]; // pad so packed sizeof == 160
 };
 
-static_assert(sizeof(TIntegrityBlockHeader) == 96);
+static_assert(sizeof(TIntegrityBlockHeader) == 160);
 
 // Base format (AWUPF >= 4 KiB): how many data-block checksums fit after the header in one unit.
 constexpr ui32 ChecksumsPerIntegrityBlock =
     (IntegrityUnitSize - sizeof(TIntegrityBlockHeader)) / sizeof(ui64);
-static_assert(ChecksumsPerIntegrityBlock == 500);
+static_assert(ChecksumsPerIntegrityBlock == 492);
+
+// The bitmap must have a bit for every checksum slot of the block.
+static_assert(sizeof(TIntegrityBlockHeader::UsedBlocksBitmap) * 8 >= ChecksumsPerIntegrityBlock);
 
 struct TIntegrityBlock {
     TIntegrityBlockHeader Header;
@@ -81,6 +104,25 @@ struct TIntegrityBlock {
 };
 
 static_assert(sizeof(TIntegrityBlock) == IntegrityUnitSize);
+
+struct TIntegrityBlockIdentity {
+    ui64 OwnerId = 0;
+    ui64 VChunkId = 0;
+    ui64 VChunkGeneration = 0;
+    ui64 IntegrityChunkId = 0;
+    ui64 IntegrityExtentId = 0;
+    ui64 IntegrityChunkGeneration = 0;
+    ui32 ChecksumBlockIdx = 0;
+};
+
+// Validates a single slot without trusting any of its fields first. The self-checksum is checked
+// before identity/generation fields are used for winner selection.
+bool ValidateIntegrityBlock(const TIntegrityBlock& block, const TIntegrityBlockIdentity& expected);
+
+// Returns the winning slot index (0 for A, 1 for B), or -1 when neither slot is valid. A valid
+// slot with the larger PairSequenceNumber wins; equal sequence numbers deterministically prefer B.
+i32 SelectIntegrityBlockWinner(const TIntegrityBlock (&slots)[IntegrityPairSlots],
+    const TIntegrityBlockIdentity& expected);
 
 struct TIntegritySubBlockHeader {
     ui64 Magic;
@@ -104,12 +146,12 @@ static_assert(ChecksumsPerIntegritySubBlock == 60);
 
 constexpr ui32 ChecksumsInIntegrityBlockHeaderSubBlock =
     (IntegritySubBlockSize - sizeof(TIntegrityBlockHeader)) / sizeof(ui64);
-static_assert(ChecksumsInIntegrityBlockHeaderSubBlock == 52);
+static_assert(ChecksumsInIntegrityBlockHeaderSubBlock == 44);
 
 constexpr ui32 ChecksumsPerIntegrityBlockAwupf512 =
     ChecksumsInIntegrityBlockHeaderSubBlock
     + (IntegritySubBlocksPerBlock - 1) * ChecksumsPerIntegritySubBlock;
-static_assert(ChecksumsPerIntegrityBlockAwupf512 == 472);
+static_assert(ChecksumsPerIntegrityBlockAwupf512 == 464);
 
 struct TIntegritySubBlock {
     TIntegritySubBlockHeader Header;
@@ -118,25 +160,8 @@ struct TIntegritySubBlock {
 
 static_assert(sizeof(TIntegritySubBlock) == IntegritySubBlockSize);
 
-// IntegrityExtent covers one DataChunk: ceil(data blocks / checksums per integrity block).
-constexpr ui32 IntegrityBlocksPerExtent =
-    (DataBlocksPerChunk + ChecksumsPerIntegrityBlock - 1) / ChecksumsPerIntegrityBlock;
-static_assert(IntegrityBlocksPerExtent == 66);
-
-constexpr ui32 IntegrityBlocksPerExtentAwupf512 =
-    (DataBlocksPerChunk + ChecksumsPerIntegrityBlockAwupf512 - 1) / ChecksumsPerIntegrityBlockAwupf512;
-static_assert(IntegrityBlocksPerExtentAwupf512 == 70);
-
-constexpr size_t IntegrityExtentSize = IntegrityBlocksPerExtent * IntegrityUnitSize;
-constexpr size_t IntegrityExtentSizeAwupf512 = IntegrityBlocksPerExtentAwupf512 * IntegrityUnitSize;
-
-constexpr ui32 IntegrityExtentsPerChunk =
-    (IntegrityChunkSize - IntegrityChunkHeaderRegionSize) / IntegrityExtentSize;
-static_assert(IntegrityExtentsPerChunk == 496);
-
-constexpr ui32 IntegrityExtentsPerChunkAwupf512 =
-    (IntegrityChunkSize - IntegrityChunkHeaderRegionSize) / IntegrityExtentSizeAwupf512;
-static_assert(IntegrityExtentsPerChunkAwupf512 == 467);
+// On disk every TIntegrityBlock lives in a ping-pong pair of adjacent 4 KiB slots (A/B, read
+// together as one 8 KiB I/O; never rewritten in place because we do not rely on AWUPF).
 
 struct TIntegrityChunkHeader {
     ui64 Magic;
@@ -160,7 +185,5 @@ struct TIntegrityChunkHeader {
 static_assert(sizeof(TIntegrityChunkHeader) == IntegrityUnitSize);
 
 #pragma pack(pop)
-
-static_assert(DataBlocksPerChunk == 32768);
 
 } // namespace NKikimr::NDDisk

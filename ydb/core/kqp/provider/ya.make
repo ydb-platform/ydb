@@ -43,7 +43,9 @@ PEERDIR(
     ydb/library/yql/dq/constraints
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
+    ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/provider
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/metadata/optimization

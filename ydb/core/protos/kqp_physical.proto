@@ -402,6 +402,14 @@ message TKqpPhyCnDqSourceStreamLookup {
     bool IsMultiGet = 15;
     bool IsMultiMatches = 16;
     optional uint64 FullscanLimit = 17;
+
+    enum EShuffleMode {
+        DEFAULT = 0;
+        OFF = 1;
+        MAP = 2;
+        HASH = 3;
+    }
+    EShuffleMode ShuffleMode = 18;
 }
 
 message TKqpPhyConnection {
@@ -610,6 +618,8 @@ message TKqpPhyStage {
     double EstimatedRows = 19;
     repeated TKqpOutputTransform OutputTransforms = 17;
     map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
+    // Per-stage WASM UDF module names (from TCoUdf)
+    repeated string WasmUdfModules = 20;
 }
 
 message TKqpPhyResult {
@@ -642,6 +652,7 @@ message TKqpSchemeOperation {
         FLAG_UNSPECIFIED = 0;
         FLAG_PG_MODE = 1; // set if pg compatible mode
         FLAG_IF_NOT_EXISTS = 2; // set if IF_NOT_EXISTS modificator present
+        FLAG_REBUILD_INDEX = 4; // set for REBUILD INDEX operation
     };
 
     // If the object is modified, this field is not empty
@@ -737,6 +748,7 @@ message TKqpPhyTx {
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
     uint32 DqChannelVersion = 11;
+    bool HasPqSources = 12; // at least one stage has an external source of type "PqSource"
 }
 
 message TKqpTableInfo {

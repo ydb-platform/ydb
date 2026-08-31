@@ -300,6 +300,7 @@ message TEvVPut {
 
     repeated TExtraBlockCheck ExtraBlockChecks = 11;
     optional uint32 WriteSourceOp = 24;
+    optional NKikimrBlobStorage.TDataKind.E DataKind = 25;
 }
 
 message TEvVPutResult {
@@ -336,6 +337,7 @@ message TVMultiPutItem {
 
     optional NActorsProto.TTraceId TraceId = 6;
     optional uint32 WriteSourceOp = 11;
+    optional NKikimrBlobStorage.TDataKind.E DataKind = 13;
 }
 
 message TEvVMultiPut {
@@ -1653,6 +1655,49 @@ message TEvControllerAllocateDDiskBlockGroupResult {
     repeated TDirectBlockGroup DirectBlockGroups = 4;
 }
 
+// CMS pull API for observing DirectBlockGroup allocations. The tablet list and
+// one tablet state are intentionally returned as single responses.
+message TEvControllerDDiskInfoListTablets {
+}
+
+message TEvControllerDDiskInfoListTabletsResult {
+    message TTabletRevision {
+        optional uint64 TabletId = 1;
+        optional uint64 Revision = 2;
+        optional uint32 GroupsCount = 3;
+        optional uint64 LastChangedAt = 4;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    repeated TTabletRevision Tablets = 3;
+}
+
+message TEvControllerDDiskInfoGetTablet {
+    optional uint64 TabletId = 1;
+    optional uint64 KnownRevision = 2;
+}
+
+message TEvControllerDDiskInfoGetTabletResult {
+    message TDirectBlockGroup {
+        optional uint64 DirectBlockGroupId = 1;
+        optional uint32 NumVChunksClaimed = 2;
+        repeated NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
+        repeated NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 4;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional uint64 TabletId = 3;
+    optional uint64 Revision = 4;
+    repeated TDirectBlockGroup Groups = 5;
+}
+
+message TEvControllerDDiskInfoTabletRevisionChanged {
+    optional uint64 TabletId = 1;
+    optional uint64 Revision = 2;
+}
+
 message TEvInterpilePut {
     message TItem {
         optional NKikimrProto.TLogoBlobID BlobId = 1;
@@ -1663,6 +1708,7 @@ message TEvInterpilePut {
         optional bool IsZeroEntry = 8;
         repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 6;
         optional NActorsProto.TTraceId TraceId = 7;
+        optional NKikimrBlobStorage.TDataKind.E DataKind = 9;
     }
 
     optional uint32 GroupId = 1;

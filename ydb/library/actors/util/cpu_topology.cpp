@@ -352,8 +352,39 @@ void AddUniqueGroup(TVector<TCpuTopologyGroup>& groups, TCpuTopologyGroup group)
     groups.push_back(std::move(group));
 }
 
-void BuildDerivedGroups(TCpuTopology& topology) {
+void BuildDerivedGroups(TCpuTopology& topology, const std::optional<TCpuMask>& allowedCpus = std::nullopt) {
+    TCpuMask offlineCpus;
     for (const auto& cpu : topology.Cpus) {
+        if (!cpu.Online) {
+            offlineCpus.Set(cpu.CpuId);
+        }
+    }
+    auto filterCpus = [&](TCpuMask cpus) {
+        if (allowedCpus) {
+            cpus = cpus & *allowedCpus;
+        }
+        return cpus - offlineCpus;
+    };
+
+    TVector<TCpuTopologyGroup> numaNodes;
+    numaNodes.reserve(topology.NumaNodes.size());
+    for (auto& node : topology.NumaNodes) {
+        node.Cpus = filterCpus(std::move(node.Cpus));
+        if (!node.Cpus.IsEmpty()) {
+            numaNodes.push_back(std::move(node));
+        }
+    }
+    topology.NumaNodes = std::move(numaNodes);
+
+    for (auto& cpu : topology.Cpus) {
+        cpu.CoreCpus = filterCpus(std::move(cpu.CoreCpus));
+        cpu.ThreadSiblings = filterCpus(std::move(cpu.ThreadSiblings));
+        cpu.ClusterCpus = filterCpus(std::move(cpu.ClusterCpus));
+        cpu.L3CacheCpus = filterCpus(std::move(cpu.L3CacheCpus));
+        cpu.DieCpus = filterCpus(std::move(cpu.DieCpus));
+        cpu.PackageCpus = filterCpus(std::move(cpu.PackageCpus));
+        cpu.NumaNodeCpus = filterCpus(std::move(cpu.NumaNodeCpus));
+
         AddUniqueGroup(topology.Clusters, TCpuTopologyGroup{cpu.ClusterId, cpu.ClusterCpus});
         AddUniqueGroup(topology.L3CacheGroups, TCpuTopologyGroup{cpu.L3CacheId, cpu.L3CacheCpus});
         AddUniqueGroup(topology.Dies, TCpuTopologyGroup{cpu.DieId, cpu.DieCpus});
@@ -456,7 +487,10 @@ const TLogicalCpuInfo* TCpuTopology::FindCpu(TCpuId cpuId) const {
     return nullptr;
 }
 
-std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) {
+namespace {
+
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopologyImpl(
+        const TFsPath& root, const std::optional<TCpuMask>& allowedCpus) {
     TCpuTopology result;
 
     auto cpus = ParseCpus(root);
@@ -467,8 +501,14 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
     if (result.Cpus.empty()) {
         return std::unexpected("no CPU topology data found under " + CpuRootPath(root).GetPath());
     }
+
     for (const auto& cpu : result.Cpus) {
-        result.AllCpus.Set(cpu.CpuId);
+        if (cpu.Online && (!allowedCpus || allowedCpus->IsSet(cpu.CpuId))) {
+            result.AllCpus.Set(cpu.CpuId);
+        }
+    }
+    if (result.AllCpus.IsEmpty()) {
+        return std::unexpected("no available CPU topology data found under " + CpuRootPath(root).GetPath());
     }
 
     auto numaNodes = ParseNumaNodes(root);
@@ -486,8 +526,18 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
         }
     }
 
-    BuildDerivedGroups(result);
+    BuildDerivedGroups(result, allowedCpus);
     return result;
+}
+
+} // namespace
+
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) {
+    return ParseSysfsCpuTopologyImpl(root, std::nullopt);
+}
+
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root, const TCpuMask& allowedCpus) {
+    return ParseSysfsCpuTopologyImpl(root, allowedCpus);
 }
 
 std::expected<TCpuTopology, TString> ParseCpuTopology() {
@@ -498,6 +548,11 @@ std::expected<TCpuTopology, TString> ParseCpuTopology() {
     }
     return BuildFlatCpuTopology(static_cast<TCpuId>(cpuCount));
 #else
-    return ParseSysfsCpuTopology(TFsPath("/sys/devices/system"));
+    TSchedCpuAffinityBackend affinity;
+    auto allowedCpus = affinity.GetAffinity();
+    if (!allowedCpus) {
+        return std::unexpected{std::move(allowedCpus).error()};
+    }
+    return ParseSysfsCpuTopology(TFsPath("/sys/devices/system"), *allowedCpus);
 #endif
 }

@@ -502,18 +502,29 @@ namespace NKikimr::NStorage {
             TBlobStorageGroupType GroupType;
             THashMap<TVDiskIdShort, NBsController::TPDiskId> ReplacedDisks;
             NBsController::TGroupMapper::TForbiddenPDisks ForbiddenPDisks;
-            i64 RequiredSpace = 0;
+            std::optional<i64> RequiredSpace;
             const NKikimrBlobStorage::TBaseConfig *BaseConfig = nullptr;
             bool ConvertToDonor = false;
             bool IgnoreVSlotQuotaCheck = false;
             bool AllowUnusableDisks = false;
             bool SettleOnlyOnOperationalDisks = false;
             bool IsSelfHealReasonDecommit = false;
+            bool PreferLessOccupiedRack = false;
+            bool WithAttentionToReplication = false;
+            bool UseSelfHealLocalPolicy = false;
+            bool TryToRelocateBrokenDisksLocallyFirst = false;
             TBridgePileId BridgePileId;
             std::optional<TGroupId> BridgeProxyGroupId;
             bool ApplySelfHealNodeAllowList = false;
             TStaticGroupReassignments *Reassignments = nullptr;
         };
+
+        static TAllocateStaticGroupParams BuildStaticGroupReassignParams(NKikimrBlobStorage::TStorageConfig *config,
+                                                                         const NKikimrBlobStorage::TBaseConfig *baseConfig,
+                                                                         const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TReassignGroupDisk& command,
+                                                                         const NKikimrBlobStorage::TGroupInfo& group,
+                                                                         const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet,
+                                                                         TStaticGroupReassignments *reassignments);
 
         void AllocateStaticGroup(TAllocateStaticGroupParams params);
 

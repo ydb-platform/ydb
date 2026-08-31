@@ -1,3 +1,5 @@
 items:
 - name: Architecture overview
   href: index.md
+- name: Metadata distribution services
+  href: metadata-services.md

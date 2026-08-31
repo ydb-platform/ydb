@@ -54,8 +54,7 @@ namespace NActors {
         void StartHandshake() override;
         void ReestablishConnectionWithHandshake(TDisconnectReason reason) override;
         void CloseInputSession() override;
-        bool IsRdmaInUse() override { return false; }
-        bool HasRdmaState() const override { return false; }
+        ERdmaState GetRdmaState() const override { return ERdmaState::None; }
         bool SupportsContinuation() const override { return false; }
 
         const TSessionParams& GetParams() const override { return Params; }

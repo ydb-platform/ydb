@@ -158,7 +158,7 @@ void TConnection::Close()
 
         if (Error_.IsOK()) {
             Error_ = TError(NBus::EErrorCode::TransportError, "Bus terminated")
-                << *EndpointAttributes_;
+                .With(*EndpointAttributes_);
         }
 
         if (State_ == EState::Open) {
@@ -461,7 +461,7 @@ void TConnection::ResolveAddress()
             EndpointHostName_ = FQDNHostName();
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Failed to resolve local host name")
-                .With(TError(ex));
+                .With(ex);
             EndpointHostName_ = "localhost";
         }
 
@@ -538,9 +538,9 @@ void TConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
 
     // Construct a detailed error.
     YT_VERIFY(!error.IsOK());
-    auto detailedError = error << *EndpointAttributes_;
+    auto detailedError = error.With(*EndpointAttributes_);
     if (PeerAttributes_) {
-        detailedError <<= *PeerAttributes_;
+        detailedError.Add(*PeerAttributes_);
     }
 
     {
@@ -564,7 +564,7 @@ void TConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
         PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Shutdown));
     }
 
-    YT_TLOG_EVENT_FLUENT(Logger, logLevel, "Connection aborted")
+    YT_TLOG_EVENT(Logger, logLevel, "Connection aborted")
         .With(detailedError);
 
     // OnShutdown() will be called after draining events from thread pools.
@@ -855,9 +855,9 @@ void TConnection::Terminate(const TError& error)
 {
     // Construct a detailed error.
     YT_VERIFY(!error.IsOK());
-    auto detailedError = error << *EndpointAttributes_;
+    auto detailedError = error.With(*EndpointAttributes_);
     if (PeerAttributes_) {
-        detailedError <<= *PeerAttributes_;
+        detailedError.Add(*PeerAttributes_);
     }
 
     auto guard = Guard(Lock_);
@@ -2243,7 +2243,7 @@ void TConnection::TryEstablishSslSession()
         sslContext->ApplyConfig(Config_, pathResolver);
     } catch (const std::exception& ex) {
         Abort(TError(NBus::EErrorCode::SslError, "Failed to load TLS/SSL certificates")
-            .With(TError(ex)));
+            .With(ex));
         return;
     }
 

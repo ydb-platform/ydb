@@ -268,7 +268,7 @@ message TMirrorPartitionConfig {
     optional TCredentials Credentials = 7;
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
-    optional bool SyncWriteTime = 10 [default = false];
+    reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
 }
 
 message TPartitionConfig {
@@ -281,8 +281,7 @@ message TPartitionConfig {
     repeated string ImportantClientId_Deprecated = 4; //can be empty . Deprecated. Use Consumer.Important
     optional uint32 LowWatermark = 5 [default = 6291456]; //6Mb, compact blobs if they at least this big.
     optional uint32 SourceIdLifetimeSeconds = 6 [ default = 1382400]; //16 days
-    optional uint32 SourceIdMaxCounts = 31 [default = 6000000]; // Maximum number of stored sourceId records in partition
-                                                                // default - generate 5 new source id each second during 14 days
+    optional uint32 SourceIdMaxCounts = 31 [default = 100000]; // Maximum number of stored sourceId records in partition
 
     optional uint64 WriteSpeedInBytesPerSecond = 7 [default = 50000000];
     optional uint64 BurstSize = 8 [default = 50000000];
@@ -370,6 +369,17 @@ message TOffloadConfig {
 }
 
 message TPQTabletConfig {
+    message TTopicId {
+        // Id is the schemeshard PathId for FirstClass topics, or CM-provided OwnerId for federation topics.
+        optional uint64 Id = 1;
+        // OwnerId is the schemeshard TabletId for FirstClass topics, or CM-provided OwnerId for federation topics.
+        optional uint64 OwnerId = 2;
+        // Wall-clock ms timestamp (coordinator plan step) at which Id was stamped.
+        // 0 = Id filled at create (no legacy name-keyed fallback); non-zero = Id back-filled by an alter.
+        optional uint64 TxStep = 3;
+    }
+    optional TTopicId Id = 49;
+
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
     repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)
@@ -535,6 +545,12 @@ message THeartbeat {
     optional bytes Data = 3;
 }
 
+message TSchemaChangeInfo {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+    optional bytes Data = 3;
+}
+
 message TMessageGroupInfo {
     enum EState {
         STATE_UNKNOWN = 0;
@@ -553,6 +569,7 @@ message TMessageGroupInfo {
     optional TPartitionKeyRange KeyRange = 6;
     optional EState State = 7;
     optional THeartbeat LastHeartbeat = 8;
+    optional TSchemaChangeInfo LastSchemaChange = 11;
 
 }
 
@@ -828,6 +845,13 @@ message TUserInfo {
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
+    // Whether the consumer has ever committed past the partition StartOffset.
+    // Equivalent to (Offset > StartOffset): true means a real committed position in the
+    // live data range; false means the consumer is still at/before the retention boundary
+    // (never committed into live data, or was clamped back to StartOffset).
+    // Persisted with user info; recalculated on partition init from final StartOffset.
+    // Exposed to clients/proxies as ClientHasAnyCommits (TCmdGetClientOffsetResult) and
+    // used for first-commit distributed commits when the partition has parents after a split.
     optional bool AnyCommits = 8;
     optional string CommittedMetadata = 9;
 }

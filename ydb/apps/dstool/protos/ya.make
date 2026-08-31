@@ -1,0 +1,10 @@
+PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
+
+SRCS(
+    cluster_workload.proto
+)
+
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+
+END()

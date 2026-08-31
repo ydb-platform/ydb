@@ -236,10 +236,6 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
 
     auto& appData = runtime.GetAppData();
-    // Use the l-buckets optimizer: it merges identical-key portions in a single bucket and, unlike the
-    // tiling (LSM) optimizer, honours CompactionMemoryLimit when sizing a compaction task - which is how we
-    // throttle recovery to a couple of portions per wave below.
-    appData.ColumnShardConfig.SetDefaultCompactionPreset("l-buckets");
     appData.FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
 
     // Each identical upsert batch lands as one small portion contributing ~perPortionBytes of small-blobs

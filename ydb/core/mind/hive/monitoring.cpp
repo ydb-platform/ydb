@@ -2,6 +2,7 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/vector.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
@@ -1063,6 +1064,55 @@ public:
         }
     }
 
+    static TString GetEnumValueCommonPrefix(const google::protobuf::EnumDescriptor* enumField) {
+        TString base = enumField->value(0)->name();
+        for (int n = 1; n < enumField->value_count(); ++n) {
+            TString name = enumField->value(n)->name();
+            if (base.size() > name.size()) {
+                base.resize(name.size());
+            }
+            while (base.size() > 0 && base.back() != name[base.size() - 1]) {
+                base.resize(base.size() - 1);
+            }
+        }
+        return base;
+    }
+
+    static TString BuildParamTooltip(const google::protobuf::FieldDescriptor* field) {
+        TStringBuilder tooltip;
+        const TString& description = field->options().GetExtension(NKikimrConfig::THiveConfig::ParamDescription);
+        if (!description.empty()) {
+            tooltip << EncodeHtmlPcdata(description);
+        }
+        if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_ENUM) {
+            const google::protobuf::EnumDescriptor* enumField = field->enum_type();
+            if (int valuesCount = enumField->value_count()) {
+                TString base = GetEnumValueCommonPrefix(enumField);
+                for (int n = 0; n < valuesCount; ++n) {
+                    const google::protobuf::EnumValueDescriptor* enumDescr = enumField->value(n);
+                    const TString& valueDescription = enumDescr->options().GetExtension(NKikimrConfig::THiveConfig::EnumDescription);
+                    if (!valueDescription.empty()) {
+                        if (!tooltip.empty()) {
+                            tooltip << "<br>";
+                        }
+                        tooltip << "<b>" << enumDescr->name().substr(base.size()) << "</b> - " << EncodeHtmlPcdata(valueDescription);
+                    }
+                }
+            }
+        }
+        return tooltip;
+    }
+
+    static TString BuildDescriptionIcon(const google::protobuf::FieldDescriptor* field) {
+        TString descriptionIcon;
+        if (TString tooltip = BuildParamTooltip(field)) {
+            // the tooltip is HTML, so it is escaped twice: entities decoded on attribute parsing
+            // are rendered as HTML by the bootstrap tooltip (data-html)
+            descriptionIcon = TStringBuilder() << " <span style='cursor:help' data-toggle='tooltip' data-html='true' title='" << EncodeHtmlPcdata(tooltip) << "'>&#9432;</span>";
+        }
+        return descriptionIcon;
+    }
+
     void ShowConfig(IOutputStream& out, const TString& param) {
         const google::protobuf::Reflection* reflection = Self->DatabaseConfig.GetReflection();
         const google::protobuf::FieldDescriptor* field = Self->DatabaseConfig.GetDescriptor()->FindFieldByName(param);
@@ -1070,11 +1120,12 @@ public:
             NKikimrConfig::THiveConfig defaultConfig;
             bool localOverrided = reflection->HasField(Self->DatabaseConfig, field);
 
+            TString descriptionIcon = BuildDescriptionIcon(field);
             out << "<div class='row'>";
             if (localOverrided) {
-                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "'>" << param << ":</label></div>";
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "'>" << param << "</label>" << descriptionIcon << ":</div>";
             } else {
-                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "' style='font-weight:normal'>" << param << ":</label></div>";
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "' style='font-weight:normal'>" << param << "</label>" << descriptionIcon << ":</div>";
             }
 
             switch (field->cpp_type()) {
@@ -1125,17 +1176,7 @@ public:
                     int enumvalue = reflection->GetEnumValue(Self->CurrentConfig, field);
                     const google::protobuf::EnumDescriptor* enumfield = field->enum_type();
                     out << "<div class='col-sm-2' style='padding-top:5px'><select id='" << param << "' style='max-width:170px;margin-top:7px' onchange='edit(this);'>";
-                    TString base = enumfield->FindValueByNumber(0)->name();
-                    for (int n = 1; n < enumfield->value_count(); ++n) {
-                        const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->FindValueByNumber(n);
-                        TString name = enumdescr->name();
-                        if (base.size() > name.size()) {
-                            base.resize(name.size());
-                        }
-                        while (base.size() > 0 && base.back() != name[base.size() - 1]) {
-                            base.resize(base.size() - 1);
-                        }
-                    }
+                    TString base = GetEnumValueCommonPrefix(enumfield);
                     for (int n = 0; n < enumfield->value_count(); ++n) {
                         const google::protobuf::EnumValueDescriptor* enumdescr = enumfield->FindValueByNumber(n);
                         out << "<option value=" << enumdescr->number() << (enumvalue == enumdescr->number() ? " selected" : "") << ">"
@@ -1223,6 +1264,7 @@ public:
 
     void RenderHTMLPage(IOutputStream& out, const TActorContext&/* ctx*/) {
         out << "<head></head><body>";
+        out << "<style>.tooltip-inner { max-width: 60vw; text-align: left; }</style>";
         out << "<script>$('.container > h2').html('Settings');</script>";
         out << "<div class='form-group'>";
         out << "<div class='row' style='margin-bottom:10px;font-weight:bold'><div class='col-sm-3'></div><div class='col-sm-2'>Current</div><div class='col-sm-2'></div><div class='col-sm-2'>CMS</div><div class='col-sm-2'>Default</div></div>";
@@ -1344,6 +1386,10 @@ public:
 
         out << R"___(
                <script>
+               $(function() {
+                   $("[data-toggle='tooltip']").tooltip({container: 'body'});
+               });
+
                function edit(button) {
                    $(button).parents('div').next().children('button').prop('disabled', false);
                }
@@ -3289,7 +3335,7 @@ public:
             TVector<ui32> channels;
             TVector<ui32> forcedGroupIds;
             bool skip = false;
-            if (GroupId != 0) {
+            if (GroupId != 0 || StoragePool != "") {
                 skip = true;
                 for (const auto& channel : tablet->TabletStorageInfo->Channels) {
                     if (StoragePool && channel.StoragePool != StoragePool) {
@@ -3297,7 +3343,7 @@ public:
                     }
                     if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
                         const auto* latest = channel.LatestEntry();
-                        if (latest != nullptr && latest->GroupID == GroupId) {
+                        if (latest != nullptr && (GroupId == 0 || latest->GroupID == GroupId)) {
                             skip = false;
                             channels.push_back(channel.Channel);
                             if (!ForcedGroupIds.empty()) {

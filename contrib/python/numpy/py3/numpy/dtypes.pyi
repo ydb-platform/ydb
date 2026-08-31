@@ -1,18 +1,13 @@
-from typing import (
-    Any,
-    Final,
-    Generic,
-    Literal as L,
-    NoReturn,
-    TypeAlias,
-    TypeVar,
-    final,
-)
-from typing_extensions import LiteralString
+# ruff: noqa: ANN401
+from types import MemberDescriptorType
+from typing import Any, ClassVar, Generic, NoReturn, TypeAlias, final, type_check_only
+from typing import Literal as L
+
+from typing_extensions import LiteralString, Self, TypeVar
 
 import numpy as np
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     'BoolDType',
     'Int8DType',
     'ByteDType',
@@ -50,12 +45,12 @@ __all__ = [
 
 # Helper base classes (typing-only)
 
-_SelfT = TypeVar("_SelfT", bound=np.dtype[Any])
 _SCT_co = TypeVar("_SCT_co", bound=np.generic, covariant=True)
 
-class _SimpleDType(Generic[_SCT_co], np.dtype[_SCT_co]):  # type: ignore[misc]
+@type_check_only
+class _SimpleDType(np.dtype[_SCT_co], Generic[_SCT_co]):  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
     names: None  # pyright: ignore[reportIncompatibleVariableOverride]
-    def __new__(cls: type[_SelfT], /) -> _SelfT: ...
+    def __new__(cls, /) -> Self: ...
     def __getitem__(self, key: Any, /) -> NoReturn: ...
     @property
     def base(self) -> np.dtype[_SCT_co]: ...
@@ -72,7 +67,8 @@ class _SimpleDType(Generic[_SCT_co], np.dtype[_SCT_co]):  # type: ignore[misc]
     @property
     def subdtype(self) -> None: ...
 
-class _LiteralDType(Generic[_SCT_co], _SimpleDType[_SCT_co]):
+@type_check_only
+class _LiteralDType(_SimpleDType[_SCT_co], Generic[_SCT_co]):  # type: ignore[misc]
     @property
     def flags(self) -> L[0]: ...
     @property
@@ -84,6 +80,7 @@ _KindT_co = TypeVar("_KindT_co", bound=LiteralString, covariant=True)
 _CharT_co = TypeVar("_CharT_co", bound=LiteralString, covariant=True)
 _NumT_co = TypeVar("_NumT_co", bound=int, covariant=True)
 
+@type_check_only
 class _TypeCodes(Generic[_KindT_co, _CharT_co, _NumT_co]):
     @final
     @property
@@ -95,19 +92,22 @@ class _TypeCodes(Generic[_KindT_co, _CharT_co, _NumT_co]):
     @property
     def num(self) -> _NumT_co: ...
 
+@type_check_only
 class _NoOrder:
     @final
     @property
     def byteorder(self) -> L["|"]: ...
 
+@type_check_only
 class _NativeOrder:
     @final
     @property
     def byteorder(self) -> L["="]: ...
 
 _DataSize_co = TypeVar("_DataSize_co", bound=int, covariant=True)
-_ItemSize_co = TypeVar("_ItemSize_co", bound=int, covariant=True)
+_ItemSize_co = TypeVar("_ItemSize_co", bound=int, covariant=True, default=int)
 
+@type_check_only
 class _NBit(Generic[_DataSize_co, _ItemSize_co]):
     @final
     @property
@@ -116,12 +116,13 @@ class _NBit(Generic[_DataSize_co, _ItemSize_co]):
     @property
     def itemsize(self) -> _ItemSize_co: ...
 
+@type_check_only
 class _8Bit(_NoOrder, _NBit[L[1], L[1]]): ...
 
 # Boolean:
 
 @final
-class BoolDType(
+class BoolDType(  # type: ignore[misc]
     _TypeCodes[L["b"], L["?"], L[0]],
     _8Bit,
     _LiteralDType[np.bool],
@@ -134,7 +135,7 @@ class BoolDType(
 # Sized integers:
 
 @final
-class Int8DType(
+class Int8DType(  # type: ignore[misc]
     _TypeCodes[L["i"], L["b"], L[1]],
     _8Bit,
     _LiteralDType[np.int8],
@@ -145,7 +146,7 @@ class Int8DType(
     def str(self) -> L["|i1"]: ...
 
 @final
-class UInt8DType(
+class UInt8DType(  # type: ignore[misc]
     _TypeCodes[L["u"], L["B"], L[2]],
     _8Bit,
     _LiteralDType[np.uint8],
@@ -156,7 +157,7 @@ class UInt8DType(
     def str(self) -> L["|u1"]: ...
 
 @final
-class Int16DType(
+class Int16DType(  # type: ignore[misc]
     _TypeCodes[L["i"], L["h"], L[3]],
     _NativeOrder,
     _NBit[L[2], L[2]],
@@ -168,7 +169,7 @@ class Int16DType(
     def str(self) -> L["<i2", ">i2"]: ...
 
 @final
-class UInt16DType(
+class UInt16DType(  # type: ignore[misc]
     _TypeCodes[L["u"], L["H"], L[4]],
     _NativeOrder,
     _NBit[L[2], L[2]],
@@ -180,7 +181,7 @@ class UInt16DType(
     def str(self) -> L["<u2", ">u2"]: ...
 
 @final
-class Int32DType(
+class Int32DType(  # type: ignore[misc]
     _TypeCodes[L["i"], L["i", "l"], L[5, 7]],
     _NativeOrder,
     _NBit[L[4], L[4]],
@@ -192,7 +193,7 @@ class Int32DType(
     def str(self) -> L["<i4", ">i4"]: ...
 
 @final
-class UInt32DType(
+class UInt32DType(  # type: ignore[misc]
     _TypeCodes[L["u"], L["I", "L"], L[6, 8]],
     _NativeOrder,
     _NBit[L[4], L[4]],
@@ -204,7 +205,7 @@ class UInt32DType(
     def str(self) -> L["<u4", ">u4"]: ...
 
 @final
-class Int64DType(
+class Int64DType(  # type: ignore[misc]
     _TypeCodes[L["i"], L["l", "q"], L[7, 9]],
     _NativeOrder,
     _NBit[L[8], L[8]],
@@ -216,7 +217,7 @@ class Int64DType(
     def str(self) -> L["<i8", ">i8"]: ...
 
 @final
-class UInt64DType(
+class UInt64DType(  # type: ignore[misc]
     _TypeCodes[L["u"], L["L", "Q"], L[8, 10]],
     _NativeOrder,
     _NBit[L[8], L[8]],
@@ -228,13 +229,14 @@ class UInt64DType(
     def str(self) -> L["<u8", ">u8"]: ...
 
 # Standard C-named version/alias:
-ByteDType: Final = Int8DType
-UByteDType: Final = UInt8DType
-ShortDType: Final = Int16DType
-UShortDType: Final = UInt16DType
+# NOTE: Don't make these `Final`: it will break stubtest
+ByteDType = Int8DType
+UByteDType = UInt8DType
+ShortDType = Int16DType
+UShortDType = UInt16DType
 
 @final
-class IntDType(
+class IntDType(  # type: ignore[misc]
     _TypeCodes[L["i"], L["i"], L[5]],
     _NativeOrder,
     _NBit[L[4], L[4]],
@@ -246,7 +248,7 @@ class IntDType(
     def str(self) -> L["<i4", ">i4"]: ...
 
 @final
-class UIntDType(
+class UIntDType(  # type: ignore[misc]
     _TypeCodes[L["u"], L["I"], L[6]],
     _NativeOrder,
     _NBit[L[4], L[4]],
@@ -258,7 +260,7 @@ class UIntDType(
     def str(self) -> L["<u4", ">u4"]: ...
 
 @final
-class LongDType(
+class LongDType(  # type: ignore[misc]
     _TypeCodes[L["i"], L["l"], L[7]],
     _NativeOrder,
     _NBit[L[4, 8], L[4, 8]],
@@ -270,7 +272,7 @@ class LongDType(
     def str(self) -> L["<i4", ">i4", "<i8", ">i8"]: ...
 
 @final
-class ULongDType(
+class ULongDType(  # type: ignore[misc]
     _TypeCodes[L["u"], L["L"], L[8]],
     _NativeOrder,
     _NBit[L[4, 8], L[4, 8]],
@@ -282,7 +284,7 @@ class ULongDType(
     def str(self) -> L["<u4", ">u4", "<u8", ">u8"]: ...
 
 @final
-class LongLongDType(
+class LongLongDType(  # type: ignore[misc]
     _TypeCodes[L["i"], L["q"], L[9]],
     _NativeOrder,
     _NBit[L[8], L[8]],
@@ -294,7 +296,7 @@ class LongLongDType(
     def str(self) -> L["<i8", ">i8"]: ...
 
 @final
-class ULongLongDType(
+class ULongLongDType(  # type: ignore[misc]
     _TypeCodes[L["u"], L["Q"], L[10]],
     _NativeOrder,
     _NBit[L[8], L[8]],
@@ -308,7 +310,7 @@ class ULongLongDType(
 # Floats:
 
 @final
-class Float16DType(
+class Float16DType(  # type: ignore[misc]
     _TypeCodes[L["f"], L["e"], L[23]],
     _NativeOrder,
     _NBit[L[2], L[2]],
@@ -320,7 +322,7 @@ class Float16DType(
     def str(self) -> L["<f2", ">f2"]: ...
 
 @final
-class Float32DType(
+class Float32DType(  # type: ignore[misc]
     _TypeCodes[L["f"], L["f"], L[11]],
     _NativeOrder,
     _NBit[L[4], L[4]],
@@ -332,7 +334,7 @@ class Float32DType(
     def str(self) -> L["<f4", ">f4"]: ...
 
 @final
-class Float64DType(
+class Float64DType(  # type: ignore[misc]
     _TypeCodes[L["f"], L["d"], L[12]],
     _NativeOrder,
     _NBit[L[8], L[8]],
@@ -344,7 +346,7 @@ class Float64DType(
     def str(self) -> L["<f8", ">f8"]: ...
 
 @final
-class LongDoubleDType(
+class LongDoubleDType(  # type: ignore[misc]
     _TypeCodes[L["f"], L["g"], L[13]],
     _NativeOrder,
     _NBit[L[8, 12, 16], L[8, 12, 16]],
@@ -358,7 +360,7 @@ class LongDoubleDType(
 # Complex:
 
 @final
-class Complex64DType(
+class Complex64DType(  # type: ignore[misc]
     _TypeCodes[L["c"], L["F"], L[14]],
     _NativeOrder,
     _NBit[L[4], L[8]],
@@ -370,7 +372,7 @@ class Complex64DType(
     def str(self) -> L["<c8", ">c8"]: ...
 
 @final
-class Complex128DType(
+class Complex128DType(  # type: ignore[misc]
     _TypeCodes[L["c"], L["D"], L[15]],
     _NativeOrder,
     _NBit[L[8], L[16]],
@@ -382,7 +384,7 @@ class Complex128DType(
     def str(self) -> L["<c16", ">c16"]: ...
 
 @final
-class CLongDoubleDType(
+class CLongDoubleDType(  # type: ignore[misc]
     _TypeCodes[L["c"], L["G"], L[16]],
     _NativeOrder,
     _NBit[L[8, 12, 16], L[16, 24, 32]],
@@ -396,7 +398,7 @@ class CLongDoubleDType(
 # Python objects:
 
 @final
-class ObjectDType(
+class ObjectDType(  # type: ignore[misc]
     _TypeCodes[L["O"], L["O"], L[17]],
     _NoOrder,
     _NBit[L[8], L[8]],
@@ -412,12 +414,12 @@ class ObjectDType(
 # Flexible:
 
 @final
-class BytesDType(
-    Generic[_ItemSize_co],
+class BytesDType(  # type: ignore[misc]
     _TypeCodes[L["S"], L["S"], L[18]],
     _NoOrder,
     _NBit[L[1],_ItemSize_co],
     _SimpleDType[np.bytes_],
+    Generic[_ItemSize_co],
 ):
     def __new__(cls, size: _ItemSize_co, /) -> BytesDType[_ItemSize_co]: ...
     @property
@@ -428,12 +430,12 @@ class BytesDType(
     def str(self) -> LiteralString: ...
 
 @final
-class StrDType(
-    Generic[_ItemSize_co],
+class StrDType(  # type: ignore[misc]
     _TypeCodes[L["U"], L["U"], L[19]],
     _NativeOrder,
     _NBit[L[4],_ItemSize_co],
     _SimpleDType[np.str_],
+    Generic[_ItemSize_co],
 ):
     def __new__(cls, size: _ItemSize_co, /) -> StrDType[_ItemSize_co]: ...
     @property
@@ -444,17 +446,17 @@ class StrDType(
     def str(self) -> LiteralString: ...
 
 @final
-class VoidDType(
-    Generic[_ItemSize_co],
+class VoidDType(  # type: ignore[misc]
     _TypeCodes[L["V"], L["V"], L[20]],
     _NoOrder,
     _NBit[L[1], _ItemSize_co],
-    np.dtype[np.void],  # type: ignore[misc]
+    np.dtype[np.void],  # pyright: ignore[reportGeneralTypeIssues]
+    Generic[_ItemSize_co],
 ):
     # NOTE: `VoidDType(...)` raises a `TypeError` at the moment
     def __new__(cls, length: _ItemSize_co, /) -> NoReturn: ...
     @property
-    def base(self: _SelfT) -> _SelfT: ...
+    def base(self) -> Self: ...
     @property
     def isalignedstruct(self) -> L[False]: ...
     @property
@@ -477,7 +479,7 @@ _TimeUnit: TypeAlias = L["h", "m", "s", "ms", "us", "ns", "ps", "fs", "as"]
 _DateTimeUnit: TypeAlias = _DateUnit | _TimeUnit
 
 @final
-class DateTime64DType(
+class DateTime64DType(  # type: ignore[misc]
     _TypeCodes[L["M"], L["M"], L[21]],
     _NativeOrder,
     _NBit[L[8], L[8]],
@@ -522,7 +524,7 @@ class DateTime64DType(
     ]: ...
 
 @final
-class TimeDelta64DType(
+class TimeDelta64DType(  # type: ignore[misc]
     _TypeCodes[L["m"], L["m"], L[22]],
     _NativeOrder,
     _NBit[L[8], L[8]],
@@ -567,13 +569,18 @@ class TimeDelta64DType(
     ]: ...
 
 @final
-class StringDType(
+class StringDType(  # type: ignore[misc]
     _TypeCodes[L["T"], L["T"], L[2056]],
     _NativeOrder,
     _NBit[L[8], L[16]],
     # TODO: Replace the (invalid) `str` with the scalar type, once implemented
-    np.dtype[str],  # type: ignore[misc]
+    np.dtype[str],  # type: ignore[type-var]  # pyright: ignore[reportGeneralTypeIssues,reportInvalidTypeArguments]
 ):
+    @property
+    def coerce(self) -> L[True]: ...
+    na_object: ClassVar[MemberDescriptorType]  # does not get instantiated
+
+    #
     def __new__(cls, /) -> StringDType: ...
     def __getitem__(self, key: Any, /) -> NoReturn: ...
     @property
@@ -597,4 +604,4 @@ class StringDType(
     @property
     def subdtype(self) -> None: ...
     @property
-    def type(self) -> type[str]: ...
+    def type(self) -> type[str]: ...  # type: ignore[valid-type]

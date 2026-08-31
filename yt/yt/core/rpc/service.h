@@ -240,7 +240,7 @@ struct IServiceContext
     virtual void SetResponseCodec(NCompression::ECodec codec) = 0;
 
     // COMPAT(danilalexeev): legacy RPC codecs
-    //! Returnes true if response body has been serialized with compression.
+    //! Returns true if response body has been serialized with compression.
     virtual bool IsResponseBodySerializedWithCompression() const = 0;
     virtual void SetResponseBodySerializedWithCompression() = 0;
 

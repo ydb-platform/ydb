@@ -51,6 +51,7 @@ SRCS(
     shred.cpp
     snapshots.cpp
     space_check.cpp
+    space_data_kind.cpp
     sync.cpp
     validation.cpp
     vdisk_malfunction.cpp

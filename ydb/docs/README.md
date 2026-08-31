@@ -25,9 +25,10 @@ YDB provides an AI-powered documentation writing skill that helps developers cre
    - Limitations and constraints
    - Links to PR/Issue where it was implemented
 
-2. **Run `ruler apply`** to generate agent configurations:
+2. **From `ydb/docs`, run `ruler apply`** to generate agent configurations:
 
 ```bash
+cd ydb/docs
 npm install -g @intellectronica/ruler
 ruler apply
 ```

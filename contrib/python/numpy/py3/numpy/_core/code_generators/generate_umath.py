@@ -5,8 +5,6 @@ __umath_generated.c
 """
 import os
 import re
-import struct
-import sys
 import textwrap
 import argparse
 
@@ -1154,6 +1152,22 @@ defdict = {
           TD(O),
           signature='(n),(n)->()',
           ),
+'matvec':
+    Ufunc(2, 1, None,
+          docstrings.get('numpy._core.umath.matvec'),
+          "PyUFunc_SimpleUniformOperationTypeResolver",
+          TD(notimes_or_obj),
+          TD(O),
+          signature='(m,n),(n)->(m)',
+          ),
+'vecmat':
+    Ufunc(2, 1, None,
+          docstrings.get('numpy._core.umath.vecmat'),
+          "PyUFunc_SimpleUniformOperationTypeResolver",
+          TD(notimes_or_obj),
+          TD(O),
+          signature='(n),(n,m)->(m)',
+          ),
 'str_len':
     Ufunc(1, 1, Zero,
           docstrings.get('numpy._core.umath.str_len'),
@@ -1410,7 +1424,7 @@ def make_arrays(funcdict):
                     ) from None
 
                 astype = ''
-                if not t.astype is None:
+                if t.astype is not None:
                     astype = '_As_%s' % thedict[t.astype]
                 astr = ('%s_functions[%d] = PyUFunc_%s%s;' %
                            (name, k, thedict[t.type], astype))
@@ -1578,13 +1592,10 @@ def make_code(funcdict, filename):
     #include "matmul.h"
     #include "clip.h"
     #include "dtypemeta.h"
+    #include "dispatching.h"
     #include "_umath_doc_generated.h"
 
     %s
-    /* Returns a borrowed ref of the second value in the matching info tuple */
-    PyObject *
-    get_info_no_cast(PyUFuncObject *ufunc, PyArray_DTypeMeta *op_dtype,
-                     int ndtypes);
 
     static int
     InitOperators(PyObject *dictionary) {

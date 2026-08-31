@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -81,8 +82,39 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeUsesBatchPool, ColumnShard) {
-        TTestEnv env(1, 1);
+        TTestEnv env(1, 1, ColumnShard, [](Tests::TServerSettings& settings) {
+            if constexpr (ColumnShard) {
+                using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;
+                auto& actorSystemConfig = *settings.AppConfig->MutableActorSystemConfig();
+                actorSystemConfig.ClearExecutor();
+
+                const auto addPool = [&](const TString& name, const TExecutor::EType type) {
+                    auto& executor = *actorSystemConfig.AddExecutor();
+                    executor.SetType(type);
+                    executor.SetName(name);
+                    executor.SetThreads(1);
+                    if (type == TExecutor::BASIC) {
+                        executor.SetSpinThreshold(1);
+                    }
+                };
+
+                addPool("System", TExecutor::BASIC);
+                actorSystemConfig.SetSysExecutor(0);
+                addPool("User", TExecutor::BASIC);
+                actorSystemConfig.SetUserExecutor(1);
+                addPool("Batch", TExecutor::BASIC);
+                actorSystemConfig.SetBatchExecutor(2);
+                addPool("IO", TExecutor::IO);
+                actorSystemConfig.SetIoExecutor(3);
+            }
+        });
         auto& runtime = *env.GetServer().GetRuntime();
+        if (ColumnShard) {
+            for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+                UNIT_ASSERT_VALUES_UNEQUAL(
+                    runtime.GetAppData(nodeIndex).UserPoolId, runtime.GetAppData(nodeIndex).BatchPoolId);
+            }
+        }
         CreateDatabase(env, "Database");
         const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
 
@@ -97,10 +129,32 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             ++scans;
         });
 
+        const auto getReceivedConveyorTasks = [&](const ui32 poolId) {
+            ui64 result = 0;
+            for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+                auto counters = runtime.GetAppData(nodeIndex).Counters
+                    ->GetSubgroup("actor_system_pool_id", ::ToString(poolId))
+                    ->GetSubgroup("module_id", "COMPOSITE_CONVEYOR");
+                if (const auto histogram = counters->FindHistogram("Histogram/ReceiveTask/Duration/Us")) {
+                    const auto snapshot = histogram->Snapshot();
+                    for (size_t i = 0; i < snapshot->Count(); ++i) {
+                        result += snapshot->Value(i);
+                    }
+                }
+            }
+            return result;
+        };
+        const ui32 batchPoolId = runtime.GetAppData().BatchPoolId;
+        const ui64 batchTasksBeforeAnalyze = ColumnShard ? getReceivedConveyorTasks(batchPoolId) : 0;
+
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
-        UNIT_ASSERT_GT(taskRequests, 0);
-        UNIT_ASSERT_GT(scans, 0);
+        if (ColumnShard) {
+            UNIT_ASSERT_GT(getReceivedConveyorTasks(batchPoolId), batchTasksBeforeAnalyze);
+        } else {
+            UNIT_ASSERT_GT(taskRequests, 0);
+            UNIT_ASSERT_GT(scans, 0);
+        }
     }
 
     Y_UNIT_TEST_TWIN(QueryDoesNotUseBatchPool, ColumnShard) {
@@ -114,10 +168,49 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             UNIT_ASSERT(!ev->Get()->Record.GetUseBatchPool());
             ++scans;
         });
+        THashSet<TActorId> userConveyorServices;
+        THashSet<TActorId> batchConveyorServices;
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const auto nodeId = runtime.GetNodeId(nodeIndex);
+            userConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, false));
+            batchConveyorServices.emplace(NConveyorComposite::TServiceOperator::MakeServiceId(nodeId, true));
+        }
+        THashSet<ui64> userScanProcesses;
+        THashSet<ui64> batchScanProcesses;
+        auto conveyorProcessesObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvRegisterProcess>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userConveyorServices.contains(ev->Recipient)) {
+                userScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            } else if (batchConveyorServices.contains(ev->Recipient)) {
+                batchScanProcesses.emplace(ev->Get()->GetInternalProcessId());
+            }
+        });
+        size_t userScanTasks = 0;
+        size_t batchScanTasks = 0;
+        auto conveyorTasksObserver = runtime.AddObserver<NConveyorComposite::TEvExecution::TEvNewTask>([&](auto& ev) {
+            if (ev->Get()->GetCategory() != NConveyorComposite::ESpecialTaskCategory::Scan) {
+                return;
+            }
+            if (userScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(userConveyorServices.contains(ev->Recipient));
+                ++userScanTasks;
+            } else if (batchScanProcesses.contains(ev->Get()->GetInternalProcessId())) {
+                UNIT_ASSERT(batchConveyorServices.contains(ev->Recipient));
+                ++batchScanTasks;
+            }
+        });
 
         ExecuteYqlScript(env, "SELECT COUNT(*) FROM `Root/Database/Table`;");
 
         UNIT_ASSERT_GT(scans, 0);
+        if (ColumnShard) {
+            UNIT_ASSERT_GT(userScanProcesses.size(), 0);
+            UNIT_ASSERT_GT(userScanTasks, 0);
+            UNIT_ASSERT_VALUES_EQUAL(batchScanProcesses.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(batchScanTasks, 0);
+        }
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeSpecificColumns, ColumnShard) {

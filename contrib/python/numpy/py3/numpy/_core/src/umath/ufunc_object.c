@@ -664,12 +664,6 @@ convert_ufunc_arguments(PyUFuncObject *ufunc,
             continue;
         }
 
-        // TODO: Is this equivalent/better by removing the logic which enforces
-        //       that we always use weak promotion in the core?
-        if (get_npy_promotion_state() == NPY_USE_LEGACY_PROMOTION) {
-            continue;  /* Skip use of special dtypes */
-        }
-
         /*
          * Handle the "weak" Python scalars/literals.  We use a special DType
          * for these.
@@ -1114,7 +1108,7 @@ execute_ufunc_loop(PyArrayMethod_Context *context, int masked,
      * based on the fixed strides.
      */
     PyArrayMethod_StridedLoop *strided_loop;
-    NpyAuxData *auxdata;
+    NpyAuxData *auxdata = NULL;
     npy_intp fixed_strides[NPY_MAXARGS];
 
     NpyIter_GetInnerFixedStrideArray(iter, fixed_strides);
@@ -2599,6 +2593,10 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
     int idim, ndim;
     int needs_api, need_outer_iterator;
     int res = 0;
+
+    NPY_cast_info copy_info;
+    NPY_cast_info_init(&copy_info);
+
 #if NPY_UF_DBG_TRACING
     const char *ufunc_name = ufunc_get_name_cstr(ufunc);
 #endif
@@ -2642,14 +2640,6 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
      */
     assert(PyArray_EquivTypes(descrs[0], descrs[1])
            && PyArray_EquivTypes(descrs[0], descrs[2]));
-
-    if (PyDataType_REFCHK(descrs[2]) && descrs[2]->type_num != NPY_OBJECT) {
-        /* This can be removed, but the initial element copy needs fixing */
-        PyErr_SetString(PyExc_TypeError,
-                "accumulation currently only supports `object` dtype with "
-                "references");
-        goto fail;
-    }
 
     PyArrayMethod_Context context = {
         .caller = (PyObject *)ufunc,
@@ -2746,10 +2736,10 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
         else {
             PyArray_Descr *dtype = descrs[0];
             Py_INCREF(dtype);
-            op[0] = out = (PyArrayObject *)PyArray_NewFromDescr(
+            op[0] = out = (PyArrayObject *)PyArray_NewFromDescr_int(
                                     &PyArray_Type, dtype,
                                     ndim, PyArray_DIMS(op[1]), NULL, NULL,
-                                    0, NULL);
+                                    0, NULL, NULL, _NPY_ARRAY_ENSURE_DTYPE_IDENTITY);
             if (out == NULL) {
                 goto fail;
             }
@@ -2772,6 +2762,18 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
             1, 0, fixed_strides, &strided_loop, &auxdata, &flags) < 0) {
         goto fail;
     }
+    /* Set up function to copy the first element if it has references */
+    if (PyDataType_REFCHK(descrs[2])) {
+        NPY_ARRAYMETHOD_FLAGS copy_flags;
+        /* Setup guarantees aligned here. */
+        if (PyArray_GetDTypeTransferFunction(
+                1, 0, 0, descrs[1], descrs[2], 0, &copy_info,
+                &copy_flags) == NPY_FAIL) {
+            goto fail;
+        }
+        flags = PyArrayMethod_COMBINED_FLAGS(flags, copy_flags);
+    }
+
     needs_api = (flags & NPY_METH_REQUIRES_PYAPI) != 0;
     if (!(flags & NPY_METH_NO_FLOATINGPOINT_ERRORS)) {
         /* Start with the floating-point exception flags cleared */
@@ -2835,18 +2837,17 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
              * Output (dataptr[0]) and input (dataptr[1]) may point to
              * the same memory, e.g. np.add.accumulate(a, out=a).
              */
-            if (descrs[2]->type_num == NPY_OBJECT) {
-                /*
-                 * Incref before decref to avoid the possibility of the
-                 * reference count being zero temporarily.
-                 */
-                Py_XINCREF(*(PyObject **)dataptr_copy[1]);
-                Py_XDECREF(*(PyObject **)dataptr_copy[0]);
-                *(PyObject **)dataptr_copy[0] =
-                                    *(PyObject **)dataptr_copy[1];
+            if (copy_info.func) {
+                const npy_intp one = 1;
+                if (copy_info.func(
+                        &copy_info.context, &dataptr_copy[1], &one,
+                        &stride_copy[1], copy_info.auxdata) < 0) {
+                    NPY_END_THREADS;
+                    goto fail;
+                }
             }
             else {
-                memmove(dataptr_copy[0], dataptr_copy[1], itemsize);
+                memmove(dataptr_copy[2], dataptr_copy[1], itemsize);
             }
 
             if (count_m1 > 0) {
@@ -2895,18 +2896,17 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
          * Output (dataptr[0]) and input (dataptr[1]) may point to the
          * same memory, e.g. np.add.accumulate(a, out=a).
          */
-        if (descrs[2]->type_num == NPY_OBJECT) {
-            /*
-             * Incref before decref to avoid the possibility of the
-             * reference count being zero temporarily.
-             */
-            Py_XINCREF(*(PyObject **)dataptr_copy[1]);
-            Py_XDECREF(*(PyObject **)dataptr_copy[0]);
-            *(PyObject **)dataptr_copy[0] =
-                                *(PyObject **)dataptr_copy[1];
+        if (copy_info.func) {
+            const npy_intp one = 1;
+            const npy_intp strides[2] = {itemsize, itemsize};
+            if (copy_info.func(
+                    &copy_info.context, &dataptr_copy[1], &one,
+                    strides, copy_info.auxdata) < 0) {
+                goto fail;
+            }
         }
         else {
-            memmove(dataptr_copy[0], dataptr_copy[1], itemsize);
+            memmove(dataptr_copy[2], dataptr_copy[1], itemsize);
         }
 
         if (count > 1) {
@@ -2915,8 +2915,6 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
             dataptr_copy[2] += stride0;
 
             NPY_UF_DBG_PRINT1("iterator loop count %d\n", (int)count);
-
-            needs_api = PyDataType_REFCHK(descrs[0]);
 
             if (!needs_api) {
                 NPY_BEGIN_THREADS_THRESHOLDED(count);
@@ -2931,6 +2929,7 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
 
 finish:
     NPY_AUXDATA_FREE(auxdata);
+    NPY_cast_info_xfree(&copy_info);
     Py_DECREF(descrs[0]);
     Py_DECREF(descrs[1]);
     Py_DECREF(descrs[2]);
@@ -2955,6 +2954,8 @@ fail:
     Py_XDECREF(out);
 
     NPY_AUXDATA_FREE(auxdata);
+    NPY_cast_info_xfree(&copy_info);
+
     Py_XDECREF(descrs[0]);
     Py_XDECREF(descrs[1]);
     Py_XDECREF(descrs[2]);
@@ -3011,7 +3012,7 @@ PyUFunc_Reduceat(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *ind,
     const char *ufunc_name = ufunc_get_name_cstr(ufunc);
     char *opname = "reduceat";
 
-    /* These parameters comefrom a TLS global */
+    /* These parameters come from a TLS global */
     int buffersize = 0, errormask = 0;
 
     NPY_BEGIN_THREADS_DEF;
@@ -4199,7 +4200,7 @@ resolve_descriptors(int nop,
  * None --- array-object passed in don't call PyArray_Return
  * method --- the __array_wrap__ method to call.
  *
- * @param ufunc
+ * @param ufunc The universal function to be wrapped
  * @param full_args Original inputs and outputs
  * @param subok Whether subclasses are allowed
  * @param result_arrays The ufunc result(s).  REFERENCES ARE STOLEN!
@@ -4693,6 +4694,7 @@ PyUFunc_FromFuncAndDataAndSignatureAndIdentity(PyUFuncGenericFunction *func, voi
     ufunc->core_signature = NULL;
     ufunc->core_enabled = 0;
     ufunc->obj = NULL;
+    ufunc->dict = NULL;
     ufunc->core_num_dims = NULL;
     ufunc->core_num_dim_ix = 0;
     ufunc->core_offsets = NULL;
@@ -4776,6 +4778,11 @@ PyUFunc_FromFuncAndDataAndSignatureAndIdentity(PyUFuncGenericFunction *func, voi
             Py_DECREF(ufunc);
             return NULL;
         }
+    }
+    ufunc->dict = PyDict_New();
+    if (ufunc->dict == NULL) {
+        Py_DECREF(ufunc);
+        return NULL;
     }
     /*
      * TODO: I tried adding a default promoter here (either all object for
@@ -5183,6 +5190,7 @@ ufunc_dealloc(PyUFuncObject *ufunc)
         Py_DECREF(ufunc->identity_value);
     }
     Py_XDECREF(ufunc->obj);
+    Py_XDECREF(ufunc->dict);
     Py_XDECREF(ufunc->_loops);
     if (ufunc->_dispatch_cache != NULL) {
         PyArrayIdentityHash_Dealloc(ufunc->_dispatch_cache);
@@ -5203,6 +5211,7 @@ ufunc_traverse(PyUFuncObject *self, visitproc visit, void *arg)
     if (self->identity == PyUFunc_IdentityValue) {
         Py_VISIT(self->identity_value);
     }
+    Py_VISIT(self->dict);
     return 0;
 }
 
@@ -5954,7 +5963,6 @@ fail:
     NPY_AUXDATA_FREE(auxdata);
 
     Py_XDECREF(op2_array);
-    Py_XDECREF(iter);
     Py_XDECREF(iter2);
     for (int i = 0; i < nop; i++) {
         Py_XDECREF(operation_descrs[i]);
@@ -5970,9 +5978,13 @@ fail:
         if (PyArray_FLAGS(op1_array) & NPY_ARRAY_WRITEBACKIFCOPY) {
             PyArray_DiscardWritebackIfCopy(op1_array);
         }
+        // iter might own the last refrence to op1_array,
+        // so it must be decref'd second
+        Py_XDECREF(iter);
         return NULL;
     }
     else {
+        Py_XDECREF(iter);
         Py_RETURN_NONE;
     }
 }
@@ -6064,10 +6076,6 @@ py_resolve_dtypes_generic(PyUFuncObject *ufunc, npy_bool return_context,
     PyArray_DTypeMeta *DTypes[NPY_MAXARGS] = {NULL};
     PyArray_DTypeMeta *signature[NPY_MAXARGS] = {NULL};
     PyArray_Descr *operation_descrs[NPY_MAXARGS] = {NULL};
-
-    /* This entry-point to promotion lives in the NEP 50 future: */
-    int original_promotion_state = get_npy_promotion_state();
-    set_npy_promotion_state(NPY_USE_WEAK_PROMOTION);
 
     npy_bool promoting_pyscalars = NPY_FALSE;
 
@@ -6250,8 +6258,6 @@ py_resolve_dtypes_generic(PyUFuncObject *ufunc, npy_bool return_context,
     Py_DECREF(capsule);
 
   finish:
-    set_npy_promotion_state(original_promotion_state);
-
     Py_XDECREF(result_dtype_tuple);
     for (int i = 0; i < ufunc->nargs; i++) {
         Py_XDECREF(signature[i]);
@@ -6423,6 +6429,15 @@ ufunc_get_doc(PyUFuncObject *ufunc, void *NPY_UNUSED(ignored))
 {
     PyObject *doc;
 
+    // If there is a __doc__ in the instance __dict__, use it.
+    int result = PyDict_GetItemRef(ufunc->dict, npy_interned_str.__doc__, &doc);
+    if (result == -1) {
+        return NULL;
+    }
+    else if (result == 1) {
+        return doc;
+    }
+
     if (npy_cache_import_runtime(
             "numpy._core._internal", "_ufunc_doc_signature_formatter",
             &npy_runtime_imports._ufunc_doc_signature_formatter) == -1) {
@@ -6446,6 +6461,15 @@ ufunc_get_doc(PyUFuncObject *ufunc, void *NPY_UNUSED(ignored))
     return doc;
 }
 
+static int
+ufunc_set_doc(PyUFuncObject *ufunc, PyObject *doc, void *NPY_UNUSED(ignored))
+{
+    if (doc == NULL) {
+        return PyDict_DelItem(ufunc->dict, npy_interned_str.__doc__);
+    } else {
+        return PyDict_SetItem(ufunc->dict, npy_interned_str.__doc__, doc);
+    }
+}
 
 static PyObject *
 ufunc_get_nin(PyUFuncObject *ufunc, void *NPY_UNUSED(ignored))
@@ -6531,8 +6555,8 @@ ufunc_get_signature(PyUFuncObject *ufunc, void *NPY_UNUSED(ignored))
 
 static PyGetSetDef ufunc_getset[] = {
     {"__doc__",
-        (getter)ufunc_get_doc,
-        NULL, NULL, NULL},
+        (getter)ufunc_get_doc, (setter)ufunc_set_doc,
+        NULL, NULL},
     {"nin",
         (getter)ufunc_get_nin,
         NULL, NULL, NULL},
@@ -6562,6 +6586,17 @@ static PyGetSetDef ufunc_getset[] = {
 
 
 /******************************************************************************
+ ***                          UFUNC MEMBERS                                 ***
+ *****************************************************************************/
+
+static PyMemberDef ufunc_members[] = {
+    {"__dict__", T_OBJECT, offsetof(PyUFuncObject, dict),
+     READONLY},
+    {NULL},
+};
+
+
+/******************************************************************************
  ***                        UFUNC TYPE OBJECT                               ***
  *****************************************************************************/
 
@@ -6580,6 +6615,12 @@ NPY_NO_EXPORT PyTypeObject PyUFunc_Type = {
     .tp_traverse = (traverseproc)ufunc_traverse,
     .tp_methods = ufunc_methods,
     .tp_getset = ufunc_getset,
+    .tp_getattro = PyObject_GenericGetAttr,
+    .tp_setattro = PyObject_GenericSetAttr,
+    // TODO when Python 3.12 is the minimum supported version,
+    // use Py_TPFLAGS_MANAGED_DICT
+    .tp_members = ufunc_members,
+    .tp_dictoffset = offsetof(PyUFuncObject, dict),
 };
 
 /* End of code for ufunc objects */

@@ -1007,8 +1007,9 @@ public:
             return true;
         }
 
-        if (tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalDataSource && tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalTable) {
-            YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
+        auto& externalSource = tableDesc.Metadata->ExternalSource;
+        if (externalSource.SourceType != ESourceType::ExternalDataSource && externalSource.SourceType != ESourceType::ExternalTable) {
+            YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << externalSource.SourceType;
             return true;
         }
 
@@ -1022,9 +1023,9 @@ public:
         if (mode != "insert_abort") {
             if (mode == "drop" || mode == "drop_if_exists") {
                 TString dropHint;
-                if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+                if (externalSource.SourceType == ESourceType::ExternalDataSource) {
                     dropHint = "DROP EXTERNAL DATA SOURCE";
-                } else if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable) {
+                } else if (externalSource.SourceType == ESourceType::ExternalTable) {
                     dropHint = "DROP EXTERNAL TABLE";
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Cannot drop external entity by using DROP TABLE" << (dropHint ?  ". Please use " : "") << dropHint));
@@ -1034,8 +1035,15 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
+        if (externalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Attempt to write to external data source \"" << key.GetTablePath() << "\" without table. Please specify table to write to"));
+            return false;
+        }
+
+        if (++externalSource.WriteOperations > 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "Multiple writes into same topic or external object is not supported. "
+                << "Found multiple write operations for " << (externalSource.UnderlyingExternalSourceMetadata ? "external table" : "object") << ": " << NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())));
             return false;
         }
 
@@ -1046,11 +1054,11 @@ public:
                 .Repeat(TExprStep::RewriteIO);
 
         YQL_ENSURE(ExternalSourceFactory);
-        const auto& externalSource = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
-        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(externalSource.Type);
+        if (externalSource.SourceType == ESourceType::ExternalDataSource) {
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
-                            .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
+                            .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
                             .FreeArgs()
                                 .Add(writeArgs[1]->ChildrenList()[1])
                             .Build()
@@ -1060,21 +1068,21 @@ public:
         }
 
         // tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable
-        TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
+        TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), externalSource.TableLocation) });
         auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
         auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});
         resultNode = Build<TCoWrite>(ctx, node->Pos())
             .World(node->Child(0))
             .DataSink()
-                .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
+                .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
                 .FreeArgs()
-                    .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
+                    .Add(ctx.NewAtom(node->Pos(), externalSource.DataSourcePath))
                     .Build()
                 .Build()
             .FreeArgs()
                 .Add(keyNode)
                 .Add(node->Child(3))
-                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSource, tableDesc.Metadata->ExternalSource.TableContent))
+                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSourceInfo, externalSource.TableContent))
             .Build()
             .Done().Ptr();
         return true;

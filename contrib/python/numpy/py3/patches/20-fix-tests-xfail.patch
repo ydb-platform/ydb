@@ -22,15 +22,3 @@
      def test_object_array(self):
          from fractions import Fraction
          arr = np.array([Fraction(1, 2), Fraction(-1, 2)])
---- contrib/python/numpy/py3/numpy/_core/tests/test_ufunc.py	(index)
-+++ contrib/python/numpy/py3/numpy/_core/tests/test_ufunc.py	(working tree)
-@@ -537,9 +537,6 @@ class TestUfunc:
-         with pytest.raises(TypeError):
-             np.add(np.float16(1), np.uint64(2), sig=("e", "d", None))
- 
--    @pytest.mark.xfail(np._get_promotion_state() != "legacy",
--            reason="NEP 50 impl breaks casting checks when `dtype=` is used "
--                   "together with python scalars.")
-     def test_use_output_signature_for_all_arguments(self):
-         # Test that providing only `dtype=` or `signature=(None, None, dtype)`
-         # is sufficient if falling back to a homogeneous signature works.

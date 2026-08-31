@@ -198,8 +198,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noe
     auto& msg = ev->Get()->Record;
     const TString reason = ev->Get()->GetIssues().ToOneLineString();
 
-    auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
-    YDB_LOG_COMP(prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
         {"scanActorId", ScanActorId},
         {"txId", TxId},
         {"scanId", ScanId},

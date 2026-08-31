@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
@@ -30,11 +31,19 @@ private:
 
     using TRpsLimiter = TBucketQuoter<ui64>;
     TRpsLimiter RequestLimiter;
-    NYdb::NTable::TTableClient& Client;
+    NYdb::NTable::TTableClient* TableClient = nullptr;
+    NYdb::NQuery::TQueryClient* QueryClient = nullptr;
 
     TSimpleSharedPtr<IThreadPool> TasksQueue;
+
+    bool WaitForRequestSlot();
+    void ReportWriteTxResult(const NYdb::TStatus& status);
+
+    TUploader(const TOptions& opts, const TString& query, NYdb::NTable::TTableClient* tableClient, NYdb::NQuery::TQueryClient* queryClient);
+
 public:
-    TUploader(const TOptions& opts, NYdb::NTable::TTableClient& client, const TString& query);
+    TUploader(const TOptions& opts, NYdb::NTable::TTableClient& tableClient, const TString& query);
+    TUploader(const TOptions& opts, NYdb::NQuery::TQueryClient& queryClient, const TString& query);
 
     bool Push(TParams params);
     bool Push(const TString& path, TValue&& value);

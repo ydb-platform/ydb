@@ -187,6 +187,7 @@ namespace NKikimr::NBlobDepot {
                         .HandleClass = Request.HandleClass,
                         .Tactic = Request.Tactic,
                         .WriteSource = Request.WriteSource,
+                        .DataKind = Request.DataKind,
                     });
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());

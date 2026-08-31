@@ -236,7 +236,7 @@ public:
                         auto plan = execStats->GetPlan();
                         if (plan) {
                             {
-                                TPlanVisualizer pv;
+                                NPlan2Svg::TPlanVisualizer pv;
                                 TFileOutput out(currentPlanWithStatsFileName);
                                 try {
                                     pv.LoadPlans(TString(*execStats->GetPlan()));

@@ -52,7 +52,7 @@ static constexpr ui64 MinusOne = static_cast<ui64>(-1);
 static_assert(sizeof(i64) == SerializationAlignment, "Wrong serialization alignment");
 static_assert(sizeof(double) == SerializationAlignment, "Wrong serialization alignment");
 static_assert(sizeof(TUnversionedValue) == 16, "sizeof(TUnversionedValue) != 16");
-static_assert(sizeof(TUnversionedValueData) == 8, "sizeof(TUnversionedValueData) == 8");
+static_assert(sizeof(TUnversionedValueData) == 8, "sizeof(TUnversionedValueData) != 8");
 static_assert(sizeof(TUnversionedRowHeader) == 8, "sizeof(TUnversionedRowHeader) != 8");
 static_assert(sizeof(TVersionedValue) == 24, "sizeof(TVersionedValue) != 24");
 static_assert(sizeof(TVersionedRowHeader) == 16, "sizeof(TVersionedRowHeader) != 16");

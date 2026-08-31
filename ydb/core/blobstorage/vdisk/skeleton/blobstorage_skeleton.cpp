@@ -699,7 +699,8 @@ namespace NKikimr {
                 const bool ignoreBlock = record.GetIgnoreBlock() || info.IgnoreBlock;
                 const bool isZeroEntry = item.GetIsZeroEntry();
 
-                if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size())) {
+                if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size(),
+                        item.GetDataKind())) {
                     info.HullStatus = {NKikimrProto::OUT_OF_SPACE, "out of space", false};
                     continue;
                 }
@@ -1211,7 +1212,10 @@ namespace NKikimr {
             const ui32 gen = record.GetGeneration();
             const ui64 issuerGuid = record.GetIssuerGuid();
 
-            if (!OutOfSpaceLogic->Allow(ctx, ev)) {
+            ui32 currentGen = 0;
+            bool hasExistingEntry = Hull->GetBlocked(tabletId, &currentGen);
+
+            if (!OutOfSpaceLogic->Allow(ctx, ev, hasExistingEntry)) {
                 ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
                 return;
             }
@@ -1472,7 +1476,7 @@ namespace NKikimr {
                 IActor *actor = CreateDbStatActor(HullCtx, HugeBlobCtx, ctx, std::move(fullSnap),
                         ctx.SelfID, ev, std::move(result));
                 if (actor) {
-                    auto aid = ctx.Register(actor);
+                    auto aid = RunInBatchPool(ctx, actor);
                     ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 }
                 // CreateDbStatActor is responsible for sending result to the recipient
@@ -1490,7 +1494,7 @@ namespace NKikimr {
             IActor *actor = CreateDbStatActor(HullCtx, HugeBlobCtx, ctx, std::move(fullSnap),
                     ctx.SelfID, ev, std::move(result));
             if (actor) {
-                auto aid = ctx.Register(actor);
+                auto aid = RunInBatchPool(ctx, actor);
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }

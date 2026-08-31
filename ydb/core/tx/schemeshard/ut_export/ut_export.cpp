@@ -2664,6 +2664,206 @@ partitioning_settings {
         TestGetExport(Runtime(), exportId, "/MyRoot");
     }
 
+    Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+
+        // Reject the first 'CompleteMultipartUpload' the way s3 does when the stored etags do not
+        // match the parts it holds. The request is dropped, so the upload is still there and its
+        // parts have to be uploaded anew. 'InvalidPart' is unknown to the aws sdk, so it arrives
+        // as UNKNOWN with the exception name set and without the retryable flag.
+        THolder<IEventHandle> injectResult;
+        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
+
+                    if (schemeTx.HasBackup()) {
+                        schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
+                        record.SetTxBody(schemeTx.SerializeAsString());
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+                case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
+                    if (injectResult) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    Aws::Client::AWSError<Aws::S3::S3Errors> error(Aws::S3::S3Errors::UNKNOWN, "InvalidPart",
+                        "Unable to parse ExceptionName: InvalidPart Message: One or more of the specified"
+                        " parts could not be found.", false);
+                    // Without the response code the error defaults to REQUEST_NOT_MADE, which is retryable
+                    error.SetResponseCode(Aws::Http::HttpResponseCode::BAD_REQUEST);
+
+                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                        std::nullopt,
+                        Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(std::move(error))
+                    );
+                    injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), ev->Flags, ev->Cookie);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                default: {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+            }
+        });
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              number_of_retries: 10
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        if (!injectResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
+                return bool(injectResult);
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        Runtime().SetObserverFunc(prevObserver);
+        Runtime().Send(injectResult.Release(), 0, true);
+
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
+        UNIT_ASSERT(data);
+        UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        THolder<IEventHandle> injectResult;
+        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
+
+                    // Force a multipart upload so that CompleteMultipartUpload is reached.
+                    if (schemeTx.HasBackup()) {
+                        schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
+                        record.SetTxBody(schemeTx.SerializeAsString());
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+
+                case NWrappers::NExternalStorage::EvCompleteMultipartUploadRequest: {
+                    // S3 no longer knows about this multipart upload (session expired, aborted by
+                    // a lifecycle policy, or lost across a restart). Drop the request so it never
+                    // reaches the server: CompleteMultipartUpload is what assembles the object, so
+                    // nothing is materialised - exactly what happens in production.
+                    Aws::Client::AWSError<Aws::S3::S3Errors> error(
+                        Aws::S3::S3Errors::NO_SUCH_UPLOAD,
+                        "NoSuchUpload",
+                        "The specified upload does not exist. The upload ID may be invalid,"
+                        " or the upload may have been aborted or completed.",
+                        false /* isRetryable */);
+                    // The 4-arg ctor leaves m_responseCode at REQUEST_NOT_MADE, which
+                    // NWrappers::ShouldRetry treats as retryable - set the real code explicitly.
+                    error.SetResponseCode(Aws::Http::HttpResponseCode::NOT_FOUND);
+
+                    auto response = MakeHolder<NWrappers::NExternalStorage::TEvCompleteMultipartUploadResponse>(
+                        std::nullopt,
+                        Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error>(error)
+                    );
+                    // Reply to the uploader (the request's sender) on behalf of the storage wrapper.
+                    injectResult = MakeHolder<IEventHandle>(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                default: {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+            }
+        });
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        if (!injectResult) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
+                return bool(injectResult);
+            });
+            Runtime().DispatchEvents(opts);
+        }
+
+        Runtime().SetObserverFunc(prevObserver);
+        Runtime().Send(injectResult.Release(), 0, true);
+
+        Env().TestWaitNotification(Runtime(), exportId);
+
+        // The table's data object was never assembled by S3.
+        const auto& data = S3Mock().GetData();
+        UNIT_ASSERT_C(data.find("/data_00.csv") == data.end(),
+            "precondition: CompleteMultipartUpload failed, so /data_00.csv must not exist");
+
+        // Therefore the export must NOT report success. Reporting SUCCESS here means the backup
+        // is recorded as complete while the exported table is missing from the bucket.
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
+
     Y_UNIT_TEST(CorruptedDyNumber) {
         EnvOptions().DisableStatsBatching(true);
         Env(); // Init test env
@@ -3308,7 +3508,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "1ddcace3524e08b6a7e88bb82a5f9d53dd64911c9bc59ce2ae75b2219aeeb935 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -3375,7 +3575,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "1ddcace3524e08b6a7e88bb82a5f9d53dd64911c9bc59ce2ae75b2219aeeb935 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -4086,6 +4286,38 @@ state: STATE_ENABLED
         }
     }
 
+    void DoTestIndexMaterializationFulltext(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, const TString& indexType) {
+        IndexMaterialization(env, runtime, s3Mock, s3Port, true, Sprintf(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: %s
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )", indexType.c_str()));
+    }
+
+    void DoTestIndexMaterializationJson(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, bool compact) {
+        auto indexType = compact ? "EIndexTypeGlobalJsonCompact" : "EIndexTypeGlobalJson";
+        IndexMaterialization(env, runtime, s3Mock, s3Port, true, Sprintf(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["json"]
+              Type: %s
+            }
+        )", indexType));
+    }
+
     Y_UNIT_TEST(IndexMaterializationDisabled) {
         EnvOptions().EnableIndexMaterialization(false);
         IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), false, R"(
@@ -4172,59 +4404,34 @@ state: STATE_ENABLED
         )");
     }
 
-    Y_UNIT_TEST(IndexMaterializationGlobalFulltextPlain) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextPlain
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )");
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltext) {
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(false);
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextPlain");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompact) {
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextCompact");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextRelevance) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextRelevance
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )");
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(false);
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextRelevance");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactRelevance) {
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextCompactRelevance");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalJson) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["json"]
-              Type: EIndexTypeGlobalJson
-            }
-        )");
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(false);
+        DoTestIndexMaterializationJson(Env(), Runtime(), S3Mock(), S3Port(), false);
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalJsonCompact) {
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
+        DoTestIndexMaterializationJson(Env(), Runtime(), S3Mock(), S3Port(), true);
     }
 
     Y_UNIT_TEST(IndexMaterializationTwoTables) {

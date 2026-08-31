@@ -9,6 +9,7 @@ SRCS(
     blocking_queue.cpp
     map.cpp
     parallel.cpp
+    println.cpp
     rw_binary_semaphore.cpp
     tee.cpp
 )

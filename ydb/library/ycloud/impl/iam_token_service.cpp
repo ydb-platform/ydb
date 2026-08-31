@@ -4,10 +4,16 @@
 #include "iam_token_service.h"
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>
+#include <ydb/library/ycloud/impl/util.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
+
+TIamTokenServiceSettings::TIamTokenServiceSettings(TString endpoint, TStringBuf userAgentHint) {
+    Endpoint = std::move(endpoint);
+    UserAgentPrefix = BuildUserAgentPrefix(userAgentHint);
+}
 
 class TIamTokenService : public NActors::TActor<TIamTokenService>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::IamTokenService> {
     using TThis = TIamTokenService;

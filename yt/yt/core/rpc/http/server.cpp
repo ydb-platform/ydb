@@ -286,6 +286,15 @@ private:
         }
         ToProto(rpcHeader->mutable_request_id(), *requestId);
 
+        if (const auto* startTimeString = httpHeaders->Find(StartTimeHeaderName)) {
+            i64 startTime;
+            if (!TryFromString(*startTimeString, startTime)) {
+                return TError("Invalid %Qv header value", StartTimeHeaderName)
+                    .With("value", *startTimeString);
+            }
+            rpcHeader->set_start_time(startTime);
+        }
+
         auto getCredentialsExt = [&] {
             return rpcHeader->MutableExtension(NRpc::NProto::TCredentialsExt::credentials_ext);
         };

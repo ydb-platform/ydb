@@ -4,7 +4,6 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <util/string/join.h>
-#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
@@ -120,8 +119,7 @@ public:
               proxyActorId, std::move(request), requestTimeout, counters)
         , Tasks{TSchemaQueryTask{.SQL = queryFactoryMethod(Request)}}
         , CompletionStatuses(Tasks.size(), ETaskCompletionStatus::NONE)
-        , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod))
-        , DBPath(Request->Get()->ComputeDatabase->connection().database()) { }
+        , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod)) { }
 
     TSchemaQueryYDBActor(const TActorId& proxyActorId,
                          const TEventRequestPtr request,
@@ -133,8 +131,7 @@ public:
               proxyActorId, std::move(request), requestTimeout, counters)
         , Tasks{tasksFactoryMethod(Request)}
         , CompletionStatuses(Tasks.size(), ETaskCompletionStatus::NONE)
-        , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod))
-        , DBPath(Request->Get()->ComputeDatabase->connection().database()) { }
+        , ErrorMessageFactoryMethod(std::move(errorMessageFactoryMethod)) { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_YDB_SCHEMA_QUERY_ACTOR";
 
@@ -317,10 +314,6 @@ public:
 
     void SaveIssues(const TString& message, const TStatus& status) {
         auto issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, message);
-        for (const auto& subIssue : RemoveDatabaseFromIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()), DBPath)) {
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
-        }
-
         Issues.AddIssue(std::move(issue));
         if (!FirstStatus) {
             FirstStatus = status.GetStatus();
@@ -374,7 +367,6 @@ private:
     i32 CurrentTaskIndex = 0;
     TMaybe<EStatus> FirstStatus;
     NYql::TIssues Issues;
-    TString DBPath;
 };
 
 class TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor :
@@ -1012,4 +1004,3 @@ IActor* MakeDeleteBindingActor(const TActorId& proxyActorId,
 }
 
 } // namespace NFq::NPrivate
-

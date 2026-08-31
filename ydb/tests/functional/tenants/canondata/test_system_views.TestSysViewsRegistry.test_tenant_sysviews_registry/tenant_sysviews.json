@@ -564,6 +564,10 @@
       {
         "name": "TraceId",
         "type": "Utf8?"
+      },
+      {
+        "name": "WmClassifiedBy",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [
@@ -1997,6 +2001,65 @@
     "primary_key": [
       "IntervalEnd",
       "Rank"
+    ]
+  },
+  "udf_modules": {
+    "columns": [
+      {
+        "name": "Uid",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Md5",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Name",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ModuleType",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Version",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Size",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ChunkCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileStatus",
+        "type": "Utf8?"
+      },
+      {
+        "name": "CompileError",
+        "type": "Utf8?"
+      },
+      {
+        "name": "CreatedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "CompileStartedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "CompileFinishedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Manifest",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Uid"
     ]
   }
 }

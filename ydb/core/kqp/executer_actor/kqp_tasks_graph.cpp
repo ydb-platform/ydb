@@ -26,6 +26,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <algorithm>
 
@@ -753,10 +754,6 @@ void TKqpTasksGraph::FillStages() {
                             meta.IndexMetas.back().TablePath = indexSettings.GetDocsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                             meta.IndexMetas.emplace_back();
-                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDictTable());
-                            meta.IndexMetas.back().TablePath = indexSettings.GetDictTable().GetPath();
-                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-                            meta.IndexMetas.emplace_back();
                             meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetStatsTable());
                             meta.IndexMetas.back().TablePath = indexSettings.GetStatsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
@@ -1233,8 +1230,6 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
 
 void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
     ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const TChannelLogFunc& logFunc) {
-    YQL_ENSURE(stageInfo.Tasks.size() == 1);
-
     auto* settings = GetMeta().Allocate<NDqProto::TDqInputTransformLookupSettings>();
     settings->SetLeftLabel(dqSourceStreamLookup.GetLeftLabel());
     settings->SetRightLabel(dqSourceStreamLookup.GetRightLabel());
@@ -1255,6 +1250,12 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     } else if (dqSourceStreamLookup.HasFullscanLimit()) {
         settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
     }
+    if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinShuffleMode()) {
+        Y_ENSURE(
+            dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT || dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF,
+            TStringBuilder{} << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << static_cast<NDq::EShuffleMode>(dqSourceStreamLookup.GetShuffleMode()));
+    }
+    /* ShuffleMode intentionally omitted */
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
     settings->MutableLeftJoinKeyNames()->Assign(leftJointKeys.begin(), leftJointKeys.end());
@@ -1289,8 +1290,24 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
             task.Meta.SecureParams.emplace(sourceName, structuredToken);
         }
     }
-
-    BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+    switch (dqSourceStreamLookup.GetShuffleMode()) {
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT:
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF:
+            BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+            break;
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_MAP:
+            BuildMapChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+            break;
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_HASH:
+            BuildHashShuffleChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex,
+                dqSourceStreamLookup.GetLeftJoinKeyNames(),
+                /* enableSpilling */false, logFunc);
+            break;
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MAX_SENTINEL_DO_NOT_USE_:
+            YQL_ENSURE(false, "Impossible");
+            break;
+    }
 }
 
 void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination) {
@@ -1911,6 +1928,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     result->MutableProgram()->CopyFrom(stage.GetProgram());
 
+    if (stage.WasmUdfModulesSize() > 0) {
+        TVector<TString> modules = NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules());
+        (*result->MutableTaskParams())[TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)] =
+            NUdfStore::NWasm::SerializeWasmUdfModulesTaskParam(modules);
+    }
+
     for (const auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
         dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
@@ -2274,6 +2297,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
         }
+
+        GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
     }
 }
 
@@ -2504,9 +2529,28 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             }
         }
     } else if (shuffleEliminated /* save partitioning for shuffle elimination */) {
-        std::size_t stageInternalTaskId = 0;
         columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
         columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
+
+        // in runtime we calc hash, which will be in [0; shardcount]
+        // so we merge two mappings: hash -> shardID and shardID -> channelID for runtime
+        THashMap<ui64, ui64> hashByShardId;
+        Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't been delivered yet.");
+        const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+        const auto& sharding = tableDesc.GetSharding();
+        for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+            hashByShardId.insert({sharding.GetColumnShards(si), si});
+        }
+
+        // The shuffling stage creates one output channel per task of this stage, walking stageInfo.Tasks in order
+        // (BuildHashShuffleChannels), and at runtime TaskIndexByHash is used as an index into that channel vector
+        // (TColumnShardHashV1::Finish). So a task must be addressed by its position in the placed stageInfo.Tasks,
+        // not by its position in the nodeShards traversal below: tasksByNode preserves the order inside a node, but
+        // nodeShards is a hash map, so the per-node blocks come in an order unrelated to the placed one.
+        THashMap<ui64 /* taskId */, ui64 /* position in stageInfo.Tasks */> taskPositionInStage;
+        for (std::size_t i = 0; i < stageInfo.Tasks.size(); ++i) {
+            taskPositionInStage[stageInfo.Tasks[i]] = i;
+        }
 
         for (auto&& [nodeId, shardsInfo] : nodeShards) {
             auto& nodeTasks = tasksByNode.at(nodeId);
@@ -2530,17 +2574,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 }
             }
 
-            // in runtime we calc hash, which will be in [0; shardcount]
-            // so we merge two mappings: hash -> shardID and shardID -> channelID for runtime
-            THashMap<ui64, ui64> hashByShardId;
-            Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't been delivered yet.");
-            const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
-            const auto& sharding = tableDesc.GetSharding();
-            for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
-                hashByShardId.insert({sharding.GetColumnShards(si), si});
-            }
-
-            for (ui32 t = 0; t < tasksPerNode; ++t, ++stageInternalTaskId) {
+            for (ui32 t = 0; t < tasksPerNode; ++t) {
                 auto& task = GetTask(nodeTasks[t]);
                 task.Reason = TTaskType::SHUFFLE_ELIMINATE_SCAN;
                 task.Meta = metas[t];
@@ -2549,6 +2583,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 task.Meta.ScanTask = true;
                 task.SetMetaId(t);
 
+                const ui64 stageInternalTaskId = taskPositionInStage.at(nodeTasks[t]);
                 for (const auto& readInfo: *task.Meta.Reads) {
                     Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
                     (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
@@ -2712,6 +2747,27 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     settings->MutableIndexDescription()->CopyFrom(fullTextSource.GetIndexDescription());
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
+    auto extractFloatingPointSetting = [&](const NKqpProto::TKqpPhyValue& protoValue) -> std::optional<double> {
+        NMiniKQL::TType* valueType = nullptr;
+        auto value = ExtractPhyValue(
+            stageInfo, protoValue,
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod(), &valueType);
+        if (!value.HasValue()) {
+            return std::nullopt;
+        }
+
+        YQL_ENSURE(valueType && valueType->GetKind() == NMiniKQL::TType::EKind::Data,
+            "Unexpected fulltext floating-point setting type");
+        const auto schemeType = static_cast<NMiniKQL::TDataType*>(valueType)->GetSchemeType();
+        if (schemeType == NUdf::TDataType<float>::Id) {
+            return static_cast<double>(value.Get<float>());
+        }
+
+        YQL_ENSURE(schemeType == NUdf::TDataType<double>::Id,
+            "Unexpected fulltext floating-point setting scheme type: " << schemeType);
+        return value.Get<double>();
+    };
+
     {
         TStringBuilder queryBuilder;
         for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
@@ -2753,12 +2809,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasBFactor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetBFactor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-
-        if (value.HasValue()) {
-            settings->SetBFactor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetBFactor())) {
+            settings->SetBFactor(*value);
         }
     }
 
@@ -2781,11 +2833,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasK1Factor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetK1Factor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-        if (value.HasValue()) {
-            settings->SetK1Factor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetK1Factor())) {
+            settings->SetK1Factor(*value);
         }
     }
 
@@ -3206,6 +3255,20 @@ void TKqpTasksGraph::FillSecureParamsFromStage(THashMap<TString, TString>& secur
         const auto& structuredTokenParser = NYql::CreateStructuredTokenParser(structuredToken);
         YQL_ENSURE(structuredTokenParser.HasIAMToken(), "only token authentication supported for compute tasks");
         secureParams.emplace(secretName, structuredTokenParser.GetIAMToken());
+    }
+}
+
+void TKqpTasksGraph::FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const {
+    for (const auto& source : stage.GetSources()) {
+        if (!source.HasExternalSource()) {
+            continue;
+        }
+        const auto& externalSource = source.GetExternalSource();
+        const auto& sourceName = externalSource.GetSourceName();
+        if (!sourceName) {
+            continue;
+        }
+        secureParams.emplace(sourceName, ReplaceStructuredTokenReferences(externalSource.GetAuthInfo()));
     }
 }
 
@@ -4018,7 +4081,27 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         const auto& inputStageId = NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex());
         inputs.push_back(inputStageId);
 
-        switch (input.GetTypeCase()) {
+        auto inputTypeCase = input.GetTypeCase();
+        if (inputTypeCase == NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup) {
+            auto& dqSourceStreamLookup = input.GetDqSourceStreamLookup();
+            switch (dqSourceStreamLookup.GetShuffleMode()) {
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT:
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF:
+                    inputTypeCase = NKqpProto::TKqpPhyConnection::kUnionAll;
+                    break;
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_MAP:
+                    inputTypeCase = NKqpProto::TKqpPhyConnection::kMap;
+                    break;
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_HASH:
+                    inputTypeCase = NKqpProto::TKqpPhyConnection::kHashShuffle;
+                    break;
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ENSURE(false, "Impossible");
+                    break;
+            }
+        }
+        switch (inputTypeCase) {
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
                 inputTasks += MaxTasksGraph->GetStageTasksCount(inputStageId);
                 isShuffle = true;

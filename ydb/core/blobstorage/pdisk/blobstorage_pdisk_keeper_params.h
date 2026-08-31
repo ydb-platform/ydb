@@ -42,9 +42,6 @@ struct TKeeperParams {
     // Special reserve of log chunks for disks with static groups
     i64 CommonStaticLogChunks = (i64)NPDisk::CommonStaticLogChunks;
 
-    // Should be true for disks that have one or more static group
-    bool HasStaticGroups = false;
-
     // Initially owned chunk count for each owner, must be present for all currently present owners
     TMap<TOwner, TOwnerInfo> OwnersInfo;
 
@@ -55,6 +52,10 @@ struct TKeeperParams {
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
+
+    // Upper bound for the total chunk reserve of static group owners, in permille of the user chunk pool.
+    // 0 disables the reserve.
+    ui32 StaticGroupChunkReservePerMille = NPDisk::StaticGroupChunkReservePerMille;
 };
 
 } // NPDisk

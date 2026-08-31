@@ -287,8 +287,9 @@ public:
             }
         }
         aceObj.SetAccessRight(accessRights);
-        ui32 inheritanceType = NACLib::EInheritanceType::InheritObject + NACLib::EInheritanceType::InheritContainer;
+        ui32 inheritanceType;
         if (ace.Has("InheritanceType")) {
+            inheritanceType = NACLib::EInheritanceType::InheritNone;
             const auto& jsonInheritanceType = ace["InheritanceType"].GetArraySafe();
             for (const auto& inherit : jsonInheritanceType) {
                 auto inheritance = Dialect->AccessMap.find(inherit.GetStringRobust());
@@ -298,6 +299,8 @@ public:
                     throw yexception() << "Invalid inheritance type \"" << inherit.GetStringRobust() << "\"";
                 }
             }
+        } else {
+            inheritanceType = NACLib::EInheritanceType::InheritObject + NACLib::EInheritanceType::InheritContainer;
         }
         aceObj.SetInheritanceType(inheritanceType);
         return aceObj;

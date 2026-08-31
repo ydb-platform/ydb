@@ -15,8 +15,9 @@ std::unordered_set<ui32> GetUselessSortedJoinInputs(const TCoEquiJoin& equiJoin)
         if (const auto joinInput = equiJoin.Arg(i).Cast<TCoEquiJoinInput>(); joinInput.Scope().Ref().IsAtom()) {
             const auto sorted = joinInput.List().Ref().GetConstraint<TSortedConstraintNode>();
             const auto chopped = joinInput.List().Ref().GetConstraint<TChoppedConstraintNode>();
-            if (sorted || chopped)
+            if (sorted || chopped) {
                 sorteds.emplace(joinInput.Scope().Ref().Content(), std::make_tuple(i, sorted, chopped));
+            }
         }
     }
 
@@ -24,32 +25,38 @@ std::unordered_set<ui32> GetUselessSortedJoinInputs(const TCoEquiJoin& equiJoin)
         const auto joinTree = joinTreeNodes.back();
         joinTreeNodes.pop_back();
 
-        if (!joinTree->Child(1)->IsAtom())
+        if (!joinTree->Child(1)->IsAtom()) {
             joinTreeNodes.emplace_back(joinTree->Child(1));
+        }
 
-        if (!joinTree->Child(2)->IsAtom())
+        if (!joinTree->Child(2)->IsAtom()) {
             joinTreeNodes.emplace_back(joinTree->Child(2));
+        }
 
         if (!joinTree->Head().IsAtom("Cross")) {
             std::unordered_map<std::string_view, TPartOfConstraintBase::TSetType> tableJoinKeys;
-            for (const auto keys : {joinTree->Child(3), joinTree->Child(4)})
-                for (ui32 i = 0U; i < keys->ChildrenSize(); i += 2)
+            for (const auto keys : {joinTree->Child(3), joinTree->Child(4)}) {
+                for (ui32 i = 0U; i < keys->ChildrenSize(); i += 2) {
                     tableJoinKeys[keys->Child(i)->Content()].insert_unique(TPartOfConstraintBase::TPathType(1U, keys->Child(i + 1)->Content()));
+                }
+            }
 
             for (const auto& [label, joinKeys]: tableJoinKeys) {
                 if (const auto it = sorteds.find(label); sorteds.cend() != it) {
                     const auto sorted = std::get<const TSortedConstraintNode*>(it->second);
                     const auto chopped = std::get<const TChoppedConstraintNode*>(it->second);
-                    if (sorted && sorted->StartsWith(joinKeys) || chopped && chopped->Equals(joinKeys))
+                    if (sorted && sorted->StartsWith(joinKeys) || chopped && chopped->Equals(joinKeys)) {
                         sorteds.erase(it);
+                    }
                 }
             }
         }
     }
 
     std::unordered_set<ui32> result(sorteds.size());
-    for (const auto& sort : sorteds)
+    for (const auto& sort : sorteds) {
         result.emplace(std::get<ui32>(sort.second));
+    }
     return result;
 }
 
@@ -71,7 +78,7 @@ void RegisterCoFinalCallables(TCallableOptimizerMap& map) {
         if (const auto indexes = GetUselessSortedJoinInputs(TCoEquiJoin(node)); !indexes.empty()) {
             YQL_CLOG(DEBUG, Core) << "Suppress order on " << indexes.size() << ' ' << node->Content() << " inputs";
             auto children = node->ChildrenList();
-            for (const auto idx : indexes)
+            for (const auto idx : indexes) {
                 children[idx] = ctx.Builder(children[idx]->Pos())
                     .List()
                         .Callable(0, "Unordered")
@@ -79,6 +86,7 @@ void RegisterCoFinalCallables(TCallableOptimizerMap& map) {
                         .Seal()
                         .Add(1, children[idx]->TailPtr())
                     .Seal().Build();
+            }
             return ctx.ChangeChildren(*node, std::move(children));
         }
         return node;

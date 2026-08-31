@@ -29,6 +29,13 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
 
         const auto& pathId = txState->TargetPathId;
+        if (const auto it = context.SS->StreamingQueries.find(pathId); it != context.SS->StreamingQueries.end()) {
+            const auto& props = it->second->Properties.GetProperties();
+            if (const auto runIt = props.find("run"); runIt != props.end() && runIt->second == "true") {
+                context.SS->TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Add(1);
+            }
+        }
+
         const auto& path = TPath::Init(pathId, context.SS);
         NIceDb::TNiceDb db(context.GetDB());
 

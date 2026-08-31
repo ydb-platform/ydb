@@ -30,7 +30,7 @@
 
 #include "global.h"
 #include "object.h"
-#include "memory.h"
+#include <ydb/library/nmslib/include/memory.h>
 #include "ztimer.h"
 #include "utils.h"
 #include "experimentconf.h"
@@ -316,4 +316,3 @@ public:
 }   // namespace similarity
 
 #endif
-

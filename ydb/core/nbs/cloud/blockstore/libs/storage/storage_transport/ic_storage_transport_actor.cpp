@@ -16,32 +16,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename T>
-void SetErrorStatus(
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
-    TStringBuf reason,
-    T& record)
-{
-    record.SetStatus(status);
-    record.SetErrorReason(TString(reason));
-}
-
-std::unique_ptr<NDDisk::TEvWritePersistentBuffersResult>
-MakeWritePersistentBuffersResult(
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
-    TStringBuf reason,
-    std::span<const NKikimrBlobStorage::NDDisk::TDDiskId> pbufferIds)
-{
-    auto errorResponse =
-        std::make_unique<NDDisk::TEvWritePersistentBuffersResult>();
-    for (const auto& pbufferId: pbufferIds) {
-        auto* res = errorResponse->Record.AddResult();
-        *res->MutablePersistentBufferId() = pbufferId;
-        SetErrorStatus(status, reason, *res->MutableResult());
-    }
-    return errorResponse;
-}
-
 template <typename TEvent, typename TMap>
 void RejectAllPending(TMap& map)
 {
@@ -123,16 +97,31 @@ void RejectRequestsForNode(
     }
 }
 
+template <typename TRequest>
+void AttachPayload(TRequest& request, TRope rope, bool enableChecksums)
+{
+    if (enableChecksums) {
+        request.AddPayloadThenChecksum(std::move(rope));
+    } else {
+        request.AddPayload(std::move(rope));
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TActorId CreateTransportActor(
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex)
+    ui32 dbgIndex,
+    bool enableChecksums,
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
 {
-    auto actor =
-        std::make_unique<TICStorageTransportActor>(diskDescription, dbgIndex);
+    auto actor = std::make_unique<TICStorageTransportActor>(
+        diskDescription,
+        dbgIndex,
+        enableChecksums,
+        std::move(directSessionRegistry));
 
     return TActivationContext::Register(
         actor.release(),
@@ -145,7 +134,9 @@ TActorId CreateTransportActor(
 
 TICStorageTransportActor::TICStorageTransportActor(
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex)
+    ui32 dbgIndex,
+    bool enableChecksums,
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry)
     : LogTitle(
           GetCycleCount(),
           TLogTitle::TInterconnectTransport{
@@ -153,6 +144,8 @@ TICStorageTransportActor::TICStorageTransportActor(
               .TabletId = diskDescription.TabletId,
               .Generation = diskDescription.Generation,
               .DBGIndex = dbgIndex})
+    , DirectSessionRegistry(std::move(directSessionRegistry))
+    , EnableChecksums(enableChecksums)
 {}
 
 TICStorageTransportActor::~TICStorageTransportActor()
@@ -305,7 +298,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayloadThenChecksum(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
         // TODO(RFC 006): checksums should be computed by the Partition and
         // carried down to here rather than recomputed post-copy; computing it
         // after SgListCopy only covers corruption from this point on and bakes
@@ -447,7 +440,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayloadThenChecksum(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
         // TODO(RFC 006): checksums should be computed by the Partition and
         // carried down to here rather than recomputed post-copy; computing it
         // after SgListCopy only covers corruption from this point on and bakes
@@ -589,7 +582,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        AttachPayload(*request, std::move(rope), EnableChecksums);
 
         SendWithUndeliveryTracking(
             ctx,
@@ -701,8 +694,8 @@ void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
 
     auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
         msg->Credentials);
-    for (auto lsn: msg->Lsns) {
-        request->AddErase(lsn, msg->Credentials.Generation);
+    for (const auto& pBufferKey: msg->PBufferKeys) {
+        request->AddErase(pBufferKey.Lsn, pBufferKey.Generation);
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -868,8 +861,8 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
     auto request = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
         msg->Credentials,
         msg->Selector,
-        msg->Lsn,
-        msg->Credentials.Generation,
+        msg->PBufferKey.Lsn,
+        msg->PBufferKey.Generation,
         msg->Instruction);
 
     SendWithUndeliveryTracking(
@@ -1094,14 +1087,14 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
         msg->PBufferId.PDiskId,
         msg->PBufferId.DDiskSlotId);
 
-    Y_ABORT_UNLESS(msg->Selectors.size() == msg->Lsns.size());
+    Y_ABORT_UNLESS(msg->Selectors.size() == msg->PBufferKeys.size());
     for (size_t i = 0; i < msg->Selectors.size(); ++i) {
         request->AddSegmentFromPB(
             pBufferId,
             *msg->PBufferCredentials.DDiskInstanceGuid,
             msg->Selectors[i],
-            msg->Lsns[i],
-            msg->Credentials.Generation);
+            msg->PBufferKeys[i].Lsn,
+            msg->PBufferKeys[i].Generation);
     }
 
     SendWithUndeliveryTracking(
@@ -1356,6 +1349,9 @@ void TICStorageTransportActor::PassAway()
         }
     }
     ICSubscribedNodes.clear();
+    if (DirectSessionRegistry) {
+        DirectSessionRegistry->Clear();
+    }
     NActors::IActor::PassAway();
 }
 
@@ -1371,14 +1367,77 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(
         nodeId);
 
     RejectRequestsForNode(ConnectRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvReadPersistentBufferResult>(
+        ReadFromPBufferRequests,
+        nodeId);
     RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvWritePersistentBufferResult>(
+        WriteToPBufferRequests,
+        nodeId);
     RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
     RejectRequestsForNode<NDDisk::TEvSyncResult>(
         FlushFromPBufferRequests,
         nodeId);
+    RejectRequestsForNode<NDDisk::TEvErasePersistentBufferResult>(
+        BatchEraseFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvErasePersistentBufferResult>(
+        BarrierEraseFromPBufferRequests,
+        nodeId);
+    RejectRequestsForNode<NDDisk::TEvListPersistentBufferResult>(
+        ListPBufferEntriesRequests,
+        nodeId);
     RejectRequestsForNode<NDDisk::TEvDeleteTabletChunksResult>(
         DeleteTabletChunksRequests,
         nodeId);
+
+    for (auto it = WriteToManyPBuffersRequests.begin();
+         it != WriteToManyPBuffersRequests.end();)
+    {
+        auto& requestInfo = it->second;
+        if (requestInfo.Request->ServiceId.NodeId() != nodeId) {
+            ++it;
+            continue;
+        }
+
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> remaining(
+            requestInfo.WaitingReplies.begin(),
+            requestInfo.WaitingReplies.end());
+        auto response = MakeWritePersistentBuffersResult(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+            SessionBrokenErrorMessage,
+            remaining);
+        requestInfo.Request->Reply(response->Record);
+        WriteToManyPBuffersRequests.erase(it++);
+    }
+}
+
+void TICStorageTransportActor::HandleICNodeConnected(
+    const TEvInterconnect::TEvNodeConnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const ui32 nodeId = ev->Get()->NodeId;
+    auto directSession = ev->Get()->DirectSession;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Node #%u connected, hasDirectSession# %s",
+        LogTitle.GetWithTime().c_str(),
+        nodeId,
+        directSession ? "true" : "false");
+
+    if (DirectSessionRegistry) {
+        if (directSession) {
+            DirectSessionRegistry->Set(
+                nodeId,
+                MakeSessionEntry(ctx.ActorSystem(), std::move(directSession)));
+        } else {
+            // Reconnect without a direct session must drop any previously
+            // published entry so datapath cannot send on a stale session.
+            DirectSessionRegistry->Reset(nodeId);
+        }
+    }
 }
 
 void TICStorageTransportActor::HandleICNodeDisconnected(
@@ -1393,6 +1452,10 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
         "%s Node #%u disconnected",
         LogTitle.GetWithTime().c_str(),
         nodeId);
+
+    if (DirectSessionRegistry) {
+        DirectSessionRegistry->Reset(nodeId);
+    }
 
     auto it = ICSubscribedNodes.find(nodeId);
     if (it != ICSubscribedNodes.end()) {
@@ -1511,7 +1574,7 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleDeleteTabletChunksResult);
 
         HFunc(TEvInterconnect::TEvNodeDisconnected, HandleICNodeDisconnected);
-        IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+        HFunc(TEvInterconnect::TEvNodeConnected, HandleICNodeConnected);
 
         default:
             LOG_ERROR(

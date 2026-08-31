@@ -10,9 +10,14 @@ EXECTEST()
 # Sample datasets are resolved via the Arcadia source root (see
 # test/testdataset.h) and made available to the test through DATA().
 
-SIZE(MEDIUM)
-
-TIMEOUT(600)
+IF (SANITIZER_TYPE == "memory")
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    TIMEOUT(2400)
+ELSE()
+    SIZE(MEDIUM)
+    TIMEOUT(600)
+ENDIF()
 
 RUN(test_integr)
 

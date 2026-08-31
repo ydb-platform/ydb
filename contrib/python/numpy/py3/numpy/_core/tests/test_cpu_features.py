@@ -1,14 +1,16 @@
-import sys, platform, re, pytest
+import os
+import re
+import sys
+import pathlib
+import platform
+import subprocess
+import pytest
 from numpy._core._multiarray_umath import (
     __cpu_features__,
     __cpu_baseline__,
     __cpu_dispatch__,
 )
 import numpy as np
-import subprocess
-import pathlib
-import os
-import re
 
 def assert_features_equal(actual, desired, fname):
     __tracebackhide__ = True  # Hide traceback for py.test
@@ -137,7 +139,7 @@ class TestEnvPrivation:
     SCRIPT = """
 def main():
     from numpy._core._multiarray_umath import (
-        __cpu_features__, 
+        __cpu_features__,
         __cpu_dispatch__
     )
 
@@ -400,12 +402,15 @@ class Test_ARM_Features(AbstractTest):
     def load_flags(self):
         self.load_flags_cpuinfo("Features")
         arch = self.get_cpuinfo_item("CPU architecture")
-        # in case of mounting virtual filesystem of aarch64 kernel
-        is_rootfs_v8 = int('0'+next(iter(arch))) > 7 if arch else 0
-        if  re.match("^(aarch64|AARCH64)", machine) or is_rootfs_v8:
-            self.features_map = dict(
-                NEON="ASIMD", HALF="ASIMD", VFPV4="ASIMD"
-            )
+        # in case of mounting virtual filesystem of aarch64 kernel without linux32
+        is_rootfs_v8 = (
+            not re.match("^armv[0-9]+l$", machine) and
+            (int('0' + next(iter(arch))) > 7 if arch else 0)
+        )
+        if re.match("^(aarch64|AARCH64)", machine) or is_rootfs_v8:
+            self.features_map = {
+                "NEON": "ASIMD", "HALF": "ASIMD", "VFPV4": "ASIMD"
+            }
         else:
             self.features_map = dict(
                 # ELF auxiliary vector and /proc/cpuinfo on Linux kernel(armv8 aarch32)

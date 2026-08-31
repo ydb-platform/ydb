@@ -21,7 +21,6 @@ jobs:
         python:
           # Python versions (CPython):
           # https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json
-          - "3.7"
           - "3.8"
           - "3.9"
           - "3.10"
@@ -54,7 +53,7 @@ jobs:
           - os: windows-latest
             python: 3.6
           - os: windows-latest
-            python: 3.12
+            python: 3.13
 
           # macOS: test only new Python
           - os: macos-latest
@@ -64,6 +63,8 @@ jobs:
           # GHA python-versions.
           - os: ubuntu-20.04
             python: 3.6
+          - os: ubuntu-22.04
+            python: 3.7
 
     steps:
         # https://github.com/actions/checkout

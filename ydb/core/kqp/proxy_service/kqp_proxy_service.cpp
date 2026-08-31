@@ -70,8 +70,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
 
-#include <util/folder/dirut.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 
 namespace NKikimr::NKqp {
@@ -288,15 +286,9 @@ public:
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
-            TString spillingRoot = cfg.GetRoot();
-            if (spillingRoot.empty()) {
-                spillingRoot = NYql::NDq::GetTmpSpillingRootForCurrentUser();
-                MakeDirIfNotExist(spillingRoot);
-            }
-
             SpillingService = TActivationContext::Register(NYql::NDq::CreateDqLocalFileSpillingService(
                 NYql::NDq::TFileSpillingServiceConfig{
-                    .Root = spillingRoot,
+                    .Root = cfg.GetRoot(),
                     .MaxTotalSize = cfg.GetMaxTotalSize(),
                     .IoThreadPoolWorkersCount = cfg.GetIoThreadPool().GetWorkersCount(),
                     .IoThreadPoolQueueSize = cfg.GetIoThreadPool().GetQueueSize(),
@@ -336,11 +328,14 @@ public:
         }
 
         NYql::NDq::TDqChannelLimits limits;
+        limits.EnableSpillingChannelBackpressure = TableServiceConfig.GetEnableSpillingChannelBackpressure();
 
         if (TableServiceConfig.HasDqChannelConfig()) {
             auto& config = TableServiceConfig.GetDqChannelConfig();
             limits.LocalChannelInflightBytes  = config.GetLocalChannelInflightBytes();
+            limits.LocalChannelColdInflightBytes = config.GetLocalChannelColdInflightBytes();
             limits.RemoteChannelInflightBytes = config.GetRemoteChannelInflightBytes();
+            limits.RemoteChannelColdInflightBytes = config.GetRemoteChannelColdInflightBytes();
             limits.RemoteSessionInflightBytes = config.GetRemoteSessionInflightBytes();
             limits.ReconciliationCount = config.GetReconciliationCount();
             limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
@@ -406,6 +401,7 @@ public:
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitAccessServiceService();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -516,6 +512,9 @@ public:
         if (DescribeResourceIdService) {
             Send(DescribeResourceIdService, new TEvents::TEvPoison());
         }
+        if (AccessServiceService) {
+            Send(AccessServiceService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -570,6 +569,7 @@ public:
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitAccessServiceService();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -2029,7 +2029,10 @@ private:
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            streamingQueries.GetExternalStorage(),
+            NFq::TRowDispatcherSettings(
+                streamingQueries.GetExternalStorage(),
+                FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+            ),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,
@@ -2072,6 +2075,21 @@ private:
         DescribeResourceIdService = TActivationContext::Register(actor);
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
+    }
+
+    void InitAccessServiceService() {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || AccessServiceService) {
+            return;
+        }
+        try {
+            auto actor = CreateAccessServiceActor();
+            AccessServiceService = TActivationContext::Register(actor);
+            TActivationContext::ActorSystem()->RegisterLocalService(
+                MakeKqpAccessServiceId(), AccessServiceService);
+        } catch(const std::exception& ex) {
+            YDB_LOG_ERROR("Failed to start AccessService service actor",
+                    {"exception", ex.what()});
+        }
     }
 
 private:
@@ -2136,6 +2154,7 @@ private:
     TActorId RowDispatcherService;
     TActorId CheckpointStorageService;
     TActorId DescribeResourceIdService;
+    TActorId AccessServiceService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

@@ -69,15 +69,18 @@ class _MacOSDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
         return self._append_app_name_and_version(os.path.expanduser("~/Library/Caches"))  # ruff:ignore[os-path-expanduser]
 
     @property
-    def site_cache_dir(self) -> str:
-        """Cache directory shared by users, e.g. ``/Library/Caches/$appname/$version``. If we're using a Python binary managed by `Homebrew <https://brew.sh>`_, the directory will be under the Homebrew prefix, e.g. ``$homebrew_prefix/var/cache/$appname/$version``. If `multipath <platformdirs.api.PlatformDirsABC.multipath>` is enabled, and we're in Homebrew, the response is a multi-path string separated by ":", e.g. ``$homebrew_prefix/var/cache/$appname/$version:/Library/Caches/$appname/$version``."""
+    def _site_cache_dirs(self) -> list[str]:
         is_homebrew = "/opt/python" in sys.prefix
         homebrew_prefix = sys.prefix.split("/opt/python")[0] if is_homebrew else ""
         path_list = [self._append_app_name_and_version(f"{homebrew_prefix}/var/cache")] if is_homebrew else []
         path_list.append(self._append_app_name_and_version("/Library/Caches"))
-        if self.multipath:
-            return os.pathsep.join(path_list)
-        return path_list[0]
+        return path_list
+
+    @property
+    def site_cache_dir(self) -> str:
+        """Cache directory shared by users, e.g. ``/Library/Caches/$appname/$version``. If we're using a Python binary managed by `Homebrew <https://brew.sh>`_, the directory will be under the Homebrew prefix, e.g. ``$homebrew_prefix/var/cache/$appname/$version``. If `multipath <platformdirs.api.PlatformDirsABC.multipath>` is enabled, and we're in Homebrew, the response is a multi-path string separated by ":", e.g. ``$homebrew_prefix/var/cache/$appname/$version:/Library/Caches/$appname/$version``."""
+        dirs = self._site_cache_dirs
+        return os.pathsep.join(dirs) if self.multipath else dirs[0]
 
     @property
     def site_cache_path(self) -> Path:
@@ -203,6 +206,11 @@ class _MacOSDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
         """:yield: all user and site data directories."""
         yield self.user_data_dir
         yield from self._site_data_dirs
+
+    def iter_cache_dirs(self) -> Iterator[str]:
+        """:yield: all user and site cache directories."""
+        yield self.user_cache_dir
+        yield from self._site_cache_dirs
 
 
 class MacOS(XDGMixin, _MacOSDefaults):

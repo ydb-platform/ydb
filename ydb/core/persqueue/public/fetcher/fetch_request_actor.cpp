@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_FETCH_REQUEST
 
 #define LOG_PREFIX TStringBuilder() << "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
@@ -169,7 +171,7 @@ public:
         YDB_LOG_DEBUG("DescribeTopics",
             {"logPrefix", LOG_PREFIX});
 
-        std::unordered_set<TString> topics;
+        absl::flat_hash_set<TString> topics;
         for (const auto& part : Settings.Partitions) {
             topics.insert(part.Topic);
         }
@@ -197,7 +199,11 @@ public:
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(
-                            info.Status == NDescriber::EStatus::UNAUTHORIZED ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::SCHEME_ERROR,
+                            info.Status == NDescriber::EStatus::UNAUTHORIZED
+                                ? Ydb::StatusIds::UNAUTHORIZED
+                                : (info.Status == NDescriber::EStatus::BAD_REQUEST
+                                    ? Ydb::StatusIds::BAD_REQUEST
+                                    : Ydb::StatusIds::SCHEME_ERROR),
                             NDescriber::Description(topicPath, info.Status)
                         ),
                         ctx

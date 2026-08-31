@@ -50,8 +50,7 @@ class ServiceDocumenter(BaseServiceDocumenter):
         ]
         self._root_docs_path = root_docs_path
         self._USER_GUIDE_LINK = (
-            'https://boto3.amazonaws.com/'
-            'v1/documentation/api/latest/guide/resources.html'
+            'https://docs.aws.amazon.com/boto3/latest/guide/resources.html'
         )
 
     def document_service(self):
@@ -190,7 +189,7 @@ class ServiceDocumenter(BaseServiceDocumenter):
 
     def _get_example_file(self):
         return os.path.realpath(
-            os.path.join(self.EXAMPLE_PATH, self._service_name + '.rst')
+            os.path.join(self.EXAMPLE_PATH, f"{self._service_name}.rst")
         )
 
     def _document_examples(self, section):

@@ -97,4 +97,22 @@ void TTvmServiceConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TUserTicketAuthenticationConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("check_service_tickets", &TThis::CheckServiceTickets)
+        .Default(false);
+    registrar.Parameter("allowed_service_tvm_ids", &TThis::AllowedServiceTvmIds)
+        .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TTvmServiceDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("user_ticket_authentication", &TThis::UserTicketAuthentication)
+        .DefaultNew();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NAuth

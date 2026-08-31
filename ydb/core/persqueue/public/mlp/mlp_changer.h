@@ -131,7 +131,7 @@ private:
 
         auto it = PendingPartitions.find(partitionId);
         if (it == PendingPartitions.end()) {
-            YDB_LOG_DEBUG_COMP(Service, "Received response fron unexpected partition",
+            YDB_LOG_DEBUG_COMP(Service, "Received response from unexpected partition",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"partitionId", partitionId});
             return;

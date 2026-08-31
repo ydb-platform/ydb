@@ -177,7 +177,7 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        YDB_LOG_DEBUG("Dump NPQLOGPREFIX, replyErrorAndDie, errorMessage",
+        YDB_LOG_DEBUG("ReplyErrorAndDie",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"replyErrorAndDie", errorCode},
             {"errorMessage", errorMessage});

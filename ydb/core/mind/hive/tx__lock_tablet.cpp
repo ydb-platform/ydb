@@ -127,7 +127,7 @@ public:
                 {"tabletId", TabletId},
                 {"sideEffects", SideEffects});
         } else {
-            YDB_LOG_NOTICE("THive::TTxLockTabletExecution::Complete tablet locked successfully",
+            YDB_LOG_NOTICE("THive::TTxLockTabletExecution::Complete",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", TabletId},
                 {"sideEffects", SideEffects});

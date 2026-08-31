@@ -858,8 +858,8 @@ public:
                        : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
-        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
-#if defined(__aarch64__) || defined(_win_) || defined(_darwin_)
+        /// TODO: Enable JIT for AARCH64/Win
+#if defined(__aarch64__) || defined(_win_)
         Codegen_ = {};
 #endif
 

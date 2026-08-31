@@ -12,10 +12,7 @@
 
 #include <util/generic/guid.h>
 
-#define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -42,24 +39,26 @@ bool CreateLongIncrementalRestoreOp(
     TVector<ISubOperation::TPtr>& result);
 
 class TDoneWithIncrementalRestore: public TDone {
+    virtual const char* Name() const override final { return "TDoneWithIncrementalRestore"; }
+
 public:
     explicit TDoneWithIncrementalRestore(const TOperationId& id)
         : TDone(id)
     {
         auto events = AllIncomingEvents();
         events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
-        IgnoreMessages(DebugHint(), events);
+        IgnoreMessages(events);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         context.OnComplete.Barrier(OperationId, "DoneBarrier");
         return false;
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply TEvCompleteBarrier");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         if (!TDone::Process(context)) {
             return false;
@@ -76,7 +75,7 @@ public:
         // Find the backup collection path from the long incremental restore operation
         auto itOp = context.SS->LongIncrementalRestoreOps.find(OperationId);
         if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
-            LOG_E(DebugHint() << "Failed to find long incremental restore operation");
+            YDB_LOG_ERROR_CTX(context.Ctx, "Failed to find long incremental restore operation");
             return false;
         }
 
@@ -95,37 +94,28 @@ public:
             incrementalBackupNames.push_back(name);
         }
 
-        LOG_I(DebugHint() << " Found " << incrementalBackupNames.size() << " incremental backups to restore");
+        YDB_LOG_INFO_CTX(context.Ctx, "Found incremental backups to restore",
+            {"count", incrementalBackupNames.size()},
+        );
 
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, OperationId, incrementalBackupNames));
 
         return true;
     }
 
-private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDoneWithIncrementalRestore"
-            << ", operationId: " << OperationId;
-    }
-
 }; // TDoneWithIncrementalRestore
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     const TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateRestoreOpControlPlane::TPropose"
-            << ", operationId: " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool HandleReply(
@@ -133,12 +123,10 @@ public:
         TOperationContext& context) override
     {
         const auto step = TStepId(ev->Get()->StepId);
-        const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " HandleReply TEvOperationPlan"
-            << ", step: " << step
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -146,7 +134,7 @@ public:
         }
 
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp);
- 
+
         // NIceDb::TNiceDb db(context.GetDB());
         // TODO
 
@@ -156,11 +144,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        const auto ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -172,6 +156,8 @@ public:
 };
 
 class TCreateRestoreOpControlPlane: public TSubOperationWithContext {
+    virtual const char* Name() const override final { return "TCreateRestoreOpControlPlane"; }
+
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch(state) {
         case TTxState::Waiting:
@@ -191,7 +177,7 @@ class TCreateRestoreOpControlPlane: public TSubOperationWithContext {
         case TTxState::Propose:
             return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
-            return MakeHolder<TWaitCopyTableBarrier>(OperationId, "TCreateRestoreOpControlPlane");
+            return MakeHolder<TWaitCopyTableBarrier>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDoneWithIncrementalRestore>(OperationId);
         default:
@@ -217,9 +203,7 @@ public:
 
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
-        LOG_I("TCreateRestoreOpControlPlane Propose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
 
@@ -307,14 +291,14 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateRestoreOpControlPlane AbortPropose"
-            << ", opId: " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateRestoreOpControlPlane AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateRestoreOpControlPlane AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->SelfTabletId()},
         );
 
         context.OnComplete.DoneOperation(OperationId);
@@ -484,7 +468,7 @@ bool CreateIncrementalBackupPathStateOps(
             // Check if the incremental backup path exists
             TString incrBackupPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath});
             const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, context.SS);
-            
+
             // Only create path state change operation if the path exists
             if (incrBackupPath.IsResolved()) {
                 // Create transaction for path state change
@@ -508,3 +492,5 @@ bool CreateIncrementalBackupPathStateOps(
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -385,7 +385,7 @@ class Kikimr:
         config: KikimrConfigGenerator,
         timeout_seconds: int = 240,
         enable_discovery: bool = True,
-        tenant_database: str = "romashka",
+        tenant_database: str = "/Root/my_tenant",
     ):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))

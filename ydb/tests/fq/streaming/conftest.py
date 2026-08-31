@@ -16,7 +16,7 @@ def kikimr(request):
     kikimr = Kikimr(
         get_ydb_config(request),
         enable_discovery=param.get("enable_discovery", True),
-        tenant_database="/Root/romashka",
+        tenant_database="/Root/my_tenant",
     )
     yield kikimr
     kikimr.stop()

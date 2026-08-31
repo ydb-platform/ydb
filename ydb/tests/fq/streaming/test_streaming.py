@@ -1432,7 +1432,7 @@ FROM `{table_name}`"""
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        path = f"/Root/{query_name}"
+        path = f"{kikimr.get_database_name()}/{query_name}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
@@ -1842,8 +1842,8 @@ FROM `{table_name}`"""
         query_name2 = f"test_structured_json2_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out, comment_for_pushdown='--'))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out, comment_for_pushdown=''))
-        path1 = f"/Root/{query_name1}"
-        path2 = f"/Root/{query_name2}"
+        path1 = f"{kikimr.get_database_name()}/{query_name1}"
+        path2 = f"{kikimr.get_database_name()}/{query_name2}"
         self.wait_completed_checkpoints(kikimr, query_name1)
         self.wait_completed_checkpoints(kikimr, query_name2)
 
@@ -1916,7 +1916,7 @@ FROM `{table_name}`"""
     def test_streaming_query_stop_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name)
 
-        path = f"/Root/{entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}')}"
+        path = f"{kikimr.get_database_name()}/{entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}')}"
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{path}` AS DO BEGIN
                 INSERT INTO {out}
@@ -2275,7 +2275,7 @@ FROM `{table_name}`"""
                 (2, NULL);
         """)
 
-        path = f"/Root/{entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}')}"
+        path = f"{kikimr.get_database_name()}/{entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}')}"
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{path}` AS DO BEGIN
                 INSERT INTO {out}

@@ -475,8 +475,9 @@ class StreamingTestBase(TestYdsBase):
         kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
     def wait_completed_checkpoints(
-        self, kikimr: Kikimr, path: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
+        self, kikimr: Kikimr, query_name: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
     ) -> None:
+        path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         wait_completed_checkpoints(
             kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
         )
@@ -488,8 +489,9 @@ class StreamingTestBase(TestYdsBase):
         return result if result is not None else 0
 
     def get_streaming_query_metric(
-        self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False
+        self, kikimr: Kikimr, query_name: str, metric_name: str, expect_counters_exist: bool = False
     ) -> int:
+        path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         sum = 0
         found = False
         for node_id in kikimr.cluster.slots:
@@ -532,14 +534,14 @@ class StreamingTestBase(TestYdsBase):
     def wait_streaming_query_metric(
         self,
         kikimr: Kikimr,
-        path: str,
+        query_name: str,
         metric_name: str,
         timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
         expected_value: int = 1,
     ) -> None:
         deadline = time.time() + timeout
         while True:
-            value = self.get_streaming_query_metric(kikimr, path, metric_name)
+            value = self.get_streaming_query_metric(kikimr, query_name, metric_name)
             if value >= expected_value:
                 break
             assert time.time() < deadline, "Wait streaming query metric failed, actual value: " + str(value)

@@ -36,10 +36,7 @@ private:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        if (ResolvedDatabaseName) {
-            return ResolvedDatabaseName;
-        }
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -105,10 +102,6 @@ private:
 
     bool Validate(TString&) override {
         return true;
-    }
-
-    void SetDatabaseName(const TString& database) override {
-        ResolvedDatabaseName = database;
     }
 
     void SetCounters(IGRpcProxyCounters::TPtr counters) override {
@@ -302,7 +295,6 @@ private:
     }
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
-    TMaybe<TString> ResolvedDatabaseName;
     NYql::TIssueManager IssueManager;
     IGRpcProxyCounters::TPtr Counters;
     std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;

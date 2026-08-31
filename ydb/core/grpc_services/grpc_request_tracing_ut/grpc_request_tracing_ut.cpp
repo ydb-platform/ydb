@@ -148,10 +148,6 @@ public:
         Database_ = database;
     }
 
-    void SetDatabaseName(const TString& database) override {
-        Database_ = database;
-    }
-
     void SetRespHook(NGRpcService::TRespHook&&) override {
     }
 
@@ -190,7 +186,7 @@ public:
         return {};
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 

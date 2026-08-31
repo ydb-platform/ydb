@@ -480,6 +480,8 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxyHandleMethods;
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
+
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -514,8 +516,14 @@ public:
     // validation
     virtual bool Validate(TString& error) = 0;
 
+    const TMaybe<TString> GetDatabaseName() const final {
+        return ResolvedDatabaseName ? ResolvedDatabaseName : GetDatabaseNameFromRequest();
+    }
+
     // Store the resolved database for request processing without updating counters.
-    virtual void SetDatabaseName(const TString& database) = 0;
+    void SetDatabaseName(const TString& database) {
+        ResolvedDatabaseName = database;
+    }
 
     // counters
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
@@ -555,6 +563,7 @@ public:
 
 private:
     NWilson::TTraceId UserFacingTraceId;
+    TMaybe<TString> ResolvedDatabaseName;
 };
 
 // Request context
@@ -668,7 +677,7 @@ public:
         return false;
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 
@@ -750,9 +759,6 @@ public:
 
     bool Validate(TString&) override {
         return true;
-    }
-
-    void SetDatabaseName(const TString&) override {
     }
 
     void SetCounters(IGRpcProxyCounters::TPtr) override {
@@ -887,6 +893,13 @@ struct TYdbGrpcMethodAccessorTraits {
     }
 };
 
+template <typename TReq>
+struct TYdbGrpcDatabaseNameAccessorTraits {
+    static const TMaybe<TString> GetDatabaseName(const TReq&, const NYdbGrpc::IRequestContextBase* ctx) {
+        return ExtractDatabaseName(ctx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    }
+};
+
 template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
     : public IRequestProxyCtx
@@ -956,10 +969,7 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        if (ResolvedDatabaseName_) {
-            return ResolvedDatabaseName_;
-        }
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1016,10 +1026,6 @@ public:
 
     bool Validate(TString&) override {
         return true;
-    }
-
-    void SetDatabaseName(const TString& database) override {
-        ResolvedDatabaseName_ = database;
     }
 
     void SetCounters(IGRpcProxyCounters::TPtr counters) override {
@@ -1167,7 +1173,6 @@ public:
 
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
-    TMaybe<TString> ResolvedDatabaseName_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
@@ -1315,11 +1320,8 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        if (ResolvedDatabaseName) {
-            return ResolvedDatabaseName;
-        }
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
+        return TYdbGrpcDatabaseNameAccessorTraits<TRequest>::GetDatabaseName(*GetProtoRequest(), Ctx_.Get());
     }
 
     TString GetRpcMethodName() const override {
@@ -1395,10 +1397,6 @@ public:
 
     bool Validate(TString&) override {
         return true;
-    }
-
-    void SetDatabaseName(const TString& database) override {
-        ResolvedDatabaseName = database;
     }
 
     void SetCounters(IGRpcProxyCounters::TPtr counters) override {
@@ -1658,7 +1656,6 @@ protected:
     NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
-    TMaybe<TString> ResolvedDatabaseName;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;
@@ -1977,7 +1974,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
-                    Database,
+                    GetDatabaseName().GetOrElse(Database),
                     YdbToken,
                     UserToken,
                     GetAuditLogParts()
@@ -2021,10 +2018,6 @@ public:
 
     bool Validate(TString& /*error*/) override {
         return true;
-    }
-
-    void SetDatabaseName(const TString& database) override {
-        Database = database;
     }
 
     void SetCounters(IGRpcProxyCounters::TPtr counters) override {
@@ -2080,7 +2073,7 @@ public:
         return Span.GetTraceId();
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 

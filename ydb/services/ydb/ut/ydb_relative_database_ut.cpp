@@ -47,7 +47,7 @@ void AssertSuccess(const TDiscoveryResult& result) {
 
 Y_UNIT_TEST_SUITE(YdbRelativeDatabase) {
 
-Y_UNIT_TEST(InitialDiscoveryResolvesDatabaseAgainstClusterRoot) {
+Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     TKikimrWithGrpcAndRootSchema server({}, {}, {}, false, nullptr, [](auto& settings) {
         settings.AddStoragePool(TenantPoolKind, TStringBuilder() << TenantPath << ':' << TenantPoolKind);
     });
@@ -74,14 +74,46 @@ Y_UNIT_TEST(InitialDiscoveryResolvesDatabaseAgainstClusterRoot) {
     AssertSuccess(ListEndpoints(*stub, "Root/mydb", "Root/mydb"));
     AssertSuccess(ListEndpoints(*stub, "mydb", "mydb"));
     AssertSuccess(ListEndpoints(*stub, "/Root/mydb", "mydb"));
+    AssertSuccess(ListEndpoints(*stub, "", "mydb"));
 
     TDriver driver(TDriverConfig()
         .SetEndpoint(TStringBuilder() << "localhost:" << tenantGrpcPort)
         .SetDatabase("mydb")
         .SetDiscoveryMode(EDiscoveryMode::Sync));
+    // Every SDK request below keeps using the relative database after synchronous discovery.
     NYdb::NTable::TTableClient tableClient(driver);
-    const auto session = tableClient.CreateSession().GetValueSync();
-    UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+    const auto sessionResult = tableClient.CreateSession().GetValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.GetSession();
+
+    const auto createTableResult = session.ExecuteSchemeQuery(R"(
+        --!syntax_v1
+        CREATE TABLE relative_path_test (
+            Id Uint64,
+            Payload Utf8,
+            PRIMARY KEY (Id)
+        );
+    )").GetValueSync();
+    UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
+
+    const auto upsertResult = session.ExecuteDataQuery(R"(
+        --!syntax_v1
+        UPSERT INTO relative_path_test (Id, Payload) VALUES (1u, "value");
+    )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+    const auto selectResult = session.ExecuteDataQuery(R"(
+        --!syntax_v1
+        SELECT Payload FROM relative_path_test WHERE Id = 1u;
+    )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+
+    TResultSetParser parser(selectResult.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+    const auto payload = parser.ColumnParser("Payload").GetOptionalUtf8();
+    UNIT_ASSERT(payload);
+    UNIT_ASSERT_VALUES_EQUAL(*payload, "value");
+    UNIT_ASSERT(!parser.TryNextRow());
 }
 
 } // YdbRelativeDatabase

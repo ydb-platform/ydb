@@ -672,18 +672,28 @@ void TKqpPlanner::PrepareCheckpoints() {
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
+        const bool enabledCheckpoints = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED;
+        const bool isIngress = NDq::IsIngress(settings);
         if (enabledCheckpoints && isIngress) {
             hasStreamingIngress = true;
             break;
         }
     }
+<<<<<<< HEAD
     LOG_D("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
+=======
+
+    YDB_LOG_DEBUG("PrepareCheckpoints: checked streaming ingress",
+        {"txId", TxId},
+        {"ctx", *UserRequestContext},
+        {"hasStreamingIngress", hasStreamingIngress});
+
+>>>>>>> 27a6bf88dd5 (YQ-5656 fixed checkpoint commit notifications for egress tasks (#51599))
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
     }
+
     TasksGraph.GetMeta().CreateSuspended = hasStreamingIngress;
 }
 
@@ -918,22 +928,30 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
                 << ": task " << dqTask.Id << " has no ComputeActorId (node disconnected / task not started)");
             return;
         }
+
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
         auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-            dqTask.Id,
-            enabledCheckpoints,
-            isIngress,
-            TasksGraph.IsEgressTask(dqTask),
-            NYql::NDq::HasState(settings),
-            dqTask.ComputeActorId
+            .Id = dqTask.Id,
+            .IsCheckpointingEnabled = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED,
+            .IsIngress = NDq::IsIngress(settings),
+            .IsEgress = NDq::IsEgress(settings),
+            .HasState = NDq::HasState(settings),
+            .ActorId = dqTask.ComputeActorId,
         };
         event->Tasks.emplace_back(std::move(task));
     }
+<<<<<<< HEAD
     LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+=======
+
+    YDB_LOG_INFO("Sending TEvReadyState to checkpoint coordinator",
+        {"txId", TxId},
+        {"ctx", *UserRequestContext},
+        {"checkpointCoordinatorId", CheckpointCoordinatorId});
+    TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+>>>>>>> 27a6bf88dd5 (YQ-5656 fixed checkpoint commit notifications for egress tasks (#51599))
     CheckpointsReadyStateSent = true;
 }
 

@@ -695,7 +695,6 @@ public:
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        SendWhiteboardRequest() ;   // TODO
         if (record.SystemStateInfoSize() != 1)  {
             YDB_LOG_DEBUG("Unexpected whiteboard info");
             return;

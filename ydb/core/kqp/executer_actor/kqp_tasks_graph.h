@@ -425,7 +425,7 @@ private:
     void CountScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode);
     void CountFullTextScanTasksFromSource(TStageInfo& stageInfo);
     void CountSysViewTasksFromSource(TStageInfo& stageInfo);
-    void CountReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 scheduledTaskCount);
+    void CountReadTasksFromSource(TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount);
     void CountSysViewScanTasks(TStageInfo& stageInfo);
     void CountComputeTasks(TStageInfo& stageInfo, ui32 nodesCount);
     void CountScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination);

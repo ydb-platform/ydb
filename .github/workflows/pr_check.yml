@@ -14,7 +14,6 @@ on:
       - 'synchronize'
       - 'reopened'
       - 'ready_for_review'
-      - 'converted_to_draft'
       - 'labeled'
   push:
     branches:
@@ -25,8 +24,7 @@ on:
       - 'ydb/docs/**'
 # Only 'rebase-and-check' and 'ok-to-test' labels should re-trigger checks.
 # Draft PRs skip automatic checks, but these labels can start them explicitly.
-# Marking a PR ready for review starts checks, while converting it to a draft
-# cancels an in-progress run through the shared PR concurrency group.
+# Marking a PR ready for review starts checks automatically.
 # Other labels must not cancel running checks or start new ones.
 # To achieve this we assign irrelevant label events a unique concurrency group
 # (by appending run_id) so they never cancel an in-progress run, and the job-level

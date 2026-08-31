@@ -326,26 +326,12 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
 
 // TBasicServicesInitializer
 
-void AddExecutorPool(
-    TCpuManagerConfig& cpuManager,
-    const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
-    const NKikimrConfig::TActorSystemConfig& systemConfig,
-    ui32 poolId,
-    const NKikimr::TAppData* appData)
-{
-    const auto counters = GetServiceCounters(appData->Counters, "utils");
-    NActorSystemConfigHelpers::AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, counters);
-}
-
 static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config,
                                                 const NKikimr::TAppData* appData)
 {
     TCpuManagerConfig cpuManager;
     cpuManager.Shared.United = config.GetUseUnitedPool();
-    cpuManager.PingInfoByPool.resize(config.GetExecutor().size());
-    for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
-        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, appData);
-    }
+    NActorSystemConfigHelpers::AddExecutorPools(cpuManager, config, GetServiceCounters(appData->Counters, "utils"));
     return cpuManager;
 }
 

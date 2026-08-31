@@ -2,10 +2,11 @@
 
 #include "storage_transport.h"
 
+#include <library/cpp/threading/hot_swap/hot_swap.h>
+
 #include <util/generic/hash_set.h>
 
 #include <memory>
-#include <shared_mutex>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -106,10 +107,14 @@ public:
         const THostConnection& connection) override;
 
 private:
+    struct TDisabledNodes: public TAtomicRefCount<TDisabledNodes>
+    {
+        THashSet<ui32> NodeIds;
+    };
+
     const TStorageTransportPtr UnderlyingTransport;
 
-    mutable std::shared_mutex Mutex;
-    THashSet<ui32> DisabledNodes;
+    THotSwap<TDisabledNodes> DisabledNodes{MakeIntrusive<TDisabledNodes>()};
 };
 
 ////////////////////////////////////////////////////////////////////////////////

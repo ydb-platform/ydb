@@ -38,13 +38,12 @@ TDbgConfigColumn BuildDbgConfigColumn(const TDbgSnapshot& dbg)
 {
     TDbgConfigColumn result;
 
-    // Обойдем все подключения и создадим ноды.
+    // Iterate over all connections and create the nodes.
     for (const auto& connection: dbg.Connections) {
         result[connection.DDiskId.NodeId];
     }
 
-    // Обойдем все VCHunks и пометим ноды которые используются для DDisk и
-    // PBuffer.
+    // Iterate over all VChunks and mark the nodes used for DDisk and PBuffer.
     for (const auto& [vChunkIndex, config]: dbg.VChunkConfigs) {
         for (THostIndex host = 0; host < config.GetHostCount(); ++host) {
             const auto& dDiskId = dbg.Connections[host].DDiskId;

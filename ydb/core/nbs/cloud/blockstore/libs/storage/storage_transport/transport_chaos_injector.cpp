@@ -37,14 +37,28 @@ TTransportChaosInjector::TTransportChaosInjector(
 
 void TTransportChaosInjector::DisableNode(ui32 nodeId)
 {
-    std::unique_lock lock(Mutex);
-    DisabledNodes.insert(nodeId);
+    const auto current = DisabledNodes.AtomicLoad();
+    if (current->NodeIds.contains(nodeId)) {
+        return;
+    }
+
+    auto next = MakeIntrusive<TDisabledNodes>();
+    next->NodeIds = current->NodeIds;
+    next->NodeIds.insert(nodeId);
+    DisabledNodes.AtomicStore(next);
 }
 
 void TTransportChaosInjector::EnableNode(ui32 nodeId)
 {
-    std::unique_lock lock(Mutex);
-    DisabledNodes.erase(nodeId);
+    const auto current = DisabledNodes.AtomicLoad();
+    if (!current->NodeIds.contains(nodeId)) {
+        return;
+    }
+
+    auto next = MakeIntrusive<TDisabledNodes>();
+    next->NodeIds = current->NodeIds;
+    next->NodeIds.erase(nodeId);
+    DisabledNodes.AtomicStore(next);
 }
 
 IStorageTransport::TConnectResultFutures TTransportChaosInjector::Connect(
@@ -229,8 +243,7 @@ TTransportChaosInjector::DeleteTabletChunks(const THostConnection& connection)
 
 bool TTransportChaosInjector::IsNodeDisabled(ui32 nodeId) const
 {
-    std::shared_lock lock(Mutex);
-    return DisabledNodes.contains(nodeId);
+    return DisabledNodes.AtomicLoad()->NodeIds.contains(nodeId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

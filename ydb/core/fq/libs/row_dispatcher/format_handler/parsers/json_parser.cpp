@@ -480,9 +480,9 @@ public:
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected object, but got " << JsonTypeToString(cellType));
                     return false;
                 }
-                simdjson::ondemand::object jsonObject;
+                simdjson::ondemand::object object;
                 {
-                    CHECK_JSON_ERROR(jsonValue.get_object().get(jsonObject)) {
+                    CHECK_JSON_ERROR(jsonValue.get_object().get(object)) {
                         SetParsingError(error, jsonValue, "parse as object", status, isQuiet);
                         return false;
                     }
@@ -490,7 +490,7 @@ public:
 
                 {
                     bool isEmpty;
-                    CHECK_JSON_ERROR(jsonObject.is_empty().get(isEmpty)) {
+                    CHECK_JSON_ERROR(object.is_empty().get(isEmpty)) {
                         SetParsingError(error, jsonValue, "parse as object", status, isQuiet);
                         return false;
                     }
@@ -499,7 +499,7 @@ public:
                         return true;
                     }
                 }
-                jsonObject.reset();
+                object.reset();
                 auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
                 auto keyType = dictType->GetKeyType();
                 Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data); // should be already verified, not user-data-error
@@ -515,7 +515,7 @@ public:
                 status = TStatus::Success();
                 NYql::NUdf::TUnboxedValue dictValue = HolderFactory->CreateDirectHashedDictHolder(
                     [&, this](auto& map) {
-                        for (auto elt : jsonObject) {
+                        for (auto elt : object) {
                             std::string_view name;
                             {
                                 CHECK_JSON_ERROR(elt.escaped_key().get(name)) {

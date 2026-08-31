@@ -77,4 +77,5 @@ struct TCpuTopology {
 };
 
 std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root);
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root, const TCpuMask& allowedCpus);
 std::expected<TCpuTopology, TString> ParseCpuTopology();

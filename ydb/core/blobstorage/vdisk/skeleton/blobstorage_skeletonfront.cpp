@@ -1354,7 +1354,7 @@ namespace NKikimr {
                 }
 #endif
                 // good, enqueue it in intQueue
-                auto latencyHistogram = GetLatencyHistogram(*ev->Get());
+                auto latencyHistogram = GetLatencyHistogram(*event->Get<TEvent>());
                 intQueue.Enqueue(ctx, recByteSize, std::move(event), msgId, cost, deadline, extQueueId, *this, clientId,
                     std::move(trace), internalMessageId, now, std::move(latencyHistogram));
 

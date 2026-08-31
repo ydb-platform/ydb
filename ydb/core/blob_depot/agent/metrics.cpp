@@ -6,7 +6,9 @@ namespace NKikimr::NBlobDepot {
         if (IsConnected) {
             const ui64 bytesRead = BytesRead - std::exchange(LastBytesRead, BytesRead);
             const ui64 bytesWritten = BytesWritten - std::exchange(LastBytesWritten, BytesWritten);
-            NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvPushMetrics(bytesRead, bytesWritten));
+            auto event = std::make_unique<TEvBlobDepot::TEvPushMetrics>(bytesRead, bytesWritten);
+            event->Record.SetNodeId(SelfId().NodeId());
+            NTabletPipe::SendData(SelfId(), PipeId, event.release());
         }
 
         TActivationContext::Schedule(TDuration::MilliSeconds(2500), new IEventHandle(TEvPrivate::EvPushMetrics, 0, SelfId(),

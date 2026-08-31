@@ -22,9 +22,9 @@
 #include "boost/dynamic_bitset/config.hpp"
 #include "boost/dynamic_bitset/detail/dynamic_bitset.hpp"
 #include "boost/dynamic_bitset_fwd.hpp"
-#include "boost/limits.hpp"
 #include <iosfwd>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -917,7 +917,7 @@ public:
     //!     \pre
     //!     `pos + len <= this->size()`.
     //!
-    //!     \oaram pos The position of the lowest bit to reset.
+    //!     \param pos The position of the lowest bit to reset.
     //!     \param len The number of bits to reset.
     //!
     //!     \return
@@ -1107,7 +1107,27 @@ public:
     BOOST_DYNAMIC_BITSET_CONSTEXPR20 bool             operator[]( size_type pos ) const;
 
     //!     Returns the numeric value corresponding to the bits in
-    //!     `*this`.
+    //!     `*this` (zero if `*this` is empty).
+    //!
+    //!     \par Type requirements
+    //!     `T` is a cv-unqualified unsigned integer type other than
+    //!     `bool`.
+    //!
+    //!     \par Throws
+    //!     `std::overflow_error` if that value is too large to be
+    //!     represented in `T`, i.e. if `*this` has any non-zero bit at a
+    //!     position >= `std::numeric_limits< T >::digits`.
+    //!
+    //!     \return
+    //!     The numeric value corresponding to the bits in `*this`.
+    // -----------------------------------------------------------------------
+    template< typename T >
+    BOOST_DYNAMIC_BITSET_CONSTEXPR20 T               to_number() const;
+
+    //!     Returns the numeric value corresponding to the bits in
+    //!     `*this` (zero if `*this` is empty).
+    //!
+    //!     Equivalent to `to_number< unsigned long >()`.
     //!
     //!     \par Throws
     //!     `std::overflow_error` if that value is too large to be

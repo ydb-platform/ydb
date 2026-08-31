@@ -1,6 +1,6 @@
 #include "column.h"
 
-#include "evaluate.h"
+#include <yql/essentials/sql/v1/ide/analysis/evaluate.h>
 #include "function.h"
 
 #include <yql/essentials/sql/v1/ide/completion/core/name.h>

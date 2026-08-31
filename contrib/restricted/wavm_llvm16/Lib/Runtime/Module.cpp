@@ -8,6 +8,7 @@
 #include "WAVM/LLVMJIT/LLVMJIT.h"
 #include "WAVM/Platform/Intrinsic.h"
 #include "WAVM/Platform/RWMutex.h"
+#include "WAVM/Runtime/ModuleDebugInfo.h"
 #include "WAVM/Runtime/Runtime.h"
 #include "WAVM/WASM/WASM.h"
 
@@ -28,6 +29,15 @@ static std::shared_ptr<ObjectCacheInterface> getGlobalObjectCache()
 {
 	Platform::RWMutex::ShareableLock globalObjectCacheLock(globalObjectCacheMutex);
 	return globalObjectCache;
+}
+
+static std::shared_ptr<ModuleDebugInfo> maybeCreateModuleDebugInfo(const IR::Module& irModule,
+																   const U8* wasmBytes,
+																   Uptr numWasmBytes)
+{
+	Uptr unusedIndex = 0;
+	if(!IR::findCustomSection(irModule, ".debug_info", unusedIndex)) { return nullptr; }
+	return ModuleDebugInfo::tryCreate(wasmBytes, numWasmBytes);
 }
 
 ModuleRef Runtime::compileModule(const IR::Module& irModule)
@@ -68,6 +78,8 @@ bool Runtime::loadBinaryModule(const U8* wasmBytes,
 	IR::Module irModule(std::move(featureSpec));
 	if(!WASM::loadBinaryModule(wasmBytes, numWASMBytes, irModule, outError)) { return false; }
 
+	auto debugInfo = maybeCreateModuleDebugInfo(irModule, wasmBytes, numWASMBytes);
+
 	// Get a pointer to the global object cache, if there is one.
 	std::shared_ptr<ObjectCacheInterface> objectCache = getGlobalObjectCache();
 
@@ -85,7 +97,8 @@ bool Runtime::loadBinaryModule(const U8* wasmBytes,
 		});
 	}
 
-	outModule = std::make_shared<Runtime::Module>(std::move(irModule), std::move(objectCode));
+	outModule = std::make_shared<Runtime::Module>(
+		std::move(irModule), std::move(objectCode), std::move(debugInfo));
 	return true;
 }
 
@@ -93,6 +106,16 @@ ModuleRef Runtime::loadPrecompiledModule(const IR::Module& irModule,
 										 const std::vector<U8>& objectCode)
 {
 	return std::make_shared<Module>(IR::Module(irModule), std::vector<U8>(objectCode));
+}
+
+ModuleRef Runtime::loadPrecompiledModule(const IR::Module& irModule,
+										 const std::vector<U8>& objectCode,
+										 const U8* wasmBytes,
+										 Uptr numWasmBytes)
+{
+	auto debugInfo = maybeCreateModuleDebugInfo(irModule, wasmBytes, numWasmBytes);
+	return std::make_shared<Module>(
+		IR::Module(irModule), std::vector<U8>(objectCode), std::move(debugInfo));
 }
 
 const IR::Module& Runtime::getModuleIR(ModuleConstRefParam module) { return module->ir; }

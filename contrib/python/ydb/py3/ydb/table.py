@@ -1101,7 +1101,7 @@ class ISession(abc.ABC):
     @abstractmethod
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -1322,7 +1322,7 @@ class TableClient(BaseTableClient["SyncDriver"]):
         Create a YDB table.
 
         :param path: A table path
-        :param table_description: TableDescription instanse.
+        :param table_description: TableDescription instance.
         :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
 
         :return: Operation or YDB error otherwise.
@@ -1881,7 +1881,7 @@ class BaseSession(ISession):
 
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -2556,7 +2556,7 @@ class BaseTxContext(ITxContext):
 
     def _check_split(self, allow=""):
         """
-        Deny all operaions with transaction after commit/rollback.
+        Deny all operations with transaction after commit/rollback.
         Exception: double commit and double rollbacks, because it is safe
         """
         allow_split_transaction = (

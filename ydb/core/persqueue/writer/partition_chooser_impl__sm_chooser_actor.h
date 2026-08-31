@@ -24,13 +24,16 @@ public:
     using TParentActor = TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>;
 
     TSMPartitionChooserActor(TActorId parentId,
+                           const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                            const std::shared_ptr<IPartitionChooser>& chooser,
                            const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition,
                            NWilson::TTraceId traceId)
-        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
+        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(
+                parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId),
+                config.GetPQTabletConfig().HasId() ? &config.GetPQTabletConfig().GetId() : nullptr)
         , Graph(graph) {
     }
 

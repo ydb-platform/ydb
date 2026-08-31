@@ -79,8 +79,7 @@ public:
     static constexpr ui64 BlockSize = CachelineSize;
     static constexpr ui64 BlockBits = CachelineBits;
 
-    TBloomfilter() {
-    }
+    TBloomfilter() = default;
     explicit TBloomfilter(ui64 size) {
         Resize(size);
     }
@@ -89,8 +88,8 @@ public:
         size = std::max(size, CachelineSize);
         Bits_ = 6;
 
-        for (; (ui64(1) << Bits_) < size; ++Bits_)
-            ;
+        for (; (ui64(1) << Bits_) < size; ++Bits_) {
+        }
 
         Bits_ += 3; // -> multiply by 8
 
@@ -271,7 +270,6 @@ private:
     void ProcessBucketRestoration();
     void ProcessFinalizing();
 
-private:
     enum class EState {
         InMemory,
         Spilling,

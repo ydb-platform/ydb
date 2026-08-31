@@ -15,8 +15,12 @@ TAggregatedTabletCounters::TAggregatedTabletCounters(
     , Visibility(visibility)
 {}
 
-void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters) {
+void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters, const THashSet<TString>* nameFilter) {
     Y_ABORT_UNLESS(!IsInitialized);
+
+    const auto isPublished = [nameFilter](const char* name) {
+        return name && (!nameFilter || nameFilter->empty() || nameFilter->contains(name));
+    };
 
     if (counters) {
         THashMap<TString, THolder<THistogramCounter>> histogramAggregates;
@@ -25,7 +29,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters) 
         FullSizePercentile = counters->Percentile().Size();
         AggregatedHistogramCounters.Reserve(FullSizePercentile);
         for (ui32 i = 0; i < FullSizePercentile; ++i) {
-            if (!counters->PercentileCounterName(i)) {
+            if (!isPublished(counters->PercentileCounterName(i))) {
                 DeprecatedPercentile.insert(i);
                 continue;
             }
@@ -43,7 +47,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters) 
         AggregatedSimpleCounters.Reserve(FullSizeSimple);
         for (ui32 i = 0; i < FullSizeSimple; ++i) {
             const char* name = counters->SimpleCounterName(i);
-            if (!name) {
+            if (!isPublished(name)) {
                 DeprecatedSimple.insert(i);
                 continue;
             }
@@ -60,7 +64,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters) 
         AggregatedCumulativeCounters.Reserve(FullSizeCumulative);
         for (ui32 i = 0; i < FullSizeCumulative; ++i) {
             const char* name = counters->CumulativeCounterName(i);
-            if (!name) {
+            if (!isPublished(name)) {
                 DeprecatedCumulative.insert(i);
                 continue;
             }
@@ -101,7 +105,7 @@ void TAggregatedTabletCounters::Apply(
     TVector<ui64> simpleValues;
     simpleValues.resize(FullSizeSimple); // more than needed
     for (ui32 i = 0; i < FullSizeSimple; ++i) {
-        if (!counters->SimpleCounterName(i)) {
+        if (DeprecatedSimple.contains(i)) {
             continue;
         }
         const ui32 offset = nextSimpleOffset++;
@@ -115,7 +119,7 @@ void TAggregatedTabletCounters::Apply(
     TVector<ui64> cumulativeValues;
     cumulativeValues.resize(FullSizeCumulative, 0);
     for (ui32 i = 0; i < FullSizeCumulative; ++i) {
-        if (!counters->CumulativeCounterName(i)) {
+        if (DeprecatedCumulative.contains(i)) {
             continue;
         }
         const ui32 offset = nextCumulativeOffset++;
@@ -131,7 +135,7 @@ void TAggregatedTabletCounters::Apply(
     // percentile counters
     ui32 nextPercentileOffset = 0;
     for (ui32 i = 0; i < FullSizePercentile; ++i) {
-        if (!counters->PercentileCounterName(i)) {
+        if (DeprecatedPercentile.contains(i)) {
             continue;
         }
 

@@ -802,9 +802,19 @@
         }
     },
     "test.TestViewer.test_storage_groups": {
-        "FieldsAvailable": "111110111111111111111111111",
-        "FieldsRequired": "111111111111111111111111111",
+        "FieldsAvailable": "1111110111111111111111111111",
+        "FieldsRequired": "1111111111111111111111111111",
         "FoundGroups": 5,
+        "GroupSizeInUnitsChecks": {
+            "GroupSizeOnly": {
+                "AllGroupsHaveField": true,
+                "HasNestedDiskData": false
+            },
+            "WhiteboardOnly": {
+                "AllGroupsHaveNonZeroSize": true,
+                "AllGroupsMatchVDisks": true
+            }
+        },
         "StorageGroups": [
             {
                 "Available": "not-zero-number-text",
@@ -814,6 +824,7 @@
                 "ErasureSpecies": "none",
                 "GroupGeneration": "1",
                 "GroupId": "0",
+                "GroupSizeInUnits": 0,
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
@@ -852,17 +863,19 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
+                                "PDiskCapacityAlert": "GREEN",
                                 "PDiskId": 1,
                                 "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
+                                "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
                                 "TotalSize": "not-zero-number-text"
@@ -877,6 +890,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -915,8 +929,9 @@
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
-                "GroupGeneration": "1",
+                "GroupGeneration": "2",
                 "GroupId": "2181038080",
+                "GroupSizeInUnits": 1,
                 "Kind": "hdd",
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
@@ -957,24 +972,26 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
+                                "PDiskCapacityAlert": "GREEN",
                                 "PDiskId": 1,
                                 "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
+                                "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
                                 "TotalSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
-                        "VDiskId": "2181038080-1-0-0-0",
+                        "VDiskId": "2181038080-2-0-0-0",
                         "Whiteboard": {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
@@ -982,6 +999,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -1001,7 +1019,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -1020,8 +1038,9 @@
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
-                "GroupGeneration": "1",
+                "GroupGeneration": "2",
                 "GroupId": "2181038081",
+                "GroupSizeInUnits": 1,
                 "Kind": "hdd",
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
@@ -1062,24 +1081,26 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
+                                "PDiskCapacityAlert": "GREEN",
                                 "PDiskId": 1,
                                 "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
+                                "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
                                 "TotalSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
-                        "VDiskId": "2181038081-1-0-0-0",
+                        "VDiskId": "2181038081-2-0-0-0",
                         "Whiteboard": {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
@@ -1087,6 +1108,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -1106,7 +1128,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -1128,6 +1150,7 @@
                 "ErasureSpecies": "none",
                 "GroupGeneration": "2",
                 "GroupId": "2181038082",
+                "GroupSizeInUnits": 0,
                 "Kind": "hdd",
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
@@ -1168,17 +1191,19 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
+                                "PDiskCapacityAlert": "GREEN",
                                 "PDiskId": 1,
                                 "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
+                                "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
                                 "TotalSize": "not-zero-number-text"
@@ -1193,6 +1218,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -1234,6 +1260,7 @@
                 "ErasureSpecies": "none",
                 "GroupGeneration": "2",
                 "GroupId": "2181038083",
+                "GroupSizeInUnits": 0,
                 "Kind": "hdd",
                 "LatencyGetFast": "accepted-value",
                 "LatencyPutTabletLog": "accepted-value",
@@ -1274,17 +1301,19 @@
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
                                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-                                "ExpectedSlotCount": 0,
+                                "ExpectedSlotCount": 16,
                                 "ExpectedSlotSize": "0",
                                 "Guid": "1",
                                 "LogTotalSize": "not-zero-number-text",
                                 "LogUsedSize": "not-zero-number-text",
                                 "NumActiveSlots": 5,
+                                "PDiskCapacityAlert": "GREEN",
                                 "PDiskId": 1,
                                 "PDiskUsage": "not-zero-number",
                                 "Path": "SectorMap:1:64",
                                 "Realtime": "Green",
                                 "SerialNumber": "",
+                                "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
                                 "TotalSize": "not-zero-number-text"
@@ -1299,6 +1328,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -1334,6 +1364,156 @@
         ],
         "TotalGroups": 5
     },
+    "test.TestViewer.test_storage_groups_pdisk_fields_hidden_for_database_user": [
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&group_id=2181038082",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&group_id=2181038082",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&node_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&node_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&pdisk_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "database"
+        },
+        {
+            "request": "/storage/groups?database=/Root/dedicated_db&fields_required=VDisk,PDisk,NodeId,PDiskId&pdisk_id=1",
+            "response": {
+                "StorageGroups": [
+                    {
+                        "GroupId": "2181038082",
+                        "VDisks": [
+                            {
+                                "NodeId": 1,
+                                "PDisk": {
+                                    "PDiskId": "1-1"
+                                },
+                                "VDiskId": "2181038082-2-0-0-0"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "user": "root"
+        }
+    ],
     "test.TestViewer.test_storage_stats": {
         "Paths": [
             {
@@ -4814,14 +4994,14 @@
             },
             {
                 "ErasureSpecies": "none",
-                "GroupGeneration": 1,
+                "GroupGeneration": 2,
                 "GroupID": 2181038080,
                 "NodeId": 1,
                 "StoragePoolName": "dynamic_storage_pool:1",
                 "VDiskIds": [
                     {
                         "Domain": 0,
-                        "GroupGeneration": 1,
+                        "GroupGeneration": 2,
                         "GroupID": 2181038080,
                         "Ring": 0,
                         "VDisk": 0
@@ -4833,14 +5013,14 @@
             },
             {
                 "ErasureSpecies": "none",
-                "GroupGeneration": 1,
+                "GroupGeneration": 2,
                 "GroupID": 2181038081,
                 "NodeId": 1,
                 "StoragePoolName": "dynamic_storage_pool:1",
                 "VDiskIds": [
                     {
                         "Domain": 0,
-                        "GroupGeneration": 1,
+                        "GroupGeneration": 2,
                         "GroupID": 2181038081,
                         "Ring": 0,
                         "VDisk": 0
@@ -5007,6 +5187,30 @@
         "tabletcounters_no_path_no_tablet": {
             "status_code": 400,
             "text": "Parameter 'path' or 'tablet_id' is required"
+        }
+    },
+    "test.TestViewer.test_viewer_database_stats": {
+        "/Root/dedicated_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "/Root/serverless_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "/Root/shared_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "no-database": {
+            "status_code": 400,
+            "text": "Database is required"
         }
     },
     "test.TestViewer.test_viewer_describe": {
@@ -5706,7 +5910,7 @@
                             "VDiskCategory": "0",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -5726,7 +5930,7 @@
                             "VDiskCategory": "0",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -5889,6 +6093,12 @@
                 }
             },
             "BlobStorageConfig": {
+                "InferPDiskSlotCountSettings": {
+                    "Rot": {
+                        "MaxSlots": 16,
+                        "UnitSize": "4294967296"
+                    }
+                },
                 "ServiceSet": {
                     "AvailabilityDomains": [
                         "1"
@@ -6939,6 +7149,12 @@
                 }
             },
             "BlobStorageConfig": {
+                "InferPDiskSlotCountSettings": {
+                    "Rot": {
+                        "MaxSlots": 16,
+                        "UnitSize": "4294967296"
+                    }
+                },
                 "ServiceSet": {
                     "AvailabilityDomains": [
                         "1"
@@ -7989,6 +8205,12 @@
                 }
             },
             "BlobStorageConfig": {
+                "InferPDiskSlotCountSettings": {
+                    "Rot": {
+                        "MaxSlots": 16,
+                        "UnitSize": "4294967296"
+                    }
+                },
                 "ServiceSet": {
                     "AvailabilityDomains": [
                         "1"
@@ -9000,8 +9222,8 @@
         }
     },
     "test.TestViewer.test_viewer_groups_allocation_units_without_pool_name": {
-        "FieldsAvailable": "000000100000100000100011111",
-        "FieldsRequired": "000000000000100000000000011",
+        "FieldsAvailable": "1000000100000100000100011111",
+        "FieldsRequired": "0000000000000100000000000011",
         "FoundGroups": 5,
         "StorageGroups": [
             {
@@ -9026,8 +9248,8 @@
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
-            "FieldsAvailable": "111110111111011111011110001",
-            "FieldsRequired": "100000000010000000000000001",
+            "FieldsAvailable": "1111110111111011111011110001",
+            "FieldsRequired": "0100000000010000000000000001",
             "FoundGroups": 5,
             "StorageGroupGroups": [
                 {
@@ -9046,8 +9268,8 @@
             "TotalGroups": 5
         },
         {
-            "FieldsAvailable": "111110111111011111011110001",
-            "FieldsRequired": "100000000010000000000000001",
+            "FieldsAvailable": "1111110111111011111011110001",
+            "FieldsRequired": "0100000000010000000000000001",
             "FoundGroups": 5,
             "StorageGroups": [
                 {
@@ -9076,8 +9298,8 @@
     ],
     "test.TestViewer.test_viewer_groups_group_by_pool_name": [
         {
-            "FieldsAvailable": "000000100000000000100011111",
-            "FieldsRequired": "000000000000000000000000011",
+            "FieldsAvailable": "1000000100000000000100011111",
+            "FieldsRequired": "0000000000000000000000000011",
             "FoundGroups": 5,
             "StorageGroupGroups": [
                 {
@@ -9112,8 +9334,8 @@
             "TotalGroups": 5
         },
         {
-            "FieldsAvailable": "000000100000000000100011111",
-            "FieldsRequired": "000000000000000000000000011",
+            "FieldsAvailable": "1000000100000000000100011111",
+            "FieldsRequired": "0000000000000000000000000011",
             "FoundGroups": 1,
             "StorageGroups": [
                 {
@@ -9865,18 +10087,20 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotCount": 16,
                             "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "PDiskCapacityAlert": "GREEN",
                             "PDiskId": 1,
                             "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
+                            "SlotSizeInUnits": 1,
                             "State": "Normal",
                             "SystemSize": "not-zero-number-text",
                             "TotalSize": "not-zero-number-text"
@@ -10039,6 +10263,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -10078,6 +10303,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -10100,7 +10326,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -10117,6 +10343,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -10139,7 +10366,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -10156,6 +10383,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -10195,6 +10423,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -10889,18 +11118,20 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotCount": 16,
                             "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "PDiskCapacityAlert": "GREEN",
                             "PDiskId": 1,
                             "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
+                            "SlotSizeInUnits": 1,
                             "State": "Normal",
                             "SystemSize": "not-zero-number-text",
                             "TotalSize": "not-zero-number-text"
@@ -11115,6 +11346,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -11154,6 +11386,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -11176,7 +11409,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -11193,6 +11426,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -11215,7 +11449,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -11232,6 +11466,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -11271,6 +11506,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -12207,7 +12443,7 @@
                 "ChangeTime": "not-zero-number-text",
                 "Device": 1,
                 "EnforcedDynamicSlotSize": "not-zero-number-text",
-                "ExpectedSlotCount": 0,
+                "ExpectedSlotCount": 16,
                 "ExpectedSlotSize": "0",
                 "Guid": "1",
                 "LogTotalSize": "not-zero-number-text",
@@ -14188,18 +14424,20 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotCount": 16,
                             "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "PDiskCapacityAlert": "GREEN",
                             "PDiskId": 1,
                             "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
+                            "SlotSizeInUnits": 1,
                             "State": "Normal",
                             "SystemSize": "not-zero-number-text",
                             "TotalSize": "not-zero-number-text"
@@ -14362,6 +14600,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14401,6 +14640,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14423,7 +14663,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -14440,6 +14680,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14462,7 +14703,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -14479,6 +14720,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14518,6 +14760,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14586,18 +14829,20 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotCount": 16,
                             "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "PDiskCapacityAlert": "GREEN",
                             "PDiskId": 1,
                             "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
+                            "SlotSizeInUnits": 1,
                             "State": "Normal",
                             "SystemSize": "not-zero-number-text",
                             "TotalSize": "not-zero-number-text"
@@ -14760,6 +15005,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14799,6 +15045,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14821,7 +15068,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -14838,6 +15085,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14860,7 +15108,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -14877,6 +15125,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14916,6 +15165,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -14984,18 +15234,20 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotCount": 16,
                             "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "PDiskCapacityAlert": "GREEN",
                             "PDiskId": 1,
                             "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
+                            "SlotSizeInUnits": 1,
                             "State": "Normal",
                             "SystemSize": "not-zero-number-text",
                             "TotalSize": "not-zero-number-text"
@@ -15158,6 +15410,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15197,6 +15450,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15219,7 +15473,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -15236,6 +15490,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15258,7 +15513,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -15275,6 +15530,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15314,6 +15570,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15382,18 +15639,20 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotCount": 16,
                             "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "PDiskCapacityAlert": "GREEN",
                             "PDiskId": 1,
                             "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
+                            "SlotSizeInUnits": 1,
                             "State": "Normal",
                             "SystemSize": "not-zero-number-text",
                             "TotalSize": "not-zero-number-text"
@@ -15556,6 +15815,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15595,6 +15855,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15617,7 +15878,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -15634,6 +15895,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15656,7 +15918,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -15673,6 +15935,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15712,6 +15975,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -15780,18 +16044,20 @@
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
                             "EnforcedDynamicSlotSize": "not-zero-number-text",
-                            "ExpectedSlotCount": 0,
+                            "ExpectedSlotCount": 16,
                             "ExpectedSlotSize": "0",
                             "Guid": "1",
                             "LogTotalSize": "not-zero-number-text",
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "PDiskCapacityAlert": "GREEN",
                             "PDiskId": 1,
                             "PDiskUsage": "not-zero-number",
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
                             "SerialNumber": "",
+                            "SlotSizeInUnits": 1,
                             "State": "Normal",
                             "SystemSize": "not-zero-number-text",
                             "TotalSize": "not-zero-number-text"
@@ -16006,6 +16272,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -16045,6 +16312,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -16067,7 +16335,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038080,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -16084,6 +16352,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 1,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -16106,7 +16375,7 @@
                             "StoragePoolName": "dynamic_storage_pool:1",
                             "VDiskId": {
                                 "Domain": 0,
-                                "GroupGeneration": 1,
+                                "GroupGeneration": 2,
                                 "GroupID": 2181038081,
                                 "Ring": 0,
                                 "VDisk": 0
@@ -16123,6 +16392,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -16162,6 +16432,7 @@
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
+                            "GroupSizeInUnits": 0,
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
                             "IncarnationGuid": "not-zero-number-text",
@@ -18447,6 +18718,41 @@
                         "Flag": 1
                     }
                 },
+                "StoragePoolName": "static",
+                "VDiskId": {
+                    "Domain": 0,
+                    "GroupGeneration": 1,
+                    "GroupID": 0,
+                    "Ring": 0,
+                    "VDisk": 0
+                },
+                "VDiskSlotId": 0,
+                "VDiskState": 5
+            },
+            {
+                "AllocatedSize": "0",
+                "AvailableSize": "not-zero-number-text",
+                "ChangeTime": "not-zero-number-text",
+                "DiskSpace": 1,
+                "FrontQueues": 1,
+                "Guid": "1",
+                "HasUnreadableBlobs": false,
+                "IncarnationGuid": "not-zero-number-text",
+                "InstanceGuid": "not-zero-number-text",
+                "Kind": "0",
+                "NodeId": 1,
+                "PDiskId": 1,
+                "Replicated": true,
+                "ReplicationProgress": 1,
+                "ReplicationSecondsRemaining": 0,
+                "SatisfactionRank": {
+                    "FreshRank": {
+                        "Flag": 1
+                    },
+                    "LevelRank": {
+                        "Flag": 1
+                    }
+                },
                 "StoragePoolName": "/Root/dedicated_db:hdd",
                 "VDiskId": {
                     "Domain": 0,
@@ -18520,7 +18826,7 @@
                 "StoragePoolName": "dynamic_storage_pool:1",
                 "VDiskId": {
                     "Domain": 0,
-                    "GroupGeneration": 1,
+                    "GroupGeneration": 2,
                     "GroupID": 2181038080,
                     "Ring": 0,
                     "VDisk": 0
@@ -18552,45 +18858,10 @@
                         "Flag": 1
                     }
                 },
-                "StoragePoolName": "static",
-                "VDiskId": {
-                    "Domain": 0,
-                    "GroupGeneration": 1,
-                    "GroupID": 0,
-                    "Ring": 0,
-                    "VDisk": 0
-                },
-                "VDiskSlotId": 0,
-                "VDiskState": 5
-            },
-            {
-                "AllocatedSize": "0",
-                "AvailableSize": "not-zero-number-text",
-                "ChangeTime": "not-zero-number-text",
-                "DiskSpace": 1,
-                "FrontQueues": 1,
-                "Guid": "1",
-                "HasUnreadableBlobs": false,
-                "IncarnationGuid": "not-zero-number-text",
-                "InstanceGuid": "not-zero-number-text",
-                "Kind": "0",
-                "NodeId": 1,
-                "PDiskId": 1,
-                "Replicated": true,
-                "ReplicationProgress": 1,
-                "ReplicationSecondsRemaining": 0,
-                "SatisfactionRank": {
-                    "FreshRank": {
-                        "Flag": 1
-                    },
-                    "LevelRank": {
-                        "Flag": 1
-                    }
-                },
                 "StoragePoolName": "dynamic_storage_pool:1",
                 "VDiskId": {
                     "Domain": 0,
-                    "GroupGeneration": 1,
+                    "GroupGeneration": 2,
                     "GroupID": 2181038081,
                     "Ring": 0,
                     "VDisk": 0

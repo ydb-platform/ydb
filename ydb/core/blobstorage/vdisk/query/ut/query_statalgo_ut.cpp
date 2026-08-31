@@ -252,6 +252,73 @@ namespace {
             UNIT_ASSERT(aggregator.Finished);
             UNIT_ASSERT(seenSteps == TVector<ui32>({40, 35, 30, 20, 20, 20, 15, 10}));
         }
+
+        Y_UNIT_TEST(StopPredicateReturnsAfterCompleteKeyAndResumeHasNoDuplicates) {
+            TTestDatabase database;
+            auto timeProvider = MakeIntrusive<TManualMonotonicTimeProvider>();
+            TVector<ui32> seenSteps;
+            THashMap<ui32, TVector<ui32>> quantaByStep;
+            TVector<std::pair<ui32, ui64>> seenRecords;
+            TCollectingAggregator aggregator{
+                seenSteps,
+                quantaByStep,
+                *timeProvider,
+                0,
+                false,
+                &seenRecords,
+            };
+
+            auto snapshot = database.GetSnapshot();
+            std::optional<TYieldedState> yieldedState = TraverseDbWithoutMergeUntil(
+                database.GetHullCtx(),
+                &aggregator,
+                snapshot,
+                std::optional<TYieldedState>{},
+                std::nullopt,
+                [&] {
+                    // The predicate is consulted only after all physical
+                    // records for the current key have been processed. The
+                    // third distinct key (step 20) has three such records.
+                    return seenSteps.back() == 20;
+                },
+                timeProvider);
+            snapshot.Destroy();
+
+            UNIT_ASSERT(yieldedState);
+            UNIT_ASSERT_VALUES_EQUAL(yieldedState->LastProcessedKey.LogoBlobID().Step(), 20);
+            UNIT_ASSERT(!aggregator.Finished);
+            UNIT_ASSERT(seenSteps == TVector<ui32>({40, 30, 20, 20, 20}));
+            UNIT_ASSERT_VALUES_EQUAL(quantaByStep[20].size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(quantaByStep[20].front(), quantaByStep[20].back());
+
+            aggregator.CurrentQuantum = 1;
+            auto resumedSnapshot = database.GetSnapshot();
+            yieldedState = TraverseDbWithoutMergeUntil(
+                database.GetHullCtx(),
+                &aggregator,
+                resumedSnapshot,
+                std::move(yieldedState),
+                std::nullopt,
+                [] { return false; },
+                timeProvider);
+            resumedSnapshot.Destroy();
+
+            UNIT_ASSERT(!yieldedState);
+            UNIT_ASSERT(aggregator.Finished);
+            UNIT_ASSERT(seenSteps == TVector<ui32>({40, 30, 20, 20, 20, 15, 10}));
+            UNIT_ASSERT_VALUES_EQUAL(seenRecords.size(), 7);
+
+            THashSet<ui64> recordIds;
+            for (const auto& [step, recordId] : seenRecords) {
+                Y_UNUSED(step);
+                UNIT_ASSERT(recordIds.insert(recordId).second);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(recordIds.size(), seenRecords.size());
+
+            // A disabled time policy never consults the clock; the split was
+            // caused exclusively by the explicit stop predicate.
+            UNIT_ASSERT_VALUES_EQUAL(timeProvider->GetCalls(), 0);
+        }
     }
 
 } // anonymous namespace

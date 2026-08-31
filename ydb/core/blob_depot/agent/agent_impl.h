@@ -225,6 +225,7 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetThrottleActivations;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
@@ -491,6 +492,7 @@ namespace NKikimr::NBlobDepot {
                 ui64 Tag = 0;
                 std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
                 TString Key; // the key we are reading -- this is used for retries when we are getting NODATA
+                NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             };
             struct TCheckContext;
 

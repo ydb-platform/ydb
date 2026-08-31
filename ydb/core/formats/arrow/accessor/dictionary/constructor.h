@@ -34,7 +34,7 @@ private:
     virtual TConclusion<std::shared_ptr<IChunkedArray>> DoConstructDefault(const TChunkConstructionData& externalInfo) const override;
 
 public:
-    static std::shared_ptr<arrow::DataType> GetTypeByVariantsCount(const ui32 count);
+    static std::shared_ptr<arrow::FixedWidthType> GetTypeByVariantsCount(const ui32 count);
 
     static TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyReader(
         const TString& dictionaryBlob, const TChunkConstructionData& externalInfo);

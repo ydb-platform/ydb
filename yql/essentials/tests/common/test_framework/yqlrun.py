@@ -151,6 +151,7 @@ class YQLRun(object):
                 cmd.append('--ansi-lexer')
             env = {
                 'YQL_DETERMINISTIC_MODE': '1',
+                'YQL_LINEAGE_CHECK': os.environ.get('YQL_LINEAGE_CHECK', '1'),
                 # XXX: Using UTC timezone is vital for deterministric
                 # behaviour of ClickHouse datetime machinery.
                 'TZ': 'UTC0'
@@ -316,6 +317,7 @@ class YQLRun(object):
 
         env = {
             'YQL_DETERMINISTIC_MODE': '1',
+            'YQL_LINEAGE_CHECK': os.environ.get('YQL_LINEAGE_CHECK', '1'),
             # XXX: Using UTC timezone is vital for deterministric
             # behaviour of ClickHouse datetime machinery.
             'TZ': 'UTC0'

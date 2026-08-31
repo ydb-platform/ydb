@@ -4,6 +4,7 @@ PEERDIR(
     yql/essentials/parser/common/antlr4
     yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4
     yql/essentials/parser/antlr_ast/gen/v1_antlr4
+    contrib/libs/antlr4_cpp_runtime
 )
 
 SRCS(
@@ -16,6 +17,6 @@ SRCS(
 
 END()
 
-RECURSE_FOR_TESTS(
-
+RECURSE(
+    benchmark
 )

@@ -44,6 +44,11 @@ public:
         AddHandler(0, &TCoWithWorld::Match, HNDL(WithWorld));
         AddHandler(0, &TYtMap::Match, HNDL(DirectRow));
         AddHandler(0, Names({TYtReduce::CallableName(), TYtMapReduce::CallableName()}), HNDL(IsKeySwitch));
+        AddHandler(0, Names({
+            TYtMap::CallableName(),
+            TYtReduce::CallableName(),
+            TYtMapReduce::CallableName(),
+            TYtFill::CallableName()}), HNDL(RemoveTrivialWithWorldFromOperationLambdas));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(1, &TCoRight::Match, HNDL(RightOverPersist));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(CalcOverWindow));
@@ -427,7 +432,7 @@ protected:
                 }
             }
 
-            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractorLambda().Raw(), input.ListHandlerLambda().Raw() }) {
+            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractLambda().Raw(), input.ArgMapLambda().Raw() }) {
                 if (!IsYtCompleteIsolatedLambda(*lambda, syncList, usedCluster, false, selectionMode)) {
                     return node;
                 }
@@ -767,6 +772,54 @@ protected:
         }
 
         return node;
+    }
+
+    TMaybeNode<TExprBase> RemoveTrivialWithWorldFromOperationLambdas(TExprBase node, TExprContext& ctx) const {
+        if (!IsOptimizerEnabled<KeepWorldOptName>(*State_->Types) || IsOptimizerDisabled<KeepWorldOptName>(*State_->Types)) {
+            return node;
+        }
+        const TOptimizeExprSettings settings(State_->Types);
+        TVector<std::pair<TMaybeNode<TCoLambda>, size_t>> opLambdas;
+        if (auto mapReduce = node.Maybe<TYtMapReduce>()) {
+            opLambdas = {
+                {mapReduce.Mapper().Maybe<TCoLambda>(), size_t(TYtMapReduce::idx_Mapper)},
+                {mapReduce.Reducer(), size_t(TYtMapReduce::idx_Reducer)}};
+        } else if (auto reduce = node.Maybe<TYtReduce>()) {
+            opLambdas = {{reduce.Reducer(), size_t(TYtReduce::idx_Reducer)}};
+        } else if (auto fill = node.Maybe<TYtFill>()) {
+            opLambdas = {{fill.Content(), size_t(TYtFill::idx_Content)}};
+        } else {
+            opLambdas = {{node.Maybe<TYtMap>().Mapper(), size_t(TYtMap::idx_Mapper)}};
+        }
+
+        auto result = node.Ptr();
+        for (const auto& [maybeLambda, index] : opLambdas) {
+            if (!maybeLambda) {
+                continue;
+            }
+            TNodeOnNodeOwnedMap remaps;
+            VisitExpr(maybeLambda.Cast().Ptr(), [&remaps](const TExprNode::TPtr& lambdaNode) {
+                if (TYtOutput::Match(lambdaNode.Get())) {
+                    return false;
+                }
+                if (TCoWithWorld::Match(lambdaNode.Get())) {
+                    const auto maybeRead = TCoWithWorld(lambdaNode).World().Maybe<TCoLeft>().Input().Maybe<TYtReadTable>();
+                    if (maybeRead && maybeRead.Cast().World().Ref().IsWorld()) {
+                        remaps.emplace(lambdaNode.Get(), lambdaNode->HeadPtr());
+                    }
+                }
+                return true;
+            });
+            if (remaps.empty()) {
+                continue;
+            }
+            TExprNode::TPtr cleanedLambda;
+            if (RemapExpr(maybeLambda.Cast().Ptr(), cleanedLambda, remaps, ctx, settings).Level == IGraphTransformer::TStatus::Error) {
+                return {};
+            }
+            result = ctx.ChangeChild(*result, index, std::move(cleanedLambda));
+        }
+        return TExprBase(result);
     }
 
     TMaybeNode<TExprBase> RightOverPersist(TExprBase node, TExprContext& ctx) const {

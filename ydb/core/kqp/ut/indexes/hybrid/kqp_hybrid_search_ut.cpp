@@ -28,6 +28,17 @@ TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner MakeRunnerWithCompact(bool compact) {
+    NSchemeShard::gVectorIndexSeed = 1337;
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(true);
+    return TKikimrRunner(settings);
+}
+
 void ExecOk(TQueryClient& db, const TString& sql) {
     auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -178,8 +189,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
     //   doc2:             + vec 1/(60+1) = 0.0164
     //   doc4:             + vec 1/(60+3) = 0.0159
     // i.e. exactly [1, 3, 2, 4].
-    Y_UNIT_TEST(FusesBothBranches) {
-        auto kikimr = MakeRunner();
+    Y_UNIT_TEST_TWIN(FusesBothBranches, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
         auto db = kikimr.GetQueryClient();
         SetupDocs(db);
 
@@ -189,6 +200,117 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
+    }
+
+    Y_UNIT_TEST(FulltextFloatNamedOptionsAreApplied) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats love dogs",
+                    "or" AS DefaultOperator,
+                    "2" AS MinimumShouldMatch,
+                    1.2f AS K1,
+                    0.75f AS B),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+
+        const auto keys = RunKeys(db, query);
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u}),
+            TStringBuilder() << "unexpected keys; result count: " << keys.size());
+
+        auto explainSettings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx(), explainSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        auto planOpt = result.GetStats()->GetPlan();
+        UNIT_ASSERT(planOpt.has_value());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*planOpt, &plan, true);
+        const auto read = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+        UNIT_ASSERT_C(read.IsDefined(), TStringBuilder() << "ReadFullTextIndex operator not found in plan:\n" << *planOpt);
+        UNIT_ASSERT(FindPlanNodeByKv(read, "DefaultOperator", "\"or\"").IsDefined());
+        UNIT_ASSERT(FindPlanNodeByKv(read, "MinimumShouldMatch", "\"2\"").IsDefined());
+        UNIT_ASSERT(FindPlanNodeByKv(read, "K1Factor", "\"1.2\"").IsDefined());
+        UNIT_ASSERT(FindPlanNodeByKv(read, "BFactor", "\"0.75\"").IsDefined());
+    }
+
+    Y_UNIT_TEST(FulltextNamedOptionParametersAreApplied) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDeclWith(R"sql(
+            DECLARE $defaultOperator AS String;
+            DECLARE $minimumShouldMatch AS String;
+            DECLARE $k1 AS Double;
+            DECLARE $b AS Double;
+        )sql") + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats love dogs",
+                    $defaultOperator AS DefaultOperator,
+                    $minimumShouldMatch AS MinimumShouldMatch,
+                    $k1 AS K1,
+                    $b AS B),
+                Knn::CosineDistance(Embedding, $target),
+                (4, 1) AS Limits)
+            LIMIT 4;
+        )sql";
+        const auto params = TParamsBuilder()
+            .AddParam("$defaultOperator").String("or").Build()
+            .AddParam("$minimumShouldMatch").String("2").Build()
+            .AddParam("$k1").Double(1.2).Build()
+            .AddParam("$b").Double(0.75).Build()
+            .Build();
+
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        std::vector<ui64> keys;
+        TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        UNIT_ASSERT((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u}));
+    }
+
+    Y_UNIT_TEST(RejectsUnsupportedFulltextNamedOption) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats", 1 AS Unknown),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "unsupported FullTextScore named argument 'Unknown'");
+
+        const TString badTypeQuery = TargetDeclWith(R"sql(
+            DECLARE $k1 AS Utf8;
+        )sql") + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats", $k1 AS K1),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        const auto params = TParamsBuilder().AddParam("$k1").Utf8("not a number").Build().Build();
+        result = db.ExecuteQuery(badTypeQuery, TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FullTextScore named argument 'K1'");
     }
 
     // Regression guard: the final RRF fusion stage must keep its sort, so the result rows come back
@@ -504,8 +626,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u, "a text-relevant doc must rank first");
     }
 
-    Y_UNIT_TEST(NamedIndexesDisambiguate) {
-        auto kikimr = MakeRunner();
+    Y_UNIT_TEST_TWIN(NamedIndexesDisambiguate, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
         auto db = kikimr.GetQueryClient();
         CreateDocs(db);
         UpsertDocs(db);

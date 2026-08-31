@@ -14,6 +14,8 @@ def post_install(self):
         "Runtime/VectorOverMMap.cpp"
     )  # Used at 0005-allocate-linear-memory-more-granularly.patch
 
+    self.yamakes["Lib"].SRCS.add("Runtime/ModuleDebugInfo.cpp")  # Used at 0024-wasm-dwarf-debug-info.patch
+
     self.yamakes["Lib"].SRCS.remove("Platform/POSIX/POSIX-X86_64.S")
     self.yamakes["Lib"].after(
         "SRCS",

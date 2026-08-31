@@ -77,6 +77,11 @@ namespace NKikimr {
         return MakeTabletID(false, 0x2003);
     }
 
+    // DbsController tablet (exactly one per domain in default state storage group)
+    inline ui64 MakeDbsControllerID() {
+        return MakeTabletID(false, 0x2004);
+    }
+
     // TODO: think about encoding scheme for sibling group hive
 
     inline TActorId MakeStateStorageProxyID() {

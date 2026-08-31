@@ -139,10 +139,17 @@ Y_UNIT_TEST_F(FederationUserDbAbsolutePathWithPqRootEqDomain, TNameResolverFixtu
     UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/test_db");
 }
 
-Y_UNIT_TEST_F(FccLegacyKeepsRequestNavigateDatabase, TNameResolverFixture) {
-    // FCC: path may be under LbRoot, but SchemeCache DatabaseName stays the request DB.
+Y_UNIT_TEST_F(FccKeepsLiteralDashDashName, TNameResolverFixture) {
+    // Go SDK TestSchemeList uses t.Name(), which contains '--'. That is a legal FCC leaf.
+    const auto resolved = OkFull(ResolveName(TString{Database}, "TestSchemeList--test-topic-1"));
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/Db/TestSchemeList--test-topic-1");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
+}
+
+Y_UNIT_TEST_F(FccLegacyLookingNameKeepsRequestDatabase, TNameResolverFixture) {
+    // FCC: SchemeCache DatabaseName stays the request DB; the name is not remapped to LbRoot.
     const auto resolved = OkFull(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1"));
-    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal/account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/Db/rt3.dc1--account--topic");
     UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
 }
 
@@ -205,58 +212,58 @@ Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
         "/Root/Db/account/topic");
 }
 
-Y_UNIT_TEST_F(LocalRt3, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsLiteralRt3, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "dc1")),
-        "/Root/LbCommunal/account/topic");
+        "/Root/Db/rt3.dc1--account--topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "")),
-        "/Root/LbCommunal/account/topic");
+        "/Root/Db/rt3.dc1--account--topic");
 }
 
-Y_UNIT_TEST_F(RemoteRt3Mirrored, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsLiteralRemoteRt3, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "dc1", "dc2")),
-        "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+        "/Root/Db/rt3.dc2--account--topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "dc1", "")),
-        "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+        "/Root/Db/rt3.dc2--account--topic");
 }
 
-Y_UNIT_TEST_F(Rt3WithDirectories, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsLiteralRt3WithAt, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account@dir--topic", "dc1", "")),
-        "/Root/LbCommunal/account/dir/topic");
+        "/Root/Db/rt3.dc1--account@dir--topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account@dir--topic", "dc1", "")),
-        "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
+        "/Root/Db/rt3.dc2--account@dir--topic");
 }
 
-Y_UNIT_TEST_F(ShortLegacyLocal, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsLiteralShortDashDash, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--topic", "dc1", "")),
-        "/Root/LbCommunal/account/topic");
+        "/Root/Db/account--topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account@dir--topic", "dc1", "")),
-        "/Root/LbCommunal/account/dir/topic");
+        "/Root/Db/account@dir--topic");
 }
 
-Y_UNIT_TEST_F(ShortLegacyForeignDcMirrored, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccIgnoresDcForLegacyLookingName, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--topic", "dc1", "dc2")),
-        "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+        "/Root/Db/account--topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account@dir--topic", "dc1", "dc2")),
-        "/Root/LbCommunal/account/dir/topic-mirrored-from-dc2");
+        "/Root/Db/account@dir--topic");
 }
 
-Y_UNIT_TEST_F(BareTopic, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccBareTopicJoinsDatabase, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "topic", "dc1", "")),
-        "/Root/LbCommunal/topic");
+        "/Root/Db/topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "topic", "dc1", "dc2")),
-        "/Root/LbCommunal/topic-mirrored-from-dc2");
+        "/Root/Db/topic");
 }
 
 Y_UNIT_TEST_F(FccBareInUserDatabaseUnderLbRoot, TNameResolverFixture) {
@@ -267,102 +274,102 @@ Y_UNIT_TEST_F(FccBareInUserDatabaseUnderLbRoot, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/account1");
 }
 
-Y_UNIT_TEST_F(AtWithoutDashDashIsLegacy, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsLiteralAtName, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account@dir", "dc1", "")),
-        "/Root/LbCommunal/account@dir");
+        "/Root/Db/account@dir");
 }
 
-Y_UNIT_TEST_F(DcMismatchReturnsError, TNameResolverFixture) {
-    ExpectError(
-        ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "dc2"),
-        "DC specified both in topic name and separate option and they mismatch.");
+Y_UNIT_TEST_F(FccIgnoresRt3DcMismatch, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "dc2")),
+        "/Root/Db/rt3.dc1--account--topic");
 }
 
-Y_UNIT_TEST_F(ShortWithoutDcIsLocal, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsLiteralNamesWithoutDc, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--topic", "", "")),
-        "/Root/LbCommunal/account/topic");
+        "/Root/Db/account--topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "topic", "", "")),
-        "/Root/LbCommunal/topic");
+        "/Root/Db/topic");
 }
 
-Y_UNIT_TEST_F(MalformedRt3NoDashDash, TNameResolverFixture) {
-    ExpectError(
-        ResolveName(TString{Database}, "rt3.bad", "dc1", ""),
-        "Malformed legacy style topic name: contains 'rt3.', but no '--'.");
+Y_UNIT_TEST_F(FccKeepsMalformedRt3AsLiteral, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "rt3.bad", "dc1", "")),
+        "/Root/Db/rt3.bad");
 }
 
-Y_UNIT_TEST_F(MalformedRt3EmptyDc, TNameResolverFixture) {
-    ExpectError(
-        ResolveName(TString{Database}, "rt3.--account--topic", "dc1", ""),
-        "Internal error: Could not determine DC for topic: rt3.--account--topic.");
+Y_UNIT_TEST_F(FccKeepsRt3EmptyDcAsLiteral, TNameResolverFixture) {
+    UNIT_ASSERT_VALUES_EQUAL(
+        Ok(ResolveName(TString{Database}, "rt3.--account--topic", "dc1", "")),
+        "/Root/Db/rt3.--account--topic");
 }
 
-Y_UNIT_TEST_F(MalformedRt3EmptyShort, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsRt3EmptyShortAsLiteral, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--", "dc1", "")),
-        "/Root/LbCommunal");
+        "/Root/Db/rt3.dc1--");
 }
 
-Y_UNIT_TEST_F(ShortDashDashConverted, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsTrailingDashDashAsLiteral, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--", "dc1", "")),
-        "/Root/LbCommunal/account");
+        "/Root/Db/account--");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "--topic", "dc1", "")),
-        "/Root/LbCommunal/topic");
+        "/Root/Db/--topic");
 }
 
-Y_UNIT_TEST_F(EmptyNameFccIsLegacyBare, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccEmptyNameJoinsDatabase, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "", "dc1", "")),
-        "/Root/LbCommunal");
+        "/Root/Db");
 }
 
-Y_UNIT_TEST_F(DoubleSlashInLegacyFccConverted, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccNormalizesDoubleSlashInLegacyLookingName, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--a//b", "dc1", "")),
-        "/Root/LbCommunal/account/a/b");
+        "/Root/Db/account--a/b");
 }
 
-Y_UNIT_TEST_F(LeadingSlashStripped, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccStripsLeadingSlashOnLiteralRt3, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/rt3.dc1--account--topic", "dc1", "")),
-        "/Root/LbCommunal/account/topic");
+        "/Root/Db/rt3.dc1--account--topic");
 }
 
-Y_UNIT_TEST_F(MirrorSkippedWhenLocalDcEmpty, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccDoesNotMirrorLegacyLookingName, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "", "dc2")),
-        "/Root/LbCommunal/account/topic");
+        "/Root/Db/rt3.dc2--account--topic");
 }
 
-Y_UNIT_TEST_F(FallbackToDatabaseWhenLbRootEmpty, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccIgnoresEmptyLbRootForLiteralName, TNameResolverFixture) {
     SetLbRoot("");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1--account--topic", "dc1", "")),
-        "/Root/Db/account/topic");
+        "/Root/Db/rt3.dc1--account--topic");
 }
 
-Y_UNIT_TEST_F(NoRootReturnsModernPathOnly, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccEmptyDatabaseKeepsRelativeLiteralName, TNameResolverFixture) {
     SetLbRoot("");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "rt3.dc1--account--topic", "dc1", "")),
-        "account/topic");
+        "/rt3.dc1--account--topic");
 }
 
-Y_UNIT_TEST_F(DefaultDcParsesFromRt3Name, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccDefaultDcKeepsLiteralRt3, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc2--account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+        "/Root/Db/rt3.dc2--account--topic");
 }
 
-Y_UNIT_TEST_F(DefaultDcShortUsesLocalDc, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccDefaultDcKeepsLiteralShortName, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic");
+        "/Root/Db/account--topic");
 }
 
 Y_UNIT_TEST_F(IsPathPrefixExactMatch, TNameResolverFixture) {
@@ -609,11 +616,11 @@ Y_UNIT_TEST_F(FccEmptyNameUncleanDatabaseUnderLbRoot, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/account1");
 }
 
-Y_UNIT_TEST_F(JoinWithRootEmptyLbRootUncleanPath, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccNormalizesDoubleSlashWithoutLegacyConvert, TNameResolverFixture) {
     SetLbRoot("");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "account--a//b", "dc1", "")),
-        "/Root/Db/account/a/b");
+        "/Root/Db/account--a/b");
 }
 
 Y_UNIT_TEST_F(AbsoluteDatabaseUncleanRequestDatabase, TNameResolverFixture) {
@@ -661,6 +668,7 @@ Y_UNIT_TEST_F(FederationRootMirroredMalformedRejected, TNameResolverFixture) {
 }
 
 Y_UNIT_TEST_F(NavigateDatabaseEmptyWhenNoAccountTopicShape, TNameResolverFixture) {
+    SetFcc(false);
     // Path under LbRoot without account/topic shape → keep request database.
     const auto resolved = OkFull(ResolveName(TString{Database}, "rt3.dc1--", "dc1"));
     UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal");
@@ -676,6 +684,7 @@ Y_UNIT_TEST_F(TryFederationAccountTargetCanonizesUncleanPath, TNameResolverFixtu
 }
 
 Y_UNIT_TEST_F(CorrectNameFalseUsesConvertOldTopicName, TNameResolverFixture) {
+    SetFcc(false);
     // CorrectName rejects empty producer between '--'; shortLegacy still converts.
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "rt3.dc1----topic", "dc1", "")),

@@ -312,7 +312,7 @@ class Driver(pool.ConnectionPool):
         :param connection_string: A string in the following format: <protocol>://<hostame>:<port>/?database=/path/to/the/database
         :param endpoint: An endpoint specified in the following format: <protocol>://<hostame>:<port>
         :param database: A database path
-        :param credentials: A credentials. If not specifed credentials constructed by default.
+        :param credentials: A credentials. If not specified credentials constructed by default.
         """
         from . import topic  # local import for prevent cycle import error
         from . import coordination  # local import for prevent cycle import error

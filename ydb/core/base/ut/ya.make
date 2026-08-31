@@ -18,6 +18,7 @@ RESOURCE(
 
 SRCS(
     blobstorage_grouptype_ut.cpp
+    database_kind_ut.cpp
     fulltext_ut.cpp
     kmeans_ut.cpp
     localdb_ut.cpp

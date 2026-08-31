@@ -341,7 +341,7 @@ std::vector<size_t> GetCurrentProcessThreadIds()
         }
     } catch (const std::exception& ex) {
         YT_TLOG_ERROR("Error listing /proc/self/task")
-            .With(TError(ex));
+            .With(ex);
         return {};
     }
     return result;
@@ -1233,7 +1233,7 @@ int GetFileDescriptorCount()
         --descriptorCount;
     } catch (const std::exception& ex) {
         YT_TLOG_ERROR("Error listing /proc/self/fd")
-            .With(TError(ex));
+            .With(ex);
     }
 #endif
     return descriptorCount;
@@ -1742,7 +1742,7 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
             if (ex.Status() == ENOENT) {
                 supported = false;
                 YT_TLOG_WARNING("Task I/O accounting is not supported by kernel")
-                    .With(TError(ex));
+                    .With(ex);
             } else {
                 throw;
             }
@@ -1806,8 +1806,7 @@ std::vector<int> ParseLinuxKernelVersion()
 
     std::vector<int> parsedVersion;
 
-    TStringBuf significantVersion, remainder;
-    TStringBuf(version).Split('-', significantVersion, remainder);
+    auto significantVersion = version.substr(0, version.find_first_not_of("0123456789."));
 
     StringSplitter(significantVersion).Split('.').ParseInto(&parsedVersion);
 

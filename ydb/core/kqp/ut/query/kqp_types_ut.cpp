@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
     }
 
 
-    Y_UNIT_TEST(UnsafeTimestampCastV0) {
+    Y_UNIT_TEST(UnsafeTimestampCastV0Rejected) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
         ).ExtractValueSync();
 
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.IsSuccess());
     }
 
     Y_UNIT_TEST(UnsafeTimestampCastV1) {

@@ -13,6 +13,7 @@ TEST_SRCS(
     test_secrets.py
     test_secrets_usage.py
     test_secrets_monitoring.py
+    test_show_create_external_data_source.py
 )
 
 SPLIT_FACTOR(20)

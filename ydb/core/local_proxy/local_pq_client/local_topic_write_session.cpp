@@ -185,6 +185,19 @@ private:
         auto& writeRequest = *rpcMessage.mutable_write_request();
         writeRequest.set_codec(static_cast<i32>(message.Codec.value_or(ECodec::RAW)));
 
+        if (auto& publication = message.DeferredPublication_) {
+            auto& publicationProto = *writeRequest.mutable_deferred_publish();
+
+            const auto intPublicationId = publication->IntPublicationId;
+            Y_VALIDATE(intPublicationId > 0, "Internal publication id must be positive");
+            publicationProto.set_int_publication_id(publication->IntPublicationId);
+
+            if (auto& extPublicationId = publication->ExtPublicationId) {
+                Y_VALIDATE(extPublicationId->size() <= TDeferredPublication::MaxExtPublicationIdLength, "External publication id is too large, max length is " << TDeferredPublication::MaxExtPublicationIdLength << ", got " << extPublicationId->size());
+                publicationProto.set_ext_publication_id(std::move(*extPublicationId));
+            }
+        }
+
         auto& messageData = *writeRequest.add_messages();
         messageData.set_seq_no(seqNo);
         messageData.set_data(std::move(data));
@@ -223,7 +236,7 @@ private:
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::InitResponse& message) {
-        YDB_LOG_INFO("Session initialized with used",
+        YDB_LOG_INFO("Session initialized",
             {"logPrefix", LogPrefix()},
             {"id", message.session_id()},
             {"partition", message.partition_id()});
@@ -331,7 +344,7 @@ private:
             return;
         }
 
-        YDB_LOG_TRACE("Adding continuation event,",
+        YDB_LOG_TRACE("Adding continuation token",
             {"logPrefix", LogPrefix()},
             {"inflightMemory", InflightMemory},
             {"inflightMessages", InflightMessages.size()});
@@ -439,6 +452,8 @@ public:
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message, TTransactionBase* tx) final {
         Y_VALIDATE(!tx && !message.Tx_, "Transaction is not supported for local topic write session");
+        Y_VALIDATE(!message.GetPartition(), "Partition is not supported for local topic write session");
+        Y_VALIDATE(!message.GetKey(), "Key is not supported for local topic write session");
         Y_VALIDATE(WriteSessionActor, "Can not write message, session already closed");
 
         if (message.SeqNo_) {

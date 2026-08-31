@@ -1,13 +1,17 @@
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestart4Plus2BlockMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
+ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
+ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
+ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
-ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
 ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.QuotaNoResourceThenAllowed
+ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop
@@ -17,13 +21,15 @@ ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialRd
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripFallback
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripSharedShardManyPeers
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithBackpressure
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithPayload
-ydb/library/nmslib/test/run_bunit exectest.run[bunit]
-ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
+ydb/library/actors/interconnect/ut OutgoingStream.PacketBuilderUsesPreallocatedRdmaMemoryForInternalStream
+ydb/library/actors/interconnect/ut OutgoingStream.PublicMethodsLatencyBenchmark
+ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemory
+ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemoryPreallocateNoAlloc
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
 ydb/services/config/ut ConfigGRPCService.ReplaceConfig
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
+ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
@@ -1397,12 +1403,28 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v0]
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v1]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[31]
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
-ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_batched_source
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
-ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_3
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
+ydb/tools/pdisktool/ut TPDiskToolOracle.DamagedDataSectorReportsGap
+ydb/tools/pdisktool/ut TPDiskToolOracle.DamagedFormatReplicaStillReadsDisk
+ydb/tools/pdisktool/ut TPDiskToolOracle.EncryptionOffFormat
+ydb/tools/pdisktool/ut TPDiskToolOracle.FormatAndSysLogMatchWriter
+ydb/tools/pdisktool/ut TPDiskToolOracle.HostileSstPlaceholderIsAbandoned
+ydb/tools/pdisktool/ut TPDiskToolOracle.HullWithoutOwnerTableIsRefused
+ydb/tools/pdisktool/ut TPDiskToolOracle.ImplausibleLogPageSizesAreReportedAndScanTerminates
+ydb/tools/pdisktool/ut TPDiskToolOracle.ImplausibleSysLogPageSizeIsCapped
+ydb/tools/pdisktool/ut TPDiskToolOracle.LogBlobAndUnknownSignature
+ydb/tools/pdisktool/ut TPDiskToolOracle.MainKeyArgAndKeyConfigProto
+ydb/tools/pdisktool/ut TPDiskToolOracle.OwnersChunksAndCommits
+ydb/tools/pdisktool/ut TPDiskToolOracle.PlainDataChunksAndFileDevice
+ydb/tools/pdisktool/ut TPDiskToolOracle.RepeatedLogSignaturesReportedOnce
+ydb/tools/pdisktool/ut TPDiskToolOracle.SeveralCopiesOfPartAreComparedOnExport
+ydb/tools/pdisktool/ut TPDiskToolOracle.UnwrittenSectorsAreQuietReferencedOnesAreReported

@@ -81,6 +81,22 @@ void TPartitionActor::OnTabletDead(
     DetachEndpointAddDie(ctx);
 }
 
+// Tablet received poison pill, cleanup resources
+void TPartitionActor::PassAway()
+{
+    const auto& ctx = NActors::TActivationContext::AsActorContext();
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s PassAway",
+        LogTitle.GetWithTime().c_str());
+
+    // Do not call Die() here: Die() invokes PassAway() again.
+    CleanupResources(ctx);
+    TActor::PassAway();
+}
+
 void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
@@ -110,6 +126,71 @@ void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
     Y_UNUSED(ctx);
 }
 
+void TPartitionActor::CleanupResources(const TActorContext& ctx)
+{
+    if (LoadActorAdapter) {
+        ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
+        LoadActorAdapter = {};
+    }
+
+    if (CleanupActor) {
+        ctx.Send(CleanupActor, new TEvents::TEvPoisonPill());
+        CleanupActor = {};
+    }
+
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+    if (AddHostInFlight) {
+        NTabletPipe::CloseAndForgetClient(
+            SelfId(),
+            AddHostInFlight->BSPipeClient);
+        AddHostInFlight.reset();
+    }
+
+    GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
+
+    // It is assumed that the transaction to the local database is always
+    // successful. If the Tablet finishes its work, then it is necessary to
+    // respond to all pending requests so that there are no leakage resources.
+    // We will do this after the initiator of the request is stopped.
+    auto failUpdateRequests =
+        [executingConfigPromises =
+             std::move(ExecutingUpdateVChunkConfigPromises),
+         pendingConfigRequests = std::move(PendingUpdateVChunkConfigRequests),
+         executingDirtyMapPromises =
+             std::move(ExecutingUpdateDirtyMapStatePromises),
+         pendingDirtyMapRequests =
+             std::move(PendingUpdateDirtyMapStateRequests)]() mutable
+    {
+        for (auto& promise: executingConfigPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingConfigRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+
+        for (auto& promise: executingDirtyMapPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingDirtyMapRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+    };
+
+    if (FastPathService) {
+        auto onStop = FastPathService->Stop();
+        onStop.Subscribe(
+            [failUpdateRequests = std::move(failUpdateRequests)](
+                const NThreading::TFuture<void>& stopFuture) mutable
+            {
+                Y_UNUSED(stopFuture);
+                failUpdateRequests();
+            });
+        FastPathService.reset();
+    } else {
+        failUpdateRequests();
+    }
+}
+
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
 {
     LOG_INFO(
@@ -118,14 +199,7 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
         "%s DetachEndpointAddDie",
         LogTitle.GetWithTime().c_str());
 
-    ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
-
-    GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
-
-    if (FastPathService) {
-        FastPathService->Stop();
-    }
-
+    CleanupResources(ctx);
     Die(ctx);
 }
 
@@ -256,15 +330,21 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         // groups of this tablet share the same counters chain, so per-group
         // increments naturally sum up into disk-level counters.
         std::unique_ptr<NTransport::IStorageTransport> transport;
+        const bool enableChecksums =
+            nbsService->StorageConfig->GetEnableChecksums();
         if (nbsService->StorageConfig->GetUseDirectSessionTransport()) {
             transport = NTransport::CreateDirectStorageTransport(
                 TActivationContext::ActorSystem(),
                 DiskDescription,
-                dbgIndex);
+                dbgIndex,
+                enableChecksums);
         } else {
             transport = std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(DiskDescription, dbgIndex));
+                NTransport::CreateTransportActor(
+                    DiskDescription,
+                    dbgIndex,
+                    enableChecksums));
         }
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
@@ -328,7 +408,8 @@ TString TPartitionActor::GetSocketPath() const
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
     TDirectBlockGroupsConnections directBlockGroupsConnections,
-    TVector<TVChunkConfig> vChunkConfigs)
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates)
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
@@ -347,12 +428,6 @@ void TPartitionActor::Start(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
-    TVChunkConfigByIndex vChunkConfigsByIndex;
-    vChunkConfigsByIndex.reserve(vChunkConfigs.size());
-    for (const auto& cfg: vChunkConfigs) {
-        vChunkConfigsByIndex[cfg.GetVChunkIndex()] = cfg;
-    }
-
     DirectBlockGroupsConnections = directBlockGroupsConnections;
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
@@ -363,7 +438,8 @@ void TPartitionActor::Start(
         blockCount,
         VolumeConfig.GetBlockSize(),
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
-        std::move(vChunkConfigsByIndex),
+        vChunkConfigs,
+        dirtyMapStates,
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,
@@ -586,7 +662,7 @@ void TPartitionActor::HandleInitialAllocationResult(
             msg->Record.GetErrorReason().data());
     }
 
-    NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
@@ -665,18 +741,90 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVChunkConfig %s",
+        "%s Handle UpdateVChunkConfig %s %s",
         LogTitle.GetWithTime().c_str(),
-        msg->VChunkConfig.DebugPrint().c_str());
+        msg->VChunkConfig.DebugPrint().c_str(),
+        ExecutingUpdateVChunkConfig ? "later" : "now");
 
-    ExecuteTx(
+    if (ExecutingUpdateVChunkConfig) {
+        PendingUpdateVChunkConfigRequests.push_back(
+            {.VChunkConfig = std::move(msg->VChunkConfig),
+             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    } else {
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateVChunkConfigRequests.empty());
+
+        ExecutingUpdateVChunkConfig = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateVChunkConfig>(
+                TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests{
+                    {.VChunkConfig = std::move(msg->VChunkConfig),
+                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+    }
+}
+
+void TPartitionActor::HandleUpdateDirtyMapState(
+    const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    LOG_INFO(
         ctx,
-        CreateTx<TUpdateVChunkConfig>(
-            std::move(msg->VChunkConfig),
-            std::move(msg->UpdateCompleted)));
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle UpdateDirtyMapState vchunk %u %s",
+        LogTitle.GetWithTime().c_str(),
+        msg->VChunkIndex,
+        ExecutingUpdateDirtyMapState ? "later" : "now");
+
+    if (ExecutingUpdateDirtyMapState) {
+        PendingUpdateDirtyMapStateRequests.push_back(
+            {.VChunkIndex = msg->VChunkIndex,
+             .State = std::move(msg->State),
+             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    } else {
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateDirtyMapStateRequests.empty());
+
+        ExecutingUpdateDirtyMapState = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateDirtyMapState>(
+                TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests{
+                    {.VChunkIndex = msg->VChunkIndex,
+                     .State = std::move(msg->State),
+                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
+{
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
+        HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
+        HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
+        HFunc(
+            TEvService::TEvGetLoadActorAdapterActorIdRequest,
+            HandleGetLoadActorAdapterActorId);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPoison,
+            HandlePoisonByBlockedGeneration);
+        default:
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                LOG_ERROR(
+                    TActivationContext::AsActorContext(),
+                    NKikimrServices::NBS_PARTITION,
+                    "%s Unhandled event type: %u event %s ",
+                    LogTitle.GetWithTime().c_str(),
+                    ev->GetTypeRewrite(),
+                    ev->ToString().c_str());
+            }
+            break;
+    }
+}
 
 STFUNC(TPartitionActor::StateWork)
 {
@@ -689,25 +837,18 @@ STFUNC(TPartitionActor::StateWork)
         ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-        HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
-        HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
-        HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
-        HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
-        HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
-
         HFunc(
             TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult,
             HandleControllerAllocateDDiskBlockGroupResult);
-        HFunc(
-            TEvService::TEvGetLoadActorAdapterActorIdRequest,
-            HandleGetLoadActorAdapterActorId);
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvUpdateDirtyMapState,
+            HandleUpdateDirtyMapState);
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
@@ -721,22 +862,10 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
             HandleFastPathServiceStopped);
 
-        HFunc(
-            TEvPartitionDirectPrivate::TEvPoison,
-            HandlePoisonByBlockedGeneration);
-
         HFunc(TEvService::TEvDeletePartitionRequest, HandleDeletePartition);
 
         default:
-            if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_ERROR(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "%s Unhandled event type: %u event %s ",
-                    LogTitle.GetWithTime().c_str(),
-                    ev->GetTypeRewrite(),
-                    ev->ToString().c_str());
-            }
+            HandleCommonEvents(ev);
             break;
     }
 }

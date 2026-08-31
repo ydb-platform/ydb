@@ -108,14 +108,17 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
-    // Independent seq no for CopyTable and DropTable
-    std::optional<ui64> targetPathId;
+    // Independent seq no for CopyTable, MoveTable and DropTable
+    std::optional<TSchemeShardLocalPathId> targetPathId;
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
-            targetPathId = SchemaTxBody.GetDropTable().GetPathId();
+            targetPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetDropTable());
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
-            targetPathId = SchemaTxBody.GetCopyTable().GetDstPathId();
+            targetPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+            targetPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
             break;
         default:
             break;
@@ -175,7 +178,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
-            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetMoveTable());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
             YDB_LOG_INFO("",
                 {"proposeExecute", "move_table"},
@@ -202,7 +205,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             break;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable: {
-            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetCopyTable());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
             YDB_LOG_INFO("",
                 {"proposeExecute", "copy_table"},

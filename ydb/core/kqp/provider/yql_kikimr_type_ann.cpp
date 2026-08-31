@@ -1686,8 +1686,8 @@ private:
                 return TStatus::Error;
             }
 
-            TVector<TString> indexColums;
-            TVector<TString> dataColums;
+            TVector<TString> indexColumns;
+            TVector<TString> dataColumns;
 
             for (const auto& indexCol : index.Columns()) {
                 if (!meta->Columns.contains(TString(indexCol.Value()))) {
@@ -1695,7 +1695,7 @@ private:
                         << "Index column: " << indexCol.Value() << " was not found in the index table"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                indexColums.emplace_back(TString(indexCol.Value()));
+                indexColumns.emplace_back(TString(indexCol.Value()));
             }
 
             for (const auto& dataCol : index.DataColumns()) {
@@ -1704,41 +1704,7 @@ private:
                         << "Data column: " << dataCol.Value() << " was not found in the index table"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                dataColums.emplace_back(TString(dataCol.Value()));
-            }
-
-            const bool isFulltextIndex =
-                indexType == TIndexDescription::EType::GlobalFulltextPlain ||
-                indexType == TIndexDescription::EType::GlobalFulltextRelevance ||
-                indexType == TIndexDescription::EType::GlobalFulltextCompact ||
-                indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance;
-            // Fulltext index key columns are [prefix..., text]; the text column is the last one.
-            // More than one key column means the index has prefix columns.
-            if (isFulltextIndex && indexColums.size() > 1) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndexPrefix()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                        "Fulltext index prefix columns support is disabled"));
-                    return TStatus::Error;
-                }
-                // Relevance scoring uses a corpus-global dictionary keyed by token only; with prefix
-                // columns as the leading sort key the same token scatters across prefix groups, which
-                // the streaming dictionary/borders build cannot aggregate. Not supported yet.
-                if (indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                        "Fulltext index prefix columns are not supported for compact relevance indexes"));
-                    return TStatus::Error;
-                }
-                // Prefix columns must be disjoint from the primary key (doc-id) columns:
-                // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
-                const THashSet<TString> pkColumns{meta->KeyColumnNames.begin(), meta->KeyColumnNames.end()};
-                for (size_t i = 0; i + 1 < indexColums.size(); ++i) {
-                    if (pkColumns.contains(indexColums[i])) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
-                            << "Fulltext index prefix column '" << indexColums[i]
-                            << "' must not be a primary key column"));
-                        return TStatus::Error;
-                    }
-                }
+                dataColumns.emplace_back(TString(dataCol.Value()));
             }
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
@@ -1747,7 +1713,7 @@ private:
             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
             // fulltext index has per-column analyzers settings; the text column is the last index column
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
-                indexColums.empty() ? "<none>" : indexColums.back()
+                indexColumns.empty() ? "<none>" : indexColumns.back()
             );
             for (const auto& indexSetting : index.IndexSettings()) {
                 const auto& nameLower = to_lower(indexSetting.Name().StringValue());
@@ -1828,34 +1794,34 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalBloomFilter:
-                    if (!dataColums.empty()) {
+                    if (!dataColumns.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             "Local bloom index does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
                     if (meta->StoreType == EStoreType::Column) {
                         // Column-store: keep existing restriction of exactly 1 column
-                        if (indexColums.size() != 1) {
+                        if (indexColumns.size() != 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                                 "Local bloom index on column tables requires exactly one index column"));
                             return IGraphTransformer::TStatus::Error;
                         }
                     } else {
                         // Row-store: columns must be a left-prefix of PK
-                        if (indexColums.empty()) {
+                        if (indexColumns.empty()) {
                             ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                                 "Local bloom index requires at least one PK prefix column"));
                             return IGraphTransformer::TStatus::Error;
                         }
-                        if (indexColums.size() > meta->KeyColumnNames.size()) {
+                        if (indexColumns.size() > meta->KeyColumnNames.size()) {
                             ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                                 "Bloom filter prefix columns exceed the number of primary key columns"));
                             return IGraphTransformer::TStatus::Error;
                         }
-                        for (size_t i = 0; i < indexColums.size(); ++i) {
-                            if (indexColums[i] != meta->KeyColumnNames[i]) {
+                        for (size_t i = 0; i < indexColumns.size(); ++i) {
+                            if (indexColumns[i] != meta->KeyColumnNames[i]) {
                                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
-                                    << "Bloom filter column '" << indexColums[i]
+                                    << "Bloom filter column '" << indexColumns[i]
                                     << "' does not match PK column '" << meta->KeyColumnNames[i]
                                     << "' at position " << i));
                                 return IGraphTransformer::TStatus::Error;
@@ -1866,7 +1832,7 @@ private:
                     specializedIndexDescription = std::move(localBloomFilterDescription);
                     break;
                 case TIndexDescription::EType::LocalBloomNgramFilter: {
-                    if (indexColums.size() != 1 || !dataColums.empty()) {
+                    if (indexColumns.size() != 1 || !dataColumns.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             "Local bloom ngram index requires exactly one index column and does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
@@ -1876,14 +1842,14 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalMinMax: {
-                    if (!dataColums.empty()) {
+                    if (!dataColumns.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColumns)));
                         return IGraphTransformer::TStatus::Error;
                     }
-                    if (indexColums.size() != 1) {
+                    if (indexColumns.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColumns)));
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -1894,8 +1860,8 @@ private:
             // IndexState and version, pathId are ignored for create table with index request
             TIndexDescription indexDesc(
                 TString(index.Name().Value()),
-                indexColums,
-                dataColums,
+                indexColumns,
+                dataColumns,
                 indexType,
                 TIndexDescription::EIndexState::Ready,
                 0,

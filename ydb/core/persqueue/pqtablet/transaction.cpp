@@ -394,10 +394,9 @@ void TDistributedTransaction::OnTxDone(const TEvPQ::TEvTxDone& event)
     ++PartitionRepliesCount;
 }
 
-void TDistributedTransaction::SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event)
+void TDistributedTransaction::AddPlanStepSender(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event)
 {
-    PlanStepSender = sender;
-    PlanStepEvent = std::move(event);
+    PlanStepSenders[sender] = std::move(event);
 }
 
 auto TDistributedTransaction::GetDecision() const -> EDecision

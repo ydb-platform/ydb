@@ -1,0 +1,16 @@
+use plato;
+
+pragma yt.JoinMergeTablesLimit = "10";
+pragma config.flags('OptimizerFlags', 'EmitPruneKeys');
+
+-- PruneKeys
+select *
+from Input1 as a
+left semi join Input2 as b
+on a.k1 = b.k2 and a.u1 = b.u2;
+
+-- PruneAdjacentKeys
+select *
+from Input1 as a
+left semi join Input2 as b
+on a.k1 = b.k2 and a.v1 = b.v2;

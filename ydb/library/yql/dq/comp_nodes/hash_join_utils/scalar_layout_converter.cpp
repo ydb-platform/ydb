@@ -737,7 +737,7 @@ public:
 
     void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPackResult& packed) override {
         if (numTuples == 0) return;
-        
+
         const ui32 numColumns = Extractors_.size();
         for (ui32 tupleIdx = 0; tupleIdx < numTuples; ++tupleIdx) {
             Pack(values + tupleIdx * numColumns, packed);
@@ -746,7 +746,7 @@ public:
 
     void BucketPack(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
         if (numTuples == 0) return;
-        
+
         const ui32 numColumns = Extractors_.size();
         
         // Pack each tuple and distribute to buckets based on hash
@@ -777,6 +777,9 @@ public:
 
     void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) override {
         Y_ENSURE(tupleIndex < static_cast<ui32>(packed.NTuples));
+        if (Extractors_.empty()) {
+            return;
+        }
 
         // We need to unpack all tuples to get proper column pointers
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;

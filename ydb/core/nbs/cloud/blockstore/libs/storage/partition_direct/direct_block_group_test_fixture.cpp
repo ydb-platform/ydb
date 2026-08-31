@@ -248,7 +248,7 @@ size_t TDBGFixture::ReplyUpdateRequests()
 {
     auto requests = std::move(Service->UpdateConfigRequests);
     for (auto& r: requests) {
-        r.Promise.SetValue();
+        r.Promise.SetValue(EPersistResult::Success);
     }
     return requests.size();
 }

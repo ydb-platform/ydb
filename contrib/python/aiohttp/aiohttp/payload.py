@@ -4,6 +4,7 @@ import io
 import json
 import mimetypes
 import os
+import sys
 import warnings
 from abc import ABC, abstractmethod
 from itertools import chain
@@ -97,6 +98,8 @@ class PayloadRegistry:
     note: we need zope.interface for more efficient adapter search
     """
 
+    __slots__ = ("_first", "_normal", "_last", "_normal_lookup")
+
     def __init__(self) -> None:
         self._first: List[_PayloadRegistryItem] = []
         self._normal: List[_PayloadRegistryItem] = []
@@ -167,7 +170,11 @@ class Payload(ABC):
         if content_type is not sentinel and content_type is not None:
             self._headers[hdrs.CONTENT_TYPE] = content_type
         elif self._filename is not None:
-            content_type = mimetypes.guess_type(self._filename)[0]
+            if sys.version_info >= (3, 13):
+                guesser = mimetypes.guess_file_type
+            else:
+                guesser = mimetypes.guess_type
+            content_type = guesser(self._filename)[0]
             if content_type is None:
                 content_type = self._default_content_type
             self._headers[hdrs.CONTENT_TYPE] = content_type

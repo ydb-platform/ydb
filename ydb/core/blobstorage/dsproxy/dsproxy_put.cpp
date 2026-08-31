@@ -700,8 +700,14 @@ public:
 
         Become(&TBlobStorageGroupPutRequest::StateWait);
 
+        if (Info->GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
+            BlobsEncrypted = PutImpl.Blobs.size();
+        }
+
         if (ReduceInterpileTraffic) {
-            return InterpileBootstrap();
+            ResumeBootstrap();
+            CheckRequests(TEvents::TSystem::Bootstrap);
+            return;
         }
 
         TInstant now = TActivationContext::Now();
@@ -734,9 +740,6 @@ public:
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
             partSet.resize(Info->Type.TotalPartCount());
-        }
-        if (Info->GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
-            BlobsEncrypted = PartSets.size();
         }
         ResumeBootstrap();
         CheckRequests(TEvents::TSystem::Bootstrap);
@@ -802,6 +805,38 @@ public:
         }
     }
 
+    void EncryptNextChunk() {
+        auto& blob = PutImpl.Blobs[BlobsEncrypted];
+        if (blob.AlreadyEncrypted || blob.Buffer.empty()) {
+            blob.AlreadyEncrypted = true;
+            ++BlobsEncrypted;
+            Y_ABORT_UNLESS(CurrentEncryptionOffset == 0);
+            return;
+        }
+
+        const ui32 size = Min<ui32>(blob.Buffer.size() - CurrentEncryptionOffset, MaxBytesToEncryptAtOnce);
+        EncryptInplace(blob.Buffer, CurrentEncryptionOffset, size, blob.BlobId, *Info);
+        CurrentEncryptionOffset += size;
+        if (CurrentEncryptionOffset == blob.Buffer.size()) {
+            blob.AlreadyEncrypted = true;
+            ++BlobsEncrypted;
+            CurrentEncryptionOffset = 0;
+        }
+    }
+
+    bool EncryptQuantum() {
+        const ui64 endTime = GetCycleCountFast() + DurationToCycles(MaxQuantumDuration);
+        bool firstIteration = true;
+        while (BlobsEncrypted < PutImpl.Blobs.size()) {
+            if (!firstIteration && endTime <= GetCycleCountFast()) {
+                return false;
+            }
+            firstIteration = false;
+            EncryptNextChunk();
+        }
+        return true;
+    }
+
     bool EncodeQuantum() {
         const ui64 endTime = GetCycleCountFast() + DurationToCycles(MaxQuantumDuration);
         bool firstIteration = true;
@@ -813,19 +848,7 @@ public:
             firstIteration = false;
 
             if (BlobsEncrypted <= BlobsSplit) { // first we encrypt the blob (if encryption is enabled)
-                auto& blob = PutImpl.Blobs[BlobsEncrypted];
-                if (blob.AlreadyEncrypted) {
-                    ++BlobsEncrypted;
-                    Y_ABORT_UNLESS(CurrentEncryptionOffset == 0);
-                    continue;
-                }
-                const ui32 size = Min<ui32>(blob.Buffer.size() - CurrentEncryptionOffset, MaxBytesToEncryptAtOnce);
-                EncryptInplace(blob.Buffer, CurrentEncryptionOffset, size, blob.BlobId, *Info);
-                CurrentEncryptionOffset += size;
-                if (CurrentEncryptionOffset == blob.Buffer.size()) {
-                    ++BlobsEncrypted;
-                    CurrentEncryptionOffset = 0;
-                }
+                EncryptNextChunk();
             } else { // BlobsSplit < BlobsEncrypted -- then we split it
                 auto& blob = PutImpl.Blobs[BlobsSplit];
                 const auto crcMode = static_cast<TErasureType::ECrcMode>(blob.BlobId.CrcMode());
@@ -895,12 +918,15 @@ public:
     }
 
     void ResumeBootstrap() {
-        if (EncodeQuantum()) {
+        const bool done = ReduceInterpileTraffic ? EncryptQuantum() : EncodeQuantum();
+        if (!done) {
+            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvResume, 0, SelfId(), {}, nullptr, 0));
+        } else if (ReduceInterpileTraffic) {
+            InterpileBootstrap();
+        } else {
             PutImpl.GenerateInitialRequests(LogCtx, PartSets);
             Action();
             BootstrapInProgress = false;
-        } else {
-            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvResume, 0, SelfId(), {}, nullptr, 0));
         }
         SanityCheck();
     }

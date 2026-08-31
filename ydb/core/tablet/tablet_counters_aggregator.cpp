@@ -201,15 +201,53 @@ public:
             .MetricsLevel = static_cast<EDetailedMetricsLevel>(msg.MetricsLevel),
         };
 
+        TString previousTablePath;
+        bool hadPreviousContribution = false;
+        if (auto itTablet = db.TabletContributions.find(msg.TabletID); itTablet != db.TabletContributions.end()) {
+            if (auto itFollower = itTablet->second.find(msg.FollowerId); itFollower != itTablet->second.end()) {
+                hadPreviousContribution = true;
+                previousTablePath = itFollower->second.TablePath;
+            }
+        }
+
         db.TabletContributions[msg.TabletID][msg.FollowerId] = info;
 
-        // Promote into the per-path "latest known identity" whenever this report is NOT
-        // OLDER than what is stored — not strictly newer, because ALTER DATABASE
-        // TABLES_METRICS_LEVEL bumps neither TableId nor SchemaVersion and must still
-        // update the level. See TDetailedMetricsForDb::LatestByPath.
+        // Promote into the per-path "latest known identity" only when this report carries a
+        // strictly newer identity (TableId / SchemaVersion). A level-only change (ALTER
+        // DATABASE ... TABLES_METRICS_LEVEL bumps neither) is a per-contribution concern,
+        // handled through TabletContributions. See TDetailedMetricsForDb::LatestByPath.
         auto [itLatest, latestInserted] = db.LatestByPath.try_emplace(info.TablePath, info);
-        if (!latestInserted && !IsOlderThan(info, itLatest->second)) {
+        if (!latestInserted && IsOlderThan(itLatest->second, info)) {
             itLatest->second = info;
+
+            TVector<std::pair<ui64, ui32>> stale;
+            for (const auto& [tabletId, byFollower] : db.TabletContributions) {
+                for (const auto& [followerId, contribution] : byFollower) {
+                    if (contribution.TablePath == info.TablePath && IsOlderThan(contribution, info)) {
+                        stale.emplace_back(tabletId, followerId);
+                    }
+                }
+            }
+
+            for (const auto& [tabletId, followerId] : stale) {
+                if (db.Aggregator) {
+                    db.Aggregator->ForgetTablet(tabletId, followerId);
+                }
+
+                auto itTablet = db.TabletContributions.find(tabletId);
+                itTablet->second.erase(followerId);
+                if (itTablet->second.empty()) {
+                    db.TabletContributions.erase(itTablet);
+                }
+            }
+        }
+
+        if (hadPreviousContribution && previousTablePath != info.TablePath) {
+            if (db.Aggregator) {
+                db.Aggregator->ForgetTablet(msg.TabletID, msg.FollowerId);
+            }
+
+            DropUnreportedPath(db, previousTablePath);
         }
 
         // Fires once per tablet every 5s, hence TRACE
@@ -1149,14 +1187,20 @@ private:
         THashMap<ui64, THashMap<ui32, TDetailedMetricsTableInfo>> TabletContributions;
 
         /**
-         * The newest identity (by (TableId, SchemaVersion), ties broken towards the
-         * latest report) seen at each table path on this node for this database — the
+         * The newest identity (STRICTLY by (TableId, SchemaVersion); a tie changes
+         * nothing here) seen at each table path on this node for this database — the
          * authoritative answer to "which table lives at this path right now", kept
          * separately from TabletContributions because a table dropped and recreated at
          * the same path leaves its old tablets still reporting for a few more rounds,
-         * each carrying its own (by then stale) idea of the identity and level. See
+         * each carrying its own (by then stale) idea of the identity. See
          * SetTableInfo() (where this is promoted) and ApplyDetailedMetrics() (where a
          * stale tablet is rejected against it).
+         *
+         * @note MetricsLevel is NOT part of the ordering: ALTER DATABASE ...
+         *       TABLES_METRICS_LEVEL bumps neither TableId nor SchemaVersion, and a
+         *       level change is a per-CONTRIBUTION concern (TabletContributions,
+         *       read fresh by ApplyDetailedMetrics on every report), not a
+         *       per-path one. This map answers "which table", not "at which level".
          */
         THashMap<TString, TDetailedMetricsTableInfo> LatestByPath;
     };
@@ -1223,6 +1267,31 @@ private:
             {"pathId", pathId.ToString()});
     }
 
+    /**
+     * Erase db.LatestByPath[path] once no tablet contribution at that path is left, so
+     * that a rename or a table drop does not leave a stale "latest identity" wedging
+     * that path for the rest of the database's lifetime.
+     *
+     * O(tablets), but only on a tablet forget or a rename, assumed less often than
+     * reports — if this is an issue, mirroring TabletContributions' shape by path is
+     * the way to fix it.
+     */
+    void DropUnreportedPath(TDetailedMetricsForDb& db, const TString& path) {
+        const bool stillReported = std::any_of(
+            db.TabletContributions.begin(), db.TabletContributions.end(),
+            [&path](const auto& tabletContribution) {
+                const auto& byFollower = tabletContribution.second;
+                return std::any_of(byFollower.begin(), byFollower.end(),
+                    [&path](const auto& followerContribution) {
+                        return followerContribution.second.TablePath == path;
+                    });
+            });
+
+        if (!stillReported) {
+            db.LatestByPath.erase(path);
+        }
+    }
+
     void ForgetTabletDetailedMetrics(ui64 tabletId, ui32 followerId, TPathId tenantPathId) {
         auto itDb = DetailedMetricsByPathId.find(tenantPathId);
         if (itDb == DetailedMetricsByPathId.end()) {
@@ -1241,8 +1310,8 @@ private:
             return;
         }
 
-        // Captured before erasing: needed below to tell whether this was the LAST
-        // tablet still reporting this path, once it is gone
+        // Captured before erasing: DropUnreportedPath needs it once the contribution
+        // itself is gone
         const TString path = itFollower->second.TablePath;
 
         itTablet->second.erase(itFollower);
@@ -1255,21 +1324,7 @@ private:
             db.TabletContributions.erase(itTablet);
         }
 
-        // O(tablets), but only on tablet forget which assumed less often than reports
-        // if this is an issue — mirroring of TabletContributions' is the way to fix it
-        const bool stillReported = std::any_of(
-            db.TabletContributions.begin(), db.TabletContributions.end(),
-            [&path](const auto& tabletContribution) {
-                const auto& byFollower = tabletContribution.second;
-                return std::any_of(byFollower.begin(), byFollower.end(),
-                    [&path](const auto& followerContribution) {
-                        return followerContribution.second.TablePath == path;
-                    });
-            });
-
-        if (!stillReported) {
-            db.LatestByPath.erase(path);
-        }
+        DropUnreportedPath(db, path);
     }
 
     void RemoveDetailedMetricsByPathId(TPathId pathId, const TActorContext& ctx) {

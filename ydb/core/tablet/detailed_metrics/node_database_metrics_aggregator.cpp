@@ -42,6 +42,11 @@ const TString APP_CATEGORY = "app";
  */
 using TTabletKey = std::pair<ui64, ui32>;
 
+struct TTabletInfo {
+    TString RelativePath;
+    EDetailedMetricsLevel Level;
+};
+
 /**
  * @return path with any trailing "/" chopped, as a view into path.
  */
@@ -171,8 +176,6 @@ private:
  *       the effective metrics level of the table.
  */
 struct TTableEntry {
-    EDetailedMetricsLevel MetricsLevel = TDetailedMetricsSettings::MetricsLevelUnspecified;
-
     NMonitoring::TDynamicCounterPtr TableGroup;
 
     /**
@@ -238,13 +241,13 @@ public:
         // can no longer reach. Drop it here, BEFORE the group of the new table is created,
         // because dropping the last table of the database removes the database group too
         auto mapIt = TabletToTableMap.find(tablet);
-        if (mapIt != TabletToTableMap.end() && mapIt->second != relativePath) {
-            RemoveTabletFromTable(mapIt->second, tablet);
+        if (mapIt != TabletToTableMap.end()
+            && (mapIt->second.RelativePath != relativePath || mapIt->second.Level != metricsLevel))
+        {
+            RemoveTabletFromTable(mapIt->second.RelativePath, tablet, mapIt->second.Level);
             TabletToTableMap.erase(mapIt);
             mapIt = TabletToTableMap.end();
         }
-
-        ReconcileTable(relativePath, metricsLevel);
 
         if (IsFollowerRole && IsTableLevel(metricsLevel)) {
             return;
@@ -278,10 +281,10 @@ public:
         // stale case), so the steady state — every report but the first of a tablet —
         // writes nothing and copies no string.
         if (mapIt == TabletToTableMap.end()) {
-            TabletToTableMap.emplace(tablet, TString(relativePath));
+            TabletToTableMap.emplace(tablet, TTabletInfo{TString(relativePath), metricsLevel});
         }
 
-        if (IsTableLevel(entry->MetricsLevel)) {
+        if (IsTableLevel(metricsLevel)) {
             auto& bucket = entry->TableBucket;
             if (!bucket) {
                 bucket = MakeHolder<TCountersBucket>(
@@ -323,7 +326,7 @@ public:
         // it MUST run before the reverse map entry it points into is erased below, or the
         // view dangles. RemoveTabletFromTable is documented not to touch the reverse map,
         // so calling it first before this function's own erase is safe.
-        RemoveTabletFromTable(mapIt->second, tablet);
+        RemoveTabletFromTable(mapIt->second.RelativePath, tablet, mapIt->second.Level);
         TabletToTableMap.erase(mapIt);
     }
 
@@ -395,20 +398,6 @@ private:
     }
 
     /**
-     * Switch the stored shape to match the level the caller now reports for this path.
-     */
-    void ReconcileTable(const TStringBuf relativePath, EDetailedMetricsLevel metricsLevel) {
-        auto it = Tables.find(relativePath);
-        if (it == Tables.end()) {
-            return;
-        }
-
-        if (metricsLevel != it->second.MetricsLevel) {
-            DropTableEntry(it);
-        }
-    }
-
-    /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
     TTableEntry* GetOrCreateTable(EDetailedMetricsLevel metricsLevel, const TStringBuf relativePath) {
@@ -433,13 +422,12 @@ private:
         // TString, once, shared between the map key and the GetSubgroup() call
         const TString newKey(relativePath);
         auto& entry = Tables[newKey];
-        entry.MetricsLevel = metricsLevel;
         entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, newKey);
 
         return &entry;
     }
 
-    void RemoveTabletFromTable(const TStringBuf relativePath, const TTabletKey& tablet) {
+    void RemoveTabletFromTable(const TStringBuf relativePath, const TTabletKey& tablet, EDetailedMetricsLevel level) {
         auto it = Tables.find(relativePath);
         if (it == Tables.end()) {
             // The table collects no detailed metrics, or its entry is already gone
@@ -448,7 +436,7 @@ private:
 
         auto& entry = it->second;
 
-        if (IsTableLevel(entry.MetricsLevel)) {
+        if (IsTableLevel(level)) {
             ForgetTableBucketTablet(it->first, entry, tablet);
         } else {
             ForgetLeaf(it->first, entry, tablet);
@@ -457,26 +445,6 @@ private:
         if (entry.IsEmpty()) {
             EraseTableEntry(it);
         }
-    }
-
-    void DropTableEntry(THashMap<TString, TTableEntry>::iterator it) {
-        auto& entry = it->second;
-
-        TVector<TTabletKey> tablets;
-        tablets.reserve(entry.Leaves.size());
-        for (const auto& [tablet, _] : entry.Leaves) {
-            tablets.push_back(tablet);
-        }
-
-        for (const auto& tablet : tablets) {
-            ForgetLeaf(it->first, entry, tablet);
-        }
-
-        DropTableBucket(it->first, entry);
-
-        Y_DEBUG_ABORT_UNLESS(entry.IsEmpty());
-
-        EraseTableEntry(it);
     }
 
     void EraseTableEntry(THashMap<TString, TTableEntry>::iterator it) {
@@ -540,6 +508,10 @@ private:
             {TABLET_ID_LABEL, ToString(tabletId)},
             {FOLLOWER_ID_LABEL, ToString(followerId)},
         });
+
+        if (entry.Leaves.empty()) {
+            entry.PerPartitionGroup.Reset();
+        }
     }
 
 private:
@@ -573,7 +545,7 @@ private:
      * Reverse map from (tabletId, followerId) to the table's relative path, used to
      * satisfy ForgetTablet when the forget event carries no table identity.
      */
-    THashMap<TTabletKey, TString> TabletToTableMap;
+    THashMap<TTabletKey, TTabletInfo> TabletToTableMap;
 
     /**
      * Keyed by the table's relative path (the same value the "table" label of the

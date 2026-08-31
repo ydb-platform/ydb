@@ -1955,6 +1955,78 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         UNIT_ASSERT(!FindTableBucketCounters(env));
         UNIT_ASSERT(!FindTableGroup(env));
     }
+
+    /**
+     * Verify the eager eviction of the older generation (PR review Part 2): a table
+     * recreated at the SAME path and the SAME level must not have to wait for the old
+     * tablet to report again (and get rejected by `IsOlderThan`) before the bucket
+     * reflects the new generation alone. Without this, the bucket would sum BOTH
+     * generations' tablets — 5 + 7, not 7 — for as long as the old one stays quiet.
+     */
+    Y_UNIT_TEST(RecreatedTableAtTheSameLevelDropsOldContributions) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet oldTablet(1000, 0, LEVEL_TABLE, TABLE_ID, 1 /* schemaVersion */);
+        oldTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        oldTablet.SendUpdate(env);
+        ReportCounters(env, {&oldTablet});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 5u);
+
+        // The table is dropped and recreated at the SAME path and the SAME level: its
+        // own (different) tablet reports and sends its own round of counters, without
+        // the old one ever reporting again
+        TFakeTablet newTablet(2000, 0, LEVEL_TABLE, RECREATED_TABLE_ID, 1 /* schemaVersion */);
+        newTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 7);
+        newTablet.SendUpdate(env);
+        ReportCounters(env, {&newTablet});
+
+        // The bucket holds the NEW generation alone
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(env), "SUM", ALLOWED_EXECUTOR_COUNTER), 7u);
+    }
+
+    /**
+     * Verify the rename cleanup (PR review Part 3): once a tablet's identity event
+     * moves it to a new path, the OLD path's group is dropped right away, driven by
+     * the identity event alone — not left to leak until the database is torn down,
+     * and not waiting on a counters tick that will never come again at the old path.
+     */
+    Y_UNIT_TEST(RenameDropsTheStaleGroupOfTheOldPath) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
+        const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
+
+        TFakeTablet tablet(1000, 0, LEVEL_PARTITION);
+        tablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5);
+        tablet.SendUpdate(env);
+        ReportCounters(env, {&tablet});
+
+        UNIT_ASSERT(FindTableGroup(env));
+
+        // The tablet reports a new identity at another path — an ESchemeOpMoveTable
+        // rename, seen from here as the very same tablet now reporting a different
+        // TablePath — and sends no counters at all afterwards
+        env.Runtime.Send(new IEventHandle(env.GetAggregatorId(tablet.FollowerId), env.Edge,
+            new TEvTabletCounters::TEvTabletSetTableInfo(
+                tablet.TabletId, TENANT_PATH_ID, tablet.FollowerId, tablet.TableId,
+                RENAMED_TABLE_PATH, tablet.SchemaVersion, tablet.MetricsLevel)));
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // The old table= group is gone immediately: the identity event alone drives
+        // the cleanup, no further counters tick is needed
+        UNIT_ASSERT(!FindTableGroup(env));
+
+        // Nothing of the new path exists yet either: an identity event alone builds
+        // no counter group, only a report does. Guarded at every step, the same shape
+        // as FindTableGroup: this tablet was the database's only one, so ForgetLeaf's
+        // pruning may well have taken database= (and even the raw group) with it too
+        auto rawGroup = FindRawGroup(env);
+        auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", DATABASE_PATH) : nullptr;
+        UNIT_ASSERT(!databaseGroup || !databaseGroup->FindSubgroup("table", RENAMED_RELATIVE_TABLE_PATH));
+    }
 }
 
 }

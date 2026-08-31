@@ -1673,7 +1673,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * Verify that a table, which stops collecting detailed metrics, is dropped whole:
      * its groups go, and its reports create nothing afterwards.
      */
-    Y_UNIT_TEST(LevelChangeToDisabledDropsTheTable) {
+    Y_UNIT_TEST(LevelChangeToDisabledDropsTheTableOnceEveryTabletConverges) {
         const TInstant now = TInstant::Seconds(100);
 
         // TEST 1: From the table level, where the collapse bucket has to go
@@ -1731,15 +1731,37 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
 
             UNIT_ASSERT(FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId));
 
-            // The first partition to notice takes ONLY its own table's leaves with it,
-            // including the leaf of the partition, which has not reported yet
             leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelUnspecified, now);
 
-            DumpCounters("Counters after the partition level table stopped collecting", rootGroup);
+            DumpCounters("Counters while only one partition has stopped collecting", rootGroup);
+
+            // leader1's leaf is gone, but leader2 has not noticed yet, so its own leaf —
+            // and the table= and database= groups it still fills — survive untouched
+            UNIT_ASSERT(!FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId));
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetCounterValue(
+                    FindLeafCounters(rootGroup, leader2.TabletId, leader2.FollowerId),
+                    "SUM(DbUniqueRowsTotal)"
+                ),
+                5
+            );
+            UNIT_ASSERT(FindTableGroup(rootGroup));
+            UNIT_ASSERT(rootGroup->FindSubgroup("database", DATABASE_PATH));
+
+            // The last partition converges too: NOW the table goes whole
+            leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelUnspecified, now);
+
+            DumpCounters("Counters after the last partition stopped collecting", rootGroup);
 
             UNIT_ASSERT(!FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId));
             UNIT_ASSERT(!FindLeafCounters(rootGroup, leader2.TabletId, leader2.FollowerId));
             UNIT_ASSERT(!FindTableGroup(rootGroup));
+            UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+
+            // The reports of a disabled table keep creating nothing at all
+            leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelUnspecified, now);
+            aggregator->RecalculateAllCounters();
+
             UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
         }
     }
@@ -1935,6 +1957,127 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             GetCounterValue(FindTableBucketCounters(trees.Root), "SUM(DbUniqueRowsTotal)"),
             42
         );
+    }
+
+    Y_UNIT_TEST(PartialLevelConvergenceKeepsBothShapes) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1).AddCumulative(CONSUMED_CPU, 100);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2).AddCumulative(CONSUMED_CPU, 200);
+
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        }
+        aggregator->RecalculateAllCounters();
+
+        UNIT_ASSERT(FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId));
+        UNIT_ASSERT(FindLeafCounters(rootGroup, leader2.TabletId, leader2.FollowerId));
+
+        // Only the first partition converges on the new level
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 3).AddCumulative(CONSUMED_CPU, 50);
+        leader1.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters while only one partition has converged on the table level", rootGroup);
+
+        // The switched partition has no leaf of its own any more, and its value is in
+        // the table bucket instead
+        UNIT_ASSERT(!FindLeafCounters(rootGroup, leader1.TabletId, leader1.FollowerId));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
+            3
+        );
+
+        // The lagging partition keeps its own leaf, and — the whole point of this test
+        // — its cumulative counter is exactly what it was, not reset to 0 by a
+        // table-wide teardown that no longer happens
+        auto laggingLeaf = FindLeafCounters(rootGroup, leader2.TabletId, leader2.FollowerId);
+        UNIT_ASSERT(laggingLeaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(laggingLeaf, "ConsumedCPU"), 200);
+
+        // The lagging partition converges too
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 4).AddCumulative(CONSUMED_CPU, 20);
+        leader2.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after both partitions converged on the table level", rootGroup);
+
+        auto tableGroup = FindTableGroup(rootGroup);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics", "per_partition"));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindTableBucketCounters(rootGroup), "SUM(DbUniqueRowsTotal)"),
+            3 + 4
+        );
+    }
+
+    Y_UNIT_TEST(StaleLevelReportDoesNotResetTheCumulativeCounters) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet flapping(1000, 0);
+        TFakeTablet steady(2000, 0);
+
+        flapping.AddCumulative(CONSUMED_CPU, 10);
+        steady.AddCumulative(CONSUMED_CPU, 100);
+
+        flapping.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        steady.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        aggregator->RecalculateAllCounters();
+
+        // Read once here, but NOT reused after the flap below: were the shared
+        // per_partition subtree ever detached and rebuilt, a pointer captured now
+        // would still dereference the OLD (orphaned) counter object, and the final
+        // assertion would pass on a tree no longer reachable from rootGroup at all
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(rootGroup, steady.TabletId, steady.FollowerId), "ConsumedCPU"),
+            100
+        );
+
+        // The flapping tablet jumps to the table level ...
+        flapping.AddCumulative(CONSUMED_CPU, 1);
+        flapping.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        // ... straight back to the partition one ...
+        flapping.AddCumulative(CONSUMED_CPU, 1);
+        flapping.Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        // ... and to the table level again, all without the steady tablet ever
+        // reporting anything in between
+        flapping.AddCumulative(CONSUMED_CPU, 1);
+        flapping.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        aggregator->RecalculateAllCounters();
+
+        DumpCounters("Counters after one tablet flapped between levels", rootGroup);
+
+        // The steady tablet's own leaf, and the cumulative counter accumulated in it,
+        // is untouched by any of the flapping neighbour's moves. Re-resolved through
+        // the root rather than reusing the pointer above, so that a leaf, which the
+        // flap silently detached and rebuilt, would show up as a lookup failure here
+        // instead of a stale value read off a group no longer in the tree
+        auto steadyLeaf = FindLeafCounters(rootGroup, steady.TabletId, steady.FollowerId);
+        UNIT_ASSERT(steadyLeaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(steadyLeaf, "ConsumedCPU"), 100);
     }
 
     /**

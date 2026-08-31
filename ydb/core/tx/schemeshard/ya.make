@@ -275,6 +275,8 @@ SRCS(
     schemeshard_cdc_stream_scan.cpp
     schemeshard_continuous_backup_cleaner.cpp
     schemeshard_incremental_restore_scan.cpp
+    schemeshard_database_relative_path.cpp
+    schemeshard_database_relative_path.h
     schemeshard_domain_links.cpp
     schemeshard_domain_links.h
     schemeshard_effective_acl.cpp

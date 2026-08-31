@@ -21,6 +21,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_base.cpp
     ut_counters.cpp
+    ut_database_relative_path.cpp
     ut_info_types.cpp
     ut_move_tablet_to_storage_pool.cpp
     ut_table_decimal_types.cpp

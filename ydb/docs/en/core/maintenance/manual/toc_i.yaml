@@ -25,10 +25,13 @@ items:
   href: disk_end_space.md
 - name: Replacing a node's FQDN
   href: replacing_nodes.md
+<<<<<<< HEAD
 - name: Config overview
   href: config-overview.md
 - name: Temporary configurations
   href: dynamic-config-volatile-config.md
+=======
+>>>>>>> 3ec4c5a78c1 (docs: remove legacy EN configuration overview (#51480))
 - name: BlobDepot
   href: blobdepot.md
 - name: BlobDepot decommit

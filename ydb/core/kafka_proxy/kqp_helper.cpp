@@ -10,9 +10,9 @@ TKqpTxHelper::TKqpTxHelper(TString database)
     : DataBase(database)
 {}
 
-void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx) {
+void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx, ui64 cookie) {
     auto ev = MakeCreateSessionRequest();
-    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0);
+    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, cookie);
 }
 
 void TKqpTxHelper::BeginTransaction(ui64 cookie, const TActorContext& ctx) {

@@ -145,7 +145,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"body", (msg.Response ? msg.Response->Body : "null")});
 
         if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
-            YDB_LOG_ERROR("[Export] Error at 'GetProxy'",
+            YDB_LOG_ERROR("[Export] Error at 'StateResolveProxy'",
                 {"self", this->SelfId()},
                 {"error", msg.GetError()});
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
@@ -341,7 +341,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void HandlePermissions(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        YDB_LOG_DEBUG("[Export] HandleMetadata TEvExternalStorage::TEvPutObjectResponse",
+        YDB_LOG_DEBUG("[Export] HandlePermissions TEvExternalStorage::TEvPutObjectResponse",
             {"result", result});
 
         if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
@@ -665,7 +665,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvAbortMultipartUploadResponse",
+        YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvHeadObjectResponse",
             {"result", result});
 
         if (result.IsSuccess()) {
@@ -691,7 +691,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        YDB_LOG_DEBUG("[Export] Error",
+        YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvAbortMultipartUploadResponse",
             {"result", result});
 
         if (result.IsSuccess()) {

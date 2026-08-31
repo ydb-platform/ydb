@@ -207,7 +207,7 @@ public:
         if (!Buffer->Collect(row)) {
             Success = false;
             Error = Buffer->GetError();
-            YDB_LOG_ERROR("[Export] Handle TEvExportScan::TEvFinish",
+            YDB_LOG_ERROR("[Export] Feed: Buffer collect failed",
                 {"error", Error});
             return EScan::Final;
         }

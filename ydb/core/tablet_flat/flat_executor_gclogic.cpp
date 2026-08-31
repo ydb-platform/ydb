@@ -501,6 +501,9 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                     affectedGroups[xit->GroupID];
             }
 
+            // Below the first surviving entry the generation resolves to the sentinel group:
+            // the blob was collected together with the cut entry, so a flag for it would be
+            // addressed to Max<ui32>() and fail forever.
             ui32 activeGen = Max<ui32>();
             ui32 activeGroup = Max<ui32>();
             TVector<TLogoBlobID> *vec = nullptr;
@@ -509,10 +512,12 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].first;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].first;
                 }
 
-                vec->push_back(blobId);
+                if (vec) {
+                    vec->push_back(blobId);
+                }
             }
 
             activeGen = Max<ui32>();
@@ -523,10 +528,12 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].second;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].second;
                 }
 
-                vec->push_back(blobId);
+                if (vec) {
+                    vec->push_back(blobId);
+                }
             }
 
             for (auto &xpair : affectedGroups) {

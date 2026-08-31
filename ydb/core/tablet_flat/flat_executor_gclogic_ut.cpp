@@ -1,5 +1,9 @@
 #include "flat_executor_gclogic.h"
 #include "flat_sausage_grind.h"
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -31,6 +35,24 @@ TAutoPtr<NPageCollection::TSteppedCookieAllocator> MakeGCCookies(
         TArrayRef<const NPageCollection::TSlot>(slots)
     );
 }
+
+// Drives one SendCollectGarbage pass from inside the actor system, since the call
+// needs a real TActorContext to dispatch TEvCollectGarbage.
+class TCollectGarbageDriver : public NActors::TActorBootstrapped<TCollectGarbageDriver> {
+public:
+    TCollectGarbageDriver(TExecutorGCLogic* logic, NActors::TActorId done)
+        : Logic(logic), Done(done) {}
+
+    void Bootstrap(const NActors::TActorContext& ctx) {
+        Logic->SendCollectGarbage(ctx);
+        ctx.Send(Done, new NActors::TEvents::TEvWakeup());
+        Die(ctx);
+    }
+
+private:
+    TExecutorGCLogic* const Logic;
+    const NActors::TActorId Done;
+};
 
 } // namespace
 
@@ -313,6 +335,110 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         auto toCut = gcLogic.HistoryCutter.GetHistoryToCut(0);
         UNIT_ASSERT_C(toCut.empty(),
             "history entry [10, 100) must not be cuttable while gen-50 blob has a pending DoNotKeep mark");
+    }
+
+    // Precondition for the SendCollectGarbage sentinel guard: TChannelInfo::SendCollectGarbage guards against
+    // the Max<ui32>() sentinel returned by GroupForGeneration when a blob's
+    // generation falls below the first surviving history entry.  The old code
+    // unconditionally dereferenced &affectedGroups[activeGroup], inserting a
+    // garbage key into the map and later issuing a collect against a nonexistent
+    // group, which triggered a BS error -> TEvPoison boot loop.
+    //
+    // This fix cannot be exercised in the current unit-test suite without a
+    // running actor system and a BS-proxy intercept, because
+    // TChannelInfo::SendCollectGarbage takes a const TActorContext& and
+    // immediately dispatches TEvBlobStorage::TEvCollectGarbage messages through
+    // it.  A full integration test would need to:
+    //   1. Stand up a TActorSystem with a mock BS group.
+    //   2. Drive TExecutorGCLogic to the "bloated" SendCollectGarbage branch
+    //      (barrier < latestEntry->FromGeneration with a cut entry already in place).
+    //   3. Put a blob whose generation resolves to Max<ui32>() into the keep/
+    //      notKeep vectors and verify no message is sent to group Max<ui32>().
+    //
+    // A structural check below confirms that GroupForGeneration returns the
+    // sentinel for generations below the first history entry, which is the
+    // precondition that makes the fix necessary.
+    Y_UNIT_TEST(GroupForGenerationReturnsSentinelBelowFirstEntry) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(31, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        info->Channels[0].History.emplace_back(10u, 77u); // first entry starts at gen 10
+
+        // A generation strictly below the first entry must resolve to Max<ui32>().
+        ui32 group = info->Channels[0].GroupForGeneration(5);
+        UNIT_ASSERT_VALUES_EQUAL_C(group, Max<ui32>(),
+            "GroupForGeneration must return Max<ui32>() for generations below the first history entry");
+    }
+
+    // The regression this guards: SendCollectGarbage resolved every blob's generation
+    // with GroupForGeneration and dereferenced &affectedGroups[activeGroup] without
+    // checking it. For a generation below the first surviving history entry that call
+    // returns the Max<ui32>() sentinel, so a collect went out to a group that does not
+    // exist -- BS error, TEvPoison, boot loop.
+    //
+    // Setup mirrors the state after a cut: the channel keeps a single history entry
+    // starting at generation 10, while GC still holds marks for generations 5 and 6
+    // that belonged to the entry which was cut away.
+    //
+    // Ablation: restore `vec = &affectedGroups[activeGroup].first/.second` and drop the
+    // `if (vec)` guards; the sentinel proxy then receives a collect and the second
+    // assertion below fails.
+    Y_UNIT_TEST(SendCollectGarbageSkipsSentinelGroup) {
+        const ui64 tabletId = 32;
+        const ui32 channel = 2;
+        const ui32 survivingGroup = 77;
+        const ui32 survivingFromGen = 10;
+
+        TTestBasicRuntime runtime(1);
+        TAutoPtr<TAppPrepare> app = new TAppPrepare();
+        runtime.Initialize(app->Unwrap());
+
+        // Stand in for the BS proxies. Without these the collect requests resolve to no
+        // mailbox and are dropped before anything can observe them.
+        const auto survivingEdge = runtime.AllocateEdgeActor();
+        const auto sentinelEdge = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(survivingGroup), survivingEdge);
+        runtime.RegisterService(MakeBlobStorageProxyID(Max<ui32>()), sentinelEdge);
+
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(tabletId, TTabletTypes::Dummy);
+        info->Channels.resize(channel + 1);
+        for (ui32 ch = 0; ch <= channel; ++ch) {
+            info->Channels[ch].Channel = ch;
+            // Single entry: everything below survivingFromGen resolves to the sentinel.
+            info->Channels[ch].History.emplace_back(survivingFromGen, survivingGroup);
+        }
+
+        // Tablet generation must exceed the blob generations below so they are collectable.
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info, 20));
+        gcLogic.FollowersSyncComplete(true);
+
+        TGCBlobDelta delta;
+        // Generations 5 and 6 sit below the surviving entry -> sentinel group.
+        delta.Created.push_back(HistoryCutterUtBlob(tabletId, 5, channel));
+        delta.Deleted.push_back(HistoryCutterUtBlob(tabletId, 6, channel));
+        // Generation 12 resolves normally and must still be collected.
+        delta.Created.push_back(HistoryCutterUtBlob(tabletId, 12, channel));
+        TGCLogEntry entry(TGCTime(1, 1), delta);
+        gcLogic.ApplyLogEntry(entry);
+
+        // Count collect requests per proxy. GrabEdgeEvent cannot express "nothing
+        // arrived" -- it throws once the queue drains -- so observe and count instead.
+        THashMap<TActorId, ui32> collectsByProxy;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                ++collectsByProxy[ev->Recipient];
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto done = runtime.AllocateEdgeActor();
+        runtime.Register(new TCollectGarbageDriver(&gcLogic, done));
+        runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(done);
+
+        // The collect is dispatched before the driver's wakeup, so by now it has been observed.
+        UNIT_ASSERT_C(collectsByProxy[MakeBlobStorageProxyID(survivingGroup)] > 0,
+            "the surviving history entry must still receive its collect request");
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsByProxy[MakeBlobStorageProxyID(Max<ui32>())], 0u,
+            "a collect request must never be addressed to the Max<ui32>() sentinel group");
     }
 }
 

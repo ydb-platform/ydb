@@ -124,7 +124,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpTable;
-        entry.Path = NKikimr::SplitPath(Request_->GetDatabaseRelativePath(GetProtoRequest()->path()));
+        entry.Path = NKikimr::SplitPath(Request->GetDatabaseRelativePath(GetProtoRequest()->path()));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolvePath);

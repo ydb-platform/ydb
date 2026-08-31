@@ -148,6 +148,10 @@ public:
         Database_ = database;
     }
 
+    void SetDatabaseName(const TString& database) override {
+        Database_ = database;
+    }
+
     void SetRespHook(NGRpcService::TRespHook&&) override {
     }
 

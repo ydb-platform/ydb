@@ -1058,17 +1058,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpMoveTable>(
         .Path = TString(ExtractParent(move.GetDstPath())),
     });
 
-    // The only fan-out in this migration that constructed-part declarations do NOT cover:
-    // TMoveTable::Propose itself PersistPath's each of the source's index children while
-    // remapping them, before any part is proposed. Established by removing this and watching
-    // exactly one test fail -- MoveColumnTableWithLocalBloomIndexes, on
-    // /MyRoot/ColumnTable/idx_bloom. Conditional on the source having children, so moving a
-    // plain table keeps its cross-check.
-    if (const TPath src = TPath::Resolve(move.GetSrcPath(), context.SS);
-        src.IsResolved() && !src.Base()->GetChildren().empty())
-    {
-        result.Incomplete = true;
-    }
+    // Complete as it stands. TMoveTable::Propose PersistPath's exactly the four rows
+    // declared above -- the allocated dst leaf, its parent, the src path, and the src
+    // parent. The source's index children are remapped in ConfigureParts, at execution
+    // time, and each child rename is proposed as its own ESchemeOpMoveIndex part whose
+    // declaration covers it.
     return result;
 }
 

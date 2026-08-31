@@ -615,18 +615,32 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpMoveIndex>(
     // the given table path and fan out into an AlterTable touch on the main table, an
     // optional drop of a pre-existing dst index (AllowOverwrite), the MoveTableIndex rename
     // itself, and a MoveTable+MoveSequence pair per impl table -- each declared separately
-    // under its own op type. Declare the index rename that anchors all of that and mark
-    // Incomplete rather than re-deriving the impl-table fan-out here.
+    // under its own op type. Declare the index rename that anchors all of that.
     const auto& moving = tx.GetMoveIndex();
     const TString tablePath = moving.GetTablePath();
+
+    // SrcPath/DstPath are usually bare index names relative to TablePath, but
+    // MoveLocalIndexTask (schemeshard__operation_common.cpp) passes an absolute SrcPath:
+    // when a column table is moved, the index being renamed still lives under the *source*
+    // table while TablePath already names the destination. JoinPath is a bare '/'-join with
+    // no canonization, so joining an absolute child onto the absolute table path would yield
+    // "/MyRoot/Dst//MyRoot/Src/idx" -- a path that resolves to nothing, leaving the real
+    // index undeclared. Same fix as DeclareChildOfWorkingDir: canonize, and only join a path
+    // that is actually relative.
+    const auto resolveUnderTable = [&tablePath](const TString& path) {
+        return IsStartWithSlash(path)
+            ? CanonizePath(path)
+            : CanonizePath(JoinPath({tablePath, path}));
+    };
+
     TAffectedPaths result;
     result.Paths.push_back(TAffectedPath{
         .Role = TAffectedPath::ERole::Source,
-        .Path = JoinPath({tablePath, moving.GetSrcPath()}),
+        .Path = resolveUnderTable(moving.GetSrcPath()),
     });
     result.Paths.push_back(TAffectedPath{
         .Role = TAffectedPath::ERole::Target,
-        .Path = JoinPath({tablePath, moving.GetDstPath()}),
+        .Path = resolveUnderTable(moving.GetDstPath()),
     });
     // No Incomplete. This expands into constructed parts, and IgniteOperation asks each
     // part for its own declaration before proposing it, so their paths are covered.

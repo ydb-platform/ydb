@@ -87,10 +87,6 @@ namespace NKikimr::NBlobDepot {
             float LastPushedApproximateFreeSpaceShare = 0.0f;
 
             THashSet<TS3Locator> S3WritesInFlight;
-
-            ui64 S3GetsInFlight = 0;
-            ui64 S3GetsMaxInFlight = 0;
-            ui64 S3GetsPendingQueueSize = 0;
         };
 
         struct TPipeServerContext {
@@ -385,6 +381,7 @@ namespace NKikimr::NBlobDepot {
         void UpdateThroughputs(bool reschedule = true);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
         THashMap<ui32, bool> S3RouterIsUsingProxyByNode;
         ui64 S3RouterNodeCount = 0;
@@ -397,6 +394,8 @@ namespace NKikimr::NBlobDepot {
         void ApplyAgentS3GetGauges(TAgent& agent, ui64 inFlight, ui64 maxInFlight, ui64 pendingQueueSize);
 
 >>>>>>> 523288465c8 (Fixed router switch (#51236))
+=======
+>>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation
 

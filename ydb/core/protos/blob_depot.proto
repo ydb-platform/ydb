@@ -255,14 +255,6 @@ message TEvPushMetrics {
     optional uint64 BytesRead = 1; // since last update
     optional uint64 BytesWritten = 2; // since last update
     optional uint32 NodeId = 3;
-    optional uint64 S3GetsOk = 4; // since last update
-    optional uint64 S3GetsError = 5; // since last update
-    optional uint64 S3GetsBytes = 6; // since last update
-    optional uint64 S3GetsSlowDown = 7; // since last update
-    optional uint64 S3GetThrottleActivations = 8; // since last update
-    optional uint64 S3GetsInFlight = 9;
-    optional uint64 S3GetsMaxInFlight = 10;
-    optional uint64 S3GetsPendingQueueSize = 11;
 }
 
 message TEvPrepareWriteS3 {
@@ -290,6 +282,7 @@ message TEvPrepareWriteS3Result {
     repeated TItem Items = 1;
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 message TEvPushS3RouterMetrics {
@@ -314,3 +307,5 @@ message TEvPushS3RouterMetrics {
     optional uint64 RetiringWrappersAborted = 19;
 }
 >>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
+=======
+>>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))

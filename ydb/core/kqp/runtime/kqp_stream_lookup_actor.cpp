@@ -1133,8 +1133,10 @@ private:
                 if (lockIt != Reads.endLocks()) {
                     return RetryLock(lockIt->second, false);
                 }
-                // Ignore unknown wrong shard state
-                return;
+                return RuntimeError(
+                    TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Wrong shard state.",
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    getIssues());
             }
             default: {
                 return RuntimeError(

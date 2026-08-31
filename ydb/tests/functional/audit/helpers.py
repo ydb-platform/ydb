@@ -51,13 +51,15 @@ def get_dstool_binary_path():
     return yatest.common.binary_path(os.getenv('YDB_DSTOOL_BINARY'))
 
 
-def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
+def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True, allowed_failure=None):
     full_cmd = [get_dstool_binary_path(), '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
     full_cmd += cmd
 
     proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
-    if check_exit_code and proc_result.exit_code != 0:
-        assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err.decode("utf-8")}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
+    stderr = proc_result.std_err.decode('utf-8')
+    failure_allowed = allowed_failure is not None and allowed_failure in stderr
+    if check_exit_code and proc_result.exit_code != 0 and not failure_allowed:
+        assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{stderr}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
     return proc_result.std_out
 
 
@@ -196,18 +198,18 @@ class CanonicalCaptureAuditFileOutput:
         )
 
 
-def capture_dstool_evict_vdisk_audit(cluster, token):
+def capture_dstool_evict_vdisk_audit(cluster, token, allowed_failure=None):
     list_result = json.loads(execute_dstool_grpc(cluster, token, ['vdisk', 'list', '--format', 'json']))
     assert len(list_result) > 0
     vdisk_id = list_result[0]['VDiskId']
     assert vdisk_id
 
+    evict_cmd = [
+        'vdisk', 'evict', '--vdisk-ids', vdisk_id, '--ignore-degraded-group-check',
+        '--ignore-failure-model-group-check',
+    ]
+
     capture_audit = CanonicalCaptureAuditFileOutput(cluster.config.audit_file_path)
     with capture_audit:
-        execute_dstool_grpc(
-            cluster,
-            token,
-            ['vdisk', 'evict', '--vdisk-ids', vdisk_id, '--ignore-degraded-group-check',
-             '--ignore-failure-model-group-check'],
-        )
+        execute_dstool_grpc(cluster, token, evict_cmd, allowed_failure=allowed_failure)
     return capture_audit.canonize()

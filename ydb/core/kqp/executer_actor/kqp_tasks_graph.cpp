@@ -3982,11 +3982,15 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
     if (taskCountHint) {
         taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
-        ui32 userPoolThreads = 0;
-        constexpr ui32 AveragePartitionsPerTask = 5;
-        const ui32 tasksByPartitions = (taskCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask;
-        const ui32 tasksByThread = (((TStagePredictor::GetUsableThreads() * 2) + 2) / 3) * resourceSnapshotSize;
-        taskCount = std::min(tasksByPartitions, tasksByThread);
+        if (externalSource.GetType() == NYql::PqSource) {
+            ui32 userPoolThreads = 0;
+            constexpr ui32 AveragePartitionsPerTask = 5;
+            const ui32 tasksByPartitions = (taskCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask;
+            const ui32 tasksByThread = (((TStagePredictor::GetUsableThreads() * 2) + 2) / 3) * resourceSnapshotSize;
+            taskCount = std::min(tasksByPartitions, tasksByThread);
+        } else {
+            taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
+        }
     }
 
     for (ui32 i = 0; i < taskCount; ++i) {

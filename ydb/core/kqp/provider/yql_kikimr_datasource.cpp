@@ -589,6 +589,7 @@ private:
         NKqpProto::TDqSourceKikimrLookupSource source;
         source.SetPath(path);
         source.SetToken(SessionCtx->GetUserToken() ? SessionCtx->GetUserToken()->SerializeAsString() : "");
+        source.SetDatabase(SessionCtx->GetDatabase());
 
         // preserve source description for read actor
         protoSettings.PackFrom(source);

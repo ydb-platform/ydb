@@ -7,4 +7,5 @@ option java_package = "ru.yandex.kikimr.proto";
 message TDqSourceKikimrLookupSource {
     string Path = 1;
     string Token = 2;
+    string Database = 3;
 }

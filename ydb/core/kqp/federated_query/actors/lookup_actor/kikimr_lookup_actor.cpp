@@ -435,7 +435,7 @@ namespace {
             using TRequest = Ydb::Query::ExecuteQueryRequest;
             using TResponse = Ydb::Query::ExecuteQueryResponsePart;
             using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
-            state->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(FillQuery(state), /*database*/AppData()->TenantName, Token, ActorContext(), false, ChannelBufferSize);
+            state->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(FillQuery(state), LookupSource.GetDatabase(), Token, ActorContext(), false, ChannelBufferSize);
             ReadNextResponsePart(state);
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
             if (CpuTime) {
@@ -490,7 +490,7 @@ namespace {
             using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
             TRequest request;
             request.set_session_id(session->SessionId);
-            session->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(std::move(request), /*database*/AppData()->TenantName, Token, ActorContext(), false, ChannelBufferSize);
+            session->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(std::move(request), LookupSource.GetDatabase(), Token, ActorContext(), false, ChannelBufferSize);
             if (ActiveSessions) {
                 ActiveSessions->Inc();
             }
@@ -583,7 +583,7 @@ namespace {
             TRequest request;
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, Token, actorSystem);
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), LookupToken.GetDatabase(), Token, actorSystem);
             result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
                 actorSystem->Send(selfId, new TEvQueryCreateSessionResponse(future, std::move(state)));
             });
@@ -617,7 +617,7 @@ namespace {
             [[maybe_unused]]
             auto selfId = SelfId();
             [[maybe_unused]]
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, Token, actorSystem);
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), LookupSource.GetDatabase(), Token, actorSystem);
             // don't wait for results
         }
 

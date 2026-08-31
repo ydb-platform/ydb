@@ -89,6 +89,19 @@ TKafkaInt16 OffsetFetchPartitionError(TKafkaTestClient& client, const TString& t
     return msg->Groups[0].Topics[0].Partitions[0].ErrorCode;
 }
 
+void AssertOffsetFetchNoneMinusOne(TKafkaTestClient& client, const TString& topicName, const TString& groupId = "unknown-group") {
+    std::map<TString, std::vector<i32>> topicsToPartitions;
+    topicsToPartitions[topicName] = {0};
+    auto msg = client.OffsetFetch(groupId, topicsToPartitions);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        msg->Groups[0].Topics[0].Partitions[0].ErrorCode,
+        static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
+}
+
 TKafkaInt16 OffsetCommitPartitionError(TKafkaTestClient& client, const TString& topicName, const TString& groupId) {
     std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
     offsets[topicName] = {NKafka::TEvKafka::PartitionConsumerOffset(0, 0)};
@@ -197,10 +210,10 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
         WaitUntil([&] {
             return FetchPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
         });
-        // Scheme cache hides topics without DescribeSchema as PathErrorUnknown.
-        // ListOffsets must keep UNKNOWN_TOPIC_OR_PARTITION for missing topics (mixed-version / auto-create).
+        // Apache Kafka ListOffsets: Describe is checked before existence
+        // (KAFKA-5547), so ACL deny is TOPIC_AUTHORIZATION_FAILED, not UNKNOWN.
         WaitUntil([&] {
-            return ListOffsetsPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            return ListOffsetsPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
         });
         WaitUntil([&] {
             return OffsetFetchPartitionError(client, topicName, groupId) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
@@ -350,6 +363,48 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
             static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
     }
 
+    // Apache Kafka ListOffsets: no Describe → TOPIC_AUTHORIZATION_FAILED (KAFKA-5547).
+    Y_UNIT_TEST(ListOffsetsWithoutDescribeIsAuth) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TString topicName = "/Root/topic-listoffsets-no-describe";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        UNIT_ASSERT_VALUES_EQUAL(
+            ListOffsetsPartitionError(client, topicName),
+            static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+    }
+
+    // Apache Kafka ListOffsets: DESCRIBE is enough; READ (SelectRow) is not required.
+    Y_UNIT_TEST(ListOffsetsWithDescribeOnlySucceeds) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TString topicName = "/Root/topic-listoffsets-describe-only";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            topicName,
+            "usernorights",
+            {"ydb.granular.describe_schema"},
+            true);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        UNIT_ASSERT_VALUES_EQUAL(
+            ListOffsetsPartitionError(client, topicName),
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
     // Matches Apache Kafka OffsetFetch v1+: missing topic → NONE + committedOffset -1,
     // no auto-create. See https://issues.apache.org/jira/browse/KAFKA-20165
     Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneAfterSasl) {
@@ -360,17 +415,38 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
 
         TKafkaTestClient client(testServer.Port);
         client.PlainAuthenticateToKafka();
+        AssertOffsetFetchNoneMinusOne(client, "/Root/topic-does-not-exist");
+    }
 
-        std::map<TString, std::vector<i32>> topicsToPartitions;
-        topicsToPartitions["/Root/topic-does-not-exist"] = {0};
-        auto msg = client.OffsetFetch("unknown-group", topicsToPartitions);
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+    // Describer with a token that cannot see /Root reports UNAUTHORIZED for a missing
+    // path. OffsetFetch must still distinguish "does not exist" via an unauthenticated
+    // describe, same as the old scheme-cache existence check.
+    Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneWithoutDescribe) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        AssertOffsetFetchNoneMinusOne(client, "/Root/topic-does-not-exist-norights");
+    }
+
+    Y_UNIT_TEST(OffsetFetchHiddenTopicWithoutPriorAclIsAuth) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TString topicName = "/Root/topic-offsetfetch-hidden";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
         UNIT_ASSERT_VALUES_EQUAL(
-            msg->Groups[0].Topics[0].Partitions[0].ErrorCode,
-            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
+            OffsetFetchPartitionError(client, topicName, "hidden-group"),
+            static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
     }
 
     Y_UNIT_TEST(AclRevokeThenGrantRestoresProduceAndFetch) {

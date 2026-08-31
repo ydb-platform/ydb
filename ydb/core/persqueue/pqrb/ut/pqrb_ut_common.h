@@ -21,10 +21,34 @@ inline void DispatchFor(TTestContext& tc, TDuration timeout = TDuration::MilliSe
 inline THolder<TEvPersQueue::TEvGetPartitionsLocationResponse> SendLocationRequest(
     TTestContext& tc,
     TEvPersQueue::TEvGetPartitionsLocation* request,
-    TDuration timeout = TDuration::Seconds(10)
+    TDuration timeout = TDuration::Seconds(10),
+    ui64 cookie = 0,
+    ui64* responseCookie = nullptr
 ) {
-    tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request, 0, GetPipeConfigWithRetries());
-    return tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(timeout);
+    if (responseCookie) {
+        *responseCookie = Max<ui64>();
+        tc.Runtime->SetObserverFunc([responseCookie, edge = tc.Edge](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPersQueue::TEvGetPartitionsLocationResponse::EventType &&
+                ev->Recipient == edge)
+            {
+                *responseCookie = ev->Cookie;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+    }
+    tc.Runtime->SendToPipe(
+        tc.BalancerTabletId,
+        tc.Edge,
+        request,
+        0,
+        GetPipeConfigWithRetries(),
+        TActorId(),
+        cookie);
+    auto response = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>(timeout);
+    if (responseCookie) {
+        tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+    }
+    return response;
 }
 
 inline void WaitBalancerReady(TTestContext& tc, ui32 retries = 20) {

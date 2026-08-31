@@ -123,10 +123,14 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void EnqueuePartitionsLocationRequest(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void ProcessPartitionsLocationQueue(const TActorContext& ctx);
-    bool TryRespondPartitionsLocation(const TActorId& sender, const NKikimrPQ::TGetPartitionsLocation& request, const TActorContext& ctx);
+    bool TryRespondPartitionsLocation(
+        const TActorId& sender,
+        const NKikimrPQ::TGetPartitionsLocation& request,
+        const TActorContext& ctx,
+        ui64 cookie);
     bool AllPartitionPipesReady() const;
     void SchedulePartitionsLocationWakeup(const TActorContext& ctx);
-    void SendPartitionsLocationError(const TActorId& sender, const TActorContext& ctx);
+    void SendPartitionsLocationError(const TActorId& sender, const TActorContext& ctx, ui64 cookie);
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
@@ -295,6 +299,7 @@ private:
         TActorId Sender;
         NKikimrPQ::TGetPartitionsLocation Record;
         TInstant Deadline;
+        ui64 Cookie = 0;
     };
     std::deque<TPartitionsLocationRequest> PartitionsLocationQueue;
     bool PartitionsLocationWakeupScheduled = false;

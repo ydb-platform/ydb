@@ -510,10 +510,7 @@ public:
     // Returns the best matching generation, or std::nullopt if none found in history.
     template <class TMemberCheck, class TDropVersionGet>
     std::optional<TInternalPathId> ResolveForSnapshot(
-        TSchemeShardLocalPathId ss,
-        const NOlap::TSnapshot& readSnapshot,
-        TMemberCheck isMember,
-        TDropVersionGet getDropVersion) const {
+        TSchemeShardLocalPathId ss, const NOlap::TSnapshot& readSnapshot, TMemberCheck isMember, TDropVersionGet getDropVersion) const {
         const auto* generations = Generations(ss);
         if (!generations) {
             return std::nullopt;
@@ -545,8 +542,13 @@ public:
     }
 
     // Accessors for iteration / bulk operations that need direct map access.
-    const THashMap<TSchemeShardLocalPathId, TInternalPathId>& GetLive() const { return Live; }
-    const THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>>& GetAll() const { return All; }
+    const THashMap<TSchemeShardLocalPathId, TInternalPathId>& GetLive() const {
+        return Live;
+    }
+
+    const THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>>& GetAll() const {
+        return All;
+    }
 };
 
 class TTablesManager: public NOlap::IPathIdTranslator {
@@ -555,7 +557,7 @@ private:
     TGenerationIndex GenerationIndex;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal; // Paths that are being truncated
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;   // Paths that are being truncated
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;

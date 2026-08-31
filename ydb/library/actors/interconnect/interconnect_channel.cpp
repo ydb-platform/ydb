@@ -545,7 +545,7 @@ namespace NActors {
 
         // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
         //  \todo replace with checksumsDisabled
-        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ); 
+        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ);
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 
@@ -580,7 +580,7 @@ namespace NActors {
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
-        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums 
+        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums
             && (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
         const bool disableChecksums = Params.Encryption || disableChecksumsForEvent;
 
@@ -636,7 +636,7 @@ namespace NActors {
     }
 
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
-        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notyfying about Undelivered messages!",
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notifying about Undelivered messages!",
             {"marker", "ICOCH89"},
             {"notYetConfirmed", NotYetConfirmed.size()},
             {"queue", Queue.size()});

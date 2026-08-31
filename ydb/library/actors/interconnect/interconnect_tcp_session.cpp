@@ -142,7 +142,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Terminate(TDisconnectReason reason) {
-        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Socket: %li",
+        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Terminate socket",
             {"marker", "ICS01"},
             {"socket", (Socket ? i64(*Socket) : -1)},
             {"reason", reason});

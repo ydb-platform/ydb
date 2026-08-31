@@ -127,7 +127,7 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             resultsSize += result.ByteSize();
         }
 
-        YDB_LOG_CTX(ctx, priority, "Slow query, b",
+        YDB_LOG_CTX(ctx, priority, "Slow query",
             {"requestInfo", requestInfo},
             {"duration", duration},
             {"status", status},

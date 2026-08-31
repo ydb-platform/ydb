@@ -624,9 +624,7 @@ public:
             return result;
         }
 
-        TPath path = pathId
-            ? TPath::Init(pathId, context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TPath::ResolveTarget(pathId, parentPathStr, name, context.SS);
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -1063,9 +1061,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    TPath path = pathId
-        ? TPath::Init(pathId, context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path = TPath::ResolveTarget(pathId, parentPathStr, name, context.SS);
 
     if (!path.IsResolved()) {
         return {CreateAlterTable(id, tx)};

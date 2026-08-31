@@ -1,9 +1,12 @@
 #pragma once
 
 #include "schemeshard__operation_part.h"
+#include "schemeshard_affected_paths.h"
 #include "schemeshard_tx_infly.h"
 
 #include <util/generic/set.h>
+
+#include <optional>
 
 namespace NKikimr::NSchemeShard {
 
@@ -13,6 +16,17 @@ struct TOperation: TSimpleRefCount<TOperation> {
     const TTxId TxId;
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
+
+    // Indexed 1:1 with the post-rewrite, pre-split transaction list. nullopt means the
+    // operation type is exempt rather than that it affects nothing -- the two must stay
+    // distinguishable or an unmigrated op reads as "touches no paths".
+    TVector<std::optional<TAffectedPaths>> DeclaredAffectedPaths;
+
+    // The above flattened to absolute paths, for ObservePathTouched to compare against.
+    // Lives on the operation rather than on the propose stack because path rows are written
+    // well after IgniteOperation returns -- TStorageChanges is applied later, and plan and
+    // progress write in transactions of their own.
+    THashSet<TString> DeclaredPathSet;
 
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;

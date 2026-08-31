@@ -809,6 +809,13 @@ public:
     // incompatible changes
     void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
 
+    // Absolute paths declared by the operation currently proposing, or null when none is
+    // in flight or the operation type is exempt. Every path-row write below reports to
+    // ObservePathTouched, so a declaration that misses a path the operation actually
+    // writes is caught instead of being trusted.
+    const THashSet<TString>* CurrentDeclaredPaths = nullptr;
+    void ObservePathTouched(const TPathId& pathId);
+
     // path
     void PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TPtr path);

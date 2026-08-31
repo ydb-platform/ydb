@@ -298,9 +298,9 @@ public:
             return result;
         }
 
-        TPath index = Transaction.GetDrop().HasId()
-            ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath index = TPath::ResolveTarget(
+            Transaction.GetDrop().HasId() ? context.SS->MakeLocalId(Transaction.GetDrop().GetId()) : TPathId(),
+            parentPathStr, name, context.SS);
 
         {
             TPath::TChecker checks = index.Check();

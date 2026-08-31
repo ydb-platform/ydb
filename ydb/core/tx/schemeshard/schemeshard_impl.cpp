@@ -2310,6 +2310,7 @@ void TSchemeShard::ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& 
 
 void TSchemeShard::PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId,
                                              TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs) {
+    ObservePathTouched(pathId);
     //remove old version
     if (oldAttrs) {
         for (auto& item: oldAttrs->Attrs) {
@@ -2366,6 +2367,7 @@ void TSchemeShard::PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathEl
 }
 
 void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId);
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                     NIceDb::TUpdate<Schema::Paths::LastTxId>(path->LastTxId));
@@ -2375,7 +2377,35 @@ void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr
     }
 }
 
+// Compares against the paths the proposing operation declared, rather than accumulating
+// an observed set, so the cost when nothing is declaring is a single null check. Paths
+// rather than ids: a create allocates its id during propose, so an id declared up front
+// would never match.
+void TSchemeShard::ObservePathTouched(const TPathId& pathId) {
+    if (!CurrentDeclaredPaths) {
+        return;
+    }
+    const TPath path = TPath::Init(pathId, this);
+    if (!path.IsResolved() || CurrentDeclaredPaths->contains(path.PathString())) {
+        return;
+    }
+    // Every create and drop rewrites the domain row as path-count bookkeeping, whatever
+    // it actually affected. Requiring all 136 operations to declare it would add a line
+    // that says nothing about the change, so it is excluded here instead. Narrow on
+    // purpose: only the domain row itself, so a genuine miss that happens to land on a
+    // subdomain is still reported.
+    if (path.Base()->IsDomainRoot()) {
+        return;
+    }
+    TabletCounters->Cumulative()[COUNTER_UNDECLARED_PATH_TOUCH].Increment(1);
+    LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "undeclared path touch"
+            << ", path: " << path.PathString()
+            << ", pathId: " << pathId);
+}
+
 void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
+    ObservePathTouched(pathId);
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     TPathElement::TPtr elem = PathsById.at(pathId);
     if (IsLocalId(pathId)) {
@@ -2418,6 +2448,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
 }
 
 void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId);
     Y_ABORT_UNLESS(path->Dropped() && path->DbRefCount == 0);
 
     // Make sure to cleanup any leftover user attributes for this path
@@ -2457,6 +2488,7 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
 }
 
 void TSchemeShard::PersistPathDirAlterVersion(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId);
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(path->DirAlterVersion));
@@ -2800,6 +2832,7 @@ void TSchemeShard::PersistSubDomainTablesMetricsLevelAlter(NIceDb::TNiceDb& db, 
 }
 
 void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId);
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::Paths::ACL>(path->ACL),
@@ -2813,6 +2846,7 @@ void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path
 
 
 void TSchemeShard::PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId);
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Paths::Owner>(path->Owner));
@@ -2823,6 +2857,7 @@ void TSchemeShard::PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr pa
 }
 
 void TSchemeShard::PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, TTxId txId) {
+    ObservePathTouched(pathId);
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     db.Table<Schema::Paths>().Key(pathId.LocalPathId).Update(
@@ -2830,6 +2865,7 @@ void TSchemeShard::PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, 
 }
 
 void TSchemeShard::PersistCreateStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step) {
+    ObservePathTouched(pathId);
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     // CreateTxId is saved in PersistPath
@@ -2860,6 +2896,7 @@ void TSchemeShard::PersistUnLock(NIceDb::TNiceDb& db, const TPathId pathId) {
 }
 
 void TSchemeShard::PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId) {
+    ObservePathTouched(pathId);
     Y_ABORT_UNLESS(step, "Drop step must be valid (not 0)");
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(pathId.LocalPathId).Update(

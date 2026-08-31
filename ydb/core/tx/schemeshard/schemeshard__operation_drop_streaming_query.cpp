@@ -192,9 +192,9 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& dstPath = dropDescription.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        const TPath dstPath = TPath::ResolveTarget(
+            dropDescription.HasId() ? context.SS->MakeLocalId(dropDescription.GetId()) : TPathId(),
+            parentPathStr, name, context.SS);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, context));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
 

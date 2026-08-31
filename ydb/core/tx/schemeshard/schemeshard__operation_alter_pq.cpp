@@ -648,9 +648,9 @@ public:
             return result;
         }
 
-        TPath path = alter.HasPathId()
-            ? TPath::Init(pathId, context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TPath::ResolveTarget(
+            pathId,
+            parentPathStr, name, context.SS);
 
         {
             TPath::TChecker checks = path.Check();

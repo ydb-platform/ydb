@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -184,9 +185,9 @@ THolder<TProposeResponse> TDropFileStore::Propose(
         ui64(OperationId.GetTxId()),
         ui64(ssId));
 
-    TPath path = operation.HasId()
-        ? TPath::Init(context.SS->MakeLocalId(operation.GetId()), context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path = TPath::ResolveTarget(
+        operation.HasId() ? context.SS->MakeLocalId(operation.GetId()) : TPathId(),
+        parentPathStr, name, context.SS);
 
     {
         auto checks = path.Check();
@@ -265,6 +266,23 @@ THolder<TProposeResponse> TDropFileStore::Propose(
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropFileStore = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropFileStore>(
+    TAffectedESchemeOpDropFileStore,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropFileStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropFileStore>(id, tx);

@@ -321,9 +321,9 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         return result;
     }
 
-    TPath path = operation.HasPathId()
-        ? TPath::Init(pathId, context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path = TPath::ResolveTarget(
+        pathId,
+        parentPathStr, name, context.SS);
 
     {
         auto checks = path.Check();

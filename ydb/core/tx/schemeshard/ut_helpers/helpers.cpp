@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "schemeshard_counters.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -230,6 +231,16 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
 
         CheckExpectedResult(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
+
+        // Every declaring operation is checked against what it actually wrote, after every
+        // modification in every suite -- not just in a dedicated test. Opt-in because
+        // reading the counter grabs an edge event, which perturbs suites that assert on
+        // event ordering.
+        if (GetEnv("YDB_CHECK_DECLARED_PATHS")) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                GetCumulativeCounter(runtime, "SchemeShard/UndeclaredPathTouch"), 0,
+                "an operation wrote a path row it had not declared, at txId " << txId);
+        }
         return event->Record.GetStatus();
     }
 

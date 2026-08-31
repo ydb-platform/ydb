@@ -108,7 +108,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
-    // Independent seq no for DropTable, CopyTable, MoveTable and  
+    // Independent seq no for DropTable, CopyTable, MoveTable and TruncateTable
     std::optional<TSchemeShardLocalPathId> targetPathId;
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
@@ -230,8 +230,8 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
             if (!owner.TablesManager.IsGenerateInternalPathId()) {
-                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
-                    "Cannot truncate column table without GenerateInternalPathId");
+                return TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Cannot truncate column table without GenerateInternalPathId");
             }
             if (owner.TablesManager.IsStoreTablet()) {
                 return TProposeResult(
@@ -250,8 +250,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             }
             if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId)) {
                 if (!ttl->GetUsedTiers().empty()) {
-                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
-                        "Cannot truncate column table with tiering");
+                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Cannot truncate column table with tiering");
                 }
             }
             owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);

@@ -1071,8 +1071,8 @@ FROM `{table_name}`"""
         query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
-        path1 = f"/Root/{query_name1}"
-        path2 = f"/Root/{query_name2}"
+
+       # time.sleep(120)
         self.wait_completed_checkpoints(kikimr, query_name1)
 
         # Check that streaming.query.tasks.count metric exists for both queries
@@ -1414,7 +1414,6 @@ FROM `{table_name}`"""
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        path = f"/Root/{query_name}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 

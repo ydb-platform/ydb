@@ -158,7 +158,7 @@ def get_ydb_config(request, enable_fq_connector=None):
 
 
 def monitoring_endpoint(cluster: KiKiMR, node_id: int) -> str:
-    node = cluster.nodes[node_id]
+    node = cluster.slots[node_id]
     return f"http://localhost:{node.mon_port}"
 
 
@@ -172,7 +172,7 @@ def get_checkpoint_coordinator_metric(
 ) -> int:
     sensor_sum = 0
     found = False
-    for node_id in cluster.nodes:
+    for node_id in cluster.slots:
         sensor = get_sensors(cluster, node_id, "kqp").find_sensor(
             {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
         )
@@ -385,7 +385,7 @@ class Kikimr:
         config: KikimrConfigGenerator,
         timeout_seconds: int = 240,
         enable_discovery: bool = True,
-        tenant_database: Optional[str] = None,
+        tenant_database: str = "romashka",
     ):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
@@ -408,22 +408,22 @@ class Kikimr:
         # not busy processing an async config update when we send the tenant
         # creation request.
 
-        if tenant_database is not None:
-            token = config.default_clusteradmin
-            logger.info("Sleep")
-            time.sleep(10)
-            logger.info(f"Creating tenant {tenant_database} with token={token!r}")
-            self.cluster.create_database(
-                tenant_database,
-                storage_pool_units_count={"hdd": 1},
-                token=token,
-            )
-            slot_database = tenant_database
-        else:
-            slot_database = f"/{config.domain_name}"
+       # if tenant_database is not None:
+        token = config.default_clusteradmin
+        logger.info("Sleep")
+        time.sleep(10)
+        logger.info(f"Creating tenant {tenant_database} with token={token!r}")
+        self.cluster.create_database(
+            tenant_database,
+            storage_pool_units_count={"hdd": 1},
+            token=token,
+        )
+        self.slot_database = tenant_database
+      #  else:
+      #      slot_database = f"/{config.domain_name}"
 
         # Add dynamic nodes (slots) for the tenant/DB.
-        self.cluster.register_and_start_slots(database=slot_database, count=2)
+        self.cluster.register_and_start_slots(database=self.slot_database, count=2)
         time.sleep(10)
 
         # Push the full config (with all feature-sections) into CMS.
@@ -432,7 +432,7 @@ class Kikimr:
         time.sleep(10)
 
         self.first_node = random.choice(list(self.cluster.slots.values()))
-        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", slot_database)
+        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", self.slot_database)
         logger.info(f"Creating ydb client to {self.endpoint}, database={self.endpoint.database}")
         self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
 
@@ -461,6 +461,9 @@ class Kikimr:
         self.ydb_client.stop()
         self.cluster.stop()
 
+    def get_database_name(self) -> str:
+        return self.slot_database
+
 
 class StreamingTestBase(TestYdsBase):
     def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
@@ -477,7 +480,8 @@ class StreamingTestBase(TestYdsBase):
     def wait_completed_checkpoints(
         self, kikimr: Kikimr, query_name: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
     ) -> None:
-        path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        print(f"wait_completed_checkpoints {path}")
         wait_completed_checkpoints(
             kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
         )
@@ -506,7 +510,7 @@ class StreamingTestBase(TestYdsBase):
 
     def get_schemeshard_counter(self, kikimr: Kikimr, counter_name: str) -> int:
         total = 0
-        for node_id in kikimr.cluster.nodes:
+        for node_id in kikimr.cluster.slots:
             sensor = get_sensors(kikimr.cluster, node_id, "tablets").find_sensor(
                 {"type": "SchemeShard", "category": "app", "sensor": counter_name}
             )

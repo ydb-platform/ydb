@@ -13,6 +13,8 @@ on:
       - 'opened'
       - 'synchronize'
       - 'reopened'
+      - 'ready_for_review'
+      - 'converted_to_draft'
       - 'labeled'
   push:
     branches:
@@ -22,6 +24,9 @@ on:
     paths-ignore:
       - 'ydb/docs/**'
 # Only 'rebase-and-check' and 'ok-to-test' labels should re-trigger checks.
+# Draft PRs skip automatic checks, but these labels can start them explicitly.
+# Marking a PR ready for review starts checks, while converting it to a draft
+# cancels an in-progress run through the shared PR concurrency group.
 # Other labels must not cancel running checks or start new ones.
 # To achieve this we assign irrelevant label events a unique concurrency group
 # (by appending run_id) so they never cancel an in-progress run, and the job-level
@@ -38,8 +43,21 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
 jobs:
   check-running-allowed:
-    # Skip runs triggered by irrelevant labels (anything other than rebase-and-check / ok-to-test)
-    if: ${{ github.event_name == 'pull_request_target' && (github.event.action != 'labeled' || github.event.label.name == 'rebase-and-check' || github.event.label.name == 'ok-to-test') && github.event.pull_request.state == 'open' && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true }}
+    # Non-draft PR events run automatically. Draft PRs require an explicit
+    # rebase-and-check / ok-to-test label; irrelevant labels are ignored.
+    if: >-
+      ${{
+        github.event_name == 'pull_request_target'
+        && github.event.pull_request.state == 'open'
+        && (
+          (github.event.action != 'labeled' && github.event.pull_request.draft == false)
+          || (github.event.action == 'labeled'
+              && (github.event.label.name == 'rebase-and-check'
+                  || github.event.label.name == 'ok-to-test'))
+        )
+        && vars.CHECKS_SWITCH != ''
+        && fromJSON(vars.CHECKS_SWITCH).pr_check == true
+      }}
     runs-on: [self-hosted, tiny-worker]
     timeout-minutes: 600
     outputs:
@@ -104,7 +122,7 @@ jobs:
             return false;
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false' &&
-            github.event.action == 'opened'
+            (github.event.action == 'opened' || github.event.action == 'ready_for_review')
         uses: actions/github-script@v8
         with:
           script: |

@@ -28,7 +28,7 @@ Adding rows is a special update or replace case, and a record of adding a row in
 All changes in {{ ydb-short-name }} tables are arranged according to the order in which transactions are performed. Each change is marked with a virtual timestamp which consists of two elements:
 
 1. Global [coordinator](../concepts/glossary.md#coordinator) time.
-2. Unique [transaction ID](../concepts/glossary.md#txid).
+1. Unique [transaction ID](../concepts/glossary.md#txid).
 
 Using these timestamps, you can arrange records from different partitions of the topic relative to each other or use them for filtering (for example, to exclude old change records).
 

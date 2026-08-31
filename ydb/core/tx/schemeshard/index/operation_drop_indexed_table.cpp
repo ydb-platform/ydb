@@ -410,10 +410,13 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropTable>(
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    // CreateDropIndexedTable cascades the drop over the table's indexes and other
-    // children via CascadeDropTableChildren, discovered at execution time.
+    // Complete as it stands. CreateDropIndexedTable cascades over the table's indexes and
+    // other children via CascadeDropTableChildren (:485), which appends to the parts vector
+    // during construction -- at propose, not at execution. IgniteOperation asks each
+    // constructed part for its own declaration before proposing it, so every child is
+    // covered by the part that drops it.
     const auto& drop = tx.GetDrop();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
         drop.HasId() ? drop.GetId() : 0);
 }
 

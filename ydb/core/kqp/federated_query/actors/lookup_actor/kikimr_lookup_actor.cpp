@@ -246,6 +246,7 @@ namespace {
             { "path", LookupSource.GetPath() }
             YDB_LOG_INFO("New kikimr provider lookup actor",
                     COMMON_LOG,
+                    {"database", LookupSource.GetDatabase()},
                     {"parentId", ParentId});
             Become(&TDqSourceKikimrLookupActor::StateFunc);
         }

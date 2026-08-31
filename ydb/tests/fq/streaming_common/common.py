@@ -1,4 +1,5 @@
 import copy
+import json
 import logging
 import os
 import tempfile
@@ -9,6 +10,7 @@ import yaml
 import ydb
 import pytest
 import random
+import requests
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -340,22 +342,6 @@ class YdbClient:
                 result.extend(_read_batch())
             return result
 
-
-# Sections stripped from the startup yaml_config before the cluster is started.
-# They will be pushed to CMS via replace_config after the cluster is up.
-#
-# auth_config deliberately remains in the startup configuration: it creates
-# service actors, including AccessService, during node bootstrap. Applying it
-# through CMS after dynamic nodes have started only changes configuration and
-# leaves requests addressed to the absent actor undelivered.
-# query_service_config also remains static: KQP builds its type-annotation
-# context from it at bootstrap, including enable_match_recognize. A later CMS
-# update does not enable MATCH_RECOGNIZE for that already initialized context.
-#
-# NOTE: "feature_flags" is intentionally NOT listed here — it must be present
-# in the static startup config because the NodeBroker uses feature flags (e.g.
-# allow_ydb_requests_without_database) during dynamic-node registration, which
-# happens before any CMS-delivered config is applied.
 _SECTIONS_FOR_CMS = [
     "table_service_config",
     "federated_query_config",
@@ -385,6 +371,32 @@ def _replace_config_via_cms(cluster, full_yaml_config):
         os.unlink(tmp_path)
 
 
+def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 240) -> None:
+    expected_sections = {section: full_yaml_config[section] for section in _SECTIONS_FOR_CMS}
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        try:
+            for node in cluster.slots.values():
+                response = requests.get(
+                    f"http://{node.host}:{node.mon_port}/actors/configs_dispatcher",
+                    headers={"Content-Type": "application/json"},
+                    timeout=5,
+                )
+                response.raise_for_status()
+                applied_config = yaml.safe_load(json.loads(response.text)["yaml_config"])["config"]
+                if any(applied_config.get(section) != value for section, value in expected_sections.items()):
+                    break
+            else:
+                return
+        except (KeyError, TypeError, ValueError, requests.RequestException, yaml.YAMLError):
+            pass
+
+        time.sleep(0.5)
+
+    raise AssertionError("CMS configuration was not applied to all dynamic nodes")
+
+
 class Kikimr:
     def __init__(
         self,
@@ -396,23 +408,13 @@ class Kikimr:
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
-        # Save a copy of the full yaml_config so we can push it to CMS later.
         full_yaml_config = copy.deepcopy(config.yaml_config)
 
-        # Strip "feature" sections so the startup config stays minimal and
-        # backward-compatible (older binaries will not reject unknown fields).
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
 
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
-
-        # Determine the database for dynamic nodes (slots).
-        # When a dedicated tenant_database is given, create it first so that
-        # KQP tasks are dispatched exclusively to dynamic nodes of that tenant.
-        # This must happen BEFORE _replace_config_via_cms so the Console is
-        # not busy processing an async config update when we send the tenant
-        # creation request.
 
         token = config.default_clusteradmin
         logger.info("Sleep")
@@ -425,14 +427,11 @@ class Kikimr:
         )
         self.slot_database = tenant_database
 
-        # Add dynamic nodes (slots) for the tenant/DB.
         self.cluster.register_and_start_slots(database=self.slot_database, count=2)
-        time.sleep(10)
+        self.cluster.wait_tenant_up(self.slot_database, token=token)
 
-        # Push the full config (with all feature-sections) into CMS.
-        # Nodes will pick it up dynamically without needing a restart.
         _replace_config_via_cms(self.cluster, full_yaml_config)
-        time.sleep(10)
+        _wait_cms_config_applied(self.cluster, full_yaml_config)
 
         self.first_node = random.choice(list(self.cluster.slots.values()))
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", self.slot_database)

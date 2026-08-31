@@ -360,7 +360,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         // After start ALTER: started_by must be set; stopped_by must still be null; created_by preserved
         CheckSysView({{
             .Name = queryName,
-            .Status = "CREATED",
+            .Status = "RUNNING",
             .Run = true,
             .CreatedBy = BUILTIN_ACL_ROOT,
             .ModifiedBy = BUILTIN_ACL_ROOT,
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         // After stop ALTER: stopped_by must be set; created_by must be unchanged
         CheckSysView({{
             .Name = queryName,
-            .Status = "CREATED",
+            .Status = "STOPPED",
             .Run = false,
             .CreatedBy = BUILTIN_ACL_ROOT,
             .ModifiedBy = BUILTIN_ACL_ROOT,

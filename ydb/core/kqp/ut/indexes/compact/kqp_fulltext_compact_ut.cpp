@@ -121,7 +121,12 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextCompactUpdateRequiresStreamWrite, WithRelevance) {
-    auto kikimr = KikimrWithCompact(false);
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
+    auto kikimr = TKikimrRunner(settings);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -1162,7 +1167,13 @@ Y_UNIT_TEST(JsonCompactCompaction) {
 }
 
 Y_UNIT_TEST(JsonCompactUpdateRequiresStreamWrite) {
-    auto kikimr = KikimrWithCompact(false);
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableJsonIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
+    auto kikimr = TKikimrRunner(settings);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(

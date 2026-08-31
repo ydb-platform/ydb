@@ -20,8 +20,6 @@
 #include <atomic>
 #include <deque>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
-
 namespace NKikimr::NBlobDepot {
 
     namespace {
@@ -291,12 +289,9 @@ namespace NKikimr::NBlobDepot {
             if (inFlight == 0) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
             } else {
-                YDB_LOG_DEBUG("S3Router retiring inner wrapper",
-                    {"marker", "BDTS35"},
-                    {"id", LogId},
-                    {"endpoint", CurrentEndpoint},
-                    {"inFlight", inFlight},
-                    {"retiringCount", RetiringWrappers.size() + 1});
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS35, "S3Router retiring inner wrapper",
+                    (Id, LogId), (Endpoint, CurrentEndpoint), (InFlight, inFlight),
+                    (RetiringCount, RetiringWrappers.size() + 1));
 
                 RetiringWrappers.push_back(TRetiringWrapper{
                     .ActorId = InnerWrapperId,
@@ -327,12 +322,8 @@ namespace NKikimr::NBlobDepot {
             const i64 inFlight = wrapper.InFlight->Get();
             Y_ABORT_UNLESS(inFlight >= 0);
             if (inFlight > 0) {
-                YDB_LOG_WARN("S3Router aborting requests of retiring inner wrapper",
-                    {"marker", "BDTS36"},
-                    {"id", LogId},
-                    {"endpoint", wrapper.Endpoint},
-                    {"inFlight", inFlight},
-                    {"reason", reason});
+                STLOG(PRI_WARN, BLOB_DEPOT, BDTS36, "S3Router aborting requests of retiring inner wrapper",
+                    (Id, LogId), (Endpoint, wrapper.Endpoint), (InFlight, inFlight), (Reason, reason));
                 IncCounter(Mon.RetiringWrappersAborted);
             }
 
@@ -371,11 +362,8 @@ namespace NKikimr::NBlobDepot {
         }
 
         void RejectRequest(std::unique_ptr<IEventHandle> ev) {
-            YDB_LOG_DEBUG("S3Router has no endpoint yet, rejecting request",
-                {"marker", "BDTS32"},
-                {"id", LogId},
-                {"type", ev->GetTypeRewrite()},
-                {"pending", PendingRequests.size()});
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS32, "S3Router has no endpoint yet, rejecting request",
+                (Id, LogId), (Type, ev->GetTypeRewrite()), (Pending, PendingRequests.size()));
 
             IncCounter(Mon.PendingRejects);
 
@@ -403,11 +391,8 @@ namespace NKikimr::NBlobDepot {
                 return;
             }
 
-            YDB_LOG_DEBUG("S3Router flushing pending requests",
-                {"marker", "BDTS33"},
-                {"id", LogId},
-                {"count", PendingRequests.size()},
-                {"endpoint", CurrentEndpoint});
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS33, "S3Router flushing pending requests",
+                (Id, LogId), (Count, PendingRequests.size()), (Endpoint, CurrentEndpoint));
 
             const TMonotonic now = TActivationContext::Monotonic();
             while (!PendingRequests.empty()) {
@@ -426,10 +411,8 @@ namespace NKikimr::NBlobDepot {
                 MakeRouteCounters(false));
             CurrentEndpoint = endpoint;
 
-            YDB_LOG_INFO("S3Router endpoint set (direct)",
-                {"marker", "BDTS25"},
-                {"id", LogId},
-                {"endpoint", endpoint});
+            STLOG(PRI_INFO, BLOB_DEPOT, BDTS25, "S3Router endpoint set (direct)",
+                (Id, LogId), (Endpoint, endpoint));
 
             SetCounter(Mon.IsUsingProxy, 0);
         }
@@ -447,13 +430,9 @@ namespace NKikimr::NBlobDepot {
                 MakeRouteCounters(true));
             CurrentEndpoint = proxyEndpoint;
 
-            YDB_LOG_INFO("S3Router endpoint switch (via proxy)",
-                {"marker", "BDTS26"},
-                {"id", LogId},
-                {"from", prevEndpoint},
-                {"to", CurrentEndpoint},
-                {"proxyHost", host},
-                {"proxyPort", port});
+            STLOG(PRI_INFO, BLOB_DEPOT, BDTS26, "S3Router endpoint switch (via proxy)",
+                (Id, LogId), (From, prevEndpoint), (To, CurrentEndpoint),
+                (ProxyHost, host), (ProxyPort, port));
 
             IncCounter(Mon.EndpointSwitches);
             SetCounter(Mon.IsUsingProxy, 1);
@@ -482,10 +461,8 @@ namespace NKikimr::NBlobDepot {
             }
             const TString url = TStringBuilder() << "http://" << Settings.GetBalancerHost();
 
-            YDB_LOG_DEBUG("S3Router issuing balancer request",
-                {"marker", "BDTS27"},
-                {"id", LogId},
-                {"url", url});
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS27, "S3Router issuing balancer request",
+                (Id, LogId), (Url, url));
 
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
@@ -511,10 +488,8 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleRefreshNow() {
-            YDB_LOG_WARN("S3Router 5xx detected, triggering endpoint refresh",
-                {"marker", "BDTS30"},
-                {"id", LogId},
-                {"currentEndpoint", CurrentEndpoint});
+            STLOG(PRI_WARN, BLOB_DEPOT, BDTS30, "S3Router 5xx detected, triggering endpoint refresh",
+                (Id, LogId), (CurrentEndpoint, CurrentEndpoint));
 
             IncCounter(Mon.FiveXxRefreshTriggers);
 
@@ -532,12 +507,9 @@ namespace NKikimr::NBlobDepot {
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
                 TString host = TString(StripString(msg.Response->Body));
 
-                YDB_LOG_DEBUG("S3Router balancer response OK",
-                    {"marker", "BDTS28"},
-                    {"id", LogId},
-                    {"status", msg.Response->Status},
-                    {"body", host},
-                    {"latencyMs", latency.MilliSeconds()});
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS28, "S3Router balancer response OK",
+                    (Id, LogId), (Status, msg.Response->Status), (Body, host),
+                    (LatencyMs, latency.MilliSeconds()));
 
                 IncCounter(Mon.BalancerResolveSuccesses);
 
@@ -554,13 +526,10 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
             } else {
-                YDB_LOG_WARN("S3Router balancer response failure",
-                    {"marker", "BDTS29"},
-                    {"id", LogId},
-                    {"hasResponse", msg.Response != nullptr},
-                    {"status", msg.Response ? TString(msg.Response->Status) : TString("(no response)")},
-                    {"error", msg.Error},
-                    {"latencyMs", latency.MilliSeconds()});
+                STLOG(PRI_WARN, BLOB_DEPOT, BDTS29, "S3Router balancer response failure",
+                    (Id, LogId), (HasResponse, msg.Response != nullptr),
+                    (Status, msg.Response ? TString(msg.Response->Status) : TString("(no response)")),
+                    (Error, msg.Error), (LatencyMs, latency.MilliSeconds()));
 
                 IncCounter(Mon.BalancerResolveFailures);
             }
@@ -588,11 +557,8 @@ namespace NKikimr::NBlobDepot {
             }
 
             if (PendingRequests.size() < MaxPendingRequests) {
-                YDB_LOG_DEBUG("S3Router queueing request until balancer resolves",
-                    {"marker", "BDTS34"},
-                    {"id", LogId},
-                    {"type", ev->GetTypeRewrite()},
-                    {"pending", PendingRequests.size() + 1});
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS34, "S3Router queueing request until balancer resolves",
+                    (Id, LogId), (Type, ev->GetTypeRewrite()), (Pending, PendingRequests.size() + 1));
                 PendingRequests.push_back(TPendingRequest{
                     .EnqueuedAt = TActivationContext::Monotonic(),
                     .Ev = std::unique_ptr<IEventHandle>(ev.Release()),
@@ -620,12 +586,10 @@ namespace NKikimr::NBlobDepot {
             SetupCounters();
             ScheduleSweepRetiring();
 
-            YDB_LOG_INFO("S3Router bootstrap",
-                {"marker", "BDTS24"},
-                {"id", LogId},
-                {"endpoint", OriginalEndpoint},
-                {"balancerEnabled", BalancerEnabled()},
-                {"balancerHost", BalancerEnabled() ? Settings.GetBalancerHost() : TString()});
+            STLOG(PRI_INFO, BLOB_DEPOT, BDTS24, "S3Router bootstrap",
+                (Id, LogId), (Endpoint, OriginalEndpoint),
+                (BalancerEnabled, BalancerEnabled()),
+                (BalancerHost, BalancerEnabled() ? Settings.GetBalancerHost() : TString()));
 
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
@@ -638,12 +602,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void PassAway() override {
-            YDB_LOG_INFO("S3Router shutting down",
-                {"marker", "BDTS31"},
-                {"id", LogId},
-                {"currentEndpoint", CurrentEndpoint},
-                {"pending", PendingRequests.size()},
-                {"retiringCount", RetiringWrappers.size()});
+            STLOG(PRI_INFO, BLOB_DEPOT, BDTS31, "S3Router shutting down",
+                (Id, LogId), (CurrentEndpoint, CurrentEndpoint),
+                (Pending, PendingRequests.size()), (RetiringCount, RetiringWrappers.size()));
 
             while (!PendingRequests.empty()) {
                 RejectPendingRequest(std::move(PendingRequests.front()));

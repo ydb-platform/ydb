@@ -147,26 +147,26 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
         res.Buffer.reserve(nItems * this->Columns());
 
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
-            TMKQLVector<NUdf::TUnboxedValue> probeValues(nItems * ProbeWidth_);
-            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, probeValues.data());
+            ProbeValues_.resize(nItems * ProbeWidth_);
+            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 for (auto rename : *this->Renames_) {
                     MKQL_ENSURE(rename.Side == ESide::Probe,
                                 "renames in Semi or Only Left Join shouldn't contain columns from right side");
-                    res.Buffer.push_back(probeValues[tupleIndex * ProbeWidth_ + rename.Index]);
+                    res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
                 }
             }
         } else {
-            TMKQLVector<NUdf::TUnboxedValue> buildValues(nItems * BuildWidth_);
-            TMKQLVector<NUdf::TUnboxedValue> probeValues(nItems * ProbeWidth_);
-            this->Converters_.Build->UnpackBatch(res.Packs.Build, buildValues.data());
-            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, probeValues.data());
+            BuildValues_.resize(nItems * BuildWidth_);
+            ProbeValues_.resize(nItems * ProbeWidth_);
+            this->Converters_.Build->UnpackBatch(res.Packs.Build, BuildValues_.data());
+            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 for (auto rename : *this->Renames_) {
                     if (rename.Side == ESide::Build) {
-                        res.Buffer.push_back(buildValues[tupleIndex * BuildWidth_ + rename.Index]);
+                        res.Buffer.push_back(BuildValues_[tupleIndex * BuildWidth_ + rename.Index]);
                     } else {
-                        res.Buffer.push_back(probeValues[tupleIndex * ProbeWidth_ + rename.Index]);
+                        res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
                     }
                 }
             }
@@ -178,6 +178,8 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 private:
     const int BuildWidth_;
     const int ProbeWidth_;
+    TMKQLVector<NUdf::TUnboxedValue> BuildValues_;
+    TMKQLVector<NUdf::TUnboxedValue> ProbeValues_;
 };
 
 template <TPhysicalJoin Join>

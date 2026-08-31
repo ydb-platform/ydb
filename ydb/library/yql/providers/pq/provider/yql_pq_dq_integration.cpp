@@ -472,6 +472,7 @@ public:
                 bool sharedReading = false;
                 bool skipErrors = false;
                 bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
+                bool usedPartitionPredicate = false;
                 TString format;
                 const TExprNode* userSchemaColumnsSetting = nullptr;
                 size_t const settingsCount = topicSource.Settings().Size();
@@ -514,6 +515,8 @@ public:
                         if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
                             userSchemaColumnsSetting = maybeList.Cast().Raw();
                         }
+                    } else if (name == UsedPartitionPredicateSetting) {
+                        usedPartitionPredicate = FromString<bool>(Value(setting));
                     }
                 }
 
@@ -606,6 +609,9 @@ public:
                     srcDesc.SetSharedReading(true);
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
+                if (usedPartitionPredicate) {
+                    srcDesc.SetUsedPartitionPredicate(true);
+                }
 
                 if (!streamingTopicRead) {
                     srcDesc.MutableDisposition()->mutable_oldest();

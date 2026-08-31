@@ -215,10 +215,10 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        if (!aggregate->KeyColumns.empty()) {
-            auto connection = MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex);
-
-            props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));
+        if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TMapConnection>(outputIndex));
+        } else if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }

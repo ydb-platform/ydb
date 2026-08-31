@@ -3,6 +3,7 @@
 #include "column_sort_schema.h"
 #include "comparator.h"
 #include "logical_type.h"
+#include "private.h"
 #include "unversioned_row.h"
 #include "versioned_io_options.h"
 
@@ -252,9 +253,11 @@ TColumnSchema& TColumnSchema::SetMaxInlineHunkSize(std::optional<i64> value)
 TColumnSchema& TColumnSchema::SetLogicalType(TLogicalTypePtr type)
 {
     LogicalType_ = std::move(type);
-    WireType_ = NTableClient::GetWireType(LogicalType_);
-    IsOfV1Type_ = IsV1Type(LogicalType_);
-    std::tie(V1Type_, Required_) = NTableClient::CastToV1Type(LogicalType_);
+    const auto typeInfo = GetTypeV3Info(LogicalType_);
+    WireType_ = typeInfo.WireType;
+    IsOfV1Type_ = typeInfo.IsPureV1Type;
+    V1Type_ = typeInfo.V1Type;
+    Required_ = typeInfo.Required;
     return *this;
 }
 
@@ -1665,13 +1668,11 @@ TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormat
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
+static bool IsEqualIgnoringRequirednessAndType(const TColumnSchema& lhs, const TColumnSchema& rhs)
 {
     return
         lhs.StableName() == rhs.StableName() &&
         lhs.Name() == rhs.Name() &&
-        *lhs.LogicalType() == *rhs.LogicalType() &&
-        lhs.Required() == rhs.Required() &&
         lhs.SortOrder() == rhs.SortOrder() &&
         lhs.Lock() == rhs.Lock() &&
         lhs.Expression() == rhs.Expression() &&
@@ -1679,6 +1680,14 @@ bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
         lhs.Aggregate() == rhs.Aggregate() &&
         lhs.Group() == rhs.Group() &&
         lhs.MaxInlineHunkSize() == rhs.MaxInlineHunkSize();
+}
+
+bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs)
+{
+    return
+        IsEqualIgnoringRequirednessAndType(lhs, rhs) &&
+        *lhs.LogicalType() == *rhs.LogicalType() &&
+        lhs.Required() == rhs.Required();
 }
 
 bool operator==(const TDeletedColumn& lhs, const TDeletedColumn& rhs)
@@ -1699,17 +1708,32 @@ bool operator==(const TTableSchema& lhs, const TTableSchema& rhs)
 // Compat code for https://st.yandex-team.ru/YT-10668 workaround.
 bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rhs)
 {
-    auto dropRequiredness = [] (const TTableSchema& schema) {
-        std::vector<TColumnSchema> resultColumns;
-        for (auto column : schema.Columns()) {
-            if (column.LogicalType()->GetMetatype() == ELogicalMetatype::Optional) {
-                column.SetLogicalType(column.LogicalType()->AsOptionalTypeRef().GetElement());
-            }
-            resultColumns.emplace_back(column);
+    if (lhs.IsStrict() != rhs.IsStrict() ||
+        lhs.IsUniqueKeys() != rhs.IsUniqueKeys() ||
+        lhs.Columns().size() != rhs.Columns().size())
+    {
+        return false;
+    }
+
+    auto stripOptional = [] (const TLogicalTypePtr& type) -> const TLogicalType& {
+        if (type->GetMetatype() == ELogicalMetatype::Optional) {
+            return *type->UncheckedAsOptionalTypeRef().GetElement();
         }
-        return TTableSchema(resultColumns, schema.IsStrict(), schema.IsUniqueKeys());
+        return *type;
     };
-    return dropRequiredness(lhs) == dropRequiredness(rhs);
+
+    for (int index = 0; index < std::ssize(lhs.Columns()); ++index) {
+        const auto& lhsColumn = lhs.Columns()[index];
+        const auto& rhsColumn = rhs.Columns()[index];
+        if (!IsEqualIgnoringRequirednessAndType(lhsColumn, rhsColumn)) {
+            return false;
+        }
+        if (stripOptional(lhsColumn.LogicalType()) != stripOptional(rhsColumn.LogicalType())) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

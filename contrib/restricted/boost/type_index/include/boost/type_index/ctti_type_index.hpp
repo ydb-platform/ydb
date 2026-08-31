@@ -28,8 +28,10 @@
 #include <boost/type_index/detail/compile_time_type_info.hpp>
 
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+#ifndef BOOST_TYPE_INDEX_USE_STD_MODULE
 #include <cstring>
 #include <type_traits>
+#endif
 
 #include <boost/container_hash/hash.hpp>
 #endif
@@ -64,12 +66,14 @@ namespace detail {
 /// type_index ti = type_index(foo());
 /// std::cout << ti.pretty_name();
 /// \endcode
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 class ctti_data {
 public:
     ctti_data() = delete;
     ctti_data(const ctti_data&) = delete;
     ctti_data& operator=(const ctti_data&) = delete;
 };
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
 
 } // namespace detail
 

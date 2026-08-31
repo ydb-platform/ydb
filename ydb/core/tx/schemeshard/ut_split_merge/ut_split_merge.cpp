@@ -556,7 +556,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         // we can distinguish "stats row present" from "stats missing → default 0".
         constexpr ui64 kShardCDataSize = 99999;
         const ui64 shardCTabletId = TTestTxConfig::FakeHiveTablets + 2;
-        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
+        // Only capture events addressed to schemeshard, so a same-typed forward to an aux
+        // actor (which changes Recipient) sails through untouched.
+        const TActorId schemeShardActorId = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime,
+            [schemeShardActorId](const auto& ev) {
+                return ev->GetRecipientRewrite() == schemeShardActorId;
+            }
+        );
 
         runtime.WaitFor("stats from all 3 shards", [&]{ return statsBlocker.size() >= 3; });
 

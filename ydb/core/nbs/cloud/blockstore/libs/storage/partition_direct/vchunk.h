@@ -10,7 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
@@ -25,14 +25,13 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TVChunk
     : public IWriteClient
+    , public IRangeSyncClient
     , public std::enable_shared_from_this<TVChunk>
 {
 public:
@@ -45,8 +44,7 @@ public:
         const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
-        ui64 vChunkSize,
-        NMonitoring::TDynamicCounterPtr counters);
+        ui64 vChunkSize);
 
     ~TVChunk() override;
 
@@ -76,16 +74,20 @@ public:
     [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex hostIndex) const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
-    // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
-    // Until the dirty map is restored it returns 0 (the blocking bound), so
-    // the cleanup cannot erase records that are not accounted for yet.
+    // smallest record id still held in PBuffers, or nullopt when nothing is
+    // inflight. Until the dirty map is restored it returns the zero record id
+    // (the blocking bound), so the cleanup cannot erase records that are not
+    // accounted for yet.
     // Must run on the executor thread.
-    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+    [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
 
     [[nodiscard]] TString DebugPrintDirtyMap();
 
     // Snapshot for the mon page. Must run on the executor thread.
     [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();
+
+    // Current request stats of this vchunk. Must run on the executor thread.
+    [[nodiscard]] const TVChunkStats& GetStats() const;
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(
@@ -94,6 +96,17 @@ public:
     void OnBelatedWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
         THostMask completedWrites) override;
+
+    // IRangeSyncClient implementation
+    [[nodiscard]] std::optional<TBlockRange64> GetFreshRange(
+        THostIndex host) const override;
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range) override;
+    [[nodiscard]] TRangeLock MakeDDiskRangeLock(
+        TBlockRange64 range,
+        THostMask mask) override;
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range) override;
+    void EndRangeSync(ui64 syncId, bool success) override;
+    void OnCopyProgress(ui64 totalBytes) override;
 
 private:
     friend struct TBaseFixture;
@@ -153,6 +166,8 @@ private:
         THostIndex hostIndex,
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+    void DemoteUnavailableHostsIfNeeded();
+    [[nodiscard]] THostMask GetDDisksForDemote() const;
 
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();
@@ -187,7 +202,7 @@ private:
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 
-    TVChunkCounters Counters;
+    TVChunkStats Stats;
 
     NThreading::TPromise<void> StopPromise = NThreading::NewPromise();
 };

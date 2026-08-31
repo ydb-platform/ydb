@@ -99,6 +99,7 @@ public:
             ApiHandlers["/api/json/sentinel"] = new TApiMethodHandler<TJsonProxySentinel>;
             ApiHandlers["/api/json/ddisk/tablets"] = new TApiMethodHandler<TJsonProxyDDisk>;
             ApiHandlers["/api/json/ddisk/tablet"] = new TApiMethodHandler<TJsonProxyDDisk>;
+            ApiHandlers["/api/json/ddisk/disks"] = new TApiMethodHandler<TJsonProxyDDisk>;
 
             ApiHandlers["/api/datashard/json/getinfo"]
                 = new TApiMethodHandler<TJsonProxyDataShard<TEvDataShard::TEvGetInfoRequest,

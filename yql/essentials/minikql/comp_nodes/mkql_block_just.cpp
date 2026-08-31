@@ -31,7 +31,7 @@ public:
             arrowValue.emplace_back(inputDatum.scalar());
             *res = arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, ReturnArrowType_));
         } else {
-            auto array = inputDatum.array();
+            const auto& array = inputDatum.array();
             auto newArrayData = arrow::ArrayData::Make(ReturnArrowType_, array->length, {nullptr}, 0, 0);
             newArrayData->child_data.push_back(array);
             *res = arrow::Datum(newArrayData);

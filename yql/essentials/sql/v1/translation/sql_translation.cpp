@@ -1990,7 +1990,7 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
         return nullptr;
     }
 
-    auto alt = typeNameNode.GetAlt_type_name2();
+    const auto& alt = typeNameNode.GetAlt_type_name2();
     auto& block = alt.GetBlock1();
     if (block.Alt_case() != TRule_type_name::TAlt2::TBlock1::kAlt2) {
         return nullptr;
@@ -5082,7 +5082,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameS
         frameSpec->FrameType = EFrameType::FrameByGroups;
     }
 
-    auto frameExtent = node.GetRule_window_frame_extent2();
+    const auto& frameExtent = node.GetRule_window_frame_extent2();
     // window_frame_extent: window_frame_bound | window_frame_between;
     switch (frameExtent.Alt_case()) {
         case TRule_window_frame_extent::kAltWindowFrameExtent1: {

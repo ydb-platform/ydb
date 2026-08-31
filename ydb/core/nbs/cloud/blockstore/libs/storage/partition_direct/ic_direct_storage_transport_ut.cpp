@@ -1,6 +1,7 @@
 #include "direct_block_group_test_fixture.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/fake_direct_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
@@ -85,7 +86,7 @@ void CheckDirectWriteChecksums(
     bool enableChecksums)
 {
     auto executor = fixture.MakeExecutor();
-    auto transport = std::make_unique<TICStorageTransportTestAdapter>(
+    auto transport = std::make_shared<TICStorageTransportTestAdapter>(
         fixture.Runtime.get(),
         enableChecksums);
     if (directSession) {
@@ -168,7 +169,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         const auto& ddiskId = transport->GetDDiskIds()[0];
 
         auto connect = transport->Connect(MakeDDiskConnection(ddiskId));
@@ -232,7 +233,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         transport->EnableFakeDirectSession();
 
         const auto& ddiskId = transport->GetDDiskIds()[0];
@@ -277,7 +278,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     Y_UNIT_TEST_F(DeadSessionCompletesWithOutdated, TDBGFixture)
     {
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
 
         auto dead =
             std::make_shared<TFakeDirectSession>(Runtime->GetActorSystem(0));
@@ -307,7 +308,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         transport->EnableFakeDirectSession();
 
         const auto& pbufferId = transport->GetPBufferIds()[0];
@@ -334,7 +335,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto readFuture = transport->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{1, 0, DefaultBlockSize},
-            /*lsn=*/42,
+            MakeKey(42),
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -349,7 +350,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         transport->EnableFakeDirectSession();
 
         const auto& pbufferIds = transport->GetPBufferIds();
@@ -408,7 +409,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         auto* transportPtr = transport.get();
         transportPtr->EnableFakeDirectSession();
 
@@ -492,7 +493,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         transport->EnableFakeDirectSession();
 
         // Service id for this DDiskId is never registered.
@@ -524,7 +525,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         auto* transportPtr = transport.get();
 
         const auto& pbufferId = transportPtr->GetPBufferIds()[0];
@@ -542,7 +543,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         auto future = transportPtr->ReadFromPBuffer(
             connection,
             NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
-            /*lsn=*/1,
+            MakeKey(1),
             NDDisk::TReadInstruction(/*returnInRopePayload=*/true),
             MakeSgList(readBuf),
             nullptr);
@@ -566,7 +567,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         transport->EnableFakeDirectSession();
 
         const auto& pbufferId = transport->GetPBufferIds()[0];
@@ -586,7 +587,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
 
         auto batch = transport->BatchEraseFromPBuffer(
             pbConnection,
-            TVector<ui64>{1, 2, 3},
+            TVector<TPBufferKey>{MakeKey(1), MakeKey(2), MakeKey(3)},
             nullptr);
         WaitFuture(executor, batch, WaitTimeout);
         UNIT_ASSERT(
@@ -606,7 +607,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             pbConnection,
             ddConnection,
             TVector{NDDisk::TBlockSelector{0, 0, DefaultBlockSize}},
-            TVector<ui64>{1},
+            TVector<TPBufferKey>{MakeKey(1)},
             nullptr);
         WaitFuture(executor, sync, WaitTimeout);
         UNIT_ASSERT(
@@ -624,7 +625,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     {
         auto executor = MakeExecutor();
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         auto* transportPtr = transport.get();
         transportPtr->EnableFakeDirectSession();
 
@@ -710,7 +711,7 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
     Y_UNIT_TEST_F(DestroysOwnedActorAndRejectsPendingConnect, TDBGFixture)
     {
         auto transport =
-            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
         const TActorId transportActorId = transport->GetTransportActorId();
         const auto& ddiskId = transport->GetDDiskIds()[0];
 

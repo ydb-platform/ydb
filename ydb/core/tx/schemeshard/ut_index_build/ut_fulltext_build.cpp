@@ -235,7 +235,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         return index;
     }
 
-    /*
     // Regression test for the crash at build_index__progress.cpp SendUploadFulltextBordersRequest:
     // building a *prefixed* relevance index (e.g. ALTER TABLE ... ADD INDEX ... ON (lang, text))
     // hit `Y_ENSURE(buildInfo.IndexColumns.size() == 1)` because IndexColumns is [lang, text].
@@ -243,6 +242,8 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexPrefix(true);
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -268,7 +269,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::PathExist,
         });
     }
-    */
 
     Y_UNIT_TEST(DropTableWithFlatRelevance) {
         TTestBasicRuntime runtime;

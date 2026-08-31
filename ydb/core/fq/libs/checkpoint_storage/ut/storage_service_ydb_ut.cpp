@@ -372,6 +372,7 @@ public:
     UNIT_TEST(ShouldGetState);
     UNIT_TEST(ShouldUseGc);
     UNIT_TEST(ShouldTablesHaveAutoPartitioning);
+    UNIT_TEST(ShouldDeleteGraphViaEvent);
     UNIT_TEST_SUITE_END();
 
     void ShouldRegister() {
@@ -659,6 +660,32 @@ public:
         checkTable("states");
 
         driver.Stop(true);
+    }
+
+    void ShouldDeleteGraphViaEvent() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+
+        // Verify checkpoints exist before deletion
+        auto checkpointsBefore = GetCheckpoints(GraphId);
+        UNIT_ASSERT_C(!checkpointsBefore.empty(), "Expected checkpoints to exist before deletion");
+
+        // Send TEvDeleteGraphRequest event to StorageProxy
+        auto sender = GetRuntime()->AllocateEdgeActor();
+        auto request = std::make_unique<TEvCheckpointStorage::TEvDeleteGraphRequest>(GraphId);
+        GetRuntime()->Send(new IEventHandle(
+            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        // Wait for the response
+        TAutoPtr<IEventHandle> handle;
+        auto* event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvDeleteGraphResponse>(handle, TestTimeout);
+        UNIT_ASSERT_C(event, "TEvDeleteGraphResponse not received");
+        UNIT_ASSERT_C(event->Issues.Empty(), event->Issues.ToOneLineString());
+
+        // Verify all checkpoints are gone
+        auto checkpointsAfter = GetCheckpoints(GraphId);
+        UNIT_ASSERT_C(checkpointsAfter.empty(), "Expected all checkpoints to be deleted after TEvDeleteGraphRequest");
     }
 
 private:

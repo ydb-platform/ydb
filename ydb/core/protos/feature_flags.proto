@@ -238,7 +238,7 @@ message TFeatureFlags {
     optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
-    optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
+    optional bool EnableTopicMessageLevelParallelism = 212 [default = true];
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true, deprecated = true]; // deprecated: always true
@@ -368,4 +368,8 @@ message TFeatureFlags {
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
     optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
     optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
+    optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 316 [default = false];
+    // Offloads TEvDataShard::TEvPeriodicTableStats parsing to a dedicated aux actor to reduce
+    // SchemeShard's single-threaded load.
+    optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
 }

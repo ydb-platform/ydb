@@ -5,6 +5,7 @@
 
 #include <util/charset/unidata.h>
 #include <util/charset/utf8.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/xrange.h>
 
 #include <algorithm>
@@ -52,6 +53,51 @@ namespace {
             error = TStringBuilder() << "Invalid " << name << ": " << value;
         }
         return result;
+    }
+
+    bool ApplyAnalyzer(const TString& analyzer_, Ydb::Table::FulltextIndexSettings::Analyzers& analyzers, TString& error) {
+        const TString analyzer = to_lower(analyzer_);
+        if (analyzer == "standard") {
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            analyzers.set_use_filter_lowercase(true);
+            analyzers.set_use_filter_stopwords(true);
+        } else if (analyzer == "snowball") {
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            analyzers.set_use_filter_lowercase(true);
+            analyzers.set_use_filter_stopwords(true);
+            analyzers.set_use_filter_snowball(true);
+        } else if (analyzer == "keyword") {
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+        } else {
+            error = TStringBuilder() << "Invalid analyzer: " << analyzer_;
+            return false;
+        }
+        return true;
+    }
+
+    const THashSet<TStringBuf>* GetStopwords(const TString& language) {
+        static const THashSet<TStringBuf> English = {
+            "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into", "is", "it",
+            "no", "not", "of", "on", "or", "such", "that", "the", "their", "then", "there", "these", "they",
+            "this", "to", "was", "will", "with"
+        };
+        static const THashSet<TStringBuf> Russian = {
+            "а", "без", "более", "бы", "был", "была", "были", "было", "быть", "в", "вам", "вас", "весь",
+            "во", "вот", "все", "всего", "всех", "вы", "где", "да", "даже", "для", "до", "его", "ее", "если",
+            "есть", "еще", "же", "за", "здесь", "и", "из", "или", "им", "их", "к", "как", "ко", "когда",
+            "кто", "ли", "либо", "мне", "может", "мы", "на", "надо", "наш", "не", "него", "нее", "нет", "ни",
+            "них", "но", "ну", "о", "об", "однако", "он", "она", "они", "оно", "от", "очень", "по", "под",
+            "при", "с", "со", "так", "также", "такой", "там", "те", "тем", "то", "того", "тоже", "той", "только",
+            "том", "ты", "у", "уже", "хотя", "чего", "чей", "чем", "что", "чтобы", "чье", "чья", "эта", "эти", "это", "я"
+        };
+
+        if (language == "english") {
+            return &English;
+        }
+        if (language == "russian") {
+            return &Russian;
+        }
+        return nullptr;
     }
 
     inline bool IsNonStandard(wchar32 c) {
@@ -468,16 +514,17 @@ namespace {
                 error = "language is not supported by snowball";
                 return false;
             }
-        } else if (settings.has_language()) {
-            // Currently, language is only used for stemming (use_filter_snowball).
-            // In the future, it may be used for other language-sensitive operations (e.g., stopword filtering).
-            error = "language setting is only supported with use_filter_snowball at present; other uses may be supported in the future";
+        } else if (settings.has_language() && !settings.use_filter_stopwords()) {
+            error = "language setting is only supported with use_filter_snowball or use_filter_stopwords";
             return false;
         }
 
         if (settings.use_filter_stopwords()) {
-            error = "Unsupported use_filter_stopwords setting";
-            return false;
+            const TString language = settings.has_language() ? settings.language() : "english";
+            if (!GetStopwords(language)) {
+                error = "language is not supported by stopword filter";
+                return false;
+            }
         }
 
         if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
@@ -592,6 +639,15 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
         for (auto i : xrange(tokens.size())) {
             tokens[i] = ToLowerUTF8(tokens[i]);
         }
+    }
+
+    if (settings.use_filter_stopwords()) {
+        const TString language = settings.has_language() ? settings.language() : "english";
+        const THashSet<TStringBuf>* stopwords = GetStopwords(language);
+        Y_ENSURE(stopwords);
+        tokens.erase(std::remove_if(tokens.begin(), tokens.end(), [&](const TString& token) {
+            return stopwords->contains(ToLowerUTF8(token));
+        }), tokens.end());
     }
 
     if (settings.use_filter_length() && (settings.has_filter_length_min() || settings.has_filter_length_max())) {
@@ -787,7 +843,9 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         ? settings.add_columns()->mutable_analyzers()
         : settings.mutable_columns()->rbegin()->mutable_analyzers();
 
-    if (nameLower == "tokenizer") {
+    if (nameLower == "analyzer") {
+        return ApplyAnalyzer(value, *analyzers, error);
+    } else if (nameLower == "tokenizer") {
         analyzers->set_tokenizer(ParseTokenizer(value, error));
     } else if (nameLower == "language") {
         analyzers->set_language(value);

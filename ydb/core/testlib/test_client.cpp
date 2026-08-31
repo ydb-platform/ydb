@@ -1224,7 +1224,19 @@ namespace Tests {
 
         TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
         tenantPoolConfig->AddStaticSlot(domainName);
-        appData.TenantName = CanonizePath(domainName);
+
+        // When SetupLocalService is called again it does not stop all old services,
+        // it just replaces them; if those services touch AppData it will bring races.
+        // TenantName is one such field — it must stay set-once per node's AppData.
+        const TString canonicalTenantName = CanonizePath(domainName);
+
+        if (appData.TenantName != canonicalTenantName) {
+            Y_ABORT_UNLESS(appData.TenantName.empty(),
+                "test harness reused node %u for a different tenant (%s -> %s); "
+                "would race with actors in the AppData from previous Run()",
+                nodeIdx, appData.TenantName.c_str(), canonicalTenantName.c_str());
+            appData.TenantName = canonicalTenantName;
+        }
 
         auto poolId = Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeIdx, appData.SystemPoolId,
                                         TMailboxType::Revolving, 0);

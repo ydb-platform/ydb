@@ -1360,6 +1360,19 @@ Y_UNIT_TEST(Table) {
         R"(
             CREATE TABLE test_show_create (
                 Key Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx GLOBAL USING fulltext_relevance ON (Text) WITH (tokenizer=alphanumeric, use_filter_snowball=true, language="russian")
+            );
+            ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
                 BoolValue Bool,
                 Int32Value Int32,
                 Uint32Value Uint32,

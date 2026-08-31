@@ -304,7 +304,7 @@ bool TDqComputeActorCheckpoints::ShouldIgnoreOldCoordinator(const E& ev, bool ve
 }
 
 void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
-    if (ShouldIgnoreOldCoordinator(ev, false)) {
+    if (ShouldIgnoreOldCoordinator(ev, /* verifyOnGenerationFromFuture */ false)) {
         return;
     }
     const ui64 newGeneration = ev->Get()->Record.GetGeneration();
@@ -665,14 +665,17 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outpu
 
 void TDqComputeActorCheckpoints::OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
     Y_ABORT_UNLESS(CheckpointCoordinator);
-    Y_ABORT_UNLESS(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation);
-    if (checkpoint.GetGeneration() < CheckpointCoordinator->Generation) {
+    Y_ABORT_UNLESS(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation); // It is ok to recommit state for previous checkpoints during restore
+
+    if (!PendingCommitCheckpoint || checkpoint.GetGeneration() < PendingCommitCheckpoint.Checkpoint->GetGeneration()) {
+        // Stale sink commit from previous coordinator
+        Y_ABORT_UNLESS(checkpoint.GetGeneration() < CheckpointCoordinator->Generation);
         LOG_W("Ignoring sink[" << outputIndex << "] commit state event from previous coordinator: "
-            << checkpoint.GetGeneration() << " < " << CheckpointCoordinator->Generation);
+            << checkpoint.GetGeneration() << " < " << CheckpointCoordinator->Generation << " because pending checkpoint "
+            << (PendingCommitCheckpoint ? TStringBuilder() << "already has generation " << PendingCommitCheckpoint.Checkpoint->GetGeneration() : TStringBuilder() << "is not set"));
         return;
     }
 
-    Y_ABORT_UNLESS(PendingCommitCheckpoint);
     Y_ABORT_UNLESS(PendingCommitCheckpoint.Checkpoint->GetId() == checkpoint.GetId(),
         "Expected pending commit checkpoint id %lu, but got %lu", PendingCommitCheckpoint.Checkpoint->GetId(), checkpoint.GetId());
 
@@ -773,11 +776,17 @@ bool IsIngress(const TDqTaskSettings& task) {
 }
 
 bool IsEgress(const TDqTaskSettings& task) {
-    for (const auto& output : task.GetOutputs()) {
+    const auto& outputs = task.GetOutputs();
+    if (outputs.empty()) {
+        return true;
+    }
+
+    for (const auto& output : outputs) {
         if (output.HasSink()) {
             return true;
         }
     }
+
     return false;
 }
 

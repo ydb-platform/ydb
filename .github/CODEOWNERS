@@ -31,6 +31,7 @@
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/federated_query/ @ydb-platform/fq
+/ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp
@@ -67,6 +68,7 @@
 /ydb/services/workload_manager @ydb-platform/fq
 /ydb/core/resource_pools @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
+/ydb/tests/workload_manager @ydb-platform/fq
 
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics

@@ -492,7 +492,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
         }
     }
     if (timeline) {
-        TPlanVisualizer planViz;
+        NPlan2Svg::TPlanVisualizer planViz;
         planViz.LoadPlans(plan);
         *timeline = planViz.PrintSvg();
     }

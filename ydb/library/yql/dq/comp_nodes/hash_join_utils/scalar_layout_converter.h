@@ -11,6 +11,17 @@ namespace NKikimr::NMiniKQL {
 
 class THolderFactory;
 
+// Holds the columnar buffers of one unpacked batch, so reading a row does not touch the other rows
+class IScalarBatchUnpacker : private TNonCopyable {
+public:
+    using TPtr = std::unique_ptr<IScalarBatchUnpacker>;
+
+public:
+    virtual ~IScalarBatchUnpacker() = default;
+
+    virtual void UnpackRow(ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) = 0;
+};
+
 class IScalarLayoutConverter : private TNonCopyable {
 public:
     using TPtr = std::unique_ptr<IScalarLayoutConverter>;
@@ -29,8 +40,12 @@ public:
     // values points to array in row-major order, packs is array of TPackResult[2^bucketsLogNum]
     virtual void BucketPack(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) = 0;
 
-    // Unpack single tuple to scalar values
+    // Unpack single tuple to scalar values.
+    // Unpacks the whole batch under the hood, so use BeginUnpack when more than one row is needed
     virtual void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) = 0;
+
+    // Unpacks the whole batch once; every following UnpackRow costs only one row
+    virtual IScalarBatchUnpacker::TPtr BeginUnpack(const TPackResult& packed) = 0;
 
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };

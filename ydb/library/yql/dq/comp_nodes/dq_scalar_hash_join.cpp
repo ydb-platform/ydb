@@ -148,8 +148,9 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
             TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
+            auto probeUnpacker = this->Converters_.Probe->BeginUnpack(res.Packs.Probe);
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
-                this->Converters_.Probe->Unpack(res.Packs.Probe, tupleIndex, probeValues.data());
+                probeUnpacker->UnpackRow(tupleIndex, probeValues.data());
                 for (auto rename : *this->Renames_) {
                     MKQL_ENSURE(rename.Side == ESide::Probe,
                                 "renames in Semi or Only Left Join shouldn't contain columns from right side");
@@ -159,9 +160,11 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
         } else {
             TMKQLVector<NUdf::TUnboxedValue> buildValues(BuildWidth_);
             TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
+            auto buildUnpacker = this->Converters_.Build->BeginUnpack(res.Packs.Build);
+            auto probeUnpacker = this->Converters_.Probe->BeginUnpack(res.Packs.Probe);
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
-                this->Converters_.Build->Unpack(res.Packs.Build, tupleIndex, buildValues.data());
-                this->Converters_.Probe->Unpack(res.Packs.Probe, tupleIndex, probeValues.data());
+                buildUnpacker->UnpackRow(tupleIndex, buildValues.data());
+                probeUnpacker->UnpackRow(tupleIndex, probeValues.data());
                 for (auto rename : *this->Renames_) {
                     if (rename.Side == ESide::Build) {
                         res.Buffer.push_back(buildValues[rename.Index]);

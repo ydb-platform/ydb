@@ -651,96 +651,6 @@ struct TColumnDataExtractorTraits {
 // ------------------------------------------------------------
 
 class TScalarLayoutConverter : public IScalarLayoutConverter {
-private:
-    class TBatchUnpacker : public IScalarBatchUnpacker {
-    public:
-        TBatchUnpacker(const TScalarLayoutConverter& converter, const TPackResult& packed)
-            : Converter_(converter)
-            , NTuples_(packed.NTuples)
-        {
-            if (Converter_.Extractors_.empty() || NTuples_ == 0) {
-                return;
-            }
-
-            const auto& innerExtractors = Converter_.InnerExtractors_;
-
-            std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
-            Converter_.TupleLayout_->CalculateColumnSizes(packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
-
-            // InnerExtractors corresponds to ColumnDescs
-            Y_ENSURE(bytesPerColumn.size() == innerExtractors.size(),
-                "bytesPerColumn size " << bytesPerColumn.size() << " != InnerExtractors size " << innerExtractors.size());
-
-            const size_t pointers = Converter_.MaxPointersNeeded_;
-            ColumnsDataStorage_.reserve(pointers);
-            ColumnsNullBitmapStorage_.reserve(pointers);
-            ColumnsData_.reserve(pointers);
-            ColumnsNullBitmap_.reserve(pointers);
-
-            const ui32 bitmapBytes = (packed.NTuples + 7) / 8;
-            const ui32 offsetBytes = (packed.NTuples + 1) * sizeof(ui32);
-
-            // Create buffers based on InnerExtractors (= ColumnDescs count)
-            // Note: strings will create 2 pointers (offset + data)
-            for (size_t i = 0; i < innerExtractors.size(); ++i) {
-                auto* packer = innerExtractors[i];
-
-                // For variable-size columns (strings), we need to create offset buffer first
-                if (packer->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
-                    ColumnsDataStorage_.emplace_back(offsetBytes, 0);
-                    ColumnsData_.push_back(ColumnsDataStorage_.back().data());
-
-                    // Null bitmap for offset buffer
-                    ColumnsNullBitmapStorage_.emplace_back(bitmapBytes);
-                    ColumnsNullBitmap_.push_back(ColumnsNullBitmapStorage_.back().data());
-
-                    // Data buffer
-                    ColumnsDataStorage_.emplace_back(bytesPerColumn[i]);
-                    ColumnsData_.push_back(ColumnsDataStorage_.back().data());
-
-                    // Null bitmap for data buffer (dummy)
-                    ColumnsNullBitmapStorage_.emplace_back(1);
-                    ColumnsNullBitmap_.push_back(ColumnsNullBitmapStorage_.back().data());
-                } else {
-                    ColumnsDataStorage_.emplace_back(bytesPerColumn[i]);
-                    ColumnsData_.push_back(ColumnsDataStorage_.back().data());
-
-                    ColumnsNullBitmapStorage_.emplace_back(bitmapBytes);
-                    ColumnsNullBitmap_.push_back(ColumnsNullBitmapStorage_.back().data());
-                }
-            }
-
-            Converter_.TupleLayout_->Unpack(
-                ColumnsData_.data(), ColumnsNullBitmap_.data(),
-                packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
-        }
-
-        void UnpackRow(ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) override {
-            const auto& extractors = Converter_.Extractors_;
-            if (extractors.empty()) {
-                return;
-            }
-            Y_ENSURE(tupleIndex < static_cast<ui32>(NTuples_));
-
-            for (size_t i = 0; i < extractors.size(); ++i) {
-                const size_t pointerOffset = Converter_.PointerOffsets_[i];
-                values[i] = extractors[i]->CreateFromUnpack(
-                    ColumnsData_.data() + pointerOffset,
-                    ColumnsNullBitmap_.data() + pointerOffset,
-                    tupleIndex,
-                    Converter_.HolderFactory_);
-            }
-        }
-
-    private:
-        const TScalarLayoutConverter& Converter_;
-        const i64 NTuples_;
-        TVector<TVector<ui8>> ColumnsDataStorage_;
-        TVector<TVector<ui8>> ColumnsNullBitmapStorage_;
-        TVector<ui8*> ColumnsData_;
-        TVector<ui8*> ColumnsNullBitmap_;
-    };
-
 public:
     TScalarLayoutConverter(
         TVector<IColumnDataExtractor::TPtr>&& packers,
@@ -874,11 +784,11 @@ public:
 
     void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) override {
         Y_ENSURE(tupleIndex < static_cast<ui32>(packed.NTuples));
-        TBatchUnpacker(*this, packed).UnpackRow(tupleIndex, values);
+        UnpackRange(packed, tupleIndex, 1, values);
     }
 
-    IScalarBatchUnpacker::TPtr BeginUnpack(const TPackResult& packed) override {
-        return std::make_unique<TBatchUnpacker>(*this, packed);
+    void UnpackBatch(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) override {
+        UnpackRange(packed, 0, packed.NTuples, values);
     }
 
     const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
@@ -886,6 +796,66 @@ public:
     }
 
 private:
+    void UnpackRange(const TPackResult& packed, ui32 start, ui32 count, NYql::NUdf::TUnboxedValue* values) {
+        if (Extractors_.empty() || count == 0) {
+            return;
+        }
+        Y_ENSURE(start <= static_cast<ui32>(packed.NTuples));
+        Y_ENSURE(count <= static_cast<ui32>(packed.NTuples) - start);
+
+        const ui8* packedData = packed.PackedTuples.data() + start * TupleLayout_->TotalRowSize;
+        std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
+        TupleLayout_->CalculateColumnSizes(packedData, count, bytesPerColumn);
+        Y_ENSURE(bytesPerColumn.size() == InnerExtractors_.size(),
+            "bytesPerColumn size " << bytesPerColumn.size() << " != InnerExtractors size " << InnerExtractors_.size());
+
+        TVector<TVector<ui8>> columnsDataStorage;
+        TVector<TVector<ui8>> columnsNullBitmapStorage;
+        TVector<ui8*> columnsData;
+        TVector<ui8*> columnsNullBitmap;
+        columnsDataStorage.reserve(MaxPointersNeeded_);
+        columnsNullBitmapStorage.reserve(MaxPointersNeeded_);
+        columnsData.reserve(MaxPointersNeeded_);
+        columnsNullBitmap.reserve(MaxPointersNeeded_);
+
+        const ui32 bitmapBytes = (count + 7) / 8;
+        const ui32 offsetBytes = (count + 1) * sizeof(ui32);
+        for (size_t i = 0; i < InnerExtractors_.size(); ++i) {
+            if (InnerExtractors_[i]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
+                columnsDataStorage.emplace_back(offsetBytes, 0);
+                columnsData.push_back(columnsDataStorage.back().data());
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+                columnsNullBitmapStorage.emplace_back(1);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            } else {
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            }
+        }
+
+        TupleLayout_->Unpack(
+            columnsData.data(), columnsNullBitmap.data(),
+            packedData, packed.Overflow, 0, count);
+
+        const size_t width = Extractors_.size();
+        for (ui32 tupleIndex = 0; tupleIndex < count; ++tupleIndex) {
+            for (size_t columnIndex = 0; columnIndex < width; ++columnIndex) {
+                const size_t pointerOffset = PointerOffsets_[columnIndex];
+                values[tupleIndex * width + columnIndex] = Extractors_[columnIndex]->CreateFromUnpack(
+                    columnsData.data() + pointerOffset,
+                    columnsNullBitmap.data() + pointerOffset,
+                    tupleIndex,
+                    HolderFactory_);
+            }
+        }
+    }
+
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;

@@ -147,29 +147,26 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
         res.Buffer.reserve(nItems * this->Columns());
 
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
-            TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
-            auto probeUnpacker = this->Converters_.Probe->BeginUnpack(res.Packs.Probe);
+            TMKQLVector<NUdf::TUnboxedValue> probeValues(nItems * ProbeWidth_);
+            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, probeValues.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
-                probeUnpacker->UnpackRow(tupleIndex, probeValues.data());
                 for (auto rename : *this->Renames_) {
                     MKQL_ENSURE(rename.Side == ESide::Probe,
                                 "renames in Semi or Only Left Join shouldn't contain columns from right side");
-                    res.Buffer.push_back(probeValues[rename.Index]);
+                    res.Buffer.push_back(probeValues[tupleIndex * ProbeWidth_ + rename.Index]);
                 }
             }
         } else {
-            TMKQLVector<NUdf::TUnboxedValue> buildValues(BuildWidth_);
-            TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
-            auto buildUnpacker = this->Converters_.Build->BeginUnpack(res.Packs.Build);
-            auto probeUnpacker = this->Converters_.Probe->BeginUnpack(res.Packs.Probe);
+            TMKQLVector<NUdf::TUnboxedValue> buildValues(nItems * BuildWidth_);
+            TMKQLVector<NUdf::TUnboxedValue> probeValues(nItems * ProbeWidth_);
+            this->Converters_.Build->UnpackBatch(res.Packs.Build, buildValues.data());
+            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, probeValues.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
-                buildUnpacker->UnpackRow(tupleIndex, buildValues.data());
-                probeUnpacker->UnpackRow(tupleIndex, probeValues.data());
                 for (auto rename : *this->Renames_) {
                     if (rename.Side == ESide::Build) {
-                        res.Buffer.push_back(buildValues[rename.Index]);
+                        res.Buffer.push_back(buildValues[tupleIndex * BuildWidth_ + rename.Index]);
                     } else {
-                        res.Buffer.push_back(probeValues[rename.Index]);
+                        res.Buffer.push_back(probeValues[tupleIndex * ProbeWidth_ + rename.Index]);
                     }
                 }
             }

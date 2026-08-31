@@ -360,6 +360,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexDictionary:
         case ESubState::FulltextIndexBorders:
         case ESubState::FulltextRowIdSrc:
+        case ESubState::FulltextIndexPrefixBorders:
             return true;
     }
     return false;

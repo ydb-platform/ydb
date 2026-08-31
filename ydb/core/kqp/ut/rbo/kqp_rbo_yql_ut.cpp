@@ -4,7 +4,9 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 #include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/common/simple/settings.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
@@ -17,11 +19,14 @@
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -2880,7 +2885,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
-        TestAggregation(true);
+        TestAggregation(ColumnStore);
     }
 
     void BasicHashJoinTest(bool useBlockHashJoin) {
@@ -3048,6 +3053,93 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(BasicHashJoin, UseBlockHashJoin) {
         BasicHashJoinTest(UseBlockHashJoin);
+    }
+
+    Y_UNIT_TEST(BlockHashCrossJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        UNIT_ASSERT_C(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                PRIMARY KEY (a)
+            ) WITH (STORE = COLUMN);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                PRIMARY KEY (a)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync().IsSuccess(), "create tables");
+
+        NYdb::TValueBuilder leftRows;
+        leftRows.BeginList();
+        for (size_t i = 0; i < 2; ++i) {
+            leftRows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i + 1)
+                .EndStruct();
+        }
+        leftRows.EndList();
+        UNIT_ASSERT(db.BulkUpsert("/Root/t1", leftRows.Build()).GetValueSync().IsSuccess());
+
+        NYdb::TValueBuilder rightRows;
+        rightRows.BeginList();
+        for (size_t i = 0; i < 3; ++i) {
+            rightRows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(10 + i)
+                .EndStruct();
+        }
+        rightRows.EndList();
+        UNIT_ASSERT(db.BulkUpsert("/Root/t2", rightRows.Build()).GetValueSync().IsSuccess());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto run = [&](const TString& query, const TString& expectedYson) {
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            const TString fullQuery = TString(R"(
+                PRAGMA ydb.CostBasedOptimizationLevel='0';
+                PRAGMA ydb.HashJoinMode='grace';
+            )") + query;
+
+            auto explain = session.ExecuteQuery(
+                fullQuery, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+            const auto ast = TString{*explain.GetStats()->GetAst()};
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoinCore"), ast);
+
+            auto result = session.ExecuteQuery(
+                fullQuery, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), expectedYson);
+        };
+
+        // 2 x 3 cartesian product
+        run(R"(
+            SELECT t1.a, t2.a FROM `/Root/t1` AS t1 CROSS JOIN `/Root/t2` AS t2 ORDER BY t1.a, t2.a;
+        )", R"([[0;0];[0;1];[0;2];[1;0];[1;1];[1;2]])");
+
+        // Cartesian product filtered by a residual predicate (no equality key)
+        run(R"(
+            SELECT t1.a, t2.a FROM `/Root/t1` AS t1 CROSS JOIN `/Root/t2` AS t2
+            WHERE t2.b > t1.b + 9
+            ORDER BY t1.a, t2.a;
+        )", R"([[0;1];[0;2];[1;2]])");
     }
 
     Y_UNIT_TEST(InlineJoinFiltersAfterCBOChangesJoinTree) {
@@ -4303,7 +4395,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(JoinFilters) {
+    Y_UNIT_TEST(JoinFiltersBasic) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -4425,6 +4517,75 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+    }
+
+    Y_UNIT_TEST(JoinFiltersAdvanced) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                id Int64 NOT NULL,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+
+            CREATE TABLE `/Root/t2` (
+                id Int64 NOT NULL,
+                value String NOT NULL,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        NYdb::TValueBuilder leftRows;
+        leftRows.BeginList();
+        for (i64 id : {1, 2, 3}) {
+            leftRows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(id)
+                .EndStruct();
+        }
+        leftRows.EndList();
+        auto upsertResult = db.BulkUpsert("/Root/t1", leftRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rightRows;
+        rightRows.BeginList();
+        for (const auto& [id, value] : TVector<std::pair<i64, TString>>{{1, "axy"}, {2, "abc"}}) {
+            rightRows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(id)
+                .AddMember("value").String(value)
+                .EndStruct();
+        }
+        rightRows.EndList();
+        upsertResult = db.BulkUpsert("/Root/t2", rightRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        const TString query = R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA ydb.HashJoinMode = 'grace';
+
+            SELECT l.id, r.id
+            FROM `/Root/t1` AS l
+            LEFT JOIN `/Root/t2` AS r
+                ON l.id = r.id AND r.value NOT LIKE '%x%y%'
+            ORDER BY l.id;
+        )";
+
+        const auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+        UNIT_ASSERT_C(TString(explainResult.GetAst()).Contains("BlockHashJoinCore"), explainResult.GetAst());
+
+        const auto queryResult = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(queryResult.GetResultSet(0)), R"([[1;#];[2;[2]];[3;#]])");
     }
 
     Y_UNIT_TEST(OlapPredicatePushdown) {
@@ -4755,6 +4916,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, std::move(expectedSuccessQueries), MakePerf_YqlSingleQuerySkipList(EBenchType::TPCH, queryId),
                         /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
+    }
+
+    Y_UNIT_TEST(TPCH_9) {
+        RunTPCH_YqlSingleQueryTest(9, true);
     }
 
     void RunPerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
@@ -5377,6 +5542,54 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a_plus")) != mapOutput.end());
     }
 
+    Y_UNIT_TEST(CBOTreeRecomputesPackedOutputIUs) {
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("left")}, pos);
+        auto staleRightRead = MakeTestRead({TInfoUnit("stale")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            leftRead,
+            staleRightRead,
+            pos,
+            "Inner",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+
+        // Cache the join output, then change its input before packaging it.
+        UNIT_ASSERT_VALUES_EQUAL(join->GetOutputIUs().size(), 2);
+        auto currentRightRead = MakeTestRead({TInfoUnit("current")}, pos);
+        join->SetRightInput(currentRightRead);
+
+        auto cboTree = MakeIntrusive<TOpCBOTree>(join, pos);
+        TOpRoot root(cboTree, pos, {"left", "current"});
+        root.RecomputeOutputIUsSubtree();
+
+        const auto& outputIUs = cboTree->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(outputIUs.size(), 2);
+        UNIT_ASSERT(outputIUs[0] == TInfoUnit("left"));
+        UNIT_ASSERT(outputIUs[1] == TInfoUnit("current"));
+    }
+
+    Y_UNIT_TEST(CopiedOperatorPropsDoNotReuseOutputIUs) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("input")}, pos);
+        auto oldMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("old", pos, testContext.ExprCtx),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(oldMap->GetOutputIUs().size(), 2);
+
+        auto newMap = MakeIntrusive<TOpMap>(read, pos, oldMap->Props, TVector<TMapElement>{
+            MakeTestConstantAppend("new", pos, testContext.ExprCtx),
+        }, false);
+
+        const auto& outputIUs = newMap->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(outputIUs.size(), 2);
+        UNIT_ASSERT(outputIUs[0] == TInfoUnit("input"));
+        UNIT_ASSERT(outputIUs[1] == TInfoUnit("new"));
+    }
+
     Y_UNIT_TEST(MapOutputPruningKeepsLocalHidesForKeptOutputs) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();
@@ -5595,6 +5808,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(readLiveOut.contains(TInfoUnit("a")));
         UNIT_ASSERT(readLiveOut.contains(TInfoUnit("b")));
         UNIT_ASSERT(readLiveOut.contains(TInfoUnit("c")));
+    }
+
+    Y_UNIT_TEST(AggregateShuffleEliminationUsesAndPreservesMapConnection) {
+        struct TCase {
+            bool Enabled;
+            TVector<TInfoUnit> ShuffledBy;
+            TVector<TInfoUnit> GroupBy;
+            bool EliminateShuffle;
+        };
+
+        const TVector<TCase> cases = {
+            {false, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, false},
+            {true, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, true},
+            {true, {TInfoUnit("id"), TInfoUnit("k")}, {TInfoUnit("id")}, false},
+        };
+
+        for (const auto& testCase : cases) {
+            TMapRuleTestContext testContext;
+            testContext.Config->OptShuffleEliminationForAggregation = testCase.Enabled;
+            TPlanProps planProps;
+            const auto pos = NYql::TPositionHandle();
+
+            auto read = MakeTestRead({TInfoUnit("id"), TInfoUnit("k"), TInfoUnit("payload")}, pos);
+            read->Props.StageId = planProps.StageGraph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+            read->Props.Metadata = TRBOMetadata();
+            read->Props.Metadata->ShuffledByColumns = testCase.ShuffledBy;
+            read->StorageType = NYql::EStorageType::ColumnStorage;
+
+            auto aggregate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(TInfoUnit("payload"), "sum", TInfoUnit("sum_payload"))},
+                testCase.GroupBy,
+                EOpPhase::Intermediate,
+                false,
+                pos
+            );
+            aggregate->ComputeMetadata(testContext.RboCtx, planProps);
+
+            TAssignStagesRule assignStages;
+            TIntrusivePtr<IOperator> op = aggregate;
+            UNIT_ASSERT(assignStages.MatchAndApply(op, testContext.RboCtx, planProps));
+
+            const auto inputStageId = *read->Props.StageId;
+            const auto aggregateStageId = *aggregate->Props.StageId;
+            const auto& connections = planProps.StageGraph.GetConnections(inputStageId, aggregateStageId);
+            UNIT_ASSERT_VALUES_EQUAL(connections.size(), 1);
+            if (testCase.EliminateShuffle) {
+                UNIT_ASSERT_VALUES_EQUAL(aggregate->Props.Metadata->ShuffledByColumns.size(), 1);
+                UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns.front() == TInfoUnit("id"));
+                UNIT_ASSERT(IsConnection<TMapConnection>(connections.front()));
+
+                TPropagateAggregateThroughStageRule propagateAggregate;
+                UNIT_ASSERT(propagateAggregate.MatchAndApply(op, testContext.RboCtx, planProps));
+                UNIT_ASSERT_VALUES_EQUAL(*op->Props.StageId, inputStageId);
+                const auto& propagatedConnections = planProps.StageGraph.GetConnections(inputStageId, aggregateStageId);
+                UNIT_ASSERT_VALUES_EQUAL(propagatedConnections.size(), 1);
+                UNIT_ASSERT(IsConnection<TMapConnection>(propagatedConnections.front()));
+            } else {
+                UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns.empty());
+                UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()));
+            }
+        }
     }
 
     Y_UNIT_TEST(NarrowByLivenessPrunesReadColumnsAfterDeadAggregateTraits) {
@@ -9921,6 +10196,54 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    TPreparedQueryHolder::TConstPtr CompilePreparedQuery(TKikimrRunner& kikimr, const TString& query) {
+        // The KQP proxy registers the compile service during bootstrap; session creation is the readiness barrier.
+        const auto sessionResult = kikimr.GetQueryClient().GetSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+
+        const ui32 nodeIdx = 0;
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor(nodeIdx);
+
+        TKqpQuerySettings querySettings(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        TKqpQueryId queryId(
+            TString(DefaultKikimrPublicClusterName),
+            "/Root",
+            /*databaseId*/ "",
+            /*userSid*/ "root@builtin",
+            query,
+            querySettings,
+            /*paramTypes*/ nullptr,
+            TGUCSettings{});
+
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken("root@builtin", {});
+        runtime.Send(new IEventHandle(
+            MakeKqpCompileServiceID(runtime.GetNodeId(nodeIdx)),
+            edgeActor,
+            new TEvKqp::TEvCompileRequest(
+                userToken,
+                /*clientAddress*/ "",
+                /*uid*/ Nothing(),
+                TMaybe<TKqpQueryId>(std::move(queryId)),
+                /*keepInCache*/ false,
+                /*isQueryActionPrepare*/ false,
+                /*perStatementResult*/ false,
+                /*deadline*/ TInstant::Max(),
+                /*dbCounters*/ nullptr,
+                std::make_shared<TGUCSettings>(),
+                /*applicationName*/ Nothing(),
+                std::make_shared<std::atomic<bool>>(true),
+                MakeIntrusive<TUserRequestContext>("shuffle-elimination-ut", "/Root", "compile-session"))));
+
+        const auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edgeActor, TDuration::Seconds(30));
+        UNIT_ASSERT_C(response, "Compile request timed out");
+        UNIT_ASSERT_C(response->Get()->CompileResult, "Compile result is missing");
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+            response->Get()->CompileResult->Issues.ToString());
+        UNIT_ASSERT_C(response->Get()->CompileResult->PreparedQuery, "Prepared query is missing");
+        return response->Get()->CompileResult->PreparedQuery;
+    }
+
     std::pair<TString, TString> ExplainHashCompatibilityQueryWithAst(const TVector<TString>& tables, const TString& query, bool blockChannelsAuto = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -9959,6 +10282,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     TString ExplainHashCompatibilityQuery(const TVector<TString>& tables, const TString& query) {
         return ExplainHashCompatibilityQueryWithAst(tables, query).first;
+    }
+
+    Y_UNIT_TEST(AggregationShuffleEliminationSettingEnablesTransactionLayout) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        const auto preparedQuery = CompilePreparedQuery(kikimr, R"(
+            PRAGMA ydb.OptShuffleElimination = "false";
+            PRAGMA ydb.OptShuffleEliminationForAggregation = "true";
+
+            SELECT 1;
+        )");
+
+        const auto& transactions = preparedQuery->GetTransactions();
+        UNIT_ASSERT(!transactions.empty());
+        for (const auto& transaction : transactions) {
+            UNIT_ASSERT(transaction->EnableShuffleElimination());
+        }
     }
 
     // A flat 3-way join on TPCH tables with overridden statistics and fixed

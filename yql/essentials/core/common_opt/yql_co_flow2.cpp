@@ -304,6 +304,175 @@ TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOp
     return node;
 }
 
+bool CollectLambdaUsedFields(const TCoLambda& lambda, TSet<TStringBuf>& usedFields, TOptimizeContext& optCtx) {
+    return HaveFieldsSubset(lambda.Body().Ptr(), lambda.Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap);
+}
+
+TExprNode::TPtr SqlCombineInputSubsetFields(const TCoSqlCombineInput& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const auto itemType = GetSeqItemType(node.Input().Ref().GetTypeAnn());
+    if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return node.Ptr();
+    }
+
+    const auto rowType = itemType->Cast<TStructExprType>();
+    if (rowType->GetSize() == 0) {
+        return node.Ptr();
+    }
+
+    TSet<TStringBuf> presortKeyFields;
+    const auto presortKeyLambdaNode = node.PresortKeyLambda().Maybe<TCoLambda>();
+    if (presortKeyLambdaNode) {
+        if (!CollectLambdaUsedFields(presortKeyLambdaNode.Cast(), presortKeyFields, optCtx)) {
+            return node.Ptr();
+        }
+    }
+
+    TSet<TStringBuf> keyExtractFields;
+    if (!CollectLambdaUsedFields(node.KeyExtractLambda(), keyExtractFields, optCtx)) {
+        return node.Ptr();
+    }
+
+    TSet<TStringBuf> argMapFields;
+    if (!CollectLambdaUsedFields(node.ArgMapLambda(), argMapFields, optCtx)) {
+        return node.Ptr();
+    }
+
+    TSet<TStringBuf> usedFields;
+    usedFields.insert(keyExtractFields.cbegin(), keyExtractFields.cend());
+    usedFields.insert(presortKeyFields.cbegin(), presortKeyFields.cend());
+    usedFields.insert(argMapFields.cbegin(), argMapFields.cend());
+
+    if (usedFields.empty() || usedFields.size() >= rowType->GetSize()) {
+        return node.Ptr();
+    }
+
+    const auto buildUsedColumns = [&](const TSet<TStringBuf>& fields) {
+        TExprNode::TListType columns;
+        for (const auto& item : rowType->GetItems()) {
+            if (fields.contains(item->GetName())) {
+                columns.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
+            }
+        }
+        return ctx.NewList(node.Pos(), std::move(columns));
+    };
+
+    TExprNode::TListType fieldNodes;
+    for (const auto& item : rowType->GetItems()) {
+        if (usedFields.contains(item->GetName())) {
+            fieldNodes.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
+        }
+    }
+
+    auto builder = Build<TCoSqlCombineInput>(ctx, node.Pos())
+        .InitFrom(node)
+        .Input<TCoExtractMembers>()
+            .Input(node.Input())
+            .Members().Add(fieldNodes).Build()
+        .Build()
+        .KeyExtractUsedColumns(buildUsedColumns(keyExtractFields))
+        .ArgMapUsedColumns(buildUsedColumns(argMapFields));
+
+    if (presortKeyLambdaNode) {
+        builder.PresortUsedColumns(buildUsedColumns(presortKeyFields));
+    }
+
+    return builder.Done().Ptr();
+}
+
+TExprNode::TPtr OptimizeSqlCombineInput(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TCoSqlCombineInput self(node);
+    auto ret = SqlCombineInputSubsetFields(self, ctx, optCtx);
+    if (ret != node) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+        return ret;
+    }
+    return node;
+}
+
+TExprNode::TPtr NarrowSqlCombineInputArgMap(const TCoSqlCombineInput& input, const TSet<TStringBuf>& usedFields, TExprContext& ctx) {
+    const auto argMapLambda = input.ArgMapLambda();
+    const auto argMapType = argMapLambda.Body().Ref().GetTypeAnn()->Cast<TStructExprType>();
+
+    TExprNode::TListType fieldNodes;
+    for (const auto& item : argMapType->GetItems()) {
+        const auto& name = item->GetName();
+        if (usedFields.contains(name)) {
+            fieldNodes.push_back(ctx.NewAtom(input.Pos(), name));
+        }
+    }
+
+    if (fieldNodes.size() == argMapType->GetSize()) {
+        return input.Ptr();
+    }
+
+    TMaybeNode<TExprBase> newBody;
+    if (fieldNodes.empty()) {
+        newBody = Build<TCoAsStruct>(ctx, input.Pos()).Done();
+    } else {
+        newBody = Build<TCoFilterMembers>(ctx, input.Pos())
+                      .Input(argMapLambda.Body())
+                      .Members().Add(fieldNodes)
+                  .Build().Done();
+    }
+
+    const auto newArgMap = Build<TCoLambda>(ctx, input.Pos())
+        .Args({"row"})
+        .Body<TExprApplier>()
+            .Apply(newBody.Cast())
+            .With(argMapLambda.Args().Arg(0), "row")
+        .Build()
+        .Done();
+
+    return Build<TCoSqlCombineInput>(ctx, input.Pos())
+        .InitFrom(input)
+        .ArgMapLambda(newArgMap)
+        .Done().Ptr();
+}
+
+TExprNode::TPtr SqlCombineSubsetFields(const TCoSqlCombine& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const auto usingLambda = node.UsingLambda();
+    const auto leftInput = node.LeftInput().Ptr();
+    const auto rightInput = node.RightInput().Ptr();
+
+    auto newLeftInput = leftInput;
+    const auto& leftArg = usingLambda.Args().Arg(1).Ref();
+    if (GetSeqItemType(leftArg.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) {
+        TSet<TStringBuf> leftUsedFields;
+        if (HaveFieldsSubsetLMap(usingLambda.Body().Ptr(), leftArg, leftUsedFields, *optCtx.ParentsMap)) {
+            newLeftInput = NarrowSqlCombineInputArgMap(TCoSqlCombineInput(leftInput), leftUsedFields, ctx);
+        }
+    }
+
+    auto newRightInput = rightInput;
+    const auto& rightArg = usingLambda.Args().Arg(2).Ref();
+    if (GetSeqItemType(rightArg.GetTypeAnn())->GetKind() == ETypeAnnotationKind::Struct) {
+        TSet<TStringBuf> rightUsedFields;
+        if (HaveFieldsSubsetLMap(usingLambda.Body().Ptr(), rightArg, rightUsedFields, *optCtx.ParentsMap)) {
+            newRightInput = NarrowSqlCombineInputArgMap(TCoSqlCombineInput(rightInput), rightUsedFields, ctx);
+        }
+    }
+
+    if (newLeftInput == leftInput && newRightInput == rightInput) {
+        return node.Ptr();
+    }
+
+    return Build<TCoSqlCombine>(ctx, node.Pos())
+        .InitFrom(node)
+        .LeftInput(newLeftInput)
+        .RightInput(newRightInput)
+        .Done().Ptr();
+}
+
+TExprNode::TPtr OptimizeSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TCoSqlCombine self(node);
+    auto ret = SqlCombineSubsetFields(self, ctx, optCtx);
+    if (ret != node) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+        return ret;
+    }
+    return node;
+}
+
 TExprNode::TPtr RenameJoinTable(TPositionHandle pos, TExprNode::TPtr table,
     const THashMap<TString, TString>& upstreamTablesRename, TExprContext& ctx)
 {
@@ -2551,6 +2720,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map["LMap"] = std::bind(&OptimizeLMap, _1, _2, _3);
     map["OrderedLMap"] = std::bind(&OptimizeLMap, _1, _2, _3);
+    map["SqlCombineInput"] = std::bind(&OptimizeSqlCombineInput, _1, _2, _3);
+    map["SqlCombine"] = std::bind(&OptimizeSqlCombine, _1, _2, _3);
 
     map[TCoGroupingCore::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoGroupingCore self(node);
@@ -2863,6 +3034,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         if (const auto tableSource = self.Input().Maybe<TCoTableSource>()) {
             if (auto res = ApplyExtractMembersToTableSource(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (const auto sqlCombine = self.Input().Maybe<TCoSqlCombine>()) {
+            if (auto res = ApplyExtractMembersToSqlCombine(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
             return node;

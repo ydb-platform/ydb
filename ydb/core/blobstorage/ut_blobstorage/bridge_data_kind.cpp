@@ -157,4 +157,68 @@ Y_UNIT_TEST_SUITE(BridgeDataKind) {
         }
     }
 
+    // A MustRestoreFirst read of a blob that only one pile has makes the bridge proxy copy it into
+    // the other piles. That copy is a write the reader cannot avoid, so it has to be admitted the
+    // same way the read itself is -- otherwise a system tablet cannot boot off a bridged group that
+    // is short of space.
+    Y_UNIT_TEST(RestorePutInheritsTheKindOfTheRead) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8 * 3,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        env.CreatePool();
+        const ui32 groupId = env.GetGroups().front();
+        auto info = env.GetGroupInfo(groupId);
+
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "hello";
+
+        ui32 step = 1;
+        for (const auto dataKind : {NKikimrBlobStorage::TDataKind::USER, NKikimrBlobStorage::TDataKind::SYSTEM}) {
+            // Write straight into the group backing the first pile, leaving the other two without
+            // the blob.
+            const TLogoBlobID id(100500, 1, step++, 0, data.size(), 0);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                auto put = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
+                put->ForceGroupGeneration = 1;
+                SendToBSProxy(sender, groupId + 1, put.release());
+            });
+            auto putRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(putRes->Get()->Status, NKikimrProto::OK);
+
+            std::vector<NKikimrBlobStorage::TDataKind::E> seen;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                    const auto& put = *ev->Get<TEvBlobStorage::TEvPut>();
+                    if (put.WriteSource == TWriteSource::BridgeProxyRestorePut) {
+                        seen.push_back(put.DataKind);
+                    }
+                }
+                return true;
+            };
+
+            env.Runtime->WrapInActorContext(sender, [&] {
+                auto get = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead, true /*mustRestoreFirst*/);
+                get->DataKind = dataKind;
+                SendToBSProxy(sender, info->GroupID, get.release());
+            });
+            auto getRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->Responses[0].Status, NKikimrProto::OK);
+
+            env.Runtime->FilterFunction = nullptr;
+
+            UNIT_ASSERT_C(!seen.empty(), "the read restored nothing, so it proves nothing");
+            for (const auto kind : seen) {
+                UNIT_ASSERT_EQUAL(kind, dataKind);
+            }
+        }
+    }
+
 }

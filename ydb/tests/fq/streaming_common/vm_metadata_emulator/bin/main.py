@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ def parse_args():
     )
     parser.add_argument("--port", type=int, required=True, help="HTTP port to listen on")
     parser.add_argument("--token", type=str, default=DEFAULT_TOKEN, help="IAM token to return")
+    parser.add_argument("--token-from-env", type=str, help="Use IAM token from environment (preferred for secret passing)")
     parser.add_argument("--expires-in", type=int, default=DEFAULT_EXPIRES_IN,
                         help="Token TTL in seconds")
     return parser.parse_args()
@@ -56,7 +58,10 @@ def make_handler(token, expires_in):
 
 def main():
     args = parse_args()
-    handler_class = make_handler(args.token, args.expires_in)
+    token = args.token
+    if args.token_from_env is not None:
+        token = os.getenv(args.token_from_env)
+    handler_class = make_handler(token, args.expires_in)
     server = HTTPServer(("localhost", args.port), handler_class)
     logger.info(f"IAM emulator listening on port {args.port}")
     server.serve_forever()

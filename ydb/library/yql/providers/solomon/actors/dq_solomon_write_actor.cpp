@@ -177,7 +177,10 @@ public:
     // Silently ignore checkpoint calls so the actor can coexist with
     // checkpoint-enabled pipelines.
     void LoadState(const TSinkState&) override {}
-    void CommitState(const NDqProto::TCheckpoint&) override {}
+
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
+        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+    }
 
     i64 GetFreeSpace() const override {
         return FreeSpace;

@@ -527,6 +527,10 @@ public:
         return MakeIntrusive<TMockFederatedTopicClient>(this);
     }
 
+    NYql::IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& /*driver*/, const NYdb::TCommonClientSettings& /*settings*/) final {
+        Y_ENSURE(false, "Not implemented");
+    }
+
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final {
         return NYdb::NFederatedTopic::TFederatedTopicClientSettings();
     }

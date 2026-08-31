@@ -595,7 +595,7 @@ private:
             return Unsupported("STREAM");
         }
 
-        if (auto q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
+        if (const auto& q = rule.GetRule_opt_set_quantifier4(); q.HasBlock1()) {
             const auto& token = q.GetBlock1().GetToken1();
 
             if (IS_TOKEN(token.GetId(), ALL)) {
@@ -1246,12 +1246,19 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
 
-        YQL_ENSURE(keyFunc);
+        TSourcePtr source = result.Source;
+        if (!source) {
+            source = BuildTableSource(Ctx_.Pos(), result);
+        }
 
-        Token(alt.GetToken2());
-        return Unsupported(
-            TStringBuilder()
-            << keyFunc << " LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
+        if (const auto contextHints = GetContextHints(Ctx_);
+            (tableHints || contextHints) &&
+            !source->SetTableHints(Ctx_, Ctx_.Pos(), tableHints, contextHints))
+        {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        return ToNode(Wrap(std::move(source)));
     }
 
     TNodeResult Build(

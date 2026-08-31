@@ -328,11 +328,14 @@ public:
         }
 
         NYql::NDq::TDqChannelLimits limits;
+        limits.EnableSpillingChannelBackpressure = TableServiceConfig.GetEnableSpillingChannelBackpressure();
 
         if (TableServiceConfig.HasDqChannelConfig()) {
             auto& config = TableServiceConfig.GetDqChannelConfig();
             limits.LocalChannelInflightBytes  = config.GetLocalChannelInflightBytes();
+            limits.LocalChannelColdInflightBytes = config.GetLocalChannelColdInflightBytes();
             limits.RemoteChannelInflightBytes = config.GetRemoteChannelInflightBytes();
+            limits.RemoteChannelColdInflightBytes = config.GetRemoteChannelColdInflightBytes();
             limits.RemoteSessionInflightBytes = config.GetRemoteSessionInflightBytes();
             limits.ReconciliationCount = config.GetReconciliationCount();
             limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
@@ -2026,7 +2029,10 @@ private:
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            streamingQueries.GetExternalStorage(),
+            NFq::TRowDispatcherSettings(
+                streamingQueries.GetExternalStorage(),
+                FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+            ),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,

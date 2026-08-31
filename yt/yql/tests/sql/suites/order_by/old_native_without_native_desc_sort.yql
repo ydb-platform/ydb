@@ -1,0 +1,5 @@
+USE plato;
+
+$union = SELECT * FROM EACH(["Input1", "Input2"]);
+
+PROCESS $union;

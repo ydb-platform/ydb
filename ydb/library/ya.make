@@ -17,6 +17,7 @@ RECURSE(
     fyamlcpp
     global_plugins
     grpc
+    http
     http_proxy
     intersection_tree
     json_index
@@ -28,9 +29,11 @@ RECURSE(
     mkql_proto
     naming_conventions
     ncloud
+    net
     nmslib
     pdisk_io
     persqueue
+    plan2svg
     planner
     pretty_types_print
     protobuf_printer

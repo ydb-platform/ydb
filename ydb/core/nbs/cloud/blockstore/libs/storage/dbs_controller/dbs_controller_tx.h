@@ -13,12 +13,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS(xxx, ...) \
-    xxx(InitSchema, __VA_ARGS__)                         \
-    xxx(LoadState, __VA_ARGS__)                          \
-    xxx(UpdateDDiskMap, __VA_ARGS__)                     \
-    xxx(RemoveTabletDDiskMap, __VA_ARGS__)               \
-    xxx(GetPartitionsForNode, __VA_ARGS__)
+#define BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS(xxx, ...)                       \
+    xxx(InitSchema, __VA_ARGS__)                                               \
+    xxx(LoadState, __VA_ARGS__)                                                \
+    xxx(UpdateDDiskMap, __VA_ARGS__)                                           \
+    xxx(RemoveTabletDDiskMap, __VA_ARGS__)                                     \
+    xxx(GetPartitionsForNode, __VA_ARGS__)                                     \
+    xxx(NodeMaintenancePermission, __VA_ARGS__)
 
 // BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS
 
@@ -134,6 +135,33 @@ struct TTxDbsController
         void Clear()
         {
             Tablets.clear();
+        }
+    };
+
+    //
+    // NodeMaintenancePermission
+    //
+    struct TNodeMaintenancePermission
+    {
+        const NBS::NStorage::TRequestInfoPtr RequestInfo;
+
+        TVector<ui32> NodeIds;
+
+        // Output
+        bool Allowed = false;
+        TVector<ui64> BlockingTablets;
+
+        explicit TNodeMaintenancePermission(
+            NBS::NStorage::TRequestInfoPtr requestInfo,
+            TVector<ui32> nodeIds)
+            : RequestInfo(std::move(requestInfo))
+            , NodeIds(std::move(nodeIds))
+        {}
+
+        void Clear()
+        {
+            Allowed = false;
+            BlockingTablets.clear();
         }
     };
 };

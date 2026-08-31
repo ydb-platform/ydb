@@ -36,6 +36,27 @@ struct THostSnapshot
     TLatencyByOperation LatencyByOperation;
 };
 
+struct TChaosNodeConfig
+{
+    enum class EChaosMode
+    {
+        Disabled,
+        Enabled,
+        Partial,
+    };
+
+    ui32 NodeId = 0;
+
+    EChaosMode Mode = EChaosMode::Disabled;
+    double LostProbability = 0.0;
+    double FailProbability = 0.0;
+};
+
+struct TChaosSnapshot
+{
+    TVector<TChaosNodeConfig> NodeConfigs;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -43,9 +43,7 @@ ISource::ISource(TPosition pos)
 {
 }
 
-ISource::~ISource()
-{
-}
+ISource::~ISource() = default;
 
 TSourcePtr ISource::CloneSource() const {
     Y_DEBUG_ABORT_UNLESS(dynamic_cast<ISource*>(Clone().Get()), "Cloned node is no source");
@@ -59,6 +57,10 @@ TSourcePtr ISource::CloneSource() const {
     result->FlattenColumns_ = FlattenColumns_;
     result->FlattenMode_ = FlattenMode_;
     return result;
+}
+
+ISource* ISource::GetSource() {
+    return this;
 }
 
 bool ISource::IsFake() const {
@@ -1071,9 +1073,7 @@ IJoin::IJoin(TPosition pos)
 {
 }
 
-IJoin::~IJoin()
-{
-}
+IJoin::~IJoin() = default;
 
 IJoin* IJoin::GetJoin() {
     return this;

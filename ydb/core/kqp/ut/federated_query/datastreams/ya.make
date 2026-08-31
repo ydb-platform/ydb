@@ -14,10 +14,13 @@ ENDIF()
 
 SRCS(
     common.cpp
+    datastreams_checkpoints_ut.cpp
     datastreams_ut.cpp
     datastreams_table_mode_ut.cpp
+    datastreams_queries_restart_ut.cpp
     kqp_has_path_ut.cpp
     streaming_ddl_ut.cpp
+    streaming_deferrd_commit_write_ut.cpp
     streaming_sys_view_ut.cpp
 )
 
@@ -43,6 +46,8 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/udfs/common/yson2
 )
+
+ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish")
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)

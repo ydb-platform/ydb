@@ -146,6 +146,10 @@ public:
     TFuture<NApi::IPrerequisitePtr> StartChaosLease(
         const TChaosLeaseStartOptions& options = {}) override;
 
+    TFuture<void> PingChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options = {}) override;
+
     TFuture<void> SetUserBanned(
         const std::string& user,
         bool isBanned,
@@ -221,6 +225,15 @@ public:
         const NYPath::TYPath& path,
         const std::string& expectedMD5,
         const NApi::TPutFileToCacheOptions& options) override;
+
+    TFuture<TFilePartitions> PartitionFile(
+        const NYPath::TYPath& path,
+        const std::vector<TFileReadRange>& ranges,
+        const TPartitionFileOptions& options) override;
+
+    TFuture<IFileReaderPtr> CreateFilePartitionReader(
+        const TFilePartitionCookiePtr& cookie,
+        const TReadFilePartitionOptions& options) override;
 
     // Security.
     TFuture<TGetCurrentUserResult> GetCurrentUser(

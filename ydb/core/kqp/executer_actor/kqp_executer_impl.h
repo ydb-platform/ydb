@@ -1026,7 +1026,7 @@ protected:
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
                 auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
-                TPlanVisualizer viz;
+                NPlan2Svg::TPlanVisualizer viz;
 
                 NJson::TJsonReaderConfig jsonConfig;
                 NJson::TJsonValue jsonNode;
@@ -2210,7 +2210,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useKqpTasksGraphV2,
     TVector<NKikimr::TTableId> tableIdsForSnapshot);
 

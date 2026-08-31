@@ -180,7 +180,7 @@ TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TS
     // clang-format on
 }
 
-TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TInfoUnit>& inputs, TExprContext& ctx) {
+TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TInfoUnit>& inputs, const TVector<bool>& unwrapOptionalInputs, TExprContext& ctx) {
     Y_ENSURE(input->IsLambda());
 
     TVector<TExprNode::TPtr> lambdaArgs;
@@ -191,10 +191,17 @@ TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TIn
 
     TVector<TExprBase> items;
     for (ui32 i = 0; i < inputs.size(); ++i) {
+        TExprNode::TPtr value = lambdaArgs[i];
+        if (unwrapOptionalInputs[i]) {
+            value = Build<TCoUnwrap>(ctx, input->Pos())
+                .Optional(value)
+            .Done().Ptr();
+        }
+
         // clang-format off
         auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
             .Name().Build(inputs[i].GetFullName())
-            .Value(lambdaArgs[i])
+            .Value(value)
         .Done();
         // clang-format on
         items.push_back(tuple);

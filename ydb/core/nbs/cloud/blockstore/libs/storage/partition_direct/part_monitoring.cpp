@@ -39,6 +39,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "vchunk") {
         return EMonPage::VChunk;
     }
+    if (page == "vchunkcounters") {
+        return EMonPage::VChunkCounters;
+    }
     if (page == "latency") {
         return EMonPage::Latency;
     }
@@ -76,6 +79,19 @@ ELatencyPercentile ParseSelectedPercentile(const TCgiParameters& cgi)
         return ELatencyPercentile::Max;
     }
     return ELatencyPercentile::P99;
+}
+
+// Per-vchunk row cap. all=1 dumps everything; limit=N overrides the default.
+size_t ParseVChunkStatsLimit(const TCgiParameters& cgi)
+{
+    if (cgi.Get("all") == "1") {
+        return 0;
+    }
+    size_t limit = 0;
+    if (cgi.Has("limit") && TryFromString(cgi.Get("limit"), limit)) {
+        return limit;
+    }
+    return DefaultVChunkStatsLimit;
 }
 
 std::optional<EOperation> ParseSelectedLatencyOperation(
@@ -119,6 +135,7 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
+        .BlockSize = VolumeConfig.GetBlockSize(),
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };
@@ -199,6 +216,43 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
+    if (page == EMonPage::VChunkCounters) {
+        auto* actorSystem = TActivationContext::ActorSystem();
+        const TActorId requester = ev->Sender;
+        const size_t limit = ParseVChunkStatsLimit(cgi);
+        const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
+        const bool showVChunks = cgi.Get("showvchunks") == "1";
+        const auto detail = (showVChunks && selectedDbg)
+                                ? EVChunkStatsDetail::PerVChunk
+                                : EVChunkStatsDetail::TotalOnly;
+        FastPathService->GatherVChunkStats(detail, selectedDbg)
+            .Subscribe(
+                [tabletInfo = MakeMonTabletInfo(),
+                 page,
+                 limit,
+                 selectedDbg,
+                 showVChunks,
+                 requester,
+                 actorSystem](const auto& future)
+                {
+                    TMonPageData data{
+                        .Page = page,
+                        .TabletInfo = tabletInfo,
+                        .VChunkStats = future.GetValue(),
+                        .VChunkStatsLimit = limit,
+                        .ShowVChunks = showVChunks,
+                    };
+                    if (selectedDbg) {
+                        data.SelectedVChunkDbg =
+                            static_cast<ui32>(*selectedDbg);
+                    }
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
+        return true;
+    }
+
     // Latency page always gathers every DBG (needs the full node map).
     const std::optional<size_t> selectedDbg =
         (page == EMonPage::Latency) ? std::nullopt : ParseSelectedDbg(cgi);
@@ -256,22 +310,17 @@ bool TPartitionActor::OnRenderAppHtmlPage(
              selectedPercentile,
              selectedLatencyOperation,
              requester,
-             actorSystem](const auto& future)
+             actorSystem]   //
+            (const NThreading::TFuture<TVector<TDbgSnapshot>>& future)
             {
                 TMonPageData data{
                     .Page = page,
                     .TabletInfo = tabletInfo,
                     .Dbgs = future.GetValue(),
+                    .SelectedDbg = selectedDbg,
                     .SelectedPercentile = selectedPercentile,
                     .SelectedLatencyOperation = selectedLatencyOperation,
                 };
-                if (selectedDbg) {
-                    data.SelectedDbg = static_cast<ui32>(*selectedDbg);
-                }
-                Sort(
-                    data.Dbgs,
-                    [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
-                    { return lhs.Index < rhs.Index; });
                 actorSystem->Send(
                     requester,
                     new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));

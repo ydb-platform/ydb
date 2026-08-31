@@ -256,7 +256,21 @@ void TPartitionActor::HandleUpdateVChunkConfigDuringDelete(
         LogTitle.GetWithTime().c_str(),
         ev->Get()->VChunkConfig.DebugPrint().c_str());
 
-    ev->Get()->UpdateCompleted.SetValue();
+    ev->Get()->UpdateCompleted.SetValue(EPersistResult::Cancelled);
+}
+
+void TPartitionActor::HandleUpdateDirtyMapStateDuringDelete(
+    const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Drop UpdateDirtyMapState during delete: vchunk %u",
+        LogTitle.GetWithTime().c_str(),
+        ev->Get()->VChunkIndex);
+
+    ev->Get()->UpdateCompleted.SetValue(EPersistResult::Cancelled);
 }
 
 // Ignore fast path service shutdown during delete
@@ -331,6 +345,9 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfigDuringDelete);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvUpdateDirtyMapState,
+            HandleUpdateDirtyMapStateDuringDelete);
         // Ignore fast path service shutdown during delete
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,

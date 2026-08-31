@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -58,6 +59,8 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
+    // Chaos controllers are indexed by DirectBlockGroup index.
+    TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -79,6 +82,18 @@ private:
 
     // At most one add-host runs at a time across the whole partition.
     std::optional<TAddHostInFlight> AddHostInFlight;
+
+    // Batch persisting of vchunk configs.
+    bool ExecutingUpdateVChunkConfig = false;
+    TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
+    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
+        PendingUpdateVChunkConfigRequests;
+
+    // Batch persisting of ahead and behind fields.
+    bool ExecutingUpdateDirtyMapState = false;
+    TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
+    TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
+        PendingUpdateDirtyMapStateRequests;
 
 public:
     TPartitionActor(
@@ -228,6 +243,10 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleUpdateDirtyMapStateDuringDelete(
+        const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleFastPathServiceShutdownDuringDelete(
         const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -257,6 +276,7 @@ private:
         size_t dbgId,
         THostIndex newHostIndex);
 
+    // Mon-page related methods.
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     [[nodiscard]] TString GetSocketPath() const;

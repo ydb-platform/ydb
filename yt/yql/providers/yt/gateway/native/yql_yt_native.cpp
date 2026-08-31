@@ -314,6 +314,10 @@ public:
             return session->Async([session, logCtx] {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 try {
+                    with_lock(session->SecureTmpFolderPreparationsMutex_) {
+                        session->SecureTmpFolderPreparationsByCluster_.clear();
+                    }
+
                     session->TxCache_.AbortAll();
                 } catch (...) {
                     YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
@@ -4266,6 +4270,7 @@ private:
         TString reduceLambda,
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
+        bool forceApplyMaxJobCount,
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
         const NYT::TNode& intermediateStreams,
@@ -4275,7 +4280,7 @@ private:
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, mapBlockInput, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun, forceApplyMaxJobCount]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4494,8 +4499,11 @@ private:
             }
 
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
-            FillSpec(spec, *execCtx, entry, mapExtraUsage.Cpu, reduceExtraUsage.Cpu,
-                EYtOpProp::IntermediateData | EYtOpProp::WithMapper | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            EYtOpProps opProps = EYtOpProp::IntermediateData | EYtOpProp::WithMapper | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling;
+            if (forceApplyMaxJobCount) {
+                opProps |= EYtOpProp::ForceApplyMaxJobCount;
+            }
+            FillSpec(spec, *execCtx, entry, mapExtraUsage.Cpu, reduceExtraUsage.Cpu, opProps);
             if (!intermediateStreams.IsUndefined()) {
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
@@ -4523,6 +4531,7 @@ private:
         TString reduceLambda,
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
+        bool forceApplyMaxJobCount,
         const NYT::TNode& intermediateSchema,
         bool useIntermediateStreams,
         const TExecContext<TRunOptions>::TPtr& execCtx
@@ -4530,7 +4539,7 @@ private:
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun, forceApplyMaxJobCount]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4646,8 +4655,11 @@ private:
             }
 
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
-            FillSpec(spec, *execCtx, entry, 0., reduceExtraUsage.Cpu,
-                EYtOpProp::IntermediateData | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            EYtOpProps opProps = EYtOpProp::IntermediateData | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling;
+            if (forceApplyMaxJobCount) {
+                opProps |= EYtOpProp::ForceApplyMaxJobCount;
+            }
+            FillSpec(spec, *execCtx, entry, 0., reduceExtraUsage.Cpu, opProps);
             if (useIntermediateStreams) {
                 spec["reducer"]["enable_input_table_index"] = true;
             }
@@ -4674,6 +4686,7 @@ private:
         const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config());
         const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
         const bool mapBlockInput = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const bool forceApplyMaxJobCount = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::ForceApplyMaxJobCount);
 
         NYT::TNode intermediateMeta;
         NYT::TNode intermediateSchema;
@@ -4776,16 +4789,17 @@ private:
         }
 
         return execCtx->Session_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx,
+            forceApplyMaxJobCount]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, forceApplyMaxJobCount, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
             } else {
-                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
-                    useIntermediateStreams, execCtx);
+                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, forceApplyMaxJobCount,
+                    intermediateSchema, useIntermediateStreams, execCtx);
             }
         });
     }

@@ -370,6 +370,7 @@ public:
             .DataSink(write.DataSink())
             .Topic(write.Topic())
             .Input(write.Input())
+            .Settings(write.Settings())
             .Done().Ptr();
     }
 
@@ -471,6 +472,7 @@ public:
                 bool sharedReading = false;
                 bool skipErrors = false;
                 bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
+                bool usedPartitionPredicate = false;
                 TString format;
                 const TExprNode* userSchemaColumnsSetting = nullptr;
                 size_t const settingsCount = topicSource.Settings().Size();
@@ -513,6 +515,8 @@ public:
                         if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
                             userSchemaColumnsSetting = maybeList.Cast().Raw();
                         }
+                    } else if (name == UsedPartitionPredicateSetting) {
+                        usedPartitionPredicate = FromString<bool>(Value(setting));
                     }
                 }
 
@@ -605,6 +609,9 @@ public:
                     srcDesc.SetSharedReading(true);
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
+                if (usedPartitionPredicate) {
+                    srcDesc.SetUsedPartitionPredicate(true);
+                }
 
                 if (!streamingTopicRead) {
                     srcDesc.MutableDisposition()->mutable_oldest();
@@ -679,6 +686,11 @@ public:
 
                 sinkDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 
+                const auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get();
+                if (maybeEnableDeduplication) {
+                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
+                }
+
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSink.Settings().Item(i);
@@ -689,15 +701,17 @@ public:
                         sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
+                    } else if (name == NDeliveryGuaranteeSetting::Name) {
+                        if (Value(setting) == NDeliveryGuaranteeSetting::ExactlyOnceValue) {
+                            YQL_ENSURE(State_->EnableExactlyOnceDeliveryGuaranty && State_->DeferredPublicationExtIdPrefix, "Deferred publication is not enabled");
+                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication can not be used with enabled deduplication");
+                            sinkDesc.SetDeferredPublicationExtIdPrefix(State_->DeferredPublicationExtIdPrefix);
+                        }
                     }
                 }
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSink.Token().Raw())) {
                     sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
-                }
-
-                if (auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get()) {
-                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
                 }
 
                 protoSettings.PackFrom(sinkDesc);
@@ -795,10 +809,12 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_GRANULARITY = value"));
                     return {};
                 }
+
                 const auto settingValue = setting->Child(1);
                 if (!EnsureAtom(*settingValue, ctx)) {
                     return {};
                 }
+
                 const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
                 if (!out) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
@@ -806,16 +822,25 @@ public:
                     return {};
                 }
 
-                watermarksGranularityUs = out.Get<ui64>();
+                const i64 signedGranularity = out.Get<i64>();
+                if (signedGranularity < 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_GRANULARITY, expected non-negative value"));
+                    return {};
+                }
+
+                watermarksGranularityUs = signedGranularity;
             } else if ("watermarkidletimeout" == settingName) {
                 if (setting->ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_IDLE_TIMEOUT = value"));
                     return {};
                 }
+
                 const auto settingValue = setting->Child(1);
                 if (!EnsureAtom(*settingValue, ctx)) {
                     return {};
                 }
+
                 const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
                 if (!out) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
@@ -823,7 +848,14 @@ public:
                     return {};
                 }
 
-                watermarksIdleTimeoutUs = out.Get<ui64>();
+                const i64 signedIdleTimeout = out.Get<i64>();
+                if (signedIdleTimeout < 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_IDLE_TIMEOUT, expected non-negative value"));
+                    return {};
+                }
+
+                watermarksIdleTimeoutUs = signedIdleTimeout;
             } else if ("streaming" == settingName) {
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
                     bool withStreamingValue = *parseResult;

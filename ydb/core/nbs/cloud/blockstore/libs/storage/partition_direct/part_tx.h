@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_direct_service.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
@@ -21,15 +23,15 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_PARTITION_TRANSACTIONS(xxx, ...) \
-    xxx(InitSchema, __VA_ARGS__)                    \
-    xxx(LoadState, __VA_ARGS__)                     \
-    xxx(StoreVolumeConfig, __VA_ARGS__)             \
-    xxx(StorePartitionIds, __VA_ARGS__)             \
-    xxx(UpdateVChunkConfig, __VA_ARGS__)            \
-    xxx(UpdateDirtyMapState, __VA_ARGS__)           \
-    xxx(StartAddHost, __VA_ARGS__)                  \
-    xxx(AddHostToDBG, __VA_ARGS__)                  \
+#define BLOCKSTORE_PARTITION_TRANSACTIONS(xxx, ...)                            \
+    xxx(InitSchema, __VA_ARGS__)                                               \
+    xxx(LoadState, __VA_ARGS__)                                                \
+    xxx(StoreVolumeConfig, __VA_ARGS__)                                        \
+    xxx(StorePartitionIds, __VA_ARGS__)                                        \
+    xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
+    xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(StartAddHost, __VA_ARGS__)                                             \
+    xxx(AddHostToDBG, __VA_ARGS__)                                             \
     xxx(Monitoring, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
@@ -118,14 +120,18 @@ struct TTxPartition
     //
     struct TUpdateVChunkConfig
     {
-        const TVChunkConfig VChunkConfig;
-        NThreading::TPromise<void> UpdateCompleted;
+        struct TUpdateConfigRequest
+        {
+            TVChunkConfig VChunkConfig;
+            TPersistResultPromise UpdateCompleted;
+        };
 
-        explicit TUpdateVChunkConfig(
-            TVChunkConfig vChunkConfig,
-            NThreading::TPromise<void> updateCompleted)
-            : VChunkConfig(std::move(vChunkConfig))
-            , UpdateCompleted(std::move(updateCompleted))
+        using TUpdateConfigRequests = TVector<TUpdateConfigRequest>;
+
+        TUpdateConfigRequests UpdateConfigRequests;
+
+        explicit TUpdateVChunkConfig(TUpdateConfigRequests updateConfigRequests)
+            : UpdateConfigRequests(std::move(updateConfigRequests))
         {}
 
         void Clear()
@@ -139,17 +145,19 @@ struct TTxPartition
     //
     struct TUpdateDirtyMapState
     {
-        const ui32 VChunkIndex;
-        const TDirtyMapStateProto State;
-        NThreading::TPromise<void> UpdateCompleted;
+        struct TUpdateStateRequest
+        {
+            ui32 VChunkIndex;
+            TDirtyMapStateProto State;
+            TPersistResultPromise UpdateCompleted;
+        };
 
-        TUpdateDirtyMapState(
-            ui32 vChunkIndex,
-            TDirtyMapStateProto state,
-            NThreading::TPromise<void> updateCompleted)
-            : VChunkIndex(vChunkIndex)
-            , State(std::move(state))
-            , UpdateCompleted(std::move(updateCompleted))
+        using TUpdateStateRequests = TVector<TUpdateStateRequest>;
+
+        TUpdateStateRequests UpdateStateRequests;
+
+        explicit TUpdateDirtyMapState(TUpdateStateRequests updateStateRequests)
+            : UpdateStateRequests(std::move(updateStateRequests))
         {}
 
         void Clear()

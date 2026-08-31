@@ -398,7 +398,7 @@ private:
         TUdfIndexPackageSet::TPtr udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const IUrlPreprocessing::TPtr& urlPreprocessing,
-        const TGatewaysConfig* gatewaysConfig,
+        THolder<TGatewaysConfig> gatewaysConfig,
         TString filename,
         TString sourceCode,
         TString sessionId,
@@ -469,7 +469,7 @@ private:
     const IUrlPreprocessing::TPtr UrlPreprocessing_;
     TUserDataTable SavedUserDataTable_;
     TUserDataStorage::TPtr UserDataStorage_;
-    const TGatewaysConfig* GatewaysConfig_;
+    const THolder<TGatewaysConfig> GatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;

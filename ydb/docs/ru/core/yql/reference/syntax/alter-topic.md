@@ -40,7 +40,11 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 
 {% if feature_topic_codecs %}
 
+<<<<<<< HEAD
 * `supported_codecs` — список [кодеков](../../../../concepts/topic#message-codec), поддерживаемых топиком. Тип значения — `String`.
+=======
+* `supported_codecs` — список [кодеков](../../../concepts/datamodel/topic.md#message-codec), поддерживаемых топиком. Тип значения — `String`.
+>>>>>>> e719c475d0b (YDBDOCS: enable topic codecs (#49486))
 
 {% endif %}
 

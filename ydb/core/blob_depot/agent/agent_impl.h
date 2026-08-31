@@ -673,11 +673,6 @@ namespace NKikimr::NBlobDepot {
         ui64 BytesWritten = 0;
         ui64 LastBytesRead = 0;
         ui64 LastBytesWritten = 0;
-        ui64 LastS3GetsOk = 0;
-        ui64 LastS3GetsError = 0;
-        ui64 LastS3GetBytesOk = 0;
-        ui64 LastS3GetsSlowDown = 0;
-        ui64 LastS3GetThrottleActivations = 0;
 
         void HandlePushMetrics();
     };

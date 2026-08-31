@@ -7,22 +7,23 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
-    test_min_max_index.py
-    test_rename_table.py
-    test_compression.py
-    test_encoding.py
+    test_s3_router_metrics.py
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:16)
+REQUIREMENTS(cpu:4)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-TAG(ya:manual)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
+
+ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")
 
 DEPENDS(
+    ydb/apps/dstool
     ydb/tests/library/compatibility/binaries
 )
 
 PEERDIR(
+    contrib/python/boto3
     ydb/tests/library
     ydb/tests/library/compatibility
 )

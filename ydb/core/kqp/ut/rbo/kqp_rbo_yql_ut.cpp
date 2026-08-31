@@ -1027,6 +1027,172 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(fullScan->GetMapSafe().at("A-Cpu").GetDoubleSafe(), 7, plan);
     }
 
+    Y_UNIT_TEST(ExplainAnalyzeDuplicateOperatorIdUsesFirstMatch) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "FirstExec",
+                "StageGuid": "stage-first",
+                "Operators": [{"Name": "FirstExec", "OperatorId": 7}],
+                "Stats": {
+                    "OutputRows": {"Sum": 6},
+                    "OutputBytes": {"Sum": 60},
+                    "CpuTimeUs": {"Max": 7000}
+                },
+                "Plans": [{
+                    "Node Type": "SecondExec",
+                    "StageGuid": "stage-second",
+                    "Operators": [{"Name": "SecondExec", "OperatorId": 7}],
+                    "Stats": {
+                        "OutputRows": {"Sum": 11},
+                        "OutputBytes": {"Sum": 110},
+                        "CpuTimeUs": {"Max": 11000}
+                    }
+                }]
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "First",
+                "Operators": [{"Name": "First", "OperatorId": 7}],
+                "Plans": [{
+                    "Node Type": "Second",
+                    "Operators": [{"Name": "Second", "OperatorId": 7}]
+                }]
+            }
+        })";
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TVector<const TString> txPlans = {txPlan};
+        const auto plan = SerializeRBOAnalyzePlan(txPlans, queryStats);
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* first = FindOperatorByStringField(simplifiedPlan, "Name", "First");
+        const auto* second = FindOperatorByStringField(simplifiedPlan, "Name", "Second");
+
+        UNIT_ASSERT_C(first, plan);
+        UNIT_ASSERT_C(second, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(first->GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(first->GetMapSafe().at("A-Size").GetDoubleSafe(), 60, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(first->GetMapSafe().at("A-SelfCpu").GetDoubleSafe(), 7, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(first->GetMapSafe().at("A-Cpu").GetDoubleSafe(), 7, plan);
+        UNIT_ASSERT_C(!second->GetMapSafe().contains("A-Rows"), plan);
+        UNIT_ASSERT_C(!second->GetMapSafe().contains("A-Size"), plan);
+        UNIT_ASSERT_C(!second->GetMapSafe().contains("A-SelfCpu"), plan);
+        UNIT_ASSERT_C(!second->GetMapSafe().contains("A-Cpu"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeMissingExecutionOperatorIdFails) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Exec",
+                "StageGuid": "stage-1",
+                "Operators": [{"Name": "Exec", "OperatorId": 1}]
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Missing",
+                "Operators": [{"Name": "Missing", "OperatorId": 2}]
+            }
+        })";
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TVector<const TString> txPlans = {txPlan};
+        UNIT_ASSERT_EXCEPTION(SerializeRBOAnalyzePlan(txPlans, queryStats), yexception);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeBroadcastStatsUseParentTaskCount) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Broadcast",
+                "PlanNodeType": "Connection",
+                "Stats": {"Tasks": 4},
+                "Plans": [{
+                    "Node Type": "Scan",
+                    "StageGuid": "stage-1",
+                    "Operators": [{"Name": "Scan", "OperatorId": 1}],
+                    "Stats": {
+                        "OutputRows": {"Sum": 8},
+                        "OutputBytes": {"Sum": 80},
+                        "CpuTimeUs": {"Max": 7000}
+                    }
+                }]
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Scan",
+                "Operators": [{"Name": "Scan", "OperatorId": 1}]
+            }
+        })";
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TVector<const TString> txPlans = {txPlan};
+        const auto plan = SerializeRBOAnalyzePlan(txPlans, queryStats);
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* scan = FindOperatorByStringField(simplifiedPlan, "Name", "Scan");
+
+        UNIT_ASSERT_C(scan, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(scan->GetMapSafe().at("A-Rows").GetDoubleSafe(), 2, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(scan->GetMapSafe().at("A-Size").GetDoubleSafe(), 20, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(scan->GetMapSafe().at("A-SelfCpu").GetDoubleSafe(), 7, plan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeMultiOperatorCpuUsesTopOperator) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Stage",
+                "StageGuid": "stage-1",
+                "Operators": [
+                    {"Name": "Top", "OperatorId": 1},
+                    {"Name": "Inner", "OperatorId": 2}
+                ],
+                "Stats": {"CpuTimeUs": {"Max": 7000}}
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Top",
+                "Operators": [{"Name": "Top", "OperatorId": 1}],
+                "Plans": [{
+                    "Node Type": "Inner",
+                    "Operators": [{"Name": "Inner", "OperatorId": 2}]
+                }]
+            }
+        })";
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TVector<const TString> txPlans = {txPlan};
+        const auto plan = SerializeRBOAnalyzePlan(txPlans, queryStats);
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* top = FindOperatorByStringField(simplifiedPlan, "Name", "Top");
+        const auto* inner = FindOperatorByStringField(simplifiedPlan, "Name", "Inner");
+
+        UNIT_ASSERT_C(top, plan);
+        UNIT_ASSERT_C(inner, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(top->GetMapSafe().at("A-SelfCpu").GetDoubleSafe(), 7, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(top->GetMapSafe().at("A-Cpu").GetDoubleSafe(), 7, plan);
+        UNIT_ASSERT_C(!inner->GetMapSafe().contains("A-SelfCpu"), plan);
+        UNIT_ASSERT_C(!inner->GetMapSafe().contains("A-Cpu"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeCpuAbsentDoesNotAddCpuFields) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Scan",
+                "StageGuid": "stage-1",
+                "Operators": [{"Name": "Scan", "OperatorId": 1}],
+                "Stats": {"OutputRows": {"Sum": 6}}
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Scan",
+                "Operators": [{"Name": "Scan", "OperatorId": 1}]
+            }
+        })";
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TVector<const TString> txPlans = {txPlan};
+        const auto plan = SerializeRBOAnalyzePlan(txPlans, queryStats);
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* scan = FindOperatorByStringField(simplifiedPlan, "Name", "Scan");
+
+        UNIT_ASSERT_C(scan, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(scan->GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, plan);
+        UNIT_ASSERT_C(!scan->GetMapSafe().contains("A-SelfCpu"), plan);
+        UNIT_ASSERT_C(!scan->GetMapSafe().contains("A-Cpu"), plan);
+    }
+
     Y_UNIT_TEST(ExplainAnalyzeRangePushdown) {
         TExplainPlanTestContext testContext;
         BulkUpsertExplainPlanTestRows(testContext.GetKikimr());

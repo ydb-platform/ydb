@@ -388,27 +388,23 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
         } break;
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
-            AFL_VERIFY(owner.TablesManager.IsGenerateInternalPathId())("error", "truncate requires GenerateInternalPathId");
-            if (owner.TablesManager.IsStoreTablet()) {
-                break;
-            }
+            AFL_VERIFY(owner.TablesManager.IsGenerateInternalPathId());
+            AFL_VERIFY(!owner.TablesManager.IsStoreTablet());
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
             // After restart Truncating fence is empty and GenerationIndex.Live is
             // rebuilt from DB. Re-fence the path (same as MoveTablePropose replay) so writes stay
             // blocked while TRUNCATE is still pending.
-            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
-                if (owner.TablesManager.HasTable(*internalPathId)) {
-                    const auto& table = owner.TablesManager.GetTable(*internalPathId);
-                    // Propose rejects these; on restart skip re-fence / wait setup.
-                    if (table.IsReadOnly(schemeShardLocalPathId)) {
-                        break;
-                    }
-                    if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId); ttl && !ttl->GetUsedTiers().empty()) {
-                        break;
-                    }
+            const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+            AFL_VERIFY(internalPathId);
+            AFL_VERIFY(owner.TablesManager.HasTable(*internalPathId));
+            {
+                const auto& table = owner.TablesManager.GetTable(*internalPathId);
+                AFL_VERIFY(!table.IsReadOnly(schemeShardLocalPathId));
+                if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId)) {
+                    AFL_VERIFY(ttl->GetUsedTiers().empty());
                 }
-                owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
             }
+            owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();
             AFL_VERIFY(txIdsToWait.erase(GetTxId()));
             if (!txIdsToWait.empty()) {

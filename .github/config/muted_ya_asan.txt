@@ -45,7 +45,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsNo
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsWithDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/formats/arrow/accessor/sub_columns/ut SubColumnsSparsedBuilder.BinaryJsonMatchesPlain
-ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthCorrect
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthLower
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthLower
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine3
@@ -71,7 +70,6 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithLongExpl
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestConsumersEmptyNames
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestEmptyHttpBody
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithMaxResults
-ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestPing
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestRequestWithWrongRegion
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestRequestWithWrongRegionV2
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestUnauthorizedPutRecords
@@ -131,12 +129,10 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_TableIm
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageBatch
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageBatch_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageEmptyQueueUrl_TableImplementation
-ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageFifoQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_TablesFormat0
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_WithUserSettings
-ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueueMultipleQueriesInflight
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTopicCreationStage_StdMessagingApis
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTopicMissing_ReceivePurgeGetAttributes_DoNotLeakPath
@@ -408,7 +404,6 @@ ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Date_1_UNIQUE_SYNC-pk
 ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Date_1__SYNC-pk_types33-all_types33-index33-Date--SYNC]
 ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Datetime_1_UNIQUE_SYNC-pk_types5-all_types5-index5-Datetime-UNIQUE-SYNC]
 ydb/tests/fq/generic/streaming py3test.sole chunk
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-False-1-1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-True-2-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
@@ -438,7 +433,6 @@ ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large py3test.[test_tpch_spilling.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[47]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[49]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[51]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]

@@ -227,6 +227,7 @@ protected:
     TInstant RequestStartTime;
     TDuration AmountRequestsTime;
     ui32 NumberRequests = 0;
+    ui64 NumberOfFetchedRows = 0;
 
     // Opt-in: forward TEvStreamQueryResultPart issues to Finish() on SUCCESS.
     bool ForwardStreamIssuesOnSuccess = false;

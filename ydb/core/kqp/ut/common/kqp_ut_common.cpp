@@ -17,10 +17,42 @@
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
 #include <library/cpp/testing/common/env.h>
+
+#include <util/stream/output.h>
+#include <util/system/mutex.h>
+
+#include <memory>
 
 namespace NKikimr {
 namespace NKqp {
+
+namespace {
+
+class TSynchronizedStreamLogBackend : public TLogBackend {
+public:
+    TSynchronizedStreamLogBackend(IOutputStream* slave, std::shared_ptr<TMutex> mutex)
+        : Slave_(slave)
+        , Mutex_(std::move(mutex))
+    {
+    }
+
+    void WriteData(const TLogRecord& rec) override {
+        TGuard<TMutex> guard(*Mutex_);
+        Slave_->Write(rec.Data, rec.Len);
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    IOutputStream* Slave_;
+    std::shared_ptr<TMutex> Mutex_;
+};
+
+} // namespace
 
 using namespace NYdb::NTable;
 
@@ -156,15 +188,17 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     }
 
     if (settings.LogStream) {
+        auto* logStream = settings.LogStream;
+        auto mutex = std::make_shared<TMutex>();
+        auto makeBackend = [logStream, mutex]() {
+            return new TSynchronizedStreamLogBackend(logStream, mutex);
+        };
         if (settings.NodeCount > 1) {
-            auto* logStream = settings.LogStream;
-            ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
-                runtime.SetLogBackendFactory([logStream]() {
-                    return new TOwningThreadedLogBackend(new TStreamLogBackend(logStream));
-                });
+            ServerSettings->SetLoggerInitializer([makeBackend](NActors::TTestActorRuntime& runtime) {
+                runtime.SetLogBackendFactory(makeBackend);
             });
         } else {
-            ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+            ServerSettings->SetLogBackend(makeBackend());
         }
     }
 

@@ -1,10 +1,12 @@
 #include "utils/dq_factories.h"
 #include "utils/dq_setup.h"
+#include "utils/preallocated_spiller.h"
 #include "utils/utils.h"
 #include <type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -51,6 +53,8 @@ struct TJoinTestData {
                               {1, EJoinSide::kRight}};
     TypeAndValue Result;
     std::optional<ui64> JoinMemoryConstraint = std::nullopt;
+    // Checked after the join is done: a spilling test that stops spilling would still pass otherwise
+    bool ExpectsSpilling = false;
     int BlockSize = 128;
     bool SliceBlocks = false;
     TVector<int> ScalarizeLeftColumns;
@@ -1505,6 +1509,44 @@ TJoinTestData CrossJoinLeftFilterTestData() {
     return td;
 }
 
+TJoinTestData CrossJoinRightFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2};
+    TVector<ui64> leftVals = {5, 20};
+    TVector<ui64> rightKeys = {10, 20, 30};
+    TVector<ui64> rightVals = {100, 50, 15};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    // right[1] < 80 drops (10,100); remaining 2x2 cartesian
+    TVector<ui64> expLeftKeys = {1, 1, 2, 2};
+    TVector<ui64> expLeftVals = {5, 5, 20, 20};
+    TVector<ui64> expRightKeys = {20, 30, 20, 30};
+    TVector<ui64> expRightVals = {50, 15, 50, 15};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData CrossJoinFilterRejectsAllTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {100, 200, 300};
+    TVector<ui64> rightKeys = {10, 20};
+    TVector<ui64> rightVals = {1, 2};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    TVector<ui64> empty;
+    td.Result = ConvertVectorsToTuples(setup, empty, empty, empty, empty);
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    AsCrossJoin(td);
+    return td;
+}
+
 TJoinTestData CrossJoinAllFiltersTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1558,51 +1600,198 @@ TJoinTestData CrossJoinOutputBufferBoundedTestData() {
     return td;
 }
 
-TJoinTestData CrossJoinSpillingTestData() {
+// Rows are (key, value) pairs and the expected result is the cartesian product of the pairs the
+// filters keep, so a case states its filters twice: as runtime nodes and as a predicate.
+struct TCrossSpillSpec {
+    int LeftSize = 0;
+    int RightSize = 0;
+    EBuildSide BuildSide = EBuildSide::Right;
+    std::function<ui64(int index)> LeftValue = [](int index) { return 10 * index; };
+    std::function<ui64(int index)> RightKey = [](int index) { return 2 * index + 3; };
+    std::function<ui64(int index)> RightValue = [](int index) { return index; };
+    std::function<void(TJoinTestData&)> AddFilters = {};
+    std::function<bool(ui64 leftValue, ui64 rightValue)> PairPasses = {};
+    // Tests that only count output rows do not need the expected list
+    bool WithExpectedResult = true;
+};
+
+TJoinTestData MakeCrossJoinSpillingTestData(const TCrossSpillSpec& spec) {
     TJoinTestData td;
     auto& setup = *td.Setup;
 
-    constexpr int leftSize = 3;
-    constexpr int rightSize = 15000;
-    TVector<ui64> leftKeys(leftSize);
-    TVector<ui64> leftValues(leftSize);
-    for (int index = 0; index < leftSize; ++index) {
+    TVector<ui64> leftKeys(spec.LeftSize);
+    TVector<ui64> leftValues(spec.LeftSize);
+    for (int index = 0; index < spec.LeftSize; ++index) {
         leftKeys[index] = index;
-        leftValues[index] = 10 * index;
+        leftValues[index] = spec.LeftValue(index);
     }
-    TVector<ui64> rightKeys(rightSize);
-    TVector<ui64> rightValues(rightSize);
-    for (int index = 0; index < rightSize; ++index) {
-        rightKeys[index] = 2 * index + 3;
-        rightValues[index] = index;
-    }
-
-    TVector<ui64> expLeftKeys;
-    TVector<ui64> expLeftValues;
-    TVector<ui64> expRightKeys;
-    TVector<ui64> expRightValues;
-    expLeftKeys.reserve(leftSize * rightSize);
-    expLeftValues.reserve(leftSize * rightSize);
-    expRightKeys.reserve(leftSize * rightSize);
-    expRightValues.reserve(leftSize * rightSize);
-    for (int left = 0; left < leftSize; ++left) {
-        for (int right = 0; right < rightSize; ++right) {
-            expLeftKeys.push_back(leftKeys[left]);
-            expLeftValues.push_back(leftValues[left]);
-            expRightKeys.push_back(rightKeys[right]);
-            expRightValues.push_back(rightValues[right]);
-        }
+    TVector<ui64> rightKeys(spec.RightSize);
+    TVector<ui64> rightValues(spec.RightSize);
+    for (int index = 0; index < spec.RightSize; ++index) {
+        rightKeys[index] = spec.RightKey(index);
+        rightValues[index] = spec.RightValue(index);
     }
 
     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
-    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues, expRightKeys, expRightValues);
 
+    if (spec.WithExpectedResult) {
+        TVector<ui64> expLeftKeys;
+        TVector<ui64> expLeftValues;
+        TVector<ui64> expRightKeys;
+        TVector<ui64> expRightValues;
+        for (int left = 0; left < spec.LeftSize; ++left) {
+            for (int right = 0; right < spec.RightSize; ++right) {
+                if (spec.PairPasses && !spec.PairPasses(leftValues[left], rightValues[right])) {
+                    continue;
+                }
+                expLeftKeys.push_back(leftKeys[left]);
+                expLeftValues.push_back(leftValues[left]);
+                expRightKeys.push_back(rightKeys[right]);
+                expRightValues.push_back(rightValues[right]);
+            }
+        }
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues, expRightKeys, expRightValues);
+    }
+    if (spec.AddFilters) {
+        spec.AddFilters(td);
+    }
+
+    // Only half of the build side fits in memory, the rest has to spill
     constexpr int packedTupleSize = 2 * 8 + 5;
-    constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
-    td.JoinMemoryConstraint = joinMemory;
+    const int buildSize = spec.BuildSide == EBuildSide::Left ? spec.LeftSize : spec.RightSize;
+    td.JoinMemoryConstraint = static_cast<ui64>(packedTupleSize * buildSize / 2);
+    // A single build row lands in one bucket, which becomes the in-memory table instead of spilling
+    td.ExpectsSpilling = buildSize > 1;
+    td.JoinSettings.BuildSide = spec.BuildSide;
     AsCrossJoin(td);
     return td;
+}
+
+TJoinTestData CrossJoinSpillingTestData() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 3, .RightSize = 15000});
+}
+
+TJoinTestData CrossJoinSpillingTestDataLeftIsBuild() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 15000, .RightSize = 3, .BuildSide = EBuildSide::Left});
+}
+
+// The build side spills into every bucket, so the probe stream is replayed for each of them
+TJoinTestData CrossJoinManyBucketsSpillingTestData() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 2, .RightSize = 200000});
+}
+
+TJoinTestData CrossJoinManyBucketsSpillingTestDataLeftIsBuild() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 200000, .RightSize = 2, .BuildSide = EBuildSide::Left});
+}
+
+TJoinTestData CrossJoinEmptyProbeSpillingTestData() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 0, .RightSize = 200000});
+}
+
+TJoinTestData CrossJoinEmptyBuildSpillingTestData() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 3, .RightSize = 0});
+}
+
+TJoinTestData CrossJoinEmptyProbeSpillingTestDataLeftIsBuild() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 200000, .RightSize = 0, .BuildSide = EBuildSide::Left});
+}
+
+TJoinTestData CrossJoinEmptyBuildSpillingTestDataLeftIsBuild() {
+    return MakeCrossJoinSpillingTestData({.LeftSize = 0, .RightSize = 3, .BuildSide = EBuildSide::Left});
+}
+
+// The filter keeps the output small while the build side spills into every bucket, so a probe row is
+// filtered while its scan is resumed across buckets and across spilled partitions.
+TJoinTestData CrossJoinCommonFilterSpillingTestData() {
+    constexpr int rightSize = 200000;
+    return MakeCrossJoinSpillingTestData({
+        .LeftSize = 2,
+        .RightSize = rightSize,
+        // close to the largest right value, so only a few pairs pass the filter
+        .LeftValue = [](int index) { return rightSize - 10 + 5 * index; },
+        .AddFilters = [](TJoinTestData& td) { td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1); },
+        .PairPasses = [](ui64 leftValue, ui64 rightValue) { return rightValue > leftValue; },
+    });
+}
+
+// Both sides are big enough to spill
+TJoinTestData CrossJoinBothSidesSpillingTestData(EBuildSide buildSide = EBuildSide::Right) {
+    constexpr ui64 rightKeepAfter = 20000 - 4;
+    return MakeCrossJoinSpillingTestData({
+        .LeftSize = 4000,
+        .RightSize = 20000,
+        .BuildSide = buildSide,
+        .AddFilters = [](TJoinTestData& td) {
+            td.RightFilter = GreaterThanConstFilter(td.Setup.get(), 1, rightKeepAfter);
+        },
+        .PairPasses = [](ui64, ui64 rightValue) { return rightValue > rightKeepAfter; },
+    });
+}
+
+TJoinTestData CrossJoinBothSidesSpillingTestDataLeftIsBuild() {
+    return CrossJoinBothSidesSpillingTestData(EBuildSide::Left);
+}
+
+TJoinTestData CrossJoinLeftFilterSpillingTestData() {
+    constexpr ui64 leftKeepAfter = 10 * (20 - 4);
+    return MakeCrossJoinSpillingTestData({
+        .LeftSize = 20,
+        .RightSize = 20000,
+        .AddFilters = [](TJoinTestData& td) {
+            td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, leftKeepAfter);
+        },
+        .PairPasses = [](ui64 leftValue, ui64) { return leftValue > leftKeepAfter; },
+    });
+}
+
+TJoinTestData CrossJoinRightFilterSpillingTestData() {
+    constexpr ui64 rightKeepBefore = 4;
+    return MakeCrossJoinSpillingTestData({
+        .LeftSize = 8,
+        .RightSize = 20000,
+        .AddFilters = [](TJoinTestData& td) {
+            td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, rightKeepBefore);
+        },
+        .PairPasses = [](ui64, ui64 rightValue) { return rightValue < rightKeepBefore; },
+    });
+}
+
+TJoinTestData CrossJoinAllFiltersSpillingTestData() {
+    return MakeCrossJoinSpillingTestData({
+        .LeftSize = 20,
+        .RightSize = 20000,
+        .LeftValue = [](int index) { return index; },
+        .AddFilters = [](TJoinTestData& td) {
+            td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+            td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+            td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+        },
+        .PairPasses = [](ui64 leftValue, ui64 rightValue) {
+            return leftValue > 10 && rightValue < 80 && rightValue > leftValue;
+        },
+    });
+}
+
+// Nothing passes the filter, so the whole grid is walked with an empty output
+TJoinTestData CrossJoinFilterRejectsAllSpillingTestData() {
+    return MakeCrossJoinSpillingTestData({
+        .LeftSize = 8,
+        .RightSize = 20000,
+        .LeftValue = [](int) { return 100000; },
+        .AddFilters = [](TJoinTestData& td) { td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1); },
+        .PairPasses = [](ui64 leftValue, ui64 rightValue) { return rightValue > leftValue; },
+    });
+}
+
+TJoinTestData CrossJoinOutputBufferBoundedSpillingTestData() {
+    return MakeCrossJoinSpillingTestData({
+        .LeftSize = 8,
+        .RightSize = 20000,
+        .RightKey = [](int index) { return index; },
+        .RightValue = [](int index) { return 2 * index; },
+        .WithExpectedResult = false,
+    });
 }
 
 TJoinTestData CrossJoinZeroWidthRightTestData() {
@@ -1708,6 +1897,18 @@ TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     return descr;
 }
 
+void AssertSpilled(IComputationGraph& graph) {
+    auto factory = std::dynamic_pointer_cast<TMockSpillerFactory>(graph.GetContext().SpillerFactory);
+    UNIT_ASSERT_C(factory, "Expected the graph to use TMockSpillerFactory");
+    ui64 spilled = 0;
+    for (const auto& spiller : factory->GetCreatedSpillers()) {
+        auto mock = std::dynamic_pointer_cast<TMockSpiller>(spiller);
+        UNIT_ASSERT_C(mock, "Expected TMockSpiller");
+        spilled += mock->GetTotalSpilled();
+    }
+    UNIT_ASSERT_C(spilled > 0, "Expected the join to spill data");
+}
+
 struct TOutputBlockStats {
     i64 TotalRows = 0;
     i64 MaxBlockRows = 0;
@@ -1741,6 +1942,9 @@ TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
         stats.MaxBlockRows = std::max(stats.MaxBlockRows, rows);
         ++stats.BlockCount;
     }
+    if (td.ExpectsSpilling) {
+        AssertSpilled(*graph);
+    }
     return stats;
 }
 
@@ -1765,6 +1969,31 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, withSpiller,
         testData.JoinSettings);
+    if (testData.JoinMemoryConstraint) {
+        testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 3000_MB +
+                                                 testData.Setup->Alloc.GetUsed());
+    }
+
+    if (blockJoin) {
+        CompareListAndBlockStreamIgnoringOrder(testData.Result, *got);
+    } else {
+        CompareListAndStreamIgnoringOrder(testData.Result, *got);
+    }
+    if (testData.ExpectsSpilling && withSpiller) {
+        AssertSpilled(*got);
+    }
+}
+
+// The mock spiller resolves every future at once, so the states that wait for spilling are only
+// reached with a spiller that completes its operations later.
+void TestWithSlowSpiller(TJoinTestData testData, bool blockJoin) {
+    auto descr = MakeJoinDescription(testData);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(testData.JoinMemoryConstraint.has_value());
+    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+        testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, true,
+        testData.JoinSettings);
+    got->GetContext().SpillerFactory =
+        std::make_shared<TSlowSpillerFactory>(std::make_shared<TPreallocatedSpillerFactory>(100_MB));
     if (testData.JoinMemoryConstraint) {
         testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 3000_MB +
                                                  testData.Setup->Alloc.GetUsed());
@@ -2047,6 +2276,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(CrossJoinLeftFilterTestData(), BlockJoin);
     }
 
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinRightFilter, BlockJoin) {
+        Test(CrossJoinRightFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAll, BlockJoin) {
+        Test(CrossJoinFilterRejectsAllTestData(), BlockJoin);
+    }
+
     Y_UNIT_TEST_TWIN(TestHashCrossJoinAllFilters, BlockJoin) {
         Test(CrossJoinAllFiltersTestData(), BlockJoin);
     }
@@ -2069,6 +2306,66 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthBothEmptyOutput, BlockJoin) {
         Test(CrossJoinZeroWidthBothEmptyOutputTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashCrossJoinSpillingLeftIsBuild) {
+        Test(CrossJoinSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpilling, BlockJoin) {
+        Test(CrossJoinManyBucketsSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashCrossJoinManyBucketsSpillingLeftIsBuild) {
+        Test(CrossJoinManyBucketsSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpilling, BlockJoin) {
+        Test(CrossJoinEmptyProbeSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashCrossJoinEmptyProbeSpillingLeftIsBuild) {
+        Test(CrossJoinEmptyProbeSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpilling, BlockJoin) {
+        Test(CrossJoinEmptyBuildSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashCrossJoinEmptyBuildSpillingLeftIsBuild) {
+        Test(CrossJoinEmptyBuildSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilterSpilling, BlockJoin) {
+        Test(CrossJoinCommonFilterSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpilling, BlockJoin) {
+        Test(CrossJoinBothSidesSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashCrossJoinBothSidesSpillingLeftIsBuild) {
+        Test(CrossJoinBothSidesSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilterSpilling, BlockJoin) {
+        Test(CrossJoinLeftFilterSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinRightFilterSpilling, BlockJoin) {
+        Test(CrossJoinRightFilterSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinAllFiltersSpilling, BlockJoin) {
+        Test(CrossJoinAllFiltersSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAllSpilling, BlockJoin) {
+        Test(CrossJoinFilterRejectsAllSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinSpillingSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(CrossJoinSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 
@@ -2107,6 +2404,11 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestOutputBufferBoundedCrossJoin) {
         auto td = CrossJoinOutputBufferBoundedTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), CrossJoinOutputBufferBoundedRows);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedCrossJoinSpilling) {
+        auto td = CrossJoinOutputBufferBoundedSpillingTestData();
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), 8 * 20000);
     }
 }
 } // namespace NKikimr::NMiniKQL

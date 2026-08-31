@@ -4019,7 +4019,6 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
         taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
         if (externalSource.GetType() == NYql::PqSource) {
-            ui32 userPoolThreads = 0;
             constexpr ui32 AveragePartitionsPerTask = 5;
             const ui32 tasksByPartitions = (taskCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask;
             const ui32 tasksByThread = (((TStagePredictor::GetUsableThreads() * 2) + 2) / 3) * resourceSnapshotSize;

@@ -112,36 +112,22 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        BytesRead += record.GetBytesRead();
-        BytesWritten += record.GetBytesWritten();
-        if (Config.HasVirtualGroupId()) {
-            MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
+        if (record.HasBytesRead()) {
+            BytesRead += record.GetBytesRead();
         }
 
-        auto inc = [&](NKikimrBlobDepot::ECumulativeCounters counter, ui64 value) {
-            if (value) {
-                TabletCounters->Cumulative()[counter] += value;
-            }
-        };
+        if (record.HasBytesWritten()) {
+            BytesWritten += record.GetBytesWritten();
+        }
 
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_OK, record.GetS3GetsOk());
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_ERROR, record.GetS3GetsError());
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_BYTES, record.GetS3GetsBytes());
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_SLOW_DOWN, record.GetS3GetsSlowDown());
-        inc(NKikimrBlobDepot::COUNTER_S3_GET_THROTTLE_ACTIVATIONS, record.GetS3GetThrottleActivations());
-
-        if (record.HasNodeId()) {
-            if (const auto it = Agents.find(record.GetNodeId()); it != Agents.end()) {
-                ApplyAgentS3GetGauges(it->second,
-                    record.GetS3GetsInFlight(),
-                    record.GetS3GetsMaxInFlight(),
-                    record.GetS3GetsPendingQueueSize());
-            }
+        if (Config.HasVirtualGroupId() && (record.HasBytesRead() || record.HasBytesWritten())) {
+            MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
         }
 
         UpdateThroughputs(false);
     }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
@@ -225,6 +211,8 @@ namespace NKikimr::NBlobDepot {
     }
 
 >>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
+=======
+>>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
     void TBlobDepot::UpdateThroughputs(bool reschedule) {
         static constexpr TDuration Window = TDuration::Seconds(3);
 

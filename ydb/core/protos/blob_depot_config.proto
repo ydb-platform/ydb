@@ -63,8 +63,12 @@ message TS3BackendSettings {
     // ProxyScheme for connections via the balancer-provided host.
     optional NKikimrSchemeOp.TS3Settings.EScheme BalancerProxyScheme = 8 [default = HTTP];
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     // How often the per-node S3 router pushes aggregated metrics to the tablet.
+=======
+    // How often the per-node S3 router sweeps retiring wrappers.
+>>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
     optional uint32 MetricsPushIntervalMs = 9 [default = 2500];
     optional uint32 MaxRetiringWrappers = 10 [default = 8];
     optional uint32 MinRetireGracePeriodSec = 11 [default = 60];

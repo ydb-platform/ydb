@@ -246,7 +246,7 @@ void TKafkaSaslAuthActor::SendResponse() {
     responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
     responseToClient->ErrorMessage = "";
 
-    YDB_LOG_DEBUG("Authentication first step finished. FirstServerMessage='",
+    YDB_LOG_DEBUG("Authentication first step finished",
         {LogPrefix()},
         {"authResponse", AuthResponse});
 

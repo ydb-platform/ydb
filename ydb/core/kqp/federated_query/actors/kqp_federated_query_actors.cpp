@@ -18,8 +18,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
-
 namespace NKikimr::NKqp {
 
 void RegisterDescribeSecretsActor(

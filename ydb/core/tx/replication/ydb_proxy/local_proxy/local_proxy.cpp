@@ -18,7 +18,7 @@ TLocalProxyActor::TLocalProxyActor(const TString& database)
 
 void TLocalProxyActor::Bootstrap() {
     LogPrefix = YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "LocalTopicPartitionReaderActor"},
+        {"actorClassName", "TLocalProxyActor"},
         {"selfId", SelfId()},
         {"database", Database});
     Become(&TLocalProxyActor::StateWork);
@@ -192,7 +192,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
 
 STATEFN(TLocalProxyActor::StateWork) {
     YDB_LOG_CREATE_CONTEXT(LogPrefix,
-        {"actorState", "StateWaitData"});
+        {"actorState", "StateWork"});
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvYdbProxy::TEvCreateTopicReaderRequest, Handle);
         hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);

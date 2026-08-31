@@ -298,7 +298,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::SendSuccessfullResponseForTxProducer(const TProducerState& producerState, const TActorContext& ctx) {
-        YDB_LOG_DEBUG("Sending succesfull response for transactional producer",
+        YDB_LOG_DEBUG("Sending succesful response for transactional producer",
             {LogPrefix()});
         auto response = std::make_shared<TInitProducerIdResponseData>();
         response->ErrorCode = EKafkaErrors::NONE_ERROR;

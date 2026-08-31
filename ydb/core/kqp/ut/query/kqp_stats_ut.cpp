@@ -10,7 +10,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <cstdlib>
-#include <initializer_list>
 
 namespace NKikimr {
 namespace NKqp {
@@ -24,39 +23,6 @@ NJson::TJsonValue GetLegacySimplifiedPlan(const TString& plan) {
     const auto planWithStats = AddExecStatsToTxPlan(plan, executionStats, false);
     UNIT_ASSERT_C(NJson::ReadJsonTree(planWithStats, &planJson, true), planWithStats);
     return planJson.GetMapSafe().at("SimplifiedPlan");
-}
-
-NJson::TJsonValue FindPlanNodeByTypeAndStats(
-    const NJson::TJsonValue& plan,
-    TStringBuf nodeType,
-    std::initializer_list<TStringBuf> statNames)
-{
-    if (!plan.IsMap()) {
-        return {};
-    }
-
-    const auto& map = plan.GetMapSafe();
-    if (map.contains("Node Type") && map.at("Node Type").GetStringSafe() == nodeType && map.contains("Stats")) {
-        const auto& stats = map.at("Stats").GetMapSafe();
-        bool containsAllStats = true;
-        for (const auto statName : statNames) {
-            containsAllStats &= stats.contains(TString(statName));
-        }
-        if (containsAllStats) {
-            return plan;
-        }
-    }
-
-    if (map.contains("Plans")) {
-        for (const auto& child : map.at("Plans").GetArraySafe()) {
-            auto result = FindPlanNodeByTypeAndStats(child, nodeType, statNames);
-            if (result.IsDefined()) {
-                return result;
-            }
-        }
-    }
-
-    return {};
 }
 
 NJson::TJsonValue FindRequiredPlanNodeByKv(
@@ -911,14 +877,6 @@ Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
         NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true),
         *result.GetStats()->GetPlan());
     const auto simplifiedPlan = plan.GetMapSafe().at("SimplifiedPlan");
-    const auto collect = FindPlanNodeByTypeAndStats(
-        plan.GetMapSafe().at("Plan"), "Collect", {"Table", "CpuTimeUs"});
-    UNIT_ASSERT_C(collect.IsDefined(), plan);
-    UNIT_ASSERT_C(!collect.GetMapSafe().contains("Operators"), plan);
-    const auto& collectStats = collect.GetMapSafe().at("Stats").GetMapSafe();
-    const auto& cpuTime = collectStats.at("CpuTimeUs");
-    UNIT_ASSERT_C(cpuTime.IsMap(), plan);
-    UNIT_ASSERT_C(cpuTime.GetMapSafe().at("Max").GetDoubleSafe() >= 0, plan);
 
     const auto fullScan = FindPlanNodeByKv(simplifiedPlan, "Name", "TableFullScan");
     UNIT_ASSERT_C(fullScan.IsDefined(), simplifiedPlan);

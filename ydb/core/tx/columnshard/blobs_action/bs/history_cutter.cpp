@@ -131,7 +131,7 @@ bool THistoryCutterWrapper::IsEnabled() const {
     if (NYDBTest::TControllers::GetColumnShardController()->IsCSCutHistoryEnabled()) {
         return true;
     }
-    return HasAppData() && AppData()->FeatureFlags.GetEnableCutHistory();
+    return HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardGroupDecommission();
 }
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(
@@ -236,6 +236,11 @@ void THistoryCutterWrapper::IncrementCounter(const TEntryKey& key) {
 
 void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
     auto it = Counters.find(key);
+    // Unreachable by design: OnPortionRemoved is fenced by PortionKeys, and PortionKeys and
+    // Counters are written and cleared together, so a portion that was never counted is never
+    // decremented. Poisoning guards against a future divergence between the two maps rather
+    // than any known scenario - if this warning ever fires in production, that divergence is
+    // the bug, not the channel.
     if (it == Counters.end() || it->second == 0) {
         if (PoisonedChannels.insert(key.Channel).second) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_channel_poisoned")("channel", key.Channel)(

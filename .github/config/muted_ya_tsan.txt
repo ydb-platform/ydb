@@ -166,22 +166,27 @@ ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
 ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
 ydb/core/transfer/ut/functional Transfer.WriteToNotExists
 ydb/core/transfer/ut/functional Transfer.WriteToNotTable
+ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/transfer_metrics TransferMetrics.HasDetailedMetrics
 ydb/core/transfer/ut/transfer_metrics TransferMetrics.TestDescribeTransfer
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-true
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideThenStopTenantAndForceDeleteSubDomain-AlterDatabaseCreateHiveFirst-true
+ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
+ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.CreateDummyTabletsInDifferentDomains
 ydb/library/actors/http/ut HttpProxy.StreamingResponseWithProgress1
 ydb/library/actors/http/ut THttpProxyWithMTls.UntrustedClientCertificate
 ydb/library/actors/http/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
+ydb/services/config/ut unittest.sole chunk
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Int8]
 ydb/tests/fq/http_api py3test.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/backup unittest.sole chunk
+ydb/tests/functional/backup/s3_path_style S3PathStyleBackup.DisableVirtualAddressing
 ydb/tests/functional/backup/s3_path_style unittest.sole chunk
 ydb/tests/functional/benchmarks_init py3test.[test_generator.py */*] chunk
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1
@@ -194,6 +199,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_infer_pdisk_slot_count
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_populate
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_set_status_inactive

@@ -81,14 +81,11 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
     const bool withTabletPathId) const {
     // Delegate to TGenerationIndex::ResolveForSnapshot, providing table-dependent callbacks.
     auto result = GenerationIndex.ResolveForSnapshot(
-        schemeShardLocalPathId,
-        readSnapshot,
-        // isMember: table must still know about this SS path (prevents stale All entries after Move).
+        schemeShardLocalPathId, readSnapshot,   // isMember: table must still know about this SS path (prevents stale All entries after Move).
         [this](TInternalPathId internalPathId, TSchemeShardLocalPathId ss) {
             const auto* table = Tables.FindPtr(internalPathId);
             return table && table->HasSchemeShardLocalPathId(ss);
-        },
-        // getDropVersion: path-local drop version from TTableInfo.
+        },   // getDropVersion: path-local drop version from TTableInfo.
         [this](TInternalPathId internalPathId, TSchemeShardLocalPathId ss) {
             const auto* table = Tables.FindPtr(internalPathId);
             AFL_VERIFY(table);

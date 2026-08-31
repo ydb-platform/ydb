@@ -13,7 +13,10 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.functional.nbs.helpers import execute_ydbd, execute_dstool_grpc
+try:
+    from ydb.tests.functional.nbs.lib.helpers import execute_ydbd, execute_dstool_grpc
+except ImportError:
+    from ydb.tests.functional.nbs.helpers import execute_ydbd, execute_dstool_grpc
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +101,7 @@ class NbsTestBase:
 
         execute_ydbd(self.cluster, "token", ['admin', 'bs', 'config', 'invoke', '--proto', define_ddisk_pool])
 
-    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT):
+    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
         """
         Create a disk and return the parsed CreatePartition JSON result.
         """
@@ -111,7 +114,7 @@ class NbsTestBase:
                 'create',
                 '--pool',
                 self.ddisk_pool_name,
-                '--block-size=4096',
+                f'--block-size={block_size}',
                 f'--blocks-count={blocks_count}',
                 '--type=ssd',
                 '--disk-id',
@@ -134,26 +137,40 @@ class NbsTestBase:
 
         return output
 
-    def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT):
+    def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
         """
         Create a disk with specified number of blocks.
         Returns the partition tablet id.
+
+        UNAVAILABLE is retried: a previous case's node restart can leave DDisk
+        allocation briefly unready even after mon is up.
         """
-        output = self.create_partition(disk_id, blocks_count)
+        deadline = time.time() + 40
+        output = None
+        while time.time() < deadline:
+            output = self.create_partition(disk_id, blocks_count, block_size=block_size)
+            if output.get('status') == 'SUCCESS':
+                tablet_id = output.get('tabletId', '')
+                assert tablet_id, f"CreatePartition did not return tabletId: {output}"
+                return tablet_id
+            if output.get('status') != 'UNAVAILABLE':
+                break
+            self.on_create_unavailable()
+            time.sleep(1)
         assert output.get('status') == 'SUCCESS', (
             f"CreatePartition failed for disk {disk_id}: {output}"
         )
-        tablet_id = output.get('tabletId', '')
-        assert tablet_id, f"CreatePartition did not return tabletId: {output}"
-        return tablet_id
+
+    def on_create_unavailable(self):
+        """Hook for shared-cluster suites to recover a wedged NBS tenant."""
 
     def mon_base_url(self):
         node = self.cluster.nodes[1]
         return f'http://{node.host}:{node.mon_port}'
 
-    def fetch_mon(self, path):
+    def fetch_mon(self, path, timeout=5):
         url = f'{self.mon_base_url()}{path}'
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=timeout)
         assert response.status_code == 200, (
             f"Mon request failed: {url} status={response.status_code} body={response.text[:500]}"
         )
@@ -167,7 +184,7 @@ class NbsTestBase:
             return self.fetch_mon(path)
 
         url = f'{self.mon_base_url()}{path}'
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=5)
         # After SchemeShard drops the volume, Hive deletes the tablet; the mon
         # proxy may return a non-200 / "tablet not found" page.
         if response.status_code != 200:

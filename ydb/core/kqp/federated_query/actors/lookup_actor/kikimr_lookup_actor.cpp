@@ -215,11 +215,6 @@ namespace {
     private:
         void Free() {
             auto guard = Guard(*Alloc);
-            if (InFlight) {
-                // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight
-                InFlight->Sub(LocalInFlight);
-            }
-            LocalInFlight = 0;
             KeyTypeHelper.reset();
         }
         void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
@@ -267,13 +262,34 @@ namespace {
         }
 
         void PassAway() override {
+            YDB_LOG_DEBUG("PassAway",
+                    COMMON_LOG,
+                    {"sessions", Sessions.size()},
+                    {"requests", InflightRequests.size()},
+            );
             for (auto&& session: Sessions) {
                 CleanupStreamProcessor(session);
-                if (session->SessionId) {
-                    SendDeleteSession(std::move(session->SessionId));
+                if (auto& sessionId = session->SessionId) {
+                    SendDeleteSession(std::move(sessionId));
+                    sessionId.clear();
                 }
             }
             Sessions.clear();
+            if (InFlight) {
+                // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight
+                InFlight->Sub(InflightRequests.size());
+            }
+            for (auto state: InflightRequests) {
+                if (auto& session = state->SessionState) {
+                    CleanupStreamProcessor(session);
+                    if (auto& sessionId = session->SessionId) {
+                        SendDeleteSession(std::move(sessionId));
+                        sessionId.clear();
+                    }
+                }
+                CleanupStreamProcessor(state);
+            }
+            InflightRequests.clear();
             Free();
             TBase::PassAway();
         }
@@ -290,7 +306,7 @@ namespace {
         )
 
         void Handle(TEvLookupRetry::TPtr ev) {
-            if (LocalInFlight == 0) { // already passed away
+            if (InflightRequests.empty()) { // already passed away
                 YDB_LOG_DEBUG("Retry after PassAway", COMMON_LOG);
                 return;
             }
@@ -355,6 +371,8 @@ namespace {
                 Schedule(delay, new TEvLookupRetry(std::move(state)));
                 return;
             }
+            auto removed = InflightRequests.erase(state);
+            Y_DEBUG_ABORT_UNLESS(removed);
             CleanupStreamProcessor(state);
             if (auto& session = state->SessionState) {
                 CleanupStreamProcessor(session);
@@ -406,7 +424,6 @@ namespace {
                     Fullscans->Inc();
                 }
             }
-            ++LocalInFlight;
 
             auto state = std::make_shared<TLookupState>(TLookupState {
                 .Request = request,
@@ -414,6 +431,7 @@ namespace {
                 .SentTime = TInstant::Now(),
                 .FullscanLimit = fullscanLimit
             });
+            InflightRequests.insert(state);
             SendRequest(std::move(state));
         }
 
@@ -608,6 +626,9 @@ namespace {
         }
 
         void SendDeleteSession(TString sessionId) {
+            YDB_LOG_DEBUG("DeleteSession",
+                    COMMON_LOG,
+                    {"sessionId", sessionId});
             using TRequest = Ydb::Query::DeleteSessionRequest;
             using TResponse = Ydb::Query::DeleteSessionResponse;
             using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
@@ -713,10 +734,11 @@ namespace {
 
         void FinalizeRequest(TLookupState::TPtr state) {
             CleanupStreamProcessor(state);
-            if (LocalInFlight == 0) { // PassAway was called
+            if (InflightRequests.empty()) { // PassAway was called
                 return;
             }
-            --LocalInFlight;
+            auto removed = InflightRequests.erase(state);
+            Y_DEBUG_ABORT_UNLESS(removed);
             auto guard = Guard(*Alloc);
             YDB_LOG_DEBUG("Sending lookup results",
                     COMMON_LOG,
@@ -914,12 +936,12 @@ namespace {
         const size_t MaxKeysInRequest;
         const bool IsMultiMatches;
         TMaybe<TString> Token;
-        ui32 LocalInFlight = 0;
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
         const TString SelectBody;
         const TString SelectWithKeys;
         TVector<TSessionState::TPtr> Sessions;
+        TSet<TLookupState::TPtr> InflightRequests;
 
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;
         ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;

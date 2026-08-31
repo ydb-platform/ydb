@@ -1,0 +1,365 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/local_ssd.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Disk Agent state
+
+enum EAgentState
+{
+    AGENT_STATE_ONLINE = 0;
+    AGENT_STATE_WARNING = 1;
+    AGENT_STATE_UNAVAILABLE = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Disk state
+
+enum EDiskState
+{
+    DISK_STATE_ONLINE = 0;
+    DISK_STATE_WARNING = 1;
+    DISK_STATE_TEMPORARILY_UNAVAILABLE = 2;
+    DISK_STATE_ERROR = 3;
+}
+
+message TDiskState
+{
+    string DiskId = 1;
+
+    EDiskState State = 2;
+
+    string StateMessage = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum EDevicePoolKind
+{
+    // Default global pool without name.
+    DEVICE_POOL_KIND_DEFAULT = 0;
+
+    // Named global pools.
+    DEVICE_POOL_KIND_GLOBAL = 1;
+
+    // Named local pools.
+    DEVICE_POOL_KIND_LOCAL = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Allows to control data integrity validation
+
+enum EDataIntegrityValidationPolicy
+{
+    // Data integrity validation is disabled.
+    DIVP_DISABLED = 0;
+    // Data integrity validation is enabled.
+    DIVP_ENABLED = 1;
+    // Non-present checksums will be treated as validation errors.
+    DIVP_ENABLED_FORCED = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Device Override
+
+message TDeviceOverride
+{
+    // Device UUID.
+    string Device = 1;
+
+    // DiskId for which this override takes effect.
+    string DiskId = 2;
+
+    // Overridden BlocksCount.
+    uint64 BlocksCount = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Known device
+
+message TKnownDevice
+{
+    // Device UUID.
+    string DeviceUUID = 1;
+
+    // Device Serial number.
+    string SerialNumber = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Known Disk Agent
+
+message TKnownDiskAgent
+{
+    // Disk Agent Id which is used for registration in Disk registry.
+    string AgentId = 1;
+
+    // List of device UUIDs which are allowed for this Disk Agent.
+    repeated string Devices = 2; // deprecated
+
+    // List of devices which are allowed for this Disk Agent.
+    repeated TKnownDevice KnownDevices = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Known Device Pool
+
+message TKnownDevicePool
+{
+    // Device pool name.
+    string Name = 1;
+
+    // Allocation unit for this pool (in bytes).
+    uint64 AllocationUnit = 2;
+
+    // Device pool kind.
+    EDevicePoolKind Kind = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Update Disk Registry config
+
+message TUpdateDiskRegistryConfigRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Disk registry config version.
+    uint32 Version = 2;
+
+    // Ignore affected disks and force to apply config
+    // Removed. See NBS-2299.
+    // bool ForceUpdate = 3;
+
+    // List of agents allowed to connect to the Disk Registry
+    repeated TKnownDiskAgent KnownAgents = 4;
+
+    // Ignore config version and force to apply config
+    bool IgnoreVersion = 5;
+
+    // List of device property overrides for specific volumes.
+    repeated TDeviceOverride DeviceOverrides = 6;
+
+    // List of device pool configs.
+    repeated TKnownDevicePool KnownDevicePools = 7;
+}
+
+message TUpdateDiskRegistryConfigResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Affected disks
+    repeated string AffectedDisks = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Describe Disk Registry config
+
+message TDescribeDiskRegistryConfigRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+}
+
+message TDescribeDiskRegistryConfigResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Disk registry config version.
+    uint32 Version = 2;
+
+    // List of agents allowed to connect to the Disk Registry.
+    repeated TKnownDiskAgent KnownAgents = 3;
+
+    // List of device property overrides for specific volumes.
+    repeated TDeviceOverride DeviceOverrides = 4;
+
+    // List of device pool configs.
+    repeated TKnownDevicePool KnownDevicePools = 5;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Device Info
+
+message TDeviceInfo
+{
+    // Device  name.
+    string DeviceName = 1;
+
+    // Serial number.
+    string DeviceSerialNumber = 2;
+
+    // Total space in bytes.
+    uint64 DeviceTotalSpaceInBytes = 3;
+
+    // Allocated space in bytes.
+    uint64 DeviceAllocatedSpaceInBytes = 4;
+
+    // Free space in bytes.
+    uint64 DeviceFreeSpaceInBytes = 5;
+
+    // Dirty space in bytes.
+    uint64 DeviceDirtySpaceInBytes = 6;
+
+    // Suspended space in bytes.
+    uint64 DeviceSuspendedSpaceInBytes = 7;
+
+    // Broken space in bytes.
+    uint64 DeviceBrokenSpaceInBytes = 8;
+
+    // Decomissioned space in bytes.
+    uint64 DeviceDecommissionedSpaceInBytes = 9;
+
+    // Storage pool name.
+    string StoragePoolName = 10;
+
+    // Storage pool kind.
+    EStoragePoolKind StoragePoolKind = 11;
+}
+
+message TAgentInfo {
+    // Agent  id.
+    string AgentId = 1;
+
+    // List of device info
+    repeated TDeviceInfo Devices = 2;
+
+    // Current state of the Disk Agent
+    EAgentState State = 3;
+
+    // Reason for agent state.
+    string StateMessage = 4;
+
+    // Timestamp when state has been changed (in microseconds)
+    uint64 StateTs = 5;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Query agents info
+
+message TQueryAgentsInfoRequest
+{
+    message TAgentFilter
+    {
+        // Filter out agents whose states are not in this list.
+        // An empty list means that there is no filter.
+        repeated EAgentState States = 1;
+
+        // Filter by agent ids.
+        // An empty list means that there is no filter.
+        repeated string AgentIds = 2;
+    }
+
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Exclude agents with properties that do not match the filter.
+    TAgentFilter Filter = 2;
+}
+
+message TQueryAgentsInfoResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // List of agent info
+    repeated TAgentInfo Agents = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume create from device request/response.
+
+message TCreateVolumeFromDeviceRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to create.
+    string DiskId = 2;
+
+    // Owner information.
+    string ProjectId = 3;
+
+    // User folder Id, used for billing.
+    string FolderId = 4;
+
+    // Cloud Id, used for billing.
+    string CloudId = 5;
+
+    // FQDN of the agent on which the device is located.
+    string AgentId = 6;
+
+    // Path to the device on the specified agent.
+    string Path = 7;
+}
+
+message TCreateVolumeFromDeviceResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Resume device
+
+message TResumeDeviceRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Host name.
+    string AgentId = 2;
+
+    // Device path.
+    string Path = 3;
+
+    // Dry run.
+    bool DryRun = 4;
+}
+
+message TResumeDeviceResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// List nonreplicated/mirrored disk states
+
+message TListDiskStatesRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+};
+
+message TListDiskStatesResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // List of all disk states.
+    repeated TDiskState DiskStates = 2;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Backup Disk Registry state
+
+enum EBackupDiskRegistryStateSource
+{
+    // Getting DiskRegistry State backup from memory.
+    BDRSS_MEMORY = 0;
+    // Getting DiskRegistry State backup from local db.
+    BDRSS_LOCAL_DB = 1;
+    // Getting DiskRegistry State backup from
+    // local db and memory for state comparison.
+    BDRSS_MEMORY_AND_LOCAL_DB = 2;
+}

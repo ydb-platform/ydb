@@ -321,7 +321,7 @@ message TFeatureFlags {
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
-    optional bool EnableCompactFulltextIndex = 280 [default = false];
+    optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = true];
     optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
@@ -369,5 +369,8 @@ message TFeatureFlags {
     optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
     optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
     optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 316 [default = false];
-    optional bool EnablePqSourceRescaling = 317 [default = false];
+    // Offloads TEvDataShard::TEvPeriodicTableStats parsing to a dedicated aux actor to reduce
+    // SchemeShard's single-threaded load.
+    optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
+    optional bool EnablePqSourceRescaling = 318 [default = false];
 }

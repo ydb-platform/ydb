@@ -1026,7 +1026,7 @@ protected:
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
                 auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
-                TPlanVisualizer viz;
+                NPlan2Svg::TPlanVisualizer viz;
 
                 NJson::TJsonReaderConfig jsonConfig;
                 NJson::TJsonValue jsonNode;

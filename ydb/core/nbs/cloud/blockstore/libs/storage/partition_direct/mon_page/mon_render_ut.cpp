@@ -72,6 +72,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=chaos");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunkcounters");
@@ -188,18 +189,19 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
     Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
     {
+        constexpr ui32 BlockSize = 4096;
         auto dbg = MakeDbg(0);
         auto config = TVChunkConfig::MakeDefault(
             /*vChunkIndex*/ 17,
             /*hostCount*/ 5,
             /*primaryCount*/ 3);
         config.PromoteHost(3);
-        config.SetWatermark(3, 42);
+        config.SetWatermark(3, 42 * BlockSize);
         dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
 
         const TMonPageData data{
             .Page = EMonPage::Dbg,
-            .TabletInfo = {.TabletId = 42},
+            .TabletInfo = {.TabletId = 42, .BlockSize = BlockSize},
             .Dbgs = {std::move(dbg)},
         };
 
@@ -243,7 +245,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "<input type='hidden' name='action' value='addhost'/>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
         UNIT_ASSERT_STRING_CONTAINS(html, "Connections");
-        UNIT_ASSERT_STRING_CONTAINS(html, "DDisk session");
         // The DDisk id links to its actor page on the owning node (1).
         UNIT_ASSERT_STRING_CONTAINS(
             html,
@@ -256,7 +257,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "/node/1/actors/persistent_buffer?pb=");
         UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Locked");
-        UNIT_ASSERT_STRING_CONTAINS(html, "yes");
+        UNIT_ASSERT_STRING_CONTAINS(html, "connected");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)

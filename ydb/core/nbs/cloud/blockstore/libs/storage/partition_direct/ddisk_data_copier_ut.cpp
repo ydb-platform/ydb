@@ -2,6 +2,8 @@
 
 #include "base_test_fixture.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/testlib/range_locker_access.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -29,9 +31,42 @@ void FinishFlushes(TBlocksDirtyMap& dirtyMap, const TFlushHints& hints)
     }
 }
 
-struct TFixture: public TBaseFixture
+struct TFixture
+    : public TBaseFixture
+    , public IRangeSyncClient
 {
     TDDiskDataCopierPtr Copier;
+    TVector<ui64> CopyProgressNotifications;
+
+    std::optional<TBlockRange64> GetFreshRange(THostIndex host) const override
+    {
+        return DirtyMap->GetFreshRange(host);
+    }
+
+    TReadHint MakeReadHint(TBlockRange64 range) override
+    {
+        return DirtyMap->MakeReadHint(range);
+    }
+
+    TRangeLock MakeDDiskRangeLock(TBlockRange64 range, THostMask mask) override
+    {
+        return TRangeLockAccess::Make(DirtyMap, range, mask);
+    }
+
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range) override
+    {
+        return DirtyMap->BeginRangeSync(host, range);
+    }
+
+    void EndRangeSync(ui64 syncId, bool success) override
+    {
+        DirtyMap->EndRangeSync(syncId, success);
+    }
+
+    void OnCopyProgress(ui64 totalBytes) override
+    {
+        CopyProgressNotifications.push_back(totalBytes);
+    }
 
     void Init() override
     {
@@ -48,7 +83,7 @@ struct TFixture: public TBaseFixture
             DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
-            DirtyMap,
+            this,
             FreshDDisk);
     }
 };
@@ -84,6 +119,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         // Start data copy
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
+        UNIT_ASSERT_VALUES_EQUAL(0, Copier->GetBytesCopied());
         auto complete = Copier->Start();
 
         // Should transfer all ranges. One-by-one.
@@ -114,6 +150,17 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             SetWriteResult(
                 TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
                 false);
+            UNIT_ASSERT_VALUES_EQUAL(
+                (i + 1) * CopyRangeSize,
+                Copier->GetBytesCopied());
+            UNIT_ASSERT_VALUES_EQUAL(
+                Copier->GetBytesCopied() / CopyProgressSaveInterval,
+                CopyProgressNotifications.size());
+            if (!CopyProgressNotifications.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    CopyProgressNotifications.size() * CopyProgressSaveInterval,
+                    CopyProgressNotifications.back());
+            }
 
             if (i == 5) {
                 // Check state on 5th iteration
@@ -133,6 +180,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDDiskDataCopier::EResult::Ok,
             complete.GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(DefaultVChunkSize, Copier->GetBytesCopied());
 
         // All DDisk fully operational
         UNIT_ASSERT_VALUES_EQUAL(
@@ -142,6 +190,60 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST_F(ShouldAccumulatePartialRangesForCopyProgress, TFixture)
+    {
+        Init();
+
+        const ui64 firstCopyBytes = CopyProgressSaveInterval - BlockSize;
+        const ui64 firstCopyBlocks = firstCopyBytes / BlockSize;
+        ui64 rangeStart = VChunkBlockCount - firstCopyBlocks;
+
+        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, rangeStart * BlockSize);
+
+        ExpectedRange = TBlockRange64::WithLength(
+            rangeStart,
+            Min<ui64>(BlocksPerCopy, VChunkBlockCount - rangeStart));
+        auto complete = Copier->Start();
+
+        while (!complete.IsReady()) {
+            const ui64 rangeSize = ExpectedRange.Size();
+            SetReadResult({.Error = MakeError(S_OK)}, false);
+
+            rangeStart += rangeSize;
+            if (rangeStart < VChunkBlockCount) {
+                ExpectedRange = TBlockRange64::WithLength(
+                    rangeStart,
+                    Min<ui64>(BlocksPerCopy, VChunkBlockCount - rangeStart));
+            }
+            SetWriteResult(
+                TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+                false);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(firstCopyBytes, Copier->GetBytesCopied());
+        UNIT_ASSERT_VALUES_EQUAL(0, CopyProgressNotifications.size());
+
+        DirtyMap->UpdateWatermarkDebugOnly(
+            FreshDDisk,
+            (VChunkBlockCount - 1) * BlockSize);
+        ExpectedRange = TBlockRange64::WithLength(VChunkBlockCount - 1, 1);
+        complete = Copier->Start();
+
+        SetReadResult({.Error = MakeError(S_OK)}, false);
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
+
+        UNIT_ASSERT_VALUES_EQUAL(true, complete.IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(
+            CopyProgressSaveInterval,
+            Copier->GetBytesCopied());
+        UNIT_ASSERT_VALUES_EQUAL(1, CopyProgressNotifications.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            CopyProgressSaveInterval,
+            CopyProgressNotifications.front());
     }
 
     Y_UNIT_TEST_F(ShouldRetryOnReadError, TFixture)
@@ -233,6 +335,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDDiskDataCopier::EResult::Error,
             complete.GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(0, Copier->GetBytesCopied());
+        UNIT_ASSERT_VALUES_EQUAL(0, CopyProgressNotifications.size());
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange64::WithLength(0, 32768),
@@ -559,7 +663,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // Mark DDisk#1 completely fresh.
         DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
 
-        // Start data coping
+        // Start data copying
         ExpectedRange = TBlockRange64::WithLength(0, BlocksPerCopy);
         auto complete = Copier->Start();
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
@@ -594,7 +698,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             "H4+{Disabled,0};",
             DirtyMap->DebugPrintDDiskState());
 
-        // Start data coping again
+        // Start data copying again
         ExpectedRange = TBlockRange64::WithLength(256, BlocksPerCopy);
         complete = Copier->Start();
         UNIT_ASSERT_VALUES_EQUAL(false, complete.IsReady());
@@ -749,7 +853,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             "H1[256..511]wait;",
             DirtyMap->DebugPrintInflightSync());
 
-        // Complete flushes to start coping range #1.
+        // Complete flushes to start copying range #1.
         FinishFlushes(*DirtyMap, flushHints);
 
         // Coping range #1 in progress.

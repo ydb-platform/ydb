@@ -3122,39 +3122,43 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
-    const TTtlNotAllowedIndexTestConfig JsonTtlNotAllowedConfig{
-        .TextColumnType = "Json",
-        .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
-        .AlterAddIndex = R"(
-            ALTER TABLE TestTable ADD INDEX json_idx
-                GLOBAL USING json ON (Text);
-        )",
-        .ExpectedError = "Table with EIndexTypeGlobalJson index doesn't support TTL",
-    };
+    TTtlNotAllowedIndexTestConfig MakeJsonTtlNotAllowedConfig(TKikimrRunner& kikimr) {
+        const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
+        const char* enumType = compact ? "EIndexTypeGlobalJsonCompact" : "EIndexTypeGlobalJson";
+        return {
+            .TextColumnType = "Json",
+            .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
+            .AlterAddIndex = R"(
+                ALTER TABLE TestTable ADD INDEX json_idx
+                    GLOBAL USING json ON (Text);
+            )",
+            .ExpectedError = std::format("Table with {} index doesn't support TTL", enumType),
+        };
+    }
 
     Y_UNIT_TEST(TtlNotAllowed_Both) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(PrefixedJsonCreate) {

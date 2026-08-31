@@ -45,7 +45,7 @@ ALTER TOPIC topic_path SET (option = value[, ...]);
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs`: List of [codecs](../../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type: `String`.
+* `supported_codecs` — a list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}
 

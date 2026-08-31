@@ -512,6 +512,10 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
             for (const auto& future: futures) {
                 snapshots.push_back(future.GetValue());
             }
+            Sort(
+                snapshots,
+                [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
+                { return lhs.Index < rhs.Index; });
             return snapshots;
         });
 }

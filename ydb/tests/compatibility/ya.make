@@ -10,6 +10,7 @@ RECURSE(
     federated_queries
     s3_backups
     olap
+    kv
     streaming
     result_set_format
 )

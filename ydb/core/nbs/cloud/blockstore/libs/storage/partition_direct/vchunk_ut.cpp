@@ -321,10 +321,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None} "
-            "Enabled{+++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should stay the same too.
@@ -344,10 +341,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None} "
-            "Enabled{-++++}",
+            "[DBG0/V100]{Rotten,Primary,Primary,HandOff,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should be updated.
@@ -382,10 +376,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None} "
-            "Enabled{+++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should be updated.
@@ -449,9 +440,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirectBlockGroupHostCount + 1,
             AccessConfig(*vchunk).GetHostCount());
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None;None} Enabled{++++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
@@ -648,10 +637,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
-            "DDisk{Primary;Primary;Primary;None;None} "
-            "Enabled{+++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,HandOff,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should stay the same too.
@@ -671,10 +657,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;Primary;HandOff} "
-            "DDisk{Primary;Primary;Primary;Primary;None} "
-            "Enabled{-+++[0]+}",
+            "[DBG0/V100]{Rotten,Primary,Primary,Fresh,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should be updated.
@@ -710,10 +693,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;Primary;HandOff} "
-            "DDisk{Primary;Primary;Primary;Primary;None} "
-            "Enabled{++++[0]+}",
+            "[DBG0/V100]{Primary,Primary,Primary,Fresh,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should be updated.
@@ -734,19 +714,32 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             SetWriteResult({.Error = MakeError(S_OK)}, true);
         }
 
-        // Waiting for the coping to be completed.
+        // Waiting for the copying to be completed.
         {
             DrainExecutor(DirectBlockGroup->GetExecutor());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                PartitionDirectService->UpdateConfigRequests.size());
+            UNIT_ASSERT_VALUES_EQUAL(
+                CopyProgressSaveInterval,
+                *PartitionDirectService->UpdateConfigRequests.front()
+                     .Config.GetWatermark(3));
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                PartitionDirectService->UpdateConfigRequests.size());
+            UNIT_ASSERT(!PartitionDirectService->UpdateConfigRequests.front()
+                             .Config.GetWatermark(3)
+                             .has_value());
             UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
             DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[0/100] "
-            "PBuffer{Primary;Primary;Primary;Primary;HandOff} "
-            "DDisk{Primary;Primary;Primary;Primary;None} "
-            "Enabled{+++++}",
+            "[DBG0/V100]{Primary,Primary,Primary,Primary,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should be updated.

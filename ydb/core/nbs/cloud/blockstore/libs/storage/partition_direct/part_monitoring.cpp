@@ -135,6 +135,7 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
+        .BlockSize = VolumeConfig.GetBlockSize(),
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };
@@ -309,22 +310,17 @@ bool TPartitionActor::OnRenderAppHtmlPage(
              selectedPercentile,
              selectedLatencyOperation,
              requester,
-             actorSystem](const auto& future)
+             actorSystem]   //
+            (const NThreading::TFuture<TVector<TDbgSnapshot>>& future)
             {
                 TMonPageData data{
                     .Page = page,
                     .TabletInfo = tabletInfo,
                     .Dbgs = future.GetValue(),
+                    .SelectedDbg = selectedDbg,
                     .SelectedPercentile = selectedPercentile,
                     .SelectedLatencyOperation = selectedLatencyOperation,
                 };
-                if (selectedDbg) {
-                    data.SelectedDbg = static_cast<ui32>(*selectedDbg);
-                }
-                Sort(
-                    data.Dbgs,
-                    [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
-                    { return lhs.Index < rhs.Index; });
                 actorSystem->Send(
                     requester,
                     new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));

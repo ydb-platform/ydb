@@ -136,7 +136,7 @@ BELONGS ya.make
 
 KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/algorithm.hpp at line 6, include/boost/container/detail/construct_in_place.hpp at line 6, include/boost/container/detail/destroyers.hpp at line 6, include/boost/container/detail/is_pair.hpp at line 6, include/boost/container/detail/iterator.hpp at line 6, include/boost/container/detail/iterators.hpp at line 7, include/boost/container/detail/mpl.hpp at line 6, include/boost/container/detail/pair.hpp at line 6, include/boost/container/detail/transform_iterator.hpp at line 7, include/boost/container/detail/type_traits.hpp at line 6, include/boost/container/detail/value_init.hpp at line 6, include/boost/container/experimental/nest.hpp at line 7, include/boost/container/stable_vector.hpp at line 14
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/algorithm.hpp at line 6, include/boost/container/detail/construct_in_place.hpp at line 6, include/boost/container/detail/destroyers.hpp at line 6, include/boost/container/detail/is_pair.hpp at line 6, include/boost/container/detail/iterator.hpp at line 6, include/boost/container/detail/iterators.hpp at line 7, include/boost/container/detail/mpl.hpp at line 6, include/boost/container/detail/pair.hpp at line 6, include/boost/container/detail/transform_iterator.hpp at line 7, include/boost/container/detail/type_traits.hpp at line 6, include/boost/container/detail/value_init.hpp at line 6, include/boost/container/experimental/nest.hpp at line 8, include/boost/container/stable_vector.hpp at line 14
     License text:
         // Distributed under the Boost Software License, Version 1.0.
         // (See accompanying file LICENSE_1_0.txt or copy at
@@ -158,7 +158,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/algo
         include/boost/container/detail/transform_iterator.hpp [6:8]
         include/boost/container/detail/type_traits.hpp [5:7]
         include/boost/container/detail/value_init.hpp [5:7]
-        include/boost/container/experimental/nest.hpp [6:8]
+        include/boost/container/experimental/nest.hpp [7:9]
         include/boost/container/stable_vector.hpp [13:15]
 
 KEEP     BSL-1.0              2d6ab63dc95009634a63de40db7de32e
@@ -408,7 +408,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/comp
 
 KEEP     BSL-1.0              8457187f7136699ce1b6d6cfb4c2a46c
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/segtor.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/bit_utilities.hpp at line 5, include/boost/container/hub.hpp at line 6, include/boost/container/segtor.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2026. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -419,6 +419,8 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/segtor.hpp 
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
+        include/boost/container/detail/bit_utilities.hpp [3:5]
+        include/boost/container/hub.hpp [4:6]
         include/boost/container/segtor.hpp [3:5]
 
 KEEP     BSL-1.0              86a53b60341cbe61df8532f22feab8ef
@@ -435,6 +437,21 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/thre
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
         include/boost/container/detail/thread_mutex.hpp [3:5]
+
+KEEP     BSL-1.0              86dd26bb506eb28e76e6fe78adda2c0d
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/range_utils.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2024-2024. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/container/detail/range_utils.hpp [3:5]
 
 KEEP     BSL-1.0              901941bd35f9f19e23af80f6271c10c4
 BELONGS ya.make
@@ -509,6 +526,21 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/pmr/segtor.
     Files with this license:
         include/boost/container/pmr/segtor.hpp [3:5]
 
+KEEP     BSL-1.0              c01de0902348b7c9494d50eaacc721eb
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/pmr/hub.hpp at line 5
+    License text:
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+         * http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/container/pmr/hub.hpp [4:6]
+
 KEEP     BSL-1.0              d61752484f220755bd1f5e838c59307b
 BELONGS ya.make
 FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/addressof.hpp at line 5, include/boost/container/detail/alloc_helpers.hpp at line 5, include/boost/container/detail/iterator_to_raw_pointer.hpp at line 5, include/boost/container/detail/next_capacity.hpp at line 5, include/boost/container/detail/placement_new.hpp at line 7, include/boost/container/new_allocator.hpp at line 5
@@ -566,7 +598,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp a
 
 KEEP     BSL-1.0              ed6c702973aeac50a008f9671870703a
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/deque_impl.hpp at line 5, include/boost/container/experimental/pmr/nest.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/deque_impl.hpp at line 5, include/boost/container/experimental/pmr/nest.hpp at line 5, include/boost/container/experimental/segmented_all_of.hpp at line 5, include/boost/container/experimental/segmented_any_of.hpp at line 5, include/boost/container/experimental/segmented_copy.hpp at line 5, include/boost/container/experimental/segmented_copy_if.hpp at line 5, include/boost/container/experimental/segmented_copy_n.hpp at line 5, include/boost/container/experimental/segmented_count.hpp at line 5, include/boost/container/experimental/segmented_count_if.hpp at line 5, include/boost/container/experimental/segmented_equal.hpp at line 5, include/boost/container/experimental/segmented_fill.hpp at line 5, include/boost/container/experimental/segmented_fill_n.hpp at line 5, include/boost/container/experimental/segmented_find.hpp at line 5, include/boost/container/experimental/segmented_find_if.hpp at line 5, include/boost/container/experimental/segmented_find_if_not.hpp at line 5, include/boost/container/experimental/segmented_find_last.hpp at line 5, include/boost/container/experimental/segmented_find_last_if.hpp at line 5, include/boost/container/experimental/segmented_find_last_if_not.hpp at line 5, include/boost/container/experimental/segmented_for_each.hpp at line 5, include/boost/container/experimental/segmented_generate.hpp at line 5, include/boost/container/experimental/segmented_generate_n.hpp at line 5, include/boost/container/experimental/segmented_is_partitioned.hpp at line 5, include/boost/container/experimental/segmented_is_sorted.hpp at line 5, include/boost/container/experimental/segmented_is_sorted_until.hpp at line 5, include/boost/container/experimental/segmented_iterator_traits.hpp at line 5, include/boost/container/experimental/segmented_merge.hpp at line 5, include/boost/container/experimental/segmented_mismatch.hpp at line 5, include/boost/container/experimental/segmented_none_of.hpp at line 5, include/boost/container/experimental/segmented_partition.hpp at line 5, include/boost/container/experimental/segmented_partition_copy.hpp at line 5, include/boost/container/experimental/segmented_partition_point.hpp at line 5, include/boost/container/experimental/segmented_remove.hpp at line 5, include/boost/container/experimental/segmented_remove_copy.hpp at line 5, include/boost/container/experimental/segmented_remove_copy_if.hpp at line 5, include/boost/container/experimental/segmented_remove_if.hpp at line 5, include/boost/container/experimental/segmented_replace.hpp at line 5, include/boost/container/experimental/segmented_replace_if.hpp at line 5, include/boost/container/experimental/segmented_reverse.hpp at line 5, include/boost/container/experimental/segmented_reverse_copy.hpp at line 5, include/boost/container/experimental/segmented_search.hpp at line 5, include/boost/container/experimental/segmented_search_n.hpp at line 5, include/boost/container/experimental/segmented_set_difference.hpp at line 5, include/boost/container/experimental/segmented_set_intersection.hpp at line 5, include/boost/container/experimental/segmented_set_symmetric_difference.hpp at line 5, include/boost/container/experimental/segmented_set_union.hpp at line 5, include/boost/container/experimental/segmented_stable_partition.hpp at line 5, include/boost/container/experimental/segmented_swap_ranges.hpp at line 5, include/boost/container/experimental/segmented_transform.hpp at line 5, include/boost/container/experimental/wrapped_iterator.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2025-2026. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -579,6 +611,53 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/dequ
     Files with this license:
         include/boost/container/detail/deque_impl.hpp [3:5]
         include/boost/container/experimental/pmr/nest.hpp [3:5]
+        include/boost/container/experimental/segmented_all_of.hpp [3:5]
+        include/boost/container/experimental/segmented_any_of.hpp [3:5]
+        include/boost/container/experimental/segmented_copy.hpp [3:5]
+        include/boost/container/experimental/segmented_copy_if.hpp [3:5]
+        include/boost/container/experimental/segmented_copy_n.hpp [3:5]
+        include/boost/container/experimental/segmented_count.hpp [3:5]
+        include/boost/container/experimental/segmented_count_if.hpp [3:5]
+        include/boost/container/experimental/segmented_equal.hpp [3:5]
+        include/boost/container/experimental/segmented_fill.hpp [3:5]
+        include/boost/container/experimental/segmented_fill_n.hpp [3:5]
+        include/boost/container/experimental/segmented_find.hpp [3:5]
+        include/boost/container/experimental/segmented_find_if.hpp [3:5]
+        include/boost/container/experimental/segmented_find_if_not.hpp [3:5]
+        include/boost/container/experimental/segmented_find_last.hpp [3:5]
+        include/boost/container/experimental/segmented_find_last_if.hpp [3:5]
+        include/boost/container/experimental/segmented_find_last_if_not.hpp [3:5]
+        include/boost/container/experimental/segmented_for_each.hpp [3:5]
+        include/boost/container/experimental/segmented_generate.hpp [3:5]
+        include/boost/container/experimental/segmented_generate_n.hpp [3:5]
+        include/boost/container/experimental/segmented_is_partitioned.hpp [3:5]
+        include/boost/container/experimental/segmented_is_sorted.hpp [3:5]
+        include/boost/container/experimental/segmented_is_sorted_until.hpp [3:5]
+        include/boost/container/experimental/segmented_iterator_traits.hpp [3:5]
+        include/boost/container/experimental/segmented_merge.hpp [3:5]
+        include/boost/container/experimental/segmented_mismatch.hpp [3:5]
+        include/boost/container/experimental/segmented_none_of.hpp [3:5]
+        include/boost/container/experimental/segmented_partition.hpp [3:5]
+        include/boost/container/experimental/segmented_partition_copy.hpp [3:5]
+        include/boost/container/experimental/segmented_partition_point.hpp [3:5]
+        include/boost/container/experimental/segmented_remove.hpp [3:5]
+        include/boost/container/experimental/segmented_remove_copy.hpp [3:5]
+        include/boost/container/experimental/segmented_remove_copy_if.hpp [3:5]
+        include/boost/container/experimental/segmented_remove_if.hpp [3:5]
+        include/boost/container/experimental/segmented_replace.hpp [3:5]
+        include/boost/container/experimental/segmented_replace_if.hpp [3:5]
+        include/boost/container/experimental/segmented_reverse.hpp [3:5]
+        include/boost/container/experimental/segmented_reverse_copy.hpp [3:5]
+        include/boost/container/experimental/segmented_search.hpp [3:5]
+        include/boost/container/experimental/segmented_search_n.hpp [3:5]
+        include/boost/container/experimental/segmented_set_difference.hpp [3:5]
+        include/boost/container/experimental/segmented_set_intersection.hpp [3:5]
+        include/boost/container/experimental/segmented_set_symmetric_difference.hpp [3:5]
+        include/boost/container/experimental/segmented_set_union.hpp [3:5]
+        include/boost/container/experimental/segmented_stable_partition.hpp [3:5]
+        include/boost/container/experimental/segmented_swap_ranges.hpp [3:5]
+        include/boost/container/experimental/segmented_transform.hpp [3:5]
+        include/boost/container/experimental/wrapped_iterator.hpp [3:5]
 
 KEEP     BSL-1.0              f328b5d41ed9ab62066d53579e348e68
 BELONGS ya.make

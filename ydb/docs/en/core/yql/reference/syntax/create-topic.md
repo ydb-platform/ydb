@@ -36,7 +36,7 @@ parameters not explicitly specified are also set to defaults (for both the topic
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — a list of [codecs](../../../../concepts/datamodel/topic#message-codec) supported by the topic. The value type is `String`.
+* `supported_codecs` — a list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. The value type is `String`.
 
 {% endif %}
 
@@ -52,13 +52,6 @@ The following command creates a topic without readers with default settings:
 ```yql
 CREATE TOPIC `my_topic`;
 ```
-
-
-{% if feature_topic_codecs %}
-
-* `supported_codecs`: List of [codecs](../../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type: `String`.
-
-{% endif %}
 
 To create a topic with an important reader and a data retention period of 1 day, run the command:
 

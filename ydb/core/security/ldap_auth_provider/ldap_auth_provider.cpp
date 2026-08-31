@@ -355,7 +355,7 @@ private:
             TStringBuilder logErrorMessage;
             logErrorMessage << "Could not get dn for the first entry matching " << FilterCreator.GetFilter(request.Login)
                             << " on server " << UrisCreator.GetUris() << ". " << NKikimrLdap::LdapError(*request.Ld);
-            YDB_LOG_DEBUG("Could not get dn for the first entry",
+            YDB_LOG_DEBUG("Could not get DN for the first entry",
                 {"filter", FilterCreator.GetFilter(request.Login)},
                 {"server", UrisCreator.GetUris()},
                 {"error", NKikimrLdap::LdapError(*request.Ld)}

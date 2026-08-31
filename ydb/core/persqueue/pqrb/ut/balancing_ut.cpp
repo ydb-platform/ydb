@@ -298,6 +298,21 @@ Y_UNIT_TEST(SpecialParentJoinsCommonFamilyOnMerge) {
     env.AssertLocked(2, "session-common");
 }
 
+Y_UNIT_TEST(SpecialParentJoinsCommonFamilyOnMergeAfterCommonFinish) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+    env.Finish("session-common", 0);
+    env.Finish("session-pref", 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-common");
+    env.AssertLocked(2, "session-common");
+}
+
 Y_UNIT_TEST(MergeFreeFamilyIntoReleasingKeepsPartitionMapping) {
     TScaleEnv env;
     env.CreateParents(2);

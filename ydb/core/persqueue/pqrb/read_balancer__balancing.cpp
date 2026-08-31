@@ -674,6 +674,8 @@ std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const TPartitions
 
     for (auto partitionId : partitions) {
         auto* partition = GetPartition(partitionId);
+        // Unreadable partitions (lonely explicit-partition families may lock them
+        // before parents are processed) count as active so session load includes them.
         if (IsReadable(partitionId) && partition && partition->IsInactive()) {
             ++inactivePartitionCount;
         } else {
@@ -705,6 +707,17 @@ void TPartitionFamily::UpdateSpecialSessions() {
             hasChanges = true;
         }
     } else {
+        for (auto it = SpecialSessions.begin(); it != SpecialSessions.end();) {
+            auto* session = it->second;
+            if (session->WithGroups()
+                    && session->AllPartitionsReadable(Partitions)
+                    && session->AllPartitionsReadable(WantedPartitions)) {
+                ++it;
+            } else {
+                SpecialSessions.erase(it++);
+                hasChanges = true;
+            }
+        }
         for (auto& [_, session] : Consumer.Sessions) {
             if (session->WithGroups() && session->AllPartitionsReadable(Partitions) && session->AllPartitionsReadable(WantedPartitions)) {
                 auto [_, inserted] = SpecialSessions.try_emplace(session->Pipe, session);
@@ -1364,13 +1377,18 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                         }
 
                         if (other != family) {
+                            auto* mergeLeft = family;
+                            auto* mergeRight = other;
                             auto [f, v] = MergeFamilies(family, other, ctx);
                             family = f;
-                            // MergeFamilies may Destroy `other`; only inspect it if
-                            // the merge was deferred (v == false).
-                            const bool joiningCommon = !v
-                                && other->TargetStatus == TPartitionFamily::ETargetStatus::Merge
-                                && other->MergeTo == family->Id;
+                            // MergeFamilies may swap lhs/rhs. After a swap `other` can
+                            // alias the merge target, so check both original pointers.
+                            // Inspect them only if the merge was deferred (v == false).
+                            const bool joiningCommon = !v && (
+                                (mergeRight->TargetStatus == TPartitionFamily::ETargetStatus::Merge
+                                    && mergeRight->MergeTo == family->Id)
+                                || (mergeLeft->TargetStatus == TPartitionFamily::ETargetStatus::Merge
+                                    && mergeLeft->MergeTo == family->Id));
                             allParentsMerged = allParentsMerged && (v || joiningCommon);
                         }
                     }

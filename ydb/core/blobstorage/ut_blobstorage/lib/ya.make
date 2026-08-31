@@ -36,6 +36,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/scheme_board
     ydb/core/util
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy

@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/lfalloc/alloc_profiler
     ydb/core/blob_depot
     ydb/library/yql/providers/pq/gateway/dummy
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     ydb/tests/tools/fqrun/src
     ydb/tests/tools/kqprun/runlib
     yql/essentials/parser/pg_wrapper
@@ -24,6 +25,7 @@ PEERDIR(
 PEERDIR(
     yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/re2
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

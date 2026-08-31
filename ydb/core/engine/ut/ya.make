@@ -14,6 +14,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     ydb/core/engine/minikql
     ydb/core/kqp/ut/common
     ydb/core/tablet_flat/test/libs/table

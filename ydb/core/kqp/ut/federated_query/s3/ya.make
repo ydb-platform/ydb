@@ -15,6 +15,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util
+    yql/essentials/sql/v1
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common

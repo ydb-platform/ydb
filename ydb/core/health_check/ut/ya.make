@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     ydb/core/testlib/default
+    yql/essentials/sql/v1_dummy
 )
 
 SRCS(

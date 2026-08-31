@@ -384,4 +384,8 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
+    // Gates both legs of ColumnShard group decommission: the MoveData rewrite and the
+    // CutHistory wrapper. Deliberately not EnableCutHistory, which governs the tablet_sys
+    // and tablet_executor cutters on channels 0/1.
+    optional bool EnableColumnshardGroupDecommission = 328 [default = false];
 }

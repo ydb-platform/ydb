@@ -50,12 +50,6 @@ CREATE TOPIC topic_path (
 CREATE TOPIC `my_topic`;
 ```
 
-{% if feature_topic_codecs %}
-
-* `supported_codecs` - список [кодеков](../../../../concepts/datamodel/topic#message-codec), поддерживаемых топиком. Тип значения - `String`.
-
-{% endif %}
-
 Чтобы создать топик с важным читателем и временем хранения данных 1 сутки, выполните команду:
 
 ```yql

@@ -481,7 +481,11 @@ class StreamingTestBase(TestYdsBase):
         kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
     def wait_completed_checkpoints(
-        self, kikimr: Kikimr, query_name: str, timeout: int = plain_or_under_sanitizer_wrapper(120, 150), checkpoints_count=2
+        self,
+        kikimr: Kikimr,
+        query_name: str,
+        timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
+        checkpoints_count=2,
     ) -> None:
         path = f"{kikimr.get_database_name()}/{query_name}"
         print(f"wait_completed_checkpoints {path}")

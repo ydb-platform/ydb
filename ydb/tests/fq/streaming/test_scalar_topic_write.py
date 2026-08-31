@@ -375,7 +375,11 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 self._expect_error(
                     kikimr,
                     f'INSERT INTO `{unavailable_source}`.my_topic SELECT "Data";',
-                    ["Cannot find table", "/Root/unavailable_source", "my_topic", "because it does not exist or you do not have access permissions."],
+                    [
+                        "Cannot find table",
+                        f"{kikimr.endpoint.database}/{unavailable_source}.[my_topic]",
+                        "because it does not exist or you do not have access permissions.",
+                    ],
                     client=test_client,
                 )
         finally:

@@ -18,6 +18,44 @@
     cursor: pointer;
 }
 
+.dbg-config-legend-item {
+    text-align: center;
+    padding: 5;
+}
+.dbg-config-both {
+    background-color: #dff0d8;
+}
+.dbg-config-ddisk {
+    background-color: #d9edf7;
+}
+.dbg-config-pbuffer {
+    background-color: #b8daff;
+}
+
+.chaos-cell {
+    text-align: center;
+}
+.chaos-toggle-form {
+    display: inline-block;
+    margin: 0;
+    vertical-align: middle;
+}
+.chaos-toggle {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid #888;
+    border-radius: 2px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.chaos-toggle-on {
+    background-color: #5cb85c;
+}
+.chaos-toggle-off {
+    background-color: #d9534f;
+}
+
 .lat-controls {
     margin: 0.5em 0;
 }

@@ -1,6 +1,48 @@
 # Exporting data to the file system
 
+<<<<<<< HEAD
 The `tools dump` command dumps the database data and objects schema to the client file system, in the format described in the [File system](../file-structure.md):
+=======
+## Cluster {#cluster}
+
+The `admin cluster dump` command dumps the cluster' metadata to the client file system in the format described in the [{#T}](../file-structure.md) article:
+
+```bash
+{{ ydb-cli }} [connection options] admin cluster dump [options]
+```
+
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+{% include [dump-options.md](./dump-options.md) %}
+
+A [cluster configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin cluster config fetch` command.
+
+## Database {#db}
+
+The `admin database dump` command dumps the database' data and metadata to the client file system in the format described in [{#T}](../file-structure.md):
+
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
+
+```bash
+{{ ydb-cli }} [connection options] admin database dump [options]
+```
+
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+{% include [dump-options.md](./dump-options.md) %}
+
+A [database configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin database config fetch` command.
+
+## Schema objects {#schema-objects}
+
+The `tools dump` command dumps the schema objects to the client file system in the format described in [{#T}](../file-structure.md):
+
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
+>>>>>>> 3ec4c5a78c1 (docs: remove legacy EN configuration overview (#51480))
 
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]
@@ -54,5 +96,4 @@ To a specific directory:
 ```bash
 {{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
-
 

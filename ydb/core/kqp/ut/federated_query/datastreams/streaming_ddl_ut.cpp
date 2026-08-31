@@ -5231,7 +5231,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` must be 'exactly_once' or 'at_least_once'");
     }
 
-    Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingEnabled, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingEnabled, TStreamingWithSchemaSecretsTestFixture) {
         {
             auto& featureFlags = *SetupAppConfig().MutableFeatureFlags();
             featureFlags.SetEnableExactlyOnceTopicsWriting(true);
@@ -5247,7 +5247,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char pqSourceName[] = "sourceName";
         constexpr char pqSourceNameNoAuth[] = "sourceNameNoAuth";
-        CreatePqSource(pqSourceName);
+        CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets */ true);
         CreatePqSource(pqSourceNameNoAuth);
 
         ExecQuery(fmt::format(R"(

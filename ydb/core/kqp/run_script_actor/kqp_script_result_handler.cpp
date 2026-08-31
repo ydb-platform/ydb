@@ -75,6 +75,10 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
     class TSaveResultsState {
         class TResultSetMeta {
         public:
+            const Ydb::Query::Internal::ResultSetMeta& GetMeta() const {
+                return Meta;
+            }
+
             Ydb::Query::Internal::ResultSetMeta& MutableMeta() {
                 JsonMeta = std::nullopt;
                 return Meta;
@@ -772,9 +776,17 @@ private:
         });
 
         const auto& saverId = Register(CreateSaveScriptExecutionResultMetaActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, std::move(metas), Ctx->LeaseGeneration));
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Save result meta for result sets",
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Save result meta for result sets",
             {"logPrefix", LogPrefix()},
             {"resultsCount", resultsCount},
+            {"resultSetsSizes", [infos = &SaveResultsState.ResultSetInfos]() {
+                auto results = TStringBuilder() << "|";
+                for (const auto& info : *infos) {
+                    const Ydb::Query::Internal::ResultSetMeta& meta = info.Meta.GetMeta();
+                    results << meta.truncated() << ":" << meta.finished() << ":" << meta.number_rows() << "|";
+                }
+                return results;
+            }()},
             {"saverId", saverId});
         SaveResultsState.WaitSaveMeta = true;
     }

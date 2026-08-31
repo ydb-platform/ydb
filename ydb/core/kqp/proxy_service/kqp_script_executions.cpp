@@ -3666,7 +3666,8 @@ private:
             {"resultSetIndex", ResultSetIndex},
             {"offset", Offset},
             {"rowsLimit", RowsLimit},
-            {"savedRowCount", NumberOfSavedRows});
+            {"savedRowCount", NumberOfSavedRows},
+            {"hasMoreResults", HasMoreResults});
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionResultQuery::FetchScriptResults
@@ -3771,7 +3772,8 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             YDB_LOG_DEBUG("[ScriptExecutions] Successfully fetched rows",
                 {"logPrefix", LogPrefix()},
-                {"rowCount", ResultSet.rows_size()});
+                {"rowCount", ResultSet.rows_size()},
+                {"hasMoreResults", HasMoreResults});
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
@@ -3779,6 +3781,8 @@ private:
     }
 
     void CancelFetchQuery() {
+        YDB_LOG_DEBUG("[ScriptExecutions] Cancelling fetch query",
+            {"logPrefix", LogPrefix()});
         HasMoreResults = true;
         CancelStreamQuery();
     }

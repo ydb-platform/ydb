@@ -8,15 +8,23 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
 {% list tabs %}
 
+- Go
+
+    ```go
+    err := db.Coordination().CreateNode(ctx,
+        "/path/to/mynode",
+    )
+    ```
+
 - C++
 
-  ```cpp
-  TClient client(driver);
-  auto status = client
-      .CreateNode("/path/to/mynode")
-      .ExtractValueSync();
-  Y_ABORT_UNLESS(status.IsSuccess());
-  ```
+    ```cpp
+    TClient client(driver);
+    auto status = client
+        .CreateNode("/path/to/mynode")
+        .ExtractValueSync();
+    Y_ABORT_UNLESS(status.IsSuccess());
+    ```
 
 
   When creating, you can optionally specify `TNodeSettings` with the following settings:
@@ -33,58 +41,41 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
     - The smaller the value, the higher the chance of false triggers, where a live leader may shut down as a precaution because it cannot be sure that this period has not elapsed on the new leader.
     - It must be strictly greater than `SelfCheckPeriod`.
 
-- Go
-
-  ```go
-  err := db.Coordination().CreateNode(ctx,
-      "/path/to/mynode",
-  )
-  ```
-
 - Java
 
-  To work with coordination nodes, add the Maven artifact `ydb-sdk-coordination` (module `tech.ydb.coordination.*`). Coordination nodes are needed when multiple instances of an application must coordinate access to resources – see the [coordination node](../../concepts/datamodel/coordination-node.md) section for more details.
+  ```java
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  ```
 
-  Below is a complete example: connecting via `GrpcTransport`, creating a node, and checking via `describeNode`.
+
+  A node is created by calling `createNode` with the full path to the node in the database. The database path prefix can be taken from `client.getDatabase()`.
+
+  If necessary, set the node configuration via [NodeConfig](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java) using the chain `NodeConfig.create().with…`. Available parameters: periods `SelfCheckPeriod` and `SessionGracePeriod`, read consistency and session connection modes (`readConsistencyMode`, `attachConsistencyMode`), rate limiter counter mode (`rateLimiterCountersMode`). Default values match the description for C++ (see above). The resulting `NodeConfig` is passed to `CoordinationNodeSettings`.
 
 
   ```java
+  import java.time.Duration;
+
   import tech.ydb.coordination.CoordinationClient;
   import tech.ydb.coordination.description.NodeConfig;
-  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.coordination.settings.CoordinationNodeSettings;
 
-  public class CreateCoordinationNodeExample {
+  String nodePath = client.getDatabase() + "/path/to/mynode";
 
-      private static final String NODE_PATH_SUFFIX = "/path/to/mynode";
+  NodeConfig config = NodeConfig.create()
+      .withDurationsConfig(Duration.ofSeconds(1), Duration.ofSeconds(10))
+      .withReadConsistencyMode(NodeConfig.ConsistencyMode.RELAXED)
+      .withAttachConsistencyMode(NodeConfig.ConsistencyMode.STRICT);
 
-      public static void main(String[] args) {
-          // Connection string from environment variable or default local YDB
-          String connectionString = System.getenv().getOrDefault(
-                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+  CoordinationNodeSettings settings = CoordinationNodeSettings.newBuilder()
+      .withNodeConfig(config)
+      .build();
 
-          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-               CoordinationClient client = CoordinationClient.newClient(transport).build()) {
-
-              // Full path to the node = database path + node name in the namespace
-              String nodePath = client.getDatabase() + NODE_PATH_SUFFIX;
-
-              // Create a coordination node with default settings
-              client.createNode(nodePath).join().expectSuccess("не удалось создать узел");
-
-              // Verify that the node is created: read its configuration
-              NodeConfig config = client.describeNode(nodePath).join().getValue();
-              System.out.println("Узел создан: " + nodePath);
-              System.out.println("SelfCheckPeriod: " + config.getSelfCheckPeriod());
-              System.out.println("SessionGracePeriod: " + config.getSessionGracePeriod());
-          }
-      }
-  }
+  client.createNode(nodePath, settings).join().expectSuccess("create node failed");
   ```
 
 
-  If needed, set the node configuration via [NodeConfig](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java), using the `NodeConfig.create().with…` chain. Available parameters: periods `SelfCheckPeriod` and `SessionGracePeriod`, read and session-connection consistency modes (`readConsistencyMode`, `attachConsistencyMode`), rate-limiter counters mode (`rateLimiterCountersMode`). Default values match the description for C++ (see above). The prepared `NodeConfig` is passed to `CoordinationNodeSettings` and `createNode(nodePath, settings)`.
-
-  Additionally, `alterNode` (configuration change) and `dropNode` (node removal) are available.
+  Additionally available are `alterNode` (configuration change), `dropNode` (node deletion), and `describeNode` (reading the current configuration).
 
 - Python
 
@@ -110,10 +101,6 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
   {% endlist %}
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - JavaScript
 
   ```javascript
@@ -125,7 +112,7 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
 - Rust
 
-  The coordination client is returned from [`Client::coordination_client`](https://docs.rs/ydb/latest/ydb/struct.Client.html#method.coordination_client). A node is created via [`CoordinationClient::create_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_node) with a path and [`NodeConfig`](https://docs.rs/ydb/latest/ydb/struct.NodeConfig.html) (via [`NodeConfigBuilder`](https://docs.rs/ydb/latest/ydb/struct.NodeConfigBuilder.html)). Also available are [`alter_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.alter_node), [`drop_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.drop_node), and [`describe_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.describe_node). Full example — [`mutex.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/mutex.rs).
+  The coordination client is returned from [`Client::coordination_client`](https://docs.rs/ydb/latest/ydb/struct.Client.html#method.coordination_client). The node is created via [`CoordinationClient::create_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_node) with a path and [`NodeConfig`](https://docs.rs/ydb/latest/ydb/struct.NodeConfig.html) (via [`NodeConfigBuilder`](https://docs.rs/ydb/latest/ydb/struct.NodeConfigBuilder.html)). Also available are [`alter_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.alter_node), [`drop_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.drop_node), [`describe_node`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.describe_node). A complete example is [`mutex.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/mutex.rs).
 
 
   ```rust
@@ -155,15 +142,23 @@ To get started, the client must establish a session within which it will perform
 
 {% list tabs %}
 
+- Go
+
+    ```go
+    session, err := db.Coordination().CreateSession(ctx,
+        "/path/to/mynode", // Coordination Node name in the database
+    )
+    ```
+
 - C++
 
-  ```cpp
-  TClient client(driver);
-  const TSession& session = client
-     .StartSession("/path/to/mynode")
-     .ExtractValueSync()
-     .ExtractResult();
-  ```
+    ```cpp
+    TClient client(driver);
+    const TSession& session = client
+       .StartSession("/path/to/mynode")
+       .ExtractValueSync()
+       .ExtractResult();
+    ```
 
 
   When establishing a session, you can optionally pass a `TSessionSettings` structure with the following settings:
@@ -177,57 +172,25 @@ To get started, the client must establish a session within which it will perform
   - `OnStopped` – called when the session stops attempting to restore the connection to the service, which can be useful for establishing a new connection.
   - `Timeout` – the maximum timeout during which the session can be restored after losing connection to the service.
 
-- Go
-
-  ```go
-  session, err := db.Coordination().CreateSession(ctx,
-      "/path/to/mynode", // name of the Coordination Node in the database
-  )
-  ```
-
 - Java
 
-  Before working with [semaphores](../../concepts/datamodel/coordination-node.md#semaphore) the client opens a session (see [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)): calling `createSession` creates a session object, and `connect()` establishes a bidirectional gRPC stream with a node. Retry parameters and connection timeout are set in [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
-
-  Typical scenario: after a successful `connect()` you perform semaphore operations, then close the session via `close()` (conveniently — try-with-resources). While the session is active, the SDK automatically retries the connection on network failures according to the settings.
+  Session (see [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) is created via `createSession`; to establish a bidirectional gRPC stream with a node, you need to call `connect()` (asynchronously, returns `CompletableFuture<Status>`). Retry parameters and connection timeout are set in [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
 
 
   ```java
-  import tech.ydb.coordination.CoordinationClient;
   import tech.ydb.coordination.CoordinationSession;
   import tech.ydb.coordination.settings.CoordinationSessionSettings;
-  import tech.ydb.core.grpc.GrpcTransport;
 
-  public class CoordinationSessionExample {
+  CoordinationSession session = client.createSession(
+      "/path/to/mynode",
+      CoordinationSessionSettings.newBuilder().build()
+  );
 
-      private static final String NODE_PATH_SUFFIX = "/path/to/mynode";
-
-      public static void main(String[] args) {
-          String connectionString = System.getenv().getOrDefault(
-                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-
-          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-               CoordinationClient client = CoordinationClient.newClient(transport).build()) {
-
-              String nodePath = client.getDatabase() + NODE_PATH_SUFFIX;
-              client.createNode(nodePath).join().expectSuccess("не удалось создать узел");
-
-              // try-with-resources guarantees the call to close() and stopping the thread with the node
-              try (CoordinationSession session = client.createSession(
-                      nodePath,
-                      CoordinationSessionSettings.newBuilder().build())) {
-
-                  // Establish a connection to the coordination node
-                  session.connect().join().expectSuccess("не удалось подключить сессию");
-                  System.out.println("Сессия подключена, id=" + session.getId());
-
-                  // ... semaphore operations (see the “Working with semaphores” section) ...
-
-              } // session.close() — explicit session termination
-          }
-      }
-  }
+  session.connect().join().expectSuccess("connect failed");
   ```
+
+
+  Typical scenario: after a successful `connect()` you perform semaphore operations, then close the session via `close()` (conveniently — try-with-resources). While the session is active, the SDK automatically retries the connection on network failures according to the settings.
 
 - Python
 
@@ -240,7 +203,7 @@ To get started, the client must establish a session within which it will perform
 
     client = driver.coordination_client
     with client.session("/path/to/mynode") as session:
-        # working with the session
+        # working with session
         pass
     ```
 
@@ -251,15 +214,11 @@ To get started, the client must establish a session within which it will perform
 
     client = driver.coordination_client
     async with client.session("/path/to/mynode") as session:
-        # working with the session
+        # working with session
         pass
     ```
 
   {% endlist %}
-
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -272,7 +231,7 @@ To get started, the client must establish a session within which it will perform
 
 - Rust
 
-  The session is created by [`CoordinationClient::create_session`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_session) with a path to a node and [`SessionOptions`](https://docs.rs/ydb/latest/ydb/struct.SessionOptions.html) ([`SessionOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.SessionOptionsBuilder.html): timeout, description, etc.). The thread with the node is started inside the session constructor; there is no separate `connect` call as in Java.
+  The session is created by [`CoordinationClient::create_session`](https://docs.rs/ydb/latest/ydb/struct.CoordinationClient.html#method.create_session) with a path to the node and [`SessionOptions`](https://docs.rs/ydb/latest/ydb/struct.SessionOptions.html) ([`SessionOptionsBuilder`](https://docs.rs/ydb/latest/ydb/struct.SessionOptionsBuilder.html): timeout, description, etc.). The stream to the node is started inside the session constructor; there is no separate `connect` call, as in Java.
 
 
   ```rust
@@ -298,21 +257,17 @@ Your client application must monitor the session state, because it can rely on t
 
 {% list tabs %}
 
-- C++
-
-  In the C++ SDK, the established session maintains and automatically restores the connection to the {{ ydb-short-name }} cluster in the background.
-
 - Go
 
   In the Go SDK, a session context `session.Context()` is used to track such situations; it ends together with the session. The SDK independently handles transport-level errors and restores the connection to the service, attempting to restore the session when possible. Thus, you only need to monitor the session context to react promptly to its loss.
 
+- C++
+
+  In the C++ SDK, the established session in the background maintains and automatically restores the connection to the {{ ydb-short-name }} cluster.
+
 - Python
 
   In the Python SDK, the session automatically restores the connection to the {{ ydb-short-name }} cluster on failures. It is recommended to use a context manager (`with` or `async with`) to ensure the session is closed when exiting the block. When working with semaphores via a context manager (`with session.semaphore(name)` or `async with session.semaphore(name)`), the semaphore is automatically released upon exiting the block, and the session is closed when the context ends.
-
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -326,7 +281,7 @@ Your client application must monitor the session state, because it can rely on t
 
 - Rust
 
-  With [`CoordinationSession`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html) call [`alive`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.alive): it returns [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html) — it is cancelled when the session ends (similar to Go's context tracking). When releasing [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html) or when calling `Drop` on the session, the semaphore release is sent to the server in the background.
+  In [`CoordinationSession`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html), call [`alive`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.alive): it returns [`CancellationToken`](https://docs.rs/tokio-util/latest/tokio_util/sync/struct.CancellationToken.html), which is canceled when the session ends (similar to context tracking in Go). When releasing [`Lease`](https://docs.rs/ydb/latest/ydb/struct.Lease.html) or upon `Drop` of the session, the semaphore release is sent to the server in the background.
 
 - PHP
 
@@ -342,41 +297,41 @@ When creating a semaphore you can specify its limit. The limit defines the maxim
 
 {% list tabs %}
 
+- Go
+
+    ```go
+    err := session.CreateSemaphore(ctx,
+        "my-semaphore", // semaphore name
+        10              // semaphore limit
+    )
+    ```
+
 - C++
 
-  ```cpp
-  session
-      .CreateSemaphore(
-          "my-semaphore",  // semaphore name
-          10               // semaphore limit
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .CreateSemaphore(
+            "my-semaphore",  // semaphore name
+            10               // semaphore limit
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 
   You can also pass a string when creating a semaphore, which will be stored with the semaphore and returned when it is acquired:
 
 
-  ```cpp
-  session
-      .CreateSemaphore(
-          "my-semaphore",  // semaphore name
-          10,              // semaphore limit
-          "my-data"        // semaphore data
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
-
-- Go
-
-  ```go
-  err := session.CreateSemaphore(ctx,
-      "my-semaphore", // semaphore name
-      10              // semaphore limit
-  )
-  ```
+    ```cpp
+    session
+        .CreateSemaphore(
+            "my-semaphore",  // semaphore name
+            10,              // semaphore limit
+            "my-data"        // semaphore data
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 - Python
 
@@ -391,7 +346,7 @@ When creating a semaphore you can specify its limit. The limit defines the maxim
 
     client = driver.coordination_client
     with client.session("/path/to/mynode") as session:
-        # the semaphore will be created on the first acquire() with a limit of 10
+        # the semaphore will be created on the first acquire() with limit 10
         semaphore = session.semaphore("my-semaphore", 10)
     ```
 
@@ -402,15 +357,11 @@ When creating a semaphore you can specify its limit. The limit defines the maxim
 
     client = driver.coordination_client
     async with client.session("/path/to/mynode") as session:
-        # the semaphore will be created on the first acquire() with a limit of 10
+        # the semaphore will be created on the first acquire() with limit 10
         semaphore = session.semaphore("my-semaphore", 10)
     ```
 
   {% endlist %}
-
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -424,90 +375,24 @@ When creating a semaphore you can specify its limit. The limit defines the maxim
 
 - Java
 
-  Below is a complete example of a semaphore lifecycle [semaphore](../../concepts/datamodel/coordination-node.md#semaphore): creating a node and session, creating the semaphore, acquiring, updating and reading data, and releasing. A persistent semaphore must be created explicitly (`createSemaphore`); ephemeral semaphores are created on first acquire (see the “Acquiring a semaphore” section).
+  The semaphore is created explicitly by the `createSemaphore` method of the connected session. You can pass user binary data stored with the semaphore (`byte[] data`); the method variant without the `data` parameter is equivalent to passing `null`. If a semaphore with this name already exists, the operation completes with the “already exists” status.
 
 
   ```java
-  import java.nio.charset.StandardCharsets;
-  import java.time.Duration;
-
-  import tech.ydb.coordination.CoordinationClient;
-  import tech.ydb.coordination.CoordinationSession;
-  import tech.ydb.coordination.SemaphoreLease;
-  import tech.ydb.coordination.description.SemaphoreDescription;
-  import tech.ydb.coordination.settings.DescribeSemaphoreMode;
-  import tech.ydb.core.grpc.GrpcTransport;
-
-  public class CoordinationSemaphoreExample {
-
-      private static final String NODE_PATH_SUFFIX = "/path/to/mynode";
-      private static final String SEMAPHORE_NAME = "my-semaphore";
-
-      public static void main(String[] args) {
-          String connectionString = System.getenv().getOrDefault(
-                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-
-          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-               CoordinationClient client = CoordinationClient.newClient(transport).build()) {
-
-              String nodePath = client.getDatabase() + NODE_PATH_SUFFIX;
-
-              // 1. Create a coordination node
-              client.createNode(nodePath).join().expectSuccess("не удалось создать узел");
-
-              try (CoordinationSession session = client.createSession(nodePath)) {
-                  session.connect().join().expectSuccess("не удалось подключить сессию");
-
-                  byte[] initialData = "my-data".getBytes(StandardCharsets.UTF_8);
-
-                  // 2. Create a semaphore with a limit of 10 and initial data
-                  session.createSemaphore(SEMAPHORE_NAME, 10, initialData)
-                          .join().expectSuccess("не удалось создать семафор");
-
-                  // 3. Acquire 5 tokens; wait in the queue for no more than 30 seconds
-                  SemaphoreLease lease = session
-                          .acquireSemaphore(SEMAPHORE_NAME, 5, Duration.ofSeconds(30))
-                          .join().getValue();
-
-                  try {
-                      // 4. Update the data attached to the semaphore
-                      byte[] updatedData = "updated-data".getBytes(StandardCharsets.UTF_8);
-                      session.updateSemaphore(SEMAPHORE_NAME, updatedData)
-                              .join().expectSuccess("не удалось обновить данные семафора");
-
-                      // 5. Read the current state of the semaphore
-                      SemaphoreDescription description = session
-                              .describeSemaphore(SEMAPHORE_NAME, DescribeSemaphoreMode.DATA_ONLY)
-                              .join().getValue();
-
-                      System.out.println("Имя: " + description.getName());
-                      System.out.println("Лимит: " + description.getLimit());
-                      System.out.println("Захвачено: " + description.getCount());
-                      System.out.println("Данные: "
-                              + new String(description.getData(), StandardCharsets.UTF_8));
-
-                  } finally {
-                      // 6. Release the acquired tokens
-                      lease.release().join().expectSuccess("не удалось освободить семафор");
-                  }
-              }
-          }
-      }
-  }
+  session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
+      .join()
+      .expectSuccess("create semaphore failed");
   ```
-
-
-  If a semaphore with that name already exists, `createSemaphore` returns a “already exists” status. The version without the `data` parameter is equivalent to passing `null`.
 
 - Rust
 
-  [`CoordinationSession::create_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.create_semaphore) takes a name, a limit, and arbitrary bytes `data` stored in the semaphore.
+  [`CoordinationSession::create_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.create_semaphore) accepts a name, a limit, and arbitrary bytes `data` stored with the semaphore.
 
 
   ```rust
   session.create_semaphore("my-semaphore", 10, vec![]).await?;
 
-  // or with custom data stored in the semaphore:
+  // or with user data stored with the semaphore:
   session
       .create_semaphore("other-semaphore", 10, b"my-data".to_vec())
       .await?;
@@ -525,17 +410,29 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
 {% list tabs %}
 
+- Go
+
+    ```go
+    lease, err := session.AcquireSemaphore(ctx,
+        "my-semaphore",  // semaphore name
+        5,              // value to increase semaphore by
+    )
+    ```
+
+
+  To cancel waiting to acquire the semaphore, simply cancel the context `ctx` passed to the method.
+
 - C++
 
-  ```cpp
-  session
-      .AcquireSemaphore(
-          "my-semaphore",                       // semaphore name
-          TAcquireSemaphoreSettings().Count(5)  // value to increase semaphore by
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .AcquireSemaphore(
+            "my-semaphore",                       // semaphore name
+            TAcquireSemaphoreSettings().Count(5)  // value to increase semaphore by
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 
   When acquiring, you can optionally pass a `TAcquireSemaphoreSettings` structure with the following settings:
@@ -553,18 +450,6 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
   - `Ephemeral` – if `true`, the name is an ephemeral semaphore; such semaphores are created automatically on the first `Acquire` and automatically removed with the last `Release`.
   - `Shared()` – alias for setting `Count = 1`, acquiring the semaphore in shared mode.
   - `Exclusive()` – alias for setting `Count = max`, acquiring the semaphore in exclusive mode (for semaphores created with a limit of `Max<ui64>()`).
-
-- Go
-
-  ```go
-  lease, err := session.AcquireSemaphore(ctx,
-      "my-semaphore",  // semaphore name
-      5,              // value to increase semaphore by
-  )
-  ```
-
-
-  To cancel waiting for a semaphore acquisition, simply cancel the `ctx` context passed to the method.
 
 - Python
 
@@ -584,7 +469,7 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
         # or manually:
         semaphore = session.semaphore("my-semaphore", 10)
         semaphore.acquire(count=5)
-        # working with the resource
+        # working with resource
         semaphore.release()
     ```
 
@@ -602,15 +487,11 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
         # or manually:
         semaphore = session.semaphore("my-semaphore", 10)
         await semaphore.acquire(count=5)
-        # working with the resource
+        # working with resource
         await semaphore.release()
     ```
 
   {% endlist %}
-
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -624,6 +505,22 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 - Java
 
   Acquisition is performed via `acquireSemaphore` (full example – see the “Creating a semaphore” section). The method takes the semaphore name, the number of tokens `count`, optional operation data, and a queue wait timeout [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). It returns `CompletableFuture<Result<SemaphoreLease>>` (see [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) and [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). If a semaphore with the specified name does not exist, the operation ends with an exception.
+
+
+  ```java
+  import java.time.Duration;
+
+  import tech.ydb.coordination.SemaphoreLease;
+  import tech.ydb.core.Result;
+
+  Result<SemaphoreLease> result = session
+      .acquireSemaphore("my-semaphore", 5, Duration.ofSeconds(30))
+      .join();
+
+  result.getStatus().expectSuccess("cannot acquire semaphore");
+  SemaphoreLease lease = result.getValue();
+  ```
+
 
   For **ephemeral** semaphores, use `acquireEphemeralSemaphore` (the `exclusive` flag sets the acquisition mode); such semaphores are created on first acquire and removed after the final release.
 
@@ -658,30 +555,30 @@ You can decrease (but not increase) the acquired semaphore's value by calling it
 
 ### Updating semaphore data {#update-semaphore}
 
-You can update (replace) the semaphore data bound at its creation using the method `UpdateSemaphore`.
+Data update — the method `UpdateSemaphore` (step 4 in the “Creating a semaphore” example). The call does not require acquiring the semaphore and does not result in it.
 
 {% list tabs %}
 
-- C++
-
-  ```cpp
-  session
-      .UpdateSemaphore(
-          "my-semaphore",  // semaphore name
-          "updated-data"   // new semaphore data
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
-
 - Go
 
-  ```go
-  err := session.UpdateSemaphore(
-      "my-semaphore",                                                          // semaphore name
-      options.WithUpdateData([]byte("updated-data")),   // new semaphore data
-  )
-  ```
+    ```go
+    err := session.UpdateSemaphore(
+        "my-semaphore",                                                          // semaphore name
+        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
+    )
+    ```
+
+- C++
+
+    ```cpp
+    session
+        .UpdateSemaphore(
+            "my-semaphore",  // semaphore name
+            "updated-data"   // new semaphore data
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 - Python
 
@@ -711,10 +608,6 @@ You can update (replace) the semaphore data bound at its creation using the meth
 
   {% endlist %}
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - JavaScript
 
   ```javascript
@@ -727,7 +620,11 @@ You can update (replace) the semaphore data bound at its creation using the meth
 
 - Java
 
-  Data update — the method `updateSemaphore` (step 4 in the “Creating a semaphore” example). The call does not require acquiring the semaphore and does not result in it.
+  ```java
+  session.updateSemaphore("my-semaphore", "updated-data".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+      .join()
+      .expectSuccess("update semaphore failed");
+  ```
 
 - Rust
 
@@ -749,16 +646,26 @@ This call does not require acquiring the semaphore and does not result in it. If
 
 {% list tabs %}
 
+- Go
+
+    ```go
+    description, err := session.DescribeSemaphore(
+        "my-semaphore"                                // semaphore name
+        options.WithDescribeOwners(true), // to get list of owners
+        options.WithDescribeWaiters(true), // to get list of waiters
+    )
+    ```
+
 - C++
 
-  ```cpp
-  session
-      .DescribeSemaphore(
-          "my-semaphore"  // semaphore name
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .DescribeSemaphore(
+            "my-semaphore"  // semaphore name
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 
   When retrieving semaphore information, you can optionally pass a `TDescribeSemaphoreSettings` structure with the following settings:
@@ -786,16 +693,6 @@ This call does not require acquiring the semaphore and does not result in it. If
   - `Timeout` – timeout with which `AcquireSemaphore` was called for queued operations.
   - `Count` – value requested in `AcquireSemaphore`.
   - `Data` – data that were specified in `AcquireSemaphore`.
-
-- Go
-
-  ```go
-  description, err := session.DescribeSemaphore(
-      "my-semaphore"                                // semaphore name
-      options.WithDescribeOwners(true), // to get list of owners
-      options.WithDescribeWaiters(true), // to get list of waiters
-  )
-  ```
 
 - Python
 
@@ -827,10 +724,6 @@ This call does not require acquiring the semaphore and does not result in it. If
 
   {% endlist %}
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - JavaScript
 
   ```javascript
@@ -845,13 +738,25 @@ This call does not require acquiring the semaphore and does not result in it. If
 
   Reading semaphore state — the method `describeSemaphore` (step 5 in the “Creating a semaphore” example). It takes the semaphore name and a mode [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): data only, with owners list, with waiters list, or both lists.
 
+
+  ```java
+  import tech.ydb.coordination.description.SemaphoreDescription;
+  import tech.ydb.coordination.settings.DescribeSemaphoreMode;
+
+  SemaphoreDescription description = session
+      .describeSemaphore("my-semaphore", DescribeSemaphoreMode.WITH_OWNERS_AND_WAITERS)
+      .join()
+      .getValue();
+  ```
+
+
   Elements of the owners and waiters lists (`getOwnersList`, `getWaitersList`) provide the session identifier, timeout, requested `count`, operation data, and `orderId` (see the nested type `SemaphoreDescription.Session` in the source).
 
   To subscribe to changes, use `watchSemaphore` with the same description mode and [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (data, owners, or both). The [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) object contains a snapshot of `SemaphoreDescription` and `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (see [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), fields `isDataChanged`, `isOwnersChanged`). The Future completes on the next event; after notification, call `watchSemaphore` again to continue watching (see [tests](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
 
 - Rust
 
-  [`describe_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore) by default requests owners and waiters. You can set the flag set via [`DescribeOptions`](https://docs.rs/ydb/latest/ydb/struct.DescribeOptions.html) and [`describe_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore_with_params). To subscribe to changes, see [`WatchOptions`](https://docs.rs/ydb/latest/ydb/struct.WatchOptions.html) in the crate documentation.
+  By default, [`describe_semaphore`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore) requests owners and waiters. You can specify the set of flags via [`DescribeOptions`](https://docs.rs/ydb/latest/ydb/struct.DescribeOptions.html) and [`describe_semaphore_with_params`](https://docs.rs/ydb/latest/ydb/struct.CoordinationSession.html#method.describe_semaphore_with_params). For subscribing to changes, see [`WatchOptions`](https://docs.rs/ydb/latest/ydb/struct.WatchOptions.html) in the crate documentation.
 
 
   ```rust
@@ -868,29 +773,29 @@ This call does not require acquiring the semaphore and does not result in it. If
 
 {% list tabs %}
 
-- C++
-
-  ```cpp
-  session
-      .ReleaseSemaphore(
-          "my-semaphore"  // semaphore name
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
-
 - Go
 
   To release a semaphore acquired in a session, you need to call the `Release` method on the `Lease` object.
 
 
-  ```go
-  err := lease.Release()
-  ```
+    ```go
+    err := lease.Release()
+    ```
+
+- C++
+
+    ```cpp
+    session
+        .ReleaseSemaphore(
+            "my-semaphore"  // semaphore name
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 - Python
 
-  In the Python SDK, the semaphore is released by the `release()` method on the semaphore object. When using a context manager (`with` or `async with`), the release happens automatically when exiting the block.
+  In the Python SDK, the semaphore is released by the `release()` method of the semaphore object. When using a context manager (`with` or `async with`), release happens automatically when exiting the block.
 
   {% list tabs %}
 
@@ -903,7 +808,7 @@ This call does not require acquiring the semaphore and does not result in it. If
     with client.session("/path/to/mynode") as session:
         semaphore = session.semaphore("my-semaphore", 10)
         semaphore.acquire(count=5)
-        # working with the resource
+        # working with resource
         semaphore.release()
     ```
 
@@ -916,19 +821,15 @@ This call does not require acquiring the semaphore and does not result in it. If
     async with client.session("/path/to/mynode") as session:
         semaphore = session.semaphore("my-semaphore", 10)
         await semaphore.acquire(count=5)
-        # working with the resource
+        # working with resource
         await semaphore.release()
     ```
 
   {% endlist %}
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - JavaScript
 
-  To release a semaphore acquired in a session, you need to call the `Release` method on the `Lease` object. If the semaphore was taken using a `using` construct, it will be released automatically when exiting the scope.
+  To release a semaphore acquired in a session, call the `Release` method on the `Lease` object. If the semaphore was acquired using the using construct, it will be released automatically when the scope is exited.
 
 
   ```javascript
@@ -939,9 +840,14 @@ This call does not require acquiring the semaphore and does not result in it. If
 
   Release is performed via [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (step 6 in the “Creating a semaphore” example). The method is asynchronous and returns `CompletableFuture<Status>`.
 
+
+  ```java
+  lease.release().join().expectSuccess("release failed");
+  ```
+
 - Rust
 
-  Call [`Lease::release`](https://docs.rs/ydb/latest/ydb/struct.Lease.html#method.release) or simply relinquish ownership of `Lease` — when the value is dropped, a release is also sent to the server.
+  Call [`Lease::release`](https://docs.rs/ydb/latest/ydb/struct.Lease.html#method.release) or simply drop the `Lease` — when the value is destroyed, a release is also sent to the server.
 
 
   ```rust

@@ -6,25 +6,28 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 {% list tabs group=lang %}
 
+- Go
+
+  This functionality is not currently supported.
+
 - C++
 
   App code snippet for creating a client:
+
 
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
 
+
   Calling `SelfCheck` method:
 
-  ```cpp
+
+  ```c++
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
-
-- Go
-
-  This functionality is not currently supported.
 
 - Java
 
@@ -36,7 +39,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 - JavaScript
 
-  This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
+  This functionality is not currently supported.
+
+  You can create a monitoring client and call the check methods yourself:
+
 
   ```javascript
   const monitoring = driver.createClient(MonitoringServiceDefinition);
@@ -45,15 +51,18 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  This functionality is not currently supported.
 
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
 ## Call parameters {#call-parameters}
 
 `SelfCheck` method provides information in the form of a [set of issues](#example-emergency) which could look like this:
+
 
 ```json
 {
@@ -75,11 +84,16 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 }
 ```
 
+
 This is a short messages each about a single issue. All parameters will affect the amount of information the service returns for the specified database.
 
 The complete list of extra parameters is presented below:
 
 {% list tabs group=lang %}
+
+- Go
+
+  This functionality is not currently supported.
 
 - C++
 
@@ -91,10 +105,6 @@ The complete list of extra parameters is presented below:
   };
   ```
 
-- Go
-
-  This functionality is not currently supported.
-
 - Java
 
   This functionality is not currently supported.
@@ -105,26 +115,29 @@ The complete list of extra parameters is presented below:
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  This functionality is not currently supported.
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  This functionality is not currently supported.
 
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
 | Parameter | Type | Description |
-|:----|:----|:----|
-| `ReturnVerboseStatus` | `bool`         | If `ReturnVerboseStatus` is specified, the response will also include a summary of the overall health of the database in the `database_status` field ([Example](#example-verbose)). Default is false. |
-| `MinimumStatus`       | [EStatusFlag] (#issue-status) | Each issue has a `status` field. If `minimum_status` is specified, issues with a higher `status` will be discarded. By default, all issues will be listed. |
-| `MaximumLevel`        | `int32`        | Each issue has a `level` field. If `maximum_level` is specified, issues with deeper levels will be discarded. By default, all issues will be listed. |
+| :--- | :--- | :--- |
+| `ReturnVerboseStatus` | `bool` | If set, the response will also contain a summary of the overall database status in the `database_status` field ( [Example](#example-verbose)). By default: `false`. |
+| `MinimumStatus` | [EStatusFlag](#issue-status) | Each problem contains a `status` field. If `minimum_status` is defined, problems with a less severe status will be discarded. By default, all problems will be listed. |
+| `MaximumLevel` | `int32` | Each issue has a `level` field. If `maximum_level` is specified, issues with deeper levels will be discarded. By default, all issues will be listed. |
 
 ## Response structure {#response-structure}
 
-For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
-Calling the `SelfCheck` method will return the following message:
+You can view the full response structure in the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
+As a result of calling this method, the following structure will be returned:
+
 
 ```protobuf
 message SelfCheckResult {
@@ -135,9 +148,9 @@ message SelfCheckResult {
 }
 ```
 
-The shortest `HealthCheck` response looks like [this](#examples) . It is returned if there is nothing wrong with the database.
 
 If any issues are detected, the `issue_log` field will contain descriptions of the issues with the following structure:
+
 
 ```protobuf
 message IssueLog {
@@ -152,20 +165,20 @@ message IssueLog {
 ```
 
 
-### Description of fields in the response {#fields-description}
+### Description of fields in the response {#fields-Описание}
 
 | Field | Description |
-|:----|:----|
+| :--- | :--- |
 | `self_check_result` | enum field which contains the [database check result](#selfcheck-result) |
 | `issue_log` | A list of issues; each entry describes a problem at a particular level of the system. |
 | `issue_log.id` | A unique issue ID within this response. |
-| `issue_log.status` |  enum field which contains the [issue status](#issue-status) |
+| `issue_log.status` | enum field which contains the [issue status](#issue-status) |
 | `issue_log.message` | Text that describes the issue. |
 | `issue_log.location` | Location of the issue. This can be a physical location or an execution context. |
 | `issue_log.reason` | This is a set of elements, each of which describes an issue in the system at a certain level. |
 | `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a [rigid hierarchy](#issues-hierarchy) (as shown in the picture above). |
 | `issue_log.level` | Issue [nesting depth](#issues-hierarchy). |
-| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issues at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
+| `database_status` | If the `verbose` parameter is set in the settings, the `database_status` field will be filled. It provides a summary of the overall database status and is used for quickly assessing the database state and identifying serious problems at a high level. [Example](#example-verbose). You can view the full response structure in the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
 | `location` | Contains information about the host, where the `HealthCheck` service was called |
 
 ### Issues hierarchy {#issues-hierarchy}
@@ -178,12 +191,12 @@ Each issue has a nesting `level`. The higher the `level`, the deeper the issue i
 
 ![issues_hierarchy](./_assets/hc_types_hierarchy.png)
 
-#### Database check result {#selfcheck-result}
+### Database check result {#selfcheck-result}
 
-The most general status of the database `self_check_result` can have the following values:
+The overall database status can take the following values:
 
 | Value | Description |
-|:----|:----|
+| :--- | :--- |
 | `GOOD` | No issues were detected. |
 | `DEGRADED` | Degradation of at least one of the database systems was detected, but the database is still functioning (for example, allowable disk loss). |
 | `MAINTENANCE_REQUIRED` | Significant degradation was detected, there is a risk of database unavailability, and human intervention is required. |
@@ -191,10 +204,10 @@ The most general status of the database `self_check_result` can have the followi
 
 #### Issue status {#issue-status}
 
-The status (severity) of the current issue `issue_log.status`:
+Status (severity) of the current problem:
 
 | Value | Description |
-|:----|:----|
+| :--- | :--- |
 | `GREY` | Unable to determine the status (an issue with the self-diagnostic subsystem). |
 | `GREEN` | No issues detected. |
 | `BLUE` | Temporary minor degradation that does not affect database availability; the system is expected to return to `GREEN`. |
@@ -244,31 +257,25 @@ The status (severity) of the current issue `issue_log.status`:
 
 **Description:** The storage group was configured incorrectly.
 
-**Actions:** In the [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and use the known group `id` to check the configuration of nodes and disks on the nodes.
+**Actions on trigger:** In Embedded UI, go to the database page, select the `Storage` tab, and check the configuration of nodes and disks by the known `id` of the group.
 
 #### Group degraded
 
-**Description:** A number of disks allowed in the group are not available.
-
-**Logic of work:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on the nodes.
+**Description:** The group does not have the required number of disks available.
+**Logic:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate group status accordingly.
+**Actions on trigger:** In YDB Embedded UI, go to the database page, select the `Storage` tab, set the `Groups` and `Degraded` filters, and check the availability of nodes and disks on the nodes by the known `id` of the group.
 
 #### Group has no redundancy
 
-**Description:** A storage group has lost its redundancy. Another VDisk failure could result in the loss of the group.
-
-**Logic of work:** `HealthCheck` monitors various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group based on these parameters.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
+**Description:** The storage group has lost redundancy. One more disk failure may lead to the loss of the group.
+**Logic:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate group status accordingly.
+**Actions on trigger:** In YDB Embedded UI, go to the database page, select the `Storage` tab, set the `Groups` and `Degraded` filters, and check the availability of nodes and disks on the nodes by the known `id` of the group.
 
 #### Group failed
 
-**Description:** A storage group has lost its integrity, and data is no longer available. `HealthCheck` evaluates various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and determines the appropriate status, displaying a message accordingly.
-
-**Logic of work:** `HealthCheck` monitors various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
+**Description:** The storage group has lost integrity and is inoperable. Data is unavailable.
+**Logic:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate group status accordingly.
+**Actions on trigger:** In YDB Embedded UI, go to the database page, select the `Storage` tab, set the `Groups` and `Degraded` filters, and check the availability of nodes and disks on the nodes by the known `id` of the group.
 
 ### VDISK
 
@@ -278,21 +285,18 @@ The status (severity) of the current issue `issue_log.status`:
 
 #### VDisk is not available
 
-**Description:** The disk is not operational.
-
-**Actions:** In [YDB {{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Description:** The virtual disk is missing.
+**Actions on trigger:** In YDB Embedded UI, go to the database page, select the `Storage` tab, set the `Groups` and `Degraded` filters. From the related issue `STORAGE_GROUP`, you can find out the `id` of the group. Hover over the required vdisk to see which node has the problem. Check the availability of nodes and disks on the nodes.
 
 #### VDisk is being initialized
 
-**Description:** The disk is in the process of initialization.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Description:** Virtual disk initialization is in progress.
+**Actions on trigger:** In Embedded UI, go to the database page, select the `Storage` tab, set filters `Groups` and `Degraded`. Using the related issue `STORAGE_GROUP`, you can find out `id` of the group. Hover over the required vdisk — you will see which node has the problem. Check the availability of nodes and disks on the nodes.
 
 #### Replication in progress
 
-**Description:** The disk is accepting queries, but not all data has been replicated.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Description:** The disk is being replicated but can accept requests.
+**Actions on trigger:** In Embedded UI, go to the database page, select the `Storage` tab, set filters `Groups` and `Degraded`. Using the related issue `STORAGE_GROUP`, you can find out `id` of the group. Hover over the required vdisk — you will see which node has the problem. Check the availability of nodes and disks on the nodes.
 
 #### VDisk have space issue
 
@@ -306,26 +310,24 @@ The status (severity) of the current issue `issue_log.status`:
 
 #### PDisk state is
 
-**Description:** Indicates state of physical disk.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node id and PDisk to check the availability of nodes and disks on the nodes.
+**Description:** Reports the state of the physical disk.
+**Actions on trigger:** In Embedded UI, go to the database page, select the `Storage` tab, set filters `Nodes` and `Degraded`. Using the known `id` of the node and pDisk, check the availability of nodes and disks on the nodes.
 
 #### Available size is less than 12%, Available size is less than 9%, Available size is less than 6%
 
-**Description:** Free space on the physical disk is running out.
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and use the known node and PDisk identifiers to check the available space.
+**Description:** The physical disk is running out of free space.
+**Actions on trigger:** In Embedded UI, go to the database page, select the `Storage` tab, set filters `Nodes` and `Out of Space`, and using the known `id` of the node and PDisk, view the available space.
 
 #### PDisk is not available
 
-**Description:** A physical disk is not available.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node and PDisk identifiers to check the availability of nodes and disks on the nodes.
+**Description:** The physical disk is missing.
+**Actions on trigger:** In Embedded UI, go to the database page, select the `Storage` tab, set filters `Nodes` and `Degraded`, and using the known `id` of the node and PDisk, check the availability of nodes and disks on the nodes.
 
 ### STORAGE_NODE
 
 #### Storage node is not available
 
-**Description:** A storage node is not available.
+**Description:** The storage node is missing. This information helps in diagnosing the upper layer `PDISK`.
 
 ### COMPUTE
 
@@ -357,31 +359,26 @@ The status (severity) of the current issue `issue_log.status`:
 
 #### Paths quota usage is over than 90%, Paths quota usage is over than 99%, Paths quota exhausted, Shards quota usage is over than 90%, Shards quota usage is over than 99%, Shards quota exhausted
 
-**Description:** Quotas are exhausted.
-
 **Actions:** Check the number of objects (tables, topics) in the database and delete any unnecessary ones.
 
 ### SYSTEM_TABLET
 
 #### System tablet is unresponsive, System tablet response time over 1000ms, System tablet response time over 5000ms
 
-**Description:** The system tablet is either not responding or takes too long to respond.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the `Storage` tab and apply the `Nodes` filter. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Description:** The system tablet is not responding or responds with a delay.
+**Actions on trigger:** In Embedded UI, on the `Storage` tab, set filter `Nodes`. Check `Uptime` of nodes and their status. If `Uptime` is small, check the logs for the reasons of node restarts.
 
 ### TABLET
 
 #### Tablets are restarting too often
 
-**Description:** Tablets are restarting too frequently.
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Description:** Tablets restart too often.
+**Actions on trigger:** In Embedded UI, go to the `Nodes` tab. Check `Uptime` of nodes and their status. If `Uptime` is small, check the logs to determine the reasons for frequent node restarts.
 
 #### Tablets/Followers are dead
 
-**Description:** Tablets are not running (likely cannot be started).
-
-**Actions:** In [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Description:** Tablets are not running (or cannot be started).
+**Actions on trigger:** In Embedded UI, go to the `Nodes` tab. Check `Uptime` of nodes and their status. If `Uptime` is small, check the logs to determine the reasons for node restarts.
 
 ### LOAD_AVERAGE
 
@@ -389,19 +386,14 @@ The status (severity) of the current issue `issue_log.status`:
 
 **Description:** A physical host is overloaded, meaning the system is operating at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. For more information on load, see [Load (computing)](https://en.wikipedia.org/wiki/Load_(computing)).
 
-**Logic of work:**
+Load Information:
 
-- Load Information:
-
-  - Source: `/proc/loadavg`
-  - The first number of the three represents the average load over the last 1 minute.
-
+- Source: `/proc/loadavg`
 - Logical Cores Information:
 
   - Primary Source: `/sys/fs/cgroup/cpu.max`
   - Fallback Sources: `/sys/fs/cgroup/cpu/cpu.cfs_quota_us`, `/sys/fs/cgroup/cpu/cpu.cfs_period_us`
-
-The number of cores is calculated by dividing the quota by the period $(quota / period)$.
+- The number of cores is calculated by dividing the quota by the period (`quota / period`).
 
 **Actions:** Check the CPU load on the nodes.
 
@@ -409,21 +401,15 @@ The number of cores is calculated by dividing the quota by the period $(quota / 
 
 #### Pool usage is over than 90%, Pool usage is over than 95%, Pool usage is over than 99%
 
-**Description:** One of the pools' CPUs is overloaded.
-
 **Actions:** Add cores to the configuration of the actor system for the corresponding CPU pool.
 
 ### NODE_UPTIME
 
 #### The number of node restarts has increased
 
-**Description:** The number of node restarts has exceeded the threshold. By default, this is set to 10 restarts per hour.
-
 **Actions:** Check the logs to determine the reasons for the process restarts.
 
 #### Node is restarting too often
-
-**Description:** The number of node restarts has exceeded the threshold. By default, this is set to 30 restarts per hour.
 
 **Actions:** Check the logs to determine the reasons for the process restarts.
 
@@ -431,13 +417,12 @@ The number of cores is calculated by dividing the quota by the period $(quota / 
 
 #### Node is ... ms behind peer [id], Node is ... ms ahead of peer [id]
 
-**Description:** Time drift on nodes might lead to potential issues with coordinating distributed transactions. This issue starts to appear when the time difference is 5 ms or more.
-
 **Actions:** Check for discrepancies in system time between the nodes listed in the alert, and verify the operation of the time synchronization process.
 
 ## Examples {#examples}
 
-The shortest `HealthCheck` response looks like this. It is returned if there is nothing wrong with the database:
+The shortest service response looks as follows. It is returned if the database is healthy:
+
 
 ```json
 {
@@ -445,9 +430,11 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 }
 ```
 
+
 ### Verbose example {#example-verbose}
 
 `GOOD` response with `verbose` parameter:
+
 
 ```json
 {
@@ -695,9 +682,11 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 }
 ```
 
+
 ### Emergency example {#example-emergency}
 
-Response with `EMERGENCY` status:
+The response in case of problems may look like this:
+
 
 ```json
 {

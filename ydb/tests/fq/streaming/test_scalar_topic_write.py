@@ -315,7 +315,11 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
             self._expect_error(
                 kikimr,
                 'INSERT INTO `non_existent_source`.`my_topic` SELECT "Data";',
-                ["Cannot find table", "/Root/non_existent_source", "my_topic", "because it does not exist or you do not have access permissions"],
+                [
+                    "Cannot find table",
+                    f"{kikimr.endpoint.database}/non_existent_source.[my_topic]",
+                    "because it does not exist or you do not have access permissions",
+                ],
             )
 
         # Write into an unavailable external source (valid metadata, unreachable location).

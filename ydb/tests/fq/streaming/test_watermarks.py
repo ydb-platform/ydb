@@ -184,7 +184,6 @@ class TestWatermarksInYdb(StreamingTestBase):
         delivers a new source batch.  That way the event is in the aggregation
         state before the next write_time watermark can close its window.
         """
-        query_path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         input_bytes_before = self.get_streaming_query_metric(
             kikimr, query_name, "streaming.query.input.bytes"
         )
@@ -305,7 +304,6 @@ class TestWatermarksInYdb(StreamingTestBase):
             kikimr, entity_name, query_name, local_topics, shared_reading,
             tasks=1, partitions_count=2, idle_timeout_seconds=idle_timeout_seconds,
         )
-        query_path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
@@ -386,8 +384,6 @@ class TestWatermarksInYdb(StreamingTestBase):
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            query_path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
-
             # Both initial events share window [0,1). Use _write_topic_and_wait so
             # each event is buffered in the aggregation state before the next write
             # delivers a write_time watermark that would close that window (see
@@ -428,8 +424,6 @@ class TestWatermarksInYdb(StreamingTestBase):
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            query_path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
-
             # Both initial events share window [0,1). Use _write_topic_and_wait so
             # each event is buffered in the aggregation state before the next write
             # delivers a write_time watermark that would close that window (see

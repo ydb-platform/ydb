@@ -1072,7 +1072,6 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
 
-       # time.sleep(120)
         self.wait_completed_checkpoints(kikimr, query_name1)
 
         # Check that streaming.query.tasks.count metric exists for both queries
@@ -1432,7 +1431,6 @@ FROM `{table_name}`"""
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        path = f"{kikimr.get_database_name()}/{query_name}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, query_name)
 
@@ -1697,17 +1695,25 @@ FROM `{table_name}`"""
 
         self.wait_completed_checkpoints(kikimr, query_name)
 
-        def validate_table(expected):
+        def validate_table(expected, allow_extra_rows=False):
             result_sets = kikimr.ydb_client.query(f"""
                 SELECT * FROM `{output_table}`
                 ORDER BY Value || ":" || CAST(Key AS String);
             """)
-            assert len(result_sets[0].rows) == len(expected)
-
-            for row, expected_value in zip(result_sets[0].rows, sorted(expected)):
-                value, key = expected_value.split(":")
-                assert value.startswith(row["Value"].decode("utf-8")), row["Value"].decode("utf-8") + " vs " + value
-                assert row["Key"] == int(key)
+            rows = result_sets[0].rows
+            if not allow_extra_rows:
+                assert len(rows) == len(expected)
+                for row, expected_value in zip(rows, sorted(expected)):
+                    value, key = expected_value.split(":")
+                    assert value.startswith(row["Value"].decode("utf-8")), row["Value"].decode("utf-8") + " vs " + value
+                    assert row["Key"] == int(key)
+            else:
+                for expected_value in sorted(expected):
+                    value, key = expected_value.split(":")
+                    assert any(
+                        value.startswith(row["Value"].decode("utf-8")) and row["Key"] == int(key)
+                        for row in rows
+                    ), f"expected {expected_value} in {rows}"
 
             result_sets = kikimr.ydb_client.query(f"""
                 DELETE FROM `{output_table}`;
@@ -1734,7 +1740,9 @@ FROM `{table_name}`"""
 
         assert sorted(self.read_stream(len(expected_data2), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data2)
         self.wait_completed_checkpoints(kikimr, query_name)
-        validate_table(expected_data2)
+        # After restart the newly written records can reach the table while the
+        # delayed records expected below are being validated.
+        validate_table(expected_data2, allow_extra_rows=True)
 
     @link_test_case("#46139")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -1940,7 +1948,7 @@ FROM `{table_name}`"""
         logger.info("Node with query restarted")
         kikimr.ydb_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
 
-        second_node = list(kikimr.cluster.nodes.values())[1]
+        second_node = list(kikimr.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         second_ydb_client.query(f"""
             ALTER STREAMING QUERY `{path}` SET (RUN = FALSE);
@@ -2343,7 +2351,7 @@ FROM `{table_name}`"""
         assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-third"]
         logger.info("Query checked after restart")
 
-        second_node = list(kikimr.cluster.nodes.values())[1]
+        second_node = list(kikimr.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         check_issues("Lease expired", client=second_ydb_client)
 

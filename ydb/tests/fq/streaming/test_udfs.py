@@ -85,7 +85,7 @@ def get_all_cgi_params(url):
     def test_precompute_recovery(self, kikimr_udfs, local_topics, entity_name):
         inp, out, endpoint = self.get_io_names(kikimr_udfs, "test_precompute_recovery", local_topics, entity_name)
         name = f"{entity_name('test_precompute_recovery_query')}"
-        path = f"/Root/{name}"
+        path = f"{kikimr_udfs.endpoint.database}/{name}"
 
         test_table = entity_name("test_table")
         kikimr_udfs.ydb_client.query(f"""
@@ -149,7 +149,7 @@ def get_all_cgi_params(url):
         tests_count = 20
         for i in range(tests_count):
             sql = f"""
-                CREATE OR REPLACE STREAMING QUERY `{path}` AS DO BEGIN
+                CREATE OR REPLACE STREAMING QUERY `{name}` AS DO BEGIN
                     -- Revision {i}
                     INSERT INTO {out} SELECT Data || "{i}" FROM {inp}
                 END DO
@@ -160,14 +160,14 @@ def get_all_cgi_params(url):
 
         self.wait_completed_checkpoints(kikimr_udfs, name)
         kikimr_udfs.ydb_client.query(f"""
-            ALTER STREAMING QUERY `{path}` SET (RUN = FALSE)
+            ALTER STREAMING QUERY `{name}` SET (RUN = FALSE)
         """)
         self.write_stream_with_message_metadata(kikimr_udfs, [("test_data", {"msg_id": "id-1"})], endpoint=endpoint)
         logger.info("Stopped simple query")
 
         # Start query with heavy precompute
         precompute_sql = f"""
-CREATE OR REPLACE STREAMING QUERY `{path}` AS DO BEGIN
+CREATE OR REPLACE STREAMING QUERY `{name}` AS DO BEGIN
 $script = @@#py
 import time
 
@@ -211,7 +211,7 @@ END DO
         logger.info("Hanging query validated after restart")
 
         sql = f"""
-            CREATE OR REPLACE STREAMING QUERY `{path}` AS DO BEGIN
+            CREATE OR REPLACE STREAMING QUERY `{name}` AS DO BEGIN
                 -- Revision FINAL
                 INSERT INTO {out} SELECT Data || "_final" FROM {inp}
             END DO

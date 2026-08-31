@@ -344,15 +344,21 @@ class YdbClient:
 # Sections stripped from the startup yaml_config before the cluster is started.
 # They will be pushed to CMS via replace_config after the cluster is up.
 #
+# auth_config deliberately remains in the startup configuration: it creates
+# service actors, including AccessService, during node bootstrap. Applying it
+# through CMS after dynamic nodes have started only changes configuration and
+# leaves requests addressed to the absent actor undelivered.
+# query_service_config also remains static: KQP builds its type-annotation
+# context from it at bootstrap, including enable_match_recognize. A later CMS
+# update does not enable MATCH_RECOGNIZE for that already initialized context.
+#
 # NOTE: "feature_flags" is intentionally NOT listed here — it must be present
 # in the static startup config because the NodeBroker uses feature flags (e.g.
 # allow_ydb_requests_without_database) during dynamic-node registration, which
 # happens before any CMS-delivered config is applied.
 _SECTIONS_FOR_CMS = [
     "table_service_config",
-    "query_service_config",
     "federated_query_config",
-    "auth_config",
     "log_config",
 ]
 
@@ -408,7 +414,6 @@ class Kikimr:
         # not busy processing an async config update when we send the tenant
         # creation request.
 
-       # if tenant_database is not None:
         token = config.default_clusteradmin
         logger.info("Sleep")
         time.sleep(10)
@@ -419,8 +424,6 @@ class Kikimr:
             token=token,
         )
         self.slot_database = tenant_database
-      #  else:
-      #      slot_database = f"/{config.domain_name}"
 
         # Add dynamic nodes (slots) for the tenant/DB.
         self.cluster.register_and_start_slots(database=self.slot_database, count=2)

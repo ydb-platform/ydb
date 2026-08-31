@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
+import requests
 import yaml
 import time
 import pytest
@@ -121,7 +122,39 @@ def get_configuration_version(dynconfig_client, list_nodes=False):
     return result
 
 
-def verify_configuration_version(dynconfig_client, expected_v1, expected_v2, expected_unknown=0, timeout_seconds=10):
+def verify_configuration_version_counters(cluster, expected_v1, expected_v2):
+    expected = {
+        "ConfigurationV1": expected_v1,
+        "ConfigurationV2": expected_v2,
+    }
+    actual = {name: 0 for name in expected}
+
+    for node in cluster.nodes.values():
+        response = requests.get(
+            f"http://localhost:{node.mon_port}/counters/counters=config/json",
+            timeout=5,
+        )
+        response.raise_for_status()
+        sensors = response.json().get("sensors", [])
+
+        for name in expected:
+            matching_sensors = [
+                sensor for sensor in sensors
+                if sensor.get("labels", {}).get("subsystem") == "configs_dispatcher"
+                and sensor.get("labels", {}).get("sensor") == name
+            ]
+            assert len(matching_sensors) == 1, \
+                f"Expected one {name} sensor on node {node.node_id}, got {matching_sensors}"
+            sensor = matching_sensors[0]
+            assert sensor.get("kind") == "GAUGE", \
+                f"Expected {name} to be a GAUGE on node {node.node_id}, got {sensor.get('kind')}"
+            actual[name] += sensor.get("value", 0)
+
+    assert actual == expected, f"Configuration version counters: expected {expected}, got {actual}"
+
+
+def verify_configuration_version(cluster, dynconfig_client, expected_v1, expected_v2,
+                                 expected_unknown=0, timeout_seconds=10):
     start_time = time.time()
     last_result = None
     while time.time() - start_time < timeout_seconds:
@@ -132,6 +165,7 @@ def verify_configuration_version(dynconfig_client, expected_v1, expected_v2, exp
                 last_result.v1_nodes, last_result.v2_nodes, last_result.unknown_nodes,
                 expected_v1, expected_v2, expected_unknown,
             )
+            verify_configuration_version_counters(cluster, expected_v1, expected_v2)
             return last_result
         logger.debug(
             "configuration version not ready yet: v1=%s v2=%s unknown=%s (expected v1=%s v2=%s unknown=%s)",
@@ -224,7 +258,7 @@ def wait_for_all_nodes_start(swagger_client, expected_nodes_count, timeout_secon
 
 def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, table_path, tablet_ids, extract_storage_pool_types=False):
     nodes_count = len(cluster.nodes)
-    verify_configuration_version(dynconfig_client, nodes_count, 0)
+    verify_configuration_version(cluster, dynconfig_client, nodes_count, 0)
 
     # 1 step: fetch config with dynconfig client
     fetched_config = fetch_config_dynconfig(dynconfig_client)
@@ -275,7 +309,7 @@ def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, ta
     wait_for_all_nodes_start(swagger_client, len(cluster.nodes))
 
     time.sleep(2)
-    verify_configuration_version(dynconfig_client, nodes_count, 0)
+    verify_configuration_version(cluster, dynconfig_client, nodes_count, 0)
 
     check_kikimr_is_operational(cluster, table_path, tablet_ids)
 
@@ -304,7 +338,7 @@ def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, ta
     cluster.restart_nodes()
     wait_for_all_nodes_start(swagger_client, len(cluster.nodes))
 
-    verify_configuration_version(dynconfig_client, nodes_count, 0)
+    verify_configuration_version(cluster, dynconfig_client, nodes_count, 0)
     check_kikimr_is_operational(cluster, table_path, tablet_ids)
 
     # 11.5 step: fetch config
@@ -354,13 +388,13 @@ def migration_to_v2(cluster, config_client, dynconfig_client, swagger_client, ta
     fetched_config = fetch_config(config_client)
     assert_that(fetched_config is not None)
     replace_config(config_client, fetched_config)
-    verify_configuration_version(dynconfig_client, 0, nodes_count)
+    verify_configuration_version(cluster, dynconfig_client, 0, nodes_count)
     check_kikimr_is_operational(cluster, table_path, tablet_ids)
 
 
 def migration_to_v1(cluster, config_client, dynconfig_client, swagger_client, table_path, tablet_ids):
     nodes_count = len(cluster.nodes)
-    verify_configuration_version(dynconfig_client, 0, nodes_count)
+    verify_configuration_version(cluster, dynconfig_client, 0, nodes_count)
     check_kikimr_is_operational(cluster, table_path, tablet_ids)
 
     # step 1: fetch config with storage section
@@ -392,7 +426,7 @@ def migration_to_v1(cluster, config_client, dynconfig_client, swagger_client, ta
     logger.debug("Restarting nodes")
     cluster.restart_nodes()
     wait_for_all_nodes_start(swagger_client, len(cluster.nodes))
-    verify_configuration_version(dynconfig_client, nodes_count, 0)
+    verify_configuration_version(cluster, dynconfig_client, nodes_count, 0)
 
     # step 4.5: check that v2 API is not working
     def check_v2_disabled(response):
@@ -418,7 +452,7 @@ def migration_to_v1(cluster, config_client, dynconfig_client, swagger_client, ta
 
     # verify V1
     check_kikimr_is_operational(cluster, table_path, tablet_ids)
-    verify_configuration_version(dynconfig_client, nodes_count, 0)
+    verify_configuration_version(cluster, dynconfig_client, nodes_count, 0)
     v1_fetch_config = fetch_config_dynconfig(dynconfig_client)
     replace_config_dynconfig(dynconfig_client, v1_fetch_config)
 

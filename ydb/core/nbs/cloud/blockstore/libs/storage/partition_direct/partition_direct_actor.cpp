@@ -11,9 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_direct_storage_transport.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
@@ -189,6 +187,8 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     } else {
         failUpdateRequests();
     }
+
+    ChaosInjectorControls.clear();
 }
 
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
@@ -305,6 +305,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     TVector<IDirectBlockGroupPtr> directBlockGroups;
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
+    Y_ABORT_UNLESS(ChaosInjectorControls.empty());
+    ChaosInjectorControls.reserve(DirectBlockGroupsCount);
 
     NMonitoring::TDynamicCounterPtr dbgCountersRoot = MakeCountersChain(
         AppData()->Counters,
@@ -329,23 +331,16 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         // Session counters are aggregated at the disk level: all direct block
         // groups of this tablet share the same counters chain, so per-group
         // increments naturally sum up into disk-level counters.
-        std::unique_ptr<NTransport::IStorageTransport> transport;
         const bool enableChecksums =
             nbsService->StorageConfig->GetEnableChecksums();
-        if (nbsService->StorageConfig->GetUseDirectSessionTransport()) {
-            transport = NTransport::CreateDirectStorageTransport(
+        auto transport = NTransport::CreateTransportChaosInjector(
+            NTransport::CreateStorageTransport(
                 TActivationContext::ActorSystem(),
                 DiskDescription,
                 dbgIndex,
-                enableChecksums);
-        } else {
-            transport = std::make_unique<NTransport::TICStorageTransport>(
-                TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(
-                    DiskDescription,
-                    dbgIndex,
-                    enableChecksums));
-        }
+                nbsService->StorageConfig->GetUseDirectSessionTransport(),
+                enableChecksums));
+        ChaosInjectorControls.emplace_back(transport);
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),

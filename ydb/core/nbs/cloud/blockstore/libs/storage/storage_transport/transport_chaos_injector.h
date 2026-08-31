@@ -1,75 +1,84 @@
 #pragma once
 
-#include "direct_session_registry.h"
-#include "ic_storage_transport.h"
+#include "storage_transport.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <library/cpp/threading/hot_swap/hot_swap.h>
+
+#include <util/generic/hash_set.h>
+
+#include <memory>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// IStorageTransport that sends datapath events via IDirectSession from the
-// calling (NBS executor) thread, bypassing the transport actor mailbox.
-// Connect / disconnect still go through TICStorageTransport (actor path); the
-// actor publishes IDirectSession handles into DirectSessionRegistry together
-// with a long-lived reply ActorId and TSessionReplyRouter.
-//
-// When no session is registered for the destination node (local peer, mock IC,
-// brief window before TEvNodeConnected), datapath calls fall back to the
-// actor-based base class.
-class TICDirectStorageTransport: public TICStorageTransport
+// Decorates IStorageTransport and simulates undelivery for disabled nodes.
+class TTransportChaosInjector final: public ITransportWithChaosInjectorControl
 {
 public:
-    TICDirectStorageTransport(
-        NActors::TActorSystem* actorSystem,
-        NActors::TActorId icStorageTransportActorId,
-        std::shared_ptr<TDirectSessionRegistry> directSessionRegistry,
-        bool enableChecksums);
+    explicit TTransportChaosInjector(TStorageTransportPtr underlyingTransport);
 
-    ~TICDirectStorageTransport() override = default;
+    ~TTransportChaosInjector() override = default;
 
+    // Disables nodeId for subsequent requests.
+    void DisableNode(ui32 nodeId) override;
+
+    // Enables nodeId for subsequent requests.
+    void EnableNode(ui32 nodeId) override;
+
+    // Returns true when nodeId is disabled.
+    [[nodiscard]] bool IsNodeDisabled(ui32 nodeId) const override;
+
+    // Connects through the underlying transport if the node is enabled.
+    TConnectResultFutures Connect(const THostConnection& connection) override;
+
+    // Reads from a persistent buffer or returns an undelivery error.
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const TPBufferKey pBufferKey,
-        const NKikimr::NDDisk::TReadInstruction instruction,
+        TPBufferKey pBufferKey,
+        NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
+    // Reads from a DDisk or returns an undelivery error.
     NThreading::TFuture<TEvReadResult> ReadFromDDisk(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const NKikimr::NDDisk::TReadInstruction instruction,
+        NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
+    // Writes to a persistent buffer or returns an undelivery error.
     NThreading::TFuture<TEvWritePersistentBufferResult> WriteToPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
-        const NKikimr::NDDisk::TWriteInstruction instruction,
+        ui64 lsn,
+        NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
+    // Writes to many persistent buffers or reports coordinator undelivery.
     void WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
-        const NKikimr::NDDisk::TWriteInstruction instruction,
+        ui64 lsn,
+        NKikimr::NDDisk::TWriteInstruction instruction,
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
         std::shared_ptr<NWilson::TSpan> span,
         TWriteToManyPBuffersCallback callback) override;
 
+    // Writes to a DDisk or returns an undelivery error.
     NThreading::TFuture<TEvWriteResult> WriteToDDisk(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const NKikimr::NDDisk::TWriteInstruction instruction,
+        NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
+    // Synchronizes through the destination DDisk or returns undelivery.
     NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
@@ -77,38 +86,36 @@ public:
         TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) override;
 
+    // Erases persistent-buffer entries or returns an undelivery error.
     NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
         const THostConnection& connection,
         TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) override;
 
+    // Erases a persistent-buffer range or returns an undelivery error.
     NThreading::TFuture<TEvErasePersistentBufferResult> BarrierEraseFromPBuffer(
         const THostConnection& connection,
         ui64 lsn,
         NWilson::TSpan* span) override;
 
+    // Lists persistent-buffer entries or returns an undelivery error.
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
         const THostConnection& connection) override;
 
+    // Deletes tablet chunks or returns an undelivery error.
+    NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
+        const THostConnection& connection) override;
+
 private:
-    using EConnectionType = THostConnection::EConnectionType;
+    struct TDisabledNodes: public TAtomicRefCount<TDisabledNodes>
+    {
+        THashSet<ui32> NodeIds;
+    };
 
-    const std::shared_ptr<TDirectSessionRegistry> DirectSessionRegistry;
-    const bool EnableChecksums;
+    const TStorageTransportPtr UnderlyingTransport;
 
-    [[nodiscard]] TSessionEntry GetSessionEntry(
-        const THostConnection& connection) const;
+    THotSwap<TDisabledNodes> DisabledNodes{MakeIntrusive<TDisabledNodes>()};
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Convenience factory: creates the shared registry, transport actor and
-// TICDirectStorageTransport bound together.
-[[nodiscard]] TStorageTransportPtr CreateDirectStorageTransport(
-    NActors::TActorSystem* actorSystem,
-    const TDiskDescription& diskDescription,
-    ui32 dbgIndex,
-    bool enableChecksums);
 
 ////////////////////////////////////////////////////////////////////////////////
 

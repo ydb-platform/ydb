@@ -825,7 +825,7 @@ TICDirectStorageTransport::ListPBufferEntries(const THostConnection& connection)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
+TStorageTransportPtr CreateDirectStorageTransport(
     TActorSystem* actorSystem,
     const TDiskDescription& diskDescription,
     ui32 dbgIndex,
@@ -837,7 +837,7 @@ std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
         dbgIndex,
         enableChecksums,
         registry);
-    return std::make_unique<TICDirectStorageTransport>(
+    return std::make_shared<TICDirectStorageTransport>(
         actorSystem,
         actorId,
         std::move(registry),

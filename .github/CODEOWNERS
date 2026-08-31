@@ -1,6 +1,6 @@
-* @ydb-platform/ReleaseApprovers
-/.github @ydb-platform/ci
-/.github/workflows/docs_* @ydb-platform/docs
-/.github/workflows/ydbdoc-* @ydb-platform/docs     
-/CHANGELOG.md @ydb-platform/changelog-reviewers
-/ydb/docs/ @ydb-platform/docs
+* @ydb-platform/ReleaseApprovers @ydb-platform/entbuilders
+/.github @ydb-platform/ci @ydb-platform/entbuilders
+/.github/workflows/docs_* @ydb-platform/docs @ydb-platform/entbuilders
+/.github/workflows/ydbdoc-* @ydb-platform/docs @ydb-platform/entbuilders
+/CHANGELOG.md @ydb-platform/changelog-reviewers @ydb-platform/entbuilders
+/ydb/docs/ @ydb-platform/docs @ydb-platform/entbuilders

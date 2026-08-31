@@ -189,12 +189,14 @@ class TLocalBufferRegistry;
 
 class TLocalBuffer : public IChannelBuffer {
 public:
-    TLocalBuffer(const std::shared_ptr<TLocalBufferRegistry> registry, const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes)
+    TLocalBuffer(const std::shared_ptr<TLocalBufferRegistry> registry, const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes, ui64 coldInflightBytes, bool enableSpillingBackpressure)
         : IChannelBuffer(info)
         , Registry(registry)
         , ActorSystem(actorSystem)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
+        , ColdInflightBytes(coldInflightBytes)
+        , EnableSpillingBackpressure(enableSpillingBackpressure)
         , QuotaManager(quotaManager)
     {
         PushStats.Level = info.Level;
@@ -246,6 +248,26 @@ public:
     std::atomic<ui64> SpilledBytes = 0;
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
+    const ui64 ColdInflightBytes; // both of the above while the node is under memory pressure
+    const bool EnableSpillingBackpressure; // TDqChannelLimits::EnableSpillingChannelBackpressure
+
+    // Both sides live on this node, so the node level memory pressure is read directly off the
+    // quota manager, no TEvChannelUpdateV2 round trip as for TOutputDescriptor. Must be called
+    // under Mutex, together with the Max/Min getters below, to keep the window consistent
+    void RefreshMemoryPressure() {
+        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->IsReasonableToUseSpilling());
+    }
+
+    ui64 GetMaxInflightBytes() const {
+        return MemoryPressure.load() ? ColdInflightBytes : MaxInflightBytes;
+    }
+
+    ui64 GetMinInflightBytes() const {
+        return MemoryPressure.load() ? ColdInflightBytes * 8 / 10 : MinInflightBytes;
+    }
+
+    // written under Mutex only, atomic to be readable from the mon page
+    std::atomic<bool> MemoryPressure = false;
     bool FinishPushed = false;
     std::atomic<TInstant> LastOutputNotificationTime;
     std::atomic<TInstant> LastInputNotificationTime;
@@ -269,11 +291,13 @@ class TNodeState;
 class TOutputDescriptor {
 public:
     TOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferBytes,
-        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes, ui64 coldInflightBytes)
+        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferThrottledCount,
+        ui64 maxInflightBytes, ui64 minInflightBytes, ui64 coldInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
         , OutputBufferBytes(outputBufferBytes)
         , OutputBufferChunks(outputBufferChunks)
+        , OutputBufferThrottledCount(outputBufferThrottledCount)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
         , ColdInflightBytes(coldInflightBytes)
@@ -296,7 +320,8 @@ public:
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
     void AbortChannelByMemoryLimit(ui64 bytes);
-    void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
@@ -388,13 +413,35 @@ public:
     std::atomic<bool> Finished = false;
     std::atomic<bool> FinishPushed = false;
     std::atomic<bool> Leading = true;
+    std::atomic<bool> PeerMemoryPressure = false; // last value reported by the peer (receiver) node
 
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferThrottledCount;
 
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     const ui64 ColdInflightBytes;
+
+    // The channel is kept at the cold inflight window until the peer pops something (so that a fan out
+    // of channels nobody drains cannot soak MaxInflightBytes each) and while the peer node reports
+    // node level memory pressure, see TInputDescriptor::MemoryPressure
+    bool IsCold() const {
+        return RemotePopBytes.load() == 0 || PeerMemoryPressure.load();
+    }
+
+    ui64 GetMaxInflightBytes() const {
+        return IsCold() ? ColdInflightBytes : MaxInflightBytes;
+    }
+
+    ui64 GetMinInflightBytes() const {
+        return IsCold() ? ColdInflightBytes * 8 / 10 : MinInflightBytes;
+    }
+
+    // Recomputes FillLevel from the current inflight/spilled state and the effective inflight window,
+    // updates the Aggregator and returns true if the level has changed.
+    // Must be called under FlowControlMutex
+    bool RecalcFillLevel();
 
 private:
     IMemoryQuotaManager::TPtr QuotaManager;
@@ -468,12 +515,14 @@ public:
     TInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem,
         ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes,
         ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks,
-        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes)
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes,
+        bool enableSpillingBackpressure)
         : Info(info)
         , ActorSystem(actorSystem)
         , InputBufferBytes(inputBufferBytes)
         , InputBufferChunks(inputBufferChunks)
         , InputBufferInflightBytes(inputBufferInflightBytes)
+        , EnableSpillingBackpressure(enableSpillingBackpressure)
         , QuotaManager(quotaManager)
     {
         PushStats.Level = info.Level;
@@ -486,6 +535,11 @@ public:
     bool PushDataChunk(TDataChunk&& data);
     bool PopDataChunk(TDataChunk& data);
     ui32 GetQueueSize();
+
+    // Must be called under QueueMutex - QuotaManager is (re)assigned under the same mutex
+    void RefreshMemoryPressure() {
+        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->IsReasonableToUseSpilling());
+    }
 
     bool IsFinished();
     bool IsEarlyFinished();
@@ -516,9 +570,22 @@ public:
     std::atomic<bool> Aborted = false;
     std::atomic<bool> Finishing = false;
 
+    // Node level memory pressure on this (receiver) node, reported to the sender via TEvChannelUpdateV2.
+    // Written under QueueMutex by RefreshMemoryPressure, read by TNodeState::SendUpdateProgress
+    std::atomic<bool> MemoryPressure = false;
+    // Written by TNodeState::SendUpdateProgress under TNodeState::Mutex only, read lock free to
+    // detect that a flip of MemoryPressure is not delivered to the sender yet
+    std::atomic<bool> LastSentMemoryPressure = false;
+
+    bool IsMemoryPressureReported() const {
+        return MemoryPressure.load() == LastSentMemoryPressure.load();
+    }
+
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+
+    const bool EnableSpillingBackpressure; // TDqChannelLimits::EnableSpillingChannelBackpressure
 
     IMemoryQuotaManager::TPtr QuotaManager;
 };
@@ -617,10 +684,12 @@ public:
         OutputBufferWaiterCount = counters->GetCounter("OutputBuffer/WaiterCount", false);
         OutputBufferWaiterBytes = counters->GetCounter("OutputBuffer/WaiterBytes", false);
         OutputBufferWaiterMessages = counters->GetCounter("OutputBuffer/WaiterMessages", false);
+        OutputBufferThrottledCount = counters->GetCounter("OutputBuffer/ThrottledCount", false);
         InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
         InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
+        InputBufferPressureReports = counters->GetCounter("InputBuffer/PressureReports", true);
         SessionMessagesSent = counters->GetCounter("Session/MessagesSent", true);
         SessionMessagesResent = counters->GetCounter("Session/MessagesResent", true);
         SessionReconciliations = counters->GetCounter("Session/Reconciliations", true);
@@ -705,10 +774,12 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferThrottledCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferPressureReports;
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesSent;
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesResent;
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionReconciliations;
@@ -764,8 +835,9 @@ public:
 class TLocalBufferRegistry {
 public:
     TLocalBufferRegistry(NActors::TActorSystem* actorSystem, NMonitoring::TDynamicCounterPtr counters,
-        ui64 maxInflightBytes, ui64 minInflightBytes)
+        ui64 maxInflightBytes, ui64 minInflightBytes, ui64 coldInflightBytes, bool enableSpillingBackpressure)
         : ActorSystem(actorSystem), MaxInflightBytes(maxInflightBytes), MinInflightBytes(minInflightBytes)
+        , ColdInflightBytes(coldInflightBytes), EnableSpillingBackpressure(enableSpillingBackpressure)
     {
         LocalBufferCount = counters->GetCounter("LocalBuffer/Count", false);
         LocalBufferBytes = counters->GetCounter("LocalBuffer/Bytes", true);
@@ -780,6 +852,8 @@ public:
     NActors::TActorSystem* ActorSystem;
     const ui64 MaxInflightBytes;
     const ui64 MinInflightBytes;
+    const ui64 ColdInflightBytes;
+    const bool EnableSpillingBackpressure;
     mutable std::mutex Mutex;
     mutable std::unordered_map<TChannelInfo, std::weak_ptr<TLocalBuffer>> LocalBuffers;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferBytes;
@@ -797,7 +871,9 @@ public:
         , Counters(counters)
         , Limits(limits)
         , PoolId(poolId) {
-        LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters, Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10);
+        LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters,
+            Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10, Limits.LocalChannelColdInflightBytes,
+            Limits.EnableSpillingChannelBackpressure);
     }
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);

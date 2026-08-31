@@ -1,19 +1,22 @@
 #pragma once
 
+#include "prerequisite.h"
+
 #include <yt/yt/client/api/public.h>
 
-namespace NYT::NApi::NRpcProxy {
+#include <library/cpp/yt/logging/logger.h>
+
+namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NApi::IPrerequisitePtr CreateChaosLease(
+IPrerequisitePtr CreateChaosLease(
     IClientPtr client,
-    NRpc::IChannelPtr channel,
     NChaosClient::TChaosLeaseId id,
     TDuration timeout,
     bool pingAncestors,
-    std::optional<TDuration> pingPeriod);
+    const NLogging::TLogger& logger);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NApi::NRpcProxy
+} // namespace NYT::NApi

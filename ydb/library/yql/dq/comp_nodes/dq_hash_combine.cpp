@@ -2686,7 +2686,9 @@ private:
     TDqHashCombineTestParams TestParams;
 };
 
-IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNodeFactoryContext& ctx, const EOperatorKind kind) {
+IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNodeFactoryContext& ctx, NYql::NDq::TDqComputeContextBase& computeCtx, const EOperatorKind kind) {
+    Y_ENSURE(computeCtx.MemoryQuota);
+
     TDqHashOperatorParams params = ParseCommonDqHashOperatorParams(callable, ctx);
 
     auto inputComponents = GetWideComponents(callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
@@ -2759,12 +2761,12 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
     }
 }
 
-IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapDqHashOperator(callable, ctx, EOperatorKind::Aggregator);
+IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx, NYql::NDq::TDqComputeContextBase& computeCtx) {
+    return WrapDqHashOperator(callable, ctx, computeCtx, EOperatorKind::Aggregator);
 }
 
-IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapDqHashOperator(callable, ctx, EOperatorKind::Combiner);
+IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx, NYql::NDq::TDqComputeContextBase& computeCtx) {
+    return WrapDqHashOperator(callable, ctx, computeCtx, EOperatorKind::Combiner);
 }
 
 }

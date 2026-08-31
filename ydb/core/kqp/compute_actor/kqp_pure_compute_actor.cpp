@@ -34,6 +34,7 @@ TKqpComputeActor::TKqpComputeActor(
     , UserToken(std::move(userToken))
     , Database(database)
 {
+    ComputeCtx.MemoryQuota = this->MemoryQuota.Get();
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();

@@ -52,7 +52,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         }
     }
 
-    bool AllocateExtraQuota(ui64 extraSize) override {
+    bool AllocateExtraQuota(ui64 extraSize, bool isOptional) override {
+        Y_UNUSED(isOptional);
         return NodeQuoter->Allocate(TxId, 0, extraSize);
     }
 

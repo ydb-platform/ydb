@@ -255,7 +255,7 @@ public:
     // quota manager, no TEvChannelUpdateV2 round trip as for TOutputDescriptor. Must be called
     // under Mutex, together with the Max/Min getters below, to keep the window consistent
     void RefreshMemoryPressure() {
-        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->IsReasonableToUseSpilling());
+        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->GetMemoryAvailability() <= 0);
     }
 
     ui64 GetMaxInflightBytes() const {
@@ -338,7 +338,7 @@ public:
 
     // must be called only if IsQuotaAssigned() is true
     bool AllocateQuota(ui64 bytes) {
-        return QuotaManager->AllocateQuota(bytes);
+        return QuotaManager->AllocateQuota(bytes, false);
     }
 
     // must be called only for the bytes allocated by AllocateQuota
@@ -538,7 +538,7 @@ public:
 
     // Must be called under QueueMutex - QuotaManager is (re)assigned under the same mutex
     void RefreshMemoryPressure() {
-        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->IsReasonableToUseSpilling());
+        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->GetMemoryAvailability() <= 0);
     }
 
     bool IsFinished();

@@ -180,7 +180,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
             // allocate quota before the chunk is counted as inflight to keep InflightBytes always allocated
-            if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
+            if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, false)) {
                 AbortChannelByMemoryLimit(data.Bytes);
                 return;
             }
@@ -190,7 +190,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             fillLevel = InflightBytes.load() >= maxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
     } else {
-        if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
+        if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, false)) {
             AbortChannelByMemoryLimit(data.Bytes);
             return;
         }
@@ -278,7 +278,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
             auto bytes = SpilledChunkBytes.front();
             // quota for a spilled chunk is allocated as soon as it is counted as inflight (and released on pop),
             // no matter whether it is loaded right here or via LoadingQueue
-            if (QuotaManager && !QuotaManager->AllocateQuota(bytes)) {
+            if (QuotaManager && !QuotaManager->AllocateQuota(bytes, false)) {
                 AbortChannelByMemoryLimit(bytes);
                 break;
             }
@@ -852,7 +852,7 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
 
     RefreshMemoryPressure();
 
-    if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
+    if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, false)) {
         AbortChannelByMemoryLimit(data.Bytes);
         return false;
     }
@@ -1975,7 +1975,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
             if (result->QuotaManager) {
                 result->QuotaManager->FreeQuota(result->QueueBytes);
             }
-            if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes)) {
+            if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes, false)) {
                 result->AbortChannelByMemoryLimit(result->QueueBytes);
                 quotaManager = nullptr;
             }

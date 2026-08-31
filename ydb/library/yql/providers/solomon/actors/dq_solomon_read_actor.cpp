@@ -166,7 +166,7 @@ public:
     }
 
     void Bootstrap() {
-        if (!MemoryQuotaManager->AllocateQuota(MaxDataInflightBytes + MaxMetadataInflightBytes)) {
+        if (!MemoryQuotaManager->AllocateQuota(MaxDataInflightBytes + MaxMetadataInflightBytes, false)) {
             TIssues issues;
             issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << MaxDataInflightBytes + MaxMetadataInflightBytes << "b read buffer"});
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));

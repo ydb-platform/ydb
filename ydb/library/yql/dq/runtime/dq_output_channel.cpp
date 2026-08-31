@@ -105,7 +105,7 @@ public:
         if (QuotaManager) {
             size_t storedSize = PackedDataSize + Packer.PackedSizeEstimate();
             if (QuotedSize < storedSize) {
-                if (!QuotaManager->AllocateQuota(storedSize - QuotedSize)) {
+                if (!QuotaManager->AllocateQuota(storedSize - QuotedSize, false)) {
                     throw NKikimr::TMemoryLimitExceededException();
                 }
             } else if (QuotedSize > storedSize) {

@@ -2880,7 +2880,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
-        TestAggregation(true);
+        TestAggregation(ColumnStore);
     }
 
     void BasicHashJoinTest(bool useBlockHashJoin) {

@@ -6,7 +6,8 @@ namespace NActors {
 
     public:
         TSchedulerCookie2Way()
-            : Value(2)
+            : ISchedulerCookie(2)
+            , Value(2)
         {
         }
 
@@ -14,20 +15,18 @@ namespace NActors {
             return (AtomicGet(Value) == 2);
         }
 
-        bool Detach() noexcept override {
+        bool DetachImpl() noexcept override {
             const ui64 x = AtomicDecrement(Value);
             if (x == 1)
                 return true;
 
-            if (x == 0) {
-                delete this;
+            if (x == 0)
                 return false;
-            }
 
             Y_ABORT();
         }
 
-        bool DetachEvent() noexcept override {
+        bool DetachEventImpl() noexcept override {
             Y_ABORT();
         }
     };
@@ -41,7 +40,8 @@ namespace NActors {
 
     public:
         TSchedulerCookie3Way()
-            : Value(3)
+            : ISchedulerCookie(3)
+            , Value(3)
         {
         }
 
@@ -49,30 +49,24 @@ namespace NActors {
             return (AtomicGet(Value) == 3);
         }
 
-        bool Detach() noexcept override {
+        bool DetachImpl() noexcept override {
             const ui64 x = AtomicDecrement(Value);
             if (x == 2)
                 return true;
-            if (x == 1)
+            if (x == 1 || x == 0)
                 return false;
-            if (x == 0) {
-                delete this;
-                return false;
-            }
 
             Y_ABORT();
         }
 
-        bool DetachEvent() noexcept override {
+        bool DetachEventImpl() noexcept override {
             const ui64 x = AtomicDecrement(Value);
             if (x == 2)
                 return false;
             if (x == 1)
                 return true;
-            if (x == 0) {
-                delete this;
+            if (x == 0)
                 return false;
-            }
 
             Y_ABORT();
         }

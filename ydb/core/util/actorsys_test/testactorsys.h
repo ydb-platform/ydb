@@ -944,8 +944,12 @@ private:
 
 class TFakeSchedulerCookie : public ISchedulerCookie {
 public:
-    bool Detach() noexcept override { delete this; return false; }
-    bool DetachEvent() noexcept override { Y_ABORT(); }
+    TFakeSchedulerCookie()
+        : ISchedulerCookie(1)
+    {}
+
+    bool DetachImpl() noexcept override { return false; }
+    bool DetachEventImpl() noexcept override { Y_ABORT(); }
     bool IsArmed() noexcept override { Y_ABORT(); }
 };
 

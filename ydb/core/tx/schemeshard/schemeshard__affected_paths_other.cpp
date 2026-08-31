@@ -474,10 +474,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpTruncateTable>(
     const TOperationContext& context)
 {
     // DfsOnTableChildrenTree walks the table's whole child tree -- indexes, their impl
-    // tables and sequences -- emitting a truncate per node, each of which persists that
-    // node's path row (schemeshard__operation_truncate_table.cpp:280, :393, :485, :592).
-    // Only the root is in the request.
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+    // tables and sequences -- emitting a truncate per node. That walk runs at propose:
+    // CreateConsistentTruncateTable (schemeshard__operation_truncate_table.cpp:560) calls it
+    // at :589 and it pushes a CreateTruncateTable part per node at :388. Only the root is in
+    // the request, but every part is asked for its own declaration, so the tree is covered.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetTruncateTable().GetTableName(), 0);
 }
 
@@ -542,9 +543,26 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpBackupBackupCol
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    // The tables copied are read from the collection's own description and from those
-    // tables' index children, not from the request
-    // (schemeshard__operation_backup_backup_collection.cpp:85, :95, :108, :122).
+    // The fan-out is propose-time, not execution-time: CreateBackupBackupCollection
+    // (schemeshard__operation_backup_backup_collection.cpp:34) walks the description at
+    // :85-:119, pushes the control part at :123 and hands the copy set to
+    // CreateConsistentCopyTables at :265. So admitParts sees the copy parts and this could
+    // in principle be a plain target.
+    //
+    // It cannot be yet. CreateConsistentCopyTables expands inline into the caller's part
+    // list rather than proposing an ESchemeOpCreateConsistentCopyTables part, so the
+    // Incomplete on that op's own declaration (:410 here) never travels upward. What
+    // admitParts actually asks is each copy part, whose transaction is ESchemeOpCreateTable
+    // with CopyFromTable set -- and that declaration disclaims itself, returning nullopt
+    // (schemeshard__operation_create_table.cpp:874). The disclaimer is right for a top-level
+    // request, where MakeOperationParts re-dispatches such a tx to CreateCopyTable
+    // (schemeshard__operation.cpp:1567) and the path row is written by the parts below it.
+    // It is wrong for a part built by CCT, where TCopyTable::Propose itself persists the
+    // destination, its parent and the source (schemeshard__operation_copy_table.cpp:819-821).
+    // All three are knowable from that part's own tx (WorkingDir + Name + CopyFromTable).
+    //
+    // Retiring this marker aborts with "wrote path row it had not declared" on every copy
+    // destination. Retire it once the copy parts declare themselves; not before.
     return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetBackupBackupCollection().GetName(), 0);
 }
@@ -562,9 +580,12 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpBackupIncrement
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    // schemeshard__operation_backup_incremental_backup_collection.cpp:158 names the
-    // collection; :186-187 expands it over the description's entries.
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+    // The request names only the collection, but CreateBackupIncrementalBackupCollection
+    // (schemeshard__operation_backup_incremental_backup_collection.cpp:155) expands it at
+    // propose: an AlterContinuousBackup part per description entry (:220), another per index
+    // impl table (:287), and the control part at :296. Only the writes land at execution, and
+    // every part is asked for its own declaration.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetBackupIncrementalBackupCollection().GetName(), 0);
 }
 
@@ -581,9 +602,18 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRestoreBackupCo
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    // The restore picks its sources by scanning the collection's children for the last
-    // full backup and the incrementals after it, then pairs them with the description's
-    // entries (schemeshard__operation_restore_backup_collection.cpp:386-401, :411-430).
+    // Like BackupBackupCollection above, the fan-out is propose-time: the child scan for the
+    // last full backup and the incrementals after it is at
+    // schemeshard__operation_restore_backup_collection.cpp:395-:401, the pairing with the
+    // description's entries at :414-:430, and the parts come from CreateConsistentCopyTables
+    // (:432) and CreateIncrementalBackupPathStateOps (:436).
+    //
+    // Blocked on the same thing: the CCT copy parts declare nullopt for themselves
+    // (schemeshard__operation_create_table.cpp:874) while TCopyTable::Propose persists the
+    // destination, its parent and the source (schemeshard__operation_copy_table.cpp:819-821).
+    // Restore trips both halves -- the destination is the live table it restores into and the
+    // source is the backup-dir copy -- so retiring this aborts on /MyRoot/<table> and on
+    // .../<ts>_full/<table> alike. Retire it with the backup site, once copy parts declare.
     return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetRestoreBackupCollection().GetName(), 0);
 }

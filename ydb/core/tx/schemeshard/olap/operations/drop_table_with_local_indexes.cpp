@@ -17,11 +17,13 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropColumnTable
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    // DropColumnTableWithLocalIndexes discovers and cascades over local-index children
-    // (tablePath.Base()->GetChildren()) at execution time, so the drop is not just the
-    // named table -- it is a cascade rooted there.
+    // DropColumnTableWithLocalIndexes does cascade over local-index children, but it does so
+    // at propose: it pushes the table's own drop part (:45), then walks
+    // tablePath.Base()->GetChildren() (:48) and pushes a DropColumnTableLocalIndex part per
+    // local index (:70). Only the writes land at execution. Each of those parts is asked for
+    // its own declaration, so this one names just the table.
     const auto& drop = tx.GetDrop();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
         drop.HasId() ? drop.GetId() : 0);
 }
 

@@ -545,10 +545,13 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropBackupColle
     const TOperationContext& context)
 {
     // CollectExternalObjects walks the whole subtree under the collection (BFS over
-    // children) plus scans every CDC stream on the schemeshard for ones feeding it, all at
-    // execution time. The name is the only thing the request carries -- no id field.
+    // children) plus scans every CDC stream on the schemeshard for ones feeding it -- but it
+    // runs at propose, from CreateDropBackupCollectionCascade (:632), which turns the plan
+    // into DropCdcStream (:643) and DropTable (:651) parts before any of it is proposed. Only
+    // the writes land at execution. Those parts declare their own paths, so this declaration
+    // is just the collection the name resolves to; the request carries no id field.
     const auto& drop = tx.GetDropBackupCollection();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(), 0);
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(), 0);
 }
 
 } // namespace NOperation

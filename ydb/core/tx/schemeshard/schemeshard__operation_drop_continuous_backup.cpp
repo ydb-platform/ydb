@@ -19,11 +19,13 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropContinuousB
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    // The request names only the source table (TDropContinuousBackup has no id field); the
-    // "_continuousBackupImpl" streams under it are discovered as children at execution time
-    // and cascaded via NCdc::DoDropStream, so the table is a cascade root, not a plain target.
+    // The request names only the source table (TDropContinuousBackup has no id field), but
+    // the fan-out is not deferred to execution: CreateDropContinuousBackup scans the table's
+    // children for "_continuousBackupImpl" streams (:67) and expands them into drop parts
+    // through NCdc::DoDropStream (:92), both at propose. Every part is asked for its own
+    // declaration, so this one only has to name the table the request named.
     const auto& op = tx.GetDropContinuousBackup();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
 }
 
 } // namespace NOperation

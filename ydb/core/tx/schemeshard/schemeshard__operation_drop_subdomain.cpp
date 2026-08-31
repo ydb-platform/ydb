@@ -233,8 +233,12 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropSubDomain>(
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
+    // Not a cascade at all, despite the name: Propose refuses a subdomain that still has
+    // children (.NotChildren(), :154), and HandleReply asserts the subtree it drops is the
+    // single path it was given (Y_ABORT_UNLESS(paths.size() == 1), :59). A subdomain with
+    // contents has to be emptied first, so the target is the only path this can touch.
     const auto& drop = tx.GetDrop();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
         drop.HasId() ? drop.GetId() : 0);
 }
 

@@ -417,12 +417,14 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropIndex>(
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    // CreateDropIndex resolves the same WorkingDir/TableName/IndexName path and then
-    // cascades over the index's impl-table children (AddDropIndex walks
-    // indexPath.Base()->GetChildren() at execution time).
+    // CreateDropIndex (:440) resolves the same WorkingDir/TableName/IndexName path and then
+    // cascades over the index's impl-table children, but that expansion is a propose-time
+    // one: AddDropIndex (:593) pushes the index's own drop part (:598), walks
+    // indexPath.Base()->GetChildren() (:600) and pushes a DropTable part per impl table
+    // (:612). Only the writes land at execution. Those parts declare their own paths.
     const auto& op = tx.GetDropIndex();
     const TString tablePath = JoinPath({tx.GetWorkingDir(), op.GetTableName()});
-    return DeclareCascadeTargetByIdOrName(context.SS, tablePath, op.GetIndexName(), 0);
+    return DeclareTargetByIdOrName(context.SS, tablePath, op.GetIndexName(), 0);
 }
 
 } // namespace NOperation

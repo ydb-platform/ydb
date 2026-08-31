@@ -49,9 +49,7 @@ jobs:
         && github.event.pull_request.state == 'open'
         && (
           (github.event.action != 'labeled' && github.event.pull_request.draft == false)
-          || (github.event.action == 'labeled'
-              && (github.event.label.name == 'rebase-and-check'
-                  || github.event.label.name == 'ok-to-test'))
+          || (github.event.action == 'labeled' && (github.event.label.name == 'rebase-and-check' || github.event.label.name == 'ok-to-test'))
         )
         && vars.CHECKS_SWITCH != ''
         && fromJSON(vars.CHECKS_SWITCH).pr_check == true

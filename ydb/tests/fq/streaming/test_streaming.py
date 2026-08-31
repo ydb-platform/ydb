@@ -2414,6 +2414,7 @@ FROM `{table_name}`"""
         output_topic = entity_name("auto_partitioned_output")
         query_name = entity_name("auto_partitioned_query")
         query_path = f"/Root/{query_name}"
+        consumer_name = "auto_partitioned_consumer"
 
         kikimr.ydb_client.query(f"""
             CREATE TOPIC `{input_topic}`
@@ -2427,7 +2428,7 @@ FROM `{table_name}`"""
             );
             CREATE TOPIC `{output_topic}`;
         """)
-        create_read_rule(output_topic, self.consumer_name, default_endpoint=kikimr.endpoint)
+        create_read_rule(output_topic, consumer_name, default_endpoint=kikimr.endpoint)
 
         topic_client = kikimr.ydb_client.driver.topic_client
         load_message = json.dumps({"kind": "load", "value": "x" * 1024 * 1024})
@@ -2488,7 +2489,7 @@ FROM `{table_name}`"""
                 partition_id=partition_id,
             )
 
-        assert sorted(kikimr.ydb_client.topic_read(output_topic, self.consumer_name, len(child_partition_ids))) == [
+        assert sorted(kikimr.ydb_client.topic_read(output_topic, consumer_name, len(child_partition_ids))) == [
             f"partition-{partition_id}" for partition_id in child_partition_ids
         ]
 

@@ -295,6 +295,7 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate,
     auto success = NJson::ReadJsonTree(*plan, &planJson, true);
     UNIT_ASSERT_C(success, "Failed to read plan as JSON");
 
+    auto defaultOp = defaultOperator.empty() ? (expected.size() == 1 || predicate.find("strict ") != std::string::npos ? "and" : "or") : defaultOperator;
     auto op = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["DefaultOperator"].GetString();
     UNIT_ASSERT_VALUES_EQUAL_C(op, '"' + defaultOperator + '"', "for predicate = " << predicate);
 
@@ -565,10 +566,10 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
         } else {
             UNIT_ASSERT_C(idxResult.IsSuccess(), "INDEX query failed for predicate: " << p.Sql << " err: " << idxResult.GetIssues().ToString());
             UNIT_ASSERT_C(mainResult.IsSuccess(), "MAIN query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
+            Cerr << p.Sql << ", size: " << idxResult.GetResultSet(0).RowsCount() << Endl;
+
             CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(idxResult.GetResultSet(0)));
             ++okCount;
-
-            Cerr << p.Sql << ", size: " << idxResult.GetResultSet(0).RowsCount() << Endl;
         }
     }
 

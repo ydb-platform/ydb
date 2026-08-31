@@ -61,10 +61,10 @@ void FillDataColumn(NYdb::NQuery::TQueryClient& db);
 
 void ValidateTokens(NYdb::NQuery::TQueryClient& db, const std::string& predicate,
     std::vector<NJsonIndex::TToken> expected, NYdb::TParams params,
-    const std::string& defaultOperator = "and");
+    const std::string& defaultOperator = "");
 
 void ValidateTokens(NYdb::NQuery::TQueryClient& db, const std::string& predicate, std::vector<std::string> expected,
-    const std::string& defaultOperator = "and");
+    const std::string& defaultOperator = "");
 
 NYdb::NQuery::TExecuteQueryResult WriteJsonIndexWithKeys(NYdb::NQuery::TQueryClient& db, const std::string& stmt,
     const std::string& tableName, const std::string& jsonType, const std::vector<std::pair<ui64, ui64>>& values,

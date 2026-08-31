@@ -38,11 +38,10 @@ NBinaryJson::EEntryType GetEntryType(const TJsonPathItem& item) {
 
 // Keys may contain binary data (e.g. a zero byte), so we prefix each key with its
 // varint-encoded length (LEB128). This allows unambiguous prefix-scan queries.
-// Key lengths are encoded as (actual_length + 1) so that the encoded length byte is never
-// zero. This reserves \x00 exclusively for the literal separator used in AppendJsonIndexLiteral,
-// preventing ambiguity between an empty-key path component and the start of a literal suffix
+// Key lengths are encoded as (actual_length + PathSep::Max) so that the encoded length
+// byte is never zero and some extra values are reserved for special separators
 void AppendKey(TString& prefix, TStringBuf key) {
-    size_t size = key.size() + 1;
+    size_t size = key.size() + (ui8)EPathSeparator::Max;
     while (size > 0) {
         if (size < 0x80) {
             prefix.push_back(static_cast<char>(size));
@@ -52,6 +51,10 @@ void AppendKey(TString& prefix, TStringBuf key) {
         size >>= 7;
     };
     prefix += key;
+}
+
+void AppendArrayItem(TString& prefix) {
+    prefix += static_cast<char>(EPathSeparator::ArrayItem);
 }
 
 bool IsSuffixType(EJsonPathItemType type) {
@@ -88,26 +91,39 @@ bool IsPredicateType(EJsonPathItemType type) {
     }
 }
 
+static bool ReadPathKey(TStringBuf path, size_t& pos, TStringBuf& key) {
+    if ((ui8)path[pos] < (ui8)EPathSeparator::Max) {
+        return false;
+    }
+    size_t encodedSize = 0;
+    size_t shift = 0;
+    while (pos < path.size()) {
+        const ui8 byte = (ui8)path[pos++];
+        encodedSize |= (size_t)(byte & 0x7F) << shift;
+        if ((byte & 0x80) == 0) {
+            break;
+        }
+        shift += 7;
+    }
+    if (encodedSize == 0 || encodedSize - (ui8)EPathSeparator::Max > path.size() - pos) {
+        return false;
+    }
+    key = TStringBuf(path.data() + pos, encodedSize - (ui8)EPathSeparator::Max);
+    pos += encodedSize - (ui8)EPathSeparator::Max;
+    return true;
+}
+
 TStringBuf GetPathPrefix(TStringBuf pathToken) {
     size_t pos = 0;
     while (pos < pathToken.size()) {
-        size_t encodedSize = 0;
-        size_t shift = 0;
-        while (pos < pathToken.size()) {
-            const ui8 byte = static_cast<ui8>(pathToken[pos++]);
-            if (byte == 0) {
-                return pathToken.SubStr(0, pos - 1);
-            }
-            encodedSize |= static_cast<size_t>(byte & 0x7F) << shift;
-            if ((byte & 0x80) == 0) {
-                break;
-            }
-            shift += 7;
+        if ((ui8)pathToken[pos] == (ui8)EPathSeparator::ArrayItem) {
+            pos++;
+            continue;
         }
-        if (encodedSize == 0 || encodedSize - 1 > pathToken.size() - pos) {
-            return pathToken;
+        TStringBuf key;
+        if (!ReadPathKey(pathToken, pos, key)) {
+            return pathToken.substr(0, pos);
         }
-        pos += encodedSize - 1;
     }
     return pathToken;
 }
@@ -131,12 +147,7 @@ bool IsPathPrefixAncestor(const TToken& ancestor, const TToken& descendant) {
 // AND -> keep leaves (maximal tokens): if token A is a prefix of token B, A is redundant
 //        because requiring both A and B is satisfied by B alone (descendant implies ancestor)
 //
-// Path prefix comparison uses only the portion before the literal separator (\x00):
-//   1. AppendKey encodes key lengths as (actual_length + 1), so no key-length byte is ever \x00
-//   2. AppendJsonIndexLiteral always starts the literal suffix with \x00
-// Therefore \x00 can only appear at the start of a literal suffix, never inside the path portion.
-// Literal suffix bytes must not participate in StartsWith, or tokens with the same path but
-// different values could be collapsed when their encoded literals share a byte prefix.
+// Path prefix comparison uses only the portion before the literal separator (PathSep::Literal)
 void PruneRedundantTokens(TTokens& tokens, TCollectResult::ETokensMode mode) {
     if (tokens.size() <= 1 || mode == TCollectResult::ETokensMode::NotSet) {
         return;
@@ -251,11 +262,16 @@ public:
         : Reader(path)
         , CallableType(callableType)
         , Variables(variables)
-        , ParamVariables(paramVariables.begin(), paramVariables.end()) {
+        , ParamVariables(paramVariables.begin(), paramVariables.end())
+        , Lax(Reader.GetMode() == EJsonPathMode::Lax) {
     }
 
     TCollectResult Collect() {
         return Collect(Reader.ReadFirst(), EMode::Context);
+    }
+
+    bool IsLax() const {
+        return Lax;
     }
 
 private:
@@ -296,6 +312,7 @@ private:
     std::unordered_map<TString, TString> Variables;
     std::unordered_map<TString, TString> ParamVariables;
     TVector<TString> FilterObjectPrefixes;
+    bool Lax;
 };
 
 TCollectResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
@@ -419,7 +436,18 @@ TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, 
 }
 
 TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
-    return Collect(Reader.ReadInput(item), mode);
+    auto result = Collect(Reader.ReadInput(item), mode);
+    if (!result.CanCollect()) {
+        return result;
+    }
+    auto& tokens = result.GetTokens();
+    TTokens prefixedTokens;
+    for (auto node: tokens) {
+        AppendArrayItem(node.PathToken);
+        prefixedTokens.insert(std::move(node));
+    }
+    std::swap(tokens, prefixedTokens);
+    return result;
 }
 
 TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
@@ -711,16 +739,25 @@ TString TokenizeJsonNextPrefix(const TString& prefix, TStringBuf key) {
     return newPrefix;
 }
 
+TString TokenizeJsonArrayPrefix(const TString& prefix) {
+    TString newPrefix = prefix;
+    AppendArrayItem(newPrefix);
+    return newPrefix;
+}
+
 void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens) {
     switch (root.GetType()) {
         case NBinaryJson::EContainerType::TopLevelScalar:
             TokenizeBinaryJson(root.GetElement(0), prefix, tokens);
             break;
-        case NBinaryJson::EContainerType::Array:
+        case NBinaryJson::EContainerType::Array: {
+            TString nextPrefix = TokenizeJsonArrayPrefix(prefix);
+            tokens.push_back(nextPrefix);
             for (ui32 pos = 0; pos < root.GetSize(); pos++) {
-                TokenizeBinaryJson(root.GetElement(pos), prefix, tokens);
+                TokenizeBinaryJson(root.GetElement(pos), nextPrefix, tokens);
             }
             break;
+        }
         case NBinaryJson::EContainerType::Object:
             auto it = root.GetObjectIterator();
             while (it.HasNext()) {
@@ -737,7 +774,7 @@ void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString
 }   // namespace
 
 void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload, const double* numberPayload) {
-    out.push_back(0);
+    out.push_back(static_cast<char>(EPathSeparator::Literal));
     out.push_back(static_cast<char>(type));
     switch (type) {
         case NBinaryJson::EEntryType::String:
@@ -798,6 +835,10 @@ bool TCollectResult::CanCollect() const {
     return !IsError() && !Stopped && GetTokens().size() == 1;
 }
 
+bool TCollectResult::CanAppendLiteral() const {
+    return !IsError() && !Stopped && !GetTokens().empty();
+}
+
 TCollectResult::ETokensMode TCollectResult::GetTokensMode() const {
     return TokensMode;
 }
@@ -827,12 +868,82 @@ TVector<TString> TokenizeJson(TStringBuf text, TString& error) {
     return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
 }
 
+TTokens ExpandLaxToken(const TToken& token) {
+    // Generate all variants of the path portion. In lax mode a member access
+    // implicitly descends one array level, so an array-item marker may optionally
+    // precede each key segment.
+    TVector<TString> variants{ "" };
+    auto multiply = [&](TStringBuf segment) {
+        TVector<TString> nextVariants;
+        nextVariants.reserve(variants.size() * 2);
+        for (auto& variant : variants) {
+            nextVariants.push_back(variant + segment);
+            nextVariants.push_back(variant + (char)EPathSeparator::ArrayItem + segment);
+        }
+        variants = std::move(nextVariants);
+    };
+
+    size_t pos = 0;
+    bool inArray = false;
+    TStringBuf literal;
+    while (pos < token.PathToken.size()) {
+        if (token.PathToken[pos] == (char)EPathSeparator::ArrayItem) {
+            multiply("");
+            pos++;
+            inArray = true;
+            continue;
+        }
+        TStringBuf segment;
+        const size_t segmentStart = pos;
+        if (!ReadPathKey(token.PathToken, pos, segment)) {
+            literal = TStringBuf(token.PathToken.data() + segmentStart, token.PathToken.size() - segmentStart);
+            break;
+        }
+        segment = TStringBuf(token.PathToken.data() + segmentStart, pos - segmentStart);
+        if (inArray) {
+            // Already in array item, don't unpack second time
+            for (auto& variant : variants) {
+                variant += segment;
+            }
+            inArray = false;
+        } else {
+            multiply(segment);
+        }
+    }
+    if (!inArray) {
+        multiply("");
+    }
+
+    TTokens result;
+    for (auto& variant : variants) {
+        result.emplace(variant + literal, token.ParamName);
+    }
+    return result;
+}
+
+TTokens ExpandLaxTokens(const TTokens& tokens) {
+    TTokens result;
+    for (const auto& token : tokens) {
+        auto expanded = ExpandLaxToken(token);
+        result.insert(expanded.begin(), expanded.end());
+    }
+    return result;
+}
+
 TCollectResult CollectJsonPath(const TJsonPathPtr& path, ECallableType callableType, const std::unordered_map<TString, TString>& variables,
     const std::unordered_map<TString, TString>& paramVariables) {
-    auto result = TQueryCollector(path, callableType, variables, paramVariables).Collect();
+    TQueryCollector collector(path, callableType, variables, paramVariables);
+    auto result = collector.Collect();
     if (!result.IsError()) {
         if (result.GetTokens().empty()) {
             result = TCollectResult(TIssue("Cannot collect tokens for the given JSON path"));
+        } else {
+            if (collector.IsLax()) {
+                result.GetTokens() = ExpandLaxTokens(result.GetTokens());
+                if (result.GetTokens().size() > 1) {
+                    result.SetTokensMode(TCollectResult::ETokensMode::Or);
+                }
+            }
         }
 
         if (callableType != ECallableType::JsonValue) {
@@ -856,20 +967,26 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
     NJson::TJsonWriter writer(&ss, /* formatOutput */ false);
     writer.OpenMap();
 
-    size_t nullPos = pathToken.find('\0');
-    size_t pathEnd = (nullPos == TString::npos) ? pathToken.size() : nullPos;
+    const TStringBuf pathPart = GetPathPrefix(pathToken);
+    const bool hasLiteral = pathPart.size() != pathToken.size();
 
-    // Decode LEB128-prefixed key segments from the path portion
-    if (pathEnd > 0) {
+    // Decode LEB128-prefixed key segments and array-item markers from the path portion
+    if (!pathPart.empty()) {
         std::vector<TString> path;
         size_t pos = 0;
 
-        while (pos < pathEnd) {
+        while (pos < pathPart.size()) {
+            if (pathPart[pos] == (char)EPathSeparator::ArrayItem) {
+                path.push_back("[*]");
+                pos++;
+                continue;
+            }
+
             size_t encodedLength = 0;
             int shift = 0;
-            while (pos < pathEnd) {
-                ui8 byte = static_cast<ui8>(pathToken[pos++]);
-                encodedLength |= static_cast<size_t>(byte & 0x7F) << shift;
+            while (pos < pathPart.size()) {
+                ui8 byte = (ui8)pathPart[pos++];
+                encodedLength |= (size_t)(byte & 0x7F) << shift;
                 shift += 7;
                 if (!(byte & 0x80)) {
                     break;
@@ -880,12 +997,12 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
                 break;
             }
 
-            size_t keyLength = encodedLength - 1;
-            if (pos + keyLength > pathEnd) {
+            size_t keyLength = encodedLength - (ui8)EPathSeparator::Max;
+            if (pos + keyLength > pathPart.size()) {
                 break;
             }
 
-            path.push_back(pathToken.substr(pos, keyLength));
+            path.push_back(TString(pathPart.substr(pos, keyLength)));
             pos += keyLength;
         }
 
@@ -895,8 +1012,9 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
     }
 
     // Decode literal suffix
-    if (nullPos != TString::npos && nullPos + 1 < pathToken.size()) {
-        auto typeCode = static_cast<NBinaryJson::EEntryType>(static_cast<ui8>(pathToken[nullPos + 1]));
+    if (hasLiteral && pathPart.size() + 1 < pathToken.size()) {
+        auto typeCode = (NBinaryJson::EEntryType)pathToken[pathPart.size() + 1];
+        const size_t payloadPos = pathPart.size() + 2;
 
         switch (typeCode) {
             case NBinaryJson::EEntryType::BoolFalse:
@@ -909,12 +1027,12 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
                 writer.Write("literal", NJson::TJsonValue(NJson::JSON_NULL));
                 break;
             case NBinaryJson::EEntryType::String:
-                writer.Write("literal", pathToken.substr(nullPos + 2));
+                writer.Write("literal", pathToken.substr(payloadPos));
                 break;
             case NBinaryJson::EEntryType::Number:
-                if (nullPos + 2 + sizeof(double) <= pathToken.size()) {
+                if (payloadPos + sizeof(double) <= pathToken.size()) {
                     double d = 0.0;
-                    memcpy(&d, pathToken.data() + nullPos + 2, sizeof(double));
+                    memcpy(&d, pathToken.data() + payloadPos, sizeof(double));
                     writer.Write("literal", d);
                 }
                 break;

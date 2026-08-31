@@ -1114,13 +1114,13 @@ private:
 
             const auto operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
             if (!operationStatus) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Can not restart execution without final status");
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Cannot restart execution without final status");
                 return;
             }
 
             const auto finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
             if (finalizationStatus) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not restart execution while finalization is not finished, current status: " << *finalizationStatus);
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot restart execution while finalization is not finished, current status: " << *finalizationStatus);
                 return;
             }
 
@@ -1577,7 +1577,7 @@ public:
         , Counters(std::move(counters))
         , Settings(std::move(settings))
     {
-        Y_VALIDATE(!Settings.AllowRestart || Settings.FailOnNotFound, "Can not handle setting FailOnNotFound when restart allowed");
+        Y_VALIDATE(!Settings.AllowRestart || Settings.FailOnNotFound, "Cannot handle setting FailOnNotFound when restart allowed");
     }
 
     void Bootstrap() {
@@ -2868,7 +2868,7 @@ private:
 // Script execution cancellation with handling runtime and retry cancellation
 // *Assumptions*:
 // 1. Retry backoff large enough to cancel script execution operation between retries
-// 2. System not under high load so data transaction can not be executed during backoff period
+// 2. System not under high load so data transaction cannot be executed during backoff period
 
 class TCancelScriptExecutionOperationActor final : public TActorBootstrapped<TCancelScriptExecutionOperationActor> {
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;

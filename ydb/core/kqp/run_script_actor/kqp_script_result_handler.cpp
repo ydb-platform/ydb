@@ -298,7 +298,7 @@ private:
             {"sender", ev->Sender});
 
         if (SavePhysicalGraphState.Sender) {
-            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Can not save graph twice, previous sender was: " << SavePhysicalGraphState.Sender << ", got graph from: " << ev->Sender)}));
+            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Cannot save graph twice, previous sender was: " << SavePhysicalGraphState.Sender << ", got graph from: " << ev->Sender)}));
             return;
         }
 
@@ -338,7 +338,7 @@ private:
         SavePhysicalGraphState.GraphsToSave.pop();
 
         if (sendResponse) {
-            Y_VALIDATE(SavePhysicalGraphState.Sender, "Can not reply without sender");
+            Y_VALIDATE(SavePhysicalGraphState.Sender, "Cannot reply without sender");
             Forward(ev, SavePhysicalGraphState.Sender);
         } else if (saveFailed) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to update query physical graph", issues));
@@ -620,7 +620,7 @@ private:
                 {"issues", issues.ToOneLineString()},
                 {"from", ev->Sender});
 
-            // We can not finish query manually, consider it is already finished
+            // We cannot finish query manually, consider it is already finished
             QueryIsRunning = false;
             Finish(status, AddRootIssue(TStringBuilder() << "Failed to cancel query (" << status << ")", issues));
             return;

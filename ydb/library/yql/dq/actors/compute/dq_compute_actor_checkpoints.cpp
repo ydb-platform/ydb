@@ -432,7 +432,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
         return;
     }
 
-    auto& checkpoint = ev->Get()->Checkpoint;
+    const auto& checkpoint = ev->Get()->Checkpoint;
     std::vector<ui64> taskIds;
     size_t taskIdsSize = 1;
     if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
@@ -538,7 +538,7 @@ void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev
 }
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-    const auto buildDiagnostics = [task = &Task, ca = ComputeActor](const TPendingCheckpointBase& checkpoint, const TString& type) -> TString {
+    const auto buildDiagnostics = [task = &Task, ca = ComputeActor, id = SelfId()](const TPendingCheckpointBase& checkpoint, const TString& type) -> TString {
         TString diagnostics;
         if (!checkpoint.IsSlowCheckpoint(diagnostics)) {
             return "";
@@ -546,6 +546,7 @@ void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
 
         return TStringBuilder()
             << " Stage: " << task->GetStageId()
+            << ". Self id: " << id
             << ". Channels version: " << task->GetDqChannelVersion()
             << ". Pending checkpoint type: " << type
             << ". " << diagnostics

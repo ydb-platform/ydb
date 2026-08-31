@@ -1030,7 +1030,7 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
 }
 
 void TStreamingTestFixture::EnsureNotInitialized(const std::string& info) {
-    UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
+    UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, cannot setup " << info);
 }
 
 void TStreamingTestFixture::TearDown(NUnitTest::TTestContext& context)  {

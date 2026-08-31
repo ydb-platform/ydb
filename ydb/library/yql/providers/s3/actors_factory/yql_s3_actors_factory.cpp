@@ -87,9 +87,6 @@ namespace NYql::NDq {
         if (s3Config.HasBlockFileSizeLimit()) {
             s3ReadFactoryConfig.BlockFileSizeLimit = s3Config.GetBlockFileSizeLimit();
         }
-        if (s3Config.HasEnableScheduling()) {
-            s3ReadFactoryConfig.EnableScheduling = s3Config.GetEnableScheduling();
-        }
         return s3ReadFactoryConfig;
     }
 } // namespace NYql::NDq

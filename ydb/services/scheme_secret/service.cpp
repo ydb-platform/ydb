@@ -246,7 +246,7 @@ void TDescribeSchemaSecretsService::HandleIncomingSchemeCacheRetryRequest(TEvRes
 }
 
 void TDescribeSchemaSecretsService::HandleIncomingSchemeShardRetryRequest(TEvResolveSecretSchemeShardRetry::TPtr& ev) {
-    YDB_LOG_NOTICE("HandleIncomingSchemeShardRetryRequest",
+    YDB_LOG_NOTICE("HandleIncomingRequest",
         {"event", "TEvResolveSecretSchemeShardRetry"},
         {"requestId", ev->Get()->InitialRequestId},
         {"secret", ev->Get()->SecretPath}

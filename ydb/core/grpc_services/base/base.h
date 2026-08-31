@@ -514,6 +514,9 @@ public:
     // validation
     virtual bool Validate(TString& error) = 0;
 
+    // Store the resolved database for request processing without updating counters.
+    virtual void SetDatabaseName(const TString& database) = 0;
+
     // counters
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
     virtual IGRpcProxyCounters::TPtr GetCounters() const = 0;
@@ -749,6 +752,9 @@ public:
         return true;
     }
 
+    void SetDatabaseName(const TString&) override {
+    }
+
     void SetCounters(IGRpcProxyCounters::TPtr) override {
     }
 
@@ -951,8 +957,8 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        if (DatabaseName_) {
-            return DatabaseName_;
+        if (ResolvedDatabaseName_) {
+            return ResolvedDatabaseName_;
         }
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
@@ -1012,6 +1018,10 @@ public:
         return true;
     }
 
+    void SetDatabaseName(const TString& database) override {
+        ResolvedDatabaseName_ = database;
+    }
+
     void SetCounters(IGRpcProxyCounters::TPtr counters) override {
         Counters_ = counters;
     }
@@ -1021,7 +1031,6 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
-        DatabaseName_ = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1158,7 +1167,7 @@ public:
 
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
-    TMaybe<TString> DatabaseName_;
+    TMaybe<TString> ResolvedDatabaseName_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
@@ -1307,8 +1316,8 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        if (DatabaseName) {
-            return DatabaseName;
+        if (ResolvedDatabaseName) {
+            return ResolvedDatabaseName;
         }
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
@@ -1388,6 +1397,10 @@ public:
         return true;
     }
 
+    void SetDatabaseName(const TString& database) override {
+        ResolvedDatabaseName = database;
+    }
+
     void SetCounters(IGRpcProxyCounters::TPtr counters) override {
         Counters = counters;
     }
@@ -1397,7 +1410,6 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
-        DatabaseName = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1646,7 +1658,7 @@ protected:
     NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
-    TMaybe<TString> DatabaseName;
+    TMaybe<TString> ResolvedDatabaseName;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;
@@ -2009,6 +2021,10 @@ public:
 
     bool Validate(TString& /*error*/) override {
         return true;
+    }
+
+    void SetDatabaseName(const TString& database) override {
+        Database = database;
     }
 
     void SetCounters(IGRpcProxyCounters::TPtr counters) override {

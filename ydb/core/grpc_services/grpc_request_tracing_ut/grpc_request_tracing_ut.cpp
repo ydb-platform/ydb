@@ -640,6 +640,10 @@ Y_UNIT_TEST(UsesValidatedDatabaseName) {
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "mydb");
+    request.SetDatabaseName("/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/Root/mydb");
+    UNIT_ASSERT(ctx->UsedDatabase.empty());
+
     request.UseDatabase("/Root/mydb");
     UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/Root/mydb");
@@ -825,6 +829,10 @@ Y_UNIT_TEST(UsesValidatedDatabaseName) {
     NGRpcService::TEvBiStreamPingRequest request(ctx);
 
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "mydb");
+    request.SetDatabaseName("/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/Root/mydb");
+    UNIT_ASSERT(ctx->UsedDatabase.empty());
+
     request.UseDatabase("/Root/mydb");
     UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/Root/mydb");

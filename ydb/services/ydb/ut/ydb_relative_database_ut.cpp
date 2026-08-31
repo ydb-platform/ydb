@@ -12,6 +12,7 @@ using namespace NYdb;
 namespace {
 
 const TString TenantPath = "/Root/mydb";
+const TString TenantPoolKind = "mydb";
 
 struct TDiscoveryResult {
     grpc::Status Status;
@@ -47,12 +48,14 @@ void AssertSuccess(const TDiscoveryResult& result) {
 Y_UNIT_TEST_SUITE(YdbRelativeDatabase) {
 
 Y_UNIT_TEST(InitialDiscoveryResolvesDatabaseAgainstClusterRoot) {
-    TKikimrWithGrpcAndRootSchema server;
+    TKikimrWithGrpcAndRootSchema server({}, {}, {}, false, nullptr, [](auto& settings) {
+        settings.AddStoragePool(TenantPoolKind, TStringBuilder() << TenantPath << ':' << TenantPoolKind);
+    });
 
     Ydb::Cms::CreateDatabaseRequest createRequest;
     createRequest.set_path(TenantPath);
     auto* storage = createRequest.mutable_resources()->add_storage_units();
-    storage->set_unit_kind("ssd");
+    storage->set_unit_kind(TenantPoolKind);
     storage->set_count(1);
     server.Tenants_->CreateTenant(std::move(createRequest));
 

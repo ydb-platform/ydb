@@ -147,7 +147,7 @@ private:
         IRequestProxyCtx* requestBaseCtx = event->Get();
         const auto providedDatabaseName = requestBaseCtx->GetDatabaseName();
         if (providedDatabaseName && !providedDatabaseName->empty()) {
-            requestBaseCtx->UseDatabase(ResolveDatabaseName(*providedDatabaseName, RootDatabase));
+            requestBaseCtx->SetDatabaseName(ResolveDatabaseName(*providedDatabaseName, RootDatabase));
         }
 
         LogRequest(event);

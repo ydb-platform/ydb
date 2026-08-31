@@ -4022,7 +4022,7 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
             constexpr ui32 AveragePartitionsPerTask = 5;
             const ui32 tasksByPartitions = (taskCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask;
             const ui32 tasksByThread = (((TStagePredictor::GetUsableThreads() * 2) + 2) / 3);
-            taskCount = std::min(tasksByPartitions, tasksByThread * resourceSnapshotSize);
+            taskCount = std::min<ui32>(tasksByPartitions, tasksByThread * resourceSnapshotSize);
         } else {
             taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
         }

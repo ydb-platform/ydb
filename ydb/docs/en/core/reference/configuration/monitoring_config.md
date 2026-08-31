@@ -1,47 +1,161 @@
 # monitoring_config
 
-The `monitoring_config` section of the {{ ydb-short-name }} configuration file configures [YDB Monitoring](../ydb-ui/ydb-monitoring.md). The parameters below control [authentication](../../security/authentication.md) on individual embedded monitoring pages.
+The `monitoring_config` section of the {{ ydb-short-name }} configuration file defines the parameters of YDB Monitoring.
 
+## Authentication on monitoring pages {#authentication}
 
-```yaml
-monitoring_config:
-  # authentication on the /counters and /healthcheck pages
-  require_counters_authentication: false
-  require_healthcheck_authentication: false
-```
-
-
-## Authentication on Monitoring Pages {#authentication}
+This section describes settings related to [authentication](../../security/authentication.md) on individual pages of the built-in monitoring.
 
 #|
 || Parameter | Description ||
-|| `require_counters_authentication` | Selects mandatory [authentication](../../security/authentication.md) mode for the `/counters` and `/counters/hosts` pages.
+|| `require_counters_authentication` | Mandatory authentication mode on the `/counters` and `/counters/hosts` pages.
 
-Valid values:
+Possible values:
 
-- `true`: Access to `/counters` and `/counters/hosts` requires an [auth token](../../concepts/glossary.md#auth-token). Requests undergo authentication and authorization.
+- `true` — access to `/counters` and `/counters/hosts` only with an [authentication token](../../concepts/glossary.md#auth-token); requests are authenticated and [permissions](../../concepts/glossary.md#access-right) are checked.
 
-  The `true` value is allowed only when mandatory [authentication](../../security/authentication.md) is enabled in the [security_config](./security_config.md) section of the {{ ydb-short-name }} configuration file.
-- `false`: Requests to `/counters` and `/counters/hosts` can be made without an [auth token](../../concepts/glossary.md#auth-token).
+  The value `true` is allowed only when mandatory authentication mode is enabled in the [security_config](./security_config.md) section of the {{ ydb-short-name }} configuration file.
+- `false` — requests to `/counters` and `/counters/hosts` can be made without an authentication token.
 
 Default value: `false`.
 ||
-|| `require_healthcheck_authentication` | Adds an [authentication](../../security/authentication.md) requirement for the `/healthcheck` endpoint on top of the cluster-wide rules.
+|| `require_healthcheck_authentication` | Additional authentication requirement for the `/healthcheck` endpoint in addition to the cluster's general rules.
 
-Valid values:
+Possible values:
 
-- `true`: Any `/healthcheck` response, including [Prometheus format](https://prometheus.io/docs/instrumenting/exposition_formats/) output (the `format=prometheus` parameter), is returned only for requests with an [auth token](../../concepts/glossary.md#auth-token). Requests undergo authentication and authorization.
+- `true` — any response from `/healthcheck`, including the [Prometheus format](https://prometheus.io/docs/instrumenting/exposition_formats/) (parameter `format=prometheus`), is returned only when the request includes an authentication token; requests are authenticated and permissions are checked.
 
-  The `true` value is allowed only when mandatory [authentication](../../security/authentication.md) is enabled in the [security_config](./security_config.md) section of the {{ ydb-short-name }} configuration file.
-- `false`: When mandatory authentication is enabled in the cluster, requests to `/healthcheck` without a token are still allowed if [Prometheus format](https://prometheus.io/docs/instrumenting/exposition_formats/) output is requested (`format=prometheus`). Cluster-wide rules apply to all other `/healthcheck` response formats (see the note below).
+  The value `true` is allowed only when mandatory authentication mode is enabled in the security_config section of the {{ ydb-short-name }} configuration file.
+- `false` — when mandatory authentication is enabled in the cluster, requests to `/healthcheck` without a token are still allowed if the output is requested in Prometheus format (`format=prometheus`). For other response formats `/healthcheck`, the general rules apply (see the note below).
 
 Default value: `false`.
 
 {% note info %}
 
-If mandatory [authentication](../../security/authentication.md) is enabled in [security_config](./security_config.md), an auth token is required for `/healthcheck` responses in any format other than Prometheus, regardless of the `require_healthcheck_authentication` value.
+If mandatory authentication is enabled in security_config, then for `/healthcheck` responses in any format except Prometheus, a token is required regardless of the value of `require_healthcheck_authentication`.
 
 {% endnote %}
 
 ||
 |#
+
+Example of setting parameters with authentication enabled on individual pages of the built-in monitoring.
+
+
+```yaml
+monitoring_config:
+  # authentication on the /counters and /healthcheck pages
+  require_counters_authentication: true
+  require_healthcheck_authentication: true
+```
+
+
+## TLS on monitoring pages {#tls}
+
+{{ ydb-short-name }} opens a separate HTTP port for the built-in interface, displaying [metrics](../../devops/observability/monitoring.md), and other auxiliary commands.
+
+You can enable [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) on the HTTP port, so the port will accept only HTTPS connections. Regular HTTP requests will then be rejected at the TLS handshake level without any response and without redirecting to HTTPS. Simultaneous operation of HTTP and HTTPS on different ports is not supported: monitoring uses a single port that works either as HTTP or as HTTPS.
+
+TLS is enabled by specifying an SSL certificate (certificate chains are supported) and a private SSL key (keys of the following types are supported: RSA, ECDSA, and PKCS#8) without a password, because encrypted keys are not supported.
+
+The TLS parameters for monitoring are described below. When changing the values of these parameters, you must restart the cluster nodes on which the changes were made.
+
+#|
+|| Parameter | Description ||
+||
+
+`monitoring_certificate`
+
+|
+
+Parameter for passing the contents of the SSL certificate and private SSL key directly in [PEM format](https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail) without using separate files. Requirements for the parameter contents:
+
+- First, the server certificate is specified.
+- Then intermediate certificates are specified in sequence, if any.
+- Then the private key is specified without a password.
+
+When this parameter is specified, the built-in interface automatically starts processing requests using the specified SSL certificate. If the `monitoring_certificate` parameter is specified, the `monitoring_certificate_file` and `monitoring_private_key_file` parameters are ignored.
+
+Default value: empty string.
+
+||
+||
+
+`monitoring_certificate_file`
+
+|
+
+Path to the certificate file for SSL access in PEM format. The file may additionally contain a private SSL key without a password. This private key will be used if the `monitoring_private_key_file` parameter is not specified.
+
+When the `monitoring_certificate_file` parameter is specified, the built-in interface automatically starts processing requests using the specified SSL certificate.
+
+Default value: empty string.
+
+||
+||
+
+`monitoring_private_key_file`
+|
+
+Path to the private SSL key file in PEM format without a password. When this parameter is specified, the `monitoring_certificate_file` parameter must be set. If the file specified in the `monitoring_certificate_file` parameter contains a private SSL key, it will be ignored, meaning the `monitoring_private_key_file` parameter takes priority in specifying the private key.
+
+Default value: empty string.
+
+||
+||
+
+`monitoring_ca_file`
+
+|
+
+Path to the file with the root (CA) certificate. Enables requesting a client certificate during the TLS handshake for monitoring.
+
+Possible values:
+
+- Non-empty path — the server requests a client certificate. If a certificate is presented, it is verified at the TLS level during [device authentication](../../security/authentication.md#device-auth-interfaces) (a connection with an untrusted certificate is not established); after successful verification, the server preferentially uses the [authentication token](../../concepts/glossary.md#auth-token) to authenticate the client, and if there is no token, authentication is performed using the [client certificate](../../security/authentication.md#client-certificate). If no certificate is presented, then with the `client_certificate_required: true` setting, the connection is not established.
+- Empty string — the server does not request a client certificate during the TLS handshake; device authentication and client certificate authentication for monitoring are unavailable with this setting.
+
+The parameter is ignored if TLS is not enabled by the `monitoring_certificate` or `monitoring_certificate_file`+`monitoring_private_key_file` parameters.
+
+Default value: empty string.
+
+||
+||
+
+`client_certificate_required`
+
+|
+
+Requirement for a client certificate during the TLS handshake for monitoring.
+
+Possible values:
+
+- `true` — the server requires a client certificate: a connection without a certificate or with an untrusted certificate is not established. `true` can only be specified together with the specified `monitoring_ca_file`.
+- `false` — a client certificate is not required; the behavior when requesting a certificate is determined by the `monitoring_ca_file` parameter.
+
+Default value: `false`.
+
+||
+|#
+
+Example of enabling mTLS for monitoring: requesting a client certificate without requiring it to be presented.
+
+
+```yaml
+monitoring_config:
+  monitoring_certificate_file: /path/to/cert.pem # to enable TLS
+  monitoring_private_key_file: /path/to/key.pem
+  monitoring_ca_file: /path/to/ca.pem # client certificate request (mTLS)
+```
+
+
+Example of enabling mTLS for monitoring: requiring a client certificate with mandatory presentation.
+
+
+```yaml
+monitoring_config:
+  monitoring_certificate_file: /path/to/cert.pem
+  monitoring_private_key_file: /path/to/key.pem
+  monitoring_ca_file: /path/to/ca.pem
+  client_certificate_required: true
+```

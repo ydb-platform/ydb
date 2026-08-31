@@ -346,6 +346,153 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         }
         UNIT_ASSERT(!validator.Validate(makeConfig(30, "IO")).Ok());
     }
+
+    Y_UNIT_TEST(ExecutorReferences) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+
+        auto makeConfig = [](TStringBuf executorReferences) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << "  executor:\n"
+                << "  - name: System\n"
+                << "    threads: 1\n"
+                << "    type: BASIC\n"
+                << executorReferences
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "  sys_executor: 0\n"
+            "  user_executor: 0\n"
+            "  io_executor: 0\n"
+            "  batch_executor: 0\n"
+            "  service_executor:\n"
+            "  - service_name: Interconnect\n"
+            "    executor_id: 0\n"))));
+
+        for (TStringBuf field : {"sys_executor", "user_executor", "io_executor", "batch_executor"}) {
+            UNIT_ASSERT_C(!validator.Validate(makeConfig(
+                ::TStringBuilder() << "  " << field << ": 1\n")).Ok(), field);
+        }
+
+        UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(makeConfig(
+            "  service_executor:\n"
+            "  - service_name: Interconnect\n"
+            "    executor_id: 1\n")), {{
+                "/actor_system_config",
+                "Check \"Executor references\" failed: service_executor[0].executor_id "
+                "must refer to an existing executor (got 1, executor count is 1)"
+            }}));
+
+        UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(makeConfig(
+            "  sys_executor: 256\n")), {{
+                "/actor_system_config/sys_executor",
+                "Value must be less or equal to max value(i.e <= 255)"
+            }}));
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "  service_executor:\n"
+            "  - service_name: Interconnect\n"
+            "    executor_id: 256\n")).Ok());
+    }
+
+    Y_UNIT_TEST(UseSharedThreadsRequiresAutoConfig) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+
+        auto autoConfig =
+            "actor_system_config:\n"
+            "  use_auto_config: true\n"
+            "  use_shared_threads: true\n"
+            "  node_type: COMPUTE\n"
+            "  cpu_count: 2\n";
+        UNIT_ASSERT(Valid(validator.Validate(autoConfig)));
+
+        auto manualConfig =
+            "actor_system_config:\n"
+            "  use_shared_threads: true\n"
+            "  executor:\n"
+            "  - name: System\n"
+            "    threads: 1\n"
+            "    type: BASIC\n"
+            "  scheduler:\n"
+            "    progress_threshold: 10000\n"
+            "    resolution: 64\n"
+            "    spin_threshold: 0\n";
+        UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(manualConfig), {{
+            "/actor_system_config",
+            "Check \"Must either be auto config or manual config\" failed: "
+            "use_shared_threads must not exist when not using auto config"
+        }}));
+    }
+
+    Y_UNIT_TEST(ExecutorPlacement) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+        auto makeConfig = [](TStringBuf name, TStringBuf executorFields, TStringBuf actorSystemFields = {}) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << "  executor:\n"
+                << "  - name: " << name << "\n"
+                << executorFields
+                << actorSystemFields
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "BS0",
+            "    threads: 3\n"
+            "    placement: 1\n"
+            "    type: BASIC\n"))));
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    affinity:\n"
+            "      cpu_list: 0-1\n"
+            "      exclude_cpu_list: 1\n"
+            "    type: BASIC\n"))));
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "IO",
+            "    threads: 1\n"
+            "    placement: 0\n"
+            "    type: IO\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    placement: 0\n"
+            "    type: BASIC\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    placement: -1\n"
+            "    type: BASIC\n")).Ok());
+
+        UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    placement: 0\n"
+            "    affinity:\n"
+            "      cpu_list: 0-1\n"
+            "    type: BASIC\n")), {{
+                "/actor_system_config/executor/0",
+                "Check \"Executor placement settings\" failed: executor must not define both affinity and placement"
+            }}));
+
+    }
+
 }
 
 } // namesapce NKikimr

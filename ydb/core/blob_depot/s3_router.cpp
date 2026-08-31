@@ -1,15 +1,8 @@
 #include "s3_router.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-#include <ydb/core/base/tablet_pipe.h>
-=======
 #include <ydb/core/base/counters.h>
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
 #include <ydb/core/protos/config.pb.h>
->>>>>>> 523288465c8 (Fixed router switch (#51236))
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/events/abstract.h>
@@ -20,35 +13,19 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-<<<<<<< HEAD
-#include <util/string/cast.h>
-#include <util/string/strip.h>
-
-<<<<<<< HEAD
-=======
-#include <algorithm>
-=======
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
 #include <atomic>
 #include <deque>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
->>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
 namespace NKikimr::NBlobDepot {
 
     namespace {
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    struct TLatencyHistogram {
-        static constexpr ui64 Bounds[] = {
-=======
     struct TRouteMonCounters {
         NMonitoring::TDynamicCounters::TCounterPtr Requests;
         NMonitoring::TDynamicCounters::TCounterPtr Errors;
@@ -74,7 +51,6 @@ namespace NKikimr::NBlobDepot {
 
     static NMonitoring::IHistogramCollectorPtr MakeLatencyHistogram() {
         return NMonitoring::ExplicitHistogram({
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
             1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000
         });
     }
@@ -117,9 +93,6 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-<<<<<<< HEAD
->>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
-=======
     class TWrapperInFlight : public TThrRefBase {
         std::atomic<i64> Count{0};
 
@@ -137,11 +110,11 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
->>>>>>> 523288465c8 (Fixed router switch (#51236))
     // Adapter installed on the inner storage wrapper. It does NOT redirect the response
-    // (recipient stays at the original sender of the request), but it inspects every
-    // outgoing response and notifies the router actor when an HTTP 5xx is detected, so
-    // the router can refresh the endpoint promptly.
+    // (recipient stays at the original sender of the request), but it observes every
+    // finished request: it reports its latency/traffic to the route sensors and notifies
+    // the router actor when an HTTP 5xx is detected, so the router can refresh the
+    // endpoint promptly.
     //
     // The adapter runs in AWS SDK callback threads, so ActorSystem is captured up front.
     class TRouterReplyAdapter : public NWrappers::NExternalStorage::IReplyAdapter {
@@ -149,11 +122,8 @@ namespace NKikimr::NBlobDepot {
         TActorSystem* const ActorSystem;
         const TActorId RouterId;
         const ui32 NotifyEventType;
-<<<<<<< HEAD
-=======
         const TIntrusivePtr<TRouteCounters> Counters;
         const TIntrusivePtr<TWrapperInFlight> InFlight;
->>>>>>> 523288465c8 (Fixed router switch (#51236))
 
     private:
         template <typename T>
@@ -169,14 +139,6 @@ namespace NKikimr::NBlobDepot {
         }
 
     public:
-<<<<<<< HEAD
-        TRouterReplyAdapter(TActorSystem* actorSystem, TActorId routerId, ui32 notifyEventType)
-            : ActorSystem(actorSystem)
-            , RouterId(routerId)
-            , NotifyEventType(notifyEventType)
-        {}
-
-=======
         TRouterReplyAdapter(TActorSystem* actorSystem, TActorId routerId, ui32 notifyEventType,
                 TIntrusivePtr<TRouteCounters> counters, TIntrusivePtr<TWrapperInFlight> inFlight)
             : ActorSystem(actorSystem)
@@ -196,7 +158,6 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
->>>>>>> 523288465c8 (Fixed router switch (#51236))
 #define IMPL_REBUILD(NAME) \
         std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<NWrappers::NExternalStorage::TEv##NAME##Response>&& ev) const override { \
             return Inspect(std::move(ev)); \
@@ -211,14 +172,13 @@ namespace NKikimr::NBlobDepot {
             enum {
                 EvBalancerTick = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvRefreshNow,
-<<<<<<< HEAD
-=======
                 EvSweepRetiring,
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
             };
         };
 
         NKikimrBlobDepot::TS3BackendSettings Settings;
+        ui64 TabletId = 0;
+        TString LogId;
         TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
@@ -237,8 +197,6 @@ namespace NKikimr::NBlobDepot {
         bool RefreshInFlight = false;
         bool RefreshScheduled = false;
 
-<<<<<<< HEAD
-=======
         struct TPendingRequest {
             TMonotonic EnqueuedAt;
             std::unique_ptr<IEventHandle> Ev;
@@ -251,7 +209,6 @@ namespace NKikimr::NBlobDepot {
 
         TMonotonic BalancerRequestStartedAt;
 
->>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
         ui32 RefreshSecMin() const {
             return Settings.HasBalancerRefreshSecMin() ? Settings.GetBalancerRefreshSecMin() : 10;
         }
@@ -270,8 +227,6 @@ namespace NKikimr::NBlobDepot {
             return TDuration::Seconds(sec);
         }
 
-<<<<<<< HEAD
-=======
         size_t MaxRetiringWrappers() const {
             return Settings.GetMaxRetiringWrappers();
         }
@@ -322,21 +277,13 @@ namespace NKikimr::NBlobDepot {
             return MakeIntrusive<TRouteCounters>(nonBalancer ? Mon.NonBalancer : Mon.Balancer);
         }
 
->>>>>>> 523288465c8 (Fixed router switch (#51236))
         ui16 BalancerProxyPort() const {
             return Settings.GetBalancerProxyPort();
         }
 
-<<<<<<< HEAD
-        void RegisterInnerWrapper(NWrappers::IExternalStorageConfig::TPtr externalStorageConfig) {
-            if (InnerWrapperId) {
-                Send(InnerWrapperId, new TEvents::TEvPoison());
-                InnerWrapperId = {};
-=======
         void RetireInnerWrapper() {
             if (!InnerWrapperId) {
                 return;
->>>>>>> 523288465c8 (Fixed router switch (#51236))
             }
 
             const i64 inFlight = InnerWrapperInFlight ? InnerWrapperInFlight->Get() : 0;
@@ -416,12 +363,8 @@ namespace NKikimr::NBlobDepot {
             auto inFlight = MakeIntrusive<TWrapperInFlight>();
             auto storageOperator = externalStorageConfig->ConstructStorageOperator();
             storageOperator->InitReplyAdapter(std::make_shared<TRouterReplyAdapter>(
-<<<<<<< HEAD
-                TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow));
-=======
                 TActivationContext::ActorSystem(), SelfId(), TEvPrivate::EvRefreshNow,
                 std::move(routeCounters), inFlight));
->>>>>>> 523288465c8 (Fixed router switch (#51236))
             InnerWrapperId = Register(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
             InnerWrapperInFlight = std::move(inFlight);
             FlushPendingRequests();
@@ -479,10 +422,9 @@ namespace NKikimr::NBlobDepot {
             auto* mutableSettings = Settings.MutableSettings();
             mutableSettings->SetEndpoint(endpoint);
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings));
+                AppData()->AwsClientConfig, *mutableSettings),
+                MakeRouteCounters(false));
             CurrentEndpoint = endpoint;
-<<<<<<< HEAD
-=======
 
             YDB_LOG_INFO("S3Router endpoint set (direct)",
                 {"marker", "BDTS25"},
@@ -490,20 +432,17 @@ namespace NKikimr::NBlobDepot {
                 {"endpoint", endpoint});
 
             SetCounter(Mon.IsUsingProxy, 0);
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
         }
 
         void BuildInnerWrapperViaProxy(const TString& host, ui16 port) {
+            const TString prevEndpoint = CurrentEndpoint;
             auto* mutableSettings = Settings.MutableSettings();
             mutableSettings->SetEndpoint(OriginalEndpoint);
             mutableSettings->SetProxyHost(host);
             mutableSettings->SetProxyPort(port);
             mutableSettings->SetProxyScheme(Settings.GetBalancerProxyScheme());
+            const TString proxyEndpoint = TStringBuilder() << host << ':' << port;
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-<<<<<<< HEAD
-                AppData()->AwsClientConfig, *mutableSettings));
-            CurrentEndpoint = TStringBuilder() << host << ':' << port;
-=======
                 AppData()->AwsClientConfig, *mutableSettings),
                 MakeRouteCounters(true));
             CurrentEndpoint = proxyEndpoint;
@@ -518,52 +457,14 @@ namespace NKikimr::NBlobDepot {
 
             IncCounter(Mon.EndpointSwitches);
             SetCounter(Mon.IsUsingProxy, 1);
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
         }
 
         bool BalancerEnabled() const {
             return Settings.HasBalancerHost() && Settings.GetBalancerHost();
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-        void CreatePipe() {
-            Y_ABORT_UNLESS(!PipeId);
-            PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId,
-                NTabletPipe::TClientRetryPolicy::WithRetries()));
-        }
-
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-            auto& msg = *ev->Get();
-            if (msg.ClientId != PipeId) {
-                return;
-            }
-            if (msg.Status == NKikimrProto::OK) {
-                PipeConnected = true;
-            } else {
-                PipeConnected = false;
-                PipeId = {};
-                CreatePipe();
-            }
-        }
-
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-            if (ev->Get()->ClientId != PipeId) {
-                return;
-            }
-
-            PipeConnected = false;
-            PipeId = {};
-            CreatePipe();
-        }
-
-        void SchedulePushMetrics() {
-            TActivationContext::Schedule(MetricsPushInterval(), new IEventHandle(TEvPrivate::EvPushMetrics, 0,
-=======
         void ScheduleSweepRetiring() {
             TActivationContext::Schedule(SweepRetiringInterval(), new IEventHandle(TEvPrivate::EvSweepRetiring, 0,
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
                 SelfId(), {}, nullptr, 0));
         }
 
@@ -572,7 +473,6 @@ namespace NKikimr::NBlobDepot {
             ScheduleSweepRetiring();
         }
 
->>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
         void IssueBalancerRequest() {
             if (RefreshInFlight || !BalancerEnabled()) {
                 return;
@@ -581,15 +481,18 @@ namespace NKikimr::NBlobDepot {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
             const TString url = TStringBuilder() << "http://" << Settings.GetBalancerHost();
+
+            YDB_LOG_DEBUG("S3Router issuing balancer request",
+                {"marker", "BDTS27"},
+                {"id", LogId},
+                {"url", url});
+
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
             RefreshInFlight = true;
-<<<<<<< HEAD
-=======
             BalancerRequestStartedAt = TActivationContext::Monotonic();
             IncCounter(Mon.BalancerResolveRequests);
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
         }
 
         void ScheduleNextRefresh() {
@@ -608,8 +511,6 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleRefreshNow() {
-<<<<<<< HEAD
-=======
             YDB_LOG_WARN("S3Router 5xx detected, triggering endpoint refresh",
                 {"marker", "BDTS30"},
                 {"id", LogId},
@@ -617,7 +518,6 @@ namespace NKikimr::NBlobDepot {
 
             IncCounter(Mon.FiveXxRefreshTriggers);
 
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
             if (!RefreshInFlight) {
                 IssueBalancerRequest();
             }
@@ -625,11 +525,6 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
             RefreshInFlight = false;
-<<<<<<< HEAD
-            const auto& msg = *ev->Get();
-            if (msg.Response && msg.Response->Status.StartsWith("2")) {
-                TString host = TString(StripString(msg.Response->Body));
-=======
             const TDuration latency = TActivationContext::Monotonic() - BalancerRequestStartedAt;
             CollectHistogram(Mon.BalancerResolveLatency, latency.MilliSeconds());
 
@@ -646,7 +541,6 @@ namespace NKikimr::NBlobDepot {
 
                 IncCounter(Mon.BalancerResolveSuccesses);
 
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
                 if (!host.empty()) {
                     ui16 port = BalancerProxyPort();
                     if (TStringBuf h, p; TStringBuf(host).TrySplit(':', h, p)) {
@@ -659,8 +553,6 @@ namespace NKikimr::NBlobDepot {
                         BuildInnerWrapperViaProxy(host, port);
                     }
                 }
-<<<<<<< HEAD
-=======
             } else {
                 YDB_LOG_WARN("S3Router balancer response failure",
                     {"marker", "BDTS29"},
@@ -671,7 +563,6 @@ namespace NKikimr::NBlobDepot {
                     {"latencyMs", latency.MilliSeconds()});
 
                 IncCounter(Mon.BalancerResolveFailures);
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
             }
             ScheduleNextRefresh();
         }
@@ -717,23 +608,17 @@ namespace NKikimr::NBlobDepot {
             return NKikimrServices::TActivity::BLOB_DEPOT_S3_ROUTER;
         }
 
-        explicit TBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings)
+        explicit TBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId)
             : Settings(std::move(settings))
+            , TabletId(tabletId)
+            , LogId(TStringBuilder() << '{' << tabletId << ":s3r}")
         {}
 
         void Bootstrap() {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
             OriginalEndpoint = endpoint;
-<<<<<<< HEAD
-<<<<<<< HEAD
-            BuildInnerWrapper(endpoint);
-=======
-            CreatePipe();
-            SchedulePushMetrics();
-=======
             SetupCounters();
             ScheduleSweepRetiring();
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
 
             YDB_LOG_INFO("S3Router bootstrap",
                 {"marker", "BDTS24"},
@@ -742,7 +627,6 @@ namespace NKikimr::NBlobDepot {
                 {"balancerEnabled", BalancerEnabled()},
                 {"balancerHost", BalancerEnabled() ? Settings.GetBalancerHost() : TString()});
 
->>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
                 ScheduleNextRefresh();
@@ -754,8 +638,6 @@ namespace NKikimr::NBlobDepot {
         }
 
         void PassAway() override {
-<<<<<<< HEAD
-=======
             YDB_LOG_INFO("S3Router shutting down",
                 {"marker", "BDTS31"},
                 {"id", LogId},
@@ -768,7 +650,6 @@ namespace NKikimr::NBlobDepot {
                 PendingRequests.pop_front();
             }
 
->>>>>>> 106e608ed10 (do not bypass S3 non-balancer before resolve (#50972))
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
@@ -797,10 +678,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
                 cFunc(TEvPrivate::EvBalancerTick, HandleBalancerTick);
                 cFunc(TEvPrivate::EvRefreshNow, HandleRefreshNow);
-<<<<<<< HEAD
-=======
                 cFunc(TEvPrivate::EvSweepRetiring, HandleSweepRetiring);
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
                 cFunc(TEvents::TSystem::Poison, PassAway);
             }
         }
@@ -808,8 +686,8 @@ namespace NKikimr::NBlobDepot {
 
     } // anonymous
 
-    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings) {
-        return new TBlobDepotS3Router(std::move(settings));
+    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId) {
+        return new TBlobDepotS3Router(std::move(settings), tabletId);
     }
 
 } // NKikimr::NBlobDepot

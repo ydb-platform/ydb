@@ -380,22 +380,6 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
         void UpdateThroughputs(bool reschedule = true);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-        THashMap<ui32, bool> S3RouterIsUsingProxyByNode;
-        ui64 S3RouterNodeCount = 0;
-        ui64 S3RouterNodesWithUsingProxy = 0;
-
-        ui64 S3GetsInFlightTotal = 0;
-        ui64 S3GetsMaxInFlightTotal = 0;
-        ui64 S3GetsPendingQueueSizeTotal = 0;
-
-        void ApplyAgentS3GetGauges(TAgent& agent, ui64 inFlight, ui64 maxInFlight, ui64 pendingQueueSize);
-
->>>>>>> 523288465c8 (Fixed router switch (#51236))
-=======
->>>>>>> 8034f543ce0 (Added compatibility for metrics (#51483))
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation
 

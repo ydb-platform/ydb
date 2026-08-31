@@ -358,6 +358,10 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+
+    TString GetDatabaseRelativePath(TStringBuf path) const {
+        return ResolvePathToDatabase(GetDatabaseName(), path);
+    }
 };
 
 class IRequestCtxBase
@@ -533,10 +537,6 @@ public:
 
     const TMaybe<TString> GetDatabaseName() const final {
         return ResolvedDatabaseName ? ResolvedDatabaseName : GetDatabaseNameFromRequest();
-    }
-
-    TString GetDatabaseRelativePath(TStringBuf path) const {
-        return ResolvePathToDatabase(GetDatabaseName(), path);
     }
 
     // Store the resolved database for request processing without updating counters.

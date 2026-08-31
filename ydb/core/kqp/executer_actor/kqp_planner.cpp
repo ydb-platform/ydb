@@ -679,16 +679,9 @@ void TKqpPlanner::PrepareCheckpoints() {
             break;
         }
     }
-<<<<<<< HEAD
+
     LOG_D("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
-=======
 
-    YDB_LOG_DEBUG("PrepareCheckpoints: checked streaming ingress",
-        {"txId", TxId},
-        {"ctx", *UserRequestContext},
-        {"hasStreamingIngress", hasStreamingIngress});
-
->>>>>>> 27a6bf88dd5 (YQ-5656 fixed checkpoint commit notifications for egress tasks (#51599))
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
@@ -941,17 +934,9 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
         };
         event->Tasks.emplace_back(std::move(task));
     }
-<<<<<<< HEAD
-    LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
-    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-=======
 
-    YDB_LOG_INFO("Sending TEvReadyState to checkpoint coordinator",
-        {"txId", TxId},
-        {"ctx", *UserRequestContext},
-        {"checkpointCoordinatorId", CheckpointCoordinatorId});
+    LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
     TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
->>>>>>> 27a6bf88dd5 (YQ-5656 fixed checkpoint commit notifications for egress tasks (#51599))
     CheckpointsReadyStateSent = true;
 }
 

@@ -343,10 +343,16 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::List: {
-                simdjson::ondemand::array array;
-                if (jsonValue.get_array().get(array)) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (List), expected array, but got " << JsonTypeToString(cellType));
+                if (cellType != simdjson::builtin::ondemand::json_type::array) {
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected array, but got " << JsonTypeToString(cellType));
                     return false;
+                }
+                simdjson::ondemand::array array;
+                {
+                    CHECK_JSON_ERROR(jsonValue.get_array().get(array)) {
+                        SetParsingError(error, jsonValue, "parse as array", status, isQuiet);
+                        return false;
+                    }
                 }
                 auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
                 auto itemType = listType->GetItemType();
@@ -369,10 +375,16 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
-                simdjson::ondemand::array array;
-                if (jsonValue.get_array().get(array)) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (Tuple), expected array, but got " << JsonTypeToString(cellType));
+                if (cellType != simdjson::builtin::ondemand::json_type::array) {
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected array, but got " << JsonTypeToString(cellType));
                     return false;
+                }
+                simdjson::ondemand::array array;
+                {
+                    CHECK_JSON_ERROR(jsonValue.get_array().get(array)) {
+                        SetParsingError(error, jsonValue, "parse as array", status, isQuiet);
+                        return false;
+                    }
                 }
                 auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
                 auto elementsCount = tupleType->GetElementsCount();
@@ -397,7 +409,7 @@ public:
                 for (; idx != elementsCount; ++idx) {
                     // tail must be optional
                     if (tupleType->GetElementType(idx)->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
-                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Tuple), short json array at index " << idx << ", expected non optional type " << GetTypeName(tupleType->GetElementType(idx)));
+                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), short json array at index " << idx << ", expected non optional type " << GetTypeName(tupleType->GetElementType(idx)));
                         return false;
                     }
                 }
@@ -406,10 +418,16 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
-                simdjson::ondemand::object object;
-                if (jsonValue.get_object().get(object)) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (Struct), expected object, but got " << JsonTypeToString(cellType));
+                if (cellType != simdjson::builtin::ondemand::json_type::object) {
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected object, but got " << JsonTypeToString(cellType));
                     return false;
+                }
+                simdjson::ondemand::object object;
+                {
+                    CHECK_JSON_ERROR(jsonValue.get_object().get(object)) {
+                        SetParsingError(error, jsonValue, "parse as object", status, isQuiet);
+                        return false;
+                    }
                 }
                 auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
                 auto membersCount = structType->GetMembersCount();
@@ -449,7 +467,7 @@ public:
 
                 for (ui32 idx = 0; idx != membersCount; ++idx) {
                     if (!resultValues[idx] && structType->GetMemberType(idx)->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
-                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field " << structType->GetMemberName(idx));
+                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected non-optional field " << structType->GetMemberName(idx));
                         return false;
                     }
                 }
@@ -458,11 +476,18 @@ public:
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
-                simdjson::ondemand::object jsonObject;
-                if (jsonValue.get_object().get(jsonObject)) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
+                if (cellType != simdjson::builtin::ondemand::json_type::object) {
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected object, but got " << JsonTypeToString(cellType));
                     return false;
                 }
+                simdjson::ondemand::object jsonObject;
+                {
+                    CHECK_JSON_ERROR(jsonValue.get_object().get(jsonObject)) {
+                        SetParsingError(error, jsonValue, "parse as object", status, isQuiet);
+                        return false;
+                    }
+                }
+
                 {
                     bool isEmpty;
                     CHECK_JSON_ERROR(jsonObject.is_empty().get(isEmpty)) {

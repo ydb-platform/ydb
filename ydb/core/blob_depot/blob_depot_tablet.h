@@ -108,10 +108,6 @@ namespace NKikimr::NBlobDepot {
             float LastPushedApproximateFreeSpaceShare = 0.0f;
 
             THashSet<TS3Locator> S3WritesInFlight;
-
-            ui64 S3GetsInFlight = 0;
-            ui64 S3GetsMaxInFlight = 0;
-            ui64 S3GetsPendingQueueSize = 0;
         };
 
         struct TPipeServerContext {
@@ -459,18 +455,7 @@ namespace NKikimr::NBlobDepot {
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
-        void Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev);
         void UpdateThroughputs(bool reschedule = true);
-
-        THashMap<ui32, bool> S3RouterIsUsingProxyByNode;
-        ui64 S3RouterNodeCount = 0;
-        ui64 S3RouterNodesWithUsingProxy = 0;
-
-        ui64 S3GetsInFlightTotal = 0;
-        ui64 S3GetsMaxInFlightTotal = 0;
-        ui64 S3GetsPendingQueueSizeTotal = 0;
-
-        void ApplyAgentS3GetGauges(TAgent& agent, ui64 inFlight, ui64 maxInFlight, ui64 pendingQueueSize);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

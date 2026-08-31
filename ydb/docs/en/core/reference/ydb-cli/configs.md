@@ -8,6 +8,7 @@
 * `--all` — extend command output to the entire configuration (see advanced configuration).
 * `--allow-unknown-fields` — allow ignoring unknown fields in the configuration.
 
+<<<<<<< HEAD
 ```bash
 # Apply the configuration dynconfig.yaml to the cluster
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
@@ -36,6 +37,113 @@
 # Delete all temporary configurations on the cluster
 {{ ydb-cli }} admin volatile-config drop --all
 ```
+=======
+{% endnote %}
+
+This section contains commands for managing the {{ ydb-short-name }} [cluster configuration](../../devops/configuration-management/configuration-v1/config-overview.md).
+
+- Apply the `dynconfig.yaml` configuration to the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
+    ```
+
+- Check if it is possible to apply the configuration dynconfig.yaml to the cluster (check all validators, the configuration version in the yaml file must be 1 higher than the cluster configuration version, the cluster name must match):
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
+    ```
+
+- Apply the `dynconfig.yaml` configuration to the cluster, ignoring version and cluster checks (the version and cluster values will be overwritten with correct values):
+
+    ```bash
+    {{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
+    ```
+
+- Fetch the main cluster configuration:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config fetch
+    ```
+
+- Generate all possible final configurations for `dynconfig.yaml`:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
+    ```
+
+- Generate the final configuration for `dynconfig.yaml` with the `tenant=/Root/test` and `canary=true` labels:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
+    ```
+
+- Generate the final configuration for `dynconfig.yaml` for labels from node 100:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 100
+    ```
+
+- Generate a dynamic configuration file, based on a static configuration on the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin cluster config genereate
+    ```
+
+- Initialize a directory with the configuration, using the path to the configuration file:
+
+    ```bash
+    {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>
+    ```
+
+- Initialize a directory with the configuration, using the configuration from the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>
+    ```
+
+## Managing temporary configuration
+
+This section contains commands for managing [temporary configurations](../../devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md).
+
+- Fetch all temporary configurations from the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
+    ```
+
+- Fetch the temporary configuration with id 1 from the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config fetch --id 1
+    ```
+
+- Apply the `volatile.yaml` temporary configuration to the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config add -f volatile.yaml
+    ```
+
+- Delete temporary configurations with ids 1 and 3 on the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config drop --id 1 --id 3
+    ```
+
+- Delete all temporary configurations on the cluster:
+
+    ```bash
+    {{ ydb-cli }} admin volatile-config drop --all
+    ```
+
+## Parameters
+
+* `-f, --filename <filename.yaml>` — read input from a file, `-` for STDIN. For commands that accept multiple files (e.g., resolve), you can specify it multiple times, the file type will be determined by the metadata field
+* `--output-directory <dir>` — dump/resolve files to a directory
+* `--strip-metadata` — remove the metadata field from the output
+* `--all` — extends the output of commands to the entire configuration (see advanced configuration)
+* `--allow-unknown-fields` — allows ignoring unknown fields in the configuration
+>>>>>>> 3ec4c5a78c1 (docs: remove legacy EN configuration overview (#51480))
 
 ## Scenarios
 

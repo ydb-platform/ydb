@@ -38,8 +38,6 @@ namespace NKikimr::NBlobDepot {
             S3Manager->AddTrashToCollect(locator);
         }
         agent.S3WritesInFlight.clear();
-
-        ApplyAgentS3GetGauges(agent, 0, 0, 0);
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {

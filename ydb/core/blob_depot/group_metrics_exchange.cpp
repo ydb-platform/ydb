@@ -105,111 +105,19 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        BytesRead += record.GetBytesRead();
-        BytesWritten += record.GetBytesWritten();
-        if (Config.HasVirtualGroupId()) {
+        if (record.HasBytesRead()) {
+            BytesRead += record.GetBytesRead();
+        }
+
+        if (record.HasBytesWritten()) {
+            BytesWritten += record.GetBytesWritten();
+        }
+
+        if (Config.HasVirtualGroupId() && (record.HasBytesRead() || record.HasBytesWritten())) {
             MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
         }
 
-        auto inc = [&](NKikimrBlobDepot::ECumulativeCounters counter, ui64 value) {
-            if (value) {
-                TabletCounters->Cumulative()[counter] += value;
-            }
-        };
-
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_OK, record.GetS3GetsOk());
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_ERROR, record.GetS3GetsError());
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_BYTES, record.GetS3GetsBytes());
-        inc(NKikimrBlobDepot::COUNTER_S3_GETS_SLOW_DOWN, record.GetS3GetsSlowDown());
-        inc(NKikimrBlobDepot::COUNTER_S3_GET_THROTTLE_ACTIVATIONS, record.GetS3GetThrottleActivations());
-
-        if (record.HasNodeId()) {
-            if (const auto it = Agents.find(record.GetNodeId()); it != Agents.end()) {
-                ApplyAgentS3GetGauges(it->second,
-                    record.GetS3GetsInFlight(),
-                    record.GetS3GetsMaxInFlight(),
-                    record.GetS3GetsPendingQueueSize());
-            }
-        }
-
         UpdateThroughputs(false);
-    }
-
-    void TBlobDepot::ApplyAgentS3GetGauges(TAgent& agent, ui64 inFlight, ui64 maxInFlight, ui64 pendingQueueSize) {
-        S3GetsInFlightTotal = S3GetsInFlightTotal - agent.S3GetsInFlight + inFlight;
-        S3GetsMaxInFlightTotal = S3GetsMaxInFlightTotal - agent.S3GetsMaxInFlight + maxInFlight;
-        S3GetsPendingQueueSizeTotal = S3GetsPendingQueueSizeTotal - agent.S3GetsPendingQueueSize + pendingQueueSize;
-        agent.S3GetsInFlight = inFlight;
-        agent.S3GetsMaxInFlight = maxInFlight;
-        agent.S3GetsPendingQueueSize = pendingQueueSize;
-        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_GET_READS_IN_FLIGHT] = S3GetsInFlightTotal;
-        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_GET_MAX_READS_IN_FLIGHT] = S3GetsMaxInFlightTotal;
-        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_GET_PENDING_QUEUE_SIZE] = S3GetsPendingQueueSizeTotal;
-    }
-
-    void TBlobDepot::Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev) {
-        const auto& record = ev->Get()->Record;
-
-        auto inc = [&](NKikimrBlobDepot::ECumulativeCounters counter, ui64 value) {
-            if (value) {
-                TabletCounters->Cumulative()[counter] += value;
-            }
-        };
-
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_REQUESTS, record.GetBalancerRequests());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_ERRORS, record.GetBalancerErrors());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_REQUESTS, record.GetNonBalancerRequests());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_ERRORS, record.GetNonBalancerErrors());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_BYTES_READ, record.GetNonBalancerBytesRead());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_BYTES_WRITTEN, record.GetNonBalancerBytesWritten());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_REQUESTS, record.GetBalancerResolveRequests());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_SUCCESSES, record.GetBalancerResolveSuccesses());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_FAILURES, record.GetBalancerResolveFailures());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_ENDPOINT_SWITCHES, record.GetEndpointSwitches());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_FIVE_XX_REFRESH_TRIGGERS, record.GetFiveXxRefreshTriggers());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_PENDING_REJECTS, record.GetPendingRejects());
-        inc(NKikimrBlobDepot::COUNTER_S3_ROUTER_RETIRING_WRAPPERS_ABORTED, record.GetRetiringWrappersAborted());
-
-        auto applyLatencyHistogram = [&](NKikimrBlobDepot::EPercentileCounters counter, const auto& buckets) {
-            if (buckets.empty()) {
-                return;
-            }
-
-            auto& hist = TabletCounters->Percentile()[counter];
-            const ui32 n = Min<ui32>(hist.GetRangeCount(), buckets.size());
-            for (ui32 i = 0; i < n; ++i) {
-                if (const ui64 count = buckets.Get(i)) {
-                    hist.AddFor(hist.GetRangeBound(i), count);
-                }
-            }
-        };
-
-        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_LATENCY_MS, record.GetBalancerLatencyHistogram());
-        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_NON_BALANCER_LATENCY_MS, record.GetNonBalancerLatencyHistogram());
-        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_BALANCER_RESOLVE_LATENCY_MS, record.GetBalancerResolveLatencyHistogram());
-        applyLatencyHistogram(NKikimrBlobDepot::COUNTER_S3_ROUTER_PENDING_LATENCY_MS, record.GetPendingLatencyHistogram());
-
-        if (record.HasIsUsingProxy()) {
-            const ui32 nodeId = record.GetNodeId();
-            const bool isUsingProxyByNode = record.GetIsUsingProxy();
-            auto it = S3RouterIsUsingProxyByNode.find(nodeId);
-            if (it == S3RouterIsUsingProxyByNode.end()) {
-                ++S3RouterNodeCount;
-                it = S3RouterIsUsingProxyByNode.emplace(nodeId, false).first;
-            }
-            if (isUsingProxyByNode != it->second) {
-                if (isUsingProxyByNode) {
-                    ++S3RouterNodesWithUsingProxy;
-                } else if (S3RouterNodesWithUsingProxy) {
-                    --S3RouterNodesWithUsingProxy;
-                }
-
-                it->second = isUsingProxyByNode;
-            }
-
-            const bool isUsingProxy = S3RouterNodeCount && S3RouterNodesWithUsingProxy == S3RouterNodeCount;
-            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_ROUTER_IS_USING_PROXY] = isUsingProxy ? 1 : 0;
-        }
     }
 
     void TBlobDepot::UpdateThroughputs(bool reschedule) {

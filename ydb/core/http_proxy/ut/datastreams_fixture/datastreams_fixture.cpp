@@ -270,7 +270,8 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
                                 const TString& host, const TString& date, const TString& userAgent,
                                 const TString& acceptEncoding,
                                 const IOutputStream::TPart& body, const TString& authorizationStr,
-                                const TString& contentType) {
+                                const TString& contentType,
+                                const TVector<std::pair<TString, TString>>& extraHeaders) {
     TNetworkAddress addr("::", HttpServicePort);
     TSocket sock(addr);
     TSocketOutput so(sock);
@@ -308,6 +309,12 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
     if (!contentType.empty()) {
         parts.push_back(IOutputStream::TPart(TStringBuf("Content-Type:")));
         parts.push_back(IOutputStream::TPart(TStringBuf(contentType)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    for (const auto& [name, value] : extraHeaders) {
+        parts.push_back(IOutputStream::TPart(TStringBuf(name)));
+        parts.push_back(IOutputStream::TPart(TStringBuf(":")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(value)));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
     parts.push_back(IOutputStream::TPart::CrLf());
@@ -357,10 +364,11 @@ NJson::TJsonMap THttpProxyTestMock::CreateQueueWithSecurityToken(NJson::TJsonMap
 THttpResult THttpProxyTestMock::SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
                             const TString& host, const TString& date, const TString& userAgent,
                             const TString& acceptEncoding, const TString& authorizationStr,
-                            const TString& contentType) {
+                            const TString& contentType,
+                            const TVector<std::pair<TString, TString>>& extraHeaders) {
     TString jsonStr = NJson::WriteJson(value);
     return SendHttpRequestRawSpecified(handler, target, host, date, userAgent, acceptEncoding,
-                                {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType);
+                                {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType, extraHeaders);
 }
 
 THttpResult THttpProxyTestMock::SendPing() {
@@ -1052,6 +1060,8 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     httpProxyConfig.Config = config;
     httpProxyConfig.CredentialsProvider = credentialsProvider;
     httpProxyConfig.UseSDK = GetEnv("INSIDE_YDB").empty();
+
+    AppData(as)->HttpProxyConfig.CopyFrom(config.GetHttpConfig());
 
     actorId = as->Register(NKikimr::NHttpProxy::CreateHttpProxy(httpProxyConfig));
     as->RegisterLocalService(MakeHttpProxyID(), actorId);

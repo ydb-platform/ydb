@@ -11,8 +11,10 @@ PEERDIR(
     ydb/core/protos
     ydb/core/resource_pools
 
+    ydb/services/metadata
     ydb/services/metadata/abstract
     ydb/services/metadata/manager
+    ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
 )
 
 YQL_LAST_ABI_VERSION()

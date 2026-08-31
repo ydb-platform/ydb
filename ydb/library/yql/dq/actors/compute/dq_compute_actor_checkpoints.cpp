@@ -409,18 +409,23 @@ void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
     if (CheckpointStartTime && (TActivationContext::Now() - CheckpointStartTime) >= SLOW_CHECKPOINT_DURATION) {
-        TStringBuilder checkpointDiagnostic;
+        auto checkpointDiagnostic = TStringBuilder() << " Stage: " << Task.GetStageId() << ". Channels version: " << Task.GetDqChannelVersion() << ". ";
+
         if (PendingCheckpoint.Checkpoint) {
             checkpointDiagnostic << "[Checkpoint " << MakeStringForLog(*PendingCheckpoint.Checkpoint) << "] ";
         }
+
         checkpointDiagnostic << "Slow checkpoint. Duration: " << (TInstant::Now() - CheckpointStartTime).Seconds() << 's';
+
         if (PendingCheckpoint) {
             checkpointDiagnostic << " CA: " << PendingCheckpoint.SavedComputeActorState;
+
             if (PendingCheckpoint.SinksCount) {
                 checkpointDiagnostic << " Sinks: " << PendingCheckpoint.SavedSinkStatesCount << '/' << PendingCheckpoint.SinksCount;
             }
         }
-        checkpointDiagnostic << " SavingToDatabase: " << SavingToDatabase;
+
+        checkpointDiagnostic << " SavingToDatabase: " << SavingToDatabase << ". Compute actor state diagnostics. " << ComputeActor->GetTaskDebugState();
         LOG_W(checkpointDiagnostic);
     }
     Schedule(SLOW_CHECKPOINT_DURATION, new NActors::TEvents::TEvWakeup());
@@ -459,7 +464,6 @@ bool TDqComputeActorCheckpoints::SaveState() {
         PendingCheckpoint.SavedComputeActorState = true;
         ComputeActor->SaveState(*PendingCheckpoint.Checkpoint, PendingCheckpoint.ComputeActorState);
     } catch (const std::exception& e) {
-        AbortCheckpoint();
         LOG_PCP_E("Failed to save state: " << e.what());
 
         auto resultEv = MakeHolder<TEvDqCompute::TEvSaveTaskStateResult>();
@@ -467,6 +471,7 @@ bool TDqComputeActorCheckpoints::SaveState() {
         resultEv->Record.SetTaskId(Task.GetId());
         resultEv->Record.SetStatus(NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR);
         EventsQueue.Send(std::move(resultEv));
+        AbortCheckpoint();
 
         return false;
     }

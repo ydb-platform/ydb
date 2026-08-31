@@ -261,8 +261,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 .Fifo = QueueAttributes.FifoQueue,
             };
 
-            TString path = PackQueueUrlPath(queueUrl);
-            TString url = TStringBuilder() << GetEndpoint(Cfg()) << path;
+            TString url = MakeQueueUrl(queueUrl, Request_.get());
             result.set_queue_url(std::move(url));
 
             return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);

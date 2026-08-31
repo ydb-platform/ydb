@@ -319,7 +319,7 @@ public:
                 }
                 if (status.IsSuccess()) {
                     // Note: we try to keep error from last alternative, but this won't work if tail is rejected by early json type mismatch check. So, just ensure some error is reported
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse as Variant type");
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse as Variant type" << ", json type: " << JsonTypeToString(cellType) << ", current token: '" << TruncateString(jsonValue.raw_json_token()) << "'");
                 } else if (!isQuiet) {
                     status.AddParentIssue(TStringBuilder() << "Failed to parse as Variant type");
                 }

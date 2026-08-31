@@ -19,7 +19,7 @@
         columnN typeN,
 {% if feature_secondary_index == true %}
         INDEX `<index_name>`
-          [GLOBAL|LOCAL]
+          GLOBAL
           [SYNC|ASYNC]
           [USING <index_type>]
           ON ( <index_columns> )

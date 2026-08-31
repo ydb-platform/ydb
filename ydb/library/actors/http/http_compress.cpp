@@ -2,6 +2,8 @@
 
 #include <zlib.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT THttpConfig::HttpLog
+
 namespace NHttp {
 
 struct TCompressContext::TImpl { // always deflate, make virtual later
@@ -24,16 +26,19 @@ void TCompressContext::InitCompress(TStringBuf encoding) {
         Impl->zs.zfree = Z_NULL;
         Impl->zs.opaque = Z_NULL;
         if (deflateInit2(&Impl->zs, compressionlevel, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-            ALOG_ERROR(THttpConfig::HttpLog, "deflateInit2 failed with level " << compressionlevel);
+            YDB_LOG_ERROR("DeflateInit2 failed with level",
+                {"compressionlevel", compressionlevel});
             Impl.reset();
         }
     } else if (encoding == "deflate") {
         if (deflateInit(&Impl->zs, compressionlevel) != Z_OK) {
-            ALOG_ERROR(THttpConfig::HttpLog, "deflateInit failed with level " << compressionlevel);
+            YDB_LOG_ERROR("DeflateInit failed with level",
+                {"compressionlevel", compressionlevel});
             Impl.reset();
         }
     } else {
-        ALOG_ERROR(THttpConfig::HttpLog, "Unsupported content encoding: " << encoding);
+        YDB_LOG_ERROR("Unsupported content",
+            {"encoding", encoding});
         Impl.reset();
     }
 }
@@ -51,16 +56,17 @@ void TCompressContext::InitDecompress(TStringBuf encoding) {
         Impl->zs.zfree = Z_NULL;
         Impl->zs.opaque = Z_NULL;
         if (inflateInit2(&Impl->zs, 15 + 16) != Z_OK) {
-            ALOG_ERROR(THttpConfig::HttpLog, "inflateInit2 failed while decompressing");
+            YDB_LOG_ERROR("InflateInit2 failed while decompressing");
             Impl.reset();
         }
     } else if (encoding == "deflate") {
         if (inflateInit(&Impl->zs) != Z_OK) {
-            ALOG_ERROR(THttpConfig::HttpLog, "inflateInit failed while decompressing");
+            YDB_LOG_ERROR("InflateInit failed while decompressing");
             Impl.reset();
         }
     } else {
-        ALOG_ERROR(THttpConfig::HttpLog, "Unsupported content encoding: " << encoding);
+        YDB_LOG_ERROR("Unsupported content",
+            {"encoding", encoding});
         Impl.reset();
     }
 }
@@ -75,7 +81,7 @@ void TCompressContext::Clear() {
 
 TString TCompressContext::Compress(TStringBuf source, bool finish) {
     if (!Impl) {
-        ALOG_ERROR(THttpConfig::HttpLog, "CompressContext is not initialized");
+        YDB_LOG_ERROR("CompressContext is not initialized");
         return {};
     }
     Impl->zs.next_in = (Bytef*)source.data();
@@ -90,7 +96,9 @@ TString TCompressContext::Compress(TStringBuf source, bool finish) {
         result.append(outbuffer, sizeof(outbuffer) - Impl->zs.avail_out);
     } while (ret == Z_OK && (Impl->zs.avail_in > 0 || Impl->zs.avail_out == 0 || finish));
     if (ret != Z_STREAM_END && ret != Z_OK) {
-        ALOG_ERROR(THttpConfig::HttpLog, "Exception during zlib compression: (" << ret << ") " << Impl->zs.msg);
+        YDB_LOG_ERROR("Exception during zlib compression",
+            {"ret", ret},
+            {"error", Impl->zs.msg});
         return {};
     }
     if (finish) {
@@ -101,7 +109,7 @@ TString TCompressContext::Compress(TStringBuf source, bool finish) {
 
 TString TCompressContext::Decompress(TStringBuf source) {
     if (!Impl) {
-        ALOG_ERROR(THttpConfig::HttpLog, "CompressContext is not initialized");
+        YDB_LOG_ERROR("CompressContext is not initialized");
         return {};
     }
     Impl->zs.next_in = (Bytef*)source.data();
@@ -116,7 +124,9 @@ TString TCompressContext::Decompress(TStringBuf source) {
         result.append(outbuffer, sizeof(outbuffer) - Impl->zs.avail_out);
     } while (ret == Z_OK && (Impl->zs.avail_in > 0 || Impl->zs.avail_out == 0));
     if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {
-        ALOG_ERROR(THttpConfig::HttpLog, "Exception during zlib decompression: (" << ret << ") " << Impl->zs.msg);
+        YDB_LOG_ERROR("Exception during zlib decompression",
+            {"ret", ret},
+            {"error", Impl->zs.msg});
         return {};
     }
     if (ret == Z_STREAM_END) {

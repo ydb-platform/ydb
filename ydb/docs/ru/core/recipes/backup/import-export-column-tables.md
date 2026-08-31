@@ -1,6 +1,6 @@
 # Импорт и экспорт данных в колоночные таблицы
 
-Для миграции данных и восстановления после сбоев [колоночные таблицы](../concepts/datamodel/table.md#column-oriented-tables) можно выгружать и загружать серверными командами [`export s3`](../reference/ydb-cli/export-import/export-s3.md) и [`import s3`](../reference/ydb-cli/export-import/import-s3.md). Команды [`tools dump`](../reference/ydb-cli/export-import/tools-dump.md), [`tools restore`](../reference/ydb-cli/export-import/tools-restore.md), [`export nfs`](../reference/ydb-cli/export-import/export-nfs.md) и [`import nfs`](../reference/ydb-cli/export-import/import-nfs.md) колоночные таблицы не обрабатывают.
+Для миграции данных и восстановления после сбоев [колоночные таблицы](../../concepts/datamodel/table.md#column-oriented-tables) можно выгружать и загружать серверными командами [`export s3`](../../reference/ydb-cli/export-import/export-s3.md) и [`import s3`](../../reference/ydb-cli/export-import/import-s3.md). Команды [`tools dump`](../../reference/ydb-cli/export-import/tools-dump.md), [`tools restore`](../../reference/ydb-cli/export-import/tools-restore.md), [`export nfs`](../../reference/ydb-cli/export-import/export-nfs.md) и [`import nfs`](../../reference/ydb-cli/export-import/import-nfs.md) колоночные таблицы не обрабатывают.
 
 Если нужен другой формат (например, Parquet или CSV) или выгрузка во внешнюю систему, доступны дополнительные подходы:
 

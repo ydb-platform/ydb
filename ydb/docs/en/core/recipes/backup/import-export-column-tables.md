@@ -1,6 +1,6 @@
 # Import and export of data to column tables
 
-For data migration and recovery after failures, [column tables](../concepts/datamodel/table.md#column-oriented-tables) can be exported and imported with the server-side [`export s3`](../reference/ydb-cli/export-import/export-s3.md) and [`import s3`](../reference/ydb-cli/export-import/import-s3.md) commands. The [`tools dump`](../reference/ydb-cli/export-import/tools-dump.md), [`tools restore`](../reference/ydb-cli/export-import/tools-restore.md), [`export nfs`](../reference/ydb-cli/export-import/export-nfs.md), and [`import nfs`](../reference/ydb-cli/export-import/import-nfs.md) commands do not process column tables.
+For data migration and recovery after failures, [column tables](../../concepts/datamodel/table.md#column-oriented-tables) can be exported and imported with the server-side [`export s3`](../../reference/ydb-cli/export-import/export-s3.md) and [`import s3`](../../reference/ydb-cli/export-import/import-s3.md) commands. The [`tools dump`](../../reference/ydb-cli/export-import/tools-dump.md), [`tools restore`](../../reference/ydb-cli/export-import/tools-restore.md), [`export nfs`](../../reference/ydb-cli/export-import/export-nfs.md), and [`import nfs`](../../reference/ydb-cli/export-import/import-nfs.md) commands do not process column tables.
 
 If you need a different format (for example, Parquet or CSV) or an export to an external system, additional approaches are available:
 

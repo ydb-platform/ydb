@@ -24,6 +24,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
+ydb/public/tools/local_ydb/ut test_local_ydb.py.test_deploy_stop_start_update_and_cleanup_preserve_data
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-lax]
@@ -73,6 +74,7 @@ ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorklo
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_operations_tab_renders_task_result_panel_after_completion
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
+ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_tab_navigation_matches_state_machine_for_core_command_sequences
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWriteChecksumsDisabled

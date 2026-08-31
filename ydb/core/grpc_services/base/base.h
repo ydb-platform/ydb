@@ -81,11 +81,11 @@ inline TString ResolvePathToDatabase(const TMaybe<TString>& database, TStringBuf
         return {};
     }
 
-    const TString canonizedPath = CanonizePath(TString(path));
     if (path.StartsWith('/')) {
-        return canonizedPath;
+        return TString(path);
     }
 
+    const TString canonizedPath = CanonizePath(TString(path));
     return NormalizePath(CanonizePath(database.GetOrElse(TString())), canonizedPath);
 }
 

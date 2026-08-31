@@ -88,12 +88,12 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
         .SetDatabase("mydb")
         .SetDiscoveryMode(EDiscoveryMode::Sync));
     // Resource paths below are relative after discovery unless explicitly testing absolute compatibility.
-    NScheme::TSchemeClient schemeClient(driver);
+    NYdb::NScheme::TSchemeClient schemeClient(driver);
     AssertSuccess(schemeClient.MakeDirectory("relative_dir").GetValueSync());
     AssertSuccess(schemeClient.DescribePath("relative_dir").GetValueSync());
     AssertSuccess(schemeClient.ListDirectory("relative_dir").GetValueSync());
 
-    NTable::TTableClient tableClient(driver);
+    NYdb::NTable::TTableClient tableClient(driver);
     const auto sessionResult = tableClient.CreateSession().GetValueSync();
     AssertSuccess(sessionResult);
     auto session = sessionResult.GetSession();
@@ -123,7 +123,7 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
 
     AssertSuccess(tableClient.BulkUpsert(
         "relative_dir/relative_path_test",
-        NTable::EDataFormat::CSV,
+        NYdb::NTable::EDataFormat::CSV,
         "2,2\n").GetValueSync());
 
     auto extraType = TTypeBuilder()
@@ -133,8 +133,8 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
         .Build();
     AssertSuccess(session.AlterTable(
         "relative_dir/relative_path_test",
-        NTable::TAlterTableSettings().AppendAddColumns(
-            NTable::TColumn("Extra", extraType))).GetValueSync());
+        NYdb::NTable::TAlterTableSettings().AppendAddColumns(
+            NYdb::TColumn("Extra", extraType))).GetValueSync());
 
     TValueBuilder keys;
     keys.BeginList();
@@ -221,7 +221,7 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     AssertSuccess(session.DropTable("relative_dir/renamed").GetValueSync());
     AssertSuccess(schemeClient.ModifyPermissions(
         "relative_dir",
-        NScheme::TModifyPermissionsSettings().AddInterruptInheritance(true)).GetValueSync());
+        NYdb::NScheme::TModifyPermissionsSettings().AddInterruptInheritance(true)).GetValueSync());
     AssertSuccess(schemeClient.RemoveDirectory("relative_dir").GetValueSync());
 }
 

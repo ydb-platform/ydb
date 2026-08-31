@@ -16,6 +16,8 @@
 #include <ydb/library/actors/core/events.h>
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 namespace NKikimr::NPQ {
 using namespace NActors;
 using namespace Ydb::Topic;
@@ -33,12 +35,6 @@ i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
     return 0;
 }
 
-#define PQ_CPROXY_LOG_D(message) LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_I(message) LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_W(message) LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_E(message) LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-#define PQ_CPROXY_LOG_A(message) LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
-
 void SetKafkaBatchBaseOffsetIfNeeded(NKikimrPQClient::TDataChunk& proto, ui64 offset) {
     if (GetDataChunkCodec(proto) == Ydb::Topic::CODEC_KAFKA_BATCH) {
         NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), offset);
@@ -54,7 +50,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        PQ_CPROXY_LOG_D(": Created");
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: Created");
 
         Become(&TThis::StateWork);
         ctx.Schedule(DeadlineMapWakeupPeriod, new TEvents::TEvWakeup(ExpireDeadlineMapsWakeupTag));
@@ -108,11 +104,13 @@ private:
     void HandleCreateClientSession(TEvPQProxy::TEvDirectReadDataSessionConnected::TPtr& ev) {
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
-        PQ_CPROXY_LOG_D("client session connected with id '" << key.SessionId << "'");
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: client session connected with id",
+            {"sessionId", key.SessionId});
         ChangeCounterValue("CreateClientSessionRate", 1, false, true);
         auto sessionIter = ServerSessions.find(key);
         if (sessionIter.IsEnd()) {
-            PQ_CPROXY_LOG_D("unknown session id '" << key.SessionId << "', close session");
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: unknown session id close session",
+                {"sessionId", key.SessionId});
             CloseSession(ev->Sender, key.SessionId, Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "Unknown session");
             return;
         }
@@ -195,10 +193,13 @@ private:
         // registered and then died).
         MarkSessionRetired(key, generation);
         if (destroyDone) {
-            PQ_CPROXY_LOG_D("server session deregistered: " << key.SessionId);
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: server session",
+                {"deregistered", key.SessionId});
         } else {
-            PQ_CPROXY_LOG_W("attempted to deregister unknown server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << generation << ", ignored");
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to deregister unknown server ignored",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", generation});
             return;
         }
     }
@@ -209,18 +210,20 @@ private:
         auto sessionIter = ServerSessions.find(sessionKey);
         if (sessionIter.IsEnd()) {
             if (IsSessionGenerationRetired(sessionKey, ev->Get()->TabletGeneration)) {
-                PQ_CPROXY_LOG_I("drop stage for retired session generation: session=" << sessionKey.SessionId
-                                << ", partitionSessionId=" << sessionKey.PartitionSessionId
-                                << ", ReadKey.ReadId=" << ev->Get()->ReadKey.ReadId
-                                << ", TabletGeneration=" << ev->Get()->TabletGeneration);
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop stage for retired session",
+                    {"session", sessionKey.SessionId},
+                    {"partitionSessionId", sessionKey.PartitionSessionId},
+                    {"readId", ev->Get()->ReadKey.ReadId},
+                    {"generation", ev->Get()->TabletGeneration});
                 return;
             }
             // LOGBROKER-10590: CreateSession Register is fire-and-forget; Stage can arrive first.
             // Dropping it permanently leaves tablet inFlight without client-visible DirectRead.
-            PQ_CPROXY_LOG_I("buffer stage for unregistered session: session=" << sessionKey.SessionId
-                            << ", partitionSessionId=" << sessionKey.PartitionSessionId
-                            << ", ReadKey.ReadId=" << ev->Get()->ReadKey.ReadId
-                            << ", TabletGeneration=" << ev->Get()->TabletGeneration);
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer stage for unregistered session",
+                    {"session", sessionKey.SessionId},
+                    {"partitionSessionId", sessionKey.PartitionSessionId},
+                    {"readId", ev->Get()->ReadKey.ReadId},
+                    {"generation", ev->Get()->TabletGeneration});
             BufferPendingStage(
                     sessionKey,
                     ev->Get()->ReadKey.ReadId,
@@ -237,19 +240,26 @@ private:
         auto key = MakeSessionKey(ev->Get());
         const auto readId = ev->Get()->ReadKey.ReadId;
         const auto& generation = ev->Get()->TabletGeneration;
-        PQ_CPROXY_LOG_D("publish read: " << readId << " for session " << key.SessionId << ", Generation: " << generation);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: publish for session",
+            {"read", readId},
+            {"sessionId", key.SessionId},
+            {"generation", generation});
 
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
             if (IsSessionGenerationRetired(key, generation)) {
-                PQ_CPROXY_LOG_I("drop publish for retired session generation: sessionId=" << key.SessionId
-                                << ", partitionSessionId=" << key.PartitionSessionId
-                                << ", readId=" << readId << ", generation=" << generation);
+                YDB_LOG_INFO_CTX(ctx, "Direct read cache: drop publish for retired session generation",
+                    {"sessionId", key.SessionId},
+                    {"partitionSessionId", key.PartitionSessionId},
+                    {"readId", readId},
+                    {"generation", generation});
                 return;
             }
-            PQ_CPROXY_LOG_I("buffer publish for unregistered session: sessionId=" << key.SessionId
-                            << ", partitionSessionId=" << key.PartitionSessionId
-                            << ", readId=" << readId << ", generation=" << generation);
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: buffer publish for unregistered session",
+                    {"sessionId", key.SessionId},
+                    {"partitionSessionId", key.PartitionSessionId},
+                    {"readId", readId},
+                    {"generation", generation});
             BufferPendingPublish(key, readId, generation);
             return;
         }
@@ -265,10 +275,13 @@ private:
         ForgetPending(key, readId, generation);
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
-            PQ_CPROXY_LOG_D("attempt to forget read for unknown session: " << ev->Get()->ReadKey.SessionId << " ignored");
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: attempt to forget read for unknown session ignored",
+                {"session", ev->Get()->ReadKey.SessionId});
             return;
         }
-        PQ_CPROXY_LOG_D("forget read: " << readId << " for session " << key.SessionId);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: forget read for session",
+            {"readId", readId},
+            {"sessionId", key.SessionId});
 
         if (iter->second.Generation != generation) { // Stale generation in event, ignore it
             return;
@@ -331,27 +344,34 @@ private:
         const auto& ctx = ActorContext();
         auto sessionsIter = ServerSessions.find(key);
         if (sessionsIter.IsEnd()) {
-            PQ_CPROXY_LOG_D("registered server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << generation);
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", generation});
 
             ClearRetiredSession(key);
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
             FlushPendingDirectReads(key);
         } else if (sessionsIter->second.Generation == generation) {
-            PQ_CPROXY_LOG_W("attempted to register duplicate server session: " << key.SessionId << ":"
-                            << key.PartitionSessionId << " with same generation " << generation << ", ignored");
+            YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to register duplicate server with same generation ignored",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", generation});
             ClearRetiredSession(key);
             FlushPendingDirectReads(key);
         } else if (DestroyServerSession(sessionsIter, generation)) {
-            PQ_CPROXY_LOG_D("registered server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with generation " << generation
-                            << ", killed existing session with older generation ");
+            YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation killed existing session with older generation",
+                {"sessionId", key.SessionId},
+                {"partitionSessionId", key.PartitionSessionId},
+                {"generation", generation});
             ClearRetiredSession(key);
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
             FlushPendingDirectReads(key);
         } else {
-            PQ_CPROXY_LOG_I("attempted to register server session: " << key.SessionId
-                            << ":" << key.PartitionSessionId << " with stale generation " << generation << ", ignored");
+            YDB_LOG_INFO_CTX(ctx, "Direct read cache: attempted to register server with stale generation ignored",
+                {"session", key.SessionId},
+                {"sessionId", key.PartitionSessionId},
+                {"generation", generation});
         }
         ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);
     }
@@ -677,7 +697,10 @@ private:
                         partSessionId);
         message->set_status(Ydb::StatusIds::SUCCESS);
 
-        PQ_CPROXY_LOG_D("send data to client " << sessionId << ", assignId: " << partSessionId << ", readId: " << readId);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: send data to client",
+            {"sessionId", sessionId},
+            {"assignId", partSessionId},
+            {"readId", readId});
 
         ctx.Send(proxyClient.ProxyId, new TEvPQProxy::TEvDirectReadSendClientData(std::move(message)));
         return true;
@@ -691,7 +714,9 @@ private:
     ) {
         const auto& ctx = ActorContext();
         ctx.Send(proxyId, new TEvPQProxy::TEvDirectReadCloseSession(code, reason));
-        PQ_CPROXY_LOG_D("close session for proxy " << proxyId.ToString() << ", sessionId: " << sessionId);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: close session for proxy",
+            {"proxyId", proxyId},
+            {"sessionId", sessionId});
     }
 
     bool DestroyPartitionSession(
@@ -705,7 +730,9 @@ private:
         ctx.Send(
                 sessionIter->second.Client->ProxyId, new TEvPQProxy::TEvDirectReadDestroyPartitionSession(sessionIter->first, code, reason)
         );
-        PQ_CPROXY_LOG_D("DestroyPartitionSession, sessionId: " << sessionIter->first.SessionId << ", proxy: " << sessionIter->second.Client->ProxyId.ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: DestroyPartitionSession",
+            {"sessionId", sessionIter->first.SessionId},
+            {"proxy", sessionIter->second.Client->ProxyId});
         return true;
     }
 

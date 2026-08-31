@@ -285,7 +285,19 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateBackupCol
     }
 
     const TString backupCollectionsDir = JoinPath({workingDir.GetDomainPathString(), ".backups/collections"});
-    return DeclareChildOfWorkingDir(backupCollectionsDir, tx.GetCreateBackupCollection().GetName());
+
+    // The name may itself be an absolute path, in which case the resolver places the
+    // collection there and takes the parent from the name rather than from
+    // backupCollectionsDir (schemeshard__backup_collection_common.cpp:61 and :85). Joining
+    // unconditionally would append the whole absolute name to backupCollectionsDir and
+    // declare a path nothing ever writes.
+    const TString& name = tx.GetCreateBackupCollection().GetName();
+    const TPathSplitUnix nameSplit(name);
+    if (nameSplit.size() > 1 && nameSplit.IsAbsolute) {
+        const TString parent = "/" + JoinRange("/", nameSplit.begin(), nameSplit.end() - 1);
+        return DeclareChildOfWorkingDir(parent, TString(nameSplit.back()));
+    }
+    return DeclareChildOfWorkingDir(backupCollectionsDir, name);
 }
 
 } // namespace NOperation

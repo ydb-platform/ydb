@@ -630,8 +630,8 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpMoveIndex>(
     });
     // No Incomplete. This expands into constructed parts, and IgniteOperation asks each
     // part for its own declaration before proposing it, so their paths are covered.
-    // Verified rather than assumed: with this removed the schemeshard suites are green
-    // under YDB_CHECK_DECLARED_PATHS=1.
+    // Verified rather than assumed: with this removed the schemeshard suites stay green
+    // under the cross-check.
     return result;
 }
 

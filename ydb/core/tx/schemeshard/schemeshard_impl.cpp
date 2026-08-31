@@ -2405,8 +2405,7 @@ void TSchemeShard::ObservePathTouched(const TPathId& pathId, const char* writeSi
     // perturbed any test asserting on event ordering. Failing here instead costs nothing
     // when off, and when on it stops at the offending write with the path and the Persist*
     // that made it -- which is the information needed to fix the declaration anyway.
-    static const bool crashOnUndeclared = !GetEnv("YDB_CHECK_DECLARED_PATHS").empty();
-    Y_ABORT_UNLESS(!crashOnUndeclared,
+    Y_ABORT_UNLESS(!UndeclaredPathTouchIsFatal,
         "operation wrote path row it had not declared: %s, writeSite: %s",
         path.PathString().c_str(), writeSite);
     LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,

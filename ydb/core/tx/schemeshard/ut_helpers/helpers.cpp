@@ -232,7 +232,7 @@ namespace NSchemeShardUT_Private {
 
         CheckExpectedResult(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
 
-        // No check here. YDB_CHECK_DECLARED_PATHS is enforced inside the schemeshard at the
+        // No check here. The cross-check is enforced inside the schemeshard at the
         // write itself (TSchemeShard::ObservePathTouched), which still covers every
         // modification in every suite. Asserting from here meant polling a counter over an
         // edge event after every modification: far more expensive -- it timed out the reboot

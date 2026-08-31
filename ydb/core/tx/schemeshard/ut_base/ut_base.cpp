@@ -1,6 +1,7 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
@@ -33,6 +34,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(GetCumulativeCounter(runtime, "SchemeShard/UndeclaredPathTouch"), 0,
             "MkDir wrote a path row it had not declared");
+    }
+
+    // The cross-check is armed by constructing a TTestEnv, which is invisible from any
+    // individual test -- so if that wiring is ever removed, every suite would keep passing
+    // while checking nothing. This asserts the check is on, so the check being on is itself
+    // checked. It is the one thing here that cannot be caught by the check itself.
+    Y_UNIT_TEST(DeclaredPathsCrossCheckIsArmed) {
+        UNIT_ASSERT_C(!NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal,
+            "expected the cross-check to be off before a test environment exists");
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        UNIT_ASSERT_C(NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal,
+            "TTestEnv no longer arms the affected-paths cross-check: every schemeshard suite "
+            "would now pass without verifying any declaration");
     }
 
     // Batch harness for the migration: exercise many object types in one run and assert

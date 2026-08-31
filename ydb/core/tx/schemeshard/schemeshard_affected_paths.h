@@ -53,6 +53,13 @@ struct TAffectedPaths {
 
 class TSchemeShard;
 
+// Turns an undeclared path write from a log line into an abort naming the path and the
+// Persist* that made it. Set by the schemeshard test environment (TTestEnv), so a suite is
+// covered by constructing a test env rather than by remembering an env var or a per-suite
+// ya.make line -- and a suite added later is covered without anyone remembering anything.
+// Never set in production: the point of it is that it stops the tablet.
+inline bool UndeclaredPathTouchIsFatal = false;
+
 // The common shape: an object named directly under WorkingDir. The container is part of
 // it because creating or removing a child bumps the parent's DirAlterVersion, which is a
 // path-row write in its own right.
@@ -64,6 +71,16 @@ TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString
 // different object than the operation mutated. Pass localPathId == 0 when absent.
 TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
     const TString& name, ui64 localPathId);
+
+// Overloads taking the context rather than the schemeshard, so a declaration can be written
+// as a single line in the traits table. TOperationContext is only forward-declared there;
+// binding a reference to an incomplete type is fine, and the member access happens in the
+// .cpp where it is complete.
+struct TOperationContext;
+TAffectedPaths DeclareTargetByIdOrName(const TOperationContext& context,
+    const TString& workingDir, const TString& name, ui64 localPathId);
+TAffectedPaths DeclareCascadeTargetByIdOrName(const TOperationContext& context,
+    const TString& workingDir, const TString& name, ui64 localPathId);
 
 // A drop that takes the target's whole subtree with it. The root is named exactly, as it
 // is what the request asked for and what the outbox records, but the descendants are

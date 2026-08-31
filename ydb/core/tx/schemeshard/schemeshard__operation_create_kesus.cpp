@@ -432,21 +432,6 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-using TAffectedESchemeOpCreateKesus = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus>;
-
-namespace NOperation {
-
-template <>
-std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateKesus>(
-    TAffectedESchemeOpCreateKesus,
-    const TTxTransaction& tx,
-    const TOperationContext& context)
-{
-    Y_UNUSED(context);
-    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetKesus().GetName());
-}
-
-} // namespace NOperation
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus>;
 

@@ -832,7 +832,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterTable>(
     // AlterTable fan-out, the add-an-index parts), and IgniteOperation asks each part for its
     // own declaration before proposing it -- so alter, the most common operation there is,
     // keeps its cross-check instead of giving it up. Verified rather than assumed: with no
-    // Incomplete here the schemeshard suites are green under YDB_CHECK_DECLARED_PATHS=1.
+    // Incomplete here the schemeshard suites stay green under the cross-check.
     return result;
 }
 

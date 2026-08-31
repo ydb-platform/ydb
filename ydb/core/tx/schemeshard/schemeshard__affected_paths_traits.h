@@ -32,17 +32,103 @@ struct TAffectedPathsUnreachable {
     static constexpr bool Declares = false;
 };
 
+namespace NOperation {
+
+template <class TTraits>
+std::optional<TAffectedPaths> GetAffectedPaths(
+    TTraits traits, const TTxTransaction& tx, const TOperationContext& context);
+
+} // namespace NOperation
+
+// The three shapes that cover 95 of the 123 declarations in this table. Writing one of
+// these IS the whole task for an ordinary operation -- no .cpp change, no template
+// boilerplate. Reach for a hand-written GetAffectedPaths only when the operation genuinely
+// does something else (multiple targets, a rename, a path derived from more than a name).
+//
+// `accessor` is the TModifyScheme getter carrying the request, e.g. GetCreateFoo. It must be
+// the same field the suboperation's Propose resolves, and the same one GetTargetName returns
+// if the op has one -- a declaration that reads a different field names a different object
+// than the operation mutates, which is the exact failure this table exists to prevent.
+
+// Creates a new object named under WorkingDir.
+#define SS_DECLARES_CHILD_OF_WORKING_DIR(op, accessor)                              \
+    SS_DECLARES_AFFECTED_PATHS(op);                                                 \
+    namespace NOperation {                                                          \
+    template <>                                                                     \
+    inline std::optional<TAffectedPaths>                                            \
+    GetAffectedPaths<TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>>(    \
+        TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>,                  \
+        const TTxTransaction& tx, const TOperationContext&)                         \
+    {                                                                               \
+        return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.accessor().GetName());\
+    }                                                                               \
+    }
+
+// Acts on an existing object, which the request may name or identify by path id.
+#define SS_DECLARES_TARGET_BY_ID_OR_NAME(op, accessor)                              \
+    SS_DECLARES_AFFECTED_PATHS(op);                                                 \
+    namespace NOperation {                                                          \
+    template <>                                                                     \
+    inline std::optional<TAffectedPaths>                                            \
+    GetAffectedPaths<TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>>(    \
+        TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>,                  \
+        const TTxTransaction& tx, const TOperationContext& context)                 \
+    {                                                                               \
+        const auto& request = tx.accessor();                                        \
+        return DeclareTargetByIdOrName(context, tx.GetWorkingDir(), request.GetName(),\
+            request.HasId() ? request.GetId() : 0);                                 \
+    }                                                                               \
+    }
+
+// Same, but the operation takes the target's whole subtree with it. Turns the cross-check
+// off for the operation, so use it only when the subtree genuinely cannot be enumerated.
+#define SS_DECLARES_CASCADE_TARGET(op, accessor)                                    \
+    SS_DECLARES_AFFECTED_PATHS(op);                                                 \
+    namespace NOperation {                                                          \
+    template <>                                                                     \
+    inline std::optional<TAffectedPaths>                                            \
+    GetAffectedPaths<TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>>(    \
+        TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>,                  \
+        const TTxTransaction& tx, const TOperationContext& context)                 \
+    {                                                                               \
+        const auto& request = tx.accessor();                                        \
+        return DeclareCascadeTargetByIdOrName(context, tx.GetWorkingDir(),          \
+            request.GetName(), request.HasId() ? request.GetId() : 0);              \
+    }                                                                               \
+    }
+
 #define SS_DECLARES_AFFECTED_PATHS(op)                                              \
     template <>                                                                     \
     struct TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>                \
         : TAffectedPathsDeclares {}
 
+// Exemption is a category, not prose. Free text let anything through -- including, during
+// this migration, a justification that turned out to be false -- and a reviewer cannot check
+// a sentence as easily as they can check "is this factory really Y_ABORT". Pick the one that
+// applies; if none does, the operation writes path rows and has to declare them.
 #define SS_EXEMPT_AFFECTED_PATHS(op, why)                                           \
     template <>                                                                     \
     struct TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>                \
         : TAffectedPathsExempt {                                                    \
         static constexpr const char* Why = why;                                     \
     }
+
+// The factory in schemeshard__operation.cpp is Y_ABORT("TODO: implement").
+#define SS_EXEMPT_UNIMPLEMENTED(op)                                                 \
+    SS_EXEMPT_AFFECTED_PATHS(op, "unimplemented: the factory is Y_ABORT(TODO: implement)")
+
+// Reachable, but Propose is an unfinished stub that resolves nothing and writes nothing.
+#define SS_EXEMPT_UNFINISHED_STUB(op)                                               \
+    SS_EXEMPT_AFFECTED_PATHS(op, "Propose is an unfinished stub: sets state and returns")
+
+// Withdrawn: the factory unconditionally CreateRejects, or the op number is retired.
+#define SS_EXEMPT_RETIRED(op)                                                       \
+    SS_EXEMPT_AFFECTED_PATHS(op, "retired: nothing is ever proposed for this op")
+
+// Genuinely writes no row in Schema::Paths. `what` names the table it writes instead, so the
+// claim can be checked against the code rather than taken on trust.
+#define SS_EXEMPT_NO_PATH_ROW(op, what)                                             \
+    SS_EXEMPT_AFFECTED_PATHS(op, "writes no path row; writes " what)
 
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpMkDir);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateTable);
@@ -62,8 +148,8 @@ SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateBlockStoreVolume);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAlterBlockStoreVolume);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAssignBlockStoreVolume);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropBlockStoreVolume);
-SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateKesus);
-SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropKesus);
+SS_DECLARES_CHILD_OF_WORKING_DIR(ESchemeOpCreateKesus, GetKesus);
+SS_DECLARES_TARGET_BY_ID_OR_NAME(ESchemeOpDropKesus, GetDrop);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpForceDropSubDomain);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateSolomonVolume);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropSolomonVolume);
@@ -78,7 +164,7 @@ SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropTableIndex);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateExtSubDomain);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAlterExtSubDomain);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpForceDropExtSubDomain);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOp_DEPRECATED_35, "retired op number; the factory is Y_ABORT(impossible)");
+SS_EXEMPT_RETIRED(ESchemeOp_DEPRECATED_35);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpUpgradeSubDomain);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpUpgradeSubDomainDecision);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateIndexBuild);
@@ -104,7 +190,7 @@ SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropColumnStore);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateColumnTable);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAlterColumnTable);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropColumnTable);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpAlterLogin, "writes the subdomain security state, not a path row");
+SS_EXEMPT_NO_PATH_ROW(ESchemeOpAlterLogin, "the subdomain security state");
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateCdcStream);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateCdcStreamImpl);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateCdcStreamAtTable);
@@ -126,20 +212,20 @@ SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateReplication);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAlterReplication);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropReplicationCascade);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateBlobDepot);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpAlterBlobDepot, "Propose is an unfinished stub: sets state and returns, resolving no path");
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpDropBlobDepot, "Propose is an unfinished stub: sets state and returns, resolving no path");
+SS_EXEMPT_UNFINISHED_STUB(ESchemeOpAlterBlobDepot);
+SS_EXEMPT_UNFINISHED_STUB(ESchemeOpDropBlobDepot);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpMoveIndex);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAlterExtSubDomainCreateHive);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateExternalTable);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropExternalTable);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpAlterExternalTable, "unimplemented; the factory in schemeshard__operation.cpp is Y_ABORT(TODO: implement)");
+SS_EXEMPT_UNIMPLEMENTED(ESchemeOpAlterExternalTable);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateExternalDataSource);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropExternalDataSource);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpAlterExternalDataSource, "unimplemented; the factory in schemeshard__operation.cpp is Y_ABORT(TODO: implement)");
+SS_EXEMPT_UNIMPLEMENTED(ESchemeOpAlterExternalDataSource);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateColumnBuild);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropColumnBuild);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateView);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpAlterView, "unimplemented; the factory in schemeshard__operation.cpp is Y_ABORT(TODO: implement)");
+SS_EXEMPT_UNIMPLEMENTED(ESchemeOpAlterView);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropView);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropReplication);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateContinuousBackup);
@@ -148,10 +234,10 @@ SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropContinuousBackup);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateResourcePool);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropResourcePool);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAlterResourcePool);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpRestoreMultipleIncrementalBackups, "retired; the factory unconditionally CreateRejects, so nothing is ever proposed");
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpRestoreIncrementalBackupAtTable, "retired; the factory unconditionally CreateRejects, so nothing is ever proposed");
+SS_EXEMPT_RETIRED(ESchemeOpRestoreMultipleIncrementalBackups);
+SS_EXEMPT_RETIRED(ESchemeOpRestoreIncrementalBackupAtTable);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateBackupCollection);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpAlterBackupCollection, "unimplemented; the factory in schemeshard__operation.cpp is Y_ABORT(TODO: implement)");
+SS_EXEMPT_UNIMPLEMENTED(ESchemeOpAlterBackupCollection);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropBackupCollection);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpBackupBackupCollection);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpBackupIncrementalBackupCollection);
@@ -166,7 +252,7 @@ SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropSysView);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateLongIncrementalRestoreOp);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpChangePathState);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpIncrementalRestoreFinalize);
-SS_EXEMPT_AFFECTED_PATHS(ESchemeOpCreateLongIncrementalBackupOp, "writes only the IncrementalBackups list, keyed by TxId; resolves WorkingDir to validate it and never writes a path row");
+SS_EXEMPT_NO_PATH_ROW(ESchemeOpCreateLongIncrementalBackupOp, "the IncrementalBackups list, keyed by TxId");
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpCreateSecret);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpAlterSecret);
 SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropSecret);
@@ -197,14 +283,6 @@ SS_DECLARES_AFFECTED_PATHS(ESchemeOpDropTestShardSet);
 SS_FOR_EACH_OP_TYPE(SS_ASSERT_AFFECTED_PATHS_DECLARED)
 
 #undef SS_ASSERT_AFFECTED_PATHS_DECLARED
-
-namespace NOperation {
-
-template <class TTraits>
-std::optional<TAffectedPaths> GetAffectedPaths(
-    TTraits traits, const TTxTransaction& tx, const TOperationContext& context);
-
-} // namespace NOperation
 
 template <class TTraits>
 std::optional<TAffectedPaths> GetAffectedPaths(

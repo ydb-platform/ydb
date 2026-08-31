@@ -234,23 +234,6 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-using TAffectedESchemeOpDropKesus = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus>;
-
-namespace NOperation {
-
-template <>
-std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropKesus>(
-    TAffectedESchemeOpDropKesus,
-    const TTxTransaction& tx,
-    const TOperationContext& context)
-{
-    Y_UNUSED(context);
-    const auto& drop = tx.GetDrop();
-    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
-        drop.HasId() ? drop.GetId() : 0);
-}
-
-} // namespace NOperation
 
 ISubOperation::TPtr CreateDropKesus(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropKesus>(id, tx);

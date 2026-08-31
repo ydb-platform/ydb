@@ -5811,6 +5811,36 @@
                 "ColumnId": 19,
                 "ColumnName": "LastTokenRows",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "FirstPrefix",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "FirstPrefixDocCount",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "FirstPrefixSumDocLength",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "LastPrefix",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "LastPrefixDocCount",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 25,
+                "ColumnName": "LastPrefixSumDocLength",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5835,7 +5865,13 @@
                     16,
                     17,
                     18,
-                    19
+                    19,
+                    20,
+                    21,
+                    22,
+                    23,
+                    24,
+                    25
                 ],
                 "RoomID": 0,
                 "Codec": 0,

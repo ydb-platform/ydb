@@ -42,12 +42,12 @@
 ...
 host_configs:
 - host_config_id: 1
-    drive:
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+  drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
     type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
     type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
     type: SSD
 ...
 ```

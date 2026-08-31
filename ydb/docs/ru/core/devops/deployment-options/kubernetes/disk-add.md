@@ -378,6 +378,18 @@ kubectl cp auth_token <storage-name>-0:/tmp/auth_token -c ydb-storage
     admin blobstorage config init --yaml-file /opt/ydb/cfg/config.yaml
   ```
 
+- С TLS без аутентификации
+
+  Выполните команду:
+
+  ```bash
+  kubectl exec <storage-name>-0 -c ydb-storage -- \
+    /opt/ydb/bin/ydbd \
+    --ca-file /etc/ssl/certs/ca-certificates.crt \
+    -s grpcs://<storage-name>-grpc:2135 \
+    admin blobstorage config init --yaml-file /opt/ydb/cfg/config.yaml
+  ```
+
 {% endlist %}
 
 В примерах команд выше используются следующие параметры:
@@ -429,17 +441,49 @@ ConfigTxSeqNo: 13
 
 3. Проверьте состояние PDisk кластера:
 
-    ```bash
-    ydb-dstool -e grpc://localhost:2135 pdisk list
-    ```
+    {% list tabs %}
+
+    - Без аутентификации
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool -e grpc://localhost:2135 pdisk list
+      ```
+
+    - С аутентификацией
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool --token-file auth_token -e grpc://localhost:2135 pdisk list
+      ```
+
+    {% endlist %}
 
     В выводе команды должны присутствовать новые PDisk. Значение `ACTIVE` в колонке `Status` означает, что кластер готов размещать на диске VDisk. Проверьте статус всех PDisk, а не только новых: после перезапуска узлов хранения в статусе `INACTIVE` могут оказаться и ранее добавленные диски.
 
 4. Если какие-либо PDisk имеют статус `INACTIVE`, переведите их в состояние `ACTIVE`:
 
-    ```bash
-    ydb-dstool -e grpc://localhost:2135 pdisk set --pdisk-ids <pdisk-ids> --status ACTIVE
-    ```
+    {% list tabs %}
+
+    - Без аутентификации
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool -e grpc://localhost:2135 pdisk set --pdisk-ids <pdisk-ids> --status ACTIVE
+      ```
+
+    - С аутентификацией
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool --token-file auth_token -e grpc://localhost:2135 pdisk set --pdisk-ids <pdisk-ids> --status ACTIVE
+      ```
+
+    {% endlist %}
 
     В примере команды выше используется следующий параметр:
 
@@ -449,9 +493,25 @@ ConfigTxSeqNo: 13
 
 5. Добавьте группы хранения:
 
-    ```bash
-    ydb-dstool --verbose -e grpc://localhost:2135 group add --pool-name <database>:<storage-pool> --groups <groups-count>
-    ```
+    {% list tabs %}
+
+    - Без аутентификации
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool --verbose -e grpc://localhost:2135 group add --pool-name <database>:<storage-pool> --groups <groups-count>
+      ```
+
+    - С аутентификацией
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool --token-file auth_token --verbose -e grpc://localhost:2135 group add --pool-name <database>:<storage-pool> --groups <groups-count>
+      ```
+
+    {% endlist %}
 
     В примере команды выше используются следующие параметры:
 
@@ -473,9 +533,25 @@ ConfigTxSeqNo: 13
 
 6. Проверьте количество групп хранения в пуле:
 
-    ```bash
-    ydb-dstool -e grpc://localhost:2135 pool list --show-group-status
-    ```
+    {% list tabs %}
+
+    - Без аутентификации
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool -e grpc://localhost:2135 pool list --show-group-status
+      ```
+
+    - С аутентификацией
+
+      Выполните команду:
+
+      ```bash
+      ydb-dstool --token-file auth_token -e grpc://localhost:2135 pool list --show-group-status
+      ```
+
+    {% endlist %}
 
     Значение в колонке `Groups_TOTAL` увеличилось на число добавленных групп, а значение в колонке `Groups_FULL` совпадает с ним: все группы пула работоспособны.
 

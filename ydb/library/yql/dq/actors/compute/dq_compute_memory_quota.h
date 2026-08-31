@@ -38,12 +38,12 @@ namespace NYql::NDq {
             , ActorSystem(actorSystem) {
 
             auto memoryLimit = initialMkqlMemoryLimit;
-            if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit, true)) {
+            if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit, false)) {
                 // we don't have API call to discover current limit available in MemoryQuotaManager
                 // but at this point it'll match GetMaxMemorySize(), so we can use it as guranteed limit
                 // and allocation should never fail anymore
                 memoryLimit = std::min(InitialMkqlMemoryLimit, MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
-                if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit, true)) {
+                if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit, false)) {
                     CAMQ_LOG_W("[Mem] initial memory allocation of " << memoryLimit << " failed, starting with 0");
                     return;
                 }

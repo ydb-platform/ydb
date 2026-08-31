@@ -13644,7 +13644,7 @@ END DO)",
             NYdb::TResultSetParser resultParser(result.ResultSets[0]);
 
             UNIT_ASSERT_VALUES_EQUAL(resultParser.RowsCount(), expectExistance);
-            UNIT_ASSERT_VALUES_EQUAL(resultParser.ColumnsCount(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(resultParser.ColumnsCount(), 22);
 
             if (expectExistance) {
                 UNIT_ASSERT(resultParser.TryNextRow());

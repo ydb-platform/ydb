@@ -6,7 +6,22 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
     void CompareProperties(const NKikimrSchemeOp::TStreamingQueryProperties& expected, const NKikimrSchemeOp::TStreamingQueryProperties& actual) {
         const auto& expectedProperties = expected.properties();
         const auto& actualProperties = actual.properties();
-        UNIT_ASSERT_EQUAL(expectedProperties.size(), actualProperties.size());
+
+        const auto isManagedProperty = [](const auto& key) {
+            return key == "__created_by"
+                || key == "__modified_by"
+                || key == "__started_by"
+                || key == "__stopped_by"
+                || key == "__created_at"
+                || key == "__modified_at";
+        };
+
+        size_t actualUserPropertiesCount = 0;
+        for (const auto& property : actualProperties) {
+            actualUserPropertiesCount += !isManagedProperty(property.first);
+        }
+        UNIT_ASSERT_EQUAL(expectedProperties.size(), actualUserPropertiesCount);
+
         for (const auto& [expectedKey, expectedValue] : expectedProperties) {
             const auto it = actualProperties.find(expectedKey);
             UNIT_ASSERT(it != actualProperties.end());

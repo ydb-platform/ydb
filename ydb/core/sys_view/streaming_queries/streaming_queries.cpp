@@ -569,10 +569,10 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
             });
             AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) { return p.second.LastExecutionId; });
             AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) { return p.second.PreviousExecutionIds; });
-            AddString<TSchema::CreatedBy>([](const TExtractorValue& p) { return p.second.CreatedBy; });
-            AddString<TSchema::ModifiedBy>([](const TExtractorValue& p) { return p.second.ModifiedBy; });
-            AddString<TSchema::StartedBy>([](const TExtractorValue& p) { return p.second.StartedBy; });
-            AddString<TSchema::StoppedBy>([](const TExtractorValue& p) { return p.second.StoppedBy; });
+            AddOptionalString<TSchema::CreatedBy>([](const TExtractorValue& p) { return p.second.CreatedBy; });
+            AddOptionalString<TSchema::ModifiedBy>([](const TExtractorValue& p) { return p.second.ModifiedBy; });
+            AddOptionalString<TSchema::StartedBy>([](const TExtractorValue& p) { return p.second.StartedBy; });
+            AddOptionalString<TSchema::StoppedBy>([](const TExtractorValue& p) { return p.second.StoppedBy; });
             AddOpt<TSchema::CreatedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
                 if (p.second.CreatedAt) return p.second.CreatedAt.MicroSeconds();
                 return std::nullopt;
@@ -618,6 +618,14 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
             insert({TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
                 const auto& value = textExtractor(p);
                 return TCell(value.data(), value.size());
+            }});
+        }
+
+        template <typename TCol>
+        void AddOptionalString(std::function<TString(const TExtractorValue& p)> textExtractor) {
+            insert({TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
+                const auto& value = textExtractor(p);
+                return value.empty() ? TCell() : TCell(value.data(), value.size());
             }});
         }
     };

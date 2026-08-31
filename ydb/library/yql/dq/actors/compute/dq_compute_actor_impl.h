@@ -1037,6 +1037,7 @@ protected:
         bool EarlyFinish = false;
         bool PopStarted = false;
         bool IsTransformOutput = false; // Is this channel output of a transform.
+        NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::ECheckpointingMode::CHECKPOINTING_MODE_DISABLED;
         NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
 
         TOutputChannelInfo(ui64 channelId, ui32 dstStageId)
@@ -2414,6 +2415,7 @@ protected:
                         outputChannel.PeerId = NActors::ActorIdFromProto(channel.GetDstEndpoint().GetActorId());
                     }
                     outputChannel.IsTransformOutput = outputDesc.HasTransform();
+                    outputChannel.CheckpointingMode = channel.GetCheckpointingMode();
                     outputChannel.WatermarksMode = channel.GetWatermarksMode();
 
                     if (Y_UNLIKELY(RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) {

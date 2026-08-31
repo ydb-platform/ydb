@@ -8,6 +8,8 @@
 #include <contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord_test_helpers.h>
 
 #include <util/string/cast.h>
+#include <array>
+#include <cstring>
 
 using namespace NActors;
 
@@ -162,6 +164,42 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
     Y_UNIT_TEST(CheckSerializeThenDeserializeBufferWithPayloadLong) {
         CheckSerializeThenDeserialize(true, true, 1000);
+    }
+
+    // 0-byte live events must still FeedBuf so the coroutine clears Event; otherwise the next event
+    // on the same channel hits SetSerializingEvent()'s Event == nullptr VERIFY.
+    Y_UNIT_TEST(EmptyLiveEventThenAnotherOnSameChannel) {
+        TActorId sender(1, 2, 3, 4);
+        TActorId recipient(2, 3, 4, 5);
+        auto makeEmpty = [&](ui64 cookie) {
+            auto ev = std::make_unique<TEvPrivate::TEvProto>();
+            return std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
+        };
+        auto makeBody = [&](ui64 cookie) {
+            auto ev = std::make_unique<TEvPrivate::TEvProto>();
+            ev->Record.SetMeta("after-empty");
+            return std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
+        };
+
+        for (bool useXdc : {false, true}) {
+            TEventSerializer ser(true, useXdc);
+            ser.Push(makeEmpty(1));
+            ser.Push(makeBody(2));
+
+            std::vector<TRcBuf> bufs;
+            std::vector<TContiguousSpan> spans = Serialize(ser, bufs);
+
+            TEventDeserializer deser(TScopeId{});
+            TEventProcessor processor;
+            for (TContiguousSpan span : spans) {
+                deser.Push(TRcBuf::Copy(span), &processor, {});
+            }
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events[0]->Cookie, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events[1]->Cookie, 2u);
+            auto& second = *processor.Events[1]->Get<TEvPrivate::TEvProto>();
+            UNIT_ASSERT_VALUES_EQUAL(second.Record.GetMeta(), "after-empty");
+        }
     }
 
     // Feed the serialized stream to the deserializer in tiny fragments (1..3 bytes), so chunk headers and
@@ -535,6 +573,316 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         }
         Y_UNUSED(acc);
         UNIT_ASSERT_GT(batches.size(), 1);
+    }
+
+    std::pair<std::vector<TContiguousSpan>, std::vector<TContiguousSpan>> SerializeXdc(
+            TEventSerializer& ser, std::vector<TRcBuf>& mainBufs, std::vector<TRcBuf>& xdcBufs) {
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        for (;;) {
+            if (mainBufs.empty() || mainBufs.back().size() < 1024) {
+                mainBufs.push_back(TRcBuf::Uninitialized(65536));
+            }
+            if (xdcBufs.empty() || xdcBufs.back().size() < 1024) {
+                xdcBufs.push_back(TRcBuf::Uninitialized(65536));
+            }
+            const size_t produced = ser.ProduceOutputStream(mainBufs.back(), &mainSpans,
+                &xdcBufs.back(), &xdcSpans);
+            if (!produced) {
+                break;
+            }
+        }
+        return {std::move(mainSpans), std::move(xdcSpans)};
+    }
+
+    TString ConcatSpans(const std::vector<TContiguousSpan>& spans) {
+        TString out;
+        for (const TContiguousSpan& s : spans) {
+            out.append(s.data(), s.size());
+        }
+        return out;
+    }
+
+    void FeedXdc(TEventDeserializer& deser, TStringBuf xdc, size_t& xdcPos, TEventProcessor& processor) {
+        while (deser.HasXdcReadPending() && xdcPos < xdc.size()) {
+            TIoVec iov[64];
+            const size_t n = deser.PrepareXdcReadv(iov, 64, 1 << 20);
+            if (!n) {
+                break;
+            }
+            size_t total = 0;
+            for (size_t i = 0; i < n; ++i) {
+                const size_t take = Min(iov[i].Size, xdc.size() - xdcPos);
+                if (!take) {
+                    break;
+                }
+                memcpy(iov[i].Data, xdc.data() + xdcPos, take);
+                xdcPos += take;
+                total += take;
+                if (take < iov[i].Size) {
+                    break;
+                }
+            }
+            if (!total) {
+                break;
+            }
+            deser.CommitXdcBytes(total, &processor, {});
+        }
+    }
+
+    void CheckSerializeThenDeserializeXdc(bool buffer, size_t payloadLen) {
+        auto ev = std::make_unique<TEvPrivate::TEvProto>();
+        ev->Record.SetMeta("xdc-meta");
+        ev->Record.AddSomeData("world");
+        TActorId sender(1, 2, 3, 4);
+        TActorId recipient(2, 3, 4, 5);
+        ui64 cookie = 42;
+        ev->AddPayload(TRope(TString(payloadLen, 'P')));
+        auto h = std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
+        if (buffer) {
+            h->Preserialize();
+        }
+
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        ser.Push(std::move(h));
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        UNIT_ASSERT_C(!xdcSpans.empty(), "expected XDC traffic for payloadLen# " << payloadLen);
+
+        TString main = ConcatSpans(mainSpans);
+        TString xdc = ConcatSpans(xdcSpans);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(main)), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+
+        auto& outEv = *processor.Events.front();
+        UNIT_ASSERT(outEv.Sender == sender);
+        UNIT_ASSERT(outEv.Recipient == recipient);
+        UNIT_ASSERT_VALUES_EQUAL(outEv.Cookie, cookie);
+        auto& out = *outEv.Get<TEvPrivate::TEvProto>();
+        UNIT_ASSERT_VALUES_EQUAL(out.Record.GetMeta(), "xdc-meta");
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayloadCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(0).ConvertToString(), TString(payloadLen, 'P'));
+    }
+
+    Y_UNIT_TEST(XdcRoundTripLiveEvent) {
+        CheckSerializeThenDeserializeXdc(false, 8192);
+    }
+
+    Y_UNIT_TEST(XdcRoundTripPreserialized) {
+        CheckSerializeThenDeserializeXdc(true, 8192);
+    }
+
+    Y_UNIT_TEST(XdcDoesNotConsumeBytesBeforeCommands) {
+        auto h = MakeIndexedEvent(1, 7, 8192, true);
+        TEventSerializer ser(true, true);
+        ser.Push(std::move(h));
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        UNIT_ASSERT(!xdcSpans.empty());
+
+        TString xdc = ConcatSpans(xdcSpans);
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        size_t xdcPos = 0;
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT(processor.Events.empty());
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, 0u);
+
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        UNIT_ASSERT(processor.Events.empty());
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 1u);
+        CheckIndexedEvent(*processor.Events.front(), 1, 8192, true);
+    }
+
+    Y_UNIT_TEST(XdcFragmentedMainAndXdc) {
+        constexpr ui64 numEvents = 40;
+        TEventSerializer ser(true, true);
+        for (ui64 i = 0; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(i % 3, i, 8192, true));
+        }
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        TString main = ConcatSpans(mainSpans);
+        TString xdc = ConcatSpans(xdcSpans);
+        UNIT_ASSERT(!xdc.empty());
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        size_t xdcPos = 0;
+        size_t pos = 0;
+        while (pos < main.size()) {
+            const size_t frag = Min<size_t>(1 + (pos % 5), main.size() - pos);
+            deser.Push(TRcBuf::Copy(TContiguousSpan(main.data() + pos, frag)), &processor, {});
+            pos += frag;
+            if (xdcPos < xdc.size()) {
+                const size_t xdcFragEnd = Min(xdc.size(), xdcPos + 1 + (pos % 7));
+                TStringBuf slice(xdc.data(), xdcFragEnd);
+                FeedXdc(deser, slice, xdcPos, processor);
+            }
+        }
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        std::array<ui64, 3> next{};
+        for (auto& ev : processor.Events) {
+            const ui16 ch = ev->GetChannel();
+            CheckIndexedEvent(*ev, ch, 8192, true);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, next[ch] * 3 + ch);
+            ++next[ch];
+        }
+    }
+
+    Y_UNIT_TEST(XdcCommitDoesNotReleaseEventsWithBytesStillInFlight) {
+        TEventSerializer ser(false, true);
+        constexpr ui64 numEvents = 21;
+        ser.Push(MakeIndexedEvent(1, 0, 60000, true));
+        for (ui64 i = 1; i < numEvents; ++i) {
+            ser.Push(MakeIndexedEvent(2, i, 1000, false));
+        }
+
+        struct TBatch {
+            TRcBuf MainScratch;
+            TRcBuf XdcScratch;
+            std::vector<TContiguousSpan> MainSpans;
+            std::vector<TContiguousSpan> XdcSpans;
+            size_t MainBytes = 0;
+            size_t XdcBytes = 0;
+        };
+        std::vector<TBatch> batches;
+        for (;;) {
+            TBatch b;
+            b.MainScratch = TRcBuf::Uninitialized(4096);
+            b.XdcScratch = TRcBuf::Uninitialized(4096);
+            const ui64 mainBefore = ser.GetCumulativeProducedMain();
+            const ui64 xdcBefore = ser.GetCumulativeProducedXdc();
+            const size_t produced = ser.ProduceOutputStream(b.MainScratch, &b.MainSpans,
+                &b.XdcScratch, &b.XdcSpans);
+            if (!produced) {
+                break;
+            }
+            b.MainBytes = ser.GetCumulativeProducedMain() - mainBefore;
+            b.XdcBytes = ser.GetCumulativeProducedXdc() - xdcBefore;
+            batches.push_back(std::move(b));
+        }
+
+        volatile ui64 acc = 0;
+        ui64 committedMain = 0;
+        ui64 committedXdc = 0;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            committedMain += batches[i].MainBytes;
+            committedXdc += batches[i].XdcBytes;
+            ser.CommitProducedBytes(batches[i].MainBytes, batches[i].XdcBytes);
+            for (size_t j = i + 1; j < batches.size(); ++j) {
+                for (const TContiguousSpan& s : batches[j].MainSpans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+                for (const TContiguousSpan& s : batches[j].XdcSpans) {
+                    for (size_t k = 0; k < s.size(); ++k) {
+                        acc += static_cast<ui8>(s.data()[k]);
+                    }
+                }
+            }
+        }
+        Y_UNUSED(acc);
+        UNIT_ASSERT_GT(batches.size(), 1);
+        UNIT_ASSERT_GT(committedMain, 0u);
+        UNIT_ASSERT_GT(committedXdc, 0u);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        TString main;
+        TString xdc;
+        for (const auto& b : batches) {
+            main += ConcatSpans(b.MainSpans);
+            xdc += ConcatSpans(b.XdcSpans);
+        }
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(main)), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+    }
+
+    Y_UNIT_TEST(FairBandwidthDistributionXdcVsInline) {
+        constexpr ui16 floodChannel = 3;
+        constexpr ui16 otherChannel = 7;
+        constexpr size_t numFlood = 200;
+        constexpr size_t numOther = 30;
+
+        TEventSerializer ser(true, true);
+        for (ui64 i = 0; i < numFlood; ++i) {
+            ser.Push(MakeIndexedEvent(floodChannel, i, 8192, true));
+        }
+        for (ui64 i = 0; i < numOther; ++i) {
+            ser.Push(MakeIndexedEvent(otherChannel, i, 8, false));
+        }
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        size_t lastOtherPos = 0;
+        size_t floodBeforeLastOther = 0;
+        ui64 nextFlood = 0;
+        ui64 nextOther = 0;
+        size_t delivered = 0;
+
+        for (TContiguousSpan span : mainSpans) {
+            deser.Push(TRcBuf::Copy(span), &processor, {});
+            FeedXdc(deser, xdc, xdcPos, processor);
+            while (!processor.Events.empty()) {
+                auto ev = std::move(processor.Events.front());
+                processor.Events.pop_front();
+                const ui16 channel = ev->GetChannel();
+                if (channel == floodChannel) {
+                    CheckIndexedEvent(*ev, floodChannel, 8192, true);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextFlood++);
+                } else {
+                    CheckIndexedEvent(*ev, otherChannel, 8, false);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextOther++);
+                    lastOtherPos = delivered;
+                    floodBeforeLastOther = nextFlood;
+                }
+                ++delivered;
+            }
+        }
+        FeedXdc(deser, xdc, xdcPos, processor);
+        while (!processor.Events.empty()) {
+            auto ev = std::move(processor.Events.front());
+            processor.Events.pop_front();
+            if (ev->GetChannel() == floodChannel) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextFlood++);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, nextOther++);
+                lastOtherPos = delivered;
+                floodBeforeLastOther = nextFlood;
+            }
+            ++delivered;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(nextFlood, numFlood);
+        UNIT_ASSERT_VALUES_EQUAL(nextOther, numOther);
+        Cerr << "lastOtherPos# " << lastOtherPos << " floodBeforeLastOther# " << floodBeforeLastOther << Endl;
+        UNIT_ASSERT_C(floodBeforeLastOther < numFlood / 4,
+            "the flooded XDC channel blocks the other one: floodBeforeLastOther# " << floodBeforeLastOther);
     }
 
 }

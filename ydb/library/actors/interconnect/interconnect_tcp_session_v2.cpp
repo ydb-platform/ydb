@@ -79,7 +79,7 @@ namespace NActors {
             {"socket", i64(*ev->Get()->Socket)});
 
         Socket = std::move(ev->Get()->Socket);
-        XdcSocket = std::move(ev->Get()->XdcSocket); // unused by v2 (no external data channel)
+        XdcSocket = std::move(ev->Get()->XdcSocket);
 
         Proxy->Metrics->SetConnected(1);
 
@@ -89,8 +89,13 @@ namespace NActors {
             as->Send(selfId, new TEvPrivate::TEvTerminate(reason));
         };
         SetNonBlock(*Socket, false);
+        const bool useXdc = Params.UseExternalDataChannel && Params.UseSessionV2Xdc && XdcSocket;
+        if (useXdc) {
+            SetNonBlock(*XdcSocket, false);
+        }
         EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(), Params.PeerScopeId,
-            onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
+            onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT,
+            useXdc ? XdcSocket : TIntrusivePtr<NInterconnect::TStreamSocket>{});
         if (!EngineHandle) {
             YDB_LOG_ERROR("V2 io_uring engine failed to register the connection",
                 {"marker", "ICS99"});
@@ -235,6 +240,13 @@ namespace NActors {
         return Proxy->Common->UringEngineV2->GetTotalOutputQueueSize(EngineHandle);
     }
 
+    std::optional<ui8> TInterconnectSessionTCPv2::GetXDCFlags() const {
+        if (Params.UseExternalDataChannel && Params.UseSessionV2Xdc && XdcSocket) {
+            return TInterconnectProxyTCP::TProxyStats::NONE;
+        }
+        return std::nullopt;
+    }
+
     void TInterconnectSessionTCPv2::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {
         TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
         str << "<div class=\"panel panel-info\">"
@@ -243,6 +255,8 @@ namespace NActors {
         str << "<table class=\"table\">";
         str << "<tr><td>EngineHandle</td><td>" << EngineHandle << "</td></tr>";
         str << "<tr><td>Subscribers.size()</td><td>" << Subscribers.size() << "</td></tr>";
+        str << "<tr><td>Params.UseExternalDataChannel</td><td>" << Params.UseExternalDataChannel << "</td></tr>";
+        str << "<tr><td>Params.UseSessionV2Xdc</td><td>" << Params.UseSessionV2Xdc << "</td></tr>";
         str << "</table>";
         str << "</div></div>";
         Proxy->Common->UringEngineV2->IssueMonRequest(EngineHandle, std::move(ev));

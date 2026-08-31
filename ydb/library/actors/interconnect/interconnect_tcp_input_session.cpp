@@ -1,5 +1,6 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
+#include "v2_event_serializer.h"
 #include "rdma/events.h"
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
@@ -794,23 +795,7 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
-            if (alignment > 1) {
-                Y_DEBUG_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
-                // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base buffer,
-                // but headroom may still shift the visible data away from the requested alignment, so we always keep
-                // up to alignment - 1 bytes of extra slack and spend part of it as additional headroom.
-                const size_t extra = alignment - 1;
-                TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(size + headroom + tailroom + extra));
-                const uintptr_t ptr = reinterpret_cast<uintptr_t>(buffer.GetData()) + headroom;
-                const size_t misalignment = ptr & (alignment - 1);
-                const size_t shift = misalignment ? alignment - misalignment : 0;
-                tailroom += extra - shift;
-                buffer.TrimFront(size + tailroom);
-                buffer.TrimBack(size);
-                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(buffer.GetData()) % alignment == 0);
-                return buffer;
-            }
-            return TRcBuf::Uninitialized(size, headroom, tailroom);
+            return AllocateXdcSectionBuffer(size, headroom, tailroom, alignment);
         }
     }
 

@@ -57,7 +57,7 @@ namespace NActors {
         if (Event && !Buffer) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            Buffer = serializer.Release(Event->CreateSerializationInfo(false));
+            Buffer = serializer.Release(Event->CreateSerializationInfo(true));
             Event.Reset();
         }
     }

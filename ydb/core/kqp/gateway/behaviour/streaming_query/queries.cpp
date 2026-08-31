@@ -881,7 +881,7 @@ private:
             .MaxRetryTime = TDuration::Seconds(5),
         }));
 
-        Y_VALIDATE(TxId, "Can not subscribe on completion without tx id");
+        Y_VALIDATE(TxId, "Cannot subscribe on completion without tx id");
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(TxId));
 
         YDB_LOG_DEBUG("[StreamingQueries] Subscribing to scheme transaction completion on scheme pipe",
@@ -1772,7 +1772,7 @@ public:
             {"query", State.GetQueryText()});
 
         if (State.HasCurrentExecutionId()) {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not start query, already started: " << State.GetCurrentExecutionId());
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot start query, already started: " << State.GetCurrentExecutionId());
             return;
         }
 
@@ -2388,7 +2388,7 @@ private:
 
     void StartQuery() {
         if (State.HasCurrentExecutionId()) {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not start query, already started: " << State.GetCurrentExecutionId());
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot start query, already started: " << State.GetCurrentExecutionId());
             return;
         }
 
@@ -2921,7 +2921,7 @@ public:
         }
 
         if (!SchemeInfo) {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Can not continue alter without query state");
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Cannot continue alter without query state");
         } else {
             const auto& syncActorId = Register(new TSyncStreamingQueryTableActor(Context, QueryPath, {
                 .InitialState = QueryState,

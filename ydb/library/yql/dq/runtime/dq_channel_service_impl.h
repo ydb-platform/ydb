@@ -14,7 +14,7 @@
 //
 // 1. There are several ui64 counters which grow monotonically
 //
-// 2. Local Channeels
+// 2. Local Channels
 // 2.1. PushStats.Bytes - pushed into Channel
 // 2.2. PopStats.Bytes - popped from Channel
 // 2.3. PushStats.Bytes >= PopStats.Bytes
@@ -34,7 +34,7 @@
 // Guaranteed delivery, ordering and reconciliation
 //
 // 1. All messages are numbered sequentially in single node to node session starting from 1
-// 2. Also node maintains monotically increased E
+// 2. Also node maintains monotonically increased E
 //
 // (statement below are not valid already)
 //
@@ -45,35 +45,24 @@
 // 5. Cookie is returned in Ack and used for additional control (for outdated Acks and excessive Retries)
 // 6. Message order is preserved for now
 
-namespace std {
-
-template<>
-struct hash<pair<NActors::TActorId, NActors::TActorId>> {
-    size_t operator()(pair<NActors::TActorId, NActors::TActorId> const &p) const {
-        return hash<NActors::TActorId>()(p.first) ^ hash<NActors::TActorId>()(p.second);
-    }
-};
-
-}
-
 namespace NYql::NDq {
 
 inline bool operator==(const TChannelInfo& lhs, const TChannelInfo& rhs) {
     return lhs.ChannelId == rhs.ChannelId && lhs.OutputActorId == rhs.OutputActorId && lhs.InputActorId == rhs.InputActorId;
 }
 
-}
+} // namespace NYql::NDq
 
 namespace std {
 
 template<>
 struct hash<NYql::NDq::TChannelInfo> {
-    size_t operator()(NYql::NDq::TChannelInfo const &info) const {
-        return std::hash<ui64>()(info.ChannelId) ^ hash<NActors::TActorId>()(info.OutputActorId) ^ hash<NActors::TActorId>()(info.InputActorId);
+    size_t operator()(const NYql::NDq::TChannelInfo& info) const {
+        return hash<ui64>()(info.ChannelId) ^ hash<NActors::TActorId>()(info.OutputActorId) ^ hash<NActors::TActorId>()(info.InputActorId);
     }
 };
 
-}
+} // namespace std
 
 namespace NYql::NDq {
 
@@ -880,9 +869,9 @@ public:
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
     void FreeNodeSession(ui32 nodeId, NActors::TActorId sender);
 
-    // unbinded stubs
-    std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
-    // binded helpers
+    // unbound stubs
+    std::shared_ptr<IChannelBuffer> GetUnboundBuffer(const TChannelFullInfo& info);
+    // bound helpers
     std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) final;
     std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) final;
     // binding
@@ -892,7 +881,7 @@ public:
     std::shared_ptr<TInputBuffer> GetRemoteInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager);
     // local buffer
     std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bindInput, IDqChannelStorage::TPtr storage);
-    // unbinded channels
+    // unbound channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
     // extras
@@ -1411,4 +1400,4 @@ public:
     std::queue<TEvDqCompute::TEvChannelAckV2::TPtr> PendingChannelAck;
 };
 
-}
+} // namespace NYql::NDq

@@ -5328,7 +5328,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
-        ), EStatus::SUCCESS, "`DELIVERY_GUARANTEE` = 'exactly_once' can not be used in current query context, falling back to default 'at_least_once'");
+        ), EStatus::SUCCESS, "`DELIVERY_GUARANTEE` = 'exactly_once' cannot be used in current query context, falling back to default 'at_least_once'");
 
         ReadTopicMessage(outputTopicName, "test_message");
     }

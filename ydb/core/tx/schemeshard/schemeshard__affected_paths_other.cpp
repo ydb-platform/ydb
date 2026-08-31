@@ -561,8 +561,18 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpBackupBackupCol
     // destination, its parent and the source (schemeshard__operation_copy_table.cpp:819-821).
     // All three are knowable from that part's own tx (WorkingDir + Name + CopyFromTable).
     //
-    // Retiring this marker aborts with "wrote path row it had not declared" on every copy
-    // destination. Retire it once the copy parts declare themselves; not before.
+    // The copy half of that is now fixed: the CreateTable declaration no longer disclaims a
+    // copy-from-table create, it declares the destination, its parent and the source, so the
+    // copy parts cover themselves.
+    //
+    // Still blocked, on a second and unrelated gap. Retiring this marker now aborts on
+    //   /MyRoot/TestTable/19700101000009Z_continuousBackupImpl
+    // -- the continuous-backup CDC stream, whose name is minted from Now() inside
+    // CreateAlterContinuousBackup (schemeshard__operation_alter_continuous_backup.cpp:176-180)
+    // rather than coming from the request. The part that creates it does carry the name in
+    // its own tx, but that part is an ESchemeOpCreateCdcStream, which is itself still
+    // Incomplete (schemeshard__operation_create_cdc_stream.cpp:944). Retire this with the
+    // CDC *AtTable* family, not before.
     return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetBackupBackupCollection().GetName(), 0);
 }
@@ -608,12 +618,14 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRestoreBackupCo
     // description's entries at :414-:430, and the parts come from CreateConsistentCopyTables
     // (:432) and CreateIncrementalBackupPathStateOps (:436).
     //
-    // Blocked on the same thing: the CCT copy parts declare nullopt for themselves
-    // (schemeshard__operation_create_table.cpp:874) while TCopyTable::Propose persists the
-    // destination, its parent and the source (schemeshard__operation_copy_table.cpp:819-821).
-    // Restore trips both halves -- the destination is the live table it restores into and the
-    // source is the backup-dir copy -- so retiring this aborts on /MyRoot/<table> and on
-    // .../<ts>_full/<table> alike. Retire it with the backup site, once copy parts declare.
+    // Restore trips both halves of the copy -- the destination is the live table it restores
+    // into and the source is the backup-dir copy -- so it needed the CreateTable declaration
+    // to stop disclaiming a copy-from-table create. That is now done, and both halves are
+    // covered by the copy part that writes them.
+    //
+    // Held with BackupBackupCollection above for the same second reason: the incremental
+    // path reaches the continuous-backup CDC stream whose name is minted from Now(), and the
+    // part that creates it is still Incomplete. Retire the pair with the CDC *AtTable* family.
     return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetRestoreBackupCollection().GetName(), 0);
 }

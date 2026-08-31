@@ -4,6 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -868,13 +869,30 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTable>(
     const TOperationContext& context)
 {
     Y_UNUSED(context);
-    // A copy-from-table create is dispatched to CreateCopyTable instead of TCreateTable::
-    // Propose (see the HasCopyFromTable branch in MakeOperationParts), so it never writes
-    // the path row this declaration would name -- same reason GetTargetName returns nullopt.
-    if (tx.GetCreateTable().HasCopyFromTable()) {
-        return std::nullopt;
+    const auto& create = tx.GetCreateTable();
+    TAffectedPaths result = DeclareChildOfWorkingDir(tx.GetWorkingDir(), create.GetName());
+
+    // A copy-from-table create reaches this declaration two ways, and they used to be
+    // conflated. As a top-level request it is re-dispatched to CreateCopyTable
+    // (the HasCopyFromTable branch in MakeOperationParts), and the rows are written by the
+    // part below -- which is why returning nullopt here looked harmless. But
+    // CreateConsistentCopyTables expands INLINE into its caller's part list, so for a
+    // backup or restore of a collection the part admitParts asks *is* this one, and nullopt
+    // left the whole copy undeclared.
+    //
+    // TCopyTable::Propose persists three rows (schemeshard__operation_copy_table.cpp:819-821):
+    // the new table, its parent, and the source. The first two come from
+    // DeclareChildOfWorkingDir above; the source is added here. On the top-level path those
+    // rows are written too, just by a lower part, so naming them is not an over-declaration.
+    if (create.HasCopyFromTable()) {
+        // Absolute, and resolved as such -- TPath::Resolve(GetCopyFromTable()) at
+        // schemeshard__operation_copy_table.cpp:568, never joined with WorkingDir.
+        result.Paths.push_back(TAffectedPath{
+            .Role = TAffectedPath::ERole::Source,
+            .Path = CanonizePath(create.GetCopyFromTable()),
+        });
     }
-    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateTable().GetName());
+    return result;
 }
 
 } // namespace NOperation

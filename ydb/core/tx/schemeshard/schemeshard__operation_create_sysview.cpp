@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -264,6 +265,22 @@ template <>
 bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
     tx.MutableCreateSysView()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateSysView = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateSysView>(
+    TAffectedESchemeOpCreateSysView,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateSysView().GetName());
 }
 
 } // namespace NOperation

@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -5,6 +6,26 @@
 #include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropColumnTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropColumnTable>(
+    TAffectedESchemeOpDropColumnTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // DropColumnTableWithLocalIndexes discovers and cascades over local-index children
+    // (tablePath.Base()->GetChildren()) at execution time, so the drop is not just the
+    // named table -- it is a cascade rooted there.
+    const auto& drop = tx.GetDrop();
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> DropColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;

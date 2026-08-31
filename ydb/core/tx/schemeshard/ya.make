@@ -97,6 +97,7 @@ SRCS(
     operation_queue_timer.h
     schemeshard.cpp
     schemeshard__affected_paths.cpp
+    schemeshard__affected_paths_other.cpp
     schemeshard__affected_paths_traits.h
     schemeshard__background_cleaning.cpp
     schemeshard__background_compaction.cpp

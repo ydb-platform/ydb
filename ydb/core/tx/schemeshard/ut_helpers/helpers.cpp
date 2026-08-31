@@ -232,15 +232,11 @@ namespace NSchemeShardUT_Private {
 
         CheckExpectedResult(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
 
-        // Every declaring operation is checked against what it actually wrote, after every
-        // modification in every suite -- not just in a dedicated test. Opt-in because
-        // reading the counter grabs an edge event, which perturbs suites that assert on
-        // event ordering.
-        if (GetEnv("YDB_CHECK_DECLARED_PATHS")) {
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                GetCumulativeCounter(runtime, "SchemeShard/UndeclaredPathTouch"), 0,
-                "an operation wrote a path row it had not declared, at txId " << txId);
-        }
+        // No check here. YDB_CHECK_DECLARED_PATHS is enforced inside the schemeshard at the
+        // write itself (TSchemeShard::ObservePathTouched), which still covers every
+        // modification in every suite. Asserting from here meant polling a counter over an
+        // edge event after every modification: far more expensive -- it timed out the reboot
+        // suites -- and further from the failure than the write that caused it.
         return event->Record.GetStatus();
     }
 

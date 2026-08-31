@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -797,6 +798,65 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpAlterTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterTable>(
+    TAffectedESchemeOpAlterTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    // TAlterTable::Propose (this file) and CreateConsistentAlterTable both prefer the
+    // pathId over the name when both are present; Id_Deprecated is the legacy scalar form.
+    const ui64 localPathId = alter.HasPathId() ? alter.GetPathId().GetLocalId()
+        : alter.HasId_Deprecated() ? alter.GetId_Deprecated() : 0;
+    TAffectedPaths result =
+        DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), localPathId);
+
+    // Two alter shapes reach past the table into its index children, both by walking
+    // GetChildren() at propose time, so which paths they touch depends on state rather than
+    // on the request: turning EnableFilterByKey off drops every local bloom index
+    // (CreateConsistentAlterTable via CollectLocalBloomIndexNames + AddDropIndex), and a
+    // DetailedMetricsSettings alter is fanned out to every index impl table
+    // (AppendIndexImplTableMetricsAlters). Conditional rather than blanket: alter is the
+    // most common operation there is, and marking it Incomplete unconditionally would give
+    // up the cross-check on all of it to cover three branches. The third goes the other way
+    // and *creates* index children: TableIndexes on the alter is the add-an-index request
+    // (:1036), whose paths are named relative to the table rather than to WorkingDir.
+    //
+    // All three shapes expand into constructed parts (AddDropIndex, the per-impl-table
+    // AlterTable fan-out, the add-an-index parts), and IgniteOperation asks each part for its
+    // own declaration before proposing it -- so alter, the most common operation there is,
+    // keeps its cross-check instead of giving it up. Verified rather than assumed: with no
+    // Incomplete here the schemeshard suites are green under YDB_CHECK_DECLARED_PATHS=1.
+    return result;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpFinalizeBuildIndexImplTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpFinalizeBuildIndexImplTable>(
+    TAffectedESchemeOpFinalizeBuildIndexImplTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CreateFinalizeBuildIndexImplTable (below) constructs a plain TAlterTable -- the same
+    // Propose class as ESchemeOpAlterTable above -- reading the same tx.GetAlterTable(). Its
+    // synthesis site (index/operation_apply_build_index.cpp FinalizeIndexImplTable) sets only
+    // the name, never a PathId, so declare by name alone.
+    const auto& alter = tx.GetAlterTable();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterTable>(id, tx);

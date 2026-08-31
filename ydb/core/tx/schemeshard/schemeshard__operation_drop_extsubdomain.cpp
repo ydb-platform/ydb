@@ -389,7 +389,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropExtSub
     const TOperationContext& context)
 {
     const auto& drop = tx.GetDrop();
-    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
         drop.HasId() ? drop.GetId() : 0);
 }
 

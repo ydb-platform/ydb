@@ -814,7 +814,10 @@ public:
     // ObservePathTouched, so a declaration that misses a path the operation actually
     // writes is caught instead of being trusted.
     const THashSet<TString>* CurrentDeclaredPaths = nullptr;
-    void ObservePathTouched(const TPathId& pathId);
+    // writeSite names the Persist* that wrote the row. A miss is otherwise reported as a
+    // bare path, which does not say whether the operation forgot the path or merely
+    // touched an incidental column on it -- the difference decides how to fix it.
+    void ObservePathTouched(const TPathId& pathId, const char* writeSite);
 
     // path
     void PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId);

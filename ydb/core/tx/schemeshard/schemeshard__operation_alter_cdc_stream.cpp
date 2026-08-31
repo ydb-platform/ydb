@@ -1,5 +1,6 @@
 #include "schemeshard__operation_alter_cdc_stream.h"
 
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 
@@ -595,6 +596,72 @@ ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, const TTxTransa
 ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot) {
     return MakeSubOperation<TAlterCdcStreamAtTable>(id, state, dropSnapshot);
 }
+
+using TAffectedESchemeOpAlterCdcStream = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterCdcStream>(
+    TAffectedESchemeOpAlterCdcStream,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CreateAlterCdcStream (this file) resolves the stream as a child of the table named in
+    // the request, not directly under WorkingDir: workingDir/tableName/streamName.
+    const auto& op = tx.GetAlterCdcStream();
+    return DeclareTargetByIdOrName(context.SS, JoinPath({tx.GetWorkingDir(), op.GetTableName()}),
+        op.GetStreamName(), 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpAlterCdcStreamImpl = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterCdcStreamImpl>(
+    TAffectedESchemeOpAlterCdcStreamImpl,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Synthesized by DoAlterStream (this file) with WorkingDir == the table path.
+    // TAlterCdcStream::Propose (above) resolves
+    // TPath::Resolve(workingDir).Dive(streamName), i.e. the stream directly under WorkingDir.
+    const auto& op = tx.GetAlterCdcStream();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetStreamName(), 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpAlterCdcStreamAtTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterCdcStreamAtTable>(
+    TAffectedESchemeOpAlterCdcStreamAtTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Synthesized by DoAlterStream (this file) with WorkingDir == the table's parent.
+    // TAlterCdcStreamAtTable::Propose (above) only PersistPath's the table
+    // itself (tablePath, resolved as workingDirPath.Child(tableName)); the streams it
+    // validates are already declared by the sibling AlterCdcStreamImpl part.
+    const auto& op = tx.GetAlterCdcStream();
+    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
+    // TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp), shared by
+    // every CdcStreamAtTable op, also walks path->GetChildren() to sync AlterVersion/
+    // DirAlterVersion on any table-index children -- discovered at execution time, not
+    // enumerable from this request.
+    if (!result.Unresolved) {
+        result.Incomplete = true;
+    }
+    return result;
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream);

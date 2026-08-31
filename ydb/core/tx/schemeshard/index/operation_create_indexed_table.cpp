@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
@@ -31,6 +32,28 @@ bool SetName<TTag>(
 {
     tx.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateIndexedTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateIndexedTable>(
+    TAffectedESchemeOpCreateIndexedTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // The base table is what the request names, and it is what the outbox records.
+    TAffectedPaths result = DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateIndexedTable().GetTableDescription().GetName());
+    // No Incomplete. This expands into constructed parts, and IgniteOperation asks each
+    // part for its own declaration before proposing it, so their paths are covered.
+    // Verified rather than assumed: with this removed the schemeshard suites are green
+    // under YDB_CHECK_DECLARED_PATHS=1.
+    return result;
 }
 
 } // namespace NOperation

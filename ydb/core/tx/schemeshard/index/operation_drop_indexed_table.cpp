@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -381,6 +382,42 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropTableIndex = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropTableIndex>(
+    TAffectedESchemeOpDropTableIndex,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpDropTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropTable>(
+    TAffectedESchemeOpDropTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CreateDropIndexedTable cascades the drop over the table's indexes and other
+    // children via CascadeDropTableChildren, discovered at execution time.
+    const auto& drop = tx.GetDrop();
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropTableIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropTableIndex>(id, tx);

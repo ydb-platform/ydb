@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_alter_cdc_stream.h"
 #include "schemeshard__operation_common.h"
@@ -77,6 +78,24 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
 
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
 }
+
+using TAffectedESchemeOpAlterContinuousBackup = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterContinuousBackup>(
+    TAffectedESchemeOpAlterContinuousBackup,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CreateAlterContinuousBackup (below) resolves the table named in the request and fans
+    // out into CDC/PQ/table suboperations; the table itself is what the top-level op names.
+    const auto& cbOp = tx.GetAlterContinuousBackup();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), cbOp.GetTableName(), 0);
+}
+
+} // namespace NOperation
 
 bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup);

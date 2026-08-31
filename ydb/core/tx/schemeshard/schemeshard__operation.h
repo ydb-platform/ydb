@@ -28,6 +28,13 @@ struct TOperation: TSimpleRefCount<TOperation> {
     // progress write in transactions of their own.
     THashSet<TString> DeclaredPathSet;
 
+    // Cleared once anything -- a requested transaction or a constructed part -- reports an
+    // Incomplete declaration, and never set again for this operation. A plain clear of
+    // DeclaredPathSet is not enough: parts are admitted in a loop, so a later part would
+    // repopulate the set, and TDeclaredPathsGuard would then re-arm at plan and progress
+    // time against a subset that is known to be partial -- reporting everything outside it.
+    bool DeclaredPathsUsable = true;
+
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;
     THashSet<TTxId> WaitOperations;

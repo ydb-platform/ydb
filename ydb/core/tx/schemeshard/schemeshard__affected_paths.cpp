@@ -14,15 +14,31 @@ bool OperationDeclaresAffectedPaths(const TTxTransaction& tx) {
 }
 
 TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString& name) {
+    // Canonized, not merely joined. WorkingDir arrives from the wire and may carry a
+    // trailing slash ("/MyRoot/table/indexByValue/"), which JoinPath would turn into a
+    // double slash -- a path that matches nothing and would be recorded in the outbox
+    // verbatim. CanonizePath collapses the separators the way TPath::Resolve does.
+    const TString target = CanonizePath(JoinPath({workingDir, name}));
+
     TAffectedPaths result;
     result.Paths.push_back(TAffectedPath{
         .Role = TAffectedPath::ERole::Target,
-        .Path = JoinPath({workingDir, name}),
+        .Path = target,
     });
-    result.Paths.push_back(TAffectedPath{
-        .Role = TAffectedPath::ERole::Container,
-        .Path = workingDir,
-    });
+    // Not WorkingDir. A create may carry a relative path rather than a leaf -- MkDir
+    // "DirB/DirC" under /MyRoot/DirA -- and then the directory that gains the child is
+    // /MyRoot/DirA/DirB, which is what SplitIntoTransactions would rewrite WorkingDir to.
+    // Declaring WorkingDir here would name the right container only for a bare leaf, and
+    // that is exactly the case the auto-mkdir split does not have to touch.
+    //
+    // Empty for a target directly under the root ("/" + "MyRoot"), which has no container
+    // path to name; pushing it anyway would put an empty string in the outbox record.
+    if (const TStringBuf container = ExtractParent(target); !container.empty()) {
+        result.Paths.push_back(TAffectedPath{
+            .Role = TAffectedPath::ERole::Container,
+            .Path = TString(container),
+        });
+    }
     return result;
 }
 
@@ -62,5 +78,72 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
     }
     return result;
 }
+
+TAffectedPaths DeclareCascadeTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
+        const TString& name, ui64 localPathId)
+{
+    TAffectedPaths result = DeclareTargetByIdOrName(ss, workingDir, name, localPathId);
+    // Not set on the unresolved result: that already carries a stronger verdict, and
+    // marking it Incomplete as well would only muddy which of the two the caller sees.
+    if (!result.Unresolved) {
+        result.Incomplete = true;
+    }
+    return result;
+}
+
+namespace NOperation {
+
+// Suboperation: index/operation_alter_index.cpp (TAlterTableIndex). No pathId field;
+// resolves by Name only.
+using TAffectedESchemeOpAlterTableIndex = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex>;
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterTableIndex>(
+    TAffectedESchemeOpAlterTableIndex,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& tableIndexAlter = tx.GetAlterTableIndex();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), tableIndexAlter.GetName(), 0);
+}
+
+// Suboperation: olap/operations/alter_store.cpp (TAlterOlapStore). No pathId field;
+// resolves by Name only.
+using TAffectedESchemeOpAlterColumnStore = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore>;
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterColumnStore>(
+    TAffectedESchemeOpAlterColumnStore,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterColumnStore();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), 0);
+}
+
+// Suboperation: olap/operations/alter_table.cpp (NOlap::NAlter::TAlterColumnTable). No
+// pathId field; resolves by Name only, taking the name from AlterColumnTable if present,
+// else falling back to the legacy AlterTable proto (used when a row-table alter request
+// lands on what is now a column table).
+using TAffectedESchemeOpAlterColumnTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable>;
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterColumnTable>(
+    TAffectedESchemeOpAlterColumnTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const TString& name = tx.HasAlterColumnTable() ? tx.GetAlterColumnTable().GetName() : tx.GetAlterTable().GetName();
+    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), name, 0);
+    // An AlterSchema that upserts, drops or moves indexes turns this into
+    // AlterColumnTableWithLocalIndexes, which appends a part per index.
+    // No Incomplete. This expands into constructed parts, and IgniteOperation asks each
+    // part for its own declaration before proposing it, so their paths are covered.
+    // Verified rather than assumed: with this removed the schemeshard suites are green
+    // under YDB_CHECK_DECLARED_PATHS=1.
+    return result;
+}
+
+} // namespace NOperation
 
 } // namespace NKikimr::NSchemeShard

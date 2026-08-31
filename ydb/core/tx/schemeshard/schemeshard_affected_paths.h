@@ -65,4 +65,11 @@ TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString
 TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
     const TString& name, ui64 localPathId);
 
+// A drop that takes the target's whole subtree with it. The root is named exactly, as it
+// is what the request asked for and what the outbox records, but the descendants are
+// walked at execution time and cannot be enumerated here -- hence Incomplete, which turns
+// the path cross-check off for the operation rather than letting it report every child.
+TAffectedPaths DeclareCascadeTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
+    const TString& name, ui64 localPathId);
+
 } // namespace NKikimr::NSchemeShard

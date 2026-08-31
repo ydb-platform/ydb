@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_cdc_stream_common.h>
@@ -385,6 +386,46 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropTableIndexAtMainTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropTableIndexAtMainTable>(
+    TAffectedESchemeOpDropTableIndexAtMainTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // TDropIndexAtMainTable::Propose names the main table (WorkingDir/TableName) and dives
+    // to the index child (IndexName) beneath it -- the target is the index path, not the
+    // table named in the request.
+    const auto& op = tx.GetDropIndex();
+    const TString tablePath = JoinPath({tx.GetWorkingDir(), op.GetTableName()});
+    return DeclareTargetByIdOrName(context.SS, tablePath, op.GetIndexName(), 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpDropIndex = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropIndex>(
+    TAffectedESchemeOpDropIndex,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CreateDropIndex resolves the same WorkingDir/TableName/IndexName path and then
+    // cascades over the index's impl-table children (AddDropIndex walks
+    // indexPath.Base()->GetChildren() at execution time).
+    const auto& op = tx.GetDropIndex();
+    const TString tablePath = JoinPath({tx.GetWorkingDir(), op.GetTableName()});
+    return DeclareCascadeTargetByIdOrName(context.SS, tablePath, op.GetIndexName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropIndexAtMainTable>(id, state);

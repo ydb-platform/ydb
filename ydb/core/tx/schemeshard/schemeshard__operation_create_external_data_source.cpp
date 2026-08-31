@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_external_data_source.h"
@@ -281,6 +282,22 @@ bool SetName<TTag>(
 {
     tx.MutableCreateExternalDataSource()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateExternalDataSource = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateExternalDataSource>(
+    TAffectedESchemeOpCreateExternalDataSource,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateExternalDataSource().GetName());
 }
 
 } // namespace NOperation

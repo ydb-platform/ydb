@@ -1,7 +1,10 @@
 #include "schemeshard__operation_drop_cdc_stream.h"
 
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+
+#include <ydb/core/base/path.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -637,6 +640,95 @@ void DoDropStream(
 } // namespace NCdc
 
 using namespace NCdc;
+
+using TAffectedESchemeOpDropCdcStream = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropCdcStream>(
+    TAffectedESchemeOpDropCdcStream,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // TDropCdcStream names one table and one-or-more streams under it (TDropCdcStream has
+    // no id field for either). Each stream is cascaded independently in DoDropStream, which
+    // discovers and drops its PQ-group implementation children at execution time -- so every
+    // named stream is its own cascade root, with the table declared as their shared container.
+    const auto& op = tx.GetDropCdcStream();
+    const TString tablePath = JoinPath({tx.GetWorkingDir(), op.GetTableName()});
+
+    TAffectedPaths result;
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Container,
+        .Path = tablePath,
+    });
+
+    for (const auto& streamName : op.GetStreamName()) {
+        TAffectedPaths stream = DeclareCascadeTargetByIdOrName(context.SS, tablePath, streamName, 0);
+        if (stream.Unresolved) {
+            return stream;
+        }
+        std::move(stream.Paths.begin(), stream.Paths.end(), std::back_inserter(result.Paths));
+        result.Incomplete = result.Incomplete || stream.Incomplete;
+    }
+
+    return result;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpDropCdcStreamAtTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropCdcStreamAtTable>(
+    TAffectedESchemeOpDropCdcStreamAtTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // DoDropStream (this file) synthesizes this part with WorkingDir == the table's parent
+    // and CopyFrom(op), which carries the same table name and (possibly several) stream
+    // names as the top-level TDropCdcStream request. TDropCdcStreamAtTable::Propose only
+    // PersistPath's the table itself (tablePath, resolved as
+    // TPath::Resolve(workingDir).Dive(tableName)); each named stream's own row is dropped
+    // by the sibling DropCdcStreamImpl part declared below, so no cascade is needed here.
+    const auto& op = tx.GetDropCdcStream();
+    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
+    // TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp), shared by
+    // every CdcStreamAtTable op, also walks path->GetChildren() to sync AlterVersion/
+    // DirAlterVersion on any table-index children -- discovered at execution time, not
+    // enumerable from this request.
+    if (!result.Unresolved) {
+        result.Incomplete = true;
+    }
+    return result;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpDropCdcStreamImpl = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropCdcStreamImpl>(
+    TAffectedESchemeOpDropCdcStreamImpl,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // DoDropStream (this file) synthesizes one of these parts per stream, WorkingDir == the
+    // table path, outTx.MutableDrop()->SetName(streamPath.Base()->Name) -- the uniform Drop
+    // shape. TDropCdcStream::Propose (above) drops only the stream's own path row; its PQ-group
+    // implementation children are dropped by a separate DropPersQueueGroup part that
+    // DoDropStream synthesizes alongside this one, so no cascade is needed here.
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropCdcStream>(id, tx);

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"
@@ -12,6 +13,28 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpCreateContinuousBackup = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateContinuousBackup>(
+    TAffectedESchemeOpCreateContinuousBackup,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // CreateNewContinuousBackup (below) creates a CDC stream under the table, defaulting the
+    // stream name to a Now()-derived value when the request doesn't supply one -- a value this
+    // declaration cannot reproduce deterministically. Declare the table itself, which is known
+    // from the request, and mark Incomplete rather than guess the generated stream path.
+    TAffectedPaths result = DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateContinuousBackup().GetTableName());
+    result.Incomplete = true;
+    return result;
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup);

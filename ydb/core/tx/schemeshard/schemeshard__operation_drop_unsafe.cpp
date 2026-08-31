@@ -271,7 +271,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropUnsafe
     const TOperationContext& context)
 {
     const auto& drop = tx.GetDrop();
-    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
         drop.HasId() ? drop.GetId() : 0);
 }
 
@@ -288,7 +288,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropSubDom
     const TOperationContext& context)
 {
     const auto& drop = tx.GetDrop();
-    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
         drop.HasId() ? drop.GetId() : 0);
 }
 

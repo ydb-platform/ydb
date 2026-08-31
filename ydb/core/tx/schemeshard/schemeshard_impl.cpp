@@ -10,6 +10,8 @@
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_svp_migration.h"
 
+#include <util/system/env.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -2310,7 +2312,7 @@ void TSchemeShard::ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& 
 
 void TSchemeShard::PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId,
                                              TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs) {
-    ObservePathTouched(pathId);
+    ObservePathTouched(pathId, "PersistUserAttributes");
     //remove old version
     if (oldAttrs) {
         for (auto& item: oldAttrs->Attrs) {
@@ -2367,7 +2369,7 @@ void TSchemeShard::PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathEl
 }
 
 void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
-    ObservePathTouched(path->PathId);
+    ObservePathTouched(path->PathId, "PersistLastTxId");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                     NIceDb::TUpdate<Schema::Paths::LastTxId>(path->LastTxId));
@@ -2381,7 +2383,7 @@ void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr
 // an observed set, so the cost when nothing is declaring is a single null check. Paths
 // rather than ids: a create allocates its id during propose, so an id declared up front
 // would never match.
-void TSchemeShard::ObservePathTouched(const TPathId& pathId) {
+void TSchemeShard::ObservePathTouched(const TPathId& pathId, const char* writeSite) {
     if (!CurrentDeclaredPaths) {
         return;
     }
@@ -2398,14 +2400,24 @@ void TSchemeShard::ObservePathTouched(const TPathId& pathId) {
         return;
     }
     TabletCounters->Cumulative()[COUNTER_UNDECLARED_PATH_TOUCH].Increment(1);
+    // Opt-in, and deliberately fatal rather than a counter the harness polls. Polling cost
+    // one edge-event round trip per modification, which timed out the reboot suites and
+    // perturbed any test asserting on event ordering. Failing here instead costs nothing
+    // when off, and when on it stops at the offending write with the path and the Persist*
+    // that made it -- which is the information needed to fix the declaration anyway.
+    static const bool crashOnUndeclared = !GetEnv("YDB_CHECK_DECLARED_PATHS").empty();
+    Y_ABORT_UNLESS(!crashOnUndeclared,
+        "operation wrote path row it had not declared: %s, writeSite: %s",
+        path.PathString().c_str(), writeSite);
     LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
         "undeclared path touch"
             << ", path: " << path.PathString()
-            << ", pathId: " << pathId);
+            << ", pathId: " << pathId
+            << ", writeSite: " << writeSite);
 }
 
 void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
-    ObservePathTouched(pathId);
+    ObservePathTouched(pathId, "PersistPath");
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     TPathElement::TPtr elem = PathsById.at(pathId);
     if (IsLocalId(pathId)) {
@@ -2448,7 +2460,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
 }
 
 void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
-    ObservePathTouched(path->PathId);
+    ObservePathTouched(path->PathId, "PersistRemovePath");
     Y_ABORT_UNLESS(path->Dropped() && path->DbRefCount == 0);
 
     // Make sure to cleanup any leftover user attributes for this path
@@ -2488,7 +2500,7 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
 }
 
 void TSchemeShard::PersistPathDirAlterVersion(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
-    ObservePathTouched(path->PathId);
+    ObservePathTouched(path->PathId, "PersistPathDirAlterVersion");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(path->DirAlterVersion));
@@ -2832,7 +2844,7 @@ void TSchemeShard::PersistSubDomainTablesMetricsLevelAlter(NIceDb::TNiceDb& db, 
 }
 
 void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
-    ObservePathTouched(path->PathId);
+    ObservePathTouched(path->PathId, "PersistACL");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::Paths::ACL>(path->ACL),
@@ -2846,7 +2858,7 @@ void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path
 
 
 void TSchemeShard::PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
-    ObservePathTouched(path->PathId);
+    ObservePathTouched(path->PathId, "PersistOwner");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Paths::Owner>(path->Owner));
@@ -2857,7 +2869,7 @@ void TSchemeShard::PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr pa
 }
 
 void TSchemeShard::PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, TTxId txId) {
-    ObservePathTouched(pathId);
+    ObservePathTouched(pathId, "PersistCreateTxId");
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     db.Table<Schema::Paths>().Key(pathId.LocalPathId).Update(
@@ -2865,7 +2877,7 @@ void TSchemeShard::PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, 
 }
 
 void TSchemeShard::PersistCreateStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step) {
-    ObservePathTouched(pathId);
+    ObservePathTouched(pathId, "PersistCreateStep");
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     // CreateTxId is saved in PersistPath
@@ -2896,7 +2908,7 @@ void TSchemeShard::PersistUnLock(NIceDb::TNiceDb& db, const TPathId pathId) {
 }
 
 void TSchemeShard::PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId) {
-    ObservePathTouched(pathId);
+    ObservePathTouched(pathId, "PersistDropStep");
     Y_ABORT_UNLESS(step, "Drop step must be valid (not 0)");
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(pathId.LocalPathId).Update(

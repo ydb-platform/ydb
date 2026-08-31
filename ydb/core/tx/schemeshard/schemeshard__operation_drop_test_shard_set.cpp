@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -5,6 +6,23 @@
 #include <ydb/core/base/subdomain.h>
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropTestShardSet = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropTestShardSet>(
+    TAffectedESchemeOpDropTestShardSet,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // TDropTestShardSet always resolves by name: it never consults drop.GetId().
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(), 0);
+}
+
+} // namespace NOperation
 
 namespace {
 

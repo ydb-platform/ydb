@@ -9,6 +9,7 @@ ENDIF()
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion

@@ -11,7 +11,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/utils/log
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translator_iface
 )
 
 YQL_LAST_ABI_VERSION()

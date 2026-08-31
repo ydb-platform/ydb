@@ -57,6 +57,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/proto
     ydb/services/persqueue_v1
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

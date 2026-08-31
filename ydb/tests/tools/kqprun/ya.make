@@ -12,6 +12,7 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
 
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     yql/essentials/parser/pg_wrapper
     yt/yql/providers/yt/gateway/file
     yql/essentials/sql/pg
@@ -27,6 +28,7 @@ PEERDIR(
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/yson2
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

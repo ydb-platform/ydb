@@ -32,6 +32,7 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

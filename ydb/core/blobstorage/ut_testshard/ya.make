@@ -7,6 +7,7 @@ UNITTEST()
     )
 
     PEERDIR(
+        ydb/public/lib/ydb_cli/dump/util/view_query_dummy
         ydb/apps/version
         ydb/core/base
         ydb/core/blob_depot

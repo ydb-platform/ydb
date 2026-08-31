@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 PEERDIR(
     ydb/core/testlib/basics/default
     ydb/core/tx/schemeshard/ut_helpers
+    yql/essentials/sql/v1_dummy
 )
 
 SRCS(

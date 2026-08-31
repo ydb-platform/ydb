@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v0/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translator_iface/translator.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 

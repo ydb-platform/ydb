@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/tx/replication/ydb_proxy
     ydb/public/sdk/cpp/src/client/topic
     library/cpp/testing/unittest
+    yql/essentials/sql/v1
 )
 
 SRCS(

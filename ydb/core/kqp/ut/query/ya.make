@@ -21,6 +21,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util
+    yql/essentials/sql/v1
     ydb/core/statistics/ut_common
     ydb/public/sdk/cpp/src/client/proto
     ydb/core/kqp

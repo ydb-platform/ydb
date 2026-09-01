@@ -62,6 +62,7 @@ namespace NKikimr {
         bool IsBlockedLegacy(ui64 tabletId, TBlockedGen gen, ui32 *actualGen = nullptr) const;
         bool HasRecord(ui64 tabletId) const;
         bool Find(ui64 tabletId, ui32 *outGen) const;
+        std::tuple<ui32, ui64> FindMax(ui64 tabletId) const;
         bool IsInFlight() const { return !InFlightBlocks.empty() || !InFlightBlocksQueue.empty(); }
 
         void UpdateLegacy(ui64 tabletId, TBlockedGen gen) { UpdatePersistent(tabletId, gen); }

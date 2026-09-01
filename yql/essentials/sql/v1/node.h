@@ -245,13 +245,9 @@ public:
     TPtr AstNode(TPtr node) const;
     TPtr AstNode(const TString& str) const;
 
-    template <typename TVal, typename... TVals>
-    void Add(TVal val, TVals... vals) {
-        DoAdd(AstNode(val));
-        Add(vals...);
-    }
-
-    void Add() {
+    template <typename... TVals>
+    void Add(TVals... vals) {
+        (DoAdd(AstNode(vals)), ...);
     }
 
     // Y() Q() L()
@@ -902,7 +898,6 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     TNodePtr Hop;
     TNodePtr Interval;
     TNodePtr Delay;
-    bool DataWatermarks;
 
     TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
     ~TLegacyHoppingWindowSpec() {

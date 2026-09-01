@@ -2736,7 +2736,6 @@ public:
                 .OtherQueries = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
                 .TraceId = TraceId(),
                 .VictimQuerySpanId = victimQuerySpanId,
-                .CurrentQuerySpanId = QueryState->GetQuerySpanId(),
                 .VictimQueryText = victimQueryText,
                 .IsCommitAction = isCommitAction,
             }, TlsActivationContext->AsActorContext());

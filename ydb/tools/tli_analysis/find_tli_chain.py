@@ -161,21 +161,33 @@ class FastTimeParser:
 
 # ==================== Line Matching Helpers ====================
 
+def extract_query_id(line: str) -> Optional[str]:
+    """Extract querySpanId from line."""
+
+    return extract_field(line, "querySpanId")
+
+
 def extract_breaker_id(line: str) -> Optional[str]:
     """Extract BreakerQuerySpanId from line."""
 
     return extract_field(line, "breakerQuerySpanId")
 
 
-def check_victim_id_in_line(line: str, victim_id: str) -> bool:
-    """Check if victim_id appears as victimQuerySpanId or otherVictimQuerySpanId."""
+def check_query_id_in_line(line: str, query_id: str) -> bool:
+    """Check if query_id appears as querySpanId, victimQuerySpanId or otherVictimQuerySpanId."""
+
+    query_id = query_id.strip()
+
+    id = extract_field(line, "querySpanId")
+    if id and id.strip() == query_id:
+        return True
 
     id = extract_field(line, "victimQuerySpanId")
-    if id and id.strip() == victim_id.strip():
+    if id and id.strip() == query_id:
         return True
 
     id = extract_field(line, "otherVictimQuerySpanId")
-    if id and id.strip() == victim_id.strip():
+    if id and id.strip() == query_id:
         return True
 
     return False
@@ -277,33 +289,29 @@ def main():
         line = line.rstrip("\n")
 
         # Victim SessionActor line: "was a victim of broken locks" + component=SessionActor
-        if ("was a victim of broken locks" in line) and ("component=SessionActor" in line) and check_victim_id_in_line(line, victim_id):
+        if ("was a victim of broken locks" in line) and ("component=SessionActor" in line) and check_query_id_in_line(line, victim_id):
 
-            line_victim_id = extract_field(line, "victimQuerySpanId")
-            line_victim_query_text = unescape_and_format_query_text(extract_field(line, "victimQueryText"))
-            if line_victim_id and line_victim_query_text:
-                victim_query_text = line_victim_query_text
-                victim_tx_items.append((line_victim_id, line_victim_query_text))
-
-            other_victim_id = extract_field(line, "otherVictimQuerySpanId")
-            other_victim_query_text = unescape_and_format_query_text(extract_field(line, "otherVictimQueryText"))
-            if other_victim_id and other_victim_query_text:
-                victim_tx_items.append((other_victim_id, other_victim_query_text))
+            line_query_id = extract_field(line, "querySpanId")
+            line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
+            if line_query_id and line_query_text:
+                if ("isVictimQuery" in line):
+                    victim_query_text = line_query_text
+                victim_tx_items.append((line_query_id, line_query_text))
 
         # Breaker DataShard line: "broke other locks" + Component: DataShard
         if breaker_log_ds is None:
             if ("broke other locks" in line) and \
                ("component=DataShard" in line or "datashard_integrity_trails" in line) and \
-               check_victim_id_in_line(line, victim_id):
+               check_query_id_in_line(line, victim_id):
                 breaker_log_ds = line.rstrip("\n")
                 breaker_id = extract_breaker_id(line)
 
         # Breaker SessionActor lines: "had broken other locks" + Component: SessionActor
         # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
         if ("had broken other locks" in line) and ("component=SessionActor" in line):
-            bid = extract_breaker_id(line)
+            bid = extract_query_id(line)
             if bid:
-                breaker_query_text = unescape_and_format_query_text(extract_field(line, "breakerQueryText"))
+                breaker_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
                 if breaker_query_text:
                     breaker_sa_with_text_by_id[bid] = breaker_query_text
                     breaker_tx_items.append((bid, breaker_query_text))

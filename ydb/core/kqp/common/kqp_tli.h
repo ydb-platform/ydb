@@ -84,7 +84,6 @@ struct TTliLogParams {
     TString TraceId;
     TMaybe<ui64> BreakerQuerySpanId;
     TMaybe<ui64> VictimQuerySpanId;
-    TMaybe<ui64> CurrentQuerySpanId;
     TString VictimQueryText;
     bool IsCommitAction = false;
 };
@@ -191,13 +190,9 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     const bool isBreaker = params.BreakerQuerySpanId.Defined() && *params.BreakerQuerySpanId != 0;
 
     if (isBreaker) {
-        YDB_LOG_UPDATE_MESSAGE(message, {"breakerQuerySpanId", ToString(*params.BreakerQuerySpanId)});
+        YDB_LOG_UPDATE_MESSAGE(message, {"querySpanId", ToString(*params.BreakerQuerySpanId)});
     } else if (params.VictimQuerySpanId && *params.VictimQuerySpanId != 0) {
-        YDB_LOG_UPDATE_MESSAGE(message, {"victimQuerySpanId", ToString(*params.VictimQuerySpanId)});
-    }
-
-    if (params.CurrentQuerySpanId && *params.CurrentQuerySpanId != 0) {
-        YDB_LOG_UPDATE_MESSAGE(message, {"currentQuerySpanId", ToString(*params.CurrentQuerySpanId)});
+        YDB_LOG_UPDATE_MESSAGE(message, {"querySpanId", ToString(*params.VictimQuerySpanId)});
     }
 
     // Use appropriate field names based on breaker vs victim
@@ -206,27 +201,26 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
             if (allQueriesItem.Text == params.QueryText) {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
-                    {"breakerQueryText", params.QueryText});
+                    {"queryText", allQueriesItem.Text},
+                    {"isBreakerQuery", true});
             }
             else {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
-                    {"breakerQueryText", params.QueryText},
-                    {"otherBreakerQueryText", allQueriesItem.Text});
+                    {"queryText", allQueriesItem.Text});
             }
         }
         else {
-            if (allQueriesItem.Text == params.VictimQueryText) {
+            if (allQueriesItem.Text == params.QueryText) {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
-                    {"victimQueryText", params.VictimQueryText});
+                    {"queryText", allQueriesItem.Text},
+                    {"isVictimQuery", true});
             }
             else {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
-                    {"victimQueryText", params.VictimQueryText},
-                    {"otherVictimQuerySpanId", allQueriesItem.Id},
-                    {"otherVictimQueryText", allQueriesItem.Text});
+                    {"queryText", allQueriesItem.Text});
             }
         }
     }

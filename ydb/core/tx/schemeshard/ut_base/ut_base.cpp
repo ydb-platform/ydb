@@ -10,6 +10,7 @@
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 #include <util/generic/scope.h>
+#include <util/string/join.h>
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -59,6 +60,48 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     // tablet, because the property only shows up with more than one schemeshard -- exactly
     // the extsubdomain and serverless configurations, where a process-wide flag would force
     // the root and a tenant to be armed together.
+    // (b): the planning pass is pure and runs before anything is constructed or proposed --
+    // declarations at schemeshard__operation.cpp:303-376, first ConstructParts at :433. The
+    // question that decides whether it needs a namespace overlay is this one: when a create
+    // names a path whose intermediate directories do not exist yet, does the plan computed
+    // *before* those directories are made still name them all?
+    //
+    // It does, and the reason is that a create declares by string arithmetic
+    // (CanonizePath/JoinPath/ExtractParent) rather than by resolving against live state, so
+    // it is indifferent to whether the directories exist yet. See E36.
+    Y_UNIT_TEST(NestedCreatePlanNamesDirectoriesMadeForIt) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        THashMap<ui64, THashSet<TString>> plans;
+        NKikimr::NSchemeShard::CompletedPlanSink = &plans;
+        Y_DEFER { NKikimr::NSchemeShard::CompletedPlanSink = nullptr; };
+
+        // Neither DirA nor DirA/DirB exists; both are auto-created by the split.
+        const ui64 createTxId = ++txId;
+        TestCreateTable(runtime, createTxId, "/MyRoot", R"(
+            Name: "DirA/DirB/Table1"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, createTxId);
+
+        auto it = plans.find(createTxId);
+        UNIT_ASSERT_C(it != plans.end(), "the create completed without recording a plan");
+        const THashSet<TString>& plan = it->second;
+
+        for (const TString& expected : {
+                TString("/MyRoot/DirA"),
+                TString("/MyRoot/DirA/DirB"),
+                TString("/MyRoot/DirA/DirB/Table1")}) {
+            UNIT_ASSERT_C(plan.contains(expected),
+                "plan omits " << expected << ", computed before that directory existed: "
+                    << JoinSeq(", ", plan));
+        }
+    }
+
     Y_UNIT_TEST(PathCheckModesAreHeldPerTablet) {
         // Reaches the live tablet the way ut_counters does, since the modes are internal
         // state with no wire representation.

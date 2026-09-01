@@ -1,6 +1,10 @@
 #include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/vector.h>
+#include <util/string/builder.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -157,6 +161,61 @@ Y_UNIT_TEST(AbsentPathIdFallsBackToTheName) {
     // Acting on an existing object, so Alter/MayWrite rather than the create's claim.
     UNIT_ASSERT(declared.Paths[0].Effect == TAffectedPath::EEffect::Alter);
     UNIT_ASSERT(declared.Paths[0].Expect == TAffectedPath::EObservation::MayWrite);
+}
+
+// (h), the lint half. The exemption macros exist so that opting an operation out of
+// declaring its paths is a *category* a reviewer can check, not a sentence they have to
+// believe -- the macro comment says as much, having been burned once during this migration by
+// a free-text justification that turned out to be false.
+//
+// Nothing enforced that. SS_EXEMPT_AFFECTED_PATHS takes an arbitrary string, so a new
+// operation can be exempted with any prose at all and the build stays green. This walks every
+// operation type in the enum and requires each exemption reason to be one the categorised
+// macros produce.
+//
+// Deliberately not a static_assert: the point is to name every offender in one run, and a
+// static_assert stops at the first.
+namespace {
+
+constexpr TStringBuf CATEGORY_PREFIXES[] = {
+    "unimplemented:",
+    "Propose is an unfinished stub",
+    "retired:",
+    "writes no path row",
+};
+
+template <class TTraits>
+void CollectUncategorisedExemption(const char* opName, TVector<TString>& offenders) {
+    if constexpr (!TTraits::Declares) {
+        if constexpr (requires { TTraits::Why; }) {
+            const TStringBuf why = TTraits::Why;
+            for (const TStringBuf prefix : CATEGORY_PREFIXES) {
+                if (why.StartsWith(prefix)) {
+                    return;
+                }
+            }
+            offenders.push_back(TStringBuilder() << opName << " -> \"" << why << "\"");
+        }
+    }
+}
+
+} // namespace
+
+Y_UNIT_TEST(EveryExemptionUsesACategory) {
+    TVector<TString> offenders;
+
+#define SS_LINT_ONE_EXEMPTION(op)                                                   \
+    CollectUncategorisedExemption<TAffectedPathsTraits<op>>(#op, offenders);
+
+    SS_FOR_EACH_OP_TYPE(SS_LINT_ONE_EXEMPTION)
+
+#undef SS_LINT_ONE_EXEMPTION
+
+    UNIT_ASSERT_C(offenders.empty(),
+        "these operations are exempt from declaring their paths with a free-text reason "
+        "rather than one of the categories (unimplemented / unfinished stub / retired / "
+        "writes no path row). Free text is not reviewable -- pick the category that applies, "
+        "or declare the paths: " << JoinSeq("; ", offenders));
 }
 
 // There was an IncompleteDeclarationDemandsNothing here, covering a declaration that said up

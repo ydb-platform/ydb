@@ -1,0 +1,4 @@
+-- Type mismatch: stored Int32, requested Int64 -> empty optional.
+SELECT
+    PeekErased(AsErased(42), Int64)
+;

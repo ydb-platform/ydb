@@ -54,8 +54,11 @@ cdef class ResponseBuffer:
         self.current_chunk = None
         if self._exception_tag:
             tag_bytes = self._exception_tag.encode()
-            self.open_marker = b"__exception__" + tag_bytes
-            self.close_marker = tag_bytes + b"__exception__"
+            # The server separates __exception__ from the tag with a CRLF on both markers, e.g.
+            # __exception__\r\n<tag> ... <tag>\r\n__exception__. Matching the exact wire bytes is what
+            # lets the scan fire; without the CRLF these markers never match and detection goes dead.
+            self.open_marker = b"__exception__\r\n" + tag_bytes
+            self.close_marker = tag_bytes + b"\r\n__exception__"
 
     cdef void _check_for_exception(self, object chunk) except *:
         cdef object search_data
@@ -185,7 +188,7 @@ cdef class ResponseBuffer:
                         self.buf_loc += 1
                     else:
                         b = self._read_byte_load()
-                    sz += ((b & 0x7f) << shift)
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
                     if (b & 0x80) == 0:
                         break
                     shift += 7
@@ -231,7 +234,7 @@ cdef class ResponseBuffer:
                         self.buf_loc += 1
                     else:
                         b = self._read_byte_load()
-                    sz += ((b & 0x7f) << shift)
+                    sz += (<unsigned long long>(b & 0x7f)) << shift
                     if (b & 0x80) == 0:
                         break
                     shift += 7
@@ -278,7 +281,7 @@ cdef class ResponseBuffer:
                 self.buf_loc += 1
             else:
                 b = self._read_byte_load()
-            sz += ((b & 0x7f) << shift)
+            sz += (<unsigned long long>(b & 0x7f)) << shift
             if (b & 0x80) == 0:
                 return sz
             shift += 7

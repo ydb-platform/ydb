@@ -1,0 +1,4 @@
+{
+  "stubPath": "typings",
+  "extraPaths": ["."]
+}

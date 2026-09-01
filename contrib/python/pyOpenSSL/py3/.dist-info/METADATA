@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pyOpenSSL
-Version: 24.3.0
+Version: 25.1.0
 Summary: Python wrapper module around the OpenSSL library
 Home-page: https://pyopenssl.org/
 Author: The pyOpenSSL developers
@@ -28,7 +28,8 @@ Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: System :: Networking
 Requires-Python: >=3.7
 License-File: LICENSE
-Requires-Dist: cryptography<45,>=41.0.5
+Requires-Dist: cryptography<46,>=41.0.5
+Requires-Dist: typing-extensions>=4.9; python_version < "3.13" and python_version >= "3.8"
 Provides-Extra: test
 Requires-Dist: pytest-rerunfailures; extra == "test"
 Requires-Dist: pretend; extra == "test"
@@ -36,6 +37,18 @@ Requires-Dist: pytest>=3.0.1; extra == "test"
 Provides-Extra: docs
 Requires-Dist: sphinx!=5.2.0,!=5.2.0.post0,!=7.2.5; extra == "docs"
 Requires-Dist: sphinx_rtd_theme; extra == "docs"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 ========================================================
 pyOpenSSL -- A Python wrapper around the OpenSSL library
@@ -83,6 +96,40 @@ You can also join ``#pyca`` on ``irc.libera.chat`` to ask questions or get invol
 
 Release Information
 ===================
+
+25.1.0 (2025-05-17)
+-------------------
+
+Backward-incompatible changes:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Deprecations:
+^^^^^^^^^^^^^
+
+- Attempting using any methods that mutate an ``OpenSSL.SSL.Context`` after it
+  has been used to create an ``OpenSSL.SSL.Connection`` will emit a warning. In
+  a future release, this will raise an exception.
+
+Changes:
+^^^^^^^^
+
+* ``cryptography`` maximum version has been increased to 45.0.x.
+
+
+25.0.0 (2025-01-12)
+-------------------
+
+Backward-incompatible changes:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Changes:
+^^^^^^^^
+
+- Corrected type annotations on ``Context.set_alpn_select_callback``, ``Context.set_session_cache_mode``, ``Context.set_options``, ``Context.set_mode``, ``X509.subject_name_hash``, and ``X509Store.load_locations``.
+- Deprecated APIs are now marked using ``warnings.deprecated``. ``mypy`` will emit deprecation notices for them when used with ``--enable-error-code deprecated``.
 
 24.3.0 (2024-11-27)
 -------------------

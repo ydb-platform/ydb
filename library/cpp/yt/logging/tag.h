@@ -1,10 +1,11 @@
 #pragma once
 
-#include "tagged_payload.h"
+#include "public.h"
 
 #include <library/cpp/yt/string/format.h>
 
 #include <util/generic/strbuf.h>
+#include <util/generic/typetraits.h>
 
 #include <string>
 
@@ -12,9 +13,10 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Wraps the format spec passed to a tag-appending |With| and validates at compile time
-//! that it is a |%|-prefixed string literal (e.g. |"%v"|, |"%08x"|).
-class TLoggingTagSpec;
+//! Wraps a tag key and rejects, at compile time, the pre-migration printf spelling
+//! (|WithTag("Key: %v", value)|), which would otherwise bind to |WithTag(key, value)|
+//! and silently produce a tag keyed |"Key: %v"|.
+class TLoggingTagKey;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -24,32 +26,60 @@ class TLoggingTagList
 public:
     TLoggingTagList() = default;
 
-    template <class TValue>
-    TLoggingTagList& With(TStringBuf key, const TValue& value) &;
-    template <class TValue>
-    TLoggingTagList& With(TStringBuf key, const TValue& value, TLoggingTagSpec spec) &;
-    template <class... TArgs>
-    TLoggingTagList& WithFormat(TStringBuf key, TFormatString<TArgs...> format, TArgs&&... args) &;
+    //! Reconstructs a list from bytes previously produced by #GetPayload.
+    explicit TLoggingTagList(TLoggingTagListPayload payload);
 
     template <class TValue>
-    TLoggingTagList&& With(TStringBuf key, const TValue& value) &&;
-    template <class TValue>
-    TLoggingTagList&& With(TStringBuf key, const TValue& value, TLoggingTagSpec spec) &&;
+    TLoggingTagList& Add(TLoggingTagKey key, const TValue& value);
     template <class... TArgs>
-    TLoggingTagList&& WithFormat(TStringBuf key, TFormatString<TArgs...> format, TArgs&&... args) &&;
+    TLoggingTagList& AddFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
+
+    //! Appends every tag from #other.
+    TLoggingTagList& Add(const TLoggingTagList& other);
+
+    template <class TValue>
+    [[nodiscard]] TLoggingTagList With(TLoggingTagKey key, const TValue& value) const &;
+    template <class TValue>
+    [[nodiscard]] TLoggingTagList With(TLoggingTagKey key, const TValue& value) &&;
+    template <class... TArgs>
+    [[nodiscard]] TLoggingTagList WithFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &;
+    template <class... TArgs>
+    [[nodiscard]] TLoggingTagList WithFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) &&;
 
     bool IsEmpty() const;
 
     //! The serialized tag section, spliced verbatim by #TTaggedPayloadWriter::AppendTags.
-    TStringBuf GetPayload() const;
+    const TLoggingTagListPayload& GetPayload() const;
 
 private:
-    std::string Payload_;
+    TLoggingTagListPayload Payload_;
 
     template <class TValue>
-    void DoWith(TStringBuf key, const TValue& value, TStringBuf spec);
-    void AppendTag(TStringBuf key, TStringBuf value);
+    void DoAdd(TLoggingTagKey key, const TValue& value, TStringBuf spec);
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Marks a type as carrying a well-known tag under #Key.
+template <class T>
+struct TWellKnownLoggingTagTraits
+{
+    static_assert(TDependentFalse<T>, "Type does not carry a well-known logging tag; pass an explicit key");
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Views #payload without copying.
+TLoggingTagListPayloadView AsView(const TLoggingTagListPayload& payload);
+
+//! Renders the tags as |Key: Value, ...|.
+void FormatValue(TStringBuilderBase* builder, TLoggingTagListPayloadView tags, TStringBuf spec);
+
+//! Renders the tags as |Key: Value, ...|.
+void FormatValue(TStringBuilderBase* builder, const TLoggingTagListPayload& tags, TStringBuf spec);
+
+//! Renders the tags as |Key: Value, ...|.
+void FormatValue(TStringBuilderBase* builder, const TLoggingTagList& tags, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

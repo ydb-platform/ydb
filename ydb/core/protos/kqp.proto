@@ -410,6 +410,8 @@ message TSessionInfo {
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
     optional string TraceId = 21;
+    // Description of how the query was classified into WmPoolId
+    optional string WmClassifiedBy = 22;
 }
 
 message TEvListSessionsRequest {
@@ -679,6 +681,7 @@ message TEvStartKqpTasksRequest {
     optional string UserToken = 20 [(Ydb.sensitive) = true];
     optional bool SupportShuttingDown = 21 [default = true];
     optional bool EnableWatermarks = 22 [default = false];
+    optional bool UseBatchPool = 23 [default = false];
 
     reserved 15;
     reserved 16;
@@ -879,6 +882,7 @@ message TKqpTableSinkIndexSettings {
     repeated TKqpColumnMetadataProto DictColumns = 16;
     optional NKqpProto.TKqpPhyTableId StatsTable = 17;
     repeated TKqpColumnMetadataProto StatsColumns = 18;
+    optional uint32 DataColumnCount = 19;
 }
 
 enum EInputRowFormat {
@@ -1086,6 +1090,7 @@ message TScriptExecutionOperationMeta {
     optional string CheckpointId = 14;
     optional string StreamingQueryPath = 15;
     optional string CustomerSuppliedId = 16;
+    optional google.protobuf.Duration CheckpointInterval = 17;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table

@@ -118,6 +118,12 @@ struct TStreamLookupConnection: public TConnection {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
 
+    // In join mode the input type describes the tuples that the physical conversion builds at the
+    // end of the input stage, so it can only be filled in once that expression exists.
+    void SetInputType(NYql::TExprNode::TPtr inputType) {
+        InputType = std::move(inputType);
+    }
+
     NYql::TExprNode::TPtr Table;
     NYql::TExprNode::TPtr Columns;
     NYql::TExprNode::TPtr InputType;

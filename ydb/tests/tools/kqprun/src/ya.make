@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/aws_init
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/services/keyvalue
     ydb/services/persqueue_v1
     ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src/proto

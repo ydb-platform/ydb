@@ -11,6 +11,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
+#include <util/string/builder.h>
 #include <util/system/env.h>
 #include <util/system/mutex.h>
 
@@ -136,7 +137,26 @@ namespace {
         std::atomic<size_t> Count = 0;
     };
 
+    // Deterministic payload content derived from the sequence number so the receiver can validate
+    // that the bytes survived the v2 wire format intact (unlike a fill of '*', which hides corruption
+    // that preserves size).
+    TString MakeLoadPayload(ui64 seq, size_t size) {
+        TString result = TString::Uninitialized(size);
+        char* p = result.Detach();
+        for (size_t i = 0; i < size; ++i) {
+            p[i] = static_cast<char>((seq * 131u + i * 17u + 0x5Au) & 0xff);
+        }
+        return result;
+    }
+
+    // Short inline protobuf payload (Record.Payload) used when UseInlinePayload is set.
+    TString MakeLoadInlinePayload(ui64 seq) {
+        return TStringBuilder() << "inl-" << seq;
+    }
+
     // Echoes each TEvTest back to its sender as a TEvTestResponse, preserving channel and cookie.
+    // Validates sequence number, rope payload, and optional inline protobuf payload before replying
+    // so sustained load exercises content correctness, not just delivery.
     class TLoadEchoActor: public TActor<TLoadEchoActor> {
     public:
         TLoadEchoActor()
@@ -149,23 +169,44 @@ namespace {
         )
 
         void Handle(TEvTest::TPtr& ev) {
-            Send(ev->Sender, new TEvTestResponse(ev->Get()->Record.GetSequenceNumber()),
+            auto* msg = ev->Get();
+            const ui64 seq = msg->Record.GetSequenceNumber();
+            Y_ABORT_UNLESS(seq == ev->Cookie,
+                "corrupted request: seq# %" PRIu64 " cookie# %" PRIu64, seq, ev->Cookie);
+
+            if (msg->GetPayloadCount() > 0) {
+                Y_ABORT_UNLESS(msg->GetPayloadCount() == 1,
+                    "unexpected payload count# %" PRIu32 " seq# %" PRIu64, msg->GetPayloadCount(), seq);
+                const TString got = msg->GetPayload(0).ConvertToString();
+                const TString expected = MakeLoadPayload(seq, got.size());
+                Y_ABORT_UNLESS(got == expected,
+                    "rope payload mismatch seq# %" PRIu64 " size# %zu", seq, got.size());
+            }
+            if (msg->Record.HasPayload()) {
+                const TString& got = msg->Record.GetPayload();
+                const TString expected = MakeLoadInlinePayload(seq);
+                Y_ABORT_UNLESS(got == expected,
+                    "inline payload mismatch seq# %" PRIu64, seq);
+            }
+
+            Send(ev->Sender, new TEvTestResponse(seq),
                 IEventHandle::MakeFlags(ev->GetChannel(), 0), ev->Cookie);
         }
     };
 
-    // Mimics the interconnect load test: keeps up to InFlyMax messages (each carrying a rope payload on
-    // a given channel) in flight and only generates more as responses return; fulfils the promise once
-    // Total responses have been received.
+    // Mimics the interconnect load test: keeps up to InFlyMax messages (each carrying a deterministic
+    // rope and/or inline protobuf payload on a given channel) in flight and only generates more as
+    // responses return; fulfils the promise once Total responses have been received.
     class TLoadDriverActor: public TActorBootstrapped<TLoadDriverActor> {
     public:
         TLoadDriverActor(const TActorId& responder, ui32 total, ui32 inFlyMax, ui32 payloadSize, ui16 channel,
-                NThreading::TPromise<ui32> done)
+                NThreading::TPromise<ui32> done, bool useInlinePayload = false)
             : Responder(responder)
             , Total(total)
             , InFlyMax(inFlyMax)
             , PayloadSize(payloadSize)
             , Channel(channel)
+            , UseInlinePayload(useInlinePayload)
             , Done(std::move(done))
         {}
 
@@ -182,10 +223,11 @@ namespace {
 
         void SendOne(ui64 seq) {
             auto ev = MakeHolder<TEvTest>(seq);
+            if (UseInlinePayload) {
+                ev->Record.SetPayload(MakeLoadInlinePayload(seq));
+            }
             if (PayloadSize) {
-                TString payload = TString::Uninitialized(PayloadSize);
-                memset(payload.Detach(), '*', payload.size());
-                ev->AddPayload(TRope(std::move(payload)));
+                ev->AddPayload(TRope(MakeLoadPayload(seq, PayloadSize)));
             }
             Send(Responder, ev.Release(), IEventHandle::MakeFlags(Channel, 0) | IEventHandle::FlagTrackDelivery, seq);
             ++InFly;
@@ -227,6 +269,7 @@ namespace {
         const ui32 InFlyMax;
         const ui32 PayloadSize;
         const ui16 Channel;
+        const bool UseInlinePayload;
         NThreading::TPromise<ui32> Done;
         ui32 Sent = 0;
         ui32 Received = 0;
@@ -306,7 +349,9 @@ namespace {
         std::atomic<size_t> DisconnectCount{0};
     };
 
-    std::unique_ptr<TTestICCluster> MakeV2Cluster(ui32 tcpSocketBufferSize = 0) {
+    std::unique_ptr<TTestICCluster> MakeV2Cluster(ui32 tcpSocketBufferSize = 0,
+            TTestICCluster::TTrafficInterrupterSettings *tiSettings = nullptr,
+            TDuration deadPeerTimeout = TDuration::Seconds(2)) {
         auto customizer = [tcpSocketBufferSize](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
             settings.V2.ChecksumEvents = true;
@@ -315,9 +360,9 @@ namespace {
             }
         };
         return std::make_unique<TTestICCluster>(
-            /*numNodes=*/2, TChannelsConfig(), /*tiSettings=*/nullptr, /*loggerSettings=*/nullptr,
+            /*numNodes=*/2, TChannelsConfig(), tiSettings, /*loggerSettings=*/nullptr,
             TTestICCluster::EMPTY, /*checkerFactory=*/TTestICCluster::TCheckerFactory{},
-            /*deadPeerTimeout=*/TDuration::Seconds(2), /*inflight=*/TNode::DefaultInflight(), customizer);
+            deadPeerTimeout, /*inflight=*/TNode::DefaultInflight(), customizer);
     }
 
     std::shared_ptr<IDirectSession> GrabDirectSession(TTestICCluster& cluster, ui32 fromNode, ui32 peerNode) {
@@ -460,6 +505,35 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 
         UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "load-like round trip stalled");
         UNIT_ASSERT_VALUES_EQUAL(future.GetValueSync(), kTotal);
+        AssertV2InUse(*cluster, 1, 2);
+    }
+
+    // Sustained multi-channel load with mixed rope sizes and inline protobuf payloads; the echo actor
+    // byte-validates every message so framing/serialization corruption fails the test (unlike ic_bench,
+    // which only measures throughput).
+    Y_UNIT_TEST(ValidatingLoadVariedPayloads) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+        auto cluster = MakeV2Cluster();
+        const TActorId responder = cluster->RegisterActor(new TLoadEchoActor, 2);
+
+        constexpr ui32 kChannels = 6;
+        constexpr ui32 kPerChannel = 5000;
+        std::vector<NThreading::TFuture<ui32>> futures;
+        for (ui16 ch = 0; ch < kChannels; ++ch) {
+            auto promise = NThreading::NewPromise<ui32>();
+            futures.push_back(promise.GetFuture());
+            const ui32 payload = (ch % 3 == 0) ? 40 : (ch % 3 == 1 ? 4096 : 20000);
+            const bool useInline = (ch % 2 == 0);
+            cluster->RegisterActor(new TLoadDriverActor(responder, kPerChannel, /*inFlyMax=*/8, payload,
+                /*channel=*/ch, promise, useInline), 1);
+        }
+        for (ui16 ch = 0; ch < kChannels; ++ch) {
+            UNIT_ASSERT_C(futures[ch].Wait(TDuration::Seconds(90)), "validating load stalled");
+            UNIT_ASSERT_VALUES_EQUAL(futures[ch].GetValueSync(), kPerChannel);
+        }
         AssertV2InUse(*cluster, 1, 2);
     }
 
@@ -859,5 +933,66 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             /*channel=*/1, promise), 1);
         UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "connection did not recover after disconnect churn");
         UNIT_ASSERT_VALUES_EQUAL(future.GetValueSync(), kTotal);
+    }
+
+    // A link that stops delivering anything while both sockets stay open (blackholed traffic) gives the
+    // engine no error to react to: only the dead-peer watchdog can notice that the peer went silent. The
+    // session must be torn down shortly after the timeout expires -- and not before -- and the connection
+    // must come back once traffic flows again.
+    Y_UNIT_TEST(DeadPeerTimeout) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+
+        constexpr TDuration deadPeerTimeout = TDuration::Seconds(2);
+        TTestICCluster::TTrafficInterrupterSettings tiSettings{
+            .RejectingTrafficTimeout = TDuration::Zero(), // no random rejects; the test drives the blackhole
+            .BandWidth = 0.0,
+            .Disconnect = false,
+        };
+        auto cluster = MakeV2Cluster(/*tcpSocketBufferSize=*/0, &tiSettings, deadPeerTimeout);
+
+        const TActorId responder = cluster->RegisterActor(new TLoadEchoActor, 2);
+        auto* monitor = new TConnectionMonitorActor(2);
+        cluster->RegisterActor(monitor, 1);
+
+        auto runLoad = [&](ui32 total, TStringBuf what) {
+            auto promise = NThreading::NewPromise<ui32>();
+            auto future = promise.GetFuture();
+            cluster->RegisterActor(new TLoadDriverActor(responder, total, /*inFlyMax=*/16, /*payloadSize=*/4096,
+                /*channel=*/1, promise), 1);
+            UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), what);
+            UNIT_ASSERT_VALUES_EQUAL(future.GetValueSync(), total);
+        };
+
+        runLoad(500, "initial load stalled");
+        AssertV2InUse(*cluster, 1, 2);
+        WaitFor(TDuration::Seconds(20), [&] { return monitor->Connects() >= 1; }, "connection observed");
+
+        // Connecting may take a couple of attempts (handshake races at startup), so count from where we are
+        // rather than from zero.
+        const size_t disconnectsBefore = monitor->Disconnects();
+
+        // From now on nothing gets through in either direction, but the sockets remain open.
+        cluster->StartBlackhole(1);
+        cluster->StartBlackhole(2);
+        const TInstant blackholeStart = TInstant::Now();
+
+        WaitFor(deadPeerTimeout + TDuration::Seconds(20),
+            [&] { return monitor->Disconnects() > disconnectsBefore; },
+            "dead peer detected while traffic is blackholed");
+
+        // Pings keep the stream alive right up to the blackhole, so a disconnect noticeably earlier than the
+        // timeout would mean something other than the dead-peer watchdog tore the session down.
+        const TDuration elapsed = TInstant::Now() - blackholeStart;
+        UNIT_ASSERT_C(elapsed >= deadPeerTimeout / 2, TStringBuilder()
+            << "session died after " << elapsed << ", too early for a dead-peer timeout of " << deadPeerTimeout);
+
+        cluster->StopBlackhole(1);
+        cluster->StopBlackhole(2);
+
+        runLoad(500, "load after dead peer stalled -- reconnect broken");
+        AssertV2InUse(*cluster, 1, 2);
     }
 }

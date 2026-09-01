@@ -24,7 +24,7 @@ bool ConvertToBooleanValue(TStringBuf stringValue)
         return false;
     } else {
         THROW_ERROR_EXCEPTION("Unable to convert value to boolean")
-            << TErrorAttribute("value", stringValue);
+            .With("value", stringValue);
     }
 }
 
@@ -74,7 +74,7 @@ void TValueConsumerBase::ProcessInt64Value(const TUnversionedValue& value, EValu
                 value,
                 columnType,
                 TError("Unable to convert negative int64 to uint64")
-                    << TErrorAttribute("value", integralValue));
+                    .With("value", integralValue));
         } else {
             OnMyValue(MakeUnversionedUint64Value(static_cast<ui64>(integralValue), value.Id));
         }
@@ -92,7 +92,7 @@ void TValueConsumerBase::ProcessUint64Value(const TUnversionedValue& value, EVal
                 value,
                 columnType,
                 TError("Unable to convert uint64 to int64 as it leads to an overflow")
-                    << TErrorAttribute("value", integralValue));
+                    .With("value", integralValue));
         } else {
             OnMyValue(MakeUnversionedInt64Value(static_cast<i64>(integralValue), value.Id));
         }
@@ -201,10 +201,10 @@ const TTableSchemaPtr& TValueConsumerBase::GetSchema() const
 void TValueConsumerBase::ThrowConversionException(const TUnversionedValue& value, EValueType columnType, const TError& ex)
 {
     THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error while performing type conversion")
-        << ex
-        << TErrorAttribute("column", GetNameTable()->GetName(value.Id))
-        << TErrorAttribute("value_type", value.Type)
-        << TErrorAttribute("column_type", columnType);
+        .With(ex)
+        .With("column", GetNameTable()->GetName(value.Id))
+        .With("value_type", value.Type)
+        .With("column_type", columnType);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -278,7 +278,7 @@ void TBuildingValueConsumer::OnMyValue(const TUnversionedValue& value)
         (valueCopy.Type != EValueType::Null || ConvertNullToEntity_))
     {
         if (valueCopy.Type == EValueType::Null && LogNullToEntity_) {
-            YT_LOG_DEBUG("Detected conversion of null to YSON entity");
+            YT_TLOG_DEBUG("Detected conversion of null to YSON entity");
             LogNullToEntity_ = false;
         }
         Builder_.AddValue(EncodeUnversionedAnyValue(valueCopy, &MemoryPool_));

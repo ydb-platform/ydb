@@ -17,6 +17,9 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/containers/absl/btree_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
@@ -101,7 +104,7 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
     PipesRequested.clear();
     ReadyPartitionTablets = 0;
     while (!PartitionsLocationQueue.empty()) {
-        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
+        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx, PartitionsLocationQueue.front().Cookie);
         PartitionsLocationQueue.pop_front();
     }
     if (PartitionsScaleManager) {
@@ -141,7 +144,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
         StartFindSubDomainPathId(true);
     }
 
-    StartPartitionIdForWrite = NextPartitionIdForWrite = rand() % TotalGroups;
+    StartPartitionIdForWrite = NextPartitionIdForWrite = TotalGroups ? rand() % TotalGroups : 0;
 
     auto getInitLog = [&]() {
         TStringBuilder s;
@@ -171,6 +174,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
 
     ProcessPartitionsLocationQueue(ctx);
+    ProcessMLPGetPartitionRequests(ctx);
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
@@ -205,8 +209,14 @@ void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvUpdateBalancerConfig:
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr &ev, const TActorContext &ctx) {
-    NextPartitionIdForWrite = (NextPartitionIdForWrite + 1) % TotalGroups; //TODO: change here when there will be more than 1 partition in partition_group.
     THolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse> response = MakeHolder<TEvPersQueue::TEvGetPartitionIdForWriteResponse>();
+    if (TotalGroups == 0) {
+        response->Record.SetPartitionId(0);
+        ctx.Send(ev->Sender, response.Release());
+        return;
+    }
+
+    NextPartitionIdForWrite = (NextPartitionIdForWrite + 1) % TotalGroups; //TODO: change here when there will be more than 1 partition in partition_group.
     response->Record.SetPartitionId(NextPartitionIdForWrite);
     ctx.Send(ev->Sender, response.Release());
     if (NextPartitionIdForWrite == StartPartitionIdForWrite) { // randomize next cycle
@@ -326,25 +336,44 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         }
     }
 
+    absl::flat_hash_set<ui64> liveTabletIds;
+    liveTabletIds.reserve(record.TabletsSize());
+    newTablets.reserve(record.TabletsSize());
+    reallocatedTablets.reserve(record.TabletsSize());
     for (auto& p : record.GetTablets()) {
+        liveTabletIds.insert(p.GetTabletId());
         auto it = TabletsInfo.find(p.GetTabletId());
         if (it == TabletsInfo.end()) {
             TTabletInfo info{p.GetOwner(), p.GetIdx()};
             TabletsInfo[p.GetTabletId()] = info;
-            newTablets.push_back(std::make_pair(p.GetTabletId(), info));
+            newTablets.emplace_back(p.GetTabletId(), info);
         } else {
             if (it->second.Owner != p.GetOwner() || it->second.Idx != p.GetIdx()) {
                 TTabletInfo info{p.GetOwner(), p.GetIdx()};
                 TabletsInfo[p.GetTabletId()] = info;
-                reallocatedTablets.push_back(std::make_pair(p.GetTabletId(), info));
+                reallocatedTablets.emplace_back(p.GetTabletId(), info);
             }
         }
 
     }
 
-    std::map<ui32, TPartitionInfo> partitionsInfo;
+    if (record.TabletsSize() > 0) {
+        for (auto it = TabletsInfo.begin(); it != TabletsInfo.end();) {
+            if (!liveTabletIds.contains(it->first)) {
+                ClosePipe(it->first, ctx);
+                TabletsInfo.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    absl::btree_map<ui32, TPartitionInfo> partitionsInfo;
     std::vector<TPartInfo> newPartitions;
     std::vector<ui32> newPartitionsIds;
+    newPartitions.reserve(record.PartitionsSize());
+    newPartitionsIds.reserve(record.PartitionsSize());
+    newGroups.reserve(record.PartitionsSize());
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         if (it == PartitionsInfo.end()) {
@@ -375,10 +404,16 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             deletedPartitions.push_back(p.first);
         }
     }
-    PartitionsInfo = std::unordered_map<ui32, TPartitionInfo>(partitionsInfo.rbegin(), partitionsInfo.rend());
+    PartitionsInfo = absl::flat_hash_map<ui32, TPartitionInfo>(partitionsInfo.begin(), partitionsInfo.end());
 
     Balancer->UpdateConfig(newPartitionsIds, deletedPartitions, ctx);
-    MLPBalancer->UpdateConfig(newPartitionsIds);
+    auto receiveAttemptDeletes = MLPBalancer->UpdateConfig(newPartitionsIds);
+    if (!receiveAttemptDeletes.empty()) {
+        TReceiveAttemptPartitionsWriteBatch batch;
+        batch.Deletes = std::move(receiveAttemptDeletes);
+        PendingReceiveAttemptPartitionsWrites.push_back(std::move(batch));
+        TryStartNextReceiveAttemptPartitionsWrite(ctx);
+    }
 
     Execute(new TTxWrite(this, std::move(deletedPartitions), std::move(newPartitions), std::move(newTablets), std::move(newGroups), std::move(reallocatedTablets)), ctx);
 
@@ -398,6 +433,15 @@ TStringBuilder TPersQueueReadBalancer::LogPrefix() const {
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
 {
     auto tabletId = ev->Get()->TabletId;
+    auto it = TabletPipes.find(tabletId);
+    if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
+        YDB_LOG_DEBUG("TEvClientDestroyed for stale pipe",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"clientId", ev->Get()->ClientId});
+        return;
+    }
+
     YDB_LOG_DEBUG("TEvClientDestroyed",
         {"logPrefix", LogPrefix()},
         {"tabletId", tabletId});
@@ -410,6 +454,14 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)
 {
     auto tabletId = ev->Get()->TabletId;
+    auto it = TabletPipes.find(tabletId);
+    if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
+        YDB_LOG_DEBUG("TEvClientConnected for stale pipe",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"clientId", ev->Get()->ClientId});
+        return;
+    }
 
     PipesRequested.erase(tabletId);
 
@@ -426,26 +478,19 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 
     Y_VERIFY_DEBUG_S(ev->Get()->Generation, "Tablet generation should be greater than 0");
 
-    auto it = TabletPipes.find(tabletId);
-    if (it != TabletPipes.end()) {
-        it->second.Generation = ev->Get()->Generation;
-        it->second.NodeId = ev->Get()->ServerId.NodeId();
+    it->second.Generation = ev->Get()->Generation;
+    it->second.NodeId = ev->Get()->ServerId.NodeId();
 
-        if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
-            it->second.Ready = true;
-            ++ReadyPartitionTablets;
-        }
-
-        YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
-            {"nodeId", ev->Get()->ServerId.NodeId()},
-            {"generation", ev->Get()->Generation});
-    } else {
-        YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId});
+    if (!it->second.Ready && TabletsInfo.contains(tabletId)) {
+        it->second.Ready = true;
+        ++ReadyPartitionTablets;
     }
+
+    YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
+        {"logPrefix", LogPrefix()},
+        {"tabletId", tabletId},
+        {"nodeId", ev->Get()->ServerId.NodeId()},
+        {"generation", ev->Get()->Generation});
 
     ProcessPartitionsLocationQueue(ctx);
 }
@@ -573,6 +618,9 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     //TODO: Decide about changing number of partitions and send request to SchemeShard
     //TODO: make AlterTopic request via TX_PROXY
 
+    // Also required on the TEvStatsWakeup timeout path, which calls CheckStat without the response handler.
+    StatsRequestTracker.StatsReceived = true;
+
     if (!TTxWritePartitionStatsScheduled) {
         TTxWritePartitionStatsScheduled = true;
         Execute(new TTxWritePartitionStats(this));
@@ -591,6 +639,7 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
 
     NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
 
+    ProcessPendingMLPRequests(ctx);
 }
 
 void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
@@ -737,7 +786,7 @@ void TPersQueueReadBalancer::StartWatchingSubDomainPathId() {
 void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (DatabaseInfo.DatabasePath.empty()) {
-        DatabaseInfo.DatabasePath = msg->Result->GetPath();
+        DatabaseInfo.DatabasePath = !msg->Path.empty() ? msg->Path : msg->Result->GetPath();
         for (const auto& attr : msg->Result->GetPathDescription().GetUserAttributes()) {
             if (attr.GetKey() == "folder_id") DatabaseInfo.FolderId = attr.GetValue();
             if (attr.GetKey() == "cloud_id") DatabaseInfo.CloudId = attr.GetValue();
@@ -749,7 +798,7 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
     }
 
     if (PartitionsScaleManager) {
-        PartitionsScaleManager->UpdateDatabasePath(DatabaseInfo.DatabasePath);
+        PartitionsScaleManager->UpdateDatabasePath(DatabaseInfo.DatabasePath, ctx);
     }
 
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
@@ -898,11 +947,13 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
 }
 
 void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
-    if (!SplitMergeEnabled(TabletConfig)) {
+    if (!PartitionsScaleManager) {
         return;
     }
-    if (PartitionsScaleManager) {
+    if (SplitMergeEnabled(TabletConfig)) {
         PartitionsScaleManager->HandleScaleRequestResult(ev, ctx);
+    } else {
+        PartitionsScaleManager->AbortInflightScaleRequest(ctx);
     }
 }
 
@@ -933,6 +984,9 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) 
         {"logPrefix", LogPrefix()},
         {"ev", ev->Get()->Record.ShortDebugString()});
     PendingMLPGetPartitionRequests.push_back(std::move(ev));
+    if (!Inited) {
+        return;
+    }
     ProcessMLPGetPartitionRequests(ActorContext());
 }
 
@@ -984,6 +1038,7 @@ void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext&
     }
 
     TReceiveAttemptPartitionsWriteBatch batch;
+    batch.Responses.reserve(PendingMLPGetPartitionRequests.size());
     const auto now = TAppData::TimeProvider->Now();
 
     while (!PendingMLPGetPartitionRequests.empty()) {
@@ -1000,10 +1055,10 @@ void TPersQueueReadBalancer::ProcessMLPGetPartitionRequests(const TActorContext&
             ev->Get()->GetReceiveAttemptId(),
             now
         );
-        if (prepared.IsError) {
+        if (prepared.IsError || !prepared.Node) {
             response.IsError = true;
-            response.ErrorStatus = prepared.ErrorStatus;
-            response.ErrorMessage = prepared.ErrorMessage;
+            response.ErrorStatus = prepared.IsError ? prepared.ErrorStatus : Ydb::StatusIds::SCHEME_ERROR;
+            response.ErrorMessage = prepared.IsError ? prepared.ErrorMessage : TString("No partitions for balancing");
         } else {
             response.PartitionId = prepared.Node->Id;
             response.TabletId = prepared.Node->TabletId;
@@ -1078,7 +1133,6 @@ void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext& ctx)
         PendingMLPRequests.pop_front();
     }
 
-    std::exchange(PendingMLPRequests, {});
     ProcessMLPGetPartitionRequests(ctx);
 }
 

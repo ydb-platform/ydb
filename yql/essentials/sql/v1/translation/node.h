@@ -144,7 +144,6 @@ public:
         }
     };
 
-public:
     explicit INode(TPosition pos);
     virtual ~INode();
 
@@ -379,7 +378,6 @@ protected:
     TUdfNode* GetUdfNode() override;
     const TUdfNode* GetUdfNode() const override;
 
-protected:
     void DoUpdateState() const override;
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const override;
     bool InitReference(TContext& ctx) override;
@@ -518,7 +516,6 @@ protected:
 
     void UpdateStateByListNodes(const TVector<TNodePtr>& Nodes) const;
 
-protected:
     TVector<TNodePtr> Nodes_;
     mutable TMaybe<bool> CacheGroupKey_;
 };
@@ -555,7 +552,6 @@ protected:
     TString GetCallExplain() const;
     bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
 
-protected:
     TString OpName_;
     i32 MinArgs_;
     i32 MaxArgs_;
@@ -855,8 +851,7 @@ public:
     const TNodePtr OrderExpr;
     const bool Ascending;
     TIntrusivePtr<TSortSpecification> Clone() const;
-    ~TSortSpecification() {
-    }
+    ~TSortSpecification() = default;
 
 private:
     const TNodePtr CleanOrderExpr_;
@@ -888,8 +883,7 @@ struct TFrameBound: public TSimpleRefCount<TFrameBound> {
     EFrameSettings Settings = FrameUndefined;
 
     TIntrusivePtr<TFrameBound> Clone() const;
-    ~TFrameBound() {
-    }
+    ~TFrameBound() = default;
 };
 using TFrameBoundPtr = TIntrusivePtr<TFrameBound>;
 
@@ -900,8 +894,7 @@ struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     EFrameExclusions FrameExclusion = FrameExclNone;
 
     TIntrusivePtr<TFrameSpecification> Clone() const;
-    ~TFrameSpecification() {
-    }
+    ~TFrameSpecification() = default;
 };
 using TFrameSpecificationPtr = TIntrusivePtr<TFrameSpecification>;
 
@@ -913,8 +906,7 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     bool DataWatermarks;
 
     TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
-    ~TLegacyHoppingWindowSpec() {
-    }
+    ~TLegacyHoppingWindowSpec() = default;
 };
 using TLegacyHoppingWindowSpecPtr = TIntrusivePtr<TLegacyHoppingWindowSpec>;
 
@@ -927,8 +919,7 @@ struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     TFrameSpecificationPtr Frame;
 
     TIntrusivePtr<TWindowSpecification> Clone() const;
-    ~TWindowSpecification() {
-    }
+    ~TWindowSpecification() = default;
 };
 using TWindowSpecificationPtr = TIntrusivePtr<TWindowSpecification>;
 using TWinSpecs = TMap<TString, TWindowSpecificationPtr>;
@@ -977,7 +968,6 @@ private:
 
     void DoUpdateState() const override;
 
-private:
     static const TString Empty;
     TNodePtr Node_;
     TString ColumnName_;
@@ -1447,6 +1437,7 @@ struct TAlterTableParameters {
     TVector<TIdentifier> DropChangefeeds;
     ETableType TableType = ETableType::Table;
     TMaybe<TCompactEntry> Compact;
+    TVector<TIndexDescription> RebuildIndexes;
 
     bool IsEmpty() const {
         return AddColumns.empty() &&
@@ -1465,14 +1456,14 @@ struct TAlterTableParameters {
                AddChangefeeds.empty() &&
                AlterChangefeeds.empty() &&
                DropChangefeeds.empty() &&
-               !Compact.Defined();
+               !Compact.Defined() &&
+               RebuildIndexes.empty();
     }
 };
 
 struct TRoleParameters {
 protected:
-    TRoleParameters() {
-    }
+    TRoleParameters() = default;
 
 public:
     TVector<TDeferredAtom> Roles;
@@ -1507,7 +1498,6 @@ public:
 
     TMaybe<TDeferredAtom> InheritPermissions;
 
-public:
     bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
 

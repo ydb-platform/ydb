@@ -95,13 +95,46 @@ struct Topology {
     uint16_t core = 0;     // < packages[package].cores.size()
     uint8_t package = 0;   // < packages.size()
     uint8_t smt = 0;       // < packages[package].cores[core].lps.Count()
+    uint8_t node = 0;
 
-    uint8_t reserved1 = 0;
-    uint8_t reserved2 = 0;
+    uint8_t reserved = 0;
   };
 #pragma pack(pop)
   std::vector<LP> lps;  // size() == TotalLogicalProcessors().
 };
+
+#pragma pack(push, 1)
+// Cache parameters. Note the overlap with `HWY_ALIGNMENT`, which is intended
+// but not guaranteed to be an upper bound for L1/L2 line sizes, and
+// `Topology::Cluster::private_kib/shared_kib`, which are intended but not
+// guaranteed to be the L2/L3 sizes. Getting the exact parameters, including the
+// ways of associativity, can be useful for modeling cache conflicts.
+//
+// Uses packed fields so the array of `Cache` fits in a typical cache line.
+struct Cache {
+  // Arbitrary upper bound for sanity checking.
+  static constexpr uint16_t kMaxAssociativity = 128;
+
+  // Zero if the level does not exist; *per-core* portion for shared caches.
+  uint32_t size_kib = 0;
+  // Also per-core portion, computed as number of lines / associativity.
+  uint32_t sets = 0;
+  uint16_t bytes_per_line = 0;
+  uint16_t associativity = 0;  // number of ways
+  uint16_t cores_sharing = 0;  // usually 1 for L1
+  uint16_t reserved = 0;
+};
+static_assert(sizeof(Cache) == 16, "Unexpected size");
+#pragma pack(pop)
+
+// Returns null if unknown, otherwise pointer to an array of `Cache` instances,
+// where entry 0 is reserved, entry 1 describes the L1 data cache, entry 2
+// describes the (possibly unified or shared) L2, and entry 3 describes the L3
+// if its `size_kib != 0`.
+//
+// Initializes on-demand, which has some overhead for thread safety, hence
+// callers should cache the result.
+HWY_CONTRIB_DLLEXPORT const Cache* DataCaches();
 
 }  // namespace hwy
 

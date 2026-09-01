@@ -52,6 +52,28 @@ argparse_example_function(PyObject *NPY_UNUSED(mod),
     Py_RETURN_NONE;
 }
 
+/*
+ *  Tests that argparse cache creation is thread-safe. *must* be called only
+ *  by the python-level test_thread_safe_argparse_cache function, otherwise
+ *  the cache might be created before the test to make sure cache creation is
+ *  thread-safe runs
+ */
+static PyObject *
+threaded_argparse_example_function(PyObject *NPY_UNUSED(mod),
+        PyObject *const *args, Py_ssize_t len_args, PyObject *kwnames)
+{
+    NPY_PREPARE_ARGPARSER;
+    int arg1;
+    PyObject *arg2;
+    if (npy_parse_arguments("thread_func", args, len_args, kwnames,
+            "$arg1", &PyArray_PythonPyIntFromInt, &arg1,
+            "$arg2", NULL, &arg2,
+            NULL, NULL, NULL) < 0) {
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
 /* test PyArray_IsPythonScalar, before including private py3 compat header */
 static PyObject *
 IsPythonScalar(PyObject * dummy, PyObject *args)
@@ -68,7 +90,7 @@ IsPythonScalar(PyObject * dummy, PyObject *args)
     }
 }
 
-#include "npy_pycompat.h"
+
 
 
 /** Function to test calling via ctypes */
@@ -82,7 +104,7 @@ EXPORT(void*) forward_pointer(void *x)
  *  - Handle mode
  */
 
-#line 80
+#line 102
 static int copy_double(PyArrayIterObject *itx, PyArrayNeighborhoodIterObject *niterx,
         npy_intp const *bounds,
         PyObject **out)
@@ -124,7 +146,7 @@ static int copy_double(PyArrayIterObject *itx, PyArrayNeighborhoodIterObject *ni
     return 0;
 }
 
-#line 80
+#line 102
 static int copy_int(PyArrayIterObject *itx, PyArrayNeighborhoodIterObject *niterx,
         npy_intp const *bounds,
         PyObject **out)
@@ -1866,7 +1888,7 @@ get_struct_alignments(PyObject *NPY_UNUSED(self), PyObject *args) {
         return NULL;
     }
 
-#line 1824
+#line 1846
     alignment = PyLong_FromLong(NPY_ALIGNOF(struct TestStruct1));
     size = PyLong_FromLong(sizeof(struct TestStruct1));
     val = PyTuple_Pack(2, alignment, size);
@@ -1878,7 +1900,7 @@ get_struct_alignments(PyObject *NPY_UNUSED(self), PyObject *args) {
     }
     PyTuple_SET_ITEM(ret, 1-1, val);
 
-#line 1824
+#line 1846
     alignment = PyLong_FromLong(NPY_ALIGNOF(struct TestStruct2));
     size = PyLong_FromLong(sizeof(struct TestStruct2));
     val = PyTuple_Pack(2, alignment, size);
@@ -1890,7 +1912,7 @@ get_struct_alignments(PyObject *NPY_UNUSED(self), PyObject *args) {
     }
     PyTuple_SET_ITEM(ret, 2-1, val);
 
-#line 1824
+#line 1846
     alignment = PyLong_FromLong(NPY_ALIGNOF(struct TestStruct3));
     size = PyLong_FromLong(sizeof(struct TestStruct3));
     val = PyTuple_Pack(2, alignment, size);
@@ -1925,7 +1947,9 @@ get_fpu_mode(PyObject *NPY_UNUSED(self), PyObject *args)
         result = _controlfp(0, 0);
         return PyLong_FromLongLong(result);
     }
-#elif (defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))) || (defined(_MSC_VER) && defined(__clang__))
+#elif (defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))) \
+  || (defined(_MSC_VER) && defined(__clang__) && \
+      (defined(_M_IX86) || defined(_M_AMD64)))
     {
         unsigned short cw = 0;
         __asm__("fstcw %w0" : "=m" (cw));
@@ -1940,9 +1964,9 @@ get_fpu_mode(PyObject *NPY_UNUSED(self), PyObject *args)
  * npymath wrappers
  */
 
-#line 1876
+#line 1900
 
-#line 1884
+#line 1908
 
 static PyObject *
 call_npy_cabsf(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -1972,7 +1996,7 @@ call_npy_cabsf(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1884
+#line 1908
 
 static PyObject *
 call_npy_cabs(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2002,7 +2026,7 @@ call_npy_cabs(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1884
+#line 1908
 
 static PyObject *
 call_npy_cabsl(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2034,9 +2058,9 @@ call_npy_cabsl(PyObject *NPY_UNUSED(self), PyObject *args)
 
 
 
-#line 1876
+#line 1900
 
-#line 1884
+#line 1908
 
 static PyObject *
 call_npy_cargf(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2066,7 +2090,7 @@ call_npy_cargf(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1884
+#line 1908
 
 static PyObject *
 call_npy_carg(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2096,7 +2120,7 @@ call_npy_carg(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1884
+#line 1908
 
 static PyObject *
 call_npy_cargl(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2129,9 +2153,9 @@ call_npy_cargl(PyObject *NPY_UNUSED(self), PyObject *args)
 
 
 
-#line 1919
+#line 1943
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_log10f(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2161,7 +2185,7 @@ call_npy_log10f(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_log10(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2191,7 +2215,7 @@ call_npy_log10(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_log10l(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2223,9 +2247,9 @@ call_npy_log10l(PyObject *NPY_UNUSED(self), PyObject *args)
 
 
 
-#line 1919
+#line 1943
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_coshf(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2255,7 +2279,7 @@ call_npy_coshf(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_cosh(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2285,7 +2309,7 @@ call_npy_cosh(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_coshl(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2317,9 +2341,9 @@ call_npy_coshl(PyObject *NPY_UNUSED(self), PyObject *args)
 
 
 
-#line 1919
+#line 1943
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_sinhf(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2349,7 +2373,7 @@ call_npy_sinhf(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_sinh(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2379,7 +2403,7 @@ call_npy_sinh(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_sinhl(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2411,9 +2435,9 @@ call_npy_sinhl(PyObject *NPY_UNUSED(self), PyObject *args)
 
 
 
-#line 1919
+#line 1943
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_tanf(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2443,7 +2467,7 @@ call_npy_tanf(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_tan(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2473,7 +2497,7 @@ call_npy_tan(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_tanl(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2505,9 +2529,9 @@ call_npy_tanl(PyObject *NPY_UNUSED(self), PyObject *args)
 
 
 
-#line 1919
+#line 1943
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_tanhf(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2537,7 +2561,7 @@ call_npy_tanhf(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_tanh(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2567,7 +2591,7 @@ call_npy_tanh(PyObject *NPY_UNUSED(self), PyObject *args)
 }
 
 
-#line 1925
+#line 1949
 
 static PyObject *
 call_npy_tanhl(PyObject *NPY_UNUSED(self), PyObject *args)
@@ -2638,7 +2662,35 @@ PrintFloat_Printf_g(PyObject *obj, int precision)
     return PyUnicode_FromString(str);
 }
 
-
+/*
+ *  format_float_OSprintf_g(val, precision)
+ *
+ *  Print a floating point scalar using the system's printf function,
+ *  equivalent to:
+ *
+ *      printf("%.*g", precision, val);
+ *
+ *  for half/float/double, or replacing 'g' by 'Lg' for longdouble. This
+ *  method is designed to help cross-validate the format_float_* methods.
+ *
+ *  Parameters
+ *  ----------
+ *  val : python float or numpy floating scalar
+ *      Value to format.
+ *
+ *  precision : non-negative integer, optional
+ *      Precision given to printf.
+ *
+ *  Returns
+ *  -------
+ *  rep : string
+ *      The string representation of the floating point value
+ *
+ *  See Also
+ *  --------
+ *  format_float_scientific
+ *  format_float_positional
+ */
 static PyObject *
 printf_float_g(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
 {
@@ -2823,6 +2875,9 @@ static PyMethodDef Multiarray_TestsMethods[] = {
     {"argparse_example_function",
          (PyCFunction)argparse_example_function,
          METH_KEYWORDS | METH_FASTCALL, NULL},
+    {"threaded_argparse_example_function",
+         (PyCFunction)threaded_argparse_example_function,
+         METH_KEYWORDS | METH_FASTCALL, NULL},
     {"IsPythonScalar",
         IsPythonScalar,
         METH_VARARGS, NULL},
@@ -2937,38 +2992,38 @@ static PyMethodDef Multiarray_TestsMethods[] = {
     {"get_fpu_mode",
         get_fpu_mode,
         METH_VARARGS, get_fpu_mode_doc},
-#line 2297
+#line 2352
 
-#line 2301
+#line 2356
     {"npy_cabsf",
         call_npy_cabsf,
         METH_VARARGS, NULL},
 
-#line 2301
+#line 2356
     {"npy_cabs",
         call_npy_cabs,
         METH_VARARGS, NULL},
 
-#line 2301
+#line 2356
     {"npy_cabsl",
         call_npy_cabsl,
         METH_VARARGS, NULL},
 
 
 
-#line 2297
+#line 2352
 
-#line 2301
+#line 2356
     {"npy_cargf",
         call_npy_cargf,
         METH_VARARGS, NULL},
 
-#line 2301
+#line 2356
     {"npy_carg",
         call_npy_carg,
         METH_VARARGS, NULL},
 
-#line 2301
+#line 2356
     {"npy_cargl",
         call_npy_cargl,
         METH_VARARGS, NULL},
@@ -2976,95 +3031,95 @@ static PyMethodDef Multiarray_TestsMethods[] = {
 
 
 
-#line 2311
+#line 2366
 
-#line 2315
+#line 2370
     {"npy_log10f",
         call_npy_log10f,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_log10",
         call_npy_log10,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_log10l",
         call_npy_log10l,
         METH_VARARGS, NULL},
 
 
 
-#line 2311
+#line 2366
 
-#line 2315
+#line 2370
     {"npy_coshf",
         call_npy_coshf,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_cosh",
         call_npy_cosh,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_coshl",
         call_npy_coshl,
         METH_VARARGS, NULL},
 
 
 
-#line 2311
+#line 2366
 
-#line 2315
+#line 2370
     {"npy_sinhf",
         call_npy_sinhf,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_sinh",
         call_npy_sinh,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_sinhl",
         call_npy_sinhl,
         METH_VARARGS, NULL},
 
 
 
-#line 2311
+#line 2366
 
-#line 2315
+#line 2370
     {"npy_tanf",
         call_npy_tanf,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_tan",
         call_npy_tan,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_tanl",
         call_npy_tanl,
         METH_VARARGS, NULL},
 
 
 
-#line 2311
+#line 2366
 
-#line 2315
+#line 2370
     {"npy_tanhf",
         call_npy_tanhf,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_tanh",
         call_npy_tanh,
         METH_VARARGS, NULL},
 
-#line 2315
+#line 2370
     {"npy_tanhl",
         call_npy_tanhl,
         METH_VARARGS, NULL},
@@ -3132,10 +3187,19 @@ PyMODINIT_FUNC PyInit__multiarray_tests(void)
         return m;
     }
     import_array();
+    if (init_argparse_mutex() < 0) {
+        return NULL;
+    }
     if (PyErr_Occurred()) {
         PyErr_SetString(PyExc_RuntimeError,
                         "cannot load _multiarray_tests module.");
     }
+
+#if Py_GIL_DISABLED
+    // signal this module supports running with the GIL disabled
+    PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
+#endif
+
     return m;
 }
 

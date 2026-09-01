@@ -216,6 +216,73 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(!centroid[4]);
     }
 
+    Y_UNIT_TEST(FindClustersPrefersLowerClusterNumberOnEqualDistance) {
+        TString error;
+        auto clusters = CreateClusters(
+            MakeCosineSettings(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2),
+            1,
+            error);
+
+        UNIT_ASSERT_C(clusters, error);
+        // 3 equal centroids and 1 different
+        UNIT_ASSERT(clusters->SetClusters(TVector<TString>{
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({0.0f, 1.0f}),
+        }));
+
+        const auto embedding = SerializeVector<float>({2.0f, 0.0f});
+
+        // FindCluster() picks the first of the equally distant clusters,
+        // FindClusters() must pick the same one, otherwise rows are distributed
+        // between clusters differently during the K-means and the upload passes
+        // of the vector index build, which leaves clusters without any rows
+        auto single = clusters->FindCluster(embedding);
+        UNIT_ASSERT(single);
+        UNIT_ASSERT_VALUES_EQUAL(*single, 0u);
+
+        std::vector<std::pair<ui32, double>> found;
+        clusters->FindClusters(embedding, found, 1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(found[0].first, 0u);
+
+        clusters->FindClusters(embedding, found, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(found[0].first, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(found[1].first, 1u);
+
+        // The farthest cluster must still be the last one
+        clusters->FindClusters(embedding, found, 4, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(found[3].first, 3u);
+    }
+
+    Y_UNIT_TEST(FindClustersClearsResultForInvalidEmbedding) {
+        TString error;
+        auto clusters = CreateClusters(
+            MakeCosineSettings(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2),
+            1,
+            error);
+
+        UNIT_ASSERT_C(clusters, error);
+        UNIT_ASSERT(clusters->SetClusters(TVector<TString>{
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({0.0f, 1.0f}),
+        }));
+
+        std::vector<std::pair<ui32, double>> found;
+        const auto embedding = SerializeVector<float>({1.0f, 0.0f});
+        clusters->FindClusters(embedding, found, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 2u);
+
+        // A vector of a wrong dimension must not be assigned to the clusters
+        // found for the previously checked vector
+        const auto invalid = SerializeVector<float>({1.0f, 0.0f, 1.0f});
+        clusters->FindClusters(invalid, found, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 0u);
+    }
+
     Y_UNIT_TEST(ComputeOptimalClustersBasic) {
         // L=1: C = sqrt(T * P * N) = sqrt(10 * 1 * 10000) = sqrt(100000) ≈ 316
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 10000, 1.0), 316);

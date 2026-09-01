@@ -1,18 +1,121 @@
-/// Tests that pin the exact column/JSON representation of resource pool classifiers
-/// in both storage surfaces simultaneously:
-///   1.  `.sys/resource_pool_classifiers`              (sys-view, TResourcePoolClassifiersScan)
-///   2.  `.metadata/workload_manager/classifiers/resource_pool_classifiers`  (raw metadata table)
-///
-
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/object.h>
+#include <ydb/services/metadata/abstract/request_features.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <unordered_set>
 
 
 namespace NKikimr::NWorkloadManager {
 
 using namespace NYdb;
+using namespace NResourcePool;
+
+Y_UNIT_TEST_SUITE(TResourcePoolClassifierConfigSerialization) {
+    Y_UNIT_TEST(RoundTripBasicFields) {
+        TClassifierSettings settings;
+        settings.Rank = 10;
+        settings.ResourcePool = "pool_a";
+        settings.MemberName = "user@org";
+        settings.HasAppName = "ydb-cli";
+        settings.HasFullScan = TRegexPredicate::FromGlob("/Root/db/*");
+        settings.HasPath = TRegexPredicate::FromGlob("/Root/archive/?");
+        settings.HasStream = true;
+
+        const auto json = TResourcePoolClassifierConfig::SerializeToJson(settings);
+        const auto restored = TResourcePoolClassifierConfig::DeserializeFromJson(json, 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(restored.Rank, 10);
+        UNIT_ASSERT_VALUES_EQUAL(*restored.ResourcePool, "pool_a");
+        UNIT_ASSERT_VALUES_EQUAL(*restored.MemberName, "user@org");
+        UNIT_ASSERT_VALUES_EQUAL(*restored.HasAppName, "ydb-cli");
+        UNIT_ASSERT_VALUES_EQUAL(restored.HasFullScan->Pattern, "/Root/db/*");
+        UNIT_ASSERT_VALUES_EQUAL(restored.HasPath->Pattern, "/Root/archive/?");
+        UNIT_ASSERT_VALUES_EQUAL(*restored.HasStream, true);
+        UNIT_ASSERT(!restored.Action.has_value());
+    }
+
+    Y_UNIT_TEST(EmptyStringsTreatedAsAbsent) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["resource_pool"] = "pool_a";
+        json["member_name"] = "";
+        json["has_app_name"] = "";
+        json["has_full_scan"] = "";
+        json["has_path"] = "";
+        json["action"] = "";
+
+        const auto settings = TResourcePoolClassifierConfig::DeserializeFromJson(json, 1);
+        UNIT_ASSERT_VALUES_EQUAL(*settings.ResourcePool, "pool_a");
+        UNIT_ASSERT(!settings.MemberName.has_value());
+        UNIT_ASSERT(!settings.HasAppName.has_value());
+        UNIT_ASSERT(!settings.HasFullScan.has_value());
+        UNIT_ASSERT(!settings.HasPath.has_value());
+        UNIT_ASSERT(!settings.Action.has_value());
+    }
+
+    Y_UNIT_TEST(HasStreamAcceptsBooleanAndString) {
+        {
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["resource_pool"] = "pool_a";
+            json["has_stream"] = true;
+            const auto settings = TResourcePoolClassifierConfig::DeserializeFromJson(json, 1);
+            UNIT_ASSERT_VALUES_EQUAL(*settings.HasStream, true);
+        }
+        {
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["resource_pool"] = "pool_a";
+            json["has_stream"] = "false";
+            const auto settings = TResourcePoolClassifierConfig::DeserializeFromJson(json, 1);
+            UNIT_ASSERT_VALUES_EQUAL(*settings.HasStream, false);
+        }
+    }
+
+    Y_UNIT_TEST(InvalidActionSkipped) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["resource_pool"] = "pool_a";
+        json["action"] = "not_a_real_action";
+
+        const auto settings = TResourcePoolClassifierConfig::DeserializeFromJson(json, 1);
+        UNIT_ASSERT_VALUES_EQUAL(*settings.ResourcePool, "pool_a");
+        UNIT_ASSERT(!settings.Action.has_value());
+    }
+
+    Y_UNIT_TEST(RejectActionClearsResourcePool) {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["resource_pool"] = "pool_a";
+        json["action"] = "reject";
+
+        const auto settings = TResourcePoolClassifierConfig::DeserializeFromJson(json, 1);
+        UNIT_ASSERT(!settings.ResourcePool.has_value());
+        UNIT_ASSERT(settings.Action.has_value());
+        UNIT_ASSERT_EQUAL(*settings.Action, EClassifierAction::Reject);
+    }
+
+    Y_UNIT_TEST(SerializeRejectOmitsResourcePool) {
+        TClassifierSettings settings;
+        settings.Action = EClassifierAction::Reject;
+        settings.ResourcePool = "should_not_be_written";
+
+        const auto json = TResourcePoolClassifierConfig::SerializeToJson(settings);
+        UNIT_ASSERT(!json.Has("resource_pool"));
+        UNIT_ASSERT_VALUES_EQUAL(json["action"].GetString(), "reject");
+    }
+
+    Y_UNIT_TEST(ParseRejectsEmptyResourcePool) {
+        NYql::TFeaturesExtractor extractor(
+            THashMap<TString, TString>{
+                {"resource_pool", ""},
+            },
+            std::unordered_set<TString>{});
+        TResourcePoolClassifierConfig::TParseResult result;
+        const auto error = TResourcePoolClassifierConfig::ParseFromFeaturesExtractor(extractor, &result);
+        UNIT_ASSERT(error.has_value());
+        UNIT_ASSERT_STRING_CONTAINS(*error, "Failed to parse property resource_pool");
+        UNIT_ASSERT_STRING_CONTAINS(*error, "resource pool name must not be empty");
+    }
+}
 
 namespace {
 
@@ -374,27 +477,27 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
 
         ydb->WaitForClassifierPropagation();
 
-        // ---- sys-view: MemberName is reset to an empty string ----
+        // ---- sys-view: MemberName is NULL after RESET; Rank is unchanged ----
         {
             auto result = ReadSysView(ydb, "some_classifier");
             TSampleQueries::CheckSuccess(result);
             NYdb::TResultSetParser rs(result.GetResultSet(0));
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
-            const auto memberName = rs.ColumnParser("MemberName").GetOptionalUtf8();
-            UNIT_ASSERT_C(memberName.has_value(), "MemberName must be present after RESET");
-            UNIT_ASSERT_VALUES_EQUAL(*memberName, "");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Rank").GetOptionalInt64(), 20);
+            UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(),
+                "MemberName must be NULL after RESET");
         }
 
-        // ---- metadata table: member_name key is present with an empty value ----
+        // ---- metadata table: member_name key is absent after RESET; rank unchanged ----
         {
             auto result = ReadMetadataTable(ydb, "some_classifier");
             TSampleQueries::CheckSuccess(result);
             NYdb::TResultSetParser rs(result.GetResultSet(0));
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in metadata table");
 
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("rank").GetOptionalInt64(), 20);
             const auto json = ParseJson(TString(*rs.ColumnParser("config").GetOptionalJsonDocument()));
-            UNIT_ASSERT_C(json.Has("member_name"), "'member_name' must be present in JSON after RESET");
-            UNIT_ASSERT_VALUES_EQUAL(json["member_name"].GetString(), "");
+            UNIT_ASSERT_C(!json.Has("member_name"), "'member_name' must be absent from JSON after RESET");
         }
     }
 

@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 import math
@@ -155,7 +155,7 @@ def do(args):
             pool['groups'] = defaultdict(int)
         groups = pool['groups']
 
-        for key in ['Groups_TOTAL', 'Groups_' + kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)]:
+        for key in ['Groups_TOTAL', 'Groups_' + kikimr_bs3.TGroupStatus.E.Name(group.OperatingStatus)]:
             groups[key] += 1
         groups['TotalSizeInUnits'] += group.GroupSizeInUnits or 1
 

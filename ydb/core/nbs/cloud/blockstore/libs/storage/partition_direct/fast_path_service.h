@@ -5,6 +5,7 @@
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
@@ -15,6 +16,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/throttling/simple_leaky_bucket.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -45,6 +47,7 @@ private:
     TDuration TraceSamplePeriod;
 
     TVolumeCounters Counters;
+    TVChunkCounters VChunkCounters;
     TVolumeConfigPtr VolumeConfig;
 
     TAdaptiveLock DumpLock;
@@ -54,18 +57,21 @@ private:
     struct TPBufferCleanupGather
     {
         std::atomic<bool> Active{false};
-        TVector<std::optional<ui64>> SafeBarriers;
+        TVector<std::optional<TPBufferKey>> SafeBarriers;
         std::atomic<size_t> PendingResponses{0};
     };
 
     TPBufferCleanupGather CleanupGather;
 
-    // Result of the last finished cleanup round: the minimum safe barrier
-    // across all DBGs. 0 until the first round finishes.
+    // Result of the last finished cleanup round: the lsn of the minimum safe
+    // barrier across all DBGs. 0 until the first round finishes.
     std::atomic<ui64> LastSafeBarrier{0};
 
     TAdaptiveLock PBufferBarrierLock;
     TMap<NKikimr::NBsController::TDDiskId, ui64> LastSentBarrierByPBuffer;
+
+    TAdaptiveLock CopyRangeBucketLock;
+    std::optional<TSimpleLeakyBucket> CopyRangeBucket;
 
 public:
     TFastPathService(
@@ -75,7 +81,8 @@ public:
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        TVChunkConfigByIndex vChunkConfigs,
+        const TVChunkConfigs& vChunkConfigs,
+        const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
@@ -110,7 +117,7 @@ public:
     void ReportIOError() override;
 
     // ITraceService implementation
-    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
+    NWilson::TSpan CreateRootSpan(TStringBuf name) override;
 
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override;
@@ -120,8 +127,11 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    NThreading::TFuture<void> UpdateVChunkConfig(
-        const TVChunkConfig& cfg) override;
+    TPersistResultFuture UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+
+    TPersistResultFuture UpdateDirtyMapState(
+        ui32 vChunkIndex,
+        TDirtyMapStateProto state) override;
 
     void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 
@@ -132,6 +142,8 @@ public:
     bool TryAdvancePBufferBarrier(
         const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
         ui64 lsn) override;
+
+    TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
@@ -145,6 +157,14 @@ public:
     [[nodiscard]] NThreading::TFuture<std::optional<TVChunkSnapshot>>
     GatherVChunkMonSnapshot(ui32 vchunkIndex) const;
 
+    // Disk-wide vchunk stats: each DBG hops onto its executor. TotalOnly
+    // returns the disk sum plus per-DBG totals. PerVChunk also fills rows;
+    // if dbgIndex is set, only that DBG lists its vchunks.
+    [[nodiscard]] NThreading::TFuture<TVChunkStatsGatherResult>
+    GatherVChunkStats(
+        EVChunkStatsDetail detail,
+        std::optional<size_t> dbgIndex = std::nullopt) const;
+
 private:
     void OnRegionStopped(size_t regionIndex);
     void OnAllRegionsStopped();
@@ -153,11 +173,15 @@ private:
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
 
+    void ScheduleVChunkCountersUpdate();
+    void QueryVChunkStats();
+    void OnVChunkStats(const TVChunkStatsGatherResult& result);
+
     void MaybeTriggerPBufferCleanup(ui64 lsn);
     void PBufferCleanup();
     void OnGatherSafeBarrierForErase(
         size_t dbgIndex,
-        std::optional<ui64> safeBarrier);
+        std::optional<TPBufferKey> safeBarrier);
     void FinishPBufferCleanup();
 };
 

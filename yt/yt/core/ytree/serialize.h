@@ -7,7 +7,8 @@
 #include <yt/yt/core/yson/producer.h>
 
 #include <yt/yt/core/misc/guid.h>
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 #include <yt/yt/core/misc/statistic_path.h>
 
 #include <yt/yt/core/yson/writer.h>

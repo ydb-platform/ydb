@@ -23,6 +23,7 @@ SRCS(
     folder_service_ut.cpp
     service_account_service_ut.cpp
     user_account_service_ut.cpp
+    util_ut.cpp
 )
 
 END()

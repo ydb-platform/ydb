@@ -1,0 +1,17 @@
+/* syntax version 1 */
+pragma config.flags('OptimizerFlags', 'KeepWorld', 'CheckMissingWorld');
+use plato;
+
+insert into Output1 with truncate
+select key, subkey, 1 as ev from Input
+order by key, subkey;
+commit;
+
+insert into Output2
+select key, subkey, s
+from (
+    select key, subkey, sum(ev) over w as s
+    from Output1
+    window w as (partition compact by key order by subkey)
+)
+where s == 1;

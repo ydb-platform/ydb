@@ -17,9 +17,10 @@
  */
 
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
-#include "npy_pycompat.h"
-#include "npy_import.h"
 
+#include "npy_import.h"
+#include "npy_static_data.h"
+#include "multiarraymodule.h"
 
 /*
  *****************************************************************************
@@ -62,7 +63,7 @@ npy_ObjectPower(PyObject *x, PyObject *y)
     return PyNumber_Power(x, y, Py_None);
 }
 
-#line 59
+#line 60
 static PyObject *
 npy_ObjectMax(PyObject *i1, PyObject *i2)
 {
@@ -83,7 +84,7 @@ npy_ObjectMax(PyObject *i1, PyObject *i2)
     return result;
 }
 
-#line 59
+#line 60
 static PyObject *
 npy_ObjectMin(PyObject *i1, PyObject *i2)
 {
@@ -185,35 +186,20 @@ npy_ObjectLogicalNot(PyObject *i1)
 
 static PyObject *
 npy_ObjectFloor(PyObject *obj) {
-    static PyObject *math_floor_func = NULL;
-
-    npy_cache_import("math", "floor", &math_floor_func);
-    if (math_floor_func == NULL) {
-        return NULL;
-    }
-    return PyObject_CallFunction(math_floor_func, "O", obj);
+    return PyObject_CallFunction(npy_static_pydata.math_floor_func,
+                                 "O", obj);
 }
 
 static PyObject *
 npy_ObjectCeil(PyObject *obj) {
-    static PyObject *math_ceil_func = NULL;
-
-    npy_cache_import("math", "ceil", &math_ceil_func);
-    if (math_ceil_func == NULL) {
-        return NULL;
-    }
-    return PyObject_CallFunction(math_ceil_func, "O", obj);
+    return PyObject_CallFunction(npy_static_pydata.math_ceil_func,
+                                 "O", obj);
 }
 
 static PyObject *
 npy_ObjectTrunc(PyObject *obj) {
-    static PyObject *math_trunc_func = NULL;
-
-    npy_cache_import("math", "trunc", &math_trunc_func);
-    if (math_trunc_func == NULL) {
-        return NULL;
-    }
-    return PyObject_CallFunction(math_trunc_func, "O", obj);
+    return PyObject_CallFunction(npy_static_pydata.math_trunc_func,
+                                 "O", obj);
 }
 
 static PyObject *
@@ -223,13 +209,8 @@ npy_ObjectGCD(PyObject *i1, PyObject *i2)
 
     /* use math.gcd if valid on the provided types */
     {
-        static PyObject *math_gcd_func = NULL;
-
-        npy_cache_import("math", "gcd", &math_gcd_func);
-        if (math_gcd_func == NULL) {
-            return NULL;
-        }
-        gcd = PyObject_CallFunction(math_gcd_func, "OO", i1, i2);
+        gcd = PyObject_CallFunction(npy_static_pydata.math_gcd_func,
+                                    "OO", i1, i2);
         if (gcd != NULL) {
             return gcd;
         }
@@ -239,13 +220,12 @@ npy_ObjectGCD(PyObject *i1, PyObject *i2)
 
     /* otherwise, use our internal one, written in python */
     {
-        static PyObject *internal_gcd_func = NULL;
-
-        npy_cache_import("numpy._core._internal", "_gcd", &internal_gcd_func);
-        if (internal_gcd_func == NULL) {
+        if (npy_cache_import_runtime("numpy._core._internal", "_gcd",
+                                     &npy_runtime_imports.internal_gcd_func) == -1) {
             return NULL;
         }
-        gcd = PyObject_CallFunction(internal_gcd_func, "OO", i1, i2);
+        gcd = PyObject_CallFunction(npy_runtime_imports.internal_gcd_func,
+                                    "OO", i1, i2);
         if (gcd == NULL) {
             return NULL;
         }
@@ -309,7 +289,7 @@ npy_ObjectClip(PyObject *arr, PyObject *min, PyObject *max) {
  * extension that makes use of the UFUNC API
  */
 
-#line 291
+#line 271
 
 static void
 nc_negf(npy_cfloat *a, npy_cfloat *r)
@@ -494,7 +474,7 @@ nc_tanhf(npy_cfloat *x, npy_cfloat *r)
 }
 
 
-#line 291
+#line 271
 
 static void
 nc_neg(npy_cdouble *a, npy_cdouble *r)
@@ -679,7 +659,7 @@ nc_tanh(npy_cdouble *x, npy_cdouble *r)
 }
 
 
-#line 291
+#line 271
 
 static void
 nc_negl(npy_clongdouble *a, npy_clongdouble *r)

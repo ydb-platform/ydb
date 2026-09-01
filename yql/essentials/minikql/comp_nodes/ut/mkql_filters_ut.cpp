@@ -6,8 +6,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
 Y_UNIT_TEST_LLVM(TestSkipNullMembers) {
@@ -59,8 +58,6 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembers) {
 Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptional) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
-
-    const auto justNothing = pb.NewOptional(pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i32>::Id));
 
     using TOpt = TMaybe<TMaybe<i32>>;
     using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TOpt>,
@@ -715,7 +712,7 @@ Y_UNIT_TEST_LLVM(TestDateToStringCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
                                                         [&](TRuntimeNode item) {
                                                             const auto date = pb.ToIntegral(item, dateType);
@@ -733,8 +730,8 @@ Y_UNIT_TEST_LLVM(TestTzDateToStringCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
-    const auto dateTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDate, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
+    const auto dateTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDate, /*optional=*/true);
     const auto canada = pb.NewDataLiteral<ui16>(375U);
     const auto europe = pb.NewDataLiteral<ui16>(459U);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
@@ -787,8 +784,8 @@ Y_UNIT_TEST_LLVM(TestDateToDatetimeCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
-    const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
+    const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime, /*optional=*/true);
     const auto pgmReturn = pb.Not(pb.HasItems(pb.Filter(list,
                                                         [&](TRuntimeNode item) {
                                                             const auto date = pb.ToIntegral(item, dateType);
@@ -805,7 +802,7 @@ Y_UNIT_TEST_LLVM(TestTzDateToDatetimeCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime);
     const auto canada = pb.NewDataLiteral<ui16>(375U);
     const auto europe = pb.NewDataLiteral<ui16>(459U);
@@ -827,7 +824,7 @@ Y_UNIT_TEST_LLVM(TestDateAddTimezoneAndCastOrderCompleteCheck) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = pb.ListFromRange(pb.NewDataLiteral<ui16>(0U), pb.NewDataLiteral<ui16>(NUdf::MAX_DATE), pb.NewDataLiteral<ui16>(1U));
-    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, true);
+    const auto dateType = pb.NewDataType(NUdf::EDataSlot::Date, /*optional=*/true);
     const auto datetimeType = pb.NewDataType(NUdf::EDataSlot::Datetime);
     const auto datetimeTypeTz = pb.NewDataType(NUdf::EDataSlot::TzDatetime);
     const auto canada = pb.NewDataLiteral<ui16>(375U);
@@ -1095,5 +1092,4 @@ Y_UNIT_TEST_LLVM(TestFilterWithLimitOverFlow) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -18,7 +18,7 @@ TError TClusterDirectoryUpdateResult::GetCumulativeError() const
     }
 
     return TError("Cluster directory update failed")
-        << std::move(failedClusterErrors);
+        .With(std::move(failedClusterErrors));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -88,7 +88,7 @@ void TQueueStaticExportConfig::Register(TRegistrar registrar)
                 TCronExpression{*config->ExportCronSchedule};
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("Export CRON schedule %Qv is not well-formed", *config->ExportCronSchedule)
-                    << ex;
+                    .With(ex);
             }
         } else {
             THROW_ERROR_EXCEPTION("One of \"export_period\", \"export_cron_schedule\" must be specified");

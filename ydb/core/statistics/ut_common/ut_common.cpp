@@ -6,7 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#include <ydb/core/testlib/actors/wait_events.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/tenant_helpers.h>
 
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
@@ -85,6 +85,13 @@ TTestEnv::~TTestEnv() {
     Server->ShutdownGRpc();
 }
 
+namespace {
+
+void WaitForDatabaseRunning(TTestEnv& env, const TString& path);
+void WaitForPath(TTestEnv& env, const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp operation);
+
+} // anonymous namespace
+
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     size_t nodeCount, bool isShared, const TString& poolName)
 {
@@ -116,12 +123,8 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     env.GetTenants().Run(fullDbName, nodeCount);
-
-    if (!env.GetServer().GetSettings().UseRealThreads) {
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    } else {
-        Sleep(TDuration::Seconds(1));
-    }
+    WaitForDatabaseRunning(env, fullDbName);
+    WaitForPath(env, fullDbName, NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
 
     return fullDbName;
 }
@@ -145,13 +148,81 @@ TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, con
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     env.GetTenants().Run(fullDbName, nodeCount);
-
-    if (!env.GetServer().GetSettings().UseRealThreads) {
-        runtime.SimulateSleep(TDuration::Seconds(1));
-    }
+    WaitForDatabaseRunning(env, fullDbName);
+    WaitForPath(env, fullDbName, NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
 
     return fullDbName;
 }
+
+namespace {
+
+void WaitForDatabaseRunning(TTestEnv& env, const TString& path) {
+    auto& runtime = *env.GetServer().GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+    Ydb::Cms::GetDatabaseStatusResult lastResult;
+
+    for (ui32 attempt = 0; attempt < 300; ++attempt) {
+        auto request = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+        request->Record.MutableRequest()->set_path(path);
+        runtime.SendToPipe(MakeConsoleID(), sender, request.release(), 0, GetPipeConfigWithRetries());
+
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(response, "Timed out waiting for database status: " << path);
+        response->Get()->Record.GetResponse().operation().result().UnpackTo(&lastResult);
+        if (lastResult.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING) {
+            return;
+        }
+
+        if (env.GetServer().GetSettings().UseRealThreads) {
+            Sleep(TDuration::MilliSeconds(100));
+        } else {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+    }
+
+    UNIT_FAIL("Database " << path << " is not running, last status: " << lastResult.DebugString());
+}
+
+void WaitForPath(TTestEnv& env, const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp operation) {
+    auto& runtime = *env.GetServer().GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+    TNavigate::EStatus lastStatus = TNavigate::EStatus::Unknown;
+    for (ui32 attempt = 0; attempt < 300; ++attempt) {
+        auto request = std::make_unique<TNavigate>();
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath(path);
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+        entry.Operation = operation;
+        entry.ShowPrivatePath = true;
+        runtime.Send(MakeSchemeCacheID(), sender, new TEvRequest(request.release()));
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT(ev->Get());
+        std::unique_ptr<TNavigate> response(ev->Get()->Request.Release());
+        UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
+        lastStatus = response->ResultSet.front().Status;
+        if (lastStatus == TNavigate::EStatus::Ok) {
+            return;
+        }
+
+        if (env.GetServer().GetSettings().UseRealThreads) {
+            Sleep(TDuration::MilliSeconds(100));
+        } else {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+    }
+
+    UNIT_FAIL("Path " << path << " is not available, last navigation status: " << static_cast<ui32>(lastStatus));
+}
+
+} // anonymous namespace
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey, ui64* saTabletId) {
     auto sender = runtime.AllocateEdgeActor();
@@ -330,6 +401,25 @@ void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TStri
     ExecuteYqlScript(env, replace);
 }
 
+namespace {
+
+// Builds a TTableInfo from a path, resolving shard IDs and path ID.
+// Used by all table-creation helpers to avoid duplicating this boilerplate.
+TTableInfo MakeTableInfo(TTestActorRuntime& runtime, const TString& databaseName,
+    const TString& tableName, bool columnShard) {
+    TTableInfo tableInfo;
+    tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    if (columnShard) {
+        tableInfo.ShardIds = GetColumnTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
+    } else {
+        tableInfo.ShardIds = GetTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
+    }
+    tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+    return tableInfo;
+}
+
+} // anonymous namespace
+
 TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount, const std::vector<TColumnDesc>& valueColumns)
 {
@@ -346,13 +436,9 @@ TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const T
         << "WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << shardCount << ");";
 
     ExecuteYqlScript(env, createTable);
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    WaitForPath(env, "/" + fullTableName, NSchemeCache::TSchemeCacheNavigate::EOp::OpPath);
 
-    TTableInfo tableInfo;
-    tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());
-    tableInfo.ShardIds = GetColumnTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
-    tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
-    return tableInfo;
+    return MakeTableInfo(runtime, databaseName, tableName, true);
 }
 
 void InsertDataIntoTable(
@@ -422,7 +508,9 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     runtime.SimulateSleep(TDuration::Seconds(1));
 
     ExecuteYqlScript(env, Sprintf(R"(
-        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":0}`);
     )", fullTableName.c_str()));
     runtime.SimulateSleep(TDuration::Seconds(1));
 
@@ -432,40 +520,7 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     )", fullTableName.c_str()));
     runtime.SimulateSleep(TDuration::Seconds(1));
 
-    using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<
-        Ydb::Table::BulkUpsertRequest,
-        Ydb::Table::BulkUpsertResponse>;
-
-    //send by a few rows with overlap to stimulate compaction
-    const size_t rowsInBlock = 100;
-    const size_t overlap = 20;
-    for (size_t i = 0; i < ColumnTableRowsNumber - overlap;) {
-        Ydb::Table::BulkUpsertRequest request;
-        request.set_table(fullTableName);
-        auto* rows = request.mutable_rows();
-
-        auto* reqRowType = rows->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
-        auto* reqKeyType = reqRowType->add_members();
-        reqKeyType->set_name("Key");
-        reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
-        auto* reqValueType = reqRowType->add_members();
-        reqValueType->set_name("Value");
-        reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
-
-        auto* reqRows = rows->mutable_value();
-        for (size_t j = 0; j < rowsInBlock && i < ColumnTableRowsNumber; ++i, ++j) {
-            auto* row = reqRows->add_items();
-            row->add_items()->set_uint64_value(i);
-            row->add_items()->set_bytes_value(ToString(i));
-        }
-        i -= overlap;
-        auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
-            std::move(request), "", "", runtime.GetActorSystem(0));
-        auto response = runtime.WaitFuture(std::move(future));
-
-        UNIT_ASSERT(response.operation().ready());
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-    }
+    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
 
     env.GetController()->WaitActualization(TDuration::Seconds(1));
 
@@ -492,11 +547,7 @@ TTableInfo PrepareMultiColumnColumnTable(
 
     InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber, MultiColumnValueColumns());
 
-    TTableInfo tableInfo;
-    tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());
-    tableInfo.ShardIds = GetColumnTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
-    tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
-    return tableInfo;
+    return MakeTableInfo(runtime, databaseName, tableName, true);
 }
 
 TTableInfo PrepareMultiColumnUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
@@ -515,11 +566,58 @@ TTableInfo PrepareMultiColumnUniformTable(TTestEnv& env, const TString& database
 
     InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber, MultiColumnValueColumns());
 
-    TTableInfo tableInfo;
-    tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());
-    tableInfo.ShardIds = GetTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
-    tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
-    return tableInfo;
+    return MakeTableInfo(runtime, databaseName, tableName, false);
+}
+
+TTableInfo PrepareUniformTableWithData(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    CreateUniformTable(env, databaseName, tableName);
+    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+    return MakeTableInfo(runtime, databaseName, tableName, false);
+}
+
+TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TString& tableName, bool columnShard) {
+    if (columnShard) {
+        return PrepareColumnTable(env, databaseName, tableName, 1);
+    }
+    return PrepareUniformTableWithData(env, databaseName, tableName);
+}
+
+TTableInfo PrepareTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName, bool columnShard) {
+    if (columnShard) {
+        return PrepareColumnTableWithIndexes(env, databaseName, tableName, 4);
+    }
+    return PrepareUniformTableWithData(env, databaseName, tableName);
+}
+
+TTableInfo PrepareMultiColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, bool columnShard) {
+    if (columnShard) {
+        return PrepareMultiColumnColumnTable(env, databaseName, tableName);
+    }
+    return PrepareMultiColumnUniformTable(env, databaseName, tableName);
+}
+
+TTableInfo CreateEmptyTable(TTestEnv& env, const TString& databaseName, const TString& tableName, bool columnShard) {
+    if (columnShard) {
+        return CreateColumnTable(env, databaseName, tableName, 4);
+    }
+    CreateUniformTable(env, databaseName, tableName);
+    auto& runtime = *env.GetServer().GetRuntime();
+    return MakeTableInfo(runtime, databaseName, tableName, false);
+}
+
+void ValidateStatistics(TTestActorRuntime& runtime, const TPathId& pathId, ui64 N) {
+    // TAnalyzeActor builds count-min sketches based on column cardinality, not
+    // index declarations, so both ColumnShard and DataShard produce the same
+    // statistics for the same data. Key column (tag 1): high cardinality
+    // (N distinct values) -> ndv >= 0.8 * n -> no CMS. Value column (tag 2):
+    // low cardinality (10 distinct values, Value = key % 10) -> CMS with probes.
+    std::vector<TCountMinSketchProbes> expected = {
+        {.Tag = 1, .Probes = std::nullopt},
+        {.Tag = 2, .Probes = {{{"1", N / 10}, {"2", N / 10}, {"10", 0}}}},
+    };
+    CheckCountMinSketch(runtime, pathId, expected);
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
@@ -552,18 +650,6 @@ std::vector<TResponse> GetStatistics(
     return std::move(evResult->Get()->StatResponses);
 }
 
-
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag) {
-    auto responses = GetStatistics(runtime, pathId, EStatType::COUNT_MIN_SKETCH, {{columnTag}});
-    UNIT_ASSERT(responses.size() == 1);
-
-    auto rsp = responses[0];
-    auto stat = rsp.CountMinSketch;
-    UNIT_ASSERT(rsp.Success);
-    UNIT_ASSERT(stat.CountMin);
-
-    return stat.CountMin;
-}
 
 void CheckCountMinSketch(
         TTestActorRuntime& runtime, const TPathId& pathId,
@@ -768,17 +854,6 @@ NKikimrStat::TEvAnalyzeResponse Analyze(
     return record;
 }
 
-void AnalyzeShard(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
-    auto ev = std::make_unique<TEvStatistics::TEvAnalyzeShard>();
-    auto& record = ev->Record;
-    table.ToProto(*record.MutableTable());
-    record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
-
-    auto sender = runtime.AllocateEdgeActor();
-    runtime.SendToPipe(shardTabletId, sender, ev.release());
-    runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeShardResponse>(sender);
-}
-
 void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus) {
     auto analyzeStatusRequest = std::make_unique<TEvStatistics::TEvAnalyzeStatus>();
     analyzeStatusRequest->Record.SetOperationId(operationId);
@@ -790,12 +865,83 @@ void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId,
     UNIT_ASSERT_VALUES_EQUAL(analyzeStatusResponse->Get()->Record.GetStatus(), expectedStatus);
 }
 
-void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId) {
-    TWaitForFirstEvent<TEvStatistics::TEvSaveStatisticsQueryResponse> waiter(runtime, [pathId](const auto& ev){
-        return ev->Get()->PathId == pathId;
-    });
+i64 GetBackgroundAnalyzeCompletedCount(TTestActorRuntime& runtime) {
+    auto counters = runtime.GetAppData(1).Counters;
+    auto completedCounter = GetServiceCounters(counters, "statistics")
+        ->GetSubgroup("subsystem", "background_analyze")
+        ->GetSubgroup("status", "completed")
+        ->FindCounter("BackgroundAnalyze");
+    return completedCounter ? completedCounter->Val() : 0;
+}
 
-    waiter.Wait();
+void WaitForBackgroundAnalyzeCompleted(TTestActorRuntime& runtime, i64 expectedCount) {
+    while (GetBackgroundAnalyzeCompletedCount(runtime) < expectedCount) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    }
+}
+
+// Waits for the background-analyze completed counter to stop incrementing
+// for at least stableSecs seconds, ensuring all race-condition-triggered
+// traversals have finished. Returns the final counter value.
+i64 WaitForBackgroundAnalyzeToStabilize(TTestActorRuntime& runtime, size_t timeoutSec, size_t stableSecs) {
+    auto prev = GetBackgroundAnalyzeCompletedCount(runtime);
+    size_t stable = 0;
+    for (size_t i = 0; i < timeoutSec; ++i) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        auto curr = GetBackgroundAnalyzeCompletedCount(runtime);
+        if (curr == prev) {
+            ++stable;
+            if (stable >= stableSecs) {
+                return curr;
+            }
+        } else {
+            stable = 0;
+            prev = curr;
+        }
+    }
+    return prev;
+}
+
+// Ensures the primary background collection has fully completed for the given
+// table. We use the BackgroundAnalyze completed counter, which is monotonically
+// increasing and never misses a traversal. WaitForBackgroundAnalyzeCompleted
+// waits for at least expectedCount traversals to finish;
+// WaitForBackgroundAnalyzeToStabilize then waits for the counter to stop
+// incrementing, ensuring all race-condition-triggered spurious traversals
+// have also completed.
+//
+// The columnShard parameter is accepted for API symmetry with
+// ValidateStatistics but does not change the waiting logic.
+i64 WaitForPrimaryCollection(
+    TTestActorRuntime& runtime, const TPathId& /*pathId*/,
+    ui64 /*expectedRowCount*/, i64 expectedCount, bool /*columnShard*/) {
+    WaitForBackgroundAnalyzeCompleted(runtime, expectedCount);
+    return WaitForBackgroundAnalyzeToStabilize(runtime);
+}
+
+void WaitForSchemeShardStatsUpdate(
+    TTestActorRuntime& runtime, ui64 ssTabletId, bool requireFull)
+{
+    bool statsUpdateSent = false;
+    auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+        if (ev->Get()->Record.GetSchemeShardId() != ssTabletId) {
+            return;
+        }
+        if (!requireFull) {
+            statsUpdateSent = true;
+            return;
+        }
+        NKikimrStat::TSchemeShardStats statRecord;
+        if (statRecord.ParseFromString(ev->Get()->Record.GetStats())
+                && statRecord.GetAreAllStatsFull())
+        {
+            statsUpdateSent = true;
+        }
+    });
+    runtime.WaitFor(
+        requireFull ? "full TEvSchemeShardStats from SchemeShard"
+                    : "TEvSchemeShardStats from SchemeShard",
+        [&]{ return statsUpdateSent; });
 }
 
 ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId) {

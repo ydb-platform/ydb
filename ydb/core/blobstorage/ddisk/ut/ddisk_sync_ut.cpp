@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = std::make_unique<NDDisk::TEvSync>();
-        creds.Serialize(syncEv->Record.MutableCredentials());
+        creds.SerializeForRequest(syncEv->Record.MutableCredentials());
 
         auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
         AssertStatus<NDDisk::TEvSyncResult>(
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
         auto syncEv = std::make_unique<NDDisk::TEvSync>();
-        creds.Serialize(syncEv->Record.MutableCredentials());
+        creds.SerializeForRequest(syncEv->Record.MutableCredentials());
         auto *segment = syncEv->Record.AddSources()->AddSegments();
         NDDisk::TBlockSelector(0, 0, MinBlockSize).Serialize(
             segment->MutableSelector());

@@ -11,6 +11,7 @@
 #include "antlr_token.h"
 #include "secret_settings.h"
 
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 #include <yql/essentials/sql/v1/proto_parser/statement.h>
 #include <yql/essentials/sql/v1/proto_parser/token.h>
 
@@ -331,27 +332,38 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const auto& stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
-            TNodePtr node = YqlSelectOrLegacy(
-                [&]() -> TNodeResult {
-                    return BuildYqlSelectStatement(*this, stmt);
-                },
-                [&]() -> TNodePtr {
-                    Ctx_.BodyPart();
+            const auto selectKind = Unpack(stmt.GetRule_select_stmt_core2().GetRule_select_stmt_intersect1().GetRule_select_kind_parenthesis1());
 
-                    TPosition pos;
-                    TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
-                    if (!source) {
-                        return nullptr;
-                    }
+            const auto buildLegacy = [&](const auto& stmt) -> TNodePtr {
+                Ctx_.BodyPart();
 
-                    return BuildSelectResult(
-                        pos,
-                        std::move(source),
-                        Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
-                        Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
-                        Ctx_.Scoped);
-                },
-                Ctx_.TokenPosition(Beginning(stmt)));
+                TPosition pos;
+                TSourcePtr source = TSqlSelect(*this).Build(stmt, pos);
+                if (!source) {
+                    return nullptr;
+                }
+
+                return BuildSelectResult(
+                    pos,
+                    std::move(source),
+                    Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
+                    Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+                    Ctx_.Scoped);
+            };
+
+            TNodePtr node;
+            if (IsOnlySelect(stmt) && !selectKind.GetRule_select_kind1().GetBlock2().HasAlt3()) {
+                node = buildLegacy(stmt);
+            } else {
+                node = YqlSelectOrLegacy(
+                    [&]() -> TNodeResult {
+                        return BuildYqlSelectStatement(*this, stmt);
+                    },
+                    [&]() -> TNodePtr {
+                        return buildLegacy(stmt);
+                    },
+                    Ctx_.TokenPosition(Beginning(stmt)));
+            }
 
             if (!node) {
                 return false;
@@ -370,7 +382,17 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
-            if (subquery && Mode_ == NSQLTranslation::ESqlMode::LIBRARY && Ctx_.ScopeLevel == 0) {
+            if (auto source = GetYqlSource(nodeExpr)) {
+                const auto alias = Ctx_.MakeName("yqlsubquerynode");
+                const auto ref = Ctx_.MakeName("yqlsubquery");
+
+                blocks.push_back(BuildYqlSubquery(source, alias));
+                blocks.back()->SetLabel(ref);
+
+                for (size_t i = 0; i < names.size(); ++i) {
+                    nodes.push_back(BuildYqlSubqueryRef(blocks.back(), ref));
+                }
+            } else if (subquery && Mode_ == NSQLTranslation::ESqlMode::LIBRARY && Ctx_.ScopeLevel == 0) {
                 for (size_t i = 0; i < names.size(); ++i) {
                     nodes.push_back(BuildInvalidSubqueryRef(subquery->GetPos()));
                 }
@@ -396,16 +418,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                 } else {
                     nodes.push_back(std::move(nodeExpr));
-                }
-            } else if (auto source = GetYqlSource(nodeExpr)) {
-                const auto alias = Ctx_.MakeName("yqlsubquerynode");
-                const auto ref = Ctx_.MakeName("yqlsubquery");
-
-                blocks.push_back(BuildYqlSubquery(source, alias));
-                blocks.back()->SetLabel(ref);
-
-                for (size_t i = 0; i < names.size(); ++i) {
-                    nodes.push_back(BuildYqlSubqueryRef(blocks.back(), ref));
                 }
             } else {
                 const auto ref = Ctx_.MakeName("namedexprnode");
@@ -521,7 +533,20 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TSourcePtr tableSource = nullptr;
             if (isCreateTableAs) {
-                tableSource = TSqlAsValues(*this).Build(rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2(), "CreateTableAs");
+                const auto& ruleVS = rule.GetBlock15().GetRule_table_as_source1().GetRule_values_source2();
+                TString sqlIntoUserModeStr = "CreateTableAs";
+                TNodePtr valuesNode = YqlSelectOrLegacy(
+                    [&]() -> TNodeResult {
+                        TSqlAsValues x(*this);
+                        x.SetYqlSelectProduced(true);
+                        return ToNode(x.Build(ruleVS, sqlIntoUserModeStr));
+                    },
+                    [&]() -> TNodePtr {
+                        TSqlAsValues x(*this);
+                        return Unwrap(ToNode(x.Build(ruleVS, sqlIntoUserModeStr)));
+                    },
+                    Ctx_.Pos());
+                tableSource = MoveOutIfSource(valuesNode);
                 if (!tableSource) {
                     return false;
                 }
@@ -2100,7 +2125,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore62: {
-            // show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE) simple_table_ref
+            // show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE | EXTERNAL TABLE) simple_table_ref
             Ctx_.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core62().GetRule_show_create_table_stmt1();
 
@@ -2110,16 +2135,23 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
             const auto& block = rule.GetBlock3();
             TString type;
-            if (block.HasAlt1()) {
-                type = "showCreateTable"; // TABLE
-            } else if (block.HasAlt2()) {
-                type = "showCreateView"; // VIEW
-            } else if (block.HasAlt3()) {
-                type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
+            switch (block.Alt_case()) {
+                case TRule_show_create_table_stmt_TBlock3::kAlt1:
+                    type = "showCreateTable"; // TABLE
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::kAlt2:
+                    type = "showCreateView"; // VIEW
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::kAlt3:
+                    type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::kAlt4:
+                    type = "showCreateExternalTable"; // EXTERNAL TABLE
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::ALT_NOT_SET:
+                    YQL_ENSURE(false, "Unreachable");
             }
-            YQL_ENSURE(!type.empty(),
-                       "Unsupported SHOW CREATE statement type, expected one of TABLE, VIEW, EXTERNAL DATA SOURCE; got: "
-                           << block.DebugString());
+            YQL_ENSURE(!type.empty());
 
             AddStatementToBlocks(blocks, BuildShowCreate(Ctx_.Pos(), tr, type, Ctx_.Scoped));
             break;
@@ -2746,6 +2778,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             if (!AlterTableDropStatistics(dropStatistics, params)) {
                 return false;
             }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction26: {
+            // REBUILD INDEX
+            const auto& rebuildRule = node.GetAlt_alter_table_action26().GetRule_alter_table_rebuild_index1();
+
+            if (!AlterTableRebuildIndex(rebuildRule, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::ALT_NOT_SET:
@@ -3172,6 +3214,21 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         }
         case TRule_alter_table_alter_index_action::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
+    }
+
+    return true;
+}
+
+bool TSqlQuery::AlterTableRebuildIndex(const TRule_alter_table_rebuild_index& node, TAlterTableParameters& params) {
+    const auto indexName = IdEx(node.GetRule_an_id3(), *this);
+    params.RebuildIndexes.emplace_back(indexName, TIndexDescription::EType::GlobalVectorKmeansTree);
+    auto& index = params.RebuildIndexes.back();
+
+    // Parse optional WITH (settings) clause
+    if (node.HasBlock4()) {
+        if (!FillIndexSettings(node.GetBlock4().GetRule_with_index_settings1(), index.IndexSettings)) {
+            return false;
+        }
     }
 
     return true;
@@ -4280,6 +4337,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
 
     // bool fields.
     TABLE_ELEM(
+        "EvaluateExprCache",
+        EvaluateExprCache,
+        /*value=*/true,
+        /*isYqlSelectCompatible=*/true),
+    TABLE_ELEM(
         "RefSelect",
         PragmaRefSelect,
         /*value=*/true,
@@ -4745,7 +4807,17 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
             case TRule_delete_stmt_TBlock5::kAlt2: {
                 const auto& alt = stmt.GetBlock5().GetAlt2();
 
-                auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "DELETE ON");
+                const auto& rule = alt.GetRule_into_values_source2();
+                TNodePtr valuesNode = YqlSelectOrLegacy(
+                    [&]() -> TNodeResult {
+                        return ToNode(BuildYqlSelect(*this, rule));
+                    },
+                    [&]() -> TNodePtr {
+                        TSqlIntoValues x(*this);
+                        return Unwrap(ToNode(x.Build(rule, "DELETE ON")));
+                    },
+                    Ctx_.TokenPosition(stmt.GetToken2()));
+                TSourcePtr values = MoveOutIfSource(valuesNode);
                 if (!values) {
                     return nullptr;
                 }
@@ -4823,7 +4895,17 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         case TRule_update_stmt_TBlock4::kAlt2: {
             const auto& alt = stmt.GetBlock4().GetAlt2();
 
-            auto values = TSqlIntoValues(*this).Build(alt.GetRule_into_values_source2(), "UPDATE ON");
+            const auto& rule = alt.GetRule_into_values_source2();
+            TNodePtr valuesNode = YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    return ToNode(BuildYqlSelect(*this, rule));
+                },
+                [&]() -> TNodePtr {
+                    TSqlIntoValues x(*this);
+                    return Unwrap(ToNode(x.Build(rule, "UPDATE ON")));
+                },
+                Ctx_.TokenPosition(stmt.GetToken2()));
+            TSourcePtr values = MoveOutIfSource(valuesNode);
             if (!values) {
                 return nullptr;
             }
@@ -4880,7 +4962,7 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
     FillTargetList(*this, stmt.GetRule_set_target_list1(), targetList);
 
     const TPosition pos(Ctx_.Pos());
-    auto parenthesis = stmt.GetRule_smart_parenthesis3();
+    const auto& parenthesis = stmt.GetRule_smart_parenthesis3();
 
     TNodePtr node = TSqlExpression(*this).BuildSourceOrNode(parenthesis);
     if (TSourcePtr source = MoveOutIfSource(node)) {

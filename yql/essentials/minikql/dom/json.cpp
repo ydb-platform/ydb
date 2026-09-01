@@ -304,25 +304,34 @@ void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer) {
             const TStringBuf str = cleanValue.AsStringRef();
             if constexpr (EncodeUtf8) {
                 if (const auto from = AsciiSize(str); from < str.size()) {
-                    return writer.Write(EncodeUtf(str, from));
+                    writer.Write(EncodeUtf(str, from));
+                    return;
                 }
             }
-            return writer.Write(str);
+            writer.Write(str);
+            return;
         }
         case ENodeType::Bool:
-            return writer.Write(value.Get<bool>());
+            writer.Write(value.Get<bool>());
+            return;
         case ENodeType::Int64:
-            return writer.Write(value.Get<i64>());
+            writer.Write(value.Get<i64>());
+            return;
         case ENodeType::Uint64:
-            return writer.Write(value.Get<ui64>());
+            writer.Write(value.Get<ui64>());
+            return;
         case ENodeType::Double:
-            return writer.Write(value.Get<double>());
+            writer.Write(value.Get<double>());
+            return;
         case ENodeType::Entity:
-            return writer.WriteNull();
+            writer.WriteNull();
+            return;
         case ENodeType::List:
-            return WriteArray<SkipMapEntity, EncodeUtf8>(value, writer);
+            WriteArray<SkipMapEntity, EncodeUtf8>(value, writer);
+            return;
         case ENodeType::Dict:
-            return WriteMap<SkipMapEntity, EncodeUtf8>(value, writer);
+            WriteMap<SkipMapEntity, EncodeUtf8>(value, writer);
+            return;
         case ENodeType::Attr:
             writer.OpenMap();
             writer.WriteKey("$attributes");

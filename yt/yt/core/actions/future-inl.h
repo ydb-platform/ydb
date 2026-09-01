@@ -59,8 +59,9 @@ auto RunFutureHandler(F&& functor, As&&... args) noexcept -> decltype(functor(st
 
 inline TError WrapIntoCancelationError(const TError& error)
 {
+    // Cancel may be passed an OK error.
     return TError(NYT::EErrorCode::Canceled, "Operation canceled")
-        << error;
+        .WithIf(!error.IsOK(), error);
 }
 
 inline TError TryExtractCancelationError()
@@ -74,7 +75,8 @@ inline TError TryExtractCancelationError()
         // rely on their cancelation error to never be wrapped
         // into anything with a different error code.
         const auto& tokenError = GetCancelationError(currentToken);
-        return TError(tokenError.GetCode(), "Promise abandoned") << tokenError;
+        return TError(tokenError.GetCode(), "Promise abandoned")
+            .WithIf(!tokenError.IsOK(), tokenError);
     }
 
     return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
@@ -934,14 +936,14 @@ TFuture<T> ApplyTimeoutHelper(
             } else {
                 error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 if constexpr (std::is_same_v<D, TDuration>) {
-                    error = error << TErrorAttribute("timeout", timeoutOrDeadline);
+                    error = error.With("timeout", timeoutOrDeadline);
                 }
                 if constexpr (std::is_same_v<D, TInstant>) {
-                    error = error << TErrorAttribute("deadline", timeoutOrDeadline);
+                    error = error.With("deadline", timeoutOrDeadline);
                 }
             }
             if (!options.Error.IsOK()) {
-                error = options.Error << std::move(error);
+                error = options.Error.With(std::move(error));
             }
             promise.TrySet(error);
             cancelable.Cancel(error);
@@ -2264,7 +2266,7 @@ private:
         auto combinerError = TError(
             NYT::EErrorCode::FutureCombinerFailure,
             "Any-of combiner failure: all responses have failed")
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 
@@ -2436,7 +2438,7 @@ private:
                 this->CancelFutures(TError(
                     NYT::EErrorCode::FutureCombinerShortcut,
                     "All-of combiner shortcut: some response failed")
-                    << error);
+                    .With(error));
             }
 
             return;
@@ -2596,7 +2598,7 @@ private:
             N_,
             failedCount,
             totalCount)
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 
@@ -2610,7 +2612,7 @@ private:
             this->CancelFutures(TError(
                 NYT::EErrorCode::FutureCombinerShortcut,
                 "Any-N-of combiner shortcut: one of responses failed")
-                << error);
+                .With(error));
         }
     }
 };
@@ -2906,7 +2908,7 @@ private:
     void OnCanceled(const TError& error)
     {
         auto wrappedError = TError(NYT::EErrorCode::Canceled, "Canceled")
-            << error;
+            .With(error);
 
         OnError(wrappedError);
     }

@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -158,7 +158,10 @@ private:
         Cost = other.Cost;
         LeftShuffleBy = other.LeftShuffleBy;
         RightShuffleBy = other.RightShuffleBy;
-        OutputIUs = other.OutputIUs;
+        // OutputIUs depends on both the operator and its current inputs. Props
+        // are frequently copied into a newly constructed, rewritten operator,
+        // so carrying this cache across the copy can make lazy reads stale.
+        OutputIUs.reset();
         ClearLogicalAnalysis();
     }
 };
@@ -285,6 +288,7 @@ protected:
     virtual void ComputeOutputIUs() = 0;
     virtual void ComputeOutputIUsSubtree();
 
+    friend class TOpCBOTree;
     friend class TOpRoot;
 };
 
@@ -312,6 +316,9 @@ public:
         Children.push_back(input);
     }
     TIntrusivePtr<IOperator>& GetInput() {
+        return Children[0];
+    }
+    const TIntrusivePtr<IOperator>& GetInput() const {
         return Children[0];
     }
     void SetInput(TIntrusivePtr<IOperator> newInput) {
@@ -406,7 +413,12 @@ public:
         TExprNode::TPtr ComputeNode;  // ranges expression pushed into the read
         TVector<TString> KeyColumns;  // all table key columns (with or without alias prefix)
         size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
+        size_t PointPrefixLen = 0;    // how many are pinned to a single value
         TMaybe<size_t> ExpectedMaxRanges;
+        TExprNode::TPtr Points;
+        const TStructExprType* PointsItemType = nullptr;
+        TVector<TString> PointColumns;
+        TMaybe<size_t> ExpectedMaxPoints;
     };
 
     TOpRead(TExprNode::TPtr node);
@@ -760,27 +772,78 @@ private:
     EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
+enum class ELookupStrategy : ui32 {
+    LookupRows,
+    LookupJoinRows,
+};
+
 class TOpTableLookup: public IUnaryOperator {
 public:
+    struct TLookupKeyPrefix {
+        TExprNode::TPtr Points;
+        const TStructExprType* PointsItemType = nullptr;
+        TVector<TString> Columns;
+        TVector<std::pair<TString, TInfoUnit>> Equalities;
+    };
+
+    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table, const TVector<TString>& fetchColumns,
+                   const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
+
     TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
-                   const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
+                   const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys,
+                   const TVector<TString>& lookupKeyColumns, const TString& joinKind,
+                   const std::optional<TExpression>& fetchedRowFilter,
+                   const std::optional<TLookupKeyPrefix>& prefix = std::nullopt,
+                   const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys = {});
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual TString GetExplainName() const override { return "TableLookup"; }
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override { return IsJoin() ? "TableLookupJoin" : "TableLookup"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    bool IsJoin() const {
+        return Strategy == ELookupStrategy::LookupJoinRows;
+    }
 
     TExprNode::TPtr Table;
     TVector<TString> FetchColumns;
     TVector<TInfoUnit> OutputIUs;
     TVector<TInfoUnit> LookupKeys;
+    TVector<TString> LookupKeyColumns;
+    TString JoinKind;
+    std::optional<TExpression> FetchedRowFilter;
+    std::optional<TLookupKeyPrefix> Prefix;
+    ELookupStrategy Strategy{ELookupStrategy::LookupRows};
+    TVector<std::pair<TInfoUnit, TInfoUnit>> ResidualJoinKeys;
 
 protected:
     void ComputeOutputIUs() override;
 };
 
+/***
+ * Logical representation of index lookup join. In runtime it conusmes a tuple (left row, optional<right row>, cookie).
+ * Where cookie is (left row id, first row, last row).
+ ***/
+class TOpIndexLookupJoin: public IUnaryOperator {
+public:
+    TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override { return "IndexLookupJoin"; }
+
+    TIntrusivePtr<TOpTableLookup> GetTableLookup();
+
+    TString JoinKind;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+
+protected:
+    void ComputeOutputIUs() override;
+};
 
 /***
  * This operator packages a subtree of operators in order to pass them to dynamic programming optimizer
@@ -804,9 +867,6 @@ public:
     TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TPositionHandle pos);
     TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TVector<TIntrusivePtr<IOperator>> treeNodes, TPositionHandle pos);
 
-    virtual const TVector<TInfoUnit>& GetOutputIUs() override {
-        return TreeRoot->GetOutputIUs();
-    }
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;

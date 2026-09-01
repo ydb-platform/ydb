@@ -30,8 +30,8 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Used only for YT_LOG_ALERT.
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "AttributeFilter");
+//! Used only for YT_TLOG_ALERT.
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "AttributeFilter");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -60,7 +60,7 @@ void CanonizeAndValidatePath(TYPath& path)
             tokenizer.Advance();
         }
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path) << ex);
+        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path).With(ex));
     }
 
     path = std::move(result);
@@ -160,7 +160,7 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
             if (Sync_) {
                 // This could be YT_VERIFY if this code was not so heavily used in master. Hope trace id
                 // of the log message below will help in investigation.
-                YT_LOG_ALERT_UNLESS(asyncFilteredYson.IsSet(), "Unexpected unset future in synchronous attribute filtering");
+                YT_TLOG_ALERT_UNLESS(asyncFilteredYson.IsSet(), "Unexpected unset future in synchronous attribute filtering");
                 if (!asyncFilteredYson.IsSet()) {
                     THROW_ERROR_EXCEPTION("Unexpected unset future in synchronous attribute filtering");
                 }

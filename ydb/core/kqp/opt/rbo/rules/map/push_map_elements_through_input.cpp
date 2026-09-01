@@ -111,6 +111,7 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
     }
 
     auto topMap = CastOperator<TOpMap>(input);
+        
     auto op = topMap->GetInput();
     if (!CanPushThroughInputOperator(*op) || !op->IsSingleConsumer()) {
         return input;

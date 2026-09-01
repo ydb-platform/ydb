@@ -14,7 +14,8 @@ import numpy._core._multiarray_umath as ncu
 from numpy._core._rational_tests import rational
 
 from numpy.testing import (
-    assert_array_equal, assert_warns, IS_PYPY)
+    assert_array_equal, assert_warns, IS_PYPY, IS_64BIT
+)
 
 
 def arraylikes():
@@ -38,7 +39,7 @@ def arraylikes():
 
     yield subclass
 
-    class _SequenceLike():
+    class _SequenceLike:
         # Older NumPy versions, sometimes cared whether a protocol array was
         # also _SequenceLike.  This shouldn't matter, but keep it for now
         # for __array__ and not the others.
@@ -54,7 +55,9 @@ def arraylikes():
             self.a = a
 
         def __array__(self, dtype=None, copy=None):
-            return self.a
+            if dtype is None:
+                return self.a
+            return self.a.astype(dtype)
 
     yield param(ArrayDunder, id="__array__")
 
@@ -714,8 +717,7 @@ class TestArrayLikes:
         arr = np.array([ArrayLike])
         assert arr[0] is ArrayLike
 
-    @pytest.mark.skipif(
-            np.dtype(np.intp).itemsize < 8, reason="Needs 64bit platform")
+    @pytest.mark.skipif(not IS_64BIT, reason="Needs 64bit platform")
     def test_too_large_array_error_paths(self):
         """Test the error paths, including for memory leaks"""
         arr = np.array(0, dtype="uint8")
@@ -759,6 +761,17 @@ class TestArrayLikes:
 
         with pytest.raises(error):
             np.array(BadSequence())
+
+    def test_array_interface_descr_optional(self):
+        # The descr should be optional regression test for gh-27249
+        arr = np.ones(10, dtype="V10")
+        iface = arr.__array_interface__
+        iface.pop("descr")
+
+        class MyClass:
+            __array_interface__ = iface
+
+        assert_array_equal(np.asarray(MyClass), arr)
 
 
 class TestAsArray:

@@ -25,6 +25,10 @@ namespace NWilson {
         return NActors::TActorId(0, TStringBuf("WilsonUpload", 12));
     }
 
+    inline NActors::TActorId MakeUserFacingWilsonUploaderId() {
+        return NActors::TActorId(0, TStringBuf("WilsonUsrUpl", 12));
+    }
+
     using TRegisterMonPageCallback = std::function<void(NActors::TActorSystem* actorSystem, const NActors::TActorId& actorId)>;
 
     struct TWilsonUploaderParams {

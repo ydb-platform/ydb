@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dbs_controller_counters.h"
+#include "dbs_controller_events_private.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 
@@ -61,6 +62,28 @@ private:
         const NActors::TActorContext& ctx);
 
     void ReportTabletState(const NActors::TActorContext& ctx);
+
+    void HandleUpdateDDiskMapRequest(
+        const TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleRemoveTabletDDiskMapRequest(
+        const TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleGetPartitionsForNodeRequest(
+        const TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleNodeMaintenancePermissionRequest(
+        const TEvDbsControllerPrivate::TEvNodeMaintenancePermissionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleDiskMaintenancePermissionRequest(
+        const TEvDbsControllerPrivate::TEvDiskMaintenancePermissionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
 
     BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS(
         BLOCKSTORE_IMPLEMENT_TRANSACTION,

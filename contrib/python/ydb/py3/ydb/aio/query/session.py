@@ -136,6 +136,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -157,6 +158,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific resource pool.
 
         :return: Iterator with result sets
         """
@@ -182,6 +184,7 @@ class QuerySession(BaseQuerySession["AsyncDriver"]):
                 arrow_format_settings=arrow_format_settings,
                 concurrent_result_sets=concurrent_result_sets,
                 settings=settings,
+                pool_id=pool_id,
             )
         return AsyncResponseContextIterator(
             it=stream_it,

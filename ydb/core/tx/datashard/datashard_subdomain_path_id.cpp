@@ -4,6 +4,8 @@
 
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -56,7 +58,8 @@ private:
 };
 
 void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
-    AFL_DEBUG(NKikimrServices::TX_DATASHARD)("event", "subdomain_found");
+    YDB_LOG_DEBUG("Handle TEvSubDomainPathIdFound",
+        {"ev", ev->Get()->ToString()});
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {
@@ -167,19 +170,60 @@ private:
     const bool OutOfSpace;
 };
 
+class TDataShard::TTxPersistSubDomainTablesMetricsLevel : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxPersistSubDomainTablesMetricsLevel(TDataShard* self, NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level)
+        : TTransactionBase(self)
+        , Level(level)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_TABLES_METRICS_LEVEL; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (Self->SubDomainTablesMetricsLevel != Level) {
+            Self->PersistSys(db, Schema::Sys_SubDomainTablesMetricsLevel, ui64(Level));
+            Self->SubDomainTablesMetricsLevel = Level;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+
+private:
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel Level;
+};
+
 void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
-        const bool outOfSpace = msg->Result->GetPathDescription()
-            .GetDomainDescription()
-            .GetDomainState()
-            .GetDiskQuotaExceeded();
+        const auto& domainDescription = msg->Result->GetPathDescription().GetDomainDescription();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
-            << " at datashard " << TabletID());
+        const bool outOfSpace = domainDescription.GetDomainState().GetDiskQuotaExceeded();
+
+        YDB_LOG_DEBUG_CTX(ctx, "Discovered subdomain state",
+            {"pathId", msg->PathId},
+            {"outOfSpace", outOfSpace},
+            {"tabletId", TabletID()});
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
+
+        // Persisted so that a restart keeps emitting detailed metrics without
+        // waiting for the next subdomain publish.
+        const auto tablesMetricsLevel = domainDescription.GetTablesMetricsLevel();
+
+        if (tablesMetricsLevel != SubDomainTablesMetricsLevel) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Discovered subdomain " << msg->PathId << " tablesMetricsLevel = "
+                << NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(tablesMetricsLevel)
+                << " at datashard " << TabletID());
+
+            Execute(new TTxPersistSubDomainTablesMetricsLevel(this, tablesMetricsLevel), ctx);
+        }
     }
 }
 

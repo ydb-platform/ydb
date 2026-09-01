@@ -95,7 +95,7 @@ using TAfterSwitch = TFunctionView<void()>;
 // We do that because callback can resume fiber which will destroy the
 // closure on its stack creating the risk of stack-use-after-scope.
 // The only safe place at that moment is caller's stack frame.
-template <CInvocable<void()> T>
+template <NMpl::CInvocable<void()> T>
 auto MakeAfterSwitch(T&& lambda)
 {
     class TMoveOnCall
@@ -201,10 +201,10 @@ Y_FORCE_INLINE ELogLevel SwapMinLogLevel(ELogLevel minLogLevel)
     return result;
 }
 
-Y_FORCE_INLINE std::string SwapMessageTag(std::string messageTag)
+Y_FORCE_INLINE NLogging::TLoggingTagList SwapMessageTags(NLogging::TLoggingTagList messageTags)
 {
-    auto result = std::move(GetThreadMessageTag());
-    SetThreadMessageTag(std::move(messageTag));
+    auto result = GetThreadMessageTags();
+    SetThreadMessageTags(std::move(messageTags));
     return result;
 }
 
@@ -521,7 +521,7 @@ void FiberTrampoline()
 {
     RunAfterSwitch();
 
-    YT_LOG_DEBUG("Fiber started");
+    YT_TLOG_DEBUG("Fiber started");
 
     auto* currentFiber = GetCurrentFiber();
 
@@ -550,7 +550,7 @@ void FiberTrampoline()
         }
     }
 
-    YT_LOG_DEBUG("Fiber finished");
+    YT_TLOG_DEBUG("Fiber finished");
 
     auto afterSwitch = MakeAfterSwitch([currentFiber] () mutable {
         TFiber::ReleaseFiber(currentFiber);
@@ -656,12 +656,12 @@ public:
         ErrorSet_.NotifyAll();
 
         if (future) {
-            YT_LOG_DEBUG("Sending cancelation to fiber, propagating to the awaited future (TargetFiberId: %x)",
-                FiberId_);
+            YT_TLOG_DEBUG("Sending cancelation to fiber, propagating to the awaited future")
+                .WithFormat("TargetFiberId", "%x", FiberId_);
             future.Cancel(error);
         } else {
-            YT_LOG_DEBUG("Sending cancelation to fiber (TargetFiberId: %x)",
-                FiberId_);
+            YT_TLOG_DEBUG("Sending cancelation to fiber")
+                .WithFormat("TargetFiberId", "%x", FiberId_);
         }
     }
 
@@ -768,7 +768,7 @@ class TTlsAddressStorage
 public:
     TTlsAddressStorage() = default;
 
-    template <CInvocable<T*()> TTlsReader>
+    template <NMpl::CInvocable<T*()> TTlsReader>
     Y_FORCE_INLINE explicit TTlsAddressStorage(TTlsReader reader)
     {
 #ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
@@ -783,7 +783,7 @@ public:
         return *Address_;
     }
 
-    template <CInvocable<T*()> TTlsReader>
+    template <NMpl::CInvocable<T*()> TTlsReader>
     Y_FORCE_INLINE void ReReadAddress(TTlsReader reader)
     {
         auto* address = reader();
@@ -827,7 +827,7 @@ protected:
         Fls_ = SwapCurrentFls(Fls_);
         TContextSwitchManager::Get()->OnIn();
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
-        MessageTag_ = SwapMessageTag(MessageTag_);
+        MessageTags_ = SwapMessageTags(std::move(MessageTags_));
     }
 
     ~TBaseSwitchHandler()
@@ -835,14 +835,14 @@ protected:
         YT_VERIFY(FiberId_ == InvalidFiberId);
         YT_VERIFY(!Fls_);
         YT_VERIFY(MinLogLevel_ == ELogLevel::Minimum);
-        YT_VERIFY(MessageTag_.empty());
+        YT_VERIFY(MessageTags_.IsEmpty());
     }
 
 private:
     TFls* Fls_ = nullptr;
     TFiberId FiberId_ = InvalidFiberId;
     ELogLevel MinLogLevel_ = ELogLevel::Minimum;
-    std::string MessageTag_;
+    NLogging::TLoggingTagList MessageTags_;
 };
 
 class TFiberSwitchHandler;
@@ -1036,7 +1036,8 @@ public:
     ~TResumeGuard()
     {
         if (Fiber_) {
-            YT_LOG_TRACE("Unwinding fiber (TargetFiberId: %x)", CancelerClosure_->GetFiberId());
+            YT_TLOG_TRACE("Unwinding fiber")
+                .WithFormat("TargetFiberId", "%x", CancelerClosure_->GetFiberId());
 
             CancelerClosure_->Run(TError("Fiber resumer is lost"));
             CancelerClosure_.Reset();
@@ -1078,19 +1079,20 @@ void TFiberSchedulerThread::ThreadMain()
     EnsureSafeShutdown();
 
     try {
-        YT_LOG_DEBUG("Thread started (Name: %v)",
-            GetThreadName());
+        YT_TLOG_DEBUG("Thread started")
+            .With("Name", GetThreadName());
 
         NDetail::TFiberContext fiberContext(this, ThreadGroupName_);
         NDetail::TFiberContextGuard fiberContextGuard(&fiberContext);
 
         NDetail::SwitchFromThread(TFiber::CreateFiber());
 
-        YT_LOG_DEBUG("Thread stopped (Name: %v)",
-            GetThreadName());
+        YT_TLOG_DEBUG("Thread stopped")
+            .With("Name", GetThreadName());
     } catch (const std::exception& ex) {
-        YT_LOG_FATAL(ex, "Unhandled exception in thread main (Name: %v)",
-            GetThreadName());
+        YT_TLOG_FATAL("Unhandled exception in thread main")
+            .With("Name", GetThreadName())
+            .With(ex);
     }
 }
 
@@ -1218,8 +1220,8 @@ void SuspendFiberUntilSet(TFuture<void> future, IInvokerPtr invoker)
                 currentFiber,
                 cancelerClosure = std::move(cancelerClosure)
             ] (const TError&) mutable {
-                YT_LOG_TRACE("Waking up fiber (TargetFiberId: %x)",
-                    cancelerClosure->GetFiberId());
+                YT_TLOG_TRACE("Waking up fiber")
+                    .WithFormat("TargetFiberId", "%x", cancelerClosure->GetFiberId());
 
                 invoker->Invoke(
                     BIND_NO_PROPAGATE(NDetail::TResumeGuard(currentFiber, std::move(cancelerClosure))));
@@ -1232,7 +1234,7 @@ void SuspendFiberUntilSet(TFuture<void> future, IInvokerPtr invoker)
     }
 
     if (cancelerClosure->IsCanceled()) {
-        YT_LOG_DEBUG("Throwing fiber cancelation exception");
+        YT_TLOG_DEBUG("Throwing fiber cancelation exception");
         throw TFiberCanceledException();
     }
 }

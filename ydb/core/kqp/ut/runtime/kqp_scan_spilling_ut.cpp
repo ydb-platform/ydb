@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#include <util/folder/dirut.h>
 #include <util/system/fs.h>
 
 namespace NKikimr {
@@ -30,6 +31,7 @@ NKikimrConfig::TAppConfig AppCfg() {
     auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
     spilling->SetEnable(true);
     spilling->SetRoot("./spilling/");
+    MakeDirIfNotExist("./spilling");
 
     return appCfg;
 }
@@ -50,6 +52,7 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
 
     spilling->SetEnable(enableSpilling);
     spilling->SetRoot("./spilling/");
+    MakeDirIfNotExist("./spilling");
     if (limitFileSize) {
         spilling->SetMaxTotalSize(1);
     }

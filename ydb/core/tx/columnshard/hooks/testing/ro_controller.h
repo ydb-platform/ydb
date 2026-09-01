@@ -194,7 +194,7 @@ public:
             } else if (startVal && need == 0) {
                 return;
             }
-            Sleep(TDuration::MilliSeconds(200));
+            Sleep(TDuration::Seconds(1));
         }
         AFL_VERIFY(!NeedActualizationCount.Val());
         if (waitWrites) {

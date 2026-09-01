@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import re
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Callable, Dict, Generator, Iterable, Tuple
+from collections.abc import Callable, Generator, Iterable
+from typing import TYPE_CHECKING
 
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import FilterOrBool, to_filter
@@ -104,7 +105,7 @@ class RegexSync(SyntaxSync):
             return lineno, 0
 
     @classmethod
-    def from_pygments_lexer_cls(cls, lexer_cls: PygmentsLexerCls) -> RegexSync:
+    def from_pygments_lexer_cls(cls, lexer_cls: type[PygmentsLexerCls]) -> RegexSync:
         """
         Create a :class:`.RegexSync` instance for this Pygments lexer class.
         """
@@ -123,7 +124,7 @@ class RegexSync(SyntaxSync):
         return cls(p)
 
 
-class _TokenCache(Dict[Tuple[str, ...], str]):
+class _TokenCache(dict[tuple[str, ...], str]):
     """
     Cache that converts Pygments tokens into `prompt_toolkit` style objects.
 
@@ -219,7 +220,7 @@ class PygmentsLexer(Lexer):
         Create a lexer function that takes a line number and returns the list
         of (style_str, text) tuples as the Pygments lexer returns for that line.
         """
-        LineGenerator = Generator[Tuple[int, StyleAndTextTuples], None, None]
+        LineGenerator = Generator[tuple[int, StyleAndTextTuples], None, None]
 
         # Cache of already lexed lines.
         cache: dict[int, StyleAndTextTuples] = {}

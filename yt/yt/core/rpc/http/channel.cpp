@@ -178,6 +178,7 @@ private:
             const IClientRequestPtr& request,
             IClientResponseHandlerPtr responseHandler)
         {
+            request->Header().set_start_time(ToProto(TInstant::Now()));
             auto httpRequestHeaders = TranslateRequest(request);
 
             auto protocol = channel->IsHttps_ ? "https" : "http";
@@ -198,7 +199,7 @@ private:
                 }
             } catch (const std::exception& ex) {
                 responseHandler->HandleError(
-                    TError(NRpc::EErrorCode::TransportError, "Request serialization failed") << ex,
+                    TError(NRpc::EErrorCode::TransportError, "Request serialization failed").With(ex),
                     channel->EndpointAddress_);
                 return;
             }
@@ -244,7 +245,7 @@ private:
             try {
                 if (!responseOrError.IsOK()) {
                     responseHandler->HandleError(
-                        TError(NRpc::EErrorCode::TransportError, "HTTP client request failed") << responseOrError,
+                        TError(NRpc::EErrorCode::TransportError, "HTTP client request failed").With(responseOrError),
                         address);
                     return;
                 }
@@ -265,7 +266,7 @@ private:
                 if (response->GetStatusCode() != EStatusCode::OK) {
                     responseHandler->HandleError(
                         TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
-                            << TErrorAttribute("status", response->GetStatusCode()),
+                            .With("status", response->GetStatusCode()),
                         address);
                     return;
                 }
@@ -284,7 +285,7 @@ private:
                 responseHandler->HandleResponse(responseMessage, address);
             } catch (const std::exception& ex) {
                 responseHandler->HandleError(
-                    TError(NRpc::EErrorCode::TransportError, "Response deserialization failed") << ex,
+                    TError(NRpc::EErrorCode::TransportError, "Response deserialization failed").With(ex),
                     address);
             }
         }
@@ -319,6 +320,10 @@ private:
             if (rpcHeader.has_request_id()) {
                 auto requestId = FromProto<TRequestId>(rpcHeader.request_id());
                 httpHeaders->Add(RequestIdHeaderName, ToString(requestId));
+            }
+
+            if (rpcHeader.has_start_time()) {
+                httpHeaders->Add(StartTimeHeaderName, ToString(rpcHeader.start_time()));
             }
 
             if (rpcHeader.HasExtension(NRpc::NProto::TCredentialsExt::credentials_ext)) {

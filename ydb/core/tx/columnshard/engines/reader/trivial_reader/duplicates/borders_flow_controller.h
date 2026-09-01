@@ -45,6 +45,12 @@ public:
 
     void Enqueue(const TEvBordersConstructionResult::TPtr& event);
 
+    void ClearInflightOnAbort();
+
+    bool IsMergeInflight() const {
+        return IsInflight;
+    }
+
     ~TBordersFlowController();
 
 private:

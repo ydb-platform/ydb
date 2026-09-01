@@ -590,16 +590,17 @@ HWY_NOINLINE void BaseCase(D d, TraitsKV, T* HWY_RESTRICT keys,
 
   using FuncPtr = decltype(&Sort2To2<Traits, T>);
   const FuncPtr funcs[9] = {
-    /* <= 1 */ nullptr,  // We ensured num_keys > 1.
-    /* <= 2 */ &Sort2To2<Traits, T>,
-    /* <= 4 */ &Sort3To4<Traits, T>,
-    /* <= 8 */ &Sort8Rows<1, Traits, T>,  // 1 key per row
-    /* <= 16 */ kMaxKeysPerVector >= 2 ? &Sort8Rows<2, Traits, T> : nullptr,
-    /* <= 32 */ kMaxKeysPerVector >= 4 ? &Sort8Rows<4, Traits, T> : nullptr,
-    /* <= 64 */ kMaxKeysPerVector >= 4 ? &Sort16Rows<4, Traits, T> : nullptr,
-    /* <= 128 */ kMaxKeysPerVector >= 8 ? &Sort16Rows<8, Traits, T> : nullptr,
+      /* <= 1 */ nullptr,  // We ensured num_keys > 1.
+      /* <= 2 */ &Sort2To2<Traits, T>,
+      /* <= 4 */ &Sort3To4<Traits, T>,
+      /* <= 8 */ &Sort8Rows<1, Traits, T>,  // 1 key per row
+      /* <= 16 */ kMaxKeysPerVector >= 2 ? &Sort8Rows<2, Traits, T> : nullptr,
+      /* <= 32 */ kMaxKeysPerVector >= 4 ? &Sort8Rows<4, Traits, T> : nullptr,
+      /* <= 64 */ kMaxKeysPerVector >= 4 ? &Sort16Rows<4, Traits, T> : nullptr,
+      /* <= 128 */ kMaxKeysPerVector >= 8 ? &Sort16Rows<8, Traits, T> : nullptr,
 #if !HWY_COMPILER_MSVC && !HWY_IS_DEBUG_BUILD
-    /* <= 256 */ kMaxKeysPerVector >= 16 ? &Sort16Rows<16, Traits, T> : nullptr,
+      /* <= 256 */ kMaxKeysPerVector >= 16 ? &Sort16Rows<16, Traits, T>
+                                           : nullptr,
 #endif
   };
   funcs[ceil_log2](st, keys, num_lanes, buf);
@@ -1855,7 +1856,10 @@ HWY_NOINLINE void Recurse(D d, Traits st, T* HWY_RESTRICT keys,
   // of only one unique value. Note that for floating-point, PrevValue can
   // return the same value (for -inf inputs), but that would just mean the
   // pivot is again one of the keys.
-  HWY_DASSERT(bound != 0);
+  using Order = typename Traits::Order;
+  (void)Order::IsAscending();
+  HWY_DASSERT_M(bound != 0,
+                (Order::IsAscending() ? "Ascending" : "Descending"));
   // ChoosePivot* ensure pivot != last, so the right partition is never empty
   // except in the rare case of the pivot matching the last-in-sort-order value,
   // which implies we anyway skip the right partition due to kWasLast.
@@ -1913,8 +1917,8 @@ HWY_INLINE bool HandleSpecialCases(D d, Traits st, T* HWY_RESTRICT keys,
   const bool huge_vec = kPotentiallyHuge && (2 * N > base_case_num);
   if (partial_128 || huge_vec) {
     if (VQSORT_PRINT >= 1) {
-      fprintf(stderr, "WARNING: using slow HeapSort: partial %d huge %d\n",
-              partial_128, huge_vec);
+      HWY_WARN("using slow HeapSort: partial %d huge %d\n", partial_128,
+               huge_vec);
     }
     HeapSort(st, keys, num);
     return true;
@@ -1994,7 +1998,7 @@ void Sort(D d, Traits st, T* HWY_RESTRICT keys, const size_t num,
   (void)d;
   (void)buf;
   if (VQSORT_PRINT >= 1) {
-    fprintf(stderr, "WARNING: using slow HeapSort because vqsort disabled\n");
+    HWY_WARN("using slow HeapSort because vqsort disabled\n");
   }
   detail::HeapSort(st, keys, num);
 #endif  // VQSORT_ENABLED
@@ -2039,7 +2043,7 @@ void PartialSort(D d, Traits st, T* HWY_RESTRICT keys, size_t num, size_t k,
   (void)d;
   (void)buf;
   if (VQSORT_PRINT >= 1) {
-    fprintf(stderr, "WARNING: using slow HeapSort because vqsort disabled\n");
+    HWY_WARN("using slow HeapSort because vqsort disabled\n");
   }
   detail::HeapPartialSort(st, keys, num, k);
 #endif  // VQSORT_ENABLED
@@ -2080,7 +2084,7 @@ void Select(D d, Traits st, T* HWY_RESTRICT keys, const size_t num,
   (void)d;
   (void)buf;
   if (VQSORT_PRINT >= 1) {
-    fprintf(stderr, "WARNING: using slow HeapSort because vqsort disabled\n");
+    HWY_WARN("using slow HeapSort because vqsort disabled\n");
   }
   detail::HeapSelect(st, keys, num, k);
 #endif  // VQSORT_ENABLED

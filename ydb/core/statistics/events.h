@@ -151,16 +151,16 @@ struct TEvStatistics {
         EvAnalyzeStatus,
         EvAnalyzeStatusResponse,
 
-        EvAnalyzeShard,
-        EvAnalyzeShardResponse,
+        EvAnalyzeShard, // deprecated (old aggregation tree, kept for enum value stability)
+        EvAnalyzeShardResponse, // deprecated
 
-        EvStatisticsRequest,
-        EvStatisticsResponse,
+        EvStatisticsRequest, // deprecated
+        EvStatisticsResponse, // deprecated
 
-        EvAggregateStatistics,
-        EvAggregateStatisticsResponse,
-        EvAggregateKeepAlive,
-        EvAggregateKeepAliveAck,
+        EvAggregateStatistics, // deprecated
+        EvAggregateStatisticsResponse, // deprecated
+        EvAggregateKeepAlive, // deprecated
+        EvAggregateKeepAliveAck, // deprecated
 
         EvAnalyzeActorResult,
 
@@ -178,30 +178,6 @@ struct TEvStatistics {
 
         EvEnd
     };
-
-    struct TEvAggregateKeepAlive : public TEventPB<
-        TEvAggregateKeepAlive,
-        NKikimrStat::TEvAggregateKeepAlive,
-        EvAggregateKeepAlive>
-    {};
-
-    struct TEvAggregateKeepAliveAck : public TEventPB<
-        TEvAggregateKeepAliveAck,
-        NKikimrStat::TEvAggregateKeepAliveAck,
-        EvAggregateKeepAliveAck>
-    {};
-
-    struct TEvAggregateStatistics : public TEventPB<
-        TEvAggregateStatistics,
-        NKikimrStat::TEvAggregateStatistics,
-        EvAggregateStatistics>
-    {};
-
-    struct TEvAggregateStatisticsResponse : public TEventPB<
-        TEvAggregateStatisticsResponse,
-        NKikimrStat::TEvAggregateStatisticsResponse,
-        EvAggregateStatisticsResponse>
-    {};
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
         TString Database;
@@ -342,30 +318,6 @@ struct TEvStatistics {
         TEvAnalyzeCancel,
         NKikimrStat::TEvAnalyzeCancel,
         EvAnalyzeCancel>
-    {};
-
-    struct TEvAnalyzeShard : public TEventPB<
-        TEvAnalyzeShard,
-        NKikimrStat::TEvAnalyzeShard,
-        EvAnalyzeShard>
-    {};
-
-    struct TEvAnalyzeShardResponse : public TEventPB<
-        TEvAnalyzeShardResponse,
-        NKikimrStat::TEvAnalyzeShardResponse,
-        EvAnalyzeShardResponse>
-    {};
-
-    struct TEvStatisticsRequest : public TEventPB<
-        TEvStatisticsRequest,
-        NKikimrStat::TEvStatisticsRequest,
-        EvStatisticsRequest>
-    {};
-
-    struct TEvStatisticsResponse : public TEventPB<
-        TEvStatisticsResponse,
-        NKikimrStat::TEvStatisticsResponse,
-        EvStatisticsResponse>
     {};
 
     struct TEvAnalyzeActorResult : public TEventLocal<

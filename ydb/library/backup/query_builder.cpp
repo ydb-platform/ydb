@@ -8,11 +8,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/string/builder.h>
+#include <util/stream/mem.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
-namespace NYdb::NBackup {
+#include <limits>
+#include <type_traits>
 
-static constexpr i64 METERING_ROW_PRECISION = 1024;
+namespace NYdb::NBackup {
 
 ////////////////////////////////////////////////////////////////////////////////
 // TQueryBuilder
@@ -41,6 +43,18 @@ TString TQueryBuilder::BuildQuery(const TString &path) {
 
 template<typename T>
 T TryParse(const TStringBuf& buf) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (buf == "nan" || buf == "-nan") {
+            return std::numeric_limits<T>::quiet_NaN();
+        }
+        if (buf == "inf") {
+            return std::numeric_limits<T>::infinity();
+        }
+        if (buf == "-inf") {
+            return -std::numeric_limits<T>::infinity();
+        }
+    }
+
     T tmp;
     TMemoryInput stream(buf);
     stream >> tmp;
@@ -262,7 +276,12 @@ void TQueryBuilder::AddLine(TStringBuf line) {
         Y_ENSURE(tok, "Empty token on line");
         TTypeParser type(col.Type);
         Value.AddMember(col.Name);
-        AddMemberFromString(type, TString{col.Name}, tok);
+        try {
+            AddMemberFromString(type, TString{col.Name}, tok);
+        } catch (const std::exception& e) {
+            throw yexception() << "Failed to parse value " << TString{tok}.Quote()
+                << " for column " << TString{col.Name}.Quote() << ": " << e.what();
+        }
     }
     Value.EndStruct();
 }
@@ -283,71 +302,6 @@ TParams TQueryBuilder::EndAndGetResultingParams() {
 
 TString TQueryBuilder::GetQueryString() const {
     return Query;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// TQueryFromFileIterator
-////////////////////////////////////////////////////////////////////////////////
-
-void TQueryFromFileIterator::TryReadNextLines() {
-    if (!LinesBunch.empty() || BytesRemaining == 0) {
-        return;
-    }
-
-    const auto bytesToRead = Min<i64>(BufferMaxSize, BytesRemaining);
-    Y_ENSURE(bytesToRead > 0, "There is no more bytes to read!" <<
-             " BufferMaxSize# " << BufferMaxSize <<
-             " BytesRemaining# " << BytesRemaining <<
-             " CurrentOffset# " << CurrentOffset <<
-             " this->Empty()# " << this->Empty());
-    IoBuff.resize(bytesToRead);
-    i64 bytesRead = DataFile.Pread(IoBuff.Detach(), bytesToRead, CurrentOffset);
-    IoBuff.resize(bytesRead);
-    size_t newSize = IoBuff.rfind("\n");
-    Y_ENSURE(newSize != TString::npos, "Can't find new line symbol in buffer read from file,"
-             " bytesRead# " << bytesRead);
-    // +1 for newline symbol
-    newSize += 1;
-    IoBuff.resize(newSize);
-    BytesRemaining -= newSize;
-    CurrentOffset += newSize;
-    LinesBunch = IoBuff;
-}
-
-template<bool GetValue>
-std::conditional_t<GetValue, TValue, TParams> TQueryFromFileIterator::ReadNext() {
-    TryReadNextLines();
-
-    TStringBuf line = LinesBunch.NextTok('\n');
-    Query.Begin();
-    i64 querySizeRows = 0;
-    i64 querySizeBytes = 0;
-    while (line || LinesBunch) {
-        if (line.empty()) {
-            continue;
-        }
-        Query.AddLine(line);
-        ++querySizeRows;
-        querySizeBytes += AlignUp<i64>(line.size(), METERING_ROW_PRECISION);
-        if (MaxRowsPerQuery > 0 && querySizeRows >= MaxRowsPerQuery
-                || MaxBytesPerQuery > 0 && querySizeBytes >= MaxBytesPerQuery) {
-            break;
-        }
-        line = LinesBunch.NextTok('\n');
-    }
-    Y_ENSURE(querySizeRows > 0, "No new lines is read from file. Maybe buffer size is less then size of single row");
-    if constexpr (GetValue) {
-        return Query.EndAndGetResultingValue();
-    } else {
-        return Query.EndAndGetResultingParams();
-    }
-}
-
-template std::conditional_t<true, TValue, TParams> TQueryFromFileIterator::ReadNext<true>();
-template std::conditional_t<false, TValue, TParams> TQueryFromFileIterator::ReadNext<false>();
-
-TString TQueryFromFileIterator::GetQueryString() const {
-    return Query.GetQueryString();
 }
 
 } // NYdb::NBackup

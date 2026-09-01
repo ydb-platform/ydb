@@ -112,6 +112,7 @@ message TPersQueuePartitionRequest {
         optional bool IgnoreQuotaDeadline = 16 [ default = false ];
 
         optional NKikimrPQ.THeartbeat Heartbeat = 17; // mutually exclusive with Data & related fields
+        optional NKikimrPQ.TSchemaChangeInfo SchemaChange = 26; // mutually exclusive with Data & Heartbeat
 
         optional bool EnableKafkaDeduplication = 18 [ default = false ];
         optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
@@ -510,6 +511,8 @@ message TPersQueuePartitionResponse {
         optional uint64 CreateTimestampMS = 6; //create Timestamp of record on Offset (next to be readed record); is not set if no such record exists (no lag)
         optional uint64 SizeLag = 7;
         optional uint64 WriteTimestampEstimateMS = 8;
+        // Mirror of consumer AnyCommits: true if Offset > partition StartOffset.
+        // Proxies use it for first-commit distributed commits when the partition has parents (split).
         optional bool ClientHasAnyCommits = 9;
         optional string CommittedMetadata = 10;
     }

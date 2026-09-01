@@ -12,11 +12,6 @@ class TAlterTopicActor: public TGrpcProxyActor<TAlterTopicActor, NGRpcService::T
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>;
 
 public:
-    TAlterTopicActor(NGRpcService::TEvAlterTopicRequest* request)
-        : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
-    {
-    }
-
     TAlterTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
     {

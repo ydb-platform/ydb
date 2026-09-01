@@ -180,6 +180,13 @@ public:
             return result;
         }
 
+        if (settings.HasTablesMetricsLevel()
+            && !CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), /* isRootDomain */ false, errStr)
+        ) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -231,6 +238,10 @@ public:
 
         if (settings.HasAuditSettings()) {
             alter->SetAuditSettings(settings.GetAuditSettings());
+        }
+
+        if (settings.HasTablesMetricsLevel()) {
+            alter->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
         }
 
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));

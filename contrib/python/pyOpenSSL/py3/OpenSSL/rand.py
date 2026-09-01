@@ -2,6 +2,8 @@
 PRNG management routines, thin wrappers.
 """
 
+from __future__ import annotations
+
 import warnings
 
 from OpenSSL._util import lib as _lib

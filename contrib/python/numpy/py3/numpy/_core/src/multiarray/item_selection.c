@@ -13,9 +13,9 @@
 
 #include "npy_config.h"
 
-#include "npy_pycompat.h"
 
-#include "multiarraymodule.h"
+
+#include "npy_static_data.h"
 #include "common.h"
 #include "dtype_transfer.h"
 #include "dtypemeta.h"
@@ -243,9 +243,12 @@ PyArray_TakeFrom(PyArrayObject *self0, PyObject *indices0, int axis,
     if (self == NULL) {
         return NULL;
     }
-    indices = (PyArrayObject *)PyArray_ContiguousFromAny(indices0,
-                                                         NPY_INTP,
-                                                         0, 0);
+
+    indices = (PyArrayObject *)PyArray_FromAny(indices0,
+                PyArray_DescrFromType(NPY_INTP),
+                0, 0,
+                NPY_ARRAY_SAME_KIND_CASTING | NPY_ARRAY_DEFAULT,
+                NULL);
     if (indices == NULL) {
         goto fail;
     }
@@ -782,21 +785,21 @@ static NPY_GCC_OPT_3 inline int
 npy_fastrepeat_impl(
     npy_intp n_outer, npy_intp n, npy_intp nel, npy_intp chunk,
     npy_bool broadcast, npy_intp* counts, char* new_data, char* old_data,
-    npy_intp elsize, NPY_cast_info cast_info, int needs_refcounting)
+    npy_intp elsize, NPY_cast_info *cast_info, int needs_custom_copy)
 {
     npy_intp i, j, k;
     for (i = 0; i < n_outer; i++) {
         for (j = 0; j < n; j++) {
             npy_intp tmp = broadcast ? counts[0] : counts[j];
             for (k = 0; k < tmp; k++) {
-                if (!needs_refcounting) {
+                if (!needs_custom_copy) {
                     memcpy(new_data, old_data, chunk);
                 }
                 else {
                     char *data[2] = {old_data, new_data};
                     npy_intp strides[2] = {elsize, elsize};
-                    if (cast_info.func(&cast_info.context, data, &nel,
-                                       strides, cast_info.auxdata) < 0) {
+                    if (cast_info->func(&cast_info->context, data, &nel,
+                                       strides, cast_info->auxdata) < 0) {
                         return -1;
                     }
                 }
@@ -808,48 +811,53 @@ npy_fastrepeat_impl(
     return 0;
 }
 
+
+/*
+ * Helper to allow the compiler to specialize for all direct element copy
+ * cases (e.g. all numerical dtypes).
+ */
 static NPY_GCC_OPT_3 int
 npy_fastrepeat(
     npy_intp n_outer, npy_intp n, npy_intp nel, npy_intp chunk,
     npy_bool broadcast, npy_intp* counts, char* new_data, char* old_data,
-    npy_intp elsize, NPY_cast_info cast_info, int needs_refcounting)
+    npy_intp elsize, NPY_cast_info *cast_info, int needs_custom_copy)
 {
-    if (!needs_refcounting) {
+    if (!needs_custom_copy) {
         if (chunk == 1) {
             return npy_fastrepeat_impl(
                 n_outer, n, nel, chunk, broadcast, counts, new_data, old_data,
-                elsize, cast_info, needs_refcounting);
+                elsize, cast_info, needs_custom_copy);
         }
         if (chunk == 2) {
             return npy_fastrepeat_impl(
                 n_outer, n, nel, chunk, broadcast, counts, new_data, old_data,
-                elsize, cast_info, needs_refcounting);
+                elsize, cast_info, needs_custom_copy);
         }
         if (chunk == 4) {
             return npy_fastrepeat_impl(
                 n_outer, n, nel, chunk, broadcast, counts, new_data, old_data,
-                elsize, cast_info, needs_refcounting);
+                elsize, cast_info, needs_custom_copy);
         }
         if (chunk == 8) {
             return npy_fastrepeat_impl(
                 n_outer, n, nel, chunk, broadcast, counts, new_data, old_data,
-                elsize, cast_info, needs_refcounting);
+                elsize, cast_info, needs_custom_copy);
         }
         if (chunk == 16) {
             return npy_fastrepeat_impl(
                 n_outer, n, nel, chunk, broadcast, counts, new_data, old_data,
-                elsize, cast_info, needs_refcounting);
+                elsize, cast_info, needs_custom_copy);
         }
         if (chunk == 32) {
             return npy_fastrepeat_impl(
                 n_outer, n, nel, chunk, broadcast, counts, new_data, old_data,
-                elsize, cast_info, needs_refcounting);
+                elsize, cast_info, needs_custom_copy);
         }
     }
 
     return npy_fastrepeat_impl(
         n_outer, n, nel, chunk, broadcast, counts, new_data, old_data, elsize,
-        cast_info, needs_refcounting);
+        cast_info, needs_custom_copy);
 }
 
 
@@ -869,7 +877,6 @@ PyArray_Repeat(PyArrayObject *aop, PyObject *op, int axis)
     char *new_data, *old_data;
     NPY_cast_info cast_info;
     NPY_ARRAYMETHOD_FLAGS flags;
-    int needs_refcounting;
 
     repeats = (PyArrayObject *)PyArray_ContiguousFromAny(op, NPY_INTP, 0, 1);
     if (repeats == NULL) {
@@ -894,7 +901,6 @@ PyArray_Repeat(PyArrayObject *aop, PyObject *op, int axis)
     aop = (PyArrayObject *)ap;
     n = PyArray_DIM(aop, axis);
     NPY_cast_info_init(&cast_info);
-    needs_refcounting = PyDataType_REFCHK(PyArray_DESCR(aop));
 
     if (!broadcast && PyArray_SIZE(repeats) != n) {
         PyErr_Format(PyExc_ValueError,
@@ -916,16 +922,23 @@ PyArray_Repeat(PyArrayObject *aop, PyObject *op, int axis)
         }
     }
 
+    /* Fill in dimensions of new array */
+    npy_intp dims[NPY_MAXDIMS] = {0};
+
+    for (int i = 0; i < PyArray_NDIM(aop); i++) {
+        dims[i] = PyArray_DIMS(aop)[i];
+    }
+
+    dims[axis] = total;
+
     /* Construct new array */
-    PyArray_DIMS(aop)[axis] = total;
     Py_INCREF(PyArray_DESCR(aop));
     ret = (PyArrayObject *)PyArray_NewFromDescr(Py_TYPE(aop),
                                                 PyArray_DESCR(aop),
                                                 PyArray_NDIM(aop),
-                                                PyArray_DIMS(aop),
+                                                dims,
                                                 NULL, NULL, 0,
                                                 (PyObject *)aop);
-    PyArray_DIMS(aop)[axis] = n;
     if (ret == NULL) {
         goto fail;
     }
@@ -944,16 +957,18 @@ PyArray_Repeat(PyArrayObject *aop, PyObject *op, int axis)
         n_outer *= PyArray_DIMS(aop)[i];
     }
 
-    if (needs_refcounting) {
+    int needs_custom_copy = 0;
+    if (PyDataType_REFCHK(PyArray_DESCR(ret))) {
+        needs_custom_copy = 1;
         if (PyArray_GetDTypeTransferFunction(
-                1, elsize, elsize, PyArray_DESCR(aop), PyArray_DESCR(aop), 0,
+                1, elsize, elsize, PyArray_DESCR(aop), PyArray_DESCR(ret), 0,
                 &cast_info, &flags) < 0) {
             goto fail;
         }
     }
 
     if (npy_fastrepeat(n_outer, n, nel, chunk, broadcast, counts, new_data,
-                       old_data, elsize, cast_info, needs_refcounting) < 0) {
+                       old_data, elsize, &cast_info, needs_custom_copy) < 0) {
         goto fail;
     }
 
@@ -2006,8 +2021,7 @@ PyArray_LexSort(PyObject *sort_keys, int axis)
                 }
                 rcode = argsort(its[j]->dataptr,
                         (npy_intp *)rit->dataptr, N, mps[j]);
-                if (rcode < 0 || (PyDataType_REFCHK(PyArray_DESCR(mps[j]))
-                            && PyErr_Occurred())) {
+                if (rcode < 0 || (object && PyErr_Occurred())) {
                     goto fail;
                 }
                 PyArray_ITER_NEXT(its[j]);
@@ -2097,7 +2111,6 @@ PyArray_SearchSorted(PyArrayObject *op1, PyObject *op2,
     if (dtype == NULL) {
         return NULL;
     }
-    /* refs to dtype we own = 1 */
 
     /* Look for binary search function */
     if (perm) {
@@ -2108,26 +2121,23 @@ PyArray_SearchSorted(PyArrayObject *op1, PyObject *op2,
     }
     if (binsearch == NULL && argbinsearch == NULL) {
         PyErr_SetString(PyExc_TypeError, "compare not supported for type");
-        /* refs to dtype we own = 1 */
         Py_DECREF(dtype);
-        /* refs to dtype we own = 0 */
         return NULL;
     }
 
-    /* need ap2 as contiguous array and of right type */
-    /* refs to dtype we own = 1 */
-    Py_INCREF(dtype);
-    /* refs to dtype we own = 2 */
+    /* need ap2 as contiguous array and of right dtype (note: steals dtype reference) */
     ap2 = (PyArrayObject *)PyArray_CheckFromAny(op2, dtype,
                                 0, 0,
                                 NPY_ARRAY_CARRAY_RO | NPY_ARRAY_NOTSWAPPED,
                                 NULL);
-    /* refs to dtype we own = 1, array creation steals one even on failure */
     if (ap2 == NULL) {
-        Py_DECREF(dtype);
-        /* refs to dtype we own = 0 */
         return NULL;
     }
+    /*
+     * The dtype reference we had was used for creating ap2, which may have
+     * replaced it with another. So here we copy the dtype of ap2 and use it for `ap1`.
+     */
+     dtype = (PyArray_Descr *)Py_NewRef(PyArray_DESCR(ap2));
 
     /*
      * If the needle (ap2) is larger than the haystack (op1) we copy the
@@ -2136,9 +2146,9 @@ PyArray_SearchSorted(PyArrayObject *op1, PyObject *op2,
     if (PyArray_SIZE(ap2) > PyArray_SIZE(op1)) {
         ap1_flags |= NPY_ARRAY_CARRAY_RO;
     }
+    /* dtype is stolen, after this we have no reference */
     ap1 = (PyArrayObject *)PyArray_CheckFromAny((PyObject *)op1, dtype,
                                 1, 1, ap1_flags, NULL);
-    /* refs to dtype we own = 0, array creation steals one even on failure */
     if (ap1 == NULL) {
         goto fail;
     }
@@ -2259,10 +2269,10 @@ PyArray_Diagonal(PyArrayObject *self, int offset, int axis1, int axis2)
     }
 
     /* Handle negative axes with standard Python indexing rules */
-    if (check_and_adjust_axis_msg(&axis1, ndim, npy_ma_str_axis1) < 0) {
+    if (check_and_adjust_axis_msg(&axis1, ndim, npy_interned_str.axis1) < 0) {
         return NULL;
     }
-    if (check_and_adjust_axis_msg(&axis2, ndim, npy_ma_str_axis2) < 0) {
+    if (check_and_adjust_axis_msg(&axis2, ndim, npy_interned_str.axis2) < 0) {
         return NULL;
     }
     if (axis1 == axis2) {
@@ -2796,6 +2806,23 @@ NPY_NO_EXPORT PyObject *
 PyArray_Nonzero(PyArrayObject *self)
 {
     int i, ndim = PyArray_NDIM(self);
+    if (ndim == 0) {
+        char const* msg;
+        if (PyArray_ISBOOL(self)) {
+            msg =
+                "Calling nonzero on 0d arrays is not allowed. "
+                "Use np.atleast_1d(scalar).nonzero() instead. "
+                "If the context of this error is of the form "
+                "`arr[nonzero(cond)]`, just use `arr[cond]`.";
+        } else {
+            msg =
+                "Calling nonzero on 0d arrays is not allowed. "
+                "Use np.atleast_1d(scalar).nonzero() instead.";
+        }
+        PyErr_SetString(PyExc_ValueError, msg);
+        return NULL;
+    }
+
     PyArrayObject *ret = NULL;
     PyObject *ret_tuple;
     npy_intp ret_dims[2];
@@ -2816,42 +2843,6 @@ PyArray_Nonzero(PyArrayObject *self)
     dtype = PyArray_DESCR(self);
     nonzero = PyDataType_GetArrFuncs(dtype)->nonzero;
     needs_api = PyDataType_FLAGCHK(dtype, NPY_NEEDS_PYAPI);
-
-    /* Special case - nonzero(zero_d) is nonzero(atleast_1d(zero_d)) */
-    if (ndim == 0) {
-        char const* msg;
-        if (PyArray_ISBOOL(self)) {
-            msg =
-                "Calling nonzero on 0d arrays is deprecated, as it behaves "
-                "surprisingly. Use `atleast_1d(cond).nonzero()` if the old "
-                "behavior was intended. If the context of this warning is of "
-                "the form `arr[nonzero(cond)]`, just use `arr[cond]`.";
-        }
-        else {
-            msg =
-                "Calling nonzero on 0d arrays is deprecated, as it behaves "
-                "surprisingly. Use `atleast_1d(arr).nonzero()` if the old "
-                "behavior was intended.";
-        }
-        if (DEPRECATE(msg) < 0) {
-            return NULL;
-        }
-
-        static npy_intp const zero_dim_shape[1] = {1};
-        static npy_intp const zero_dim_strides[1] = {0};
-
-        Py_INCREF(PyArray_DESCR(self));  /* array creation steals reference */
-        PyArrayObject *self_1d = (PyArrayObject *)PyArray_NewFromDescrAndBase(
-            Py_TYPE(self), PyArray_DESCR(self),
-            1, zero_dim_shape, zero_dim_strides, PyArray_BYTES(self),
-            PyArray_FLAGS(self), (PyObject *)self, (PyObject *)self);
-        if (self_1d == NULL) {
-            return NULL;
-        }
-        ret_tuple = PyArray_Nonzero(self_1d);
-        Py_DECREF(self_1d);
-        return ret_tuple;
-    }
 
     /*
      * First count the number of non-zeros in 'self'.
@@ -2898,10 +2889,11 @@ PyArray_Nonzero(PyArrayObject *self)
              * the fast bool count is followed by this sparse path is faster
              * than combining the two loops, even for larger arrays
              */
+            npy_intp * multi_index_end = multi_index + nonzero_count;
             if (((double)nonzero_count / count) <= 0.1) {
                 npy_intp subsize;
                 npy_intp j = 0;
-                while (1) {
+                while (multi_index < multi_index_end) {
                     npy_memchr(data + j * stride, 0, stride, count - j,
                                &subsize, 1);
                     j += subsize;
@@ -2916,11 +2908,10 @@ PyArray_Nonzero(PyArrayObject *self)
              * stalls that are very expensive on most modern processors.
              */
             else {
-                npy_intp *multi_index_end = multi_index + nonzero_count;
                 npy_intp j = 0;
 
                 /* Manually unroll for GCC and maybe other compilers */
-                while (multi_index + 4 < multi_index_end) {
+                while (multi_index + 4 < multi_index_end && (j < count - 4) ) {
                     *multi_index = j;
                     multi_index += data[0] != 0;
                     *multi_index = j + 1;
@@ -2933,7 +2924,7 @@ PyArray_Nonzero(PyArrayObject *self)
                     j += 4;
                 }
 
-                while (multi_index < multi_index_end) {
+                while (multi_index < multi_index_end && (j < count) ) {
                     *multi_index = j;
                     multi_index += *data != 0;
                     data += stride;

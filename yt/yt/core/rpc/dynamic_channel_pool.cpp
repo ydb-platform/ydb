@@ -76,11 +76,10 @@ public:
             .EndMap()))
         , ServiceName_(std::move(serviceName))
         , PeerDiscovery_(std::move(peerDiscovery))
-        , Logger(RpcClientLogger().WithTag(
-            "ChannelId: %v, Endpoint: %v, Service: %v",
-            TGuid::Create(),
-            EndpointDescription_,
-            ServiceName_))
+        , Logger(RpcClientLogger()
+            .WithTag("ChannelId", TGuid::Create())
+            .WithTag("Endpoint", EndpointDescription_)
+            .WithTag("Service", ServiceName_))
         , ViablePeerRegistry_(CreateViablePeerRegistry(
             Config_,
             BIND(&TImpl::CreateChannel, Unretained(this)),
@@ -120,7 +119,7 @@ public:
         auto future = IsRequestSticky(request)
                       ? session->GetFinished()
                       : ViablePeerRegistry_->GetPeersAvailable();
-        YT_LOG_DEBUG_IF(!future.IsSet(), "Channel requested, waiting on peers to become available");
+        YT_TLOG_DEBUG_IF(!future.IsSet(), "Channel requested, waiting on peers to become available");
         return future.Apply(BIND([this, weakThis = MakeWeak(this), request, hedgingOptions] {
             if (auto this_ = weakThis.Lock()) {
                 auto channel = PickViableChannel(request, hedgingOptions);
@@ -260,7 +259,7 @@ private:
 
         void Run()
         {
-            YT_LOG_DEBUG("Starting peer discovery");
+            YT_TLOG_DEBUG("Starting peer discovery");
             TDispatcher::Get()->GetLightInvoker()->Invoke(BIND_NO_PROPAGATE(&TDiscoverySession::DoRun, MakeStrong(this)));
         }
 
@@ -325,7 +324,8 @@ private:
                 return;
             }
 
-            YT_LOG_DEBUG("Querying peer (Address: %v)", address);
+            YT_TLOG_DEBUG("Querying peer")
+                .With("Address", address);
 
             auto channel = owner->ChannelFactory_->CreateChannel(address);
             auto request = owner->PeerDiscovery_->Discover(
@@ -355,22 +355,22 @@ private:
 
             // COMPAT(babenko): drop this once all RPC proxies support unauthenticated Discover requests
             bool authError = rspOrError.GetCode() == NRpc::EErrorCode::AuthenticationError;
-            YT_LOG_DEBUG_IF(authError, "Peer has reported authentication error on discovery (Address: %v)",
-                address);
+            YT_TLOG_DEBUG_IF(authError, "Peer has reported authentication error on discovery")
+                .With("Address", address);
             if (rspOrError.IsOK() || authError) {
                 auto suggestedAddresses = authError ? std::vector<std::string>() : rspOrError.Value().Addresses;
                 bool up = authError ? true : rspOrError.Value().IsUp;
 
                 if (!suggestedAddresses.empty()) {
-                    YT_LOG_DEBUG("Peers suggested (SuggestorAddress: %v, SuggestedAddresses: %v)",
-                        address,
-                        suggestedAddresses);
+                    YT_TLOG_DEBUG("Peers suggested")
+                        .With("SuggestorAddress", address)
+                        .With("SuggestedAddresses", suggestedAddresses);
                     owner->AddPeers(suggestedAddresses);
                 }
 
-                YT_LOG_DEBUG("Peer has reported its state (Address: %v, Up: %v)",
-                    address,
-                    up);
+                YT_TLOG_DEBUG("Peer has reported its state")
+                    .With("Address", address)
+                    .With("Up", up);
 
                 if (up) {
                     OnPeerDiscovered(address);
@@ -380,12 +380,14 @@ private:
                     InvalidatePeer(address);
                 }
             } else if (rspOrError.GetCode() == NRpc::EErrorCode::GlobalDiscoveryError) {
-                YT_LOG_DEBUG(rspOrError, "Peer discovery session failed (Address: %v)",
-                    address);
+                YT_TLOG_DEBUG("Peer discovery session failed")
+                    .With("Address", address)
+                    .With(rspOrError);
                 OnFinished(rspOrError);
             } else {
-                YT_LOG_DEBUG(rspOrError, "Peer discovery request failed (Address: %v)",
-                    address);
+                YT_TLOG_DEBUG("Peer discovery request failed")
+                    .With("Address", address)
+                    .With(rspOrError);
                 auto error = owner->MakePeerDiscoveryFailedError(address, rspOrError);
                 BanPeer(address, error, owner->Config_->HardBackoffTime);
                 InvalidatePeer(address);
@@ -479,11 +481,12 @@ private:
                 FinishedPromise_.Set();
             } else {
                 auto error = owner->MakeNoAlivePeersError()
-                    << GetPeerDiscoveryErrors();
+                    .With(GetPeerDiscoveryErrors());
                 if (!globalDiscoveryError.IsOK()) {
-                    error <<= globalDiscoveryError;
+                    error.Add(globalDiscoveryError);
                 }
-                YT_LOG_DEBUG(error, "Error performing peer discovery");
+                YT_TLOG_DEBUG("Error performing peer discovery")
+                    .With(error);
                 owner->ViablePeerRegistry_->SetError(error);
                 FinishedPromise_.Set(error);
             }
@@ -496,19 +499,19 @@ private:
     public:
         TPeerPoller(TImpl* owner, const std::string& peerAddress)
             : Owner_(owner)
-            , Logger(owner->Logger().WithTag("Address: %v", peerAddress))
+            , Logger(owner->Logger().WithTag("Address", peerAddress))
             , PeerAddress_(peerAddress)
         { }
 
         void Run()
         {
-            YT_LOG_DEBUG("Starting peer poller");
+            YT_TLOG_DEBUG("Starting peer poller");
             TDispatcher::Get()->GetLightInvoker()->Invoke(BIND_NO_PROPAGATE(&TPeerPoller::DoRun, MakeStrong(this)));
         }
 
         void Stop()
         {
-            YT_LOG_DEBUG("Stopping peer poller");
+            YT_TLOG_DEBUG("Stopping peer poller");
             Stopped_ = true;
         }
 
@@ -531,8 +534,8 @@ private:
                 }
 
                 auto delay = RandomDuration(owner->Config_->PeerPollingPeriodSplay);
-                YT_LOG_DEBUG("Sleeping before peer polling start (Delay: %v)",
-                    delay);
+                YT_TLOG_DEBUG("Sleeping before peer polling start")
+                    .With("Delay", delay);
                 TDelayedExecutor::WaitForDuration(delay);
             }
 
@@ -553,8 +556,8 @@ private:
             auto now = TInstant::Now();
             if (LastRequestStart_ + lastPeerPollingPeriod > now) {
                 auto delay = LastRequestStart_ + lastPeerPollingPeriod - now;
-                YT_LOG_TRACE("Sleeping before peer polling (Delay: %v)",
-                    delay);
+                YT_TLOG_TRACE("Sleeping before peer polling")
+                    .With("Delay", delay);
                 TDelayedExecutor::WaitForDuration(delay);
             }
 
@@ -569,9 +572,9 @@ private:
                 requestTimeout,
                 /*replyDelay*/ peerPollingPeriod,
                 owner->ServiceName_);
-            YT_LOG_TRACE("Polling peer (PollingPeriod: %v, RequestTimeout: %v)",
-                peerPollingPeriod,
-                requestTimeout);
+            YT_TLOG_TRACE("Polling peer")
+                .With("PollingPeriod", peerPollingPeriod)
+                .With("RequestTimeout", requestTimeout);
 
             owner.Reset();
 
@@ -584,22 +587,24 @@ private:
                 if (rspOrError.IsOK()) {
                     auto isUp = rspOrError.Value().IsUp;
                     if (isUp) {
-                        YT_LOG_DEBUG("Peer is up");
+                        YT_TLOG_DEBUG("Peer is up");
                         owner->UnbanPeer(PeerAddress_);
                         auto discoverySessionOrError = owner->RunDiscoverySession();
                         if (discoverySessionOrError.IsOK()) {
                             discoverySessionOrError.Value()->OnPeerDiscovered(PeerAddress_);
                         } else {
-                            YT_LOG_DEBUG(discoverySessionOrError, "Failed to get discovery session");
+                            YT_TLOG_DEBUG("Failed to get discovery session")
+                                .With(discoverySessionOrError);
                         }
                     } else {
-                        YT_LOG_DEBUG("Peer is down");
+                        YT_TLOG_DEBUG("Peer is down");
                     }
                 } else {
                     if (rspOrError.GetCode() == NRpc::EErrorCode::GlobalDiscoveryError) {
                         owner->SetLastGlobalDiscoveryError(rspOrError);
                     }
-                    YT_LOG_DEBUG(rspOrError, "Failed to poll peer");
+                    YT_TLOG_DEBUG("Failed to poll peer")
+                        .With(rspOrError);
                 }
 
                 DoPollPeer(peerPollingPeriod);
@@ -626,8 +631,8 @@ private:
                 return TError(
                     NRpc::EErrorCode::TransportError,
                     "Channel terminated")
-                    << *EndpointAttributes_
-                    << TerminationError_;
+                    .With(*EndpointAttributes_)
+                    .With(TerminationError_);
             }
 
             if (CurrentDiscoverySession_) {
@@ -661,7 +666,7 @@ private:
         auto guard = ReaderGuard(SpinLock_);
         if (PeerDiscoveryError_.IsOK()) {
             return TError(NRpc::EErrorCode::Unavailable, "No alive peers found")
-                << *EndpointAttributes_;
+                .With(*EndpointAttributes_);
         } else {
             return PeerDiscoveryError_;
         }
@@ -670,14 +675,14 @@ private:
     TError MakePeerDownError(const std::string& address)
     {
         return TError("Peer %v is down", address)
-            << *EndpointAttributes_;
+            .With(*EndpointAttributes_);
     }
 
     TError MakePeerDiscoveryFailedError(const std::string& address, const TError& error)
     {
         return TError("Discovery request failed for peer %v", address)
-            << *EndpointAttributes_
-            << error;
+            .With(*EndpointAttributes_)
+            .With(error);
     }
 
     void OnPeersSet(const TError& /*error*/)
@@ -730,15 +735,10 @@ private:
 
         PeerDiscoveryError_ = {};
 
-        std::vector<std::string> newAddresses;
         for (const auto& address : addresses) {
             if (!BannedAddresses_.contains(address) && !ActiveAddresses_.contains(address)) {
-                newAddresses.push_back(address);
+                AddPeer(address);
             }
-        }
-
-        for (const auto& address : newAddresses) {
-            AddPeer(address);
         }
     }
 
@@ -759,7 +759,8 @@ private:
             YT_VERIFY(AddressToPoller_.emplace(address, std::move(poller)).second);
         }
 
-        YT_LOG_DEBUG("Peer added (Address: %v)", address);
+        YT_TLOG_DEBUG("Peer added")
+            .With("Address", address);
     }
 
     void RemovePeer(const std::string& address)
@@ -779,7 +780,8 @@ private:
             YT_VERIFY(AddressToPoller_.erase(address));
         }
 
-        YT_LOG_DEBUG("Peer removed (Address: %v)", address);
+        YT_TLOG_DEBUG("Peer removed")
+            .With("Address", address);
     }
 
     TPickPeerResult PickPeer(
@@ -823,9 +825,9 @@ private:
             BannedAddresses_.insert(address);
         }
 
-        YT_LOG_DEBUG("Peer banned (Address: %v, BackoffTime: %v)",
-            address,
-            backoffTime);
+        YT_TLOG_DEBUG("Peer banned")
+            .With("Address", address)
+            .With("BackoffTime", backoffTime);
 
         TDelayedExecutor::Submit(
             BIND(&TImpl::OnPeerBanTimeout, MakeWeak(this), address),
@@ -840,7 +842,8 @@ private:
         }
         ActiveAddresses_.insert(address);
 
-        YT_LOG_DEBUG("Peer unbanned (Address: %v)", address);
+        YT_TLOG_DEBUG("Peer unbanned")
+            .With("Address", address);
     }
 
     void OnPeerBanTimeout(const std::string& address, bool aborted)
@@ -857,9 +860,9 @@ private:
     {
         bool added = ViablePeerRegistry_->RegisterPeer(address);
 
-        YT_LOG_DEBUG("Peer is viable (Address: %v, Added: %v)",
-            address,
-            added);
+        YT_TLOG_DEBUG("Peer is viable")
+            .With("Address", address)
+            .With("Added", added);
     }
 
     void InvalidatePeer(const std::string& address)
@@ -873,7 +876,7 @@ private:
 
         if (!LastGlobalDiscoveryError_.IsOK()) {
             return LastGlobalDiscoveryError_
-                << std::move(error);
+                .With(std::move(error));
         }
         return error;
     }
@@ -884,18 +887,18 @@ private:
         const TError& error)
     {
         if (IsChannelFailureErrorHandled(error)) {
-            YT_LOG_DEBUG(error, "Encountered already handled channel failure error (Address: %v)",
-                address);
+            YT_TLOG_DEBUG("Encountered already handled channel failure error")
+                .With("Address", address)
+                .With(error);
             return;
         }
 
         bool evicted = ViablePeerRegistry_->UnregisterChannel(address, channel);
 
-        YT_LOG_DEBUG(
-            error,
-            "Peer is no longer viable due to channel failure (Address: %v, Evicted: %v)",
-            address,
-            evicted);
+        YT_TLOG_DEBUG("Peer is no longer viable due to channel failure")
+            .With("Address", address)
+            .With("Evicted", evicted)
+            .With(error);
     }
 
     IChannelPtr CreateChannel(const std::string& address)

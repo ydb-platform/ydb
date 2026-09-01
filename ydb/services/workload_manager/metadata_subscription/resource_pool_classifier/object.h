@@ -5,6 +5,10 @@
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/manager/object.h>
 
+namespace NYql {
+class TFeaturesExtractor;
+}
+
 
 namespace NKikimr::NWorkloadManager {
 
@@ -13,12 +17,20 @@ class TResourcePoolClassifierConfig : public NMetadata::NModifications::TObject<
 
     YDB_ACCESSOR_DEF(TString, Database);
     YDB_ACCESSOR_DEF(TString, Name);
-    YDB_ACCESSOR_DEF(i64, Rank);
-    YDB_ACCESSOR_DEF(NJson::TJsonValue, ConfigJson);
 
-    std::optional<NResourcePool::TClassifierSettings> Settings;
+    NResourcePool::TClassifierSettings Settings;
 
 public:
+    // JSON keys for classifier settings serialization
+    static inline const TString JSON_KEY_RANK = "rank";
+    static inline const TString JSON_KEY_RESOURCE_POOL = "resource_pool";
+    static inline const TString JSON_KEY_MEMBER_NAME = "member_name";
+    static inline const TString JSON_KEY_HAS_APP_NAME = "has_app_name";
+    static inline const TString JSON_KEY_HAS_FULL_SCAN = "has_full_scan";
+    static inline const TString JSON_KEY_HAS_PATH = "has_path";
+    static inline const TString JSON_KEY_HAS_STREAM = "has_stream";
+    static inline const TString JSON_KEY_ACTION = "action";
+
     class TDecoder : public NMetadata::NInternal::TDecoderBase {
     private:
         YDB_READONLY(i32, DatabaseIdx, -1);
@@ -38,17 +50,44 @@ public:
     virtual NMetadata::NModifications::IColumnValuesMerger::TPtr BuildMerger(const TString& columnName) const override;
     NMetadata::NInternal::TTableRecord SerializeToRecord() const;
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawData);
-
-    void EnsureSettings();
-
-    const NResourcePool::TClassifierSettings& GetClassifierSettings() const {
-        Y_ABORT_UNLESS(Settings, "Settings not populated; caller must call EnsureSettings() first");
-        return *Settings;
+    i64 GetRank() const {
+        return Settings.Rank;
     }
+    void SetRank(i64 rank) {
+        Settings.Rank = rank;
+    }
+    const NResourcePool::TClassifierSettings& GetClassifierSettings() const {
+        return Settings;
+    }
+    void SetClassifierSettings(const NResourcePool::TClassifierSettings& settings) {
+        Settings = settings;
+    }
+
     NJson::TJsonValue GetDebugJson() const;
 
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TString GetTypeId();
+
+    // Serialize TClassifierSettings to JSON (excludes rank, which is stored separately)
+    static NJson::TJsonValue SerializeToJson(const NResourcePool::TClassifierSettings& settings);
+    // Deserialize TClassifierSettings from JSON, with optional rank override
+    static NResourcePool::TClassifierSettings DeserializeFromJson(const NJson::TJsonValue& json, i64 rank = -1);
+
+    // Result of parsing classifier settings from DDL features extractor
+    struct TParseResult {
+        NResourcePool::TClassifierSettings Settings;
+        NJson::TJsonValue ConfigPatch = NJson::JSON_MAP;
+        bool HasRank = false;
+        bool HasResourcePool = false;
+        bool HasConfigPatch = false;
+    };
+
+    // Parse TClassifierSettings from features extractor (DDL properties).
+    // Returns std::nullopt on success (settings filled in *result).
+    // Returns error string on failure.
+    static std::optional<TString> ParseFromFeaturesExtractor(
+        NYql::TFeaturesExtractor& featuresExtractor,
+        TParseResult* result);
 };
 
 }  // namespace NKikimr::NWorkloadManager

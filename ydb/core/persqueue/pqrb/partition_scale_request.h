@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <util/generic/string.h>
 
@@ -37,7 +38,8 @@ public:
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext &ctx);
+    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
 
 private:
     STFUNC(StateWork)
@@ -47,11 +49,14 @@ private:
             HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvents::TEvPoisonPill, Handle);
         }
     }
     std::pair<TString, TString> SplitPath(const TString& path);
     void SendProposeRequest(const NActors::TActorContext &ctx);
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
+    bool IsOurPipe(const TActorId& clientId) const;
+    void ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TActorContext& ctx);
 
 private:
     const TString Topic;
@@ -64,6 +69,7 @@ private:
     const std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary> SetBoundaries;
     NActors::TActorId ParentActorId;
     NActors::TActorId SchemePipeActorId;
+    bool ReplySent = false;
 };
 
 } // namespace NPQ

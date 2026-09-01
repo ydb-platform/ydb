@@ -445,6 +445,16 @@ namespace NFake {
             return GroupId;
         }
 
+        void DeleteDoNotKeepBlobs() {
+            for (auto it = Blobs.begin(); it != Blobs.end(); ) {
+                if (it->second.DoNotKeep) {
+                    it = Blobs.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
     private:
         // check if provided generation is blocked for specific tablet
         bool IsBlocked(TTabletId tabletId, TGeneration generation) const noexcept {

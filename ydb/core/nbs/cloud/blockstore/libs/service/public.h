@@ -14,6 +14,9 @@ using TCallContextPtr = TIntrusivePtr<TCallContext>;
 struct IStorage;
 using IStoragePtr = std::shared_ptr<IStorage>;
 
+struct IDurableStorage;
+using IDurableStoragePtr = std::shared_ptr<IDurableStorage>;
+
 struct IStorageProvider;
 using IStorageProviderPtr = std::shared_ptr<IStorageProvider>;
 

@@ -384,6 +384,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterReplicationCard, (NChaosClient::TReplicationCardId, const TAlterReplicationCardOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (const TChaosLeaseStartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeaseAttachOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, PingChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeasePingOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SetUserBanned, (const std::string&, bool, const TSetUserBannedOptions&));
     UNIMPLEMENTED_METHOD(TFuture<bool>, GetUserBanned, (const std::string&, const TGetUserBannedOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (const TListBannedUsersOptions&));
@@ -403,6 +404,8 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, TruncateJournal, (const NYPath::TYPath&, i64, const TTruncateJournalOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (const std::string&, const TGetFileFromCacheOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const NYPath::TYPath&, const std::string&, const TPutFileToCacheOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TFilePartitions>, PartitionFile, (const NYPath::TYPath&, const std::vector<TFileReadRange>&, const TPartitionFileOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (const TFilePartitionCookiePtr&, const TReadFilePartitionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AddMember, (const std::string&, const std::string&, const TAddMemberOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RemoveMember, (const std::string&, const std::string&, const TRemoveMemberOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const std::string&, const NYPath::TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
@@ -657,8 +660,9 @@ void TClient::CheckClustersHealth()
     for (int index = 0; index != std::ssize(checks); ++index) {
         const auto& check = checks[index];
         auto error = NConcurrency::WaitFor(check);
-        YT_LOG_DEBUG_UNLESS(error.IsOK(), error, "Cluster %Qv is marked as unhealthy",
-            UnderlyingClients_[index]->Client->GetConnection()->GetClusterName());
+        YT_TLOG_DEBUG_UNLESS(error.IsOK(), "Cluster is marked as unhealthy")
+            .With("Cluster", UnderlyingClients_[index]->Client->GetConnection()->GetClusterName())
+            .With(error);
         UnderlyingClients_[index]->HasErrors = !error.IsOK()
             && !error.FindMatching(NSecurityClient::EErrorCode::AuthorizationError); // Ignore authorization errors.
     }
@@ -825,9 +829,9 @@ void TClient::UpdateActiveClient()
         const auto& clientDescription = UnderlyingClients_[index];
         if (!clientDescription->HasErrors) {
             if (ActiveClientIndex_ != index) {
-                YT_LOG_DEBUG("Active client was changed (PreviousClientIndex: %v, NewClientIndex: %v)",
-                    ActiveClientIndex_.load(),
-                    index);
+                YT_TLOG_DEBUG("Active client was changed")
+                    .With("PreviousClientIndex", ActiveClientIndex_.load())
+                    .With("NewClientIndex", index);
                 auto guard = NThreading::WriterGuard(Lock_);
                 ActiveClientIndex_ = index;
                 ActiveClient_ = clientDescription->Client;
@@ -839,8 +843,8 @@ void TClient::UpdateActiveClient()
 
 TClient::TActiveClientInfo TClient::GetActiveClient()
 {
-    YT_LOG_TRACE("Request will be send to the active client (ClientIndex: %v)",
-        ActiveClientIndex_.load());
+    YT_TLOG_TRACE("Request will be send to the active client")
+        .With("ClientIndex", ActiveClientIndex_.load());
     auto guard = ReaderGuard(Lock_);
     return {ActiveClient_, ActiveClientIndex_.load()};
 }

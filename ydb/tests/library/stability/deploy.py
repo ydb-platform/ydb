@@ -24,6 +24,23 @@ _NEMESIS_ORCHESTRATOR_PORT = 31434
 _HEALTH_POLL_INTERVAL_S = 10
 _HEALTH_POLL_TIMEOUT_S = 300
 
+# Synthetic hosts injected by SystemTabletBackup workload; not real SSH targets.
+_FAKE_HOST_PREFIX = "system.tablet.backup.fake"
+
+
+def _is_ssh_host(host: str) -> bool:
+    """Return True if host is a real cluster node reachable over SSH."""
+    return bool(host) and host != "localhost" and not host.startswith(_FAKE_HOST_PREFIX)
+
+
+def _ssh_cluster_nodes(*, load_kafka_port: bool = False) -> list[YdbCluster.Node]:
+    """DB nodes suitable for SSH deploy/ops (exclude localhost and fake backup hosts)."""
+    return [
+        node
+        for node in YdbCluster.get_cluster_nodes(db_only=True, load_kafka_port=load_kafka_port)
+        if _is_ssh_host(node.host)
+    ]
+
 
 class StressUtilDeployer:
     binaries_deploy_path: str
@@ -41,12 +58,11 @@ class StressUtilDeployer:
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
         self.static_location = static_location
-        self.nodes = YdbCluster.get_cluster_nodes(load_kafka_port=True)
+        self.nodes = _ssh_cluster_nodes(load_kafka_port=True)
         patch_max_suffix(1000000)
 
         # Collect unique hosts and their corresponding nodes
-        unique_hosts = set(node.host for node in self.nodes)
-        self.hosts = list(filter(lambda h: h != 'localhost', unique_hosts))
+        self.hosts = list({node.host for node in self.nodes})
 
     def prepare_stress_execution(
         self,
@@ -114,14 +130,12 @@ class StressUtilDeployer:
 
             # Get unique cluster hosts
             with allure.step("Get all unique cluster hosts"):
-                nodes = YdbCluster.get_cluster_nodes()
+                nodes = _ssh_cluster_nodes(load_kafka_port=True)
                 if not nodes:
                     raise Exception("No cluster nodes found")
 
-                # Collect unique hosts and their corresponding nodes
-                unique_hosts = set(node.host for node in nodes)
-                self.hosts = list(filter(lambda h: h != 'localhost', unique_hosts))
-                self.nodes = list(filter(lambda n: n.host != 'localhost', nodes))
+                self.nodes = nodes
+                self.hosts = list({node.host for node in nodes})
 
                 allure.attach(
                     str(self.hosts),

@@ -5,6 +5,7 @@ import socket
 import sys
 import warnings
 from base64 import b64encode
+from concurrent.futures import CancelledError
 
 from urllib3 import PoolManager, Timeout, proxy_from_url
 from urllib3.exceptions import (
@@ -45,7 +46,7 @@ try:
         from urllib3.contrib.pyopenssl import (
             orig_util_SSLContext as SSLContext,
         )
-except ImportError:
+except (AttributeError, ImportError):
     from urllib3.util.ssl_ import SSLContext
 
 try:
@@ -94,7 +95,7 @@ def get_cert_path(verify):
         return verify
 
     cert_path = where()
-    logger.debug(f"Certificate path: {cert_path}")
+    logger.debug("Certificate path: %s", cert_path)
 
     return cert_path
 
@@ -503,6 +504,8 @@ class URLLib3Session:
             raise ConnectionClosedError(
                 error=e, request=request, endpoint_url=request.url
             )
+        except CancelledError:
+            raise
         except Exception as e:
             message = 'Exception received when sending urllib3 HTTP request'
             logger.debug(message, exc_info=True)

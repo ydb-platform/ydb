@@ -119,11 +119,15 @@ void IUnaryOperator::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
  */
 void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(planProps);
-    Props.Metadata = TRBOMetadata();
 
     auto path = TKqpTable(Table).Path();
     const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
-    Props.Metadata->ColumnsCount = OutputIUs.size();
+
+    Props.Metadata = TRBOMetadata();
+    if (IsJoin() && GetInput()->Props.Metadata.has_value()) {
+        Props.Metadata = GetInput()->Props.Metadata;
+    }
+    Props.Metadata->ColumnsCount += OutputIUs.size();
     Props.Metadata->StorageType = EStorageType::RowStorage;
 
     Y_ENSURE(OutputIUs.size() == FetchColumns.size());
@@ -131,6 +135,11 @@ void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     const int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, path.StringValue());
     for (size_t i = 0; i < OutputIUs.size(); i++) {
         Props.Metadata->ColumnLineage.AddMapping(OutputIUs[i], TColumnLineageEntry(alias, path.StringValue(), FetchColumns[i], duplicateId));
+    }
+
+    if (IsJoin()) {
+        Props.Metadata->KeyColumns = {};
+        return;
     }
 
     TVector<TInfoUnit> keyColumns;
@@ -456,7 +465,6 @@ void TOpMap::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
  * Compute metadata for aggregare operator
  */
 void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
-    Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     if (!GetInput()->Props.Metadata.has_value()) {
         return;
@@ -485,6 +493,10 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->ColumnsCount = outputIUs.size();
 
     Props.Metadata->ShuffledByColumns = {};
+    if (CanEliminateAggregateShuffle(*this, ctx)) {
+        // Aggregation by a superset of existing shuffle keys keeps every group colocated by those shuffle keys.
+        Props.Metadata->ShuffledByColumns = inputMetadata.ShuffledByColumns;
+    }
 
     // Aggregate acts like a source in terms of lineage.
     // FIXME: We currently delete all lineage of columns before Aggregate,

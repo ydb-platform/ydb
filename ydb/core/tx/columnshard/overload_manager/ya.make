@@ -7,8 +7,11 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/protos
+    ydb/core/tx/columnshard/flow_control_manager
     ydb/core/tx/data_events
+    ydb/library/actors/interconnect
 )
 
 END()

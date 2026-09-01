@@ -28,7 +28,7 @@ TProtocolVersion TProtocolVersion::FromString(TStringBuf protocolVersionString)
     if (result.Major < 0 || result.Minor < 0) {
         THROW_ERROR_EXCEPTION("Incorrect protocol version; major and minor versions should be "
             "greater than or equal to zero")
-            << TErrorAttribute("protocol_version", ToString(result));
+            .With("protocol_version", ToString(result));
     }
 
     return result;

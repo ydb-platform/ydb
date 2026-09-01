@@ -61,8 +61,8 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb, const TVec
         itemType = pb.NewOptionalType(pb.NewDataType(NUdf::EDataSlot::String));
     } else if constexpr (std::is_same_v<Type, TString>) {
         itemType = pb.NewDataType(NUdf::EDataSlot::String);
-    } else if constexpr (std::is_same_v<Type, std::optional<ui64>>) {
-        itemType = pb.NewOptionalType(pb.NewDataType(NUdf::EDataSlot::Uint64));
+    } else if constexpr (TIsSpecializationOf<std::optional, Type>::value) {
+        itemType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<typename Type::value_type>::Id));
     } else {
         itemType = pb.NewDataType(NUdf::TDataType<Type>::Id);
     }
@@ -77,11 +77,11 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb, const TVec
             }
         } else if constexpr (std::is_same_v<Type, TString>) {
             return pb.NewDataLiteral<NUdf::EDataSlot::String>(value);
-        } else if constexpr (std::is_same_v<Type, std::optional<ui64>>) {
+        } else if constexpr (TIsSpecializationOf<std::optional, Type>::value) {
             if (value == std::nullopt) {
                 return pb.NewEmptyOptional(itemType);
             } else {
-                return pb.NewOptional(pb.NewDataLiteral<ui64>(*value));
+                return pb.NewOptional(pb.NewDataLiteral<typename Type::value_type>(*value));
             }
         } else {
             return pb.NewDataLiteral<Type>(value);
@@ -111,6 +111,19 @@ template <typename Setup, typename... TVectors> TypeAndValue ConvertVectorsToTup
     const auto tuplesNodeType = tuplesNode.GetStaticType();
     const auto tuples = setup.BuildGraph(tuplesNode)->GetValue();
     return {tuplesNodeType, tuples};
+}
+
+template <typename Setup>
+TypeAndValue MakeZeroWidthRows(Setup& setup, size_t nRows) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    TType* emptyTupleType = pb.NewTupleType({});
+    TRuntimeNode::TList items;
+    items.reserve(nRows);
+    for (size_t i = 0; i < nRows; ++i) {
+        items.push_back(pb.NewTuple({}));
+    }
+    const auto listNode = pb.NewList(emptyTupleType, items);
+    return {listNode.GetStaticType(), setup.BuildGraph(listNode)->GetValue()};
 }
 
 template <typename Setup, typename... TVectors>

@@ -88,6 +88,7 @@ void TActor::AbortExport(const TString& errorMessage) {
         Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
     }
     KillExporter();
+    AbortScanIfKnown(errorMessage);
     Stage = EStage::WaitSaveCursor;
     StageStartTime = TInstant::Now();
     Counters.OnSaveCursorStarted();
@@ -103,12 +104,29 @@ void TActor::KillExporter() {
     }
 }
 
+void TActor::AbortScanIfKnown(const TString& reason) {
+    if (ScanActorId) {
+        TBase::Send(*ScanActorId, NKqp::TEvKqp::TEvAbortExecution::Aborted(reason).Release());
+        ScanActorId.reset();
+    }
+}
+
 void TActor::PassAway() {
     YDB_LOG_INFO("",
         {"event", "export_actor_pass_away"},
         {"selfId", SelfId()},
-        {"tabletId", TabletId});
+        {"tabletId", TabletId},
+        {"stage", StageToString(Stage)});
+    if (Stage == EStage::WaitData) {
+        Counters.OnAckResponse();
+        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
+    } else if (Stage == EStage::WaitWriting) {
+        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
+    } else if (Stage == EStage::WaitSaveCursor) {
+        Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
+    }
     KillExporter();
+    AbortScanIfKnown("export actor destroyed");
     Counters.OnActorDead();
     TBase::PassAway();
 }
@@ -274,7 +292,9 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator
     // ev->Record.MutableSnapshot()->SetStep(backupTask.GetSnapshotStep());
     // ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
     ev->Record.SetScanId(tablePathId.GetRawValue());
-    ev->Record.SetTxId(tablePathId.GetRawValue());
+    const auto txId = ExportSession->GetTxId();
+    AFL_VERIFY(txId)("reason", "export_session_has_no_tx_id");
+    ev->Record.SetTxId(*txId);
     ev->Record.SetTablePath(backupTask.GetTableName());
     ev->Record.SetSchemaVersion(0);
 

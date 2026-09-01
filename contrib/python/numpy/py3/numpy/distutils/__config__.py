@@ -7,7 +7,7 @@ from numpy._core._multiarray_umath import (
     __cpu_dispatch__,
 )
 
-__all__ = ["show"]
+__all__ = ["show_config"]
 _built_with_meson = True
 
 
@@ -33,7 +33,7 @@ CONFIG = _cleanup(
             "c": {
                 "name": "gcc",
                 "linker": r"ld.bfd",
-                "version": "9.4.0",
+                "version": "10.5.0",
                 "commands": r"cc",
                 "args": r"",
                 "linker args": r"",
@@ -41,7 +41,7 @@ CONFIG = _cleanup(
             "cython": {
                 "name": "cython",
                 "linker": r"cython",
-                "version": "3.0.12",
+                "version": "3.2.9",
                 "commands": r"cython",
                 "args": r"",
                 "linker args": r"",
@@ -72,24 +72,24 @@ CONFIG = _cleanup(
         },
         "Build Dependencies": {
             "blas": {
-                "name": "blas",
+                "name": "openblas",
                 "found": bool("True".lower().replace("false", "")),
-                "version": "unknown",
-                "detection method": "system",
-                "include directory": r"unknown",
-                "lib directory": r"unknown",
-                "openblas configuration": r"unknown",
-                "pc file directory": r"unknown",
+                "version": "0.3.8",
+                "detection method": "pkgconfig",
+                "include directory": r"/usr/include/x86_64-linux-gnu/openblas-pthread/",
+                "lib directory": r"/usr/lib/x86_64-linux-gnu/openblas-pthread/",
+                "openblas configuration": r"USE_64BITINT= DYNAMIC_ARCH=1 DYNAMIC_OLDER=1 NO_CBLAS= NO_LAPACK= NO_LAPACKE=1 NO_AFFINITY=1 USE_OPENMP=0 generic MAX_THREADS=64",
+                "pc file directory": r"/usr/lib/x86_64-linux-gnu/pkgconfig",
             },
             "lapack": {
-                "name": "lapack",
+                "name": "openblas",
                 "found": bool("True".lower().replace("false", "")),
-                "version": "unknown",
-                "detection method": "system",
-                "include directory": r"unknown",
-                "lib directory": r"unknown",
-                "openblas configuration": r"unknown",
-                "pc file directory": r"unknown",
+                "version": "0.3.8",
+                "detection method": "pkgconfig",
+                "include directory": r"/usr/include/x86_64-linux-gnu/openblas-pthread/",
+                "lib directory": r"/usr/lib/x86_64-linux-gnu/openblas-pthread/",
+                "openblas configuration": r"USE_64BITINT= DYNAMIC_ARCH=1 DYNAMIC_OLDER=1 NO_CBLAS= NO_LAPACK= NO_LAPACKE=1 NO_AFFINITY=1 USE_OPENMP=0 generic MAX_THREADS=64",
+                "pc file directory": r"/usr/lib/x86_64-linux-gnu/pkgconfig",
             },
         },
         "Python Information": {
@@ -160,3 +160,11 @@ def show(mode=DisplayModes.stdout.value):
         raise AttributeError(
             f"Invalid `mode`, use one of: {', '.join([e.value for e in DisplayModes])}"
         )
+
+
+def show_config(mode=DisplayModes.stdout.value):
+    return show(mode)
+
+
+show_config.__doc__ = show.__doc__
+show_config.__module__ = "numpy"

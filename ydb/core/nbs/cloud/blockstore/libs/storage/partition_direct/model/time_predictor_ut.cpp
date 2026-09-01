@@ -2,7 +2,12 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/ring_buffer.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/set.h>
+#include <util/random/fast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -369,6 +374,154 @@ Y_UNIT_TEST_SUITE(TTimePredictorTest)
         predictor.Add(THostIndex(0), TDuration::MilliSeconds(30));
 
         UNIT_ASSERT_VALUES_EQUAL(TDuration(), predictor.Predict(0));
+    }
+
+    Y_UNIT_TEST(ZeroCapacityPredictsZero)
+    {
+        // Default config: history size 0. Add is a no-op, Predict is always
+        // zero.
+        TTimePredictor predictor(0, 0);
+
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(100));
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(200));
+
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), predictor.Predict(0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration(),
+            predictor.Predict(THostMask::MakeOne(0)));
+    }
+
+    Y_UNIT_TEST(RandomizedMatchesMultisetReference)
+    {
+        // Cross-check the sorted-vector THistory against an independent
+        // TMultiSet + TRingBuffer reference for a few thousand random steps.
+        constexpr size_t Capacity = 100;
+        constexpr size_t Steps = 5000;
+        constexpr size_t NthFromEnd = 1;
+
+        struct TReference
+        {
+            TRingBuffer<TDuration> History;
+            TMultiSet<TDuration> Durations;
+
+            explicit TReference(size_t capacity)
+                : History(capacity)
+            {}
+
+            void Add(TDuration time)
+            {
+                Durations.insert(time);
+                if (auto extracted = History.PushBack(time)) {
+                    Durations.erase(Durations.find(*extracted));
+                }
+            }
+
+            TDuration Predict(size_t nthFromEnd) const
+            {
+                auto it = Durations.rbegin();
+                for (size_t i = 0; i < nthFromEnd; ++i) {
+                    if (it == Durations.rend()) {
+                        return {};
+                    }
+                    ++it;
+                }
+                return it == Durations.rend() ? TDuration() : *it;
+            }
+        };
+
+        TTimePredictor predictor(Capacity, NthFromEnd);
+        TReference reference(Capacity);
+        TReallyFastRng32 rng(42);
+
+        for (size_t step = 0; step < Steps; ++step) {
+            const TDuration time =
+                TDuration::MicroSeconds(rng.Uniform(1, 10000));
+            predictor.Add(THostIndex(0), time);
+            reference.Add(time);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reference.Predict(NthFromEnd),
+                predictor.Predict(0),
+                "mismatch at step " << step);
+        }
+    }
+
+    Y_UNIT_TEST(GetLatencyStatsEmptyWindow)
+    {
+        TTimePredictor predictor(
+            TimePredictionHistorySize,
+            TimePredictionNthFromEnd);
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(0u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.Min);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.P50);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.P90);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.P99);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration(), stats.Max);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<size_t>(TimePredictionHistorySize),
+            predictor.GetCapacity());
+    }
+
+    Y_UNIT_TEST(GetLatencyStatsExactPercentiles)
+    {
+        TTimePredictor predictor(
+            TimePredictionHistorySize,
+            TimePredictionNthFromEnd);
+
+        // 10 samples: 10, 20, ..., 100 ms. Indices 0..9.
+        // nearest-rank: ceil(p*n)-1
+        // p50 -> ceil(5)-1 = 4 -> 50ms
+        // p90 -> ceil(9)-1 = 8 -> 90ms
+        // p99 -> ceil(9.9)-1 = 9 -> 100ms
+        for (size_t i = 0; i < TimePredictionHistorySize; ++i) {
+            predictor.Add(THostIndex(0), TDuration::MilliSeconds(10 * (i + 1)));
+        }
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(10u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(10), stats.Min);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(50), stats.P50);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(90), stats.P90);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(100), stats.P99);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(100), stats.Max);
+    }
+
+    Y_UNIT_TEST(GetLatencyStatsEvictionMovesPercentiles)
+    {
+        TTimePredictor predictor(
+            TimePredictionHistorySize,
+            TimePredictionNthFromEnd);
+
+        for (size_t i = 0; i < TimePredictionHistorySize; ++i) {
+            predictor.Add(THostIndex(0), TDuration::MilliSeconds(10 * (i + 1)));
+        }
+
+        // Evict 10ms by pushing 200ms.
+        // Window: 20..100, 200. Min=20, Max=200.
+        // p50 -> idx 4 -> 60ms; p90 -> idx 8 -> 100ms; p99 -> idx 9 -> 200ms
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(200));
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(10u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(20), stats.Min);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(60), stats.P50);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(100), stats.P90);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(200), stats.P99);
+        UNIT_ASSERT_VALUES_EQUAL(TDuration::MilliSeconds(200), stats.Max);
+    }
+
+    Y_UNIT_TEST(GetLatencyStatsZeroCapacity)
+    {
+        TTimePredictor predictor(/*capacity*/ 0, /*nthFromEnd*/ 0);
+
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(50));
+        predictor.Add(THostIndex(0), TDuration::MilliSeconds(100));
+
+        const auto stats = predictor.GetLatencyStats(0);
+        UNIT_ASSERT_VALUES_EQUAL(0u, stats.Count);
+        UNIT_ASSERT_VALUES_EQUAL(0u, predictor.GetCapacity());
     }
 }
 

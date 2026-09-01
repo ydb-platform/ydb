@@ -52,6 +52,7 @@ struct TAppData::TImpl {
     NKikimrPQ::TPQConfig PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig SqsConfig;
@@ -123,6 +124,7 @@ TAppData::TAppData(
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)
     , KafkaProxyConfig(Impl->KafkaProxyConfig)
+    , HttpProxyConfig(Impl->HttpProxyConfig)
     , NetClassifierConfig(Impl->NetClassifierConfig)
     , NetClassifierDistributableConfig(Impl->NetClassifierDistributableConfig)
     , SqsConfig(Impl->SqsConfig)
@@ -163,6 +165,7 @@ TAppData::TAppData(
     , LongTxServiceConfig(Impl->LongTxServiceConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
+    , UserFacingTracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}
 
 TAppData::~TAppData()

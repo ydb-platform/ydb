@@ -97,7 +97,7 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     }
 
     const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
-                                           /*StripAliasPrefixForColumnName=*/true);
+                                           /*StripAliasPrefixForColumnName=*/true, ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp());
     if (!IsSuitableToPushPredicateToColumnTables(input)) {
         return input;
     }
@@ -141,7 +141,8 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
             auto predicate = lambdaAfterPeephole.Body();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
+            CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(),
+                {true, pushdownOptions.PushdownSubstring, pushdownOptions.StripAliasPrefixFromColName, pushdownOptions.PushdownRegexp});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);

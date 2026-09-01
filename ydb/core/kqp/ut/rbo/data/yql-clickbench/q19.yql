@@ -1,0 +1,2 @@
+SELECT UserID, m, SearchPhrase, COUNT(*) as cnt
+FROM `/Root/hits` GROUP BY UserID, DateTime::GetMinute(Cast(EventTime as Timestamp)) AS m, SearchPhrase ORDER BY cnt DESC LIMIT 10;

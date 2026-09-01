@@ -14,7 +14,7 @@
 
 // Must be included AFTER YDB headers because linux/uapi headers pulled by
 // liburing may define macros that clash with project headers.
-#include <ydb/library/uring/liburing_linux.h>
+#include "liburing_compat.h"
 
 #include <cerrno>
 #include <cstring>
@@ -193,6 +193,24 @@ public:
                     // PrepareSqe/ReadFixed/WriteFixed.
                     NSan::Acquire(op);
                     op->Result = cqe->res;
+
+                    // Capture a device-overestimation sample before invoking
+                    // OnComplete, since OnComplete may recycle/destroy the op.
+                    // Only sample successfully completed operations with a
+                    // known submit timestamp; a per-CQE HPNow() call keeps
+                    // per-operation completion precision within a batch.
+                    if (Owner.SampleSink && op->SubmitCycles != 0 && cqe->res >= 0 &&
+                            (op->OperationType == TUringOperationBase::EREAD ||
+                             op->OperationType == TUringOperationBase::EWRITE)) {
+                        TDeviceIoSample sample;
+                        sample.SubmitCycles = op->SubmitCycles;
+                        sample.CompleteCycles = HPNow();
+                        sample.Offset = op->GetDiskOffset();
+                        sample.Size = op->GetTotalSize();
+                        sample.IsWrite = (op->OperationType == TUringOperationBase::EWRITE);
+                        Owner.SampleSink(sample);
+                    }
+
                     // For read operations the kernel fills the buffer via a syscall
                     // that MSAN cannot observe.  Mark each iovec segment as initialized
                     // so that subsequent reads do not trigger false use-of-uninitialized-
@@ -314,6 +332,13 @@ void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op)
         sqe->flags |= IOSQE_FIXED_FILE;
     }
 
+    // Record the submit-time cycle count for device-overestimation sampling.
+    // Only set on the first submission of an op (AdvanceIov short-I/O retries
+    // reuse the same op and call PrepareSqe again via Read()/Write() from the
+    // actor thread; each such resubmission is treated as its own sample by the
+    // completion poller, matching how short I/O is a distinct kernel request).
+    op->SubmitCycles = HPNow();
+
     io_uring_sqe_set_data(sqe, op);
     NSan::Release(op);
 }
@@ -359,6 +384,7 @@ bool TUringRouter::ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, T
     if (FixedFdIndex >= 0) {
         sqe->flags |= IOSQE_FIXED_FILE;
     }
+    op->SubmitCycles = HPNow();
     io_uring_sqe_set_data(sqe, op);
     NSan::Release(op);
     return true;
@@ -380,6 +406,7 @@ bool TUringRouter::WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufI
     if (FixedFdIndex >= 0) {
         sqe->flags |= IOSQE_FIXED_FILE;
     }
+    op->SubmitCycles = HPNow();
     io_uring_sqe_set_data(sqe, op);
     NSan::Release(op);
     return true;

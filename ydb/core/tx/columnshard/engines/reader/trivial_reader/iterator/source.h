@@ -275,7 +275,8 @@ private:
         const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const NArrow::NSSA::TProcessorContext& context, const TCheckHeaderContext& fetchContext) override;
-    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusionStatus DoAssembleAccessor(
+        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) override;
 
@@ -411,11 +412,14 @@ public:
 
     void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
         auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-        if (!context->IsActive()) {
+        const auto duplicatesManager = context->GetDuplicatesManager();
+        if (!duplicatesManager) {
+            // Scan abort raced with this step: UnregisterActors already dropped the manager.
+            AFL_VERIFY(!context->IsActive());
             return;
         }
         NActors::TActivationContext::AsActorContext().Send(
-            context->GetDuplicatesManagerVerified(), new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
+            duplicatesManager, new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
     std::optional<ui64> GetPortionIdOptional() const override {
@@ -432,6 +436,8 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
+    const ui64 LastDeprecatedPortionId;
+    const std::optional<ui64> LastPortionIdOptional;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
         const ui32 recordsCount = GetStageData().GetTable().GetRecordsCountActualVerified();
@@ -486,9 +492,10 @@ private:
         return TConclusionStatus::Fail("not implemented DoCheckHeader for TAggregationDataSource");
     }
 
-    virtual void DoAssembleAccessor(
+    virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
+        return TConclusionStatus::Fail("not implemented DoAssembleAccessor for TAggregationDataSource");
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
@@ -538,6 +545,14 @@ public:
 
     ui64 GetLastSourceRecordsCount() const {
         return LastSourceRecordsCount;
+    }
+
+    ui64 GetLastDeprecatedPortionId() const {
+        return LastDeprecatedPortionId;
+    }
+
+    const std::optional<ui64>& GetLastPortionIdOptional() const {
+        return LastPortionIdOptional;
     }
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const override {
@@ -609,10 +624,12 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceIdx())
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetDeprecatedPortionId())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
+        , LastDeprecatedPortionId(Sources.back()->GetDeprecatedPortionId())
+        , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
     {
         AFL_VERIFY(Sources.size());
     }

@@ -222,14 +222,18 @@ def _get_help_text(
     if remaining_paragraphs:
         # Add a newline inbetween the header and the remaining paragraphs
         yield Text("")
-        # Join with double linebreaks for markdown and Rich markup
-        remaining_lines = "\n\n".join(remaining_paragraphs)
+        remaining_lines = _fix_linebreaks(remaining_paragraphs, markup_mode)
 
         yield _make_rich_text(
             text=remaining_lines,
             style=STYLE_HELPTEXT,
             markup_mode=markup_mode,
         )
+
+
+def _fix_linebreaks(paragraphs: list[str], markup_mode: MarkupModeStrict) -> str:
+    # Join with double linebreaks for markdown and Rich markup
+    return "\n\n".join(paragraphs)
 
 
 def _get_parameter_help(
@@ -370,13 +374,16 @@ def _print_options_panel(
         metavar_type = None
         metavar_str = param.make_metavar(ctx=ctx)
         if isinstance(param, TyperArgument):
-            # TODO: revise this legacy behaviour of keeping argument names lowercased for Rich formatting
-            if param.metavar is None and param.name:
-                metavar_name = metavar_str.replace(param.name.upper(), param.name)
+            if param.metavar is not None:
+                metavar_name = param.metavar
             else:
-                metavar_name = metavar_str
+                metavar_name = param.name or ""
         if isinstance(param, TyperOption):
             metavar_type = metavar_str
+        elif isinstance(param, TyperArgument):
+            metavar_type = param.type.get_metavar(param=param, ctx=ctx)
+            if metavar_type is None:
+                metavar_type = f"<{param.type.name}>"
 
         for opt_str in param.opts:
             if "--" in opt_str:
@@ -397,12 +404,8 @@ def _print_options_panel(
         types_data = Text(style=STYLE_TYPES, overflow="fold")
 
         # Fetch type
-        if metavar_type and metavar_type != "BOOLEAN":
+        if metavar_type and "bool" not in metavar_type.lower():
             types_data.append(metavar_type)
-        else:
-            type_str = param.type.name.upper()
-            if type_str != "BOOLEAN":
-                types_data.append(type_str)
 
         # Range - from
         # https://github.com/pallets/click/blob/c63c70dabd3f86ca68678b4f00951f78f52d0270/src/click/core.py#L2698-L2706  # noqa: E501
@@ -686,7 +689,7 @@ def rich_format_help(
     if obj.epilog:
         # Remove single linebreaks, replace double with single
         lines = obj.epilog.split("\n\n")
-        epilogue = "\n".join([x.replace("\n", " ").strip() for x in lines])
+        epilogue = _fix_linebreaks(lines, markup_mode)
         epilogue_text = _make_rich_text(text=epilogue, markup_mode=markup_mode)
         console.print(Padding(Align(epilogue_text, pad=False), 1))
 
@@ -704,12 +707,13 @@ def rich_format_error(self: _click.ClickException) -> None:
     console = _get_rich_console(stderr=True)
     ctx: _click.Context | None = getattr(self, "ctx", None)
     if ctx is not None:
-        console.print(ctx.get_usage())
+        console.print(highlighter(ctx.get_usage()), style=STYLE_USAGE_COMMAND)
 
     if ctx is not None and ctx.command.get_help_option(ctx) is not None:
         console.print(
             RICH_HELP.format(
-                command_path=ctx.command_path, help_option=ctx.help_option_names[0]
+                command_path=escape(ctx.command_path),
+                help_option=ctx.help_option_names[0],
             ),
             style=STYLE_ERRORS_SUGGESTION,
         )

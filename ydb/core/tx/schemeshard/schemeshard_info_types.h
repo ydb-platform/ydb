@@ -11,6 +11,7 @@
 
 #include <util/generic/yexception.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -1017,6 +1018,8 @@ public:
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
         bool EnableColumnStatistics = false;
+        bool EnableGeneratedStored = false;
+        bool EnableGeneratedVirtual = false;
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -2404,7 +2407,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     bool CheckSmallBlobsQuotas(IQuotaCounters* counters);
 
     /*
-    Rechecks disk space and small blobs quotas in one go. 
+    Rechecks disk space and small blobs quotas in one go.
     Returns true when any flag changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckQuotas(IQuotaCounters* counters);
@@ -2752,6 +2755,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
     }
 
+    ETablesMetricsLevel GetTablesMetricsLevel() const {
+        return TablesMetricsLevel;
+    }
+
+    void SetTablesMetricsLevel(ETablesMetricsLevel level) {
+        TablesMetricsLevel = level;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2797,6 +2808,8 @@ private:
     ui64 SecurityStateVersion = 0;
 
     TMaybeAuditSettings AuditSettings;
+
+    ETablesMetricsLevel TablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     TVector<TTabletId> FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;

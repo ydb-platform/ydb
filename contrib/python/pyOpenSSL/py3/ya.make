@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 SUBSCRIBER(g:python-contrib)
 
-VERSION(24.3.0)
+VERSION(25.1.0)
 
 LICENSE(Apache-2.0)
 

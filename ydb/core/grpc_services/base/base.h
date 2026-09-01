@@ -496,6 +496,12 @@ public:
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
     virtual void FinishSpan() = 0;
+    virtual void SetUserFacingTraceId(NWilson::TTraceId id) {
+        UserFacingTraceId = std::move(id);
+    }
+    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
+        return NWilson::TTraceId(UserFacingTraceId);
+    }
     // Returns pointer to a state that denotes whether this request ever been a subject
     // to tracing decision. CAN be nullptr
     virtual bool* IsTracingDecided() = 0;
@@ -543,6 +549,9 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+private:
+    NWilson::TTraceId UserFacingTraceId;
 };
 
 // Request context
@@ -626,9 +635,10 @@ class TRefreshTokenImpl
     , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
-    TRefreshTokenImpl(const TString& token, const TString& database, TActorId from)
+    TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, TActorId from)
         : Token_(token)
         , Database_(database)
+        , PeerName_(peerName)
         , From_(from)
         , State_(true)
     { }
@@ -676,7 +686,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return {};
+        return PeerName_;
     }
 
     void SetRlPath(TMaybe<NRpcService::TRlPath>&&) override {
@@ -821,6 +831,7 @@ public:
 private:
     const TString Token_;
     const TString Database_;
+    const TString PeerName_;
     const TActorId From_;
     NYdbGrpc::TAuthState State_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -2105,7 +2116,7 @@ public:
         return {};
     }
 
-    TString Database;
+    TString Database; // Raw `database` extracted from the HTTP request
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
     NYdbGrpc::TAuthState AuthState;

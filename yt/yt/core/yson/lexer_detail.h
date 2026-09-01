@@ -245,24 +245,24 @@ public:
                 *token = TToken(FromString<double>(valueBuffer));
             } catch (const std::exception& ex) {
                 THROW_ERROR CreateLiteralError(ETokenType::Double, valueBuffer.begin(), valueBuffer.size())
-                    << *this
-                    << ex;
+                    .With(this->GetErrorAttributes())
+                    .With(ex);
             }
         } else if (numericResult == ENumericResult::Int64) {
             try {
                 *token = TToken(FromString<i64>(valueBuffer));
             } catch (const std::exception& ex) {
                 THROW_ERROR CreateLiteralError(ETokenType::Int64, valueBuffer.begin(), valueBuffer.size())
-                    << *this
-                    << ex;
+                    .With(this->GetErrorAttributes())
+                    .With(ex);
             }
         } else if (numericResult == ENumericResult::Uint64) {
             try {
                 *token = TToken(FromString<ui64>(valueBuffer.SubStr(0, valueBuffer.size() - 1)));
             } catch (const std::exception& ex) {
                 THROW_ERROR CreateLiteralError(ETokenType::Int64, valueBuffer.begin(), valueBuffer.size())
-                    << *this
-                    << ex;
+                    .With(this->GetErrorAttributes())
+                    .With(ex);
             }
         }
     }

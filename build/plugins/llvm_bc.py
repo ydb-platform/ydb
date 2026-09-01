@@ -5,7 +5,7 @@ from ymake import macro, Unit
 @macro
 def LLVM_BC(
     unit: Unit,
-    *args: tuple[str, ...],
+    *args: str,
     SYMBOLS: tuple[str, ...] = (),
     NAME: str = '',
     SUFFIX: str = '',

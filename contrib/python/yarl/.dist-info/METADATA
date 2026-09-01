@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: yarl
-Version: 1.14.0
+Version: 1.24.5
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -20,25 +20,24 @@ Project-URL: GitHub: repo, https://github.com/aio-libs/yarl
 Keywords: cython,cext,yarl
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Cython
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: Internet :: WWW/HTTP
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.8
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: NOTICE
-Requires-Dist: idna >=2.0
-Requires-Dist: multidict >=4.0
-Requires-Dist: propcache >=0.2.0
+Requires-Dist: idna>=2.0
+Requires-Dist: multidict>=4.0
+Requires-Dist: propcache>=0.2.1
+Dynamic: license-file
 
 yarl
 ====
@@ -46,22 +45,24 @@ yarl
 The module provides handy URL class for URL parsing and changing.
 
 .. image:: https://github.com/aio-libs/yarl/workflows/CI/badge.svg
-  :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
-  :align: right
+   :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
+   :align: right
 
-.. image:: https://codecov.io/gh/aio-libs/yarl/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/aio-libs/yarl
+.. image:: https://codecov.io/gh/aio-libs/yarl/graph/badge.svg?flag=pytest
+   :target: https://app.codecov.io/gh/aio-libs/yarl?flags[]=pytest
+   :alt: Codecov coverage for the pytest-driven measurements
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/yarl
 
 .. image:: https://badge.fury.io/py/yarl.svg
-    :target: https://badge.fury.io/py/yarl
-
+   :target: https://badge.fury.io/py/yarl
 
 .. image:: https://readthedocs.org/projects/yarl/badge/?version=latest
-    :target: https://yarl.aio-libs.org
-
+   :target: https://yarl.aio-libs.org
 
 .. image:: https://img.shields.io/pypi/pyversions/yarl.svg
-    :target: https://pypi.python.org/pypi/yarl
+   :target: https://pypi.python.org/pypi/yarl
 
 .. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs:matrix.org
@@ -70,6 +71,7 @@ The module provides handy URL class for URL parsing and changing.
 .. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs-space:matrix.org
    :alt: Matrix Space — #aio-libs-space:matrix.org
+
 
 Introduction
 ------------
@@ -152,7 +154,7 @@ The library is Python 3 only!
 
 PyPI contains binary wheels for Linux, Windows and MacOS.  If you want to install
 ``yarl`` on another operating system where wheels are not provided,
-the the tarball will be used to compile the library from
+the tarball will be used to compile the library from
 the source code. It requires a C compiler and and Python headers installed.
 
 To skip the compilation you must explicitly opt-in by using a PEP 517
@@ -263,6 +265,1423 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+v1.24.5
+=======
+
+*(2026-07-19)*
+
+
+Contributor-facing changes
+--------------------------
+
+- Restricted the exhaustive IDNA default-ignorable sweep test to a native
+  Linux x86_64 runner. It iterates roughly 140,000 code points and its result
+  does not depend on the architecture, so running it under emulated wheel
+  builds only added minutes and intermittently crashed the test workers
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1806 <https://github.com/aio-libs/yarl/issues/1806>`__.
+
+
+----
+
+
+v1.24.4
+=======
+
+*(2026-07-19)*
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Stopped installing ``hypothesis`` in the wheel-build test environment. The
+  property-based quoting tests that need it are skipped there already, and
+  building it from source on architectures without a prebuilt wheel (such as
+  ``armv7l`` musllinux, where the build pulls in a Rust toolchain) was failing
+  the wheel jobs -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1804 <https://github.com/aio-libs/yarl/issues/1804>`__.
+
+
+----
+
+
+v1.24.3
+=======
+
+*(2026-07-19)*
+
+
+Bug fixes
+---------
+
+- Fixed the ``~yarl.URL.host`` property incorrectly returning the
+  percent-encoded zone ID separator ``%25`` instead of decoding it to ``%``
+  for IPv6 Zone ID URLs (e.g. ``http://[fe80::1%251]/`` now correctly exposes
+  ``.host`` as ``fe80::1%1`` per ``6874``)
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1653 <https://github.com/aio-libs/yarl/issues/1653>`__.
+
+- Fixed ``_check_netloc()`` missing ``%`` from its NFKC normalization character
+  check, which allowed Unicode characters U+FF05 (FULLWIDTH PERCENT SIGN) and
+  U+FE6A (SMALL PERCENT SIGN) to produce a literal ``%`` in ``url.host`` via
+  the standard library IDNA fallback
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1655 <https://github.com/aio-libs/yarl/issues/1655>`__.
+
+- Fixed ``yarl.URL.build()`` failing to validate characters in the zone ID
+  portion of IPv6 addresses when ``validate_host=True``, allowing control
+  characters such as CR, LF, and NUL to pass through into ``url.host``.
+  Zone IDs now reject ASCII control characters and the empty string (a bare
+  trailing ``%``) per
+  `RFC 9844 §6.3 <https://datatracker.ietf.org/doc/html/rfc9844#section-6-3>`_
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1655 <https://github.com/aio-libs/yarl/issues/1655>`__.
+
+- Fixed the Cython quoting backend retaining a lone surrogate code
+  point when it was the only character forcing a rewrite; the
+  pure-Python backend already dropped lone surrogates, so both now
+  drop them and produce identical output
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1751 <https://github.com/aio-libs/yarl/issues/1751>`__.
+
+- Fixed the Cython quoting backend percent-encoding the ``%`` of a
+  ``%XX`` escape when a lone surrogate fell within it, instead of
+  dropping the surrogate and keeping the escape; it now matches the
+  pure-Python backend and produces identical output
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1752 <https://github.com/aio-libs/yarl/issues/1752>`__.
+
+- Fixed the Cython quoter preserving lone surrogate characters
+  (``U+D800``..``U+DFFF``) instead of dropping them; it now matches the
+  pure-Python quoter, which strips them, so both backends produce the
+  same output for the same input -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1799 <https://github.com/aio-libs/yarl/issues/1799>`__.
+
+- Fixed ``URL.build()()`` and
+  ``yarl.URL.with_host()`` accepting hosts that expand to a URL
+  delimiter (``/``, ``?`` or ``#``) under IDNA normalization; such hosts
+  are now rejected, so the builder APIs agree with the parser
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1800 <https://github.com/aio-libs/yarl/issues/1800>`__.
+
+- Fixed host encoding accepting Unicode default-ignorable and format code
+  points (such as soft hyphen, zero-width space, and word joiner) that IDNA
+  normalization silently drops or otherwise folds into a different host,
+  so the parsed host could differ from the input string; such hosts are now
+  rejected on both the ``~yarl.URL`` constructor and the builder APIs
+  (``URL.build()()`` and ``yarl.URL.with_host()``)
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1801 <https://github.com/aio-libs/yarl/issues/1801>`__.
+
+- Fixed ``yarl.URL.build()``, ``yarl.URL.joinpath()`` (and the ``/``
+  operator), ``yarl.URL.with_name()``, and ``yarl.URL.with_suffix()``
+  building a URL with no host and no scheme whose serialized string could be
+  parsed back as an absolute or executable-scheme URL; a scheme-shaped leading
+  colon in a relative path is now percent-encoded, matching the parser and
+  ``yarl.URL.human_repr()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1802 <https://github.com/aio-libs/yarl/issues/1802>`__.
+
+
+Improved documentation
+----------------------
+
+- Documented how ``~yarl.URL.host`` and ``~yarl.URL.raw_host``
+  expose ``6874`` IPv6 zone identifiers and that the host subcomponent
+  properties include the zone identifier verbatim
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#998 <https://github.com/aio-libs/yarl/issues/998>`__.
+
+- Fixed the stale ``with_name()`` example output in the API reference; the
+  apostrophe is a character that ``3986`` allows unencoded in path
+  segments -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1784 <https://github.com/aio-libs/yarl/issues/1784>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- The ``setuptools`` build dependency lower bound has been restored to be
+  ``>= 47`` after an incorrect automated increase in `PR #1657 <https://github.com/aio-libs/yarl/pull/1657>`__
+  -- by `@bbhtt <https://github.com/sponsors/bbhtt>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1764 <https://github.com/aio-libs/yarl/issues/1764>`__.
+
+- Fixed the in-tree PEP 517 build backend to import Cython at the point
+  of use instead of module load time. The build front-ends that serve all
+  the build hooks from a single long-running backend process, the way
+  ``pyproject-api`` under ``tox`` does, import the backend before the
+  dynamically declared Cython build dependency is provisioned, so the
+  accelerated build used to fail with a ``NameError``
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1784 <https://github.com/aio-libs/yarl/issues/1784>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Added ``UV_CONSTRAINT`` and ``UV_BUILD_CONSTRAINT`` alongside
+  ``PIP_CONSTRAINT`` and ``PIP_BUILD_CONSTRAINT`` in the
+  ``cibuildwheel`` environment so the ``requirements/cython.txt``
+  pin is honored under the ``build[uv]`` frontend; ``uv pip``
+  ignores the ``PIP_`` variables and reads only the ``UV_`` ones,
+  while the ``PIP_`` variants are kept for the pip fallback path
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1729 <https://github.com/aio-libs/yarl/issues/1729>`__.
+
+- Dependabot has been restricted to the ``requirements`` subdirectory to
+  avoid unintended updates outside dependency requirement files
+  -- by `@bbhtt <https://github.com/sponsors/bbhtt>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1764 <https://github.com/aio-libs/yarl/issues/1764>`__.
+
+- Started running the Sphinx ``doctest`` builder in CI through the
+  ``doctest-docs`` tox environment, which existed but was never wired
+  into the lint matrix and never installed the package whose examples it
+  runs. Also added spelling word list entries so the spell check passes
+  with dictionary backends other than the one CI uses
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1784 <https://github.com/aio-libs/yarl/issues/1784>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Added regression tests ensuring that lone surrogates produced by
+  decoding invalid UTF-8 with ``surrogateescape`` are preserved when
+  building a URL with ``encoded=True`` and are dropped consistently by
+  the C and pure-Python quoting backends when parsing
+  -- by `@pajod <https://github.com/sponsors/pajod>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#991 <https://github.com/aio-libs/yarl/issues/991>`__.
+
+- Expanded the test suite to pin IPv6 zone identifier handling per the
+  ``6874`` compatibility research: the ``%25`` and legacy bare ``%``
+  separator forms, empty zone and reserved character corner cases,
+  ``encoded=True`` round-trips, and zone survival through URL mutation
+  APIs -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#998 <https://github.com/aio-libs/yarl/issues/998>`__.
+
+
+----
+
+
+v1.24.2
+=======
+
+*(2026-05-19)*
+
+
+Contributor-facing changes
+--------------------------
+
+- Switched the aarch64 and armv7l wheel builds to GitHub's native ARM
+  runners. The aarch64 wheels now build without QEMU emulation, and
+  armv7l runs on aarch64 hosts so its 32-bit ARM execution is far
+  cheaper than the previous aarch64-on-x86_64 path
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1724 <https://github.com/aio-libs/yarl/issues/1724>`__.
+
+- Restored per-runner native arches in the Windows wheel matrix on tag
+  releases. The previous ``CIBW_ARCHS_WINDOWS=AMD64 ARM64`` setting made
+  both ``windows-latest`` and ``windows-11-arm`` cross-compile the other
+  arch, producing two artifacts with identically-named wheels whose
+  bytes differed; the deploy job's ``download-artifact ... merge-multiple``
+  step tore those writes together, yielding a wheel that PyPI rejected
+  with ``400 Invalid distribution file. ZIP archive not accepted:
+  Mis-matched data size`` during the 1.24.0 and 1.24.1 releases
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1725 <https://github.com/aio-libs/yarl/issues/1725>`__.
+
+
+----
+
+
+v1.24.1
+=======
+
+*(2026-05-19)*
+
+
+Contributor-facing changes
+--------------------------
+
+- Allowed re-running the deploy job after a partial release failure: the
+  ``Make Release`` step now skips when the GitHub Release already exists,
+  and the PyPI publish step uses ``skip-existing`` so dists that were
+  already uploaded on a prior attempt do not break the retry
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1721 <https://github.com/aio-libs/yarl/issues/1721>`__.
+
+
+----
+
+
+v1.24.0
+=======
+
+*(2026-05-19)*
+
+
+Bug fixes
+---------
+
+- Delayed importing pydantic until it's needed to avoid increased import time -- by `@Dreamsorcerer <https://github.com/sponsors/Dreamsorcerer>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1607 <https://github.com/aio-libs/yarl/issues/1607>`__, `#1702 <https://github.com/aio-libs/yarl/issues/1702>`__.
+
+- Fixed pickling of ``~yarl.URL`` on Python 3.15, where ``SplitResult``
+  gained a ``__getstate__`` that requires attributes set by ``__init__``.
+  ``__getstate__`` now returns the raw 5-tuple instead of a ``SplitResult``
+  built via ``tuple.__new__``, so pickling no longer touches ``SplitResult``
+  serialization at all. Pickles produced by older yarl releases (which embed
+  a ``SplitResult``) continue to load unchanged
+  -- by `@befeleme <https://github.com/sponsors/befeleme>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1632 <https://github.com/aio-libs/yarl/issues/1632>`__, `#1642 <https://github.com/aio-libs/yarl/issues/1642>`__, `#1687 <https://github.com/aio-libs/yarl/issues/1687>`__.
+
+- Fixed a parsing issue where URLs containing text before an opening bracket
+  in the host component (e.g. ``http://127.0.0.1[aa::ff]``) were silently accepted
+  instead of being rejected as strictly invalid per RFC 3986
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1654 <https://github.com/aio-libs/yarl/issues/1654>`__.
+
+- Raise ``ValueError`` when a URL's authority component contains a
+  backslash, which is not a valid character per ``3986``
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1659 <https://github.com/aio-libs/yarl/issues/1659>`__.
+
+- Fixed a host-confusion parsing bug where URLs containing multiple bracket
+  characters in the host component (e.g. ``http://[:localhost[]].google:80``)
+  were silently parsed as an unintended host. Both ``split_url()`` and
+  ``split_netloc()`` now raise ``ValueError`` when more than one ``[`` or
+  ``]`` is found in the authority, or when ``[`` does not appear at the start of
+  the host subcomponent, in compliance with ``3986`` -- by
+  `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1661 <https://github.com/aio-libs/yarl/issues/1661>`__.
+
+- Fixed a parser/serializer inconsistency where percent-encoded characters in
+  the scheme portion of a URL (e.g. ``ht%74p://...``) were decoded by the
+  requoter, causing ``str()`` and ``yarl.URL.human_repr()`` to emit an
+  absolute URL with a scheme and host while the parsed properties
+  (``~yarl.URL.scheme``, ``~yarl.URL.host``, ``~yarl.URL.absolute``)
+  reported a relative, hostless URL. The fix preserves the percent-encoding of
+  the colon (``%3A``) in relative paths whenever decoding it would materialize a
+  URL scheme -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1669 <https://github.com/aio-libs/yarl/issues/1669>`__.
+
+- Fixed a parsing issue where URLs containing text after the closing bracket
+  of an IP-literal host (e.g. ``http://[::1]allowed.example:1/``) were silently
+  accepted and normalized to the bracketed IP address (``http://[::1]:1/``),
+  dropping the trailing suffix and changing the effective host identity.
+  Per RFC 3986, after the closing ``]`` only ``:`` followed by a port number or
+  end-of-authority is valid
+  -- by `@rodrigobnogueira <https://github.com/sponsors/rodrigobnogueira>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1672 <https://github.com/aio-libs/yarl/issues/1672>`__.
+
+
+Features
+--------
+
+- Start building and shipping riscv64 wheels
+  -- by `@justeph <https://github.com/sponsors/justeph>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1626 <https://github.com/aio-libs/yarl/issues/1626>`__.
+
+
+Removals and backward incompatible breaking changes
+---------------------------------------------------
+
+- Dropped support for the experimental free-threaded build of Python 3.13 -- by `@ngoldbaum <https://github.com/sponsors/ngoldbaum>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1667 <https://github.com/aio-libs/yarl/issues/1667>`__.
+
+
+Improved documentation
+----------------------
+
+- Added a note in the ``yarl.URL.with_query()`` documentation explaining
+  that types implementing ``__int__`` (e.g. ``~uuid.UUID``) are
+  converted to integers, and advising users to cast to ``str`` when the
+  human-readable representation is needed -- by `@r266-tech <https://github.com/sponsors/r266-tech>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1638 <https://github.com/aio-libs/yarl/issues/1638>`__, `#1645 <https://github.com/aio-libs/yarl/issues/1645>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Resolved a ruff ``ISC004`` violation in the PEP 517 build backend so the
+  pre-commit ``ruff-check`` hook passes again
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1674 <https://github.com/aio-libs/yarl/issues/1674>`__.
+
+- Renamed the ``actions/checkout`` ``depth`` input to ``fetch-depth`` in the
+  reusable codspeed workflow so the actionlint pre-commit hook passes and the
+  intended shallow clone actually takes effect
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1676 <https://github.com/aio-libs/yarl/issues/1676>`__.
+
+- Bumped the pinned ``pyupgrade`` pre-commit hook to ``v3.21.2`` so it stops
+  crashing on Python 3.14, which made ``tokenize.cookie_re`` bytes-only
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1677 <https://github.com/aio-libs/yarl/issues/1677>`__.
+
+- The type preciseness coverage report generated by `MyPy
+  <https://mypy-lang.org>`__ is now uploaded to `Coveralls
+  <https://coveralls.io/github/aio-libs/yarl>`__ and
+  will not be included in the `Codecov views
+  <https://app.codecov.io/gh/aio-libs/yarl>`__ going forward
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1680 <https://github.com/aio-libs/yarl/issues/1680>`__.
+
+- Raised the per-matrix-cell timeout of the CI ``Test`` job from
+  5 to 10 minutes to prevent false failures on slower runners
+  -- by `@aiolibsbot <https://github.com/sponsors/aiolibsbot>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1683 <https://github.com/aio-libs/yarl/issues/1683>`__.
+
+- Added an ``AGENTS.md`` orientation file at the repository root,
+  covering the pull request template, ``CHANGES/`` news fragment
+  conventions, draft-PR workflow, and the Cython quoter layout, so
+  LLM contributors land changes that match project style
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1685 <https://github.com/aio-libs/yarl/issues/1685>`__.
+
+- Documented in ``AGENTS.md`` that the coverage gate also
+  applies to test code, so unreachable defensive ``raise`` guards
+  and one-sided cleanup branches in tests will fail CI
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1689 <https://github.com/aio-libs/yarl/issues/1689>`__.
+
+- Shrunk the CI wheel-build matrix on pull requests and non-tag pushes by
+  restricting ``CIBW_ARCHS_MACOS`` to ``arm64``, ``CIBW_ARCHS_WINDOWS`` to
+  ``AMD64``, and skipping the ``windows-11-arm`` runner -- the test matrix only
+  exercises those architectures, so the previously-built ``x86_64`` macOS and
+  ``ARM64`` Windows wheels were never installed. Tag releases still build the
+  full architecture set
+  -- by `@aiolibsbot <https://github.com/sponsors/aiolibsbot>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1692 <https://github.com/aio-libs/yarl/issues/1692>`__.
+
+- Documented the docs spell check (``make doc-spelling``) in
+  ``AGENTS.md`` as a pre-push gate, mirroring
+  `aio-libs/multidict#1345
+  <https://github.com/aio-libs/multidict/pull/1345>`__. The
+  spell checker reads every ``CHANGES/*.rst`` fragment as part
+  of the docs build, so an unknown technical word in a news
+  fragment fails CI before a human sees the PR
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1693 <https://github.com/aio-libs/yarl/issues/1693>`__.
+
+- Added a ``CLAUDE.md`` at the repository root that imports
+  ``AGENTS.md`` via Claude Code's ``@``-syntax, so the
+  project's LLM contributor rules load automatically when
+  working in Claude Code
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1696 <https://github.com/aio-libs/yarl/issues/1696>`__.
+
+- Enforced top-level imports across ``yarl`` and ``tests`` via the ruff
+  ``PLC0415`` rule, wired through a new ``ruff-check`` pre-commit hook.
+  Function-scoped imports must now opt in with ``# noqa: PLC0415`` plus
+  a comment explaining the import-time reason. Dropped the ``yesqa``
+  hook, which could not recognize ruff-only codes and stripped the new
+  ``noqa`` comments as stale; a wider migration off flake8 onto ruff
+  will follow separately
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1697 <https://github.com/aio-libs/yarl/issues/1697>`__.
+
+- Migrated the main tree from standalone ``black`` and ``isort``
+  pre-commit hooks to ``ruff format`` and the ruff ``I`` lint rule,
+  sharing the existing ``[tool.ruff]`` config in ``pyproject.toml``.
+  ``ruff-check`` now runs with ``--fix`` so import-order fixes apply
+  on commit, and the orphan ``[isort]`` block in ``setup.cfg`` was
+  removed. The ``packaging/pep517_backend/`` subtree keeps its own
+  ``.ruff.toml`` and is unaffected
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1698 <https://github.com/aio-libs/yarl/issues/1698>`__.
+
+- Switched the ``cibuildwheel`` build frontend to ``build[uv]`` so
+  that ``uv`` provisions every build and test virtual environment
+  in the wheel matrix. Test-dependency installation in particular
+  drops from a multi-second ``pip install`` per ABI to a roughly
+  sub-second ``uv`` resolve
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1699 <https://github.com/aio-libs/yarl/issues/1699>`__.
+
+- Restructured the root ``CLAUDE.md`` to import contributor
+  context from a shared ``aio-libs`` layer
+  (``~/.claude/aio-libs/context.md``), a project-specific layer
+  (``~/.claude/aio-libs/yarl/context.md``), the in-tree
+  ``AGENTS.md``, and an optional per-checkout
+  ``CLAUDE.local.md`` override (added to ``.gitignore``),
+  so shared ``aio-libs`` guidance can live outside the repository
+  while project rules continue to load automatically in Claude
+  Code -- by `@aiolibsbot <https://github.com/sponsors/aiolibsbot>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1700 <https://github.com/aio-libs/yarl/issues/1700>`__, `#1701 <https://github.com/aio-libs/yarl/issues/1701>`__.
+
+- Switched CI/CD to ``tox-dev/workflow``'s ``reusable-tox.yml``
+  driven by an in-tree ``tox.ini``. The ``build``,
+  ``metadata-validation`` and ``lint`` (``pre-commit``,
+  ``spellcheck-docs``, ``build-docs``) jobs all run through the
+  reusable workflow; MyPy coverage uploads to Coveralls from a
+  ``post-tox-job`` hook
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1711 <https://github.com/aio-libs/yarl/issues/1711>`__.
+
+- Switched the CI ``test`` job from ``actions/setup-python`` to
+  ``astral-sh/setup-uv`` with ``uv pip install``. Pre-release
+  interpreters skip the wheel cache so each run resolves freshly
+  against the current snapshot
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1715 <https://github.com/aio-libs/yarl/issues/1715>`__.
+
+- Switched the ``Aiohttp`` workflow that runs the aiohttp test
+  suite against the in-tree yarl checkout from
+  ``actions/setup-python`` to ``astral-sh/setup-uv`` with ``uv
+  pip install``
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1716 <https://github.com/aio-libs/yarl/issues/1716>`__.
+
+- Switched the ``Aiohttp`` workflow's ``make .develop`` step to
+  install aiohttp's dev env through ``uv pip`` by passing
+  ``PIP="uv pip"``
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1717 <https://github.com/aio-libs/yarl/issues/1717>`__.
+
+
+----
+
+
+1.23.0
+======
+
+*(2025-12-16)*
+
+
+Features
+--------
+
+- Added support for ``pydantic``, the ``~yarl.URL`` could be used as a
+  field type in ``pydantic`` models seamlessly.
+
+  *Related issues and pull requests on GitHub:*
+  `#1607 <https://github.com/aio-libs/yarl/issues/1607>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- The CI has been set up to notify Codecov about upload completion
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  With this, Codecov no longer needs to guess whether it received all
+  the intended coverage reports or not.
+
+  *Related issues and pull requests on GitHub:*
+  `#1577 <https://github.com/aio-libs/yarl/issues/1577>`__.
+
+- The in-tree build backend allows the end-users appending
+  ``CFLAGS`` and ``LDFLAGS`` by setting respective environment
+  variables externally.
+
+  It additionally sets up default compiler flags to perform
+  building with maximum optimization in release mode. This
+  makes the resulting artifacts shipped to PyPI smaller.
+
+  When line tracing is requested, the compiler and linker
+  flags are configured to include as much information as
+  possible for debugging and coverage tracking. The
+  development builds are therefore smaller.
+
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__
+
+  *Related issues and pull requests on GitHub:*
+  `#1586 <https://github.com/aio-libs/yarl/issues/1586>`__.
+
+- The `PEP 517 <https://peps.python.org/pep-517>`__ build backend now supports a new config
+  setting for controlling whether to build the project in-tree
+  or in a temporary directory. It only affects wheels and is
+  set up to build in a temporary directory by default. It does
+  not affect editable wheel builds — they will keep being
+  built in-tree regardless.
+
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__
+
+  Here's an example of using this setting:
+
+  .. code-block:: console
+
+     $ python -m build \
+         --config-setting=build-inplace=true
+
+  *Related issues and pull requests on GitHub:*
+  `#1590 <https://github.com/aio-libs/yarl/issues/1590>`__.
+
+- Starting this version, when building the wheels is happening
+  in an automatically created temporary directory, the build
+  backend makes an effort to normalize the respective file
+  system path to a deterministic source checkout directory.
+
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__
+
+  It does so by injecting the ``-ffile-prefix-map`` compiler
+  option into the ``CFLAGS`` environment variable as suggested
+  by known `reproducible build practices
+  <https://reproducible-builds.org/docs/build-path/>`__.
+
+  The effect is that downstreams will get more reproducible
+  build results.
+
+  *Related issues and pull requests on GitHub:*
+  `#1591 <https://github.com/aio-libs/yarl/issues/1591>`__.
+
+- Dropped Python 3.9 support; Python 3.10 is the minimal supported Python version
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1609 <https://github.com/aio-libs/yarl/issues/1609>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- The deprecated license classifier was removed from ``setup.cfg``
+  -- by `@yegorich <https://github.com/sponsors/yegorich>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1550 <https://github.com/aio-libs/yarl/issues/1550>`__.
+
+- The in-tree build backend allows the end-users appending
+  ``CFLAGS`` and ``LDFLAGS`` by setting respective environment
+  variables externally.
+
+  It additionally sets up default compiler flags to perform
+  building with maximum optimization in release mode. This
+  makes the resulting artifacts shipped to PyPI smaller.
+
+  When line tracing is requested, the compiler and linker
+  flags are configured to include as much information as
+  possible for debugging and coverage tracking. The
+  development builds are therefore smaller.
+
+  -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__
+
+  *Related issues and pull requests on GitHub:*
+  `#1586 <https://github.com/aio-libs/yarl/issues/1586>`__.
+
+- The CI has been updated to consistently benchmark optimized
+  release builds -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  When the release workflow is triggered, the pre-built wheels
+  ready to hit PyPI are being tested. Otherwise, the job
+  builds the project from source, while the rest of the
+  workflow uses debug builds for line tracing and coverage
+  collection.
+
+  *Related issues and pull requests on GitHub:*
+  `#1587 <https://github.com/aio-libs/yarl/issues/1587>`__.
+
+
+----
+
+
+1.22.0
+======
+
+*(2025-10-05)*
+
+
+Features
+--------
+
+- Added arm64 Windows wheel builds
+  -- by `@finnagin <https://github.com/sponsors/finnagin>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1516 <https://github.com/aio-libs/yarl/issues/1516>`__.
+
+
+----
+
+
+1.21.0
+======
+
+*(2025-10-05)*
+
+
+Contributor-facing changes
+--------------------------
+
+- The ``reusable-cibuildwheel.yml`` workflow has been refactored to
+  be more generic and ``ci-cd.yml`` now holds all the configuration
+  toggles -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1535 <https://github.com/aio-libs/yarl/issues/1535>`__.
+
+- When building wheels, the source distribution is now passed directly
+  to the ``cibuildwheel`` invocation -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1536 <https://github.com/aio-libs/yarl/issues/1536>`__.
+
+- Added CI for Python 3.14 -- by `@kumaraditya303 <https://github.com/sponsors/kumaraditya303>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1560 <https://github.com/aio-libs/yarl/issues/1560>`__.
+
+
+----
+
+
+1.20.1
+======
+
+*(2025-06-09)*
+
+
+Bug fixes
+---------
+
+- Started raising a ``ValueError`` exception raised for corrupted
+  IPv6 URL values.
+
+  These fixes the issue where exception ``IndexError`` was
+  leaking from the internal code because of not being handled and
+  transformed into a user-facing error. The problem was happening
+  under the following conditions: empty IPv6 URL, brackets in
+  reverse order.
+
+  -- by `@MaelPic <https://github.com/sponsors/MaelPic>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1512 <https://github.com/aio-libs/yarl/issues/1512>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Updated to use Cython 3.1 universally across the build path -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1514 <https://github.com/aio-libs/yarl/issues/1514>`__.
+
+- Made Cython line tracing opt-in via the ``with-cython-tracing`` build config setting -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  Previously, line tracing was enabled by default in ``pyproject.toml``, which caused build issues for some users and made wheels nearly twice as slow.
+  Now line tracing is only enabled when explicitly requested via ``pip install . --config-setting=with-cython-tracing=true`` or by setting the ``YARL_CYTHON_TRACING`` environment variable.
+
+  *Related issues and pull requests on GitHub:*
+  `#1521 <https://github.com/aio-libs/yarl/issues/1521>`__.
+
+
+----
+
+
+1.20.0
+======
+
+*(2025-04-16)*
+
+
+Features
+--------
+
+- Implemented support for the free-threaded build of CPython 3.13 -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1456 <https://github.com/aio-libs/yarl/issues/1456>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Started building wheels for the free-threaded build of CPython 3.13 -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1456 <https://github.com/aio-libs/yarl/issues/1456>`__.
+
+
+----
+
+
+1.19.0
+======
+
+*(2025-04-05)*
+
+
+Bug fixes
+---------
+
+- Fixed entire name being re-encoded when using ``yarl.URL.with_suffix()`` -- by `@NTFSvolume <https://github.com/sponsors/NTFSvolume>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1468 <https://github.com/aio-libs/yarl/issues/1468>`__.
+
+
+Features
+--------
+
+- Started building armv7l wheels for manylinux -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1495 <https://github.com/aio-libs/yarl/issues/1495>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- GitHub Actions CI/CD is now configured to manage caching pip-ecosystem
+  dependencies using `re-actors/cache-python-deps`_ -- an action by
+  `@webknjaz <https://github.com/sponsors/webknjaz>`__ that takes into account ABI stability and the exact
+  version of Python runtime.
+
+  .. _`re-actors/cache-python-deps`:
+     https://github.com/marketplace/actions/cache-python-deps
+
+  *Related issues and pull requests on GitHub:*
+  `#1471 <https://github.com/aio-libs/yarl/issues/1471>`__.
+
+- Increased minimum `propcache`_ version to 0.2.1 to fix failing tests -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  .. _`propcache`:
+     https://github.com/aio-libs/propcache
+
+  *Related issues and pull requests on GitHub:*
+  `#1479 <https://github.com/aio-libs/yarl/issues/1479>`__.
+
+- Added all hidden folders to pytest's ``norecursedirs`` to prevent it
+  from trying to collect tests there -- by `@lysnikolaou <https://github.com/sponsors/lysnikolaou>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1480 <https://github.com/aio-libs/yarl/issues/1480>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved accuracy of type annotations -- by `@Dreamsorcerer <https://github.com/sponsors/Dreamsorcerer>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1484 <https://github.com/aio-libs/yarl/issues/1484>`__.
+
+- Improved performance of parsing query strings -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1493 <https://github.com/aio-libs/yarl/issues/1493>`__, `#1497 <https://github.com/aio-libs/yarl/issues/1497>`__.
+
+- Improved performance of the C unquoter -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1496 <https://github.com/aio-libs/yarl/issues/1496>`__, `#1498 <https://github.com/aio-libs/yarl/issues/1498>`__.
+
+
+----
+
+
+1.18.3
+======
+
+*(2024-12-01)*
+
+
+Bug fixes
+---------
+
+- Fixed uppercase ASCII hosts being rejected by ``URL.build()()`` and ``yarl.URL.with_host()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#954 <https://github.com/aio-libs/yarl/issues/954>`__, `#1442 <https://github.com/aio-libs/yarl/issues/1442>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performances of multiple path properties on cache miss -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1443 <https://github.com/aio-libs/yarl/issues/1443>`__.
+
+
+----
+
+
+1.18.2
+======
+
+*(2024-11-29)*
+
+
+No significant changes.
+
+
+----
+
+
+1.18.1
+======
+
+*(2024-11-29)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved cache performance when ``~yarl.URL`` objects are constructed from ``yarl.URL.build()`` with ``encoded=True`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1432 <https://github.com/aio-libs/yarl/issues/1432>`__.
+
+- Improved cache performance for operations that produce a new ``~yarl.URL`` object -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1434 <https://github.com/aio-libs/yarl/issues/1434>`__, `#1436 <https://github.com/aio-libs/yarl/issues/1436>`__.
+
+
+----
+
+
+1.18.0
+======
+
+*(2024-11-21)*
+
+
+Features
+--------
+
+- Added ``keep_query`` and ``keep_fragment`` flags in the ``yarl.URL.with_path()``, ``yarl.URL.with_name()`` and ``yarl.URL.with_suffix()`` methods, allowing users to optionally retain the query string and fragment in the resulting URL when replacing the path -- by `@paul-nameless <https://github.com/sponsors/paul-nameless>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#111 <https://github.com/aio-libs/yarl/issues/111>`__, `#1421 <https://github.com/aio-libs/yarl/issues/1421>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Started running downstream ``aiohttp`` tests in CI -- by `@Cycloctane <https://github.com/sponsors/Cycloctane>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1415 <https://github.com/aio-libs/yarl/issues/1415>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of converting ``~yarl.URL`` to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1422 <https://github.com/aio-libs/yarl/issues/1422>`__.
+
+
+----
+
+
+1.17.2
+======
+
+*(2024-11-17)*
+
+
+Bug fixes
+---------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1411 <https://github.com/aio-libs/yarl/issues/1411>`__, `#1412 <https://github.com/aio-libs/yarl/issues/1412>`__.
+
+- Fixed a bug causing ``~yarl.URL.port`` to return the default port when the given port was zero
+  -- by `@gmacon <https://github.com/sponsors/gmacon>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1413 <https://github.com/aio-libs/yarl/issues/1413>`__.
+
+
+Features
+--------
+
+- Make error messages include details of incorrect type when ``port`` is not int in ``yarl.URL.build()``.
+  -- by `@Cycloctane <https://github.com/sponsors/Cycloctane>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1414 <https://github.com/aio-libs/yarl/issues/1414>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1411 <https://github.com/aio-libs/yarl/issues/1411>`__, `#1412 <https://github.com/aio-libs/yarl/issues/1412>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the ``yarl.URL.joinpath()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1418 <https://github.com/aio-libs/yarl/issues/1418>`__.
+
+
+----
+
+
+1.17.1
+======
+
+*(2024-10-30)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of many ``~yarl.URL`` methods -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1396 <https://github.com/aio-libs/yarl/issues/1396>`__, `#1397 <https://github.com/aio-libs/yarl/issues/1397>`__, `#1398 <https://github.com/aio-libs/yarl/issues/1398>`__.
+
+- Improved performance of passing a `dict` or `str` to ``yarl.URL.extend_query()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1401 <https://github.com/aio-libs/yarl/issues/1401>`__.
+
+
+----
+
+
+1.17.0
+======
+
+*(2024-10-28)*
+
+
+Features
+--------
+
+- Added ``~yarl.URL.host_port_subcomponent`` which returns the ``3986#section-3.2.2`` host and ``3986#section-3.2.3`` port subcomponent -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1375 <https://github.com/aio-libs/yarl/issues/1375>`__.
+
+
+----
+
+
+1.16.0
+======
+
+*(2024-10-21)*
+
+
+Bug fixes
+---------
+
+- Fixed blocking I/O to load Python code when creating a new ``~yarl.URL`` with non-ascii characters in the network location part -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1342 <https://github.com/aio-libs/yarl/issues/1342>`__.
+
+
+Removals and backward incompatible breaking changes
+---------------------------------------------------
+
+- Migrated to using a single cache for encoding hosts -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  Passing ``ip_address_size`` and ``host_validate_size`` to ``yarl.cache_configure()`` is deprecated in favor of the new ``encode_host_size`` parameter and will be removed in a future release. For backwards compatibility, the old parameters affect the ``encode_host`` cache size.
+
+  *Related issues and pull requests on GitHub:*
+  `#1348 <https://github.com/aio-libs/yarl/issues/1348>`__, `#1357 <https://github.com/aio-libs/yarl/issues/1357>`__, `#1363 <https://github.com/aio-libs/yarl/issues/1363>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of constructing ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1336 <https://github.com/aio-libs/yarl/issues/1336>`__.
+
+- Improved performance of calling ``yarl.URL.build()`` and constructing unencoded ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1345 <https://github.com/aio-libs/yarl/issues/1345>`__.
+
+- Reworked the internal encoding cache to improve performance on cache hit -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1369 <https://github.com/aio-libs/yarl/issues/1369>`__.
+
+
+----
+
+
+1.15.5
+======
+
+*(2024-10-18)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the ``yarl.URL.joinpath()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1304 <https://github.com/aio-libs/yarl/issues/1304>`__.
+
+- Improved performance of the ``yarl.URL.extend_query()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1305 <https://github.com/aio-libs/yarl/issues/1305>`__.
+
+- Improved performance of the ``yarl.URL.origin()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1306 <https://github.com/aio-libs/yarl/issues/1306>`__.
+
+- Improved performance of the ``yarl.URL.with_path()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1307 <https://github.com/aio-libs/yarl/issues/1307>`__.
+
+- Improved performance of the ``yarl.URL.with_query()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1308 <https://github.com/aio-libs/yarl/issues/1308>`__, `#1328 <https://github.com/aio-libs/yarl/issues/1328>`__.
+
+- Improved performance of the ``yarl.URL.update_query()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1309 <https://github.com/aio-libs/yarl/issues/1309>`__, `#1327 <https://github.com/aio-libs/yarl/issues/1327>`__.
+
+- Improved performance of the ``yarl.URL.join()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1313 <https://github.com/aio-libs/yarl/issues/1313>`__.
+
+- Improved performance of ``~yarl.URL`` equality checks -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1315 <https://github.com/aio-libs/yarl/issues/1315>`__.
+
+- Improved performance of ``~yarl.URL`` methods that modify the network location -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1316 <https://github.com/aio-libs/yarl/issues/1316>`__.
+
+- Improved performance of the ``yarl.URL.with_fragment()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1317 <https://github.com/aio-libs/yarl/issues/1317>`__.
+
+- Improved performance of calculating the hash of ``~yarl.URL`` objects -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1318 <https://github.com/aio-libs/yarl/issues/1318>`__.
+
+- Improved performance of the ``yarl.URL.relative()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1319 <https://github.com/aio-libs/yarl/issues/1319>`__.
+
+- Improved performance of the ``yarl.URL.with_name()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1320 <https://github.com/aio-libs/yarl/issues/1320>`__.
+
+- Improved performance of ``~yarl.URL.parent`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1321 <https://github.com/aio-libs/yarl/issues/1321>`__.
+
+- Improved performance of the ``yarl.URL.with_scheme()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1322 <https://github.com/aio-libs/yarl/issues/1322>`__.
+
+
+----
+
+
+1.15.4
+======
+
+*(2024-10-16)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the quoter when all characters are safe -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1288 <https://github.com/aio-libs/yarl/issues/1288>`__.
+
+- Improved performance of unquoting strings -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1292 <https://github.com/aio-libs/yarl/issues/1292>`__, `#1293 <https://github.com/aio-libs/yarl/issues/1293>`__.
+
+- Improved performance of calling ``yarl.URL.build()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1297 <https://github.com/aio-libs/yarl/issues/1297>`__.
+
+
+----
+
+
+1.15.3
+======
+
+*(2024-10-15)*
+
+
+Bug fixes
+---------
+
+- Fixed ``yarl.URL.build()`` failing to validate paths must start with a ``/`` when passing ``authority`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  The validation only worked correctly when passing ``host``.
+
+  *Related issues and pull requests on GitHub:*
+  `#1265 <https://github.com/aio-libs/yarl/issues/1265>`__.
+
+
+Removals and backward incompatible breaking changes
+---------------------------------------------------
+
+- Removed support for Python 3.8 as it has reached end of life -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1203 <https://github.com/aio-libs/yarl/issues/1203>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of constructing ``~yarl.URL`` when the net location is only the host -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1271 <https://github.com/aio-libs/yarl/issues/1271>`__.
+
+
+----
+
+
+1.15.2
+======
+
+*(2024-10-13)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of converting ``~yarl.URL`` to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1234 <https://github.com/aio-libs/yarl/issues/1234>`__.
+
+- Improved performance of ``yarl.URL.joinpath()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1248 <https://github.com/aio-libs/yarl/issues/1248>`__, `#1250 <https://github.com/aio-libs/yarl/issues/1250>`__.
+
+- Improved performance of constructing query strings from ``~multidict.MultiDict`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1256 <https://github.com/aio-libs/yarl/issues/1256>`__.
+
+- Improved performance of constructing query strings with ``int`` values -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1259 <https://github.com/aio-libs/yarl/issues/1259>`__.
+
+
+----
+
+
+1.15.1
+======
+
+*(2024-10-12)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of calling ``yarl.URL.build()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1222 <https://github.com/aio-libs/yarl/issues/1222>`__.
+
+- Improved performance of all ``~yarl.URL`` methods that create new ``~yarl.URL`` objects -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1226 <https://github.com/aio-libs/yarl/issues/1226>`__.
+
+- Improved performance of ``~yarl.URL`` methods that modify the network location -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1229 <https://github.com/aio-libs/yarl/issues/1229>`__.
+
+
+----
+
+
+1.15.0
+======
+
+*(2024-10-11)*
+
+
+Bug fixes
+---------
+
+- Fixed validation with ``yarl.URL.with_scheme()`` when passed scheme is not lowercase -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1189 <https://github.com/aio-libs/yarl/issues/1189>`__.
+
+
+Features
+--------
+
+- Started building ``armv7l`` wheels -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1204 <https://github.com/aio-libs/yarl/issues/1204>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of constructing unencoded ``~yarl.URL`` objects -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1188 <https://github.com/aio-libs/yarl/issues/1188>`__.
+
+- Added a cache for parsing hosts to reduce overhead of encoding ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1190 <https://github.com/aio-libs/yarl/issues/1190>`__.
+
+- Improved performance of constructing query strings from ``~collections.abc.Mapping`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1193 <https://github.com/aio-libs/yarl/issues/1193>`__.
+
+- Improved performance of converting ``~yarl.URL`` objects to strings -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1198 <https://github.com/aio-libs/yarl/issues/1198>`__.
+
+
+----
+
 
 1.14.0
 ======

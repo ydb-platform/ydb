@@ -1,14 +1,16 @@
-import sys, platform, re, pytest
+import os
+import re
+import sys
+import pathlib
+import platform
+import subprocess
+import pytest
 from numpy._core._multiarray_umath import (
     __cpu_features__,
     __cpu_baseline__,
     __cpu_dispatch__,
 )
 import numpy as np
-import subprocess
-import pathlib
-import os
-import re
 
 def assert_features_equal(actual, desired, fname):
     __tracebackhide__ = True  # Hide traceback for py.test
@@ -85,10 +87,7 @@ class AbstractTest:
         map_names = self.features_map.get(feature_name, feature_name)
         if isinstance(map_names, str):
             return map_names in self.features_flags
-        for f in map_names:
-            if f in self.features_flags:
-                return True
-        return False
+        return any(f in self.features_flags for f in map_names)
 
     def load_flags_cpuinfo(self, magic_key):
         self.features_flags = self.get_cpuinfo_item(magic_key)
@@ -140,7 +139,7 @@ class TestEnvPrivation:
     SCRIPT = """
 def main():
     from numpy._core._multiarray_umath import (
-        __cpu_features__, 
+        __cpu_features__,
         __cpu_dispatch__
     )
 
@@ -312,14 +311,24 @@ if __name__ == "__main__":
         err_type = "RuntimeError"
         self._expect_error(msg, err_type)
 
-        # Ensure that only the bad feature gets reported
-        feats = f"{bad_feature}, {self.BASELINE_FEAT}"
+        # Ensure that it fails even when providing garbage in addition
+        feats = f"{bad_feature}, Foobar"
         self.env['NPY_ENABLE_CPU_FEATURES'] = feats
         msg = (
             f"You cannot enable CPU features \\({bad_feature}\\), since they "
             "are not supported by your machine."
         )
         self._expect_error(msg, err_type)
+
+        if self.BASELINE_FEAT is not None:
+            # Ensure that only the bad feature gets reported
+            feats = f"{bad_feature}, {self.BASELINE_FEAT}"
+            self.env['NPY_ENABLE_CPU_FEATURES'] = feats
+            msg = (
+                f"You cannot enable CPU features \\({bad_feature}\\), since "
+                "they are not supported by your machine."
+            )
+            self._expect_error(msg, err_type)
 
 is_linux = sys.platform.startswith('linux')
 is_cygwin = sys.platform.startswith('cygwin')
@@ -393,12 +402,15 @@ class Test_ARM_Features(AbstractTest):
     def load_flags(self):
         self.load_flags_cpuinfo("Features")
         arch = self.get_cpuinfo_item("CPU architecture")
-        # in case of mounting virtual filesystem of aarch64 kernel
-        is_rootfs_v8 = int('0'+next(iter(arch))) > 7 if arch else 0
-        if  re.match("^(aarch64|AARCH64)", machine) or is_rootfs_v8:
-            self.features_map = dict(
-                NEON="ASIMD", HALF="ASIMD", VFPV4="ASIMD"
-            )
+        # in case of mounting virtual filesystem of aarch64 kernel without linux32
+        is_rootfs_v8 = (
+            not re.match("^armv[0-9]+l$", machine) and
+            (int('0' + next(iter(arch))) > 7 if arch else 0)
+        )
+        if re.match("^(aarch64|AARCH64)", machine) or is_rootfs_v8:
+            self.features_map = {
+                "NEON": "ASIMD", "HALF": "ASIMD", "VFPV4": "ASIMD"
+            }
         else:
             self.features_map = dict(
                 # ELF auxiliary vector and /proc/cpuinfo on Linux kernel(armv8 aarch32)

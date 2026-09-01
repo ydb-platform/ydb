@@ -54,12 +54,17 @@ struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
         OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        OnSinkStateCommitted(outputIndex, checkpoint);
+    }
+
     void OnAsyncOutputFinished(ui64 outputIndex) override final {
         OnSinkFinished(outputIndex);
     }
 
     virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
     virtual void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnSinkFinished(ui64 outputIndex) = 0;
 };
 
@@ -72,12 +77,17 @@ struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks
         OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        OnTransformStateCommitted(outputIndex, checkpoint);
+    }
+
     void OnAsyncOutputFinished(ui64 outputIndex) override final {
         OnTransformFinished(outputIndex);
     }
 
     virtual void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
     virtual void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnTransformStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnTransformFinished(ui64 outputIndex) = 0;
 };
 
@@ -436,7 +446,7 @@ protected:
                 ProcessOutputsState.ChannelsReady = false;
                 ProcessOutputsState.HasDataToSend = true;
                 ProcessOutputsState.AllOutputsFinished = false;
-                CA_LOG_T("Can not drain channelId: " << channelId << ", no dst actor id");
+                CA_LOG_T("Cannot drain channelId: " << channelId << ", no dst actor id");
                 if (Y_UNLIKELY(outputChannel.Stats)) {
                     outputChannel.Stats->NoDstActorId++;
                 }
@@ -497,6 +507,12 @@ protected:
             return;
         }
 
+        CA_LOG_T("Check run status"
+            << ". LastRunStatus: " << ProcessOutputsState.LastRunStatus
+            << ". ChannelsReady: " << ProcessOutputsState.ChannelsReady
+            << ". DataWasSent: " << ProcessOutputsState.DataWasSent
+            << ". HasDataToSend: " << ProcessOutputsState.HasDataToSend);
+
         auto status = ProcessOutputsState.LastRunStatus;
 
         if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished && !HasEffectsOutputs) {
@@ -536,7 +552,9 @@ protected:
                 for (auto& [channelId, inputChannel] : InputChannelsMap) {
                     pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
                 }
+
                 if (!pollSent) {
+                    CA_LOG_T("Cannot poll input channels, continue execute, data was sent: " << ProcessOutputsState.DataWasSent);
                     if (ProcessOutputsState.DataWasSent) {
                         ContinueExecute(EResumeSource::CADataSent);
                     }
@@ -573,6 +591,7 @@ protected:
                         finished &= info.Channel->IsFinished();
                     }
                     if (!finished) {
+                        CA_LOG_T("Continue execution, not all input channels are finished");
                         for (auto& [channelId, info] : InputChannelsMap) {
                             info.Channel->Finish();
                         }
@@ -818,9 +837,19 @@ protected:
         Checkpoints->OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
+        Checkpoints->OnSinkStateCommitted(outputIndex, checkpoint);
+    }
+
     void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
         Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
+    }
+
+    void OnTransformStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
+        Y_ABORT_UNLESS(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
+        Checkpoints->OnTransformStateCommitted(outputIndex, checkpoint);
     }
 
     void OnSinkFinished(ui64 outputIndex) override final {
@@ -834,17 +863,23 @@ protected:
     }
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
-    //bool ReadyToCheckpoint() is pure and must be overriden in a derived class
+    //bool ReadyToCheckpoint() is pure and must be overridden in a derived class
 
-    void CommitState(const NDqProto::TCheckpoint& checkpoint) override final{
-        CA_LOG_D("Commit state");
-        for (auto& [inputIndex, source] : SourcesMap) {
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) override final {
+        CA_LOG_D("Commit state, sources count: " << SourcesMap.size() << ", sinks count: " << SinksMap.size());
+
+        for (auto& [_, source] : SourcesMap) {
             Y_ABORT_UNLESS(source.AsyncInput);
             source.AsyncInput->CommitState(checkpoint);
         }
+
+        for (auto& [_, sink] : SinksMap) {
+            Y_ABORT_UNLESS(sink.AsyncOutput);
+            sink.AsyncOutput->CommitState(checkpoint);
+        }
     }
 
-    // void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) is pure and must be overriden in a derived class
+    // void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) is pure and must be overridden in a derived class
 
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {
@@ -854,6 +889,27 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
         // sources or input channels was unpaused, trigger new poll
         ResumeExecution(EResumeSource::CAResumeByCheckpoint);
+    }
+
+    TString GetTaskDebugState() const override {
+        auto diagnostics = TStringBuilder() << "Configuration. ["
+            << "Input channels #" << InputChannelsMap.size()
+            << ". Input transforms #" << InputTransformsMap.size()
+            << ". Sources #" << SourcesMap.size()
+            << ". Output channels #" << OutputChannelsMap.size()
+            << ". Output transforms #" << OutputTransformsMap.size()
+            << ". Sinks #" << SinksMap.size()
+            << "] ";
+
+        diagnostics << "Runtime state. ["
+            << "Compute state: " << NDqProto::EComputeState_Name(State)
+            << ". Last run time: " << ProcessOutputsState.LastRunTime
+            << ". Last run status: " << ProcessOutputsState.LastRunStatus
+            << ". Continue execution scheduled: " << ResumeEventScheduled
+            << ". Pending watermark: " << (WatermarksTracker.HasPendingWatermark() ? ToString(*WatermarksTracker.GetPendingWatermark()) : "<null>")
+            << "] ";
+
+        return diagnostics;
     }
 
 protected:
@@ -981,11 +1037,13 @@ protected:
         bool EarlyFinish = false;
         bool PopStarted = false;
         bool IsTransformOutput = false; // Is this channel output of a transform.
+        NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::ECheckpointingMode::CHECKPOINTING_MODE_DISABLED;
         NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
 
         TOutputChannelInfo(ui64 channelId, ui32 dstStageId)
-            : ChannelId(channelId), DstStageId(dstStageId)
-        { }
+            : ChannelId(channelId)
+            , DstStageId(dstStageId)
+        {}
 
         struct TStats {
             ui64 BlockedByCapacity = 0;
@@ -1023,6 +1081,7 @@ protected:
             const NDqProto::TWatermark* GetWatermarkOptional() const {
                 return HasWatermark ? &Watermark : nullptr;
             }
+
             const NDqProto::TCheckpoint* GetCheckpointOptional() const {
                 return HasCheckpoint ? &Checkpoint : nullptr;
             }
@@ -1072,17 +1131,21 @@ protected:
                 Y_ABORT_UNLESS(Channel->IsFinished());
                 return result;
             }
+
             result.reserve(countLimit);
             for (ui32 i = 0; i < countLimit && !Finished; ++i) {
                 TDrainedChannelMessage message;
                 if (!message.ReadData(*this)) {
                     break;
                 }
+
                 result.emplace_back(std::move(message));
+
                 if (Channel->IsFinished()) {
                     Finished = true;
                 }
             }
+
             return result;
         }
     };
@@ -1900,12 +1963,12 @@ protected:
         NDqProto::TCheckpoint checkpoint;
 
         const ui64 dataSize = !outputInfo.Finished ? sink->Pop(dataBatch, bytes) : 0;
-        Y_UNUSED(sink->Pop(watermark));
+        const bool hasWatermark = sink->Pop(watermark);
         const bool hasCheckpoint = sink->Pop(checkpoint);
         if (!dataSize && !hasCheckpoint) {
             if (!sink->IsFinished()) {
-                CA_LOG_D("sink " << outputIndex << ": nothing to send and is not finished");
-                return 0; // sink is empty and not finished yet
+                CA_LOG_D("sink " << outputIndex << ": nothing to send and is not finished, consumed watermark: " << hasWatermark);
+                return hasWatermark; // sink is empty and not finished yet
             }
         }
         outputInfo.Finished = sink->IsFinished();
@@ -1913,6 +1976,7 @@ protected:
         YQL_ENSURE(!dataSize || !dataBatch.empty()); // dataSize != 0 => !dataBatch.empty() // even if we're about to send empty rows.
 
         const ui32 checkpointSize = hasCheckpoint ? checkpoint.ByteSize() : 0;
+        Y_DEBUG_ABORT_UNLESS(!hasCheckpoint || checkpointSize > 0);
 
         TMaybe<NDqProto::TCheckpoint> maybeCheckpoint;
         if (hasCheckpoint) {
@@ -1920,9 +1984,9 @@ protected:
         }
 
         outputInfo.AsyncOutput->SendData(std::move(dataBatch), dataSize, maybeCheckpoint, outputInfo.Finished);
-        CA_LOG_T("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
+        CA_LOG_T("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier, sent watermark: " << hasWatermark);
 
-        return dataSize + checkpointSize;
+        return dataSize + checkpointSize + hasWatermark;
     }
 
 protected:
@@ -2270,10 +2334,7 @@ protected:
     }
 
     virtual ui64 CalcMkqlMemoryLimit() {
-        auto& opts = Task.GetProgram().GetSettings();
-        return opts.GetHasMapJoin()/* || opts.GetHasSort()*/
-            ? MemoryLimits.MkqlHeavyProgramMemoryLimit
-            : MemoryLimits.MkqlLightProgramMemoryLimit;
+        return MemoryLimits.MkqlLightProgramMemoryLimit;
     }
 
 protected:
@@ -2354,6 +2415,7 @@ protected:
                         outputChannel.PeerId = NActors::ActorIdFromProto(channel.GetDstEndpoint().GetActorId());
                     }
                     outputChannel.IsTransformOutput = outputDesc.HasTransform();
+                    outputChannel.CheckpointingMode = channel.GetCheckpointingMode();
                     outputChannel.WatermarksMode = channel.GetWatermarksMode();
 
                     if (Y_UNLIKELY(RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) {

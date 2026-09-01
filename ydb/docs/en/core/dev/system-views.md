@@ -10,7 +10,7 @@ Frequent access to system views leads to additional load on the database, especi
 
 ## Partitions {#partitions}
 
-The following system view stores detailed information about [partitions](topic.md#partitioning) of database tables:
+The following system view stores detailed information about [partitions](../concepts/datamodel/table.md#partitioning_row_table) of database tables:
 
 * `partition_stats` — contains information about instantaneous metrics and cumulative counters of operations. The former include, for example, CPU load data or the number of running [transactions](../concepts/transactions.md). The latter include the total number of rows read.
 
@@ -619,7 +619,7 @@ WHERE Name = "default";
 
 ## Resource pool classifier information {#resource_pools_classifiers}
 
-The `resource_pools_classifiers` system view contains information about [settings](create-resource-pool.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
+The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
 
 System view structure:
 
@@ -661,7 +661,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | User [SID](../concepts/glossary.md#tablet-implementation).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | User [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates whether login is allowed for this user; used for explicit blocking by an administrator. Independent of `IsLockedOut`.<br />Type: `Bool`. |
 | `IsLockedOut` | Indicates that this user is automatically blocked due to exceeding the number of failed authentications. Does not depend on `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | User creation time.<br />Type: `Timestamp`. |
@@ -680,7 +680,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | Group [SID](../concepts/glossary.md#tablet-implementation).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | Group [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
 
 ### Information about group membership
 

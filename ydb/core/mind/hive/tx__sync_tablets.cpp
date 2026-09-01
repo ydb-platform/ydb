@@ -162,7 +162,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxSyncTablets::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", Local.NodeId()});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

@@ -1,0 +1,13 @@
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+replace into Output
+select
+    string_field as key,
+    int64_field as value
+from Input
+order by key || "_suffix";

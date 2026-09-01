@@ -7,7 +7,7 @@ SRCS(
     block_range_field_ut.cpp
     block_range_map_ut.cpp
     block_range_ut.cpp
-
+    printable_params_ut.cpp
 )
 
 PEERDIR(

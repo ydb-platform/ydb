@@ -1,13 +1,13 @@
 self: super: with self; {
   opentelemetry-proto = stdenv.mkDerivation rec {
     name = "opentelemetry-proto";
-    version = "1.9.0";
+    version = "1.11.0";
 
     src = fetchFromGitHub {
       owner = "open-telemetry";
       repo = "opentelemetry-proto";
       rev = "v${version}";
-      hash = "sha256-5ZYu0HE0WRgf/TDmQ6oAwCJAcdnKtdHzDxU2DcmkBcg=";
+      hash = "sha256-1s94AS5+bPD0/UKbI/Ox+nSZe4PGLkinUcItITVgEiQ=";
     };
   };
 }

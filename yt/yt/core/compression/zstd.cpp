@@ -37,14 +37,14 @@ void VerifyError(size_t result)
         return;
     }
 
-    if (result == ZSTD_error_memory_allocation) {
+    if (ZSTD_getErrorCode(result) == ZSTD_error_memory_allocation) {
         AbortProcessDramatically(
             EProcessExitCode::OutOfMemory,
             "Zstd codec failed with memory allocation error");
     }
 
-    YT_LOG_FATAL("Zstd compression failed (Error: %v)",
-        ZSTD_getErrorName(result));
+    YT_TLOG_FATAL("Zstd compression failed")
+        .With("Error", ZSTD_getErrorName(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,6 +63,11 @@ void ZstdCompress(int level, TSource* source, TBlob* output)
     }
 
     auto context = ZSTD_createCCtx();
+    if (!context) {
+        AbortProcessDramatically(
+            EProcessExitCode::OutOfMemory,
+            "Zstd codec failed to allocate compression context");
+    }
     auto contextGuard = Finally([&] {
         ZSTD_freeCCtx(context);
     });
@@ -186,12 +191,12 @@ void ZstdDecompress(TSource* source, TBlob* output)
     size_t decompressedSize = ZSTD_decompress(outputPtr, outputSize, inputPtr, inputSize);
     if (ZSTD_isError(decompressedSize)) {
         THROW_ERROR_EXCEPTION("Zstd decompression failed: ZSTD_decompress returned an error")
-            << TErrorAttribute("error", ZSTD_getErrorName(decompressedSize));
+            .With("error", ZSTD_getErrorName(decompressedSize));
     }
     if (decompressedSize != outputSize) {
         THROW_ERROR_EXCEPTION("Zstd decompression failed: output size mismatch")
-            << TErrorAttribute("expected_size", outputSize)
-            << TErrorAttribute("actual_size", decompressedSize);
+            .With("expected_size", outputSize)
+            .With("actual_size", decompressedSize);
     }
 }
 
@@ -294,9 +299,9 @@ TDictionaryCompressionFrameInfo ZstdGetFrameInfo(TRef input)
         ZSTD_f_zstd1_magicless);
     if (result != 0) {
         THROW_ERROR_EXCEPTION("Failed to get frame header")
-            << TErrorAttribute("code", result)
-            << TErrorAttribute("is_error", ZSTD_isError(result))
-            << TErrorAttribute("error", ZSTD_getErrorName(result));
+            .With("code", result)
+            .With("is_error", ZSTD_isError(result))
+            .With("error", ZSTD_getErrorName(result));
     }
 
     return {
@@ -552,8 +557,8 @@ TErrorOr<TSharedRef> ZstdTrainCompressionDictionary(i64 dictionarySize, const st
         sampleSizes.size());
     if (ZSTD_isError(resultDictionarySize)) {
         return TError("Compression dictionary training failed")
-            << TErrorAttribute("zstd_error_code", static_cast<int>(ZSTD_getErrorCode(resultDictionarySize)))
-            << TErrorAttribute("zstd_error_name", ZSTD_getErrorName(resultDictionarySize));
+            .With("zstd_error_code", static_cast<int>(ZSTD_getErrorCode(resultDictionarySize)))
+            .With("zstd_error_name", ZSTD_getErrorName(resultDictionarySize));
     }
 
     YT_VERIFY(resultDictionarySize <= dictionary.Size());
@@ -604,9 +609,9 @@ IDigestedCompressionDictionaryPtr ZstdConstructDigestedCompressionDictionary(
 
     if (!digestedDictionary) {
         THROW_ERROR_EXCEPTION("Failed to create digested compression dictionary")
-            << TErrorAttribute("compression_level", compressionLevel)
-            << TErrorAttribute("dictionary_size", compressionDictionary.Size())
-            << TErrorAttribute("storage_size", storage.Size());
+            .With("compression_level", compressionLevel)
+            .With("dictionary_size", compressionDictionary.Size())
+            .With("storage_size", storage.Size());
     }
 
     return New<TDigestedCompressionDictionary>(std::move(storage), digestedDictionary);
@@ -629,8 +634,8 @@ IDigestedDecompressionDictionaryPtr ZstdConstructDigestedDecompressionDictionary
 
     if (!digestedDictionary) {
         THROW_ERROR_EXCEPTION("Failed to create digested decompression dictionary")
-            << TErrorAttribute("dictionary_size", decompressionDictionary.Size())
-            << TErrorAttribute("storage_size", storage.Size());
+            .With("dictionary_size", decompressionDictionary.Size())
+            .With("storage_size", storage.Size());
     }
 
     return New<TDigestedDecompressionDictionary>(std::move(storage), digestedDictionary);

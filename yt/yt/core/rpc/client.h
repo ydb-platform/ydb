@@ -280,7 +280,7 @@ private:
     TAttachmentsOutputStreamPtr RequestAttachmentsStream_;
     TAttachmentsInputStreamPtr ResponseAttachmentsStream_;
 
-    std::string User_;
+    std::string User_ = RootUserName;
     std::string UserTag_;
     std::string RequestInfo_;
 

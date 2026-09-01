@@ -1,6 +1,9 @@
 #include <benchmark/benchmark.h>
 
 #include <library/cpp/yt/logging/logger.h>
+#include <library/cpp/yt/logging/plain_text_formatter/formatter.h>
+
+#include <library/cpp/yt/string/raw_formatter.h>
 
 #include <atomic>
 
@@ -160,6 +163,35 @@ void BM_TLog_ThreeTags(benchmark::State& state)
     }
 }
 BENCHMARK(BM_TLog_ThreeTags);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void BM_FormatMessage_Normal(benchmark::State& state)
+{
+    TRawFormatter<1024> buffer;
+    TStringBuf message = "This is a standard log message without any special characters.";
+
+    for (auto _ : state) {
+        buffer.Reset();
+        FormatMessage(&buffer, message);
+        benchmark::DoNotOptimize(buffer.GetCursor());
+    }
+}
+BENCHMARK(BM_FormatMessage_Normal);
+
+void BM_FormatMessage_NeedsEscaping(benchmark::State& state)
+{
+    TRawFormatter<1024> buffer;
+    // Includes \n and a non-ascii character to trigger the SSE fallback.
+    TStringBuf message = "This message has a newline\n and some Russian \xD0\xA2 text.";
+
+    for (auto _ : state) {
+        buffer.Reset();
+        FormatMessage(&buffer, message);
+        benchmark::DoNotOptimize(buffer.GetCursor());
+    }
+}
+BENCHMARK(BM_FormatMessage_NeedsEscaping);
 
 ////////////////////////////////////////////////////////////////////////////////
 

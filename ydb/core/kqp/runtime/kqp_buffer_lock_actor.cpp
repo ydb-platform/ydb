@@ -395,11 +395,17 @@ public:
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_WRONG_SHARD_STATE: {
-                return RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    "Wrong shard state.",
-                    getIssues());
+                YDB_LOG_DEBUG("Received STATUS_WRONG_SHARD_STATE from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", shardId});
+                if (!RetryLockRequest(record.GetRequestId(), false)) {
+                    return RuntimeError(
+                        NYql::NDqProto::StatusIds::UNAVAILABLE,
+                        NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                        TStringBuilder() << "Table: `" << Settings.TablePath << "` retry limit exceeded.",
+                        getIssues());
+                }
+                return;
             }
             default: {
                 return RuntimeError(

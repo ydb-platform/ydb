@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/tracing/public.h>
 
+#include <library/cpp/yt/logging/public.h>
+
 namespace NYT::NBacktraceIntrospector {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,7 +22,7 @@ struct TThreadIntrospectionInfo
     std::string ThreadName;
     NTracing::TTraceId TraceId;
     //! Empty if no trace context is known.
-    std::string TraceLoggingTag;
+    NLogging::TLoggingTagListPayload TraceLoggingTags;
     std::vector<const void*> Backtrace;
 };
 
@@ -41,7 +43,7 @@ struct TFiberIntrospectionInfo
     std::string ThreadName;
     NTracing::TTraceId TraceId;
     //! Empty if no trace context is known.
-    std::string TraceLoggingTag;
+    NLogging::TLoggingTagListPayload TraceLoggingTags;
     std::vector<const void*> Backtrace;
 };
 

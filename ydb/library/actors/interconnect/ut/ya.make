@@ -20,7 +20,6 @@ SRCS(
     poller_actor_ut.cpp
     dynamic_proxy_ut.cpp
     sticking_ut.cpp
-    #uring_ut.cpp
     xdc_shuffle_ut.cpp
     v2_event_serializer_ut.cpp
     v2_session_ut.cpp

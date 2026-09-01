@@ -3,10 +3,16 @@
 #include <ydb/public/api/client/yc_private/iam/user_account_service.grpc.pb.h>
 #include "user_account_service.h"
 #include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/ycloud/impl/util.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
+
+TUserAccountServiceSettings::TUserAccountServiceSettings(TString endpoint, TStringBuf userAgentHint) {
+    Endpoint = std::move(endpoint);
+    UserAgentPrefix = BuildUserAgentPrefix(userAgentHint);
+}
 
 class TUserAccountService : public NActors::TActor<TUserAccountService>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::UserAccountService> {
     using TThis = TUserAccountService;

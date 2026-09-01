@@ -11,6 +11,7 @@ from typing import (
     Generator,
     List,
     Literal,
+    ParamSpec,
     Sequence,
     Tuple,
     Type,
@@ -18,7 +19,6 @@ from typing import (
     TypeVar,
     Union,
     no_type_check,
-    no_type_check_decorator,
     overload,
 )
 
@@ -29,11 +29,6 @@ from typeguard import (
     typeguard_ignore,
 )
 
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
-
 if TYPE_CHECKING:
     from nonexistent import Imaginary
 
@@ -42,6 +37,7 @@ P = ParamSpec("P")
 
 
 if sys.version_info <= (3, 13):
+    from typing import no_type_check_decorator
 
     @no_type_check_decorator
     def dummy_decorator(func):
@@ -206,6 +202,11 @@ def pep_604_union_retval(x: Any) -> "str | int":
 
 @typechecked
 def builtin_generic_collections(x: "list[set[int]]") -> Any:
+    return x
+
+
+@typechecked
+def empty_tuple(x: "tuple[()]") -> Any:
     return x
 
 

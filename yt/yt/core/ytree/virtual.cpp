@@ -181,7 +181,7 @@ void TVirtualMapBase::GetSelf(
 
     if (limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
 
     auto keys = GetKeys(limit);
@@ -266,7 +266,7 @@ void TVirtualMapBase::ListSelf(
 
     if (limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
 
     auto keys = GetKeys(limit);

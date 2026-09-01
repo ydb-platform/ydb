@@ -221,6 +221,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
                     ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
                 }
+                if (Cfg->DDiskConfig->HasEnableChecksums()) {
+                    ddiskConfig.EnableChecksums = Cfg->DDiskConfig->GetEnableChecksums();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
@@ -326,6 +329,9 @@ namespace NKikimr::NStorage {
             vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
             vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
             vdiskConfig->HullCompFreeSpaceThresholdPerMille = HullCompFreeSpaceThresholdPerMille;
+            vdiskConfig->HullCompEmergencyMaxSsts = HullCompEmergencyMaxSsts;
+            vdiskConfig->HullCompEmergencyChunkReserve = HullCompEmergencyChunkReserve;
+            vdiskConfig->HullCompEmergencyEnableAtColor = HullCompEmergencyEnableAtColor;
             vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
@@ -357,14 +363,16 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
             vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
+            vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;
+            vdiskConfig->EnableChecksumWriteValidationOnVDisk = EnableChecksumWriteValidationOnVDisk;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
-            vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
+            vdiskConfig->FeatureFlags = *Cfg->FeatureFlags;
 
-            if (Cfg->BlobStorageConfig.HasVDiskPerformanceSettings()) {
-                for (auto &type : Cfg->BlobStorageConfig.GetVDiskPerformanceSettings().GetVDiskTypes()) {
+            if (Cfg->BlobStorageConfig->HasVDiskPerformanceSettings()) {
+                for (auto &type : Cfg->BlobStorageConfig->GetVDiskPerformanceSettings().GetVDiskTypes()) {
                     if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
                         if (type.HasMinHugeBlobSizeInBytes()) {
                             vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
@@ -373,19 +381,19 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            vdiskConfig->BalancingEnableSend = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableSend();
-            vdiskConfig->BalancingEnableDelete = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableDelete();
-            vdiskConfig->BalancingBalanceOnlyHugeBlobs = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBalanceOnlyHugeBlobs();
-            vdiskConfig->BalancingJobGranularity = TDuration::MicroSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetJobGranularityUs());
-            vdiskConfig->BalancingBatchSize = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBatchSize();
-            vdiskConfig->BalancingMaxToSendPerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToSendPerEpoch();
-            vdiskConfig->BalancingMaxToDeletePerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToDeletePerEpoch();
-            vdiskConfig->BalancingReadBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetReadBatchTimeoutMs());
-            vdiskConfig->BalancingSendBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSendBatchTimeoutMs());
-            vdiskConfig->BalancingRequestBlobsOnMainTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetRequestBlobsOnMainTimeoutMs());
-            vdiskConfig->BalancingDeleteBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetDeleteBatchTimeoutMs());
-            vdiskConfig->BalancingEpochTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEpochTimeoutMs());
-            vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
+            vdiskConfig->BalancingEnableSend = Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetEnableSend();
+            vdiskConfig->BalancingEnableDelete = Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetEnableDelete();
+            vdiskConfig->BalancingBalanceOnlyHugeBlobs = Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetBalanceOnlyHugeBlobs();
+            vdiskConfig->BalancingJobGranularity = TDuration::MicroSeconds(Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetJobGranularityUs());
+            vdiskConfig->BalancingBatchSize = Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetBatchSize();
+            vdiskConfig->BalancingMaxToSendPerEpoch = Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetMaxToSendPerEpoch();
+            vdiskConfig->BalancingMaxToDeletePerEpoch = Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetMaxToDeletePerEpoch();
+            vdiskConfig->BalancingReadBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetReadBatchTimeoutMs());
+            vdiskConfig->BalancingSendBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetSendBatchTimeoutMs());
+            vdiskConfig->BalancingRequestBlobsOnMainTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetRequestBlobsOnMainTimeoutMs());
+            vdiskConfig->BalancingDeleteBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetDeleteBatchTimeoutMs());
+            vdiskConfig->BalancingEpochTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetEpochTimeoutMs());
+            vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig->GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
 
             vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 

@@ -20,10 +20,10 @@ Y_UNIT_TEST_SUITE(SubColumnsSparsedBuilder) {
     }
 
     std::shared_ptr<IChunkedArray> BuildColumn(
-        const std::vector<std::pair<ui32, TString>>& data, const ui32 recordsCount, const EValueType vt, const bool sparsed) {
+        const std::vector<std::pair<ui32, NBinaryJson::TBinaryJson>>& data, const ui32 recordsCount, const EValueType vt, const bool sparsed) {
         TColumnElements col("k");
-        for (auto&& [idx, json] : data) {
-            col.AddData(ToBinaryJson(json), idx);
+        for (auto&& [idx, blob] : data) {
+            col.AddData(blob, idx);
         }
         if (sparsed) {
             col.BuildSparsedAccessor(recordsCount, vt);
@@ -35,8 +35,14 @@ Y_UNIT_TEST_SUITE(SubColumnsSparsedBuilder) {
 
     void CheckSparsedMatchesPlain(
         const std::vector<std::pair<ui32, TString>>& data, const ui32 recordsCount, const EValueType vt) {
-        auto sparsed = BuildColumn(data, recordsCount, vt, true);
-        auto plain = BuildColumn(data, recordsCount, vt, false);
+        // Serialize each record once and feed the identical blobs to both builders: the physical byte
+        // layout of a BinaryJson value is not canonical, so re-serializing would compare unrelated encodings.
+        std::vector<std::pair<ui32, NBinaryJson::TBinaryJson>> blobs;
+        for (auto&& [idx, json] : data) {
+            blobs.emplace_back(idx, ToBinaryJson(json));
+        }
+        auto sparsed = BuildColumn(blobs, recordsCount, vt, true);
+        auto plain = BuildColumn(blobs, recordsCount, vt, false);
         UNIT_ASSERT_VALUES_EQUAL((ui32)sparsed->GetType(), (ui32)IChunkedArray::EType::SparsedArray);
         UNIT_ASSERT_VALUES_EQUAL((ui32)plain->GetType(), (ui32)IChunkedArray::EType::Array);
         UNIT_ASSERT_VALUES_EQUAL(sparsed->GetRecordsCount(), recordsCount);

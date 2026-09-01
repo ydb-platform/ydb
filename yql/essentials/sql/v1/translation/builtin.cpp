@@ -1843,7 +1843,6 @@ private:
         State_.Set(ENodeState::Const, /*val=*/true /* FIXME: To avoid CheckAggregationLevel issue for non-const TypeOf. */);
     }
 
-private:
     TNodePtr RunConfig_;
 };
 
@@ -2849,7 +2848,6 @@ private:
         return TCallNode::DoInit(ctx, src);
     }
 
-private:
     TString Mode_;
 };
 
@@ -2916,7 +2914,6 @@ private:
         return IsStart ? "HopStart" : "HopEnd";
     }
 
-private:
     TVector<TNodePtr> Args_;
 };
 
@@ -3026,6 +3023,7 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
                 .Mode = aggMode,
                 .Args = args,
             };
+
             return BuildYqlAggregation(std::move(pos), std::move(aggregation));
         }
 
@@ -3357,7 +3355,8 @@ struct TBuiltinFuncData {
             {"pickle", {"Pickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Pickle", 1, 1)}},
             {"stablepickle", {"StablePickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StablePickle", 1, 1)}},
             {"unpickle", {"Unpickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unpickle", 2, 2)}},
-
+            {"aserased", {"AsErased", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsErased", 1, 1), NYql::NFeature::TypeErasure.MinLangVer}},
+            {"peekerased", {"PeekErased", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PeekErased", 2, 2), NYql::NFeature::TypeErasure.MinLangVer}},
             {"typehandle", {"TypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeHandle", 1, 1)}},
             {"parsetypehandle", {"ParseTypeHandle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ParseTypeHandle", 1, 1)}},
             {"typekind", {"TypeKind", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeKind", 1, 1)}},
@@ -4100,7 +4099,7 @@ TNodeResult BuildBuiltinFunc(
         return Wrap(BuildScriptUdf(pos, scriptName, name, args, nullptr));
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleType(normalizedName, ctx.FlexibleTypes, /* isPgType = */ false)) {
-            const auto type = *simpleType;
+            const auto& type = *simpleType;
             if (NUdf::FindDataSlot(type)) {
                 YQL_ENSURE(type != "Decimal");
                 return TNonNull(TNodePtr(new TYqlData(pos, type, args)));
@@ -4138,6 +4137,10 @@ TNodeResult BuildBuiltinFunc(
         }
 
         if (normalizedName == "tablename") {
+            if (isYqlSelect) {
+                return UnsupportedYqlSelect(ctx, "TableName");
+            }
+
             return TNonNull(TNodePtr(new TTableName(pos, args, ctx.Scoped->CurrService)));
         }
 
@@ -4190,9 +4193,19 @@ TNodeResult BuildBuiltinFunc(
                     if ("first" == aggNormalizedName || "last" == aggNormalizedName) {
                         return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context")));
                     }
+
+                    auto result = (*aggrCallback).second.Callback(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect);
+                    if (!result && result.error() == ESQLError::UnsupportedYqlSelect) {
+                        return UnsupportedYqlSelect(
+                            ctx, TStringBuilder() << "Aggregation '"
+                                                  << (originalNameSpace.empty() ? "" : originalNameSpace)
+                                                  << (originalNameSpace.empty() ? "" : "::")
+                                                  << name << "'");
+                    }
+
                     return WrapWithLangVerProxy(
                         pos,
-                        (*aggrCallback).second.Callback(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect),
+                        std::move(result),
                         TString(aggrCallback->second.CanonicalSqlName),
                         aggrCallback->second.MinLangVer,
                         aggrCallback->second.MaxLangVer);
@@ -4206,6 +4219,10 @@ TNodeResult BuildBuiltinFunc(
             }
 
             auto name = multi ? "MultiAggregateBy" : "AggregateBy";
+            if (isYqlSelect) {
+                return UnsupportedYqlSelect(ctx, TStringBuilder() << "Aggregation '" << name << "'");
+            }
+
             auto aggr = BuildFactoryAggregation(pos, name, "", aggMode, multi);
             return TNonNull(TNodePtr(new TBasicAggrFunc(pos, name, aggr, args)));
         }
@@ -4283,6 +4300,22 @@ TNodeResult BuildBuiltinFunc(
 
             if (isYqlSelect && normalizedName == "grouping") {
                 return Wrap(BuildYqlGrouping(pos, args));
+            }
+
+            if (isYqlSelect && IsIn({"tablerow", "jointablerow", "tablerows"}, normalizedName)) {
+                return UnsupportedYqlSelect(ctx, "TableRow/JoinTableRow/TableRows");
+            }
+
+            if (isYqlSelect && normalizedName == "tablepath") {
+                return UnsupportedYqlSelect(ctx, "TablePath");
+            }
+
+            if (isYqlSelect && normalizedName == "tablerecordindex") {
+                return UnsupportedYqlSelect(ctx, "TableRecordIndex");
+            }
+
+            if (isYqlSelect && normalizedName == "weakfield") {
+                return UnsupportedYqlSelect(ctx, "WeakField");
             }
 
             return WrapWithLangVerProxy(

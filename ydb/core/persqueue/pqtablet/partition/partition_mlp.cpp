@@ -118,7 +118,21 @@ void TPartition::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& 
         {"logPrefix", NPQ_LOG_PREFIX},
         {"consumer", ev->Get()->Record.GetConsumer()},
         {"getPartitionId", ev->Get()->GetPartitionId()});
-    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
+    const TString& consumer = ev->Get()->GetConsumer();
+    auto it = MLPConsumers.find(consumer);
+    if (it == MLPConsumers.end()) {
+        const auto* consumerConfig = GetConsumer(Config, consumer);
+        if (consumerConfig && consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            YDB_LOG_DEBUG("Queue TEvMLPUpdateExternalLockedMessageGroupsId until consumer is created",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"consumer", consumer});
+            MLPPendingEvents.emplace_back(ev);
+            return;
+        }
+        ForwardToMLPConsumer(consumer, ev);
+        return;
+    }
+    Forward(ev, it->second.ActorId);
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
@@ -170,13 +184,10 @@ void TPartition::ProcessMLPPendingEvents() {
         Handle(v);
     };
 
-    while (!MLPPendingEvents.empty()) {
-        auto& ev = MLPPendingEvents.front();
+    auto q = std::exchange(MLPPendingEvents, {});
+    for (auto& ev : q) {
         std::visit(visitor, ev);
-        MLPPendingEvents.pop_front();
     }
-
-    MLPPendingEvents = {};
 }
 
 void TPartition::InitializeMLPConsumers() {
@@ -250,6 +261,8 @@ void TPartition::InitializeMLPConsumers() {
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
     }
+
+    ProcessMLPPendingEvents();
 }
 
 void TPartition::DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer) {

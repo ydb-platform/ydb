@@ -488,6 +488,63 @@ HWY_API V InterleaveEven(V a, V b) {
 }
 #endif
 
+// ------------------------------ MinMagnitude/MaxMagnitude
+
+#if (defined(HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE) == defined(HWY_TARGET_TOGGLE))
+#ifdef HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+#undef HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+#else
+#define HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+#endif
+
+template <class V, HWY_IF_FLOAT_V(V)>
+HWY_API V MinMagnitude(V a, V b) {
+  const auto abs_a = Abs(a);
+  const auto abs_b = Abs(b);
+  return IfThenElse(Lt(abs_a, abs_b), a,
+                    Min(IfThenElse(Eq(abs_a, abs_b), a, b), b));
+}
+
+template <class V, HWY_IF_FLOAT_V(V)>
+HWY_API V MaxMagnitude(V a, V b) {
+  const auto abs_a = Abs(a);
+  const auto abs_b = Abs(b);
+  return IfThenElse(Lt(abs_a, abs_b), b,
+                    Max(IfThenElse(Eq(abs_a, abs_b), b, a), a));
+}
+
+#endif  // HWY_NATIVE_FLOAT_MIN_MAX_MAGNITUDE
+
+template <class V, HWY_IF_SIGNED_V(V)>
+HWY_API V MinMagnitude(V a, V b) {
+  const DFromV<V> d;
+  const RebindToUnsigned<decltype(d)> du;
+  const auto abs_a = BitCast(du, Abs(a));
+  const auto abs_b = BitCast(du, Abs(b));
+  return IfThenElse(RebindMask(d, Lt(abs_a, abs_b)), a,
+                    Min(IfThenElse(RebindMask(d, Eq(abs_a, abs_b)), a, b), b));
+}
+
+template <class V, HWY_IF_SIGNED_V(V)>
+HWY_API V MaxMagnitude(V a, V b) {
+  const DFromV<V> d;
+  const RebindToUnsigned<decltype(d)> du;
+  const auto abs_a = BitCast(du, Abs(a));
+  const auto abs_b = BitCast(du, Abs(b));
+  return IfThenElse(RebindMask(d, Lt(abs_a, abs_b)), b,
+                    Max(IfThenElse(RebindMask(d, Eq(abs_a, abs_b)), b, a), a));
+}
+
+template <class V, HWY_IF_UNSIGNED_V(V)>
+HWY_API V MinMagnitude(V a, V b) {
+  return Min(a, b);
+}
+
+template <class V, HWY_IF_UNSIGNED_V(V)>
+HWY_API V MaxMagnitude(V a, V b) {
+  return Max(a, b);
+}
+
 // ------------------------------ AddSub
 
 template <class V, HWY_IF_LANES_D(DFromV<V>, 1)>
@@ -1991,6 +2048,81 @@ HWY_API void StoreInterleaved4(VFromD<D> part0, VFromD<D> part1,
 
 #endif  // HWY_NATIVE_LOAD_STORE_INTERLEAVED
 
+// Load/StoreInterleaved for special floats. Requires HWY_GENERIC_IF_EMULATED_D
+// is defined such that it is true only for types that actually require these
+// generic implementations.
+#if HWY_IDE || (defined(HWY_NATIVE_LOAD_STORE_SPECIAL_FLOAT_INTERLEAVED) == \
+                    defined(HWY_TARGET_TOGGLE) &&                           \
+                defined(HWY_GENERIC_IF_EMULATED_D))
+#ifdef HWY_NATIVE_LOAD_STORE_SPECIAL_FLOAT_INTERLEAVED
+#undef HWY_NATIVE_LOAD_STORE_SPECIAL_FLOAT_INTERLEAVED
+#else
+#define HWY_NATIVE_LOAD_STORE_SPECIAL_FLOAT_INTERLEAVED
+#endif
+#if HWY_IDE
+#define HWY_GENERIC_IF_EMULATED_D(D) int
+#endif
+
+template <class D, HWY_GENERIC_IF_EMULATED_D(D), typename T = TFromD<D>>
+HWY_API void LoadInterleaved2(D d, const T* HWY_RESTRICT unaligned,
+                              VFromD<D>& v0, VFromD<D>& v1) {
+  const RebindToUnsigned<decltype(d)> du;
+  VFromD<decltype(du)> vu0, vu1;
+  LoadInterleaved2(du, detail::U16LanePointer(unaligned), vu0, vu1);
+  v0 = BitCast(d, vu0);
+  v1 = BitCast(d, vu1);
+}
+
+template <class D, HWY_GENERIC_IF_EMULATED_D(D), typename T = TFromD<D>>
+HWY_API void LoadInterleaved3(D d, const T* HWY_RESTRICT unaligned,
+                              VFromD<D>& v0, VFromD<D>& v1, VFromD<D>& v2) {
+  const RebindToUnsigned<decltype(d)> du;
+  VFromD<decltype(du)> vu0, vu1, vu2;
+  LoadInterleaved3(du, detail::U16LanePointer(unaligned), vu0, vu1, vu2);
+  v0 = BitCast(d, vu0);
+  v1 = BitCast(d, vu1);
+  v2 = BitCast(d, vu2);
+}
+
+template <class D, HWY_GENERIC_IF_EMULATED_D(D), typename T = TFromD<D>>
+HWY_API void LoadInterleaved4(D d, const T* HWY_RESTRICT unaligned,
+                              VFromD<D>& v0, VFromD<D>& v1, VFromD<D>& v2,
+                              VFromD<D>& v3) {
+  const RebindToUnsigned<decltype(d)> du;
+  VFromD<decltype(du)> vu0, vu1, vu2, vu3;
+  LoadInterleaved4(du, detail::U16LanePointer(unaligned), vu0, vu1, vu2, vu3);
+  v0 = BitCast(d, vu0);
+  v1 = BitCast(d, vu1);
+  v2 = BitCast(d, vu2);
+  v3 = BitCast(d, vu3);
+}
+
+template <class D, HWY_GENERIC_IF_EMULATED_D(D), typename T = TFromD<D>>
+HWY_API void StoreInterleaved2(VFromD<D> v0, VFromD<D> v1, D d,
+                               T* HWY_RESTRICT unaligned) {
+  const RebindToUnsigned<decltype(d)> du;
+  StoreInterleaved2(BitCast(du, v0), BitCast(du, v1), du,
+                    detail::U16LanePointer(unaligned));
+}
+
+template <class D, HWY_GENERIC_IF_EMULATED_D(D), typename T = TFromD<D>>
+HWY_API void StoreInterleaved3(VFromD<D> v0, VFromD<D> v1, VFromD<D> v2, D d,
+                               T* HWY_RESTRICT unaligned) {
+  const RebindToUnsigned<decltype(d)> du;
+  StoreInterleaved3(BitCast(du, v0), BitCast(du, v1), BitCast(du, v2), du,
+                    detail::U16LanePointer(unaligned));
+}
+
+template <class D, HWY_GENERIC_IF_EMULATED_D(D), typename T = TFromD<D>>
+HWY_API void StoreInterleaved4(VFromD<D> v0, VFromD<D> v1, VFromD<D> v2,
+                               VFromD<D> v3, D d, T* HWY_RESTRICT unaligned) {
+  const RebindToUnsigned<decltype(d)> du;
+  StoreInterleaved4(BitCast(du, v0), BitCast(du, v1), BitCast(du, v2),
+                    BitCast(du, v3), du, detail::U16LanePointer(unaligned));
+}
+
+#endif  // HWY_NATIVE_LOAD_STORE_SPECIAL_FLOAT_INTERLEAVED
+
 // ------------------------------ LoadN
 
 #if (defined(HWY_NATIVE_LOAD_N) == defined(HWY_TARGET_TOGGLE))
@@ -2685,15 +2817,7 @@ template <class D, typename T = TFromD<D>>
 HWY_API VFromD<D> GatherIndexN(D d, const T* HWY_RESTRICT base,
                                VFromD<RebindToSigned<D>> index,
                                const size_t max_lanes_to_load) {
-  const RebindToSigned<D> di;
-  using TI = TFromD<decltype(di)>;
-  static_assert(sizeof(T) == sizeof(TI), "Index/lane size must match");
-
-  VFromD<D> v = Zero(d);
-  for (size_t i = 0; i < HWY_MIN(MaxLanes(d), max_lanes_to_load); ++i) {
-    v = InsertLane(v, i, base[ExtractLane(index, i)]);
-  }
-  return v;
+  return GatherIndexNOr(Zero(d), d, base, index, max_lanes_to_load);
 }
 
 template <class D, typename T = TFromD<D>>
@@ -2705,8 +2829,9 @@ HWY_API VFromD<D> GatherIndexNOr(VFromD<D> no, D d, const T* HWY_RESTRICT base,
   static_assert(sizeof(T) == sizeof(TI), "Index/lane size must match");
 
   VFromD<D> v = no;
-  for (size_t i = 0; i < HWY_MIN(MaxLanes(d), max_lanes_to_load); ++i) {
-    v = InsertLane(v, i, base[ExtractLane(index, i)]);
+  for (size_t i = 0; i < MaxLanes(d); ++i) {
+    if (i < max_lanes_to_load)
+      v = InsertLane(v, i, base[ExtractLane(index, i)]);
   }
   return v;
 }
@@ -5531,13 +5656,6 @@ HWY_API V CompressNot(V v, M mask) {
 
 namespace detail {
 
-#if HWY_IDE
-template <class M>
-HWY_INLINE uint64_t BitsFromMask(M /* mask */) {
-  return 0;
-}
-#endif  // HWY_IDE
-
 template <size_t N>
 HWY_INLINE Vec128<uint8_t, N> IndicesForExpandFromBits(uint64_t mask_bits) {
   static_assert(N <= 8, "Should only be called for half-vectors");
@@ -5811,7 +5929,7 @@ template <typename T, size_t N, HWY_IF_T_SIZE(T, 1), HWY_IF_V_SIZE_LE(T, N, 8)>
 HWY_API Vec128<T, N> Expand(Vec128<T, N> v, Mask128<T, N> mask) {
   const DFromV<decltype(v)> d;
 
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
   const Vec128<uint8_t, N> indices =
       detail::IndicesForExpandFromBits<N>(mask_bits);
   return BitCast(d, TableLookupBytesOr0(v, indices));
@@ -5825,7 +5943,7 @@ HWY_API Vec128<T> Expand(Vec128<T> v, Mask128<T> mask) {
   const Half<decltype(du)> duh;
   const Vec128<uint8_t> vu = BitCast(du, v);
 
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
   const uint64_t maskL = mask_bits & 0xFF;
   const uint64_t maskH = mask_bits >> 8;
 
@@ -5857,7 +5975,7 @@ HWY_API Vec128<T, N> Expand(Vec128<T, N> v, Mask128<T, N> mask) {
   const RebindToUnsigned<decltype(d)> du;
 
   const Rebind<uint8_t, decltype(d)> du8;
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
 
   // Storing as 8-bit reduces table size from 4 KiB to 2 KiB. We cannot apply
   // the nibble trick used below because not all indices fit within one lane.
@@ -6139,7 +6257,7 @@ HWY_API Vec128<T, N> Expand(Vec128<T, N> v, Mask128<T, N> mask) {
   const DFromV<decltype(v)> d;
   const RebindToUnsigned<decltype(d)> du;
 
-  const uint64_t mask_bits = detail::BitsFromMask(mask);
+  const uint64_t mask_bits = BitsFromMask(d, mask);
 
   alignas(16) static constexpr uint32_t packed_array[16] = {
       // PrintExpand64x4Nibble - same for 32x4.
@@ -7294,6 +7412,20 @@ HWY_API auto Le(V a, V b) -> decltype(a == b) {
 }
 
 #endif  // HWY_NATIVE_OPERATOR_REPLACEMENTS
+
+#undef HWY_GENERIC_IF_EMULATED_D
+
+// TODO: remove once callers are updated.
+// SVE and RVV do not support DFromM because their masks are loosely typed.
+#if HWY_MAX_BYTES <= 64 && !HWY_TARGET_IS_SVE && HWY_TARGET != HWY_RVV
+namespace detail {
+template <class M>
+uint64_t BitsFromMask(M m) {
+  const DFromM<M> d;
+  return ::hwy::HWY_NAMESPACE::BitsFromMask(d, m);
+}
+}  // namespace detail
+#endif  // !HWY_HAVE_SCALABLE && HWY_MAX_BYTES <= 64
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)
 }  // namespace HWY_NAMESPACE

@@ -731,6 +731,7 @@ class LintExtraParams:
         'alice/agents/booking',
         'bigrt',
         'grut',
+        'quality/antifraud',
         'quality/user_sessions',
         'yabs',
         'maps',
@@ -1253,6 +1254,14 @@ class TsCheckHasCoverage:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return spec_args.get("TS_CHECK_HAS_COVERAGE", "no")
+
+
+class TsCheckCommand:
+    KEY = 'TS-CHECK-COMMAND'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return spec_args.get("TS_CHECK_COMMAND", "")
 
 
 class TestedProjectFilename:

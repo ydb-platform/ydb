@@ -36,7 +36,7 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 #include <library/cpp/yt/misc/range_formatters.h>
 
 #include <library/cpp/yt/string/string_builder.h>
@@ -88,7 +88,7 @@ void WriteWellKnownTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "Test");
+YT_DEFINE_LEAKY_GLOBAL(NLogging::TLogger, Logger, "Test");
 
 std::string GenerateLogFileName()
 {
@@ -279,7 +279,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
 
     WaitForPredicate([&] {
         std::string message("Message1");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -295,7 +295,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
 
     WaitForPredicate([&] {
         std::string message("Message2");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -329,7 +329,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
 
     WaitForPredicate([&] {
         std::string message("Message1");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -341,7 +341,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
 
     WaitForPredicate([&] {
         std::string message("Message2");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -503,9 +503,9 @@ TEST_F(TLoggingTest, LogManager)
         };
     })", errorFile.Name(), infoFile.Name()));
 
-    YT_LOG_DEBUG("Debug message");
-    YT_LOG_INFO("Info message");
-    YT_LOG_ERROR("Error message");
+    YT_TLOG_DEBUG("Debug message");
+    YT_TLOG_INFO("Info message");
+    YT_TLOG_ERROR("Error message");
 
     TLogManager::Get()->Synchronize();
 
@@ -539,11 +539,11 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
         };
     })", debugFile.Name()));
 
-    YT_LOG_DEBUG("Debug message 1");
+    YT_TLOG_DEBUG("Debug message 1");
 
     SetThreadMinLogLevel(ELogLevel::Info);
-    YT_LOG_DEBUG("Debug message 2");
-    YT_LOG_INFO("Info message 1");
+    YT_TLOG_DEBUG("Debug message 2");
+    YT_TLOG_INFO("Info message 1");
 
     TLogManager::Get()->Synchronize();
 
@@ -1078,27 +1078,27 @@ TEST_F(TLoggingTest, WithMinLevel)
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Trace);
 
-        YT_LOG_TRACE("Message 1");
-        YT_LOG_DEBUG("Message 2");
-        YT_LOG_INFO("Message 3");
+        YT_TLOG_TRACE("Message 1");
+        YT_TLOG_DEBUG("Message 2");
+        YT_TLOG_INFO("Message 3");
         ASSERT_EQ(getNewLogLinesCount(), 3);
     }
 
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Debug);
 
-        YT_LOG_TRACE("Message 4");
-        YT_LOG_DEBUG("Message 5");
-        YT_LOG_INFO("Message 6");
+        YT_TLOG_TRACE("Message 4");
+        YT_TLOG_DEBUG("Message 5");
+        YT_TLOG_INFO("Message 6");
         ASSERT_EQ(getNewLogLinesCount(), 2);
     }
 
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Info);
 
-        YT_LOG_TRACE("Message 7");
-        YT_LOG_DEBUG("Message 8");
-        YT_LOG_INFO("Message 9");
+        YT_TLOG_TRACE("Message 7");
+        YT_TLOG_DEBUG("Message 8");
+        YT_TLOG_INFO("Message 9");
         ASSERT_EQ(getNewLogLinesCount(), 1);
     }
 }
@@ -1172,7 +1172,7 @@ TEST_P(TBuiltinRotationTest, All)
         Cerr << "[RotationTest] Waiting for message in file (Iter: " << index << ")" << Endl;
         // Wait until the message hits the file.
         WaitForPredicate([&] {
-            YT_LOG_INFO(message);
+            YT_TLOG_INFO(message);
             auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             if (files.empty()) {
                 return false;
@@ -1441,15 +1441,16 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
         };
     })", logFile.Name()));
 
-    YT_LOG_INFO("Info message");
+    YT_TLOG_INFO("Info message");
 
     struct TCoreDumper
         : public ICoreDumper
     {
         bool SafeCoreDumped = false;
 
-        // TODO(babenko): migrate to std::string
-        TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
+        TCoreDump WriteCoreDump(
+            const std::vector<std::string>& /*notes*/,
+            TStringBuf /*reason*/) override
         {
             SafeCoreDumped = true;
             return TCoreDump{
@@ -1482,6 +1483,20 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
 
     EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message)"));
     EXPECT_TRUE(coreDumper->SafeCoreDumped);
+
+    // The trap text carries the tags as well.
+    exceptionExpression.reset();
+
+    try {
+        YT_TLOG_FATAL("Fatal message")
+            .With("Arg1", 1);
+    } catch (const TAssertionFailedException& ex) {
+        exceptionExpression = ex.GetExpression();
+    }
+
+    ASSERT_TRUE(exceptionExpression.has_value());
+
+    EXPECT_THAT(*exceptionExpression, testing::HasSubstr("YT_LOG_FATAL(Fatal message (Arg1: 1))"));
 }
 
 // Windows does not support request tracing for now.
@@ -1512,12 +1527,12 @@ TEST_F(TLoggingTest, SupressedRequests)
         traceContext->SetRequestId(requestId);
         NTracing::TTraceContextGuard guard(traceContext);
 
-        YT_LOG_INFO("Traced message");
+        YT_TLOG_INFO("Traced message");
 
         TLogManager::Get()->SuppressRequest(requestId);
     }
 
-    YT_LOG_INFO("Info message");
+    YT_TLOG_INFO("Info message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1547,9 +1562,9 @@ TEST_F(TLoggingTest, SuppressedMessages)
         suppressed_messages = ["Suppressed message"];
     })", logFile.Name()));
 
-    YT_LOG_INFO("Suppressed message 1");
-    YT_LOG_INFO("Suppressed message 2");
-    YT_LOG_INFO("Good message");
+    YT_TLOG_INFO("Suppressed message 1");
+    YT_TLOG_INFO("Suppressed message 2");
+    YT_TLOG_INFO("Good message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1580,9 +1595,9 @@ TEST_F(TLoggingTest, MessageLevelOverride)
         };
     })", logFile.Name()));
 
-    YT_LOG_INFO("Overridden message 1");
-    YT_LOG_TRACE("Overridden message 2");
-    YT_LOG_INFO("Good message");
+    YT_TLOG_INFO("Overridden message 1");
+    YT_TLOG_TRACE("Overridden message 2");
+    YT_TLOG_INFO("Good message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1609,17 +1624,20 @@ TEST_P(TLoggingTagsTest, All)
     auto expected = std::get<4>(GetParam());
 
     auto loggingContext = NLogging::GetLoggingContext();
+    auto traceTags = TLoggingTagList().With("TraceContextTag", 1);
     if (hasTraceContext) {
-        loggingContext.TraceLoggingTag = TStringBuf("TraceContextTag");
+        loggingContext.TraceLoggingTags = NLogging::AsView(traceTags.GetPayload());
     }
 
     auto logger = TLogger("Test");
     if (hasLoggerTag) {
-        logger = logger.WithTag("LoggerTag");
+        logger = logger.WithTag("LoggerTag", 1);
     }
 
     auto threadLocalTagGuard = hasThreadMessageTag
-        ? std::optional(TFiberMessageTagGuard("ThreadLocalTag", TFiberMessageTagGuard::EMode::Replace))
+        ? std::optional(TFiberMessageTagGuard(
+            TLoggingTagList().With("ThreadLocalTag", 1),
+            TFiberMessageTagGuard::EMode::Replace))
         : std::nullopt;
 
     if (hasMessageTag) {
@@ -1643,21 +1661,21 @@ TEST_P(TLoggingTagsTest, All)
 INSTANTIATE_TEST_SUITE_P(ValueParametrized, TLoggingTagsTest,
     ::testing::Values(
         std::tuple(false, false, false, false, "Log message"),
-        std::tuple(false, false, false,  true, "Log message (ThreadLocalTag)"),
-        std::tuple(false, false,  true, false, "Log message (TraceContextTag)"),
-        std::tuple(false, false,  true,  true, "Log message (TraceContextTag, ThreadLocalTag)"),
-        std::tuple(false,  true, false, false, "Log message (LoggerTag)"),
-        std::tuple(false,  true, false,  true, "Log message (LoggerTag, ThreadLocalTag)"),
-        std::tuple(false,  true,  true, false, "Log message (LoggerTag, TraceContextTag)"),
-        std::tuple(false,  true,  true,  true, "Log message (LoggerTag, TraceContextTag, ThreadLocalTag)"),
+        std::tuple(false, false, false,  true, "Log message (ThreadLocalTag: 1)"),
+        std::tuple(false, false,  true, false, "Log message (TraceContextTag: 1)"),
+        std::tuple(false, false,  true,  true, "Log message (TraceContextTag: 1, ThreadLocalTag: 1)"),
+        std::tuple(false,  true, false, false, "Log message (LoggerTag: 1)"),
+        std::tuple(false,  true, false,  true, "Log message (LoggerTag: 1, ThreadLocalTag: 1)"),
+        std::tuple(false,  true,  true, false, "Log message (LoggerTag: 1, TraceContextTag: 1)"),
+        std::tuple(false,  true,  true,  true, "Log message (LoggerTag: 1, TraceContextTag: 1, ThreadLocalTag: 1)"),
         std::tuple( true, false, false, false, "Log message (Value: 123)"),
-        std::tuple( true, false, false,  true, "Log message (Value: 123, ThreadLocalTag)"),
-        std::tuple( true, false,  true, false, "Log message (Value: 123, TraceContextTag)"),
-        std::tuple( true, false,  true,  true, "Log message (Value: 123, TraceContextTag, ThreadLocalTag)"),
-        std::tuple( true,  true, false, false, "Log message (Value: 123, LoggerTag)"),
-        std::tuple( true,  true, false,  true, "Log message (Value: 123, LoggerTag, ThreadLocalTag)"),
-        std::tuple( true,  true,  true, false, "Log message (Value: 123, LoggerTag, TraceContextTag)"),
-        std::tuple( true,  true,  true,  true, "Log message (Value: 123, LoggerTag, TraceContextTag, ThreadLocalTag)")));
+        std::tuple( true, false, false,  true, "Log message (Value: 123, ThreadLocalTag: 1)"),
+        std::tuple( true, false,  true, false, "Log message (Value: 123, TraceContextTag: 1)"),
+        std::tuple( true, false,  true,  true, "Log message (Value: 123, TraceContextTag: 1, ThreadLocalTag: 1)"),
+        std::tuple( true,  true, false, false, "Log message (Value: 123, LoggerTag: 1)"),
+        std::tuple( true,  true, false,  true, "Log message (Value: 123, LoggerTag: 1, ThreadLocalTag: 1)"),
+        std::tuple( true,  true,  true, false, "Log message (Value: 123, LoggerTag: 1, TraceContextTag: 1)"),
+        std::tuple( true,  true,  true,  true, "Log message (Value: 123, LoggerTag: 1, TraceContextTag: 1, ThreadLocalTag: 1)")));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1697,7 +1715,8 @@ protected:
     void LogLongMessages()
     {
         for (int i = 0; i < N; ++i) {
-            YT_LOG_INFO("%v", TRange(Chunks_.data(), Chunks_.data() + i));
+            YT_TLOG_INFO("Long message")
+                .With("Chunks", TRange(Chunks_.data(), Chunks_.data() + i));
         }
     }
 
@@ -1913,9 +1932,9 @@ TEST_F(TCustomWriterTest, Write)
         };
     })", CustomWriterType));
 
-    YT_LOG_INFO("first");
-    YT_LOG_INFO("second");
-    YT_LOG_INFO("third");
+    YT_TLOG_INFO("first");
+    YT_TLOG_INFO("second");
+    YT_TLOG_INFO("third");
 
     TLogManager::Get()->Synchronize();
 

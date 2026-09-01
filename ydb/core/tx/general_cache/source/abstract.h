@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/core/tx/general_cache/usage/abstract.h>
-
 #include <util/generic/hash.h>
 
 #include <memory>

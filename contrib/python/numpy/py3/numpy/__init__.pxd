@@ -160,6 +160,7 @@ cdef extern from "numpy/arrayobject.h":
         NPY_COMPLEX512
 
         NPY_INTP
+        NPY_UINTP
         NPY_DEFAULT_INT  # Not a compile time constant (normally)!
 
     ctypedef enum NPY_ORDER:
@@ -523,7 +524,6 @@ cdef extern from "numpy/arrayobject.h":
     # more than is probably needed until it can be checked further.
     int PyArray_INCREF (ndarray) except *  # uses PyArray_Item_INCREF...
     int PyArray_XDECREF (ndarray) except *  # uses PyArray_Item_DECREF...
-    void PyArray_SetStringFunction (object, int)
     dtype PyArray_DescrFromType (int)
     object PyArray_TypeObjectFromType (int)
     char * PyArray_Zero (ndarray)
@@ -673,6 +673,23 @@ cdef extern from "numpy/arrayobject.h":
     npy_intp PyArray_OverflowMultiplyList (npy_intp *, int)
     int PyArray_SetBaseObject(ndarray, base) except -1 # NOTE: steals a reference to base! Use "set_array_base()" instead.
 
+    # The memory handler functions require the NumPy 1.22 API
+    # and may require defining NPY_TARGET_VERSION
+    ctypedef struct PyDataMemAllocator:
+        void *ctx
+        void* (*malloc) (void *ctx, size_t size)
+        void* (*calloc) (void *ctx, size_t nelem, size_t elsize)
+        void* (*realloc) (void *ctx, void *ptr, size_t new_size)
+        void (*free) (void *ctx, void *ptr, size_t size)
+
+    ctypedef struct PyDataMem_Handler:
+        char* name
+        npy_uint8 version
+        PyDataMemAllocator allocator
+
+    object PyDataMem_SetHandler(object handler)
+    object PyDataMem_GetHandler()
+
     # additional datetime related functions are defined below
 
 
@@ -756,6 +773,13 @@ cdef extern from "numpy/ndarraytypes.h":
         int64_t year
         int32_t month, day, hour, min, sec, us, ps, as
 
+    # Iterator API added in v1.6
+    #
+    # These don't match the definition in the C API because Cython can't wrap
+    # function pointers that return functions.
+    # https://github.com/cython/cython/issues/6720
+    ctypedef int (*NpyIter_IterNextFunc "NpyIter_IterNextFunc *")(NpyIter* it) noexcept nogil
+    ctypedef void (*NpyIter_GetMultiIndexFunc "NpyIter_GetMultiIndexFunc *")(NpyIter* it, npy_intp* outcoords) noexcept nogil
 
 cdef extern from "numpy/arrayscalars.h":
 
@@ -1007,10 +1031,6 @@ cdef inline NPY_DATETIMEUNIT get_datetime64_unit(object obj) nogil:
     return <NPY_DATETIMEUNIT>(<PyDatetimeScalarObject*>obj).obmeta.base
 
 
-# Iterator API added in v1.6
-ctypedef int (*NpyIter_IterNextFunc)(NpyIter* it) noexcept nogil
-ctypedef void (*NpyIter_GetMultiIndexFunc)(NpyIter* it, npy_intp* outcoords) noexcept nogil
-
 cdef extern from "numpy/arrayobject.h":
 
     ctypedef struct NpyIter:
@@ -1128,6 +1148,9 @@ cdef extern from "numpy/arrayobject.h":
                                         npy_intp* outstrides) except NPY_FAIL
     npy_bool NpyIter_IsFirstVisit(NpyIter* it, int iop) nogil
     # functions for iterating an NpyIter object
+    #
+    # These don't match the definition in the C API because Cython can't wrap
+    # function pointers that return functions.
     NpyIter_IterNextFunc* NpyIter_GetIterNext(NpyIter* it, char** errmsg) except NULL
     NpyIter_GetMultiIndexFunc* NpyIter_GetGetMultiIndex(NpyIter* it,
                                                         char** errmsg) except NULL

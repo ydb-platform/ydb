@@ -340,6 +340,8 @@ public:
 
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
 
+    bool GetInterruptInheritance() const;
+
     const TPartitioningSettings& GetPartitioningSettings() const;
 
     uint32_t GetTotalPartitionsCount() const;
@@ -395,6 +397,7 @@ private:
 
     std::string Owner_;
     NScheme::TVirtualTimestamp CreationTimestamp_;
+    bool InterruptInheritance_ = false;
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
     std::optional<EMetricsLevel> MetricsLevel_;

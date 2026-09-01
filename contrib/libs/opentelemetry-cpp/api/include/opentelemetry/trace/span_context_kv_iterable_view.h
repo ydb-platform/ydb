@@ -48,7 +48,7 @@ std::false_type is_span_context_kv_iterable_impl(...);
 template <class T>
 struct is_span_context_kv_iterable
 {
-  static const bool value =
+  static constexpr bool value =
       decltype(detail::is_span_context_kv_iterable_impl(std::declval<T>()))::value;
 };
 }  // namespace detail

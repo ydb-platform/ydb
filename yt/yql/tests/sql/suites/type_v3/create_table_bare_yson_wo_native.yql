@@ -1,0 +1,12 @@
+/*
+ * Creating non-native List<Yson> should be allowed
+ */
+
+USE plato;
+
+PRAGMA yt.UseNativeYtTypes = '0';
+
+CREATE TABLE Output (
+    key      String NOT NULL,
+    ys_list  List<Yson>
+);

@@ -27,6 +27,7 @@ DECLARE_REFCOUNTED_STRUCT(TReplicationCard)
 
 DECLARE_REFCOUNTED_STRUCT(IReplicationCardCache)
 DECLARE_REFCOUNTED_STRUCT(TChaosCacheChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TWatchedReplicationCardCacheConfig)
 DECLARE_REFCOUNTED_STRUCT(TReplicationCardCacheConfig)
 DECLARE_REFCOUNTED_STRUCT(TReplicationCardCacheDynamicConfig)
 

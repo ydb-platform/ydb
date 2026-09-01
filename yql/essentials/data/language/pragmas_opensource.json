@@ -3,6 +3,9 @@
     "name": "yt.Annotations"
   },
   {
+    "name": "yt.ApplyMaxJobCountToAll"
+  },
+  {
     "name": "yt.ApplyStoredConstraints"
   },
   {
@@ -265,6 +268,12 @@
   },
   {
     "name": "yt.JoinCommonAnySideFirst"
+  },
+  {
+    "name": "yt.JoinCommonFlatPayloadColumnLimit"
+  },
+  {
+    "name": "yt.JoinCommonUseFlatPayload"
   },
   {
     "name": "yt.JoinCommonUseMapMultiOut"
@@ -1008,6 +1017,9 @@
     "name": "DisableEmitUnionMerge"
   },
   {
+    "name": "DisableEvaluateExprCache"
+  },
+  {
     "name": "DisableExceptIntersectBefore202503"
   },
   {
@@ -1117,6 +1129,9 @@
   },
   {
     "name": "ErrorMsg"
+  },
+  {
+    "name": "EvaluateExprCache"
   },
   {
     "name": "ExceptIntersectBefore202503"

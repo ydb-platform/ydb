@@ -1,3 +1,5 @@
+/* integer log2 вместо inline-шаблона std::log2 —
+   comdat-копия из AVX-512 TU (vcvtusi2sd) прилетала в AVX2-путь -> SIGILL на Zen3 */
 /*******************************************************************
  * Copyright (C) 2022 Intel Corporation
  * SPDX-License-Identifier: BSD-3-Clause
@@ -568,7 +570,7 @@ X86_SIMD_SORT_INLINE void avx512_argsort(T *arr,
         }
         UNUSED(hasnan);
         argsort_64bit_<vectype, argtype>(
-                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
+                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
 
         if (descending) { std::reverse(arg, arg + arrsize); }
     }
@@ -602,7 +604,7 @@ X86_SIMD_SORT_INLINE void avx2_argsort(T *arr,
         }
         UNUSED(hasnan);
         argsort_64bit_<vectype, argtype>(
-                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
+                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
 
         if (descending) { std::reverse(arg, arg + arrsize); }
     }
@@ -635,7 +637,7 @@ X86_SIMD_SORT_INLINE void avx512_argselect(T *arr,
         }
         UNUSED(hasnan);
         argselect_64bit_<vectype, argtype>(
-                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
+                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
     }
 }
 
@@ -665,7 +667,7 @@ X86_SIMD_SORT_INLINE void avx2_argselect(T *arr,
         }
         UNUSED(hasnan);
         argselect_64bit_<vectype, argtype>(
-                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
+                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
     }
 }
 #endif // XSS_COMMON_ARGSORT

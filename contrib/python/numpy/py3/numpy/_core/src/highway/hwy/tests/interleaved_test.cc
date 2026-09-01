@@ -24,6 +24,7 @@
 HWY_BEFORE_NAMESPACE();
 namespace hwy {
 namespace HWY_NAMESPACE {
+namespace {
 
 struct TestLoadStoreInterleaved2 {
   template <class T, class D>
@@ -59,6 +60,10 @@ struct TestLoadStoreInterleaved2 {
 
 HWY_NOINLINE void TestAllLoadStoreInterleaved2() {
   ForAllTypes(ForMaxPow2<TestLoadStoreInterleaved2>());
+  // Temporarily disable this test for special floats on arm7.
+#ifndef HWY_ARCH_ARM_V7
+  ForSpecialTypes(ForMaxPow2<TestLoadStoreInterleaved2>());
+#endif
 }
 
 // Workaround for build timeout on GCC 12 aarch64, see #776.
@@ -110,6 +115,10 @@ struct TestLoadStoreInterleaved3 {
 
 HWY_NOINLINE void TestAllLoadStoreInterleaved3() {
   ForAllTypes(ForMaxPow2<TestLoadStoreInterleaved3>());
+  // Temporarily disable this test for special floats on arm7.
+#ifndef HWY_ARCH_ARM_V7
+  ForSpecialTypes(ForMaxPow2<TestLoadStoreInterleaved3>());
+#endif
 }
 
 struct TestLoadStoreInterleaved4 {
@@ -154,21 +163,27 @@ struct TestLoadStoreInterleaved4 {
 
 HWY_NOINLINE void TestAllLoadStoreInterleaved4() {
   ForAllTypes(ForMaxPow2<TestLoadStoreInterleaved4>());
+  // Temporarily disable this test for special floats on arm7.
+#ifndef HWY_ARCH_ARM_V7
+  ForSpecialTypes(ForMaxPow2<TestLoadStoreInterleaved4>());
+#endif
 }
 
+}  // namespace
 // NOLINTNEXTLINE(google-readability-namespace-comments)
 }  // namespace HWY_NAMESPACE
 }  // namespace hwy
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
-
 namespace hwy {
+namespace {
 HWY_BEFORE_TEST(HwyInterleavedTest);
 HWY_EXPORT_AND_TEST_P(HwyInterleavedTest, TestAllLoadStoreInterleaved2);
 HWY_EXPORT_AND_TEST_P(HwyInterleavedTest, TestAllLoadStoreInterleaved3);
 HWY_EXPORT_AND_TEST_P(HwyInterleavedTest, TestAllLoadStoreInterleaved4);
 HWY_AFTER_TEST();
+}  // namespace
 }  // namespace hwy
-
-#endif
+HWY_TEST_MAIN();
+#endif  // HWY_ONCE

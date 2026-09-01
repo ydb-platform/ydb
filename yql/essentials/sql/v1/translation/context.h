@@ -369,6 +369,7 @@ public:
     bool EnableSystemColumns = true;
     bool DqEngineEnable = false;
     bool DqEngineForce = false;
+    bool EvaluateExprCache = false;
     TString CostBasedOptimizer;
     TMaybe<ui32> CostBasedOptimizerVersion;
     TMaybe<bool> JsonQueryReturnsJsonDocument;
@@ -488,7 +489,6 @@ class TTranslation {
 protected:
     using TSetType = TSet<ui32>;
 
-protected:
     explicit TTranslation(TContext& ctx);
     TTranslation(const TTranslation&) = default;
 
@@ -525,7 +525,6 @@ public:
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
 
-protected:
     TContext& Ctx_;
 };
 

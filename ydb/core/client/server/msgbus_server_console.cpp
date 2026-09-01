@@ -8,6 +8,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 

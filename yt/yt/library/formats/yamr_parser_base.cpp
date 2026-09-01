@@ -121,7 +121,7 @@ void TYamrDelimitedBaseParser::ProcessTableSwitch(TStringBuf tableIndex)
         }
         THROW_ERROR_EXCEPTION("YAMR line %Qv cannot be parsed as a table switch; did you forget a record separator?",
             tableIndexString)
-            << *GetDebugInfo();
+            .With(*GetDebugInfo());
     }
     Consumer->SwitchTable(value);
 }
@@ -204,7 +204,7 @@ const char* TYamrDelimitedBaseParser::Consume(const char* begin, const char* end
                 "YAMR token length limit exceeded: %v > %v",
                 CurrentToken.length(),
                 MaxRowWeightLimit)
-                << *GetDebugInfo();
+                .With(*GetDebugInfo());
         }
         return end;
     }
@@ -256,7 +256,7 @@ void TYamrDelimitedBaseParser::ThrowIncorrectFormat() const
     THROW_ERROR_EXCEPTION("Unexpected symbol in YAMR row: expected %Qv, found %Qv",
         EscapeC(Config_->FieldSeparator),
         EscapeC(Config_->RecordSeparator))
-        << *GetDebugInfo();
+        .With(*GetDebugInfo());
 }
 
 void TYamrDelimitedBaseParser::OnRangeConsumed(const char* begin, const char* end)
@@ -395,8 +395,8 @@ const char* TYamrLenvalBaseParser::ConsumeData(const char* begin, const char* en
             MetEom = true;
             if (Union.Value != RowCount) {
                 THROW_ERROR_EXCEPTION("Row count mismatch")
-                    << TErrorAttribute("eom_marker_row_count", Union.Value)
-                    << TErrorAttribute("actual_row_count", RowCount);
+                    .With("eom_marker_row_count", Union.Value)
+                    .With("actual_row_count", RowCount);
             }
             State = EState::InsideKey;
             ReadingLength = true;

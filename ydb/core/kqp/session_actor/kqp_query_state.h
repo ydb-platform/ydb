@@ -52,6 +52,9 @@ public:
 
         void SetValue(const TTxId& id);
         TTxId GetValue();
+        bool HasValue() const {
+            return Id.Defined();
+        }
 
         void Reset();
 
@@ -71,7 +74,6 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
-        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
@@ -129,6 +131,7 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
         QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
@@ -155,6 +158,7 @@ public:
     std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
+    TString QueryTextForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
@@ -164,7 +168,6 @@ public:
     NKikimrKqp::EQueryType QueryType;
     bool SaveQueryPhysicalGraph = false;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    const i64 Generation = 0;
 
     TActorId RequestActorId;
 

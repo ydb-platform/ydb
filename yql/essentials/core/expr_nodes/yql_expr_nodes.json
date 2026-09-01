@@ -656,6 +656,11 @@
             "Match": {"Type": "Callable", "Name": "PartitionsByKeys"}
         },
         {
+            "Name": "TCoLPartitionsByKeys",
+            "Base": "TCoPartitionByKeyBase",
+            "Match": {"Type": "Callable", "Name": "LPartitionsByKeys"}
+        },
+        {
             "Name": "TCoSortTraits",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "SortTraits"},
@@ -1700,6 +1705,30 @@
             "Name": "TCoEquiJoin",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "EquiJoin"}
+        },
+        {
+            "Name": "TCoSqlCombineInput",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "SqlCombineInput"},
+            "Children": [
+                {"Index": 1, "Name": "PresortUsedColumns",    "Type": "TExprBase"},
+                {"Index": 2, "Name": "PresortKeyLambda",      "Type": "TExprBase"},
+                {"Index": 3, "Name": "PresortDirectionNode",  "Type": "TExprBase"},
+                {"Index": 4, "Name": "KeyExtractUsedColumns", "Type": "TExprBase"},
+                {"Index": 5, "Name": "KeyExtractLambda",      "Type": "TCoLambda"},
+                {"Index": 6, "Name": "ArgMapUsedColumns",     "Type": "TExprBase"},
+                {"Index": 7, "Name": "ArgMapLambda",          "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoSqlCombine",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SqlCombine"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput",    "Type": "TCoSqlCombineInput"},
+                {"Index": 1, "Name": "RightInput",   "Type": "TCoSqlCombineInput"},
+                {"Index": 2, "Name": "UsingLambda",  "Type": "TCoLambda"}
+            ]
         },
         {
             "Name": "TCoMapJoinCore",

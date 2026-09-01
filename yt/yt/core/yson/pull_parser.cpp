@@ -437,8 +437,8 @@ TYsonItem TYsonPullParser::Next()
         return NextImpl(&visitor);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION(EErrorCode::ParseError, "Error occurred while parsing YSON")
-            << GetErrorAttributes()
-            << ex;
+            .With(GetErrorAttributes())
+            .With(ex);
     }
 }
 
@@ -648,7 +648,7 @@ void ThrowUnexpectedYsonTokenException(
         description,
         CreateExpectedItemTypesString(expected),
         item.GetType())
-        << parser.GetErrorAttributes();
+        .With(parser.GetErrorAttributes());
 }
 
 void ThrowUnexpectedYsonTokenException(
@@ -660,7 +660,7 @@ void ThrowUnexpectedYsonTokenException(
         description,
         CreateExpectedItemTypesString(expected),
         cursor->GetType())
-        << cursor.GetErrorAttributes();
+        .With(cursor.GetErrorAttributes());
 }
 
 void ThrowUnexpectedTokenException(

@@ -39,6 +39,12 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "vchunk") {
         return EMonPage::VChunk;
     }
+    if (page == "vchunkcounters") {
+        return EMonPage::VChunkCounters;
+    }
+    if (page == "latency") {
+        return EMonPage::Latency;
+    }
     return EMonPage::Overview;
 }
 
@@ -56,6 +62,46 @@ std::optional<ui32> ParseSelectedVChunk(const TCgiParameters& cgi)
     ui32 vchunkIndex = 0;
     if (cgi.Has("vchunk") && TryFromString(cgi.Get("vchunk"), vchunkIndex)) {
         return vchunkIndex;
+    }
+    return std::nullopt;
+}
+
+ELatencyPercentile ParseSelectedPercentile(const TCgiParameters& cgi)
+{
+    const TString& p = cgi.Get("p");
+    if (p == "50") {
+        return ELatencyPercentile::P50;
+    }
+    if (p == "90") {
+        return ELatencyPercentile::P90;
+    }
+    if (p == "max") {
+        return ELatencyPercentile::Max;
+    }
+    return ELatencyPercentile::P99;
+}
+
+// Per-vchunk row cap. all=1 dumps everything; limit=N overrides the default.
+size_t ParseVChunkStatsLimit(const TCgiParameters& cgi)
+{
+    if (cgi.Get("all") == "1") {
+        return 0;
+    }
+    size_t limit = 0;
+    if (cgi.Has("limit") && TryFromString(cgi.Get("limit"), limit)) {
+        return limit;
+    }
+    return DefaultVChunkStatsLimit;
+}
+
+std::optional<EOperation> ParseSelectedLatencyOperation(
+    const TCgiParameters& cgi)
+{
+    ui32 opIndex = 0;
+    if (cgi.Has("op") && TryFromString(cgi.Get("op"), opIndex) &&
+        opIndex < OperationCount)
+    {
+        return static_cast<EOperation>(opIndex);
     }
     return std::nullopt;
 }
@@ -89,6 +135,7 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
+        .BlockSize = VolumeConfig.GetBlockSize(),
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };
@@ -169,7 +216,49 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
+    if (page == EMonPage::VChunkCounters) {
+        auto* actorSystem = TActivationContext::ActorSystem();
+        const TActorId requester = ev->Sender;
+        const size_t limit = ParseVChunkStatsLimit(cgi);
+        const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
+        const bool showVChunks = cgi.Get("showvchunks") == "1";
+        const auto detail = (showVChunks && selectedDbg)
+                                ? EVChunkStatsDetail::PerVChunk
+                                : EVChunkStatsDetail::TotalOnly;
+        FastPathService->GatherVChunkStats(detail, selectedDbg)
+            .Subscribe(
+                [tabletInfo = MakeMonTabletInfo(),
+                 page,
+                 limit,
+                 selectedDbg,
+                 showVChunks,
+                 requester,
+                 actorSystem](const auto& future)
+                {
+                    TMonPageData data{
+                        .Page = page,
+                        .TabletInfo = tabletInfo,
+                        .VChunkStats = future.GetValue(),
+                        .VChunkStatsLimit = limit,
+                        .ShowVChunks = showVChunks,
+                    };
+                    if (selectedDbg) {
+                        data.SelectedVChunkDbg =
+                            static_cast<ui32>(*selectedDbg);
+                    }
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
+        return true;
+    }
+
+    // Latency page always gathers every DBG (needs the full node map).
+    const std::optional<size_t> selectedDbg =
+        (page == EMonPage::Latency) ? std::nullopt : ParseSelectedDbg(cgi);
+    const ELatencyPercentile selectedPercentile = ParseSelectedPercentile(cgi);
+    const std::optional<EOperation> selectedLatencyOperation =
+        ParseSelectedLatencyOperation(cgi);
 
     // The "Add host" button. POST only: link prefetching must not add hosts.
     //
@@ -207,8 +296,9 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    // DBG page: gather snapshots, then render + reply in the callback. Safe
-    // off-thread - captures are taken here and RenderMonPage is pure.
+    // DBG / Latency page: gather snapshots, then render + reply in the
+    // callback. Safe off-thread - captures are taken here and RenderMonPage
+    // is pure.
     auto* actorSystem = TActivationContext::ActorSystem();
     const TActorId requester = ev->Sender;
 
@@ -217,21 +307,20 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             [tabletInfo = MakeMonTabletInfo(),
              page,
              selectedDbg,
+             selectedPercentile,
+             selectedLatencyOperation,
              requester,
-             actorSystem](const auto& future)
+             actorSystem]   //
+            (const NThreading::TFuture<TVector<TDbgSnapshot>>& future)
             {
                 TMonPageData data{
                     .Page = page,
                     .TabletInfo = tabletInfo,
                     .Dbgs = future.GetValue(),
+                    .SelectedDbg = selectedDbg,
+                    .SelectedPercentile = selectedPercentile,
+                    .SelectedLatencyOperation = selectedLatencyOperation,
                 };
-                if (selectedDbg) {
-                    data.SelectedDbg = static_cast<ui32>(*selectedDbg);
-                }
-                Sort(
-                    data.Dbgs,
-                    [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
-                    { return lhs.Index < rhs.Index; });
                 actorSystem->Send(
                     requester,
                     new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));

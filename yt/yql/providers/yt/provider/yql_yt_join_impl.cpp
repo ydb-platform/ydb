@@ -2496,17 +2496,22 @@ bool JoinKeysMayHaveNulls(const TVector<const TTypeAnnotationNode*>& inputKeyTyp
     return false;
 }
 
+// reducerBoundItem is the value routed to the reducer (variant alternative 0);
+// In flat-payload mode the caller passes the flattened row so the reducer alternative carries
+// CommonJoinCoreInputType instead of the wire {.., _yql_join_payload} row.
 TExprNode::TPtr BuildSideSplitNullsLambda(TPositionHandle pos, bool mayHaveNulls, const TExprNode::TPtr& inputItem,
     const TVector<TString>& keyColumns, const TString& sidePrefix,
     const TCoLambda& joinRenamingLambda, const TStructExprType& joinOutputType,
-    const TExprNode::TPtr& outputVariantType, size_t outputVariantIndex, TExprContext& ctx)
+    const TExprNode::TPtr& outputVariantType, size_t outputVariantIndex, TExprContext& ctx,
+    const TExprNode::TPtr& reducerBoundItem)
 {
+    const auto& reducerItem = reducerBoundItem ? reducerBoundItem : inputItem;
     if (!mayHaveNulls) {
         return ctx.Builder(pos)
             .Lambda()
                 .Param("side")
                 .Callable("Variant")
-                    .Add(0, inputItem)
+                    .Add(0, reducerItem)
                     .Atom(1, 0U)
                     .Add(2, outputVariantType)
                 .Seal()
@@ -2550,9 +2555,54 @@ TExprNode::TPtr BuildSideSplitNullsLambda(TPositionHandle pos, bool mayHaveNulls
                     .Add(2, outputVariantType)
                 .Seal()
                 .Callable(2, "Variant")
-                    .Add(0, inputItem)
+                    .Add(0, reducerItem)
                     .Atom(1, 0U)
                     .Add(2, outputVariantType)
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+// Build the map lambda that emits flat CommonJoinCoreInputType rows directly: each side's wire row
+// is flattened inside its own Visit branch.
+TExprNode::TPtr BuildFlatPayloadMapLambda(TPositionHandle pos, TExprContext& ctx,
+    const TExprNode::TPtr& mapCombinerLambda, const TExprNode::TPtr& sideMapLambda0,
+    const TExprNode::TPtr& sideMapLambda1, const TExprNode::TPtr& reduceLambda0,
+    const TExprNode::TPtr& reduceLambda1)
+{
+    const auto flatSide = [&](const TExprNode::TPtr& sideMapLambda) {
+        auto rowArg = ctx.NewArgument(pos, "row");
+        auto flatten = ctx.NewLambda(pos, ctx.NewArguments(pos, { rowArg }),
+            FlattenCommonJoinPayloadRow(pos, ctx, rowArg, reduceLambda0, reduceLambda1));
+        auto sideArg = ctx.NewArgument(pos, "side");
+        auto body = ctx.Builder(pos)
+            .Callable("Map")
+                .Apply(0, sideMapLambda)
+                    .With(0, sideArg)
+                .Seal()
+                .Add(1, flatten)
+            .Seal()
+            .Build();
+        return ctx.NewLambda(pos, ctx.NewArguments(pos, { sideArg }), std::move(body));
+    };
+
+    return ctx.Builder(pos)
+        .Lambda()
+            .Param("flow")
+            .Callable("OrderedFlatMap")
+                .Apply(0, mapCombinerLambda)
+                    .With(0, "flow")
+                .Seal()
+                .Lambda(1)
+                    .Param("item")
+                    .Callable("Visit")
+                        .Arg(0, "item")
+                        .Atom(1, "0", TNodeFlags::Default)
+                        .Add(2, flatSide(sideMapLambda0))
+                        .Atom(3, "1", TNodeFlags::Default)
+                        .Add(4, flatSide(sideMapLambda1))
+                    .Seal()
                 .Seal()
             .Seal()
         .Seal()
@@ -2565,6 +2615,8 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
 {
     const auto pos = equiJoin.Pos();
     const bool joinCommonAnySideFirst = state->Configuration->JoinCommonAnySideFirst.Get().GetOrElse(DEFAULT_JOIN_COMMON_ANY_SIDE_FIRST);
+
+    bool flatJoinPayload = state->Configuration->JoinCommonUseFlatPayload.Get().GetOrElse(DEFAULT_JOIN_COMMON_USE_FLAT_PAYLOAD);
 
     const auto leftNotFat = leftUnique
         || op.LinkSettings.LeftHints.contains("unique")
@@ -2667,6 +2719,20 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
         }
     }
 
+    if (flatJoinPayload) {
+        const ui64 flatColumnLimit = state->Configuration->JoinCommonFlatPayloadColumnLimit.Get()
+            .GetOrElse(DEFAULT_JOIN_COMMON_FLAT_PAYLOAD_COLUMN_LIMIT);
+        const ui64 flatColumnCount = ui64(ytReduceByColumns.size())
+            + 1 /* _yql_sort */
+            + leftMembersNodes.size() + rightMembersNodes.size()
+            + 1 /* _yql_table_index */;
+        if (flatColumnCount > flatColumnLimit) {
+            YQL_CLOG(INFO, ProviderYt) << "CommonJoin: flat payload disabled, flat intermediate would have "
+                << flatColumnCount << " columns (limit " << flatColumnLimit << "); using Variant payload";
+            flatJoinPayload = false;
+        }
+    }
+
     TCommonJoinCoreLambdas cjcLambdas[2];
     for (ui32 index = 0; index < 2; ++index) {
         auto keyColumnsNode = (index == 0) ? leftKeyColumns : rightKeyColumns;
@@ -2686,6 +2752,24 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
         ApplyInputPremap(cjcLambdas[index].MapLambda, leaf, otherLeaf, ctx);
     }
     YQL_ENSURE(cjcLambdas[0].CommonJoinCoreInputType == cjcLambdas[1].CommonJoinCoreInputType, "Must be same type from both side of join.");
+
+    if (flatJoinPayload) {
+        // A yson entity in a top-level Optional<Yson> column doesn't survive a table roundtrip:
+        // both the yson codec and YT's skiff yson32 parser turn a present "#" value into Nothing.
+        // The Variant payload is immune - it keeps such columns nested inside the payload struct,
+        // which is encoded losslessly. Fall back to it. Similar story with Void and Null.
+        for (const auto* item : cjcLambdas[0].CommonJoinCoreInputType->Cast<TStructExprType>()->GetItems()) {
+            const auto* columnType = RemoveAllOptionals(item->GetItemType());
+            const auto kind = columnType->GetKind();
+            if (kind == ETypeAnnotationKind::Void || kind == ETypeAnnotationKind::Null
+                || (kind == ETypeAnnotationKind::Data && columnType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson)) {
+                YQL_CLOG(INFO, ProviderYt) << "CommonJoin: flat payload disabled, column '" << item->GetName()
+                    << "' has top-level type " << *columnType << ", which is not roundtrip-safe as a plain column; using Variant payload";
+                flatJoinPayload = false;
+                break;
+            }
+        }
+    }
 
     auto groupArg = ctx.NewArgument(pos, "group");
 
@@ -2713,8 +2797,10 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
         }
     }
 
-    auto convertedList = PrepareForCommonJoinCore(pos, ctx, groupArg, cjcLambdas[0].ReduceLambda,
-                                                  cjcLambdas[1].ReduceLambda);
+    auto convertedList = flatJoinPayload
+        ? groupArg
+        : PrepareForCommonJoinCore(pos, ctx, groupArg, cjcLambdas[0].ReduceLambda,
+                                   cjcLambdas[1].ReduceLambda);
     auto joinedRawStream = ctx.NewCallable(pos, "CommonJoinCore", { convertedList, joinType,
         ctx.NewList(pos, std::move(leftMembersNodes)), ctx.NewList(pos, std::move(rightMembersNodes)),
         ctx.NewList(pos, std::move(requiredMembersNodes)), ctx.NewList(pos, std::move(keyMembersNodes)),
@@ -2906,10 +2992,17 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
 
         if (leftNulls || rightNulls) {
             TExprNode::TPtr itemArg = ctx.NewArgument(pos, "item");
+            // In flat-payload mode the reducer alternative carries the flattened
+            // CommonJoinCoreInputType row instead of the wire {.., _yql_join_payload} row.
+            // The direct outputs are built from the payload struct by the split lambdas
+            // in both modes.
+            const TExprNode::TPtr reducerBoundItem = flatJoinPayload
+                ? FlattenCommonJoinPayloadRow(pos, ctx, itemArg, cjcLambdas[0].ReduceLambda, cjcLambdas[1].ReduceLambda)
+                : itemArg;
             TExprNode::TListType outputVarTypeItems;
 
             // output to reducer
-            outputVarTypeItems.push_back(ctx.NewCallable(pos, "TypeOf", { itemArg }));
+            outputVarTypeItems.push_back(ctx.NewCallable(pos, "TypeOf", { reducerBoundItem }));
 
             // direct outputs
             size_t leftOutputIndex = 0;
@@ -2931,11 +3024,11 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
 
             const TString leftSidePrefix = labels.Inputs[0].AddLabel ? (TStringBuilder() << labels.Inputs[0].Tables[0] << ".") : TString();
             TExprNode::TPtr leftVisitLambda = BuildSideSplitNullsLambda(pos, leftNulls, itemArg, ytReduceByColumns, leftSidePrefix,
-                joinRenamingLambda, *outItemTypeBeforeRename, variantType, leftOutputIndex, ctx);
+                joinRenamingLambda, *outItemTypeBeforeRename, variantType, leftOutputIndex, ctx, reducerBoundItem);
 
             const TString rightSidePrefix = labels.Inputs[1].AddLabel ? (TStringBuilder() << labels.Inputs[1].Tables[0] << ".") : TString();
             TExprNode::TPtr rightVisitLambda = BuildSideSplitNullsLambda(pos, rightNulls, itemArg, ytReduceByColumns, rightSidePrefix,
-                joinRenamingLambda, *outItemTypeBeforeRename, variantType, rightOutputIndex, ctx);
+                joinRenamingLambda, *outItemTypeBeforeRename, variantType, rightOutputIndex, ctx, reducerBoundItem);
 
             auto splitLambdaBody = ctx.Builder(pos)
                 .Callable("Visit")
@@ -2962,6 +3055,14 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
                 .Seal()
                 .Build();
         }
+    }
+
+    // Non-multi-out maps emit flat CommonJoinCoreInputType rows, built with per-branch flattening so
+    // no payload Variant is constructed. Multi-out builds its flat rows inside the split (above).
+    if (flatJoinPayload && mapReduceOutputs.size() == 1) {
+        mapLambda = BuildFlatPayloadMapLambda(pos, ctx, mapCombinerLambda.Ptr(),
+            cjcLambdas[0].MapLambda, cjcLambdas[1].MapLambda,
+            cjcLambdas[0].ReduceLambda, cjcLambdas[1].ReduceLambda);
     }
 
     if (state->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {

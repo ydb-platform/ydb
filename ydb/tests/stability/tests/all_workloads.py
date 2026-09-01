@@ -109,13 +109,14 @@ def _init_stress_utils():
             'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard',
             'nodes_percentage': 1
         },
-        'IncrementalBackup': {
-            'args': [
-                "--endpoint", "grpc://{node_host}:2135",
-                "--backup-interval", "20"
-            ],
-            'local_path': 'ydb/tests/stress/backup/backup_stress'
-        },
+        # Disabled due to high scheme paths consumption, see https://github.com/ydb-platform/ydb/issues/50500
+        # 'IncrementalBackup': {
+        #     'args': [
+        #         "--endpoint", "grpc://{node_host}:2135",
+        #         "--backup-interval", "20"
+        #     ],
+        #     'local_path': 'ydb/tests/stress/backup/backup_stress'
+        # },
         'Streaming': {
             'args': [
                 "--endpoint", "{node_host}:2135",
@@ -167,6 +168,10 @@ def _init_stress_utils():
                 "--phase", "clean",
             ],
             'local_path': 'ydb/tests/stress/tpcc/workload_tpcc'
+        },
+        'RemoveStorageGroups': {
+            'args': ["--endpoint", "{node_host}:2135"],
+            'local_path': 'ydb/tests/stress/remove_storage_groups/remove_storage_groups'
         },
     }
 

@@ -118,6 +118,17 @@ void AssertUnsupportedCompressionType(ECompressionType compressionType) {
     }
 }
 
+struct Meta_TKafkaRecordsField {
+    using Type = TKafkaRecords;
+    using TypeDesc = NPrivate::TKafkaRecordsDesc;
+
+    static constexpr const char* Name = "records";
+
+    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+    static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+};
+
 TString Bytes(std::initializer_list<ui8> bytes) {
     TString result;
     result.reserve(bytes.size());
@@ -457,6 +468,40 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
         AssertRecordBatchRoundTrip(ECompressionType::ZSTD);
     }
 
+    Y_UNIT_TEST(SetKafkaBatchBaseOffset) {
+        const TKafkaRecordBatch expected = MakeRecordBatch(ECompressionType::ZSTD);
+        TString batchBytes = WriteKafkaRecordBatch(expected);
+        const TString originalBytes = batchBytes;
+
+        UNIT_ASSERT(SetKafkaBatchBaseOffset(batchBytes, 123));
+
+        const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(batchBytes);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, 123);
+        const size_t baseOffsetSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TString(batchBytes.data() + baseOffsetSize, batchBytes.size() - baseOffsetSize),
+            TString(originalBytes.data() + baseOffsetSize, originalBytes.size() - baseOffsetSize));
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[0].OffsetDelta, 0);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records[1].OffsetDelta, 1);
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[0].Key, expected.Records[0].Key));
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[0].Value, expected.Records[0].Value));
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[1].Key, expected.Records[1].Key));
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[1].Value, expected.Records[1].Value));
+    }
+
+    Y_UNIT_TEST(SetKafkaBatchBaseOffsetIgnoresLegacyAndMalformedBatch) {
+        TString legacyBytes = KafkaLegacyProducerBatchBytes(1, ECompressionType::NONE);
+        const TString originalLegacyBytes = legacyBytes;
+        UNIT_ASSERT(!SetKafkaBatchBaseOffset(legacyBytes, 123));
+        UNIT_ASSERT_VALUES_EQUAL(legacyBytes, originalLegacyBytes);
+
+        TString malformedBytes = "short";
+        const TString originalMalformedBytes = malformedBytes;
+        UNIT_ASSERT(!SetKafkaBatchBaseOffset(malformedBytes, 123));
+        UNIT_ASSERT_VALUES_EQUAL(malformedBytes, originalMalformedBytes);
+    }
+
     Y_UNIT_TEST(ReadKafkaBatchHeader) {
         UNIT_ASSERT(!ReadKafkaBatchHeader(TStringBuf()));
 
@@ -522,6 +567,135 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
     Y_UNIT_TEST(RecordBatchUnsupportedCompressionType) {
         AssertUnsupportedCompressionType(ECompressionType::SNAPPY);
         AssertUnsupportedCompressionType(ECompressionType::LZ4);
+    }
+
+    Y_UNIT_TEST(RecordBatchReadDoesNotConsumePastBatchLength) {
+        for (const auto compressionType : {
+                 ECompressionType::NONE,
+                 ECompressionType::GZIP,
+                 ECompressionType::ZSTD})
+        {
+            const TKafkaRecordBatch batch = MakeRecordBatch(compressionType);
+            TString serialized = WriteKafkaRecordBatch(batch);
+            const size_t batchSize = serialized.size();
+            serialized.append(64, '\xff');
+
+            TBuffer buffer(serialized.data(), serialized.size());
+            TKafkaReadable readable(buffer);
+            readable.SetAllowCompressed(true);
+            TKafkaRecordBatch parsed;
+            parsed.Read(readable, 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), batch.Records.size());
+            UNIT_ASSERT_VALUES_EQUAL(readable.position(), batchSize);
+            UNIT_ASSERT_VALUES_EQUAL(readable.left(), 64u);
+        }
+    }
+
+    Y_UNIT_TEST(RecordBatchReadRejectsBatchLengthLargerThanRemaining) {
+        TString data = WriteKafkaRecordBatch(MakeRecordBatch(ECompressionType::NONE));
+        data[8] = 0x7F;
+        data[9] = static_cast<char>(0xFF);
+        data[10] = static_cast<char>(0xFF);
+        data[11] = static_cast<char>(0xFF);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ReadKafkaRecordBatch(data), yexception, "had invalid length");
+    }
+
+    Y_UNIT_TEST(RecordBatchReadRejectsNegativeBatchLength) {
+        TString data = WriteKafkaRecordBatch(MakeRecordBatch(ECompressionType::NONE));
+        data[8] = static_cast<char>(0xFF);
+        data[9] = static_cast<char>(0xFF);
+        data[10] = static_cast<char>(0xFF);
+        data[11] = static_cast<char>(0xFF);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ReadKafkaRecordBatch(data), yexception, "invalid Kafka record batch length");
+    }
+
+    Y_UNIT_TEST(RecordsFieldReadDoesNotConsumePastLength) {
+        for (const auto compressionType : {
+                 ECompressionType::NONE,
+                 ECompressionType::GZIP,
+                 ECompressionType::ZSTD})
+        {
+            const TKafkaRecordBatch batch = MakeRecordBatch(compressionType);
+            const TString serialized = WriteKafkaRecordBatch(batch);
+            const char extra[] = "GARBAGE";
+            const char nextField[] = "NEXT";
+
+            TKafkaWriteBuffer sb(BUFFER_SIZE);
+            TKafkaWritable writable(sb);
+            writable << static_cast<TKafkaInt32>(serialized.size() + sizeof(extra));
+            writable.write(serialized.data(), serialized.size());
+            writable.write(extra, sizeof(extra));
+            writable.write(nextField, sizeof(nextField));
+
+            TKafkaReadable readable(sb.GetFrontBuffer());
+            readable.SetAllowCompressed(true);
+            TKafkaRecords result;
+            NPrivate::Read<Meta_TKafkaRecordsField>(readable, 3, result);
+
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Records.size(), batch.Records.size());
+            UNIT_ASSERT_VALUES_EQUAL(readable.left(), sizeof(nextField));
+        }
+    }
+
+    Y_UNIT_TEST(BatchHeaderReadDoesNotConsumePastBatchLength) {
+        const TKafkaRecordBatch batch = MakeRecordBatch(ECompressionType::NONE);
+        TString serialized = WriteKafkaRecordBatch(batch);
+        const size_t batchSize = serialized.size();
+        serialized.append(64, '\xff');
+
+        TBuffer buffer(serialized.data(), serialized.size());
+        TKafkaReadable readable(buffer);
+        TKafkaBatchHeader header;
+        header.Read(readable, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(header.RecordsCount, static_cast<i32>(batch.Records.size()));
+        UNIT_ASSERT_VALUES_EQUAL(readable.position(), batchSize);
+        UNIT_ASSERT_VALUES_EQUAL(readable.left(), 64u);
+    }
+
+    Y_UNIT_TEST(ReadKafkaBatchHeaderRejectsBatchLengthLargerThanRemaining) {
+        TString data = WriteKafkaRecordBatch(MakeRecordBatch(ECompressionType::NONE));
+        data[8] = 0x7F;
+        data[9] = static_cast<char>(0xFF);
+        data[10] = static_cast<char>(0xFF);
+        data[11] = static_cast<char>(0xFF);
+
+        UNIT_ASSERT(!ReadKafkaBatchHeader(data));
+    }
+
+    Y_UNIT_TEST(ReadKafkaBatchHeaderRejectsNegativeBatchLength) {
+        TString data = WriteKafkaRecordBatch(MakeRecordBatch(ECompressionType::NONE));
+        data[8] = static_cast<char>(0xFF);
+        data[9] = static_cast<char>(0xFF);
+        data[10] = static_cast<char>(0xFF);
+        data[11] = static_cast<char>(0xFF);
+
+        UNIT_ASSERT(!ReadKafkaBatchHeader(data));
+    }
+
+    Y_UNIT_TEST(ReadKafkaBatchHeaderRejectsTruncatedBatch) {
+        TString data = WriteKafkaRecordBatch(MakeRecordBatch(ECompressionType::GZIP));
+        UNIT_ASSERT(ReadKafkaBatchHeader(data));
+        data.resize(data.size() / 2);
+        UNIT_ASSERT(!ReadKafkaBatchHeader(data));
+    }
+
+    Y_UNIT_TEST(WriteKafkaRecordBatchOverridesStaleBatchLength) {
+        TKafkaRecordBatch batch = MakeRecordBatch(ECompressionType::ZSTD);
+        batch.BatchLength = 1;
+
+        const TString serialized = WriteKafkaRecordBatch(batch);
+        const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(serialized);
+        const size_t expectedBatchLength = serialized.size()
+            - sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type)
+            - sizeof(TKafkaRecordBatch::BatchLengthMeta::Type);
+
+        UNIT_ASSERT_VALUES_EQUAL(parsed.BatchLength, expectedBatchLength);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), batch.Records.size());
     }
 }
 

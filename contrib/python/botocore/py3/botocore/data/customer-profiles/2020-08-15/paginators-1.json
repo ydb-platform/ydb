@@ -35,6 +35,36 @@
       "output_token": "NextToken",
       "limit_key": "MaxResults",
       "result_key": "Items"
+    },
+    "ListDomainLayouts": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "Items"
+    },
+    "ListUploadJobs": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "Items"
+    },
+    "ListDomainObjectTypes": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "Items"
+    },
+    "ListRecommenderRecipes": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "RecommenderRecipes"
+    },
+    "ListRecommenders": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "Recommenders"
     }
   }
 }

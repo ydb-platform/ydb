@@ -537,6 +537,7 @@ message TTableServiceConfig {
         optional uint64 CleanupPeriodMs = 5 [default = 30000];
         optional uint64 IdlePingPeriodMs = 6 [default = 60000];
         optional uint64 IdleDestroyPeriodMs = 7 [default = 120000];
+        optional uint64 LocalChannelColdInflightBytes = 9 [default = 524288];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];
@@ -559,4 +560,18 @@ message TTableServiceConfig {
 
     // Defer join-filter inlining until after cost-based optimization.
     optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableVectorSearchActor = 141 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableOlapPushdownRegexp = 142 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableSmallComputeMemoryAllocations = 143 [default = true];
+
+    // Prune key columns
+    optional bool EnablePruneKeyColumns = 144 [default = true];
+
+    optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
+
+    // DQ channels 2.0: when the receiver node reports the resource manager spilling signal
+    // (NRm::TTxState::IsReasonableToStartSpilling), shrink the sender inflight window down to
+    // the cold inflight value instead of letting channels soak the full per channel limit.
+    optional bool EnableSpillingChannelBackpressure = 146 [default = false];
 };

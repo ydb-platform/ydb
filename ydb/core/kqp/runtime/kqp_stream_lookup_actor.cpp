@@ -119,6 +119,9 @@ public:
         if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
         }
@@ -463,6 +466,9 @@ private:
         {
             auto alloc = BindAllocator();
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
             for (auto& [id, state] : Reads) {
@@ -1120,6 +1126,13 @@ private:
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_WRONG_SHARD_STATE: {
+                YDB_LOG_DEBUG("Lock request returned STATUS_WRONG_SHARD_STATE",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
+                auto lockIt = Reads.findLock(record.GetRequestId());
+                if (lockIt != Reads.endLocks()) {
+                    return RetryLock(lockIt->second, false);
+                }
                 return RuntimeError(
                     TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Wrong shard state.",
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
@@ -1241,7 +1254,8 @@ private:
             {"snapshotTxId", record.GetSnapshot().GetTxId()},
             {"step", record.GetSnapshot().GetStep()},
             {"lockTxId", record.GetLockTxId()},
-            {"lockNodeId", record.GetLockNodeId()});
+            {"lockNodeId", record.GetLockNodeId()},
+            {"lockMode", record.GetLockMode()});
 
         const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 

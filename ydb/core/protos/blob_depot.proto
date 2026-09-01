@@ -1,5 +1,6 @@
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 
 package NKikimrBlobDepot;
@@ -233,6 +234,11 @@ message TEvResolve {
     }
 
     repeated TItem Items = 1;
+
+    // Admission hint of the request this resolve serves: in decommission mode a MustRestoreFirst
+    // item makes BlobDepot copy the blob into its own storage, and that write must be admitted the
+    // same way the requesting tablet's own writes are, or the tablet cannot boot.
+    optional NKikimrBlobStorage.TDataKind.E DataKind = 2;
 }
 
 message TEvResolveResult {
@@ -254,6 +260,7 @@ message TEvResolveResult {
 message TEvPushMetrics {
     optional uint64 BytesRead = 1; // since last update
     optional uint64 BytesWritten = 2; // since last update
+    optional uint32 NodeId = 3;
 }
 
 message TEvPrepareWriteS3 {

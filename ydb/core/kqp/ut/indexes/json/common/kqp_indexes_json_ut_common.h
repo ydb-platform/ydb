@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_compact_common.h>
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_corpus.h>
 #include <ydb/core/kqp/ut/indexes/json/common/kqp_indexes_json_predicate.h>
 
@@ -34,9 +35,9 @@ extern const std::string kSecondLongSqlInValue;
 
 TKikimrRunner Kikimr(bool enableJsonIndex = true, bool enableJsonIndexAutoSelect = false);
 
-void CreateTestTable(NYdb::NQuery::TQueryClient& db, const std::string& type = "Json", bool withIndex = false);
+TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect = false);
 
-NYdb::TResultSet ReadIndex(NYdb::NQuery::TQueryClient& db, const char* table = "indexImplTable");
+void CreateTestTable(NYdb::NQuery::TQueryClient& db, const std::string& type = "Json", bool withIndex = false);
 
 void TestAddJsonIndex(const std::string& type, bool nullable);
 
@@ -46,7 +47,8 @@ void ValidatePredicate(NYdb::NQuery::TQueryClient& db, const std::string& predic
     NYdb::TParams params = NYdb::TParamsBuilder().Build(), const std::string& suffix = "ORDER BY Key");
 
 void ValidateError(NYdb::NQuery::TQueryClient& db, const std::string& predicate,
-    const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate");
+    const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate",
+    const std::string& unexpectedErrorMessage = {});
 
 void ValidateError(NYdb::NQuery::TQueryClient& db, const std::string& predicate, NYdb::TParams params,
     const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate");

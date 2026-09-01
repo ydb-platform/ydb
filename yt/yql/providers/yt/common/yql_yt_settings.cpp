@@ -527,6 +527,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch
     REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
+    REGISTER_SETTING(*this, JoinCommonUseFlatPayload);
+    REGISTER_SETTING(*this, JoinCommonFlatPayloadColumnLimit);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
@@ -645,6 +647,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _ParseExpressionColumns);
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
     REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
+    REGISTER_SETTING(*this, _ForbidReservedColumns);
+    REGISTER_SETTING(*this, ApplyMaxJobCountToAll);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

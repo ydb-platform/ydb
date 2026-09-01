@@ -137,11 +137,14 @@ public:
         }
 
         if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings.QueryType)) {
-            config->_KqpYqlConstraintsTransformerEnabled = AppData()->FeatureFlags.GetEnableKqpConstraintsTransformer() && AppData()->FeatureFlags.GetEnableStreamingQueries();
+            config->_KqpYqlConstraintsTransformerEnabled = AppData()->FeatureFlags.GetEnableKqpConstraintsTransformer();
         }
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
             config->_KqpEnableSpilling = false;
+            config->OptValidateStreamingCheckpoints = true;
+        } else {
+            config->OptValidateStreamingCheckpoints = false;
         }
 
         if (UsePessimisticLocks) {
@@ -622,14 +625,7 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
         }
 
-        // If compilation failed and we tried SqlVersion = 1, retry with SqlVersion = 0
-        if (IsSuitableToFallbackToSqlV0(status)) {
-            Counters->ReportCompileEnforceConfigFailed(DbCounters);
-            EnforcedSqlVersion = false;
-            TString logMessage = "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0";
-            RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
-            return;
-        } else if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
+        if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
             Counters->ReportCompileEnforceConfigSuccess(DbCounters);
         }
 
@@ -729,10 +725,6 @@ private:
 
     bool IsSuitableToReportFailOnNewRBO(Ydb::StatusIds::StatusCode status) {
         return EnableNewRBO && status != Ydb::StatusIds::SUCCESS;
-    }
-
-    bool IsSuitableToFallbackToSqlV0(Ydb::StatusIds::StatusCode status) {
-        return !EnableNewRBO && EnforcedSqlVersion && status != Ydb::StatusIds::SUCCESS;
     }
 
     bool IsSuitableToReportSuccessOnEnforcedSqlVersion(Ydb::StatusIds::StatusCode status) {

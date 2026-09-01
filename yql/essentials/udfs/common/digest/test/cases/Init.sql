@@ -1,3 +1,10 @@
+$input = AsList(
+    <|key: "1"|>,
+    <|key: "2"|>,
+    <|key: "3"|>,
+    <|key: ""|>,
+);
+
 SELECT
     Digest::Crc64(key, 777), Digest::Crc64(key, 777 AS Init),
     Digest::Fnv32(key, 777), Digest::Fnv32(key, 777 AS Init),
@@ -7,5 +14,5 @@ SELECT
     Digest::MurMurHash2A(key, 777), Digest::MurMurHash2A(key, 777 AS Init),
     Digest::MurMurHash2A32(key, 777), Digest::MurMurHash2A32(key, 777 AS Init),
     Digest::CityHash(key, 777), Digest::CityHash(key, 777 AS Init),
-    
-FROM Input;
+
+FROM AS_TABLE($input);

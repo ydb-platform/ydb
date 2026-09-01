@@ -22,18 +22,18 @@ void TSlidingWindow<TPacket>::AddPacket(
 {
     if (sequenceNumber < GetNextSequenceNumber()) {
         THROW_ERROR_EXCEPTION("Packet sequence number is too small")
-            << TErrorAttribute("sequence_number", sequenceNumber)
-            << TErrorAttribute("min_sequence_number", GetNextSequenceNumber());
+            .With("sequence_number", sequenceNumber)
+            .With("min_sequence_number", GetNextSequenceNumber());
     }
 
     if (Window_.find(sequenceNumber) != Window_.end()) {
         THROW_ERROR_EXCEPTION("Packet with this sequence number is already queued")
-            << TErrorAttribute("sequence_number", sequenceNumber);
+            .With("sequence_number", sequenceNumber);
     }
 
     if (std::ssize(Window_) >= MaxSize_) {
         THROW_ERROR_EXCEPTION("Packet window overflow")
-            << TErrorAttribute("max_size", MaxSize_);
+            .With("max_size", MaxSize_);
     }
 
     Window_[sequenceNumber] = std::move(packet);

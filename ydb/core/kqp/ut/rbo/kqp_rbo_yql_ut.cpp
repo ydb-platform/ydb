@@ -4361,6 +4361,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 d String,
                 PRIMARY KEY (a)
             );
+
+            CREATE TABLE `/Root/t6` (
+                a Int32 NOT NULL,
+                b Int32 NOT NULL,
+                PRIMARY KEY (a)
+            );
         )";
 
         struct TCase {
@@ -4523,6 +4529,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 FROM `/Root/t1` AS t1
                 WHERE t1.a NOT IN (SELECT a FROM `/Root/t2`)
                 ORDER BY a;
+            )", 0},
+
+            // No optional keys.
+            {"left only join on not null columns", R"(
+                PRAGMA ydb.OptimizerHints = 'Rows(t6 # 100) Bytes(t6 # 1000)';
+                SELECT t6.a AS a
+                FROM `/Root/t6` AS t6
+                WHERE t6.a NOT IN (SELECT a FROM `/Root/t6` WHERE b = 2)
+                ORDER BY a;
             )", 1},
 
             {"semi join with a filtered probed side", R"(
@@ -4539,7 +4554,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 FROM `/Root/t1` AS t1
                 WHERE t1.a NOT IN (SELECT a FROM `/Root/t3` WHERE d >= 30 AND d <= 50)
                 ORDER BY a;
-            )", 1},
+            )", 0},
 
             {"semi join with a point predicate ahead of the join key", R"(
                 PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
@@ -4555,7 +4570,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 FROM `/Root/t1` AS t1
                 WHERE t1.d NOT IN (SELECT b FROM `/Root/t3` WHERE a = 2)
                 ORDER BY a;
-            )", 1},
+            )", 0},
 
             {"semi join with several point predicates ahead of the join key", R"(
                 PRAGMA ydb.OptimizerHints = 'Rows(t1 # 100) Bytes(t1 # 1000) Rows(t2 # 100) Bytes(t2 # 1000) Rows(t3 # 100) Bytes(t3 # 1000) Rows(t4 # 100) Bytes(t4 # 1000) Rows(t5 # 100) Bytes(t5 # 1000)';
@@ -4681,6 +4696,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 }
                 rows.EndList();
                 bulkUpsert("/Root/t5", rows);
+            }
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [a, b] : TVector<std::tuple<i32, i32>>{{1, 1}, {2, 1}, {3, 2}, {4, 2}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").Int32(a)
+                        .AddMember("b").Int32(b)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t6", rows);
             }
 
             {
@@ -9247,6 +9275,42 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY t1.a;
              )",
              R"([[1]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE NOT (t1.c > 100) AND t1.a IN (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.a == t1.a + 9)
+                  AND t1.a IN (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.a <= 5)
+                ORDER BY t1.a;
+             )",
+             R"([[4];[5]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.a NOT IN (SELECT t2.e FROM `/Root/t2` as t2)
+                ORDER BY t1.a;
+             )",
+             R"([])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.e NOT IN (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.a <= 2)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[4];[7];[8];[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.a NOT IN (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.a <= 10)
+                ORDER BY t1.a;
+             )",
+             R"([[11];[12]])"},
         };
 
         for (ui32 i = 0; i < cases.size(); ++i) {

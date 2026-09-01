@@ -35,9 +35,10 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
         auto maybeSubplan = conjuncts[conjunctIdx].GetExpressionBody();
 
+        bool conjunctNegated = false;
         if (TCoNot::Match(maybeSubplan.Get())) {
             maybeSubplan = maybeSubplan->ChildPtr(0);
-            negated = true;
+            conjunctNegated = true;
         }
         if (TCoMember::Match(maybeSubplan.Get())) {
             auto name = TString(maybeSubplan->ChildPtr(1)->Content());
@@ -45,6 +46,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
             if (const auto* entry = props.Subplans.Find(iu)) {
                 if (entry->Type == ESubplanType::IN_SUBPLAN || entry->Type == ESubplanType::EXISTS) {
                     subplanEntry = entry;
+                    negated = conjunctNegated;
                     break;
                 }
             }
@@ -59,6 +61,15 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     Y_ENSURE(subplanEntry);
     auto subplan = CastOperator<IOperator>(subplanEntry->Plan);
     const bool useDependentJoin = HasFreeCorrelation(subplan, subplanEntry->DependentIUs);
+
+    // If `NOT` and optional column the result could be nothing.
+    if (negated && subplanEntry->Type == ESubplanType::IN_SUBPLAN && subplanEntry->Tuple.size() == 1) {
+        const auto& leftInput = filter->GetInput();
+        const auto subplanIUs = useDependentJoin ? GetSubplanResultIUs(subplan) : subplan->GetOutputIUs();
+        if (subplanIUs.empty() || IsNullableIU(leftInput, subplanEntry->Tuple[0]) || IsNullableIU(subplan, subplanIUs[0])) {
+            return input;
+        }
+    }
 
     // Simple rewrite into left only/ left semi.
     if (subplanEntry->Type == ESubplanType::IN_SUBPLAN || useDependentJoin) {

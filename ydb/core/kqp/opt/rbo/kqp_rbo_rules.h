@@ -48,7 +48,8 @@ class TInlineScalarSubplanRule : public IRule {
 class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
   public:
     TInlineSimpleInExistsSubplanRule()
-        : ISimplifiedRule("Inline simple in or exists subplan", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
+        : ISimplifiedRule("Inline simple in or exists subplan",
+                          ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs | ERuleProperties::RequireTypes) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;

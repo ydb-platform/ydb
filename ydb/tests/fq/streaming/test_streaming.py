@@ -2438,6 +2438,7 @@ FROM `{table_name}`"""
                 [load_message, load_message],
                 producer_id=producer_id,
                 partition_id=0,
+                partition_key=producer_id,
             )
 
         def has_real_split() -> bool:

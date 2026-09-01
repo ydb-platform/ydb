@@ -566,9 +566,8 @@ Y_UNIT_TEST(BigCache_BTreeIndex) {
 // V2 parts absorb data/btree pages into EPage::Skip entries, so TMeta only
 // declares structural pages. The page collection carries the real page count
 // (structural + skip-absorbed) so the shared cache accounts for every page
-// saved via TEvSaveCompactedPages, and TryKeepInMemory enumeration walks only
-// the structural TMeta pages (skipping EPage::Skip). This test exercises the
-// real compaction -> shared cache round-trip with V2 enabled.
+// saved via TEvSaveCompactedPages. This test exercises the real compaction ->
+// shared cache round-trip with V2 enabled.
 Y_UNIT_TEST(BigCache_BTreeIndex_V2) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
@@ -625,10 +624,34 @@ Y_UNIT_TEST(BigCache_BTreeIndex_V2) {
     UNIT_ASSERT_GT(counters->ActivePages->Val(), 0);
 }
 
+Y_UNIT_TEST(BTreeIndexV2RequiresBTreeIndex) {
+    TMyEnvBase env;
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBFlatIndex(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+    SetupSharedCache(env, 1_MB, true);
+
+    for (i64 key = 0; key < 10; ++key) {
+        env.SendSync(new NFake::TEvExecute{
+            new TTxWriteRow(key, TString(1024, char('a' + key))) });
+    }
+
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    TRetriedCounters retried;
+    for (i64 key = 0; key < 10; ++key) {
+        DoReadRows(env, new TTxReadRows(key, retried), true);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{10}));
+}
+
 //
-// Column group integration test: V2 + column groups through the full
-// compaction pipeline (TLoader → StagePreloadData → shared cache).
-// Exercises the multi-group B-tree preload loop in StagePreloadData.
+// Column group integration test: V2 + column groups through compaction,
+// shared cache, and reads from multiple page collections.
 //
 namespace {
     const ui32 GroupsValueColumn2Id = 3;
@@ -743,8 +766,8 @@ Y_UNIT_TEST(BigCache_BTreeIndex_V2_Groups) {
     env.WaitFor<NFake::TEvCompacted>();
 
     LogCounters(counters);
-    // Compaction must not crash. The V2 multi-group part was loaded
-    // through TLoader::StagePreloadData successfully.
+    // Compaction must not crash and all compacted page collections must be
+    // accepted by the shared cache.
     UNIT_ASSERT_GT(counters->ActivePages->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
 
@@ -1230,6 +1253,60 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2ShadowV1Write(false);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    auto writeAndCompact = [&](ui32 tableId, bool tryKeepInMemory) {
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(tableId, tryKeepInMemory) });
+        for (i64 key = 0; key < 100; ++key) {
+            TString value(size_t(100 * 1024), char('a' + key % 26));
+            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(tableId, key, std::move(value)) });
+        }
+        env.SendSync(new NFake::TEvCompact(tableId));
+        env.WaitFor<NFake::TEvCompacted>();
+    };
+
+    writeAndCompact(TableId, true);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    writeAndCompact(Table2Id, false);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(Table2Id, key, retried), true);
+    }
+
+    retried.clear();
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
+
+    RestartAndClearCache(env, 10_MB);
+
+    retried.clear();
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(Table2Id, key, retried), true);
+    }
+
+    retried.clear();
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
 }
 
 Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
@@ -2007,12 +2084,6 @@ Y_UNIT_TEST(ZeroCache_BTreeIndex_V2) {
     UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
 }
-
-// Section 3.5: V2 shared cache support implemented (see BigCache_BTreeIndex_V2).
-// V2 page collections carry the real page count (structural + skip-absorbed
-// data/btree pages) into the shared cache, and TryKeepInMemory enumeration
-// walks only the structural TMeta pages (skipping EPage::Skip). The on-disk
-// TMeta blob stays structural-only — v1 and v2 share the same header/layout.
 
 }
 

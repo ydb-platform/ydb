@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-struct TStickyPreloadState;
+struct TBTreePreloadState;
 
 using namespace NSharedCache;
 
@@ -145,7 +145,8 @@ public:
         ECacheMode CacheMode = ECacheMode::Regular;
 
     public:
-        TStickyPreloadState* PreloadByIndex = nullptr;
+        TBTreePreloadState* StickyPreloadByIndex = nullptr;
+        TBTreePreloadState* TryKeepInMemoryPreloadByIndex = nullptr;
     };
 
 public:

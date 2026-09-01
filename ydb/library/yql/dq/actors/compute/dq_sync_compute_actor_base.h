@@ -180,8 +180,12 @@ protected: //TDqComputeActorChannels::ICalbacks
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
     bool ReadyToCheckpoint() const override final {
+        // When task become finished, there will be no read attempts from inputs,
+        // so stale data may stay in channels/sources
+        const auto allowNonEmptyInputs = this->State == NDqProto::COMPUTE_STATE_FINISHED;
+
         for (const auto& [_, sourceInfo] : this->SourcesMap) {
-            if (!sourceInfo.Buffer->Empty()) {
+            if (!sourceInfo.Buffer->Empty() && !allowNonEmptyInputs) {
                 return false;
             }
         }
@@ -191,19 +195,19 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 continue;
             }
 
-            // A finished channel may no longer become paused, but its buffer still needs to be drained.
-            if (!channelInfo.IsPaused() && !channelInfo.Channel->IsFinished()) {
+            // Checkpoints should be distributed also over finished channels, so here we wait pause unconditionally
+            if (!channelInfo.IsPaused()) {
                 return false;
             }
 
-            if (!channelInfo.Channel->Empty()) {
+            if (!channelInfo.Channel->Empty() && !allowNonEmptyInputs) {
                 return false;
             }
         }
 
         for (const auto& [_, transformInfo] : this->InputTransformsMap) {
             const auto buffer = transformInfo.Buffer;
-            if (!buffer->Empty()) {
+            if (!buffer->Empty() && !allowNonEmptyInputs) {
                 return false;
             }
 

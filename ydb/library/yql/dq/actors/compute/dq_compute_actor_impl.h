@@ -541,7 +541,9 @@ protected:
             }
         }
 
-        if (status != ERunStatus::Finished) {
+        if (status != ERunStatus::Finished ||
+            Checkpoints // We should send acks after finish in order to receive checkpoints
+        ) {
             // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent,
             // there will be no attempts to send a new piece of data from the other side of this channel.
             // So, if there is space in the channel buffer (and on previous step is was full), we send ChannelDataAck
@@ -553,7 +555,7 @@ protected:
                     pollSent |= Channels->PollChannel(channelId, GetInputChannelFreeSpace(channelId));
                 }
 
-                if (!pollSent) {
+                if (status != ERunStatus::Finished && !pollSent) {
                     CA_LOG_T("Cannot poll input channels, continue execute, data was sent: " << ProcessOutputsState.DataWasSent);
                     if (ProcessOutputsState.DataWasSent) {
                         ContinueExecute(EResumeSource::CADataSent);
@@ -602,6 +604,11 @@ protected:
                     State = NDqProto::COMPUTE_STATE_FINISHED;
                     CA_LOG_D("Compute state finished. All channels and sinks finished");
                     ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::SUCCESS, {TIssue("success")});
+
+                    if (Checkpoints) {
+                        // Continue checkpoints distribution after finish (now stale data in inputs may be skipped)
+                        ContinueExecute(EResumeSource::CAFinish);
+                    }
                 }
             }
         }
@@ -810,7 +817,9 @@ protected:
     }
 
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {
-        if (!ResumeEventScheduled && Running) {
+        if (!ResumeEventScheduled && (Running ||
+            Checkpoints // After finish graph should continue checkpoints distribution
+        )) {
             ResumeEventScheduled = true;
             this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
@@ -886,6 +895,10 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {
             if (channelInfo.PendingCheckpoint) {
+                if (const IDqInputChannel::TPtr channel = channelInfo.Channel) {
+                    Y_ENSURE(channel->Empty() || State == NDqProto::COMPUTE_STATE_FINISHED);
+                }
+
                 channelInfo.ResumeByCheckpoint();
             }
         }
@@ -1129,13 +1142,16 @@ protected:
 
         std::vector<TDrainedChannelMessage> DrainChannel(const ui32 countLimit) {
             std::vector<TDrainedChannelMessage> result;
-            if (Finished) {
+            const bool hasCheckpoint = CheckpointingMode != NDqProto::ECheckpointingMode::CHECKPOINTING_MODE_DISABLED;
+            if (Finished &&
+                !hasCheckpoint // Checkpoints can be sent after channel finish
+            ) {
                 Y_ABORT_UNLESS(Channel->IsFinished());
                 return result;
             }
 
             result.reserve(countLimit);
-            for (ui32 i = 0; i < countLimit && !Finished; ++i) {
+            for (ui32 i = 0; i < countLimit && (!Finished || hasCheckpoint); ++i) {
                 TDrainedChannelMessage message;
                 if (!message.ReadData(*this)) {
                     break;

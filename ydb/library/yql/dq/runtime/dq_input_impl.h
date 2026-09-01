@@ -294,7 +294,6 @@ public:
 
     void ResumeByCheckpoint() override {
         Y_ENSURE(IsPausedByCheckpoint());
-        Y_ENSURE(Empty());
         BeforeBarrier = PendingBarriers.front();
         PendingBarriers.pop_front();
     }

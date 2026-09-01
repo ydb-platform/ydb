@@ -27,7 +27,12 @@ Y_UNIT_TEST(ChildOfWorkingDirIsACreate) {
     UNIT_ASSERT_VALUES_EQUAL(container.Path, "/MyRoot/DirA");
     UNIT_ASSERT(container.Role == TAffectedPath::ERole::Container);
     UNIT_ASSERT(container.Effect == TAffectedPath::EEffect::ChildrenChanged);
-    UNIT_ASSERT(container.Expect == TAffectedPath::EObservation::MustWrite);
+    // MayWrite, and this assertion used to say MustWrite. Gaining a child usually does bump
+    // the parent's DirAlterVersion -- but not always: creating a vector index's impl table
+    // under /MyRoot/Table/index1 leaves that index's own row untouched, which the reverse
+    // check caught in TVectorIndexTests::ReplaceVectorIndex. A container cannot promise a
+    // write on behalf of an operation it knows nothing about.
+    UNIT_ASSERT(container.Expect == TAffectedPath::EObservation::MayWrite);
 }
 
 Y_UNIT_TEST(ChildOfWorkingDirCanonizes) {

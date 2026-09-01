@@ -66,9 +66,12 @@ TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString
             .Path = TString(container),
             .Class = TAffectedPath::EEffectClass::SchemaEffect,
             .Effect = TAffectedPath::EEffect::ChildrenChanged,
-            // Gaining a child bumps the parent's DirAlterVersion, so the write is demanded
-            // here, unlike the alter case below.
-            .Expect = TAffectedPath::EObservation::MustWrite,
+            // MayWrite, not MustWrite, and this one is counter-intuitive: gaining a child
+            // usually bumps the parent's DirAlterVersion, but not always. Creating a vector
+            // index's impl table under /MyRoot/Table/index1 leaves that index's row
+            // untouched (TVectorIndexTests::ReplaceVectorIndex). E22 again, one level up --
+            // even a create cannot promise what its container does.
+            .Expect = TAffectedPath::EObservation::MayWrite,
         });
     }
     return result;

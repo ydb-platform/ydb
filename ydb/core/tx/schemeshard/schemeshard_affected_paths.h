@@ -101,42 +101,36 @@ class TSchemeShard;
 // Never set in production: the point of it is that it stops the tablet.
 inline bool UndeclaredPathTouchIsFatal = false;
 
-// The reverse check's own switch, deliberately separate from UndeclaredPathTouchIsFatal and
-// deliberately not set by TTestEnv yet.
+// The reverse check's own switch, separate from UndeclaredPathTouchIsFatal. Both are armed by
+// TTestEnv, so both are live for every schemeshard suite.
 //
-// The mechanism is wired and proven: poisoning a declaration with a path nobody writes aborts
-// naming that path and its txId.
+// Read this before adding a MustWrite anywhere: as it stands, this check is nearly inert, and
+// that is a finding rather than a gap to be filled in by stamping more claims.
 //
-// The helper-level half of the audit is done. DeclareTargetByIdOrName used to inherit
-// Create/MustWrite wholesale from DeclareChildOfWorkingDir on its by-name branch, demanding a
-// path-row write from every by-name alter and drop -- TAlterTable being the extreme case, its
-// file contains no path-row Persist* call at all. Both of its branches now say Alter/MayWrite,
-// which is the only claim that helper is in a position to make. That took the armed failures
-// from 94 to 10.
+// The arming pass ran the armed failures from 94 to zero. Not one of them was cleared by
+// loosening a claim for convenience; each died to a specific counter-example:
 //
-// Per-call-site pass done for the non-creates that reached this helper wrongly: Backup and
-// Restore act on a table that already exists, CreateLock takes a lock on one, and
-// AssignBlockStoreVolume assigns an existing volume -- none of them gives a container a new
-// child, so none may assert Create/MustWrite. That took the armed failures from 10 to 2.
+//   a by-name alter writes its target   -> TAlterTable has no path-row Persist* at all
+//   a subtree walk writes each child    -> a subdomain upgrade marks them migrated in memory
+//                                          and persists the root alone (upgrade_subdomain.cpp:566)
+//   a force drop rewrites its subtree   -> TSchemeShardTest::ForceDropTwice, where the second
+//                                          drop succeeds having written nothing
+//   a create bumps its container        -> a vector index's impl table leaves index1 untouched
 //
-// Third pass: DeclareSubTree stamped every descendant MustWrite on the reasoning that the
-// operation's own loop rewrites each row. True for the force drops and for an owner change,
-// false for a subdomain upgrade, which marks descendants migrated in memory and persists the
-// root alone (upgrade_subdomain.cpp:566-579). The expectation is a parameter now and the two
-// upgrade sites pass MayWrite. That cleared the descendant claim; what remains:
+// What survives is one MustWrite in the whole tree: the target of a create, below. Every
+// container, subtree entry, alter and drop is MayWrite, and MayWrite is exempt by construction.
+// So this check can no longer catch much, and the forward check (written subset-of declared)
+// remains the load-bearing half.
 //
-//   TSchemeShardTest::AlterMigratedIndexTable                 -> /MyRoot, txId 105
-//   TSchemeShardTest::PersistUniqueIndexKeySize-OnCreate-false
-//              -> /MyRoot/Table/idx_uniq/indexImplTable, txId 281474976710760 (internal range)
+// The reason it cannot work as specified is structural, not an oversight. A declaration is
+// computed from the request; whether a write happens depends on state at execution. That
+// information does not exist yet at declaration time, so no amount of care closes the gap --
+// which is also why TAffectedPath deliberately carries no Outcome field.
 //
-// Both are still create-shaped declarations whose write is skipped on some flow. Note the
-// second txId is schemeshard-generated, so its declaration comes from an internally
-// synthesized request rather than a user one -- worth checking whether internal operations
-// should be held to MustWrite at all.
-//
-// Do not clear these by loosening the index creates to MayWrite. That turns them green by
-// guessing, and if the write should happen MayWrite hides the one thing this check exists to
-// find. Identify the flow that skips the write first. Arm from TTestEnv in that change.
+// The design that would work is to record what was applied in memory as writes are observed
+// and compare committed-against-declared at completion, in the DoCheckDeclarations hook this
+// branch already built. Prefer that over adding MustWrite claims the next counter-example
+// deletes.
 inline bool UnfulfilledPathDeclarationIsFatal = false;
 
 // The reverse half of the cross-check. ObservePathTouched tests written ⊆ declared, which

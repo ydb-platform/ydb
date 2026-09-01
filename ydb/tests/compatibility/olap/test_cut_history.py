@@ -95,7 +95,9 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             pytest.skip("CutHistory is available starting from 26.4")
 
         yield from self.setup_cluster(
-            extra_feature_flags=["enable_cut_history"],
+            # Both legs are needed for the pool to converge: the platform flag drives the
+            # channel-0/1 cutters, the decommission flag drives ColumnShard's data channels.
+            extra_feature_flags=["enable_cut_history", "enable_columnshard_group_decommission"],
             column_shard_config={
                 "alter_object_enabled": True,
             },

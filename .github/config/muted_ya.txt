@@ -8,6 +8,7 @@ ydb/core/kafka_proxy/ut TTopicLocationActor.MissingTopicIsSchemeError
 ydb/core/kafka_proxy/ut TTopicLocationActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicLocationActor.SuccessReturnsLivePartitions
 ydb/core/kafka_proxy/ut TTopicLocationActor.UnauthorizedStaysUnauthorized
+ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingPartitionIsSchemeError
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.ParsesConsumerOffsetsAndSkipsErrors
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnEmptyStatusResponse

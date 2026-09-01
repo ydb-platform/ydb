@@ -429,18 +429,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         StartQuery("tsQuery");
         pqGateway->WaitWriteSession(TString{OutputTopic});
 
-        // SubmittedAt comes from the current script execution. StartedAt reflects an
-        // in-flight streaming query management operation and is cleared once CREATE
-        // or ALTER completes, so it is not expected in this stable snapshot.
+        // Both timestamps come from the current script execution. A running query
+        // must have been submitted and started.
         const auto& queryResult = ExecQuery(R"(
             SELECT SubmittedAt, StartedAt
             FROM `.sys/streaming_queries`
             WHERE Path = '/Root/tsQuery'
         )");
-        CheckScriptResult(queryResult[0], 2, 1, [&](TResultSetParser& rs) {
-            UNIT_ASSERT_C(rs.ColumnParser("SubmittedAt").GetOptionalTimestamp().has_value(), "SubmittedAt must be set for a running query");
-            UNIT_ASSERT_C(!rs.ColumnParser("StartedAt").GetOptionalTimestamp().has_value(), "StartedAt must be null after CREATE completes");
-        });
+            CheckScriptResult(queryResult[0], 2, 1, [&](TResultSetParser& rs) {
+                const auto submittedAt = rs.ColumnParser("SubmittedAt").GetOptionalTimestamp();
+                const auto startedAt = rs.ColumnParser("StartedAt").GetOptionalTimestamp();
+                UNIT_ASSERT_C(submittedAt.has_value(), "SubmittedAt must be set for a running query");
+                UNIT_ASSERT_C(startedAt.has_value(), "StartedAt must be set for a running query");
+                UNIT_ASSERT_VALUES_EQUAL(*startedAt, *submittedAt);
+            });
     }
 
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {

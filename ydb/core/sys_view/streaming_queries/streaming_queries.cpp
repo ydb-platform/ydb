@@ -876,9 +876,6 @@ public:
                 .StoppedBy = info.StoppedBy,
                 .CreatedAt = info.CreatedAt,
                 .ModifiedAt = info.ModifiedAt,
-                .StartedAt = query.State.HasOperationStartedAt()
-                    ? NProtoInterop::CastFromProto(query.State.GetOperationStartedAt())
-                    : TInstant{},
             };
 
             if (ScriptExecutionInfoRequired) {
@@ -937,6 +934,7 @@ public:
             info.Issues = NKqp::SerializeIssues(event.Issues);
             info.RetryCount = event.RetryCount;
             info.SubmittedAt = event.SubmittedAt;
+            info.StartedAt = event.SubmittedAt;
             if (event.FinishedAt) {
                 info.FinishedAt = event.FinishedAt;
             }

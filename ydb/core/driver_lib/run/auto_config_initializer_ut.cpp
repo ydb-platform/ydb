@@ -12,6 +12,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/event.h>
 
+#include <array>
 #include <atomic>
 
 Y_UNIT_TEST_SUITE(AutoConfig) {
@@ -118,6 +119,30 @@ public:
 
 private:
     TManualEvent* const Done;
+};
+
+class TRecordOwnerOnBootstrapActor
+    : public NActors::TActorBootstrapped<TRecordOwnerOnBootstrapActor>
+{
+public:
+    TRecordOwnerOnBootstrapActor(
+            TManualEvent* done,
+            std::atomic<ui32>* executionOwnerPoolId)
+        : Done(done)
+        , ExecutionOwnerPoolId(executionOwnerPoolId)
+    {}
+
+    void Bootstrap() {
+        ExecutionOwnerPoolId->store(
+            NActors::TlsThreadContext->OwnerPoolId(),
+            std::memory_order_release);
+        Done->Signal();
+        PassAway();
+    }
+
+private:
+    TManualEvent* const Done;
+    std::atomic<ui32>* const ExecutionOwnerPoolId;
 };
 
 THolder<NActors::TActorSystemSetup> CreateActorSystemSetup(
@@ -535,6 +560,80 @@ Y_UNIT_TEST(AutoConfiguredAdjacentPoolWaitsForBusyOwnerWithoutForeignSlots) {
         executionOwnerPoolId.load(std::memory_order_acquire),
         ownerPoolId,
         "Batch activation was not executed by its adjacent User owner");
+}
+
+Y_UNIT_TEST(AutoConfiguredSingleCpuOwnerRunsAllAdjacentPoolsAfterIdle) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(1);
+    config.SetUseSharedThreads(true);
+    config.SetUseUnitedPool(true);
+
+    ApplyAutoConfig(&config, false, false);
+
+    static constexpr size_t AdjacentPoolCount = 3;
+    const ui32 ownerPoolId = config.GetServiceExecutor(0).GetExecutorId();
+    const std::array<ui32, AdjacentPoolCount> adjacentPoolIds = {
+        config.GetUserExecutor(),
+        config.GetSysExecutor(),
+        config.GetBatchExecutor(),
+    };
+    auto setup = CreateActorSystemSetup(config);
+
+    const auto& ownerPool = FindBasicPool(setup->CpuManager, ownerPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(ownerPool.PoolName, "IC");
+    UNIT_ASSERT_VALUES_EQUAL(ownerPool.DefaultThreadCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        ownerPool.AdjacentPools,
+        (std::vector<i16>{
+            static_cast<i16>(adjacentPoolIds[0]),
+            static_cast<i16>(adjacentPoolIds[1]),
+            static_cast<i16>(adjacentPoolIds[2]),
+        }));
+    for (ui32 adjacentPoolId : adjacentPoolIds) {
+        const auto& adjacentPool = FindBasicPool(setup->CpuManager, adjacentPoolId);
+        UNIT_ASSERT_VALUES_EQUAL(adjacentPool.DefaultThreadCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(adjacentPool.ForcedForeignSlotCount, 0);
+    }
+
+    NActors::TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    std::array<TManualEvent, AdjacentPoolCount> done;
+    std::array<std::atomic<ui32>, AdjacentPoolCount> executionOwnerPoolIds;
+    std::array<bool, AdjacentPoolCount> ownerWasParked = {};
+    std::array<bool, AdjacentPoolCount> completed = {};
+    for (auto& executionOwnerPoolId : executionOwnerPoolIds) {
+        executionOwnerPoolId.store(Max<ui32>(), std::memory_order_relaxed);
+    }
+
+    for (size_t i = 0; i < adjacentPoolIds.size(); ++i) {
+        ownerWasParked[i] = WaitForSharedThreadToPark(
+            actorSystem,
+            ownerPoolId,
+            TDuration::Seconds(5));
+        if (ownerWasParked[i]) {
+            actorSystem.Register(
+                new TRecordOwnerOnBootstrapActor(&done[i], &executionOwnerPoolIds[i]),
+                NActors::TMailboxType::HTSwap,
+                adjacentPoolIds[i]);
+            completed[i] = done[i].WaitT(TDuration::Seconds(5));
+        }
+    }
+
+    actorSystem.Stop();
+    for (size_t i = 0; i < adjacentPoolIds.size(); ++i) {
+        UNIT_ASSERT_C(ownerWasParked[i],
+            "single-CPU IC owner did not become idle before activating pool "
+                << adjacentPoolIds[i]);
+        UNIT_ASSERT_C(completed[i],
+            "single-CPU adjacent pool " << adjacentPoolIds[i]
+                << " did not execute after its IC owner became idle");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            executionOwnerPoolIds[i].load(std::memory_order_acquire),
+            ownerPoolId,
+            "single-CPU adjacent pool " << adjacentPoolIds[i]
+                << " was not executed by its IC owner");
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(AutoConfig)

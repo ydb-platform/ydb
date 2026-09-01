@@ -401,7 +401,7 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "    executor_id: 256\n")).Ok());
     }
 
-    Y_UNIT_TEST(UseSharedThreadsRequiresAutoConfig) {
+    Y_UNIT_TEST(EnabledSharedThreadsRequiresAutoConfig) {
         auto validator = TMapBuilder()
             .Field("actor_system_config", ActorSystemConfigBuilder())
             .CreateValidator();
@@ -413,6 +413,19 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "  node_type: COMPUTE\n"
             "  cpu_count: 2\n";
         UNIT_ASSERT(Valid(validator.Validate(autoConfig)));
+
+        auto manualConfigWithSharedThreadsDisabled =
+            "actor_system_config:\n"
+            "  use_shared_threads: false\n"
+            "  executor:\n"
+            "  - name: System\n"
+            "    threads: 1\n"
+            "    type: BASIC\n"
+            "  scheduler:\n"
+            "    progress_threshold: 10000\n"
+            "    resolution: 64\n"
+            "    spin_threshold: 0\n";
+        UNIT_ASSERT(Valid(validator.Validate(manualConfigWithSharedThreadsDisabled)));
 
         auto manualConfig =
             "actor_system_config:\n"
@@ -428,7 +441,7 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(manualConfig), {{
             "/actor_system_config",
             "Check \"Must either be auto config or manual config\" failed: "
-            "use_shared_threads must not exist when not using auto config"
+            "use_shared_threads must not be enabled when not using auto config"
         }}));
     }
 

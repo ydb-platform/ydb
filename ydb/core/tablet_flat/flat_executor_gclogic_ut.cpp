@@ -337,27 +337,8 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             "history entry [10, 100) must not be cuttable while gen-50 blob has a pending DoNotKeep mark");
     }
 
-    // Precondition for the SendCollectGarbage sentinel guard: TChannelInfo::SendCollectGarbage guards against
-    // the Max<ui32>() sentinel returned by GroupForGeneration when a blob's
-    // generation falls below the first surviving history entry.  The old code
-    // unconditionally dereferenced &affectedGroups[activeGroup], inserting a
-    // garbage key into the map and later issuing a collect against a nonexistent
-    // group, which triggered a BS error -> TEvPoison boot loop.
-    //
-    // This fix cannot be exercised in the current unit-test suite without a
-    // running actor system and a BS-proxy intercept, because
-    // TChannelInfo::SendCollectGarbage takes a const TActorContext& and
-    // immediately dispatches TEvBlobStorage::TEvCollectGarbage messages through
-    // it.  A full integration test would need to:
-    //   1. Stand up a TActorSystem with a mock BS group.
-    //   2. Drive TExecutorGCLogic to the "bloated" SendCollectGarbage branch
-    //      (barrier < latestEntry->FromGeneration with a cut entry already in place).
-    //   3. Put a blob whose generation resolves to Max<ui32>() into the keep/
-    //      notKeep vectors and verify no message is sent to group Max<ui32>().
-    //
-    // A structural check below confirms that GroupForGeneration returns the
-    // sentinel for generations below the first history entry, which is the
-    // precondition that makes the fix necessary.
+    // The precondition the sentinel guard relies on: generations below the first
+    // surviving history entry resolve to Max<ui32>().
     Y_UNIT_TEST(GroupForGenerationReturnsSentinelBelowFirstEntry) {
         TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(31, TTabletTypes::Dummy);
         info->Channels.emplace_back();
@@ -369,19 +350,11 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             "GroupForGeneration must return Max<ui32>() for generations below the first history entry");
     }
 
-    // The regression this guards: SendCollectGarbage resolved every blob's generation
-    // with GroupForGeneration and dereferenced &affectedGroups[activeGroup] without
-    // checking it. For a generation below the first surviving history entry that call
-    // returns the Max<ui32>() sentinel, so a collect went out to a group that does not
-    // exist -- BS error, TEvPoison, boot loop.
-    //
-    // Setup mirrors the state after a cut: the channel keeps a single history entry
-    // starting at generation 10, while GC still holds marks for generations 5 and 6
-    // that belonged to the entry which was cut away.
-    //
-    // Ablation: restore `vec = &affectedGroups[activeGroup].first/.second` and drop the
-    // `if (vec)` guards; the sentinel proxy then receives a collect and the second
-    // assertion below fails.
+    // SendCollectGarbage used to dereference &affectedGroups[GroupForGeneration(gen)]
+    // unchecked; below the first surviving entry that is Max<ui32>(), and the collect
+    // sent there ended in a BS error -> TEvPoison -> boot loop. Setup mirrors the state
+    // after a cut: one history entry from generation 10, GC marks left for 5 and 6.
+    // Ablation: drop the `if (vec)` guards and the sentinel proxy receives a collect.
     Y_UNIT_TEST(SendCollectGarbageSkipsSentinelGroup) {
         const ui64 tabletId = 32;
         const ui32 channel = 2;
@@ -437,8 +410,10 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         // The collect is dispatched before the driver's wakeup, so by now it has been observed.
         UNIT_ASSERT_C(collectsByProxy[MakeBlobStorageProxyID(survivingGroup)] > 0,
             "the surviving history entry must still receive its collect request");
-        UNIT_ASSERT_VALUES_EQUAL_C(collectsByProxy[MakeBlobStorageProxyID(Max<ui32>())], 0u,
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsByProxy.Value(MakeBlobStorageProxyID(Max<ui32>()), 0u), 0u,
             "a collect request must never be addressed to the Max<ui32>() sentinel group");
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsByProxy.size(), 1u,
+            "collects must go to the surviving group only");
     }
 }
 

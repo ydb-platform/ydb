@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
@@ -197,6 +198,18 @@ public:
         return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), "", (double)100, "", false);
     }
 
+    TIntrusivePtr<NRm::TTxState> MakePoolTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm,
+            const TString& poolId, double memoryPoolPercent, const TString& database = "db1") {
+        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), poolId, memoryPoolPercent, database, false);
+    }
+
+    // Returns the counter subgroup for a named pool's sensors.
+    NMonitoring::TDynamicCounterPtr GetPoolSensorGroup(const TString& database, const TString& poolId) {
+        return GetServiceCounters(Counters, "kqp")
+            ->GetSubgroup("pool_db", database)
+            ->GetSubgroup("pool_name", poolId);
+    }
+
     void AssertResourceManagerStats(
             std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
         Y_UNUSED(executionUnits);
@@ -282,6 +295,9 @@ public:
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
+        UNIT_TEST(P09PoolLimitAndAllocated);
+        UNIT_TEST(P10PoolPeak);
+        UNIT_TEST(P11PoolDenied);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -299,6 +315,9 @@ public:
     void NodesMembership();
     void NodesMembershipByExchanger();
     void DisonnectNodes();
+    void P09PoolLimitAndAllocated();
+    void P10PoolPeak();
+    void P11PoolDenied();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -714,6 +733,96 @@ void KqpRm::DisonnectNodes() {
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
     CheckSnapshot(0, {{1000, 100}}, rm_first);
+}
+
+// P-09: Limit sensor reflects the configured pool percent; Allocated grows on acquire and drops on release.
+void KqpRm::P09PoolLimitAndAllocated() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    constexpr double poolPercent = 50;
+    constexpr ui64 poolLimit = 500;     // 50% of QueryMemoryLimit (1000)
+    constexpr ui64 chunk = 100;
+
+    auto tx = MakePoolTx(1, rm, "pool_a", poolPercent);
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_a");
+
+    NRm::TKqpResourcesRequest request{.Memory = chunk};
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+
+    // Limit is set when the pool record is first created
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Limit", false)->Val(), (i64)poolLimit);
+    // Allocated grows after acquire
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), (i64)chunk);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), (i64)(2 * chunk));
+
+    rm->FreeResources(*tx, 1, request);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), (i64)chunk);
+
+    rm->FreeResources(*tx, 2, request);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), 0);
+}
+
+// P-10: Peak keeps the running maximum; releasing does not decrease it.
+void KqpRm::P10PoolPeak() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx = MakePoolTx(1, rm, "pool_b", 50);
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_b");
+
+    NRm::TKqpResourcesRequest r100{.Memory = 100};
+    NRm::TKqpResourcesRequest r200{.Memory = 200};
+    NRm::TKqpResourcesRequest r50{.Memory = 50};
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, r100)); // allocated = 100
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, r200)); // allocated = 300  <- peak
+    UNIT_ASSERT(rm->AllocateResources(*tx, 3, r50));  // allocated = 350  <- peak
+    i64 peakAfterThree = sensorGroup->GetCounter("Peak", false)->Val();
+
+    rm->FreeResources(*tx, 2, r200); // allocated drops to 150
+    // Peak must not decrease after release
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Peak", false)->Val(), peakAfterThree);
+    UNIT_ASSERT_GE(peakAfterThree, (i64)350);
+}
+
+// P-11: DeniedRequests and DeniedBytes grow when the pool limit denies an allocation.
+void KqpRm::P11PoolDenied() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // Pool limit = 10% of 1000 = 100. Each chunk = 40.
+    // First two allocations fill the pool (40 + 40 = 80 < 100); third is denied (80 + 40 > 100).
+    constexpr double poolPercent = 10;
+    constexpr ui64 chunk = 40;
+
+    auto tx = MakePoolTx(1, rm, "pool_c", poolPercent);
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_c");
+
+    NRm::TKqpResourcesRequest request{.Memory = chunk};
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes",    true)->Val(), 0);
+
+    // Third allocation exceeds the 100-byte pool limit
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
+
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes",    true)->Val(), (i64)chunk);
+
+    // A second denial accumulates
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 4, request));
+
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes",    true)->Val(), (i64)(2 * chunk));
 }
 
 } // namespace NKqp

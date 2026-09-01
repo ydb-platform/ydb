@@ -61,16 +61,54 @@ ui64 Percentage(ui64 limit, double percent) {
     return static_cast<double>(limit) / 100 * percent + MYEPS;
 }
 
+// Per-named-pool sensor group (all fields under a dynamic TDynamicCounters subgroup).
+// Lifetime: owned by TMemoryResource; destroyed with the pool record.
+// Gauges (Limit/Allocated/Peak/SpillingFlag) are reset to 0 in ~TMemoryResource so they do not
+// show stale values after a pool record is erased; counters (Denied*/WouldBeDeniedBytes) accumulate.
+struct TPoolSensors {
+    NMonitoring::TDynamicCounters::TCounterPtr Limit;           // gauge: pool byte limit
+    NMonitoring::TDynamicCounters::TCounterPtr Allocated;       // gauge: bytes currently acquired
+    NMonitoring::TDynamicCounters::TCounterPtr Peak;            // gauge: max Allocated since record creation
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;  // counter: allocations denied by pool limit
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedBytes;     // counter: bytes from denied requests
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingFlag;    // gauge 0/1: pool spilling cookie state
+    NMonitoring::TDynamicCounters::TCounterPtr WouldBeDeniedBytes; // counter: ExternalMemory bytes that exceeded pool limit
+};
+
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
 public:
-    explicit TMemoryResource(ui64 baseLimit, double memoryPoolPercent, double overPercent)
+    explicit TMemoryResource(ui64 baseLimit, double memoryPoolPercent, double overPercent,
+                             const NMonitoring::TDynamicCounterPtr& sensorGroup = nullptr)
         : BaseLimit(baseLimit)
         , Used(0)
+        , Peak(0)
         , MemoryPoolPercent(memoryPoolPercent)
         , OverPercent(overPercent)
         , SpillingCookie(MakeIntrusive<TMemoryResourceCookie>())
     {
         SetActualLimits();
+        if (sensorGroup) {
+            Sensors = std::make_unique<TPoolSensors>();
+            Sensors->Limit           = sensorGroup->GetCounter("Limit",              false);
+            Sensors->Allocated       = sensorGroup->GetCounter("Allocated",          false);
+            Sensors->Peak            = sensorGroup->GetCounter("Peak",               false);
+            Sensors->DeniedRequests  = sensorGroup->GetCounter("DeniedRequests",     true);
+            Sensors->DeniedBytes     = sensorGroup->GetCounter("DeniedBytes",        true);
+            Sensors->SpillingFlag    = sensorGroup->GetCounter("SpillingFlag",       false);
+            Sensors->WouldBeDeniedBytes = sensorGroup->GetCounter("WouldBeDeniedBytes", true);
+            Sensors->Limit->Set(Limit);
+        }
+    }
+
+    ~TMemoryResource() {
+        // Reset gauges so stale values are not visible after the pool record is erased.
+        // Cumulative counters (Denied*, WouldBeDeniedBytes) are not reset — they accumulate.
+        if (Sensors) {
+            Sensors->Limit->Set(0);
+            Sensors->Allocated->Set(0);
+            Sensors->Peak->Set(0);
+            Sensors->SpillingFlag->Set(0);
+        }
     }
 
     ui64 Available() const {
@@ -84,7 +122,16 @@ public:
     bool AcquireIfAvailable(ui64 value) {
         if (Available() >= value) {
             Used += value;
+            if (Used > Peak) {
+                Peak = Used;
+                if (Sensors) {
+                    Sensors->Peak->Set(Peak);
+                }
+            }
             UpdateCookie();
+            if (Sensors) {
+                Sensors->Allocated->Set(Used);
+            }
             return true;
         }
         return false;
@@ -95,11 +142,19 @@ public:
     }
 
     void UpdateCookie() {
-        SpillingCookie->SpillingPercentReached.store(Available() < OverLimit);
+        bool reached = Available() < OverLimit;
+        SpillingCookie->SpillingPercentReached.store(reached);
+        if (Sensors) {
+            Sensors->SpillingFlag->Set(reached ? 1 : 0);
+        }
     }
 
     ui64 GetUsed() const {
         return Used;
+    }
+
+    ui64 GetPeak() const {
+        return Peak;
     }
 
     void Release(ui64 value) {
@@ -108,8 +163,10 @@ public:
         } else {
             Used = 0;
         }
-
         UpdateCookie();
+        if (Sensors) {
+            Sensors->Allocated->Set(Used);
+        }
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
@@ -125,10 +182,42 @@ public:
     void SetActualLimits() {
         Limit = Percentage(BaseLimit, MemoryPoolPercent);
         OverLimit = OverPercentage(Limit, OverPercent);
+        if (Sensors) {
+            Sensors->Limit->Set(Limit);
+        }
     }
 
     ui64 GetLimit() const {
         return Limit;
+    }
+
+    void RecordDenied(ui64 bytes) {
+        if (Sensors) {
+            Sensors->DeniedRequests->Inc();
+            *Sensors->DeniedBytes += bytes;
+        }
+    }
+
+    void RecordWouldBeDenied(ui64 bytes) {
+        if (Sensors) {
+            *Sensors->WouldBeDeniedBytes += bytes;
+        }
+    }
+
+    ui64 GetDeniedRequests() const {
+        return Sensors ? Sensors->DeniedRequests->Val() : 0;
+    }
+
+    ui64 GetDeniedBytes() const {
+        return Sensors ? Sensors->DeniedBytes->Val() : 0;
+    }
+
+    ui64 GetWouldBeDeniedBytes() const {
+        return Sensors ? Sensors->WouldBeDeniedBytes->Val() : 0;
+    }
+
+    bool IsSpillingReached() const {
+        return SpillingCookie->SpillingPercentReached.load();
     }
 
     TString ToString() const {
@@ -140,10 +229,12 @@ private:
     ui64 OverLimit;
     ui64 Limit;
     ui64 Used;
+    ui64 Peak;
     double MemoryPoolPercent;
     double OverPercent;
 
     TIntrusivePtr<TMemoryResourceCookie> SpillingCookie;
+    std::unique_ptr<TPoolSensors> Sensors;
 };
 
 struct TEvPrivate {
@@ -246,6 +337,16 @@ public:
         }
 
         if (Y_UNLIKELY(resources.Memory == 0)) {
+            // ExternalMemory is not charged to the named pool (gap D6).
+            // Track WouldBeDeniedBytes when it would have exceeded the pool limit.
+            if (resources.ExternalMemory && !tx.PoolId.empty() && tx.MemoryPoolPercent > 0) {
+                with_lock (Lock) {
+                    auto it = MemoryNamedPools.find(tx.MakePoolId());
+                    if (it != MemoryNamedPools.end() && !it->second->Has(resources.ExternalMemory)) {
+                        it->second->RecordWouldBeDenied(resources.ExternalMemory);
+                    }
+                }
+            }
             tx.Allocated(resources);
             return result;
         }
@@ -282,7 +383,13 @@ public:
                 auto [it, success] = MemoryNamedPools.emplace(tx.MakePoolId(), nullptr);
 
                 if (success) {
-                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
+                    NMonitoring::TDynamicCounterPtr sensorGroup;
+                    if (Counters) {
+                        sensorGroup = Counters->GetKqpGroup()
+                            ->GetSubgroup("pool_db", tx.Database)
+                            ->GetSubgroup("pool_name", tx.PoolId);
+                    }
+                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load(), sensorGroup);
                 } else {
                     it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
                 }
@@ -291,6 +398,10 @@ public:
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
+                    poolMemory->RecordDenied(resources.Memory);
+                } else if (resources.ExternalMemory && !poolMemory->Has(resources.ExternalMemory)) {
+                    // ExternalMemory bypasses pool limit; track bytes that would have been denied.
+                    poolMemory->RecordWouldBeDenied(resources.ExternalMemory);
                 }
 
                 if (!tx.PoolMemoryCookie) {
@@ -929,6 +1040,34 @@ private:
                     }
                  }
             } // PRE()
+
+            // Named pool table
+            with_lock (ResourceManager->Lock) {
+                if (!ResourceManager->MemoryNamedPools.empty()) {
+                    str << "<h3>Memory Pools</h3>";
+                    str << "<table border='1' cellpadding='4'>";
+                    str << "<tr>"
+                        << "<th>Database</th><th>Pool</th>"
+                        << "<th>Limit</th><th>Allocated</th><th>Peak</th>"
+                        << "<th>DeniedRequests</th><th>DeniedBytes</th>"
+                        << "<th>SpillingFlag</th><th>WouldBeDeniedBytes</th>"
+                        << "</tr>";
+                    for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
+                        str << "<tr>"
+                            << "<td>" << key.first << "</td>"
+                            << "<td>" << key.second << "</td>"
+                            << "<td>" << pool->GetLimit() << "</td>"
+                            << "<td>" << pool->GetUsed() << "</td>"
+                            << "<td>" << pool->GetPeak() << "</td>"
+                            << "<td>" << pool->GetDeniedRequests() << "</td>"
+                            << "<td>" << pool->GetDeniedBytes() << "</td>"
+                            << "<td>" << (pool->IsSpillingReached() ? "1" : "0") << "</td>"
+                            << "<td>" << pool->GetWouldBeDeniedBytes() << "</td>"
+                            << "</tr>";
+                    }
+                    str << "</table>";
+                }
+            }
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

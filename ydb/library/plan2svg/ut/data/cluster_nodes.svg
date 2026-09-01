@@ -900,7 +900,7 @@
 <rect x='395' y='0' width='200' height='100%' class='clone'/>
 <rect x='368' y='0' width='24' height='100%' class='clone'/>
 <rect x='598' y='0' width='682' height='100%' class='clone'/>
-<g><title>Filter: l_shipdate > 9204</title><text x='58' y='13' class='texts clipped'>Filter: l_shipdate > 9204</text>
+<g><title>Filter: l_shipdate &gt; 9204</title><text x='58' y='13' class='texts clipped'>Filter: l_shipdate &gt; 9204</text>
 <g><title>Output Rows 35%, ∑323.49M, 5.05M | 5.05M | 5.05M, Est: 0 Rows: 60.00M Size: 1.01GB</title>
   <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 327,3 363,3 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
@@ -1275,5 +1275,4 @@
 <line x1='1131' y1='0' x2='1131' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <line x1='1197' y1='0' x2='1197' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <line x1='1264' y1='0' x2='1264' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-
 </svg>

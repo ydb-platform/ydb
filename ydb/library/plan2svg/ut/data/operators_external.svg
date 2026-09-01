@@ -1898,5 +1898,4 @@
 <line x1='1104' y1='0' x2='1104' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <line x1='1272' y1='0' x2='1272' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <rect x='1277' y='0' width='3' height='1158' stroke-width='0' opacity='0.002364948967' fill='var(--stage-texthl, #FC2824)'/>
-
 </svg>

@@ -2,10 +2,12 @@
 #include <ydb/library/plan2svg/metrics.h>
 #include <ydb/library/plan2svg/parse.h>
 #include <ydb/library/plan2svg/plan2svg.h>
+#include <ydb/library/plan2svg/svg.h>
 #include <ydb/library/plan2svg/visualizer.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/xml/document/xml-document.h>
 
 #include <util/folder/path.h>
 #include <util/stream/file.h>
@@ -33,6 +35,17 @@ TString RenderPlan(const TString& name, bool simplified) {
     TPlanVisualizer viz;
     viz.LoadPlans(ReadPlan(name), simplified);
     return viz.PrintSvg();
+}
+
+// A browser parses an SVG as XML and refuses to render a document that is not well-formed,
+// so plan text reaching the output unescaped breaks the whole picture, not one label.
+void AssertWellFormed(const TString& svg, const TString& what) {
+    try {
+        NXml::TDocument document(svg, NXml::TDocument::String);
+        Y_UNUSED(document);
+    } catch (const std::exception& e) {
+        UNIT_FAIL(what + " is not well-formed XML: " + e.what());
+    }
 }
 
 // Reports the first difference with some context, otherwise a 300 KB blob lands in the log.
@@ -64,6 +77,7 @@ void CheckGolden(const TString& name, bool simplified = false) {
 
     UNIT_ASSERT_C(svg.StartsWith("<svg"), "unexpected SVG prologue: " + svg.substr(0, 64));
     UNIT_ASSERT_C(svg.EndsWith("</svg>\n") || svg.EndsWith("</svg>"), "unexpected SVG epilogue");
+    AssertWellFormed(svg, name);
 
     auto goldenName = simplified ? (name + ".simplified.svg") : (name + ".svg");
     auto golden = DataDir() / goldenName;
@@ -191,8 +205,40 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
             auto svg = viz.PrintSvgSafe();
             UNIT_ASSERT_C(svg.StartsWith("<svg"), child.GetName());
             UNIT_ASSERT_C(svg.size() > 1024, child.GetName() + " rendered only " + ToString(svg.size()) + " bytes");
+            AssertWellFormed(svg, child.GetName());
         }
         UNIT_ASSERT_C(seen > 0, "no sample plans found in " + DataDir().GetPath());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TPlan2SvgEscape) {
+
+    Y_UNIT_TEST(PlainTextIsUnchanged) {
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(""), "");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("Stage 5: Filter"), "Stage 5: Filter");
+        // Quotes only matter inside attributes, and no plan text is written into one.
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("a'b\"c"), "a'b\"c");
+    }
+
+    Y_UNIT_TEST(XmlSpecialsAreEscaped) {
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("a & b"), "a &amp; b");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("x := <expr>"), "x := &lt;expr&gt;");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("<&>"), "&lt;&amp;&gt;");
+        // Already escaped text is escaped again: nothing in the pipeline pre-escapes.
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("&lt;"), "&amp;lt;");
+    }
+
+    // Operator descriptions routinely contain markup-looking text ("_col := <expr>",
+    // "a <- b", "x && y"), which used to reach the output verbatim.
+    Y_UNIT_TEST(PlanTextWithMarkupStaysWellFormed) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(TString(R"({"Plan":{"Plans":[{"Node Type":"ResultSet <&>","Plans":[
+            {"Node Type":"Stage","Operators":[{"Name":"Filter","Predicate":"item.a < 1 && item.b > 2"}]}
+        ]}]}})"));
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "plan with markup in operator info");
+        UNIT_ASSERT(svg.Contains("&amp;&amp;"));
+        UNIT_ASSERT(svg.Contains("&lt;"));
     }
 }
 

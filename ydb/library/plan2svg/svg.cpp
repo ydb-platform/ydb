@@ -7,6 +7,34 @@
 
 namespace NPlan2Svg {
 
+TString SvgEscape(TStringBuf text) {
+    size_t extra = 0;
+    for (char c : text) {
+        switch (c) {
+            case '&': extra += 4; break; // &amp;
+            case '<': extra += 3; break; // &lt;
+            case '>': extra += 3; break; // &gt;
+            default: break;
+        }
+    }
+
+    if (extra == 0) {
+        return TString(text);
+    }
+
+    TString result;
+    result.reserve(text.size() + extra);
+    for (char c : text) {
+        switch (c) {
+            case '&': result += "&amp;"; break;
+            case '<': result += "&lt;"; break;
+            case '>': result += "&gt;"; break;
+            default: result += c; break;
+        }
+    }
+    return result;
+}
+
 TString SvgRect(ui32 x, ui32 y, ui32 w, const TString& h, const TString& cssClass) {
     return TStringBuilder()
         << "<rect x='" << x << "' y='" << y << "' width='" << w << "' height='" << h
@@ -18,7 +46,7 @@ TString SvgRect(ui32 x, ui32 y, ui32 w, ui32 h, const TString& cssClass) {
 }
 
 TString SvgText(const TString& x, const TString& y, const TString& cssClass, TStringBuf text) {
-    return TStringBuilder() << "<text x='" << x << "' y='" << y << "' class='" << cssClass << "'>" << text << "</text>" << Endl;
+    return TStringBuilder() << "<text x='" << x << "' y='" << y << "' class='" << cssClass << "'>" << SvgEscape(text) << "</text>" << Endl;
 }
 
 TString SvgText(ui32 x, const TString& y, const TString& cssClass, TStringBuf text) {

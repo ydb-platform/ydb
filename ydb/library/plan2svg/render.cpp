@@ -402,7 +402,7 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
 
     SummaryBuilder
-        << "<g data-group='g" << GroupId << "' class='selectable'><title> " << planName << "</title>" << Endl
+        << "<g data-group='g" << GroupId << "' class='selectable'><title> " << SvgEscape(planName) << "</title>" << Endl
         << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, TIME_HEIGHT + INTERNAL_HEIGHT, "background")
         << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, titleHeight, "Query - " + planName)
         << "</g>" << Endl;
@@ -505,7 +505,7 @@ void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
     for (auto op : s->Operators) {
         ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
         s->Svg
-            << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
+            << "<g><title>" << SvgEscape(op.Name) << ": " << SvgEscape(op.Info) << (op.Blocks ? " Blocks: True" : "") << "</title>";
         if (op.Blocks) {
             auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y * 2;
             if (index == s->Operators.size() - 1) {
@@ -548,7 +548,7 @@ void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
                     auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
                     if (it != Viz.CteSubPlans.end()) {
                         s->Svg
-                        << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
+                        << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << SvgEscape(it->second->NodeType) << "</title>" << Endl
                         << SvgStageId(opX, opY, "P")
                         << "</g>" << Endl;
                     }
@@ -823,7 +823,7 @@ void TPlan::PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui
         auto x = c->CteConnection ? c->CteIndentX : c->FromStage->IndentX;
         ui32 y = 0;
 
-        c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
+        c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << SvgEscape(c->NodeType) << " connection";
         if (!c->KeyColumns.empty()) {
             c->Svg << " KeyColumns: ";
             bool first = true;
@@ -833,7 +833,7 @@ void TPlan::PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << k;
+                c->Svg << SvgEscape(k);
             }
         }
         if (!c->SortColumns.empty()) {
@@ -845,14 +845,14 @@ void TPlan::PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << s;
+                c->Svg << SvgEscape(s);
             }
         }
         if (c->Blocks) {
             c->Svg << " Blocks: True";
         }
         if (c->HashFunc) {
-            c->Svg << " HashFunc: " << c->HashFunc;
+            c->Svg << " HashFunc: " << SvgEscape(c->HashFunc);
         }
         if (c->Parallel) {
             c->Svg << " Parallel: True";
@@ -1350,11 +1350,22 @@ void TPlan::PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta) 
     builder << "</svg>" << Endl;
 }
 
+// A document carrying the message, rather than a partial render of a plan that
+// could not be drawn. It has to be well-formed too: this is what a browser gets
+// to show when everything else failed.
+static TString ErrorSvg(TStringBuf message) {
+    return TStringBuilder()
+        << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'>" << Endl
+        << "<text x='4' y='16' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px'>"
+        << SvgEscape(message) << "</text>" << Endl
+        << "</svg>" << Endl;
+}
+
 TString TVisualizer::PrintSvgSafe() {
     try {
         return PrintSvg();
     } catch (std::exception& e) {
-        return Sprintf("<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>%s<text></svg>", e.what());
+        return ErrorSvg(e.what());
     }
 }
 
@@ -1479,9 +1490,6 @@ TString TVisualizer::PrintSvg() {
         << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
 
-    // Blank line left over from a canvas builder that was never written to. Kept so that the
-    // output stays byte for byte identical; drop it together with a golden re-baseline.
-    svg << Endl;
     svg << "</svg>" << Endl;
 
     return svg;

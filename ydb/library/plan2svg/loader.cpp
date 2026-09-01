@@ -320,14 +320,6 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
                 }
                 filter.erase(p, 5);
             }
-            while(true) {
-                auto p = filter.find('<');
-                if (p == filter.npos) {
-                    break;
-                }
-                filter.erase(p, 1);
-                filter.insert(p, "&lt;");
-            }
             description.Info = filter;
         }
         ReadBoolString(subNode, "Pushdown", description.External);

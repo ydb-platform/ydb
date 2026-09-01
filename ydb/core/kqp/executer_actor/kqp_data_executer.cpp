@@ -648,10 +648,13 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         // TODO: move graph restoration outside of executer
+        bool rescalingChangedTaskCount = false;
         if (Request.QueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
             auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
                 Request.QueryPhysicalGraph);
+            const auto taskCount = mutableGraph->TasksSize();
             PatchQueryPhysicalGraphForRescaling(*mutableGraph, ResourcesSnapshot);
+            rescalingChangedTaskCount = mutableGraph->TasksSize() != taskCount;
         }
         const bool graphRestored = RestoreTasksGraph();
 
@@ -1255,10 +1258,12 @@ private:
             streamingDisposition.mutable_from_last_checkpoint()->set_force(true);
         }
 
-        // const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
-        //     ? FederatedQuery::FROM_LAST_CHECKPOINT
-        //     : FederatedQuery::EMPTY;
-        const auto stateLoadMode = FederatedQuery::EMPTY;
+        const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
+            ? FederatedQuery::FROM_LAST_CHECKPOINT
+            : FederatedQuery::EMPTY;
+        const bool restoreOffsetsFromForeignCheckpoint =
+            (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint())
+            || rescalingChangedTaskCount;
 
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {
@@ -1290,7 +1295,8 @@ private:
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition
+            streamingDisposition,
+            restoreOffsetsFromForeignCheckpoint
         ).Release());
 
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",

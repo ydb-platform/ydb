@@ -1702,7 +1702,9 @@ private:
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
-                Params.StreamingDisposition).Release());
+                Params.StreamingDisposition,
+                Params.StateLoadMode == FederatedQuery::StateLoadMode::EMPTY
+                    && Params.StreamingDisposition.has_from_last_checkpoint()).Release());
         }
 
         ControlId = Register(NYql::MakeTaskController(

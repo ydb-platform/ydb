@@ -59,12 +59,15 @@ ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddCoveringIndexOverGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddNotNullDefaultColumn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
+ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
 ydb/core/kqp/ut/scheme GeneratedStored.RandomGeneratedConsistentWithIndex
+ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclInterruptInheritance
+ydb/core/kqp/ut/scheme KqpAcl.AclTemporary-IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
@@ -120,6 +123,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldPersistDirtyMapState
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestTest.ShouldWrite
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldMainPlusHedgeAndReplyFromMain
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
@@ -163,6 +167,7 @@ ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWith
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWithOnlySelectRowOnDlqTopic
+ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWithoutDlqTopicAccess
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
@@ -171,6 +176,7 @@ ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote

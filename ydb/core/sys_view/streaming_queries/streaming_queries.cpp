@@ -706,7 +706,8 @@ public:
             if (ScriptExecutionInfoRequired = IsIn({
                 TSchema::Status::ColumnId, TSchema::Issues::ColumnId, TSchema::Plan::ColumnId,
                 TSchema::Ast::ColumnId, TSchema::RetryCount::ColumnId, TSchema::LastFailAt::ColumnId,
-                TSchema::SuspendedUntil::ColumnId
+                TSchema::SuspendedUntil::ColumnId, TSchema::SubmittedAt::ColumnId,
+                TSchema::FinishedAt::ColumnId
             }, column.Tag)) {
                 break;
             }

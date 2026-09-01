@@ -67,7 +67,7 @@ public:
         LogicActorId = RegisterWithSameMailbox(CreateDescribeOperationActor(
             SelfId(),
             {
-                .Path = GetProtoRequest()->path(),
+                .Path = Request_->GetDatabaseRelativePath(GetProtoRequest()->path()),
                 .Database = GetDatabase(),
                 .UserToken = GetUserToken(),
                 .AccessRights = {NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow},

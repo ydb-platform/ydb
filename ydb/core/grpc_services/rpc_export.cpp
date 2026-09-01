@@ -531,7 +531,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
         if constexpr (TTraits::HasSourcePath) {
-            CommonSourcePath = this->Request->GetDatabaseRelativePath(settings.source_path());
+            CommonSourcePath = CanonizePath(
+                this->Request->GetDatabaseRelativePath(settings.source_path()));
         }
         if (CommonSourcePath.empty()) {
             CommonSourcePath = CanonizePath(this->GetDatabaseName());

@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -61,18 +62,14 @@ ui64 Percentage(ui64 limit, double percent) {
     return static_cast<double>(limit) / 100 * percent + MYEPS;
 }
 
-// Per-named-pool sensor group (all fields under a dynamic TDynamicCounters subgroup).
-// Lifetime: owned by TMemoryResource; destroyed with the pool record.
-// Gauges (Limit/Allocated/Peak/SpillingFlag) are reset to 0 in ~TMemoryResource so they do not
-// show stale values after a pool record is erased; counters (Denied*/WouldBeDeniedBytes) accumulate.
 struct TPoolSensors {
-    NMonitoring::TDynamicCounters::TCounterPtr Limit;           // gauge: pool byte limit
-    NMonitoring::TDynamicCounters::TCounterPtr Allocated;       // gauge: bytes currently acquired
-    NMonitoring::TDynamicCounters::TCounterPtr Peak;            // gauge: max Allocated since record creation
-    NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;  // counter: allocations denied by pool limit
-    NMonitoring::TDynamicCounters::TCounterPtr DeniedBytes;     // counter: bytes from denied requests
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingFlag;    // gauge 0/1: pool spilling cookie state
-    NMonitoring::TDynamicCounters::TCounterPtr WouldBeDeniedBytes; // counter: ExternalMemory bytes that exceeded pool limit
+    NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    NMonitoring::TDynamicCounters::TCounterPtr Allocated;
+    NMonitoring::TDynamicCounters::TCounterPtr Peak;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr SpillingFlag;
+    NMonitoring::TDynamicCounters::TCounterPtr WouldBeDeniedBytes;
 };
 
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
@@ -101,8 +98,7 @@ public:
     }
 
     ~TMemoryResource() {
-        // Reset gauges so stale values are not visible after the pool record is erased.
-        // Cumulative counters (Denied*, WouldBeDeniedBytes) are not reset — they accumulate.
+        // gauges must not keep stale values after the pool record is erased; cumulative counters stay
         if (Sensors) {
             Sensors->Limit->Set(0);
             Sensors->Allocated->Set(0);
@@ -337,16 +333,6 @@ public:
         }
 
         if (Y_UNLIKELY(resources.Memory == 0)) {
-            // ExternalMemory is not charged to the named pool (gap D6).
-            // Track WouldBeDeniedBytes when it would have exceeded the pool limit.
-            if (resources.ExternalMemory && !tx.PoolId.empty() && tx.MemoryPoolPercent > 0) {
-                with_lock (Lock) {
-                    auto it = MemoryNamedPools.find(tx.MakePoolId());
-                    if (it != MemoryNamedPools.end() && !it->second->Has(resources.ExternalMemory)) {
-                        it->second->RecordWouldBeDenied(resources.ExternalMemory);
-                    }
-                }
-            }
             tx.Allocated(resources);
             return result;
         }
@@ -385,7 +371,7 @@ public:
                 if (success) {
                     NMonitoring::TDynamicCounterPtr sensorGroup;
                     if (Counters) {
-                        sensorGroup = Counters->GetKqpGroup()
+                        sensorGroup = Counters->GetKqpCounters()
                             ->GetSubgroup("pool_db", tx.Database)
                             ->GetSubgroup("pool_name", tx.PoolId);
                     }
@@ -400,7 +386,7 @@ public:
                     TotalMemoryResource->Release(resources.Memory);
                     poolMemory->RecordDenied(resources.Memory);
                 } else if (resources.ExternalMemory && !poolMemory->Has(resources.ExternalMemory)) {
-                    // ExternalMemory bypasses pool limit; track bytes that would have been denied.
+                    // ExternalMemory is not charged to the pool; count what the pool limit would have denied
                     poolMemory->RecordWouldBeDenied(resources.ExternalMemory);
                 }
 
@@ -1041,7 +1027,6 @@ private:
                  }
             } // PRE()
 
-            // Named pool table
             with_lock (ResourceManager->Lock) {
                 if (!ResourceManager->MemoryNamedPools.empty()) {
                     str << "<h3>Memory Pools</h3>";
@@ -1054,8 +1039,8 @@ private:
                         << "</tr>";
                     for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
                         str << "<tr>"
-                            << "<td>" << key.first << "</td>"
-                            << "<td>" << key.second << "</td>"
+                            << "<td>" << EncodeHtmlPcdata(key.first) << "</td>"
+                            << "<td>" << EncodeHtmlPcdata(key.second) << "</td>"
                             << "<td>" << pool->GetLimit() << "</td>"
                             << "<td>" << pool->GetUsed() << "</td>"
                             << "<td>" << pool->GetPeak() << "</td>"

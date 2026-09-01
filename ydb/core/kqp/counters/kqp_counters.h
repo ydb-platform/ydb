@@ -109,7 +109,6 @@ protected:
     void ReportCompileNewRBOFailed();
     void ReportRecompileRequestGet();
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
-    ::NMonitoring::TDynamicCounterPtr GetKqpGroup() const { return KqpGroup; }
 
 protected:
     ::NMonitoring::TDynamicCounterPtr Counters;

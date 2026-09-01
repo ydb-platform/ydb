@@ -2422,7 +2422,7 @@ FROM `{table_name}`"""
                 AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
                 MIN_ACTIVE_PARTITIONS = 1,
                 MAX_ACTIVE_PARTITIONS = 3,
-                AUTO_PARTITIONING_STABILIZATION_WINDOW = Interval('PT1S'),
+                AUTO_PARTITIONING_STABILIZATION_WINDOW = Interval('PT10S'),
                 AUTO_PARTITIONING_UP_UTILIZATION_PERCENT = 2,
                 AUTO_PARTITIONING_DOWN_UTILIZATION_PERCENT = 1
             );
@@ -2431,14 +2431,15 @@ FROM `{table_name}`"""
         create_read_rule(output_topic, consumer_name, default_endpoint=kikimr.endpoint)
 
         topic_client = kikimr.ydb_client.driver.topic_client
-        load_message = json.dumps({"kind": "load", "value": "x" * 1024 * 1024})
-        for producer_id in ("auto-split-producer-1", "auto-split-producer-2"):
-            kikimr.ydb_client.topic_write(
-                input_topic,
-                [load_message, load_message],
-                producer_id=producer_id,
-                partition_id=0,
-            )
+        load_message = "x" * 1024 * 1024
+        for _ in range(10):
+            for producer_id in ("auto-split-producer-1", "auto-split-producer-2"):
+                kikimr.ydb_client.topic_write(
+                    input_topic,
+                    [load_message],
+                    producer_id=producer_id,
+                   # partition_id=0,
+                )
 
         def has_real_split() -> bool:
             partitions = {
@@ -2471,13 +2472,8 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                $input = SELECT value FROM `{input_topic}`
-                WITH (
-                    FORMAT = "json_each_row",
-                    SCHEMA = (kind String NOT NULL, value String NOT NULL)
-                );
                 INSERT INTO `{output_topic}`
-                SELECT value FROM $input WHERE kind = "validation";
+                SELECT Data FROM `{input_topic}`;
             END DO;
         """)
         self.wait_completed_checkpoints(kikimr, query_path)
@@ -2485,7 +2481,7 @@ FROM `{table_name}`"""
         for partition_id in child_partition_ids:
             kikimr.ydb_client.topic_write(
                 input_topic,
-                [json.dumps({"kind": "validation", "value": f"partition-{partition_id}"})],
+                [f"partition-{partition_id}"],
                 partition_id=partition_id,
             )
 

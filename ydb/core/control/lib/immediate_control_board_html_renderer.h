@@ -15,11 +15,17 @@ private:
     TMaybe<NMonitoring::TOutputStreamRef> Html;
     TMaybe<NMonitoring::TTable> Table;
     TMaybe<NMonitoring::TTableBody> TableBody;
+
+    // Controls with an active override in the snapshots rendered across all tables.
+    ui64 OverriddenCount = 0;
 public:
     TControlBoardTableHtmlRenderer();
     void AddNewTable(const TString& caption);
     void AddTableItem(const TString& name, TIntrusivePtr<TControl> control);
     TString GetHtml();
+
+    // Return the number of rendered controls with an active override.
+    ui64 GetOverriddenCount() const;
 };
 
 }

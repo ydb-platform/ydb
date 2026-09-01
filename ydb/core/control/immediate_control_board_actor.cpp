@@ -19,12 +19,15 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
         TString ParamName;
         TAtomicBase PrevValue;
         TAtomicBase NewValue;
+        // Operator action, including transitions that keep the same numeric value.
+        TString Action;
 
-        TLogRecord(TInstant timestamp, TString paramName, TAtomicBase prevValue, TAtomicBase newValue)
+        TLogRecord(TInstant timestamp, TString paramName, TAtomicBase prevValue, TAtomicBase newValue, TString action)
             : Timestamp(timestamp)
             , ParamName(paramName)
             , PrevValue(prevValue)
             , NewValue(newValue)
+            , Action(action)
         {}
 
         TString TimestampToStr() {
@@ -71,32 +74,57 @@ public:
     }
 
 private:
+    // Record numeric changes and override transitions from the same mutation.
+    void RecordChange(const TString& name, const TControlMutation& mutation) {
+        if (mutation.Before.Value == mutation.After.Value &&
+                mutation.Before.Overridden == mutation.After.Overridden)
+        {
+            return;
+        }
+        HistoryLog.emplace_back(
+            TInstant::Now(),
+            name,
+            mutation.Before.Value,
+            mutation.After.Value,
+            mutation.After.Overridden ? "Set override" : "Restore default");
+    }
+
     void HandlePostParams(const TCgiParameters &cgi) {
+        if (cgi.Has("restoreDefault")) {
+            const TString& controlName = cgi.Get("restoreDefault");
+            TControlMutation mutation;
+            bool controlExists = false;
+            if (auto control = Icb->GetControlByName(controlName)) {
+                mutation = control->RestoreDefault();
+                controlExists = true;
+            } else {
+                controlExists = Dcb->RestoreDefault(controlName, mutation);
+            }
+            if (controlExists) {
+                RecordChange(controlName, mutation);
+            }
+            return;
+        }
         if (cgi.Has("restoreDefaults")) {
             Icb->RestoreDefaults();
             Dcb->RestoreDefaults();
-            HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
-            *HasChanged = 0;
-            *ChangedCount = 0;
+            HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0, "Restore defaults");
         }
         for (const auto& [paramName, paramValue] : cgi) {
-            TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
-            TAtomicBase prevValue = newValue;
-            bool isDefault = false;
-            if (auto control = Icb->GetControlByName(paramName)) {
-                prevValue = control->SetFromHtmlRequest(newValue);
-                isDefault = control->IsDefault();
-            } else {
-                isDefault = Dcb->SetValue(paramName, newValue, prevValue);
+            if (paramName == "restoreDefaults") {
+                continue;
             }
-            if (prevValue != newValue) {
-                HistoryLog.emplace_back(TInstant::Now(), paramName, prevValue, newValue);
-                if (isDefault) {
-                    ChangedCount->Dec();
-                } else {
-                    ChangedCount->Inc();
-                }
-                *HasChanged = (ui64)ChangedCount->Val() > 0;
+            TControlMutation mutation;
+            bool controlExists = false;
+            const TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
+            if (auto control = Icb->GetControlByName(paramName)) {
+                mutation = control->SetFromHtmlRequestWithState(newValue);
+                controlExists = true;
+            } else {
+                controlExists = Dcb->SetValue(paramName, newValue, mutation);
+            }
+            if (controlExists) {
+                RecordChange(paramName, mutation);
             }
         }
     }
@@ -114,6 +142,10 @@ private:
         renderer.AddNewTable("Dynamic Controls");
         Dcb->RenderAsHtml(renderer);
 
+        const ui64 count = renderer.GetOverriddenCount();
+        *ChangedCount = count;
+        *HasChanged = count > 0;
+
         str << renderer.GetHtml();
         HTML(str) {
             str << "<h3>History</h3>";
@@ -124,6 +156,7 @@ private:
                         TABLEH() {str << "Parameter"; }
                         TABLEH() {str << "PrevValue"; }
                         TABLEH() {str << "NewValue"; }
+                        TABLEH() {str << "Action"; }
                     }
                 }
                 TABLEBODY() {
@@ -133,6 +166,7 @@ private:
                             TABLED() { str << record.ParamName; }
                             TABLED() { str << record.PrevValue; }
                             TABLED() { str << record.NewValue; }
+                            TABLED() { str << record.Action; }
                         }
                     }
                 }

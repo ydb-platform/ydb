@@ -38,19 +38,35 @@ void TDynamicControlBoard::RestoreDefaults() {
 }
 
 void TDynamicControlBoard::RestoreDefault(TString name) {
+    TControlMutation mutation;
+    RestoreDefault(std::move(name), mutation);
+}
+
+bool TDynamicControlBoard::RestoreDefault(TString name, TControlMutation& outMutation) {
     TIntrusivePtr<TControl> control;
     if (Board.Get(name, control)) {
-        control->RestoreDefault();
+        outMutation = control->RestoreDefault();
+        return true;
     }
+    return false;
 }
 
 bool TDynamicControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
-    TIntrusivePtr<TControl> control;
-    if (Board.Get(name, control)) {
-        outPrevValue = control->SetFromHtmlRequest(value);
-        return control->IsDefault();
+    TControlMutation mutation;
+    if (SetValue(std::move(name), value, mutation)) {
+        outPrevValue = mutation.Before.Value;
+        return !mutation.After.Overridden;
     }
     return true;
+}
+
+bool TDynamicControlBoard::SetValue(TString name, TAtomic value, TControlMutation& outMutation) {
+    TIntrusivePtr<TControl> control;
+    if (Board.Get(name, control)) {
+        outMutation = control->SetFromHtmlRequestWithState(value);
+        return true;
+    }
+    return false;
 }
 
 // Only for tests

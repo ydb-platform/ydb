@@ -30,6 +30,26 @@ public:
         return Control->GetDefault();
     }
 
+    // Return a coherent snapshot of the shared control.
+    TControlState GetState() const {
+        return Control->GetState();
+    }
+
+    // Return the active override, or no value for a caller-specific fallback.
+    std::optional<TAtomicBase> GetOverride() const {
+        return Control->GetOverride();
+    }
+
+    // Update the shared default without replacing an active override.
+    void UpdateDefault(TAtomicBase newDefault) {
+        Control->UpdateDefault(newDefault);
+    }
+
+    // Set a bounded override even when it equals the shared default.
+    TControlMutation SetOverride(TAtomicBase value) {
+        return Control->SetOverride(value);
+    }
+
     i64 operator=(i64 value) {
         Control->Set(value);
         return value;

@@ -373,6 +373,10 @@ namespace {
             }
             auto removed = InflightRequests.erase(state);
             Y_DEBUG_ABORT_UNLESS(removed);
+            if (InFlight) { // all counters tied
+                InFlight->Sub(removed);
+                AnswerTime->Add((TInstant::Now() - state->SentTime).MicroSeconds());
+            }
             CleanupStreamProcessor(state);
             if (auto& session = state->SessionState) {
                 CleanupStreamProcessor(session);
@@ -745,7 +749,7 @@ namespace {
                     {"rows", state->ResultRows});
             if (InFlight) { // all counters tied
                 AnswerTime->Add((TInstant::Now() - state->SentTime).MicroSeconds());
-                InFlight->Dec();
+                InFlight->Sub(removed);
             }
             YDB_LOG_TRACE("AnswerTime",
                     {"duration", (TInstant::Now() - state->SentTime)});

@@ -30,11 +30,29 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId) {
+        auto span = std::make_shared<NWilson::TSpan>(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+            "BlobDepotAgent.ReadS3", NWilson::EFlags::AUTO_END);
+        if (*span) {
+            span->Attribute("size", static_cast<i64>(len));
+        }
+
+        TFinishCallback wrapped = [span, finish = std::move(finish)](std::optional<TString> error, const char *state) {
+            if (*span) {
+                if (error) {
+                    span->EndError(*error);
+                } else {
+                    span->EndOk();
+                }
+            }
+
+            finish(std::move(error), state);
+        };
+
         Agent.IssueOrEnqueueS3Read(TPendingS3Read{
             .Key = key,
             .Offset = offset,
             .Len = len,
-            .Finish = std::move(finish),
+            .Finish = std::move(wrapped),
             .ReadId = readId,
         });
     }

@@ -234,6 +234,9 @@ namespace {
 
             std::optional<ui64> result;
             if (component == "SessionActor") {
+                if (!record.Contains("isVictimQuery=true")) {
+                    continue;
+                }
                 result = ExtractNumericField(record, "querySpanId");
             } else {
                 result = ExtractNumericField(record, "victimQuerySpanId");

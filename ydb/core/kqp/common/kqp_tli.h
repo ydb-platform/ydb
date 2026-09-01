@@ -188,7 +188,6 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
 
     // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
     const bool isBreaker = params.BreakerQuerySpanId.Defined() && *params.BreakerQuerySpanId != 0;
-
     if (isBreaker) {
         YDB_LOG_UPDATE_MESSAGE(message, {"querySpanId", ToString(*params.BreakerQuerySpanId)});
     } else if (params.VictimQuerySpanId && *params.VictimQuerySpanId != 0) {
@@ -198,28 +197,32 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     // Use appropriate field names based on breaker vs victim
     for(auto& allQueriesItem : params.OtherQueries) {
         if (isBreaker) {
-            if (allQueriesItem.Text == params.QueryText) {
+            if (allQueriesItem.Id == params.BreakerQuerySpanId) {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
+                    // {"querySpanId", allQueriesItem.Id},
                     {"queryText", allQueriesItem.Text},
                     {"isBreakerQuery", true});
             }
             else {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
-                    message,
-                    {"queryText", allQueriesItem.Text});
+                    // {"querySpanId", allQueriesItem.Id},
+                    {"queryText", allQueriesItem.Text},
+                    message);
             }
         }
         else {
-            if (allQueriesItem.Text == params.QueryText) {
+            if (allQueriesItem.Id == params.VictimQuerySpanId) {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
+                    // {"querySpanId", allQueriesItem.Id},
                     {"queryText", allQueriesItem.Text},
                     {"isVictimQuery", true});
             }
             else {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
+                    // {"querySpanId", allQueriesItem.Id},
                     {"queryText", allQueriesItem.Text});
             }
         }

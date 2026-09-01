@@ -649,13 +649,19 @@ namespace {
 
         // must be called in actor context
         void ProcessReceivedData(Ydb::Query::ExecuteQueryResponsePart& result, TLookupState::TPtr state) {
-            Y_ENSURE(result.result_set_index() == 0);
-            ProcessReceivedData(result.result_set(), std::move(state));
-            YDB_LOG_TRACE("tx meta",
-                    {"txMeta", result.tx_meta().DebugString()});
-            YDB_LOG_DEBUG("query stats",
-                    COMMON_LOG,
-                    {"queryStats", result.exec_stats().DebugString()});
+            if (result.has_result_set()) {
+                Y_ENSURE(result.result_set_index() == 0);
+                ProcessReceivedData(result.result_set(), std::move(state));
+            }
+            if (result.has_tx_meta()) {
+                YDB_LOG_TRACE("tx meta",
+                        {"txMeta", result.tx_meta().DebugString()});
+            }
+            if (result.has_exec_stats()) {
+                YDB_LOG_DEBUG("query stats",
+                        COMMON_LOG,
+                        {"queryStats", result.exec_stats().DebugString()});
+            }
         }
 
         // must be called in actor context

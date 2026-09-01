@@ -28,7 +28,8 @@ TRunArgs GetRunArgs() {
         .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     TDriver driver(driverConfig);
-    std::string tablePath = std::string(database) + "/" + testRoot + "/pk_conflict_it";
+    const std::string prefix = database[0] == '/' ? "" : "/";
+    std::string tablePath = prefix + std::string(database) + "/" + testRoot + "/pk_conflict_it";
 
     return {std::move(driver), std::move(tablePath)};
 }

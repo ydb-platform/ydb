@@ -13,7 +13,8 @@ TRunArgs GetRunArgs() {
         .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     TDriver driver(driverConfig);
-    return {driver, database + "/" + std::string(std::getenv("YDB_TEST_ROOT")) + "/bulk"};
+    const std::string prefix = database.starts_with('/') ? "" : "/";
+    return {driver, prefix + database + "/" + std::string(std::getenv("YDB_TEST_ROOT")) + "/bulk"};
 }
 
 TStatus CreateTable(TTableClient& client, const std::string& table) {

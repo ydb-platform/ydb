@@ -2,6 +2,7 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -81,10 +82,15 @@ struct TAffectedPath {
 struct TAffectedPaths {
     TVector<TAffectedPath> Paths;
 
-    // The operation touches paths that cannot be enumerated from the request alone
-    // (cascade drops, backup-collection expansion). Set this rather than returning a
-    // short list that reads as complete.
-    bool Incomplete = false;
+    // There is deliberately no Incomplete flag. It existed as a migration crutch -- "this
+    // operation touches paths I cannot enumerate" -- and it switched the cross-check off for
+    // the whole operation, stickily, which meant the 26 operations that most needed checking
+    // were the only ones exempt from it. Every one of those justifications turned out to be
+    // wrong, in five distinct ways, and removing them found six real defects. Nothing sets it
+    // now, so the field is gone rather than left as a hatch someone can take quietly.
+    //
+    // An operation that genuinely writes no path rows takes an explicit, categorised
+    // SS_EXEMPT_AFFECTED_PATHS instead. That is reviewable; "incomplete" was not.
 
     // The declaration was attempted and failed -- a named path id did not resolve, say.
     // Distinct from an empty Paths, which means the operation genuinely touches nothing.
@@ -133,6 +139,24 @@ inline bool UndeclaredPathTouchIsFatal = false;
 // deletes.
 inline bool UnfulfilledPathDeclarationIsFatal = false;
 
+// Test-only sink for the finished plan of a top-level operation.
+//
+// The union across an operation's parts *is* the plan the requirement asks for -- every
+// suboperation of one request shares a single TOperation, so admitParts accumulates them all
+// into one DeclaredPathSet. But that set is erased with the operation
+// (schemeshard__operation_side_effects.cpp, ss->Operations.erase), so nothing outside the
+// tablet can assert on it, and "the plan is complete" stayed an argument rather than a test.
+//
+// When non-null, each completed operation's declared set is recorded here keyed by txId. A
+// test then asserts what a top-level request planned -- including the paths contributed by
+// parts it never named itself, which is the whole claim behind fanning-out operations like
+// BackupBackupCollection.
+//
+// Null in production, and read only where the operation already survives the same gate as the
+// checks above, so an exempt or knowingly partial declaration never lands here and cannot be
+// mistaken for a complete plan.
+inline THashMap<ui64, THashSet<TString>>* CompletedPlanSink = nullptr;
+
 // The reverse half of the cross-check. ObservePathTouched tests written ⊆ declared, which
 // by construction cannot see an over-declaration: a declaration naming a path nobody writes
 // passes silently, so the six subtree walks recently added are verified only in the one
@@ -142,9 +166,8 @@ inline bool UnfulfilledPathDeclarationIsFatal = false;
 //
 // Takes the flat inputs rather than a TOperation so the semantics are testable without
 // standing up a schemeshard, the way the declarations above already are. Returns the first
-// unfulfilled path so the caller can name it; MayWrite and ReferenceOnly are skipped, and
-// an Incomplete or exempt (nullopt) declaration demands nothing, because neither was ever
-// in a position to promise its list was whole.
+// unfulfilled path so the caller can name it; MayWrite and ReferenceOnly are skipped, and an
+// exempt (nullopt) declaration demands nothing, because it never promised a list at all.
 std::optional<TString> FindUnfulfilledMustWrite(
     const TVector<std::optional<TAffectedPaths>>& declared,
     const THashSet<TString>& observed);
@@ -167,8 +190,6 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
 // .cpp where it is complete.
 struct TOperationContext;
 TAffectedPaths DeclareTargetByIdOrName(const TOperationContext& context,
-    const TString& workingDir, const TString& name, ui64 localPathId);
-TAffectedPaths DeclareCascadeTargetByIdOrName(const TOperationContext& context,
     const TString& workingDir, const TString& name, ui64 localPathId);
 
 // Every path in the target's subtree, for an operation that writes a row per descendant
@@ -203,12 +224,5 @@ TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
 TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& workingDir,
     const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect,
     TAffectedPath::EObservation expect = TAffectedPath::EObservation::MayWrite);
-
-// A drop that takes the target's whole subtree with it. The root is named exactly, as it
-// is what the request asked for and what the outbox records, but the descendants are
-// walked at execution time and cannot be enumerated here -- hence Incomplete, which turns
-// the path cross-check off for the operation rather than letting it report every child.
-TAffectedPaths DeclareCascadeTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
-    const TString& name, ui64 localPathId);
 
 } // namespace NKikimr::NSchemeShard

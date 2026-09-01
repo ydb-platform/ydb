@@ -1,6 +1,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/datashard/incr_restore_scan.h>
 #include <ydb/core/tx/schemeshard/schemeshard_incremental_restore_classify.h>
@@ -8,6 +9,8 @@
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <util/generic/scope.h>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 
 #define DEFAULT_NAME_1 "MyCollection1"
@@ -428,6 +431,87 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
                 {NKikimrScheme::EStatus::StatusPathDoesNotExist});
             env.TestWaitNotification(runtime, txId);
+        }
+
+        // Step (c): the plan of a fanning-out operation must name what it actually touches,
+        // not just what the request spelled.
+        //
+        // A BackupBackupCollection request names one path -- the collection. The operation
+        // reads the collection's entry list, walks each source table's index children, and
+        // creates a backup table per source. None of that is in the request, so if the plan
+        // were built from the request alone it would be a single path, and every consumer
+        // downstream (the outbox, and Schema CDC after it) would miss the tables the backup
+        // actually copies.
+        //
+        // The plan is the union across the operation's parts: the suboperations share one
+        // TOperation, so admitParts accumulates their declarations into one set. This asserts
+        // that union directly rather than inferring it from the absence of a failure, which is
+        // all the forward write-observation check can offer.
+        Y_UNIT_TEST(BackupPlanNamesSourcesAndCreatedTables) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+            ui64 txId = 100;
+
+            SetupLogging(runtime);
+            PrepareDirs(runtime, env, txId);
+
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
+            env.TestWaitNotification(runtime, txId);
+
+            // Indexed on purpose: the index and its impl table are children the request never
+            // names, and copying a table copies them too.
+            TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+                TableDescription {
+                  Name: "Table1"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "ByValue"
+                  KeyColumnNames: ["value"]
+                }
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            THashMap<ui64, THashSet<TString>> plans;
+            NKikimr::NSchemeShard::CompletedPlanSink = &plans;
+            Y_DEFER { NKikimr::NSchemeShard::CompletedPlanSink = nullptr; };
+
+            const ui64 backupTxId = ++txId;
+            TestBackupBackupCollection(runtime, backupTxId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            env.TestWaitNotification(runtime, backupTxId);
+
+            auto it = plans.find(backupTxId);
+            UNIT_ASSERT_C(it != plans.end(),
+                "the backup operation completed without recording a plan at all");
+            const THashSet<TString>& plan = it->second;
+
+            // The source table, which the request names only indirectly through the
+            // collection's entry list.
+            UNIT_ASSERT_C(plan.contains("/MyRoot/Table1"),
+                "plan omits the source table it copies: " << JoinSeq(", ", plan));
+
+            // The destination directory is minted from a timestamp inside the operation
+            // (backup_backup_collection.cpp), so it cannot be spelled here. Assert the shape
+            // instead: something under the collection whose leaf is the source's name.
+            const TString collection = "/MyRoot/.backups/collections/" DEFAULT_NAME_1;
+            size_t createdBackupTables = 0;
+            size_t indexChildren = 0;
+            for (const TString& path : plan) {
+                if (path.StartsWith(collection + "/") && path.EndsWith("/Table1")) {
+                    ++createdBackupTables;
+                }
+                if (path.StartsWith("/MyRoot/Table1/ByValue")) {
+                    ++indexChildren;
+                }
+            }
+            UNIT_ASSERT_C(createdBackupTables > 0,
+                "plan omits the backup table it creates under " << collection
+                    << ": " << JoinSeq(", ", plan));
+            UNIT_ASSERT_C(indexChildren > 0,
+                "plan omits the source's index children: " << JoinSeq(", ", plan));
         }
 
         Y_UNIT_TEST(BackupNonIncrementalCollection) {

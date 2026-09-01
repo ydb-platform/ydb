@@ -1093,6 +1093,12 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
 
 void TSideEffects::DoCheckDeclarations(const TActorContext& ctx) {
     for (const auto& operation : CompletedOperations) {
+        // Before the check, and unconditionally for every operation that got here: a test
+        // asserting what a request planned wants the plan whether or not it also fulfilled it.
+        if (CompletedPlanSink) {
+            (*CompletedPlanSink)[ui64(operation->TxId)] = operation->DeclaredPathSet;
+        }
+
         const auto missed = FindUnfulfilledMustWrite(
             operation->DeclaredAffectedPaths, operation->ObservedPathSet);
         if (!missed) {

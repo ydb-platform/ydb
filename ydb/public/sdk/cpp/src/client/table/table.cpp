@@ -3080,6 +3080,9 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
     if (proto.has_filter_length_max()) {
         result.FilterLengthMax = proto.filter_length_max();
     }
+    if (proto.has_use_filter_superlemmer()) {
+        result.UseFilterSuperLemmer = proto.use_filter_superlemmer();
+    }
 
     return result;
 }
@@ -3137,10 +3140,22 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
     if (analyzers.FilterLengthMax.has_value()) {
         proto.set_filter_length_max(*analyzers.FilterLengthMax);
     }
+    if (analyzers.UseFilterSuperLemmer.has_value()) {
+        proto.set_use_filter_superlemmer(*analyzers.UseFilterSuperLemmer);
+    }
 
     return proto;
 }
 
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::SuperLemmer(std::string language) {
+    TAnalyzers result;
+    result.Tokenizer = ETokenizer::Standard;
+    result.Language = std::move(language);
+    result.UseFilterLowercase = true;
+    result.UseFilterStopwords = true;
+    result.UseFilterSuperLemmer = true;
+    return result;
+}
 TFulltextIndexSettings::TColumnAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {
     TFulltextIndexSettings::TColumnAnalyzers result;
     if (proto.has_column()) {

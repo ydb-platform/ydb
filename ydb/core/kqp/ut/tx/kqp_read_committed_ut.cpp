@@ -1242,6 +1242,121 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
         CompareYson(TStringBuilder() << "[[" << rowCount << "u]]", FormatResultSetYson(verify.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(BufferLock_RetryLimitExceededReresolvesShards) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        auto* retrySettings = appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings();
+        retrySettings->SetMaxShardRetries(1);
+        retrySettings->SetMaxShardResolves(100);
+        retrySettings->SetMaxTotalRetries(100);
+        retrySettings->SetStartDelayMs(5);
+        retrySettings->SetMaxDelayMs(10);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.AppConfig = appConfig;
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/LockTest` (
+                        Id Int64 NOT NULL,
+                        Val String,
+                        PRIMARY KEY (Id)
+                    ) WITH (
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1,
+                        UNIFORM_PARTITIONS = 1
+                    );
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const size_t rowCount = 10;
+        {
+            TStringBuilder dml;
+            dml << "REPLACE INTO `/Root/LockTest` (Id, Val) VALUES ";
+            for (size_t i = 0; i < rowCount; ++i) {
+                if (i) dml << ", ";
+                dml << "(" << i << ", \"v" << i << "\")";
+            }
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(dml), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        const auto resolvesBefore = counters.IteratorsShardResolve->Val();
+
+        // Drop two main-table lock requests from the buffer lock actor and deliver the
+        // corresponding TEvDeliveryProblem so the per-request retry budget is exhausted.
+        // The actor must re-resolve the shards and re-issue the row locks.
+        constexpr size_t HijackBudget = 2;
+        std::deque<std::pair<NActors::TActorId, ui64>> HijackedLocks;
+        size_t BufferLockForwards = 0;
+
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
+                auto* forward = ev->Get<TEvPipeCache::TEvForward>();
+                if (forward->Ev->Type() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType
+                        && runtime.FindActorName(ev->Sender) == "KQP_BUFFER_LOCK_ACTOR") {
+                    ++BufferLockForwards;
+                    if (HijackedLocks.size() < HijackBudget) {
+                        HijackedLocks.emplace_back(ev->Sender, forward->TabletId);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteQuery(Q_(R"(
+                UPDATE `/Root/LockTest` SET Val = "updated";
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+        });
+
+        size_t sentReplies = 0;
+        while (sentReplies < HijackBudget) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return HijackedLocks.size() > sentReplies;
+            });
+            runtime.DispatchEvents(opts, TDuration::Seconds(30));
+            UNIT_ASSERT_C(HijackedLocks.size() > sentReplies,
+                "buffer lock request was not captured by the observer");
+
+            const auto& [actorId, tabletId] = HijackedLocks[sentReplies];
+            runtime.Send(new NActors::IEventHandle(actorId, NActors::TActorId(),
+                MakeHolder<TEvPipeCache::TEvDeliveryProblem>(tabletId, true).Release()));
+            ++sentReplies;
+        }
+
+        auto result = runtime.WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_GE_C(BufferLockForwards, HijackBudget + 1,
+            TStringBuilder() << "expected at least " << (HijackBudget + 1)
+                << " buffer lock forwards (one after re-resolve), got " << BufferLockForwards);
+        UNIT_ASSERT_GT_C(counters.IteratorsShardResolve->Val(), resolvesBefore,
+            "expected shard re-resolve to happen for buffer lock actor");
+
+        auto verify = kikimr.RunCall([&] {
+            return session.ExecuteQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/LockTest` WHERE Val == "updated";
+            )"), TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+        CompareYson(TStringBuilder() << "[[" << rowCount << "u]]", FormatResultSetYson(verify.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

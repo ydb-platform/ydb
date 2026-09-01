@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lock_worker.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
@@ -42,6 +43,8 @@ private:
         ui64 LocksInflight = 0;
         TVector<NKikimrDataEvents::TLock> CollectedLocks;
         std::vector<std::pair<TOwnedCellVec, bool>> CollectedRows;
+
+        bool ResolvePending = false;
 
         bool IsAllLocksFinished() const {
             return LocksInflight == 0;
@@ -131,6 +134,7 @@ public:
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
                 hFunc(NEvents::TDataEvents::TEvLockRowsResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
                 hFunc(TEvPrivate::TEvRetryLock, Handle);
@@ -173,6 +177,7 @@ public:
         lockSettings.LockMode = Settings.LockMode;
         lockSettings.SkipAbsent = skipAbsent;
         lockSettings.QuerySpanId = Settings.QuerySpanId;
+        lockSettings.Database = Settings.Database;
         lockSettings.Snapshot = *Settings.MvccSnapshot;
 
         if (KeyColumnTypes.empty()) {
@@ -222,12 +227,12 @@ public:
 
     bool HasResult(ui64 cookie) override {
         const auto& state = CookieToLockState.at(cookie);
-        return state.LocksInflight == 0 && !state.CollectedLocks.empty();
+        return !state.ResolvePending && state.LocksInflight == 0 && !state.CollectedLocks.empty();
     }
 
     bool IsEmpty(ui64 cookie) override {
         const auto& state = CookieToLockState.at(cookie);
-        return state.LocksInflight == 0 && state.CollectedLocks.empty();
+        return !state.ResolvePending && state.LocksInflight == 0 && state.CollectedLocks.empty();
     }
 
     void ExtractResult(ui64 cookie, std::function<void(const TOwnedCellVec& row, bool modified)>&& callback) override {
@@ -495,7 +500,12 @@ public:
         failedRequest.Blocked = true;
 
         if (failedRequest.RetryAttempts >= MaxShardRetries()) {
-            return false;
+            YDB_LOG_DEBUG("Retry limit exceeded, resolving table shards",
+                {"logPrefix", this->LogPrefix},
+                {"table", Settings.TablePath},
+                {"failedRequestId", failedRequestId},
+                {"shardId", failedRequest.ShardId});
+            return HandleLockRetryExceeded(failedRequestId, lockState);
         }
 
         ++failedRequest.RetryAttempts;
@@ -527,6 +537,92 @@ public:
             LockIdToState.at(newRequestId).RetryAttempts = failedRequest.RetryAttempts;
         }
         LockIdToState.erase(failedRequestId);
+    }
+
+    bool HandleLockRetryExceeded(ui64 failedRequestId, TLockState& lockState) {
+        --lockState.LocksInflight;
+        const auto guard = Settings.TypeEnv.BindAllocator();
+        lockState.Worker->ResetLockRowsProcessing(failedRequestId);
+        LockIdToState.erase(failedRequestId);
+        LockSendTime.erase(failedRequestId);
+        lockState.ResolvePending = true;
+        ResolveTableShards();
+        return true;
+    }
+
+    void ResolveTableShards() {
+        if (ResolveShardsInProgress) {
+            return;
+        }
+
+        if (++TotalResolveShardsAttempts > MaxShardResolves()) {
+            return RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder() << "Table: `" << Settings.TablePath << "` resolve attempts limit exceeded.");
+        }
+
+        YDB_LOG_DEBUG("Resolve table shards",
+            {"logPrefix", this->LogPrefix},
+            {"table", Settings.TablePath});
+        ResolveShardsInProgress = true;
+
+        Partitioning.reset();
+
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings.Database;
+
+        TVector<TCell> minusInf(KeyColumnTypes.size());
+        TVector<TCell> plusInf;
+        TTableRange range(minusInf, true, plusInf, true, false);
+
+        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(Settings.TableId, range, TKeyDesc::ERowOperation::Read,
+            KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
+
+        Settings.Counters->IteratorsShardResolve->Inc();
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult",
+            {"logPrefix", this->LogPrefix},
+            {"table", Settings.TablePath});
+        if (!ResolveShardsInProgress) {
+            return;
+        }
+        ResolveShardsInProgress = false;
+        if (ev->Get()->Request->ErrorCount > 0) {
+            TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: " << Settings.TablePath;
+            return RuntimeError(
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                errorMsg);
+        }
+
+        auto& resultSet = ev->Get()->Request->ResultSet;
+        YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
+        Partitioning = resultSet[0].KeyDescription->Partitioning;
+
+        ProcessResolveResult();
+    }
+
+    void ProcessResolveResult() {
+        for (auto& [cookie, state] : CookieToLockState) {
+            if (state.ResolvePending) {
+                state.ResolvePending = false;
+                const auto guard = Settings.TypeEnv.BindAllocator();
+                StartLockTask(cookie, state);
+
+                if (state.LocksInflight == 0) {
+                    RuntimeError(
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                        TStringBuilder() << "Table: `" << Settings.TablePath
+                            << "` re-resolve dispatched no lock requests.");
+                }
+            }
+        }
     }
 
     void RuntimeError(
@@ -581,6 +677,9 @@ private:
     THashMap<ui64, TRequestState> LockIdToState;
 
     ui64 LockRequestId = 0;
+
+    ui64 TotalResolveShardsAttempts = 0;
+    bool ResolveShardsInProgress = false;
 
     ui64 LockRowsCount = 0;
     ui64 BrokenLocksCount = 0;

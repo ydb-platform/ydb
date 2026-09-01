@@ -306,10 +306,8 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(observer.GetSaveCount(), 0);
     }
 
-    // SchemeShard must omit .metadata tables from TEvSchemeShardStats.
-    // ANALYZE writes into .metadata/statistics_v2; sending that path to SA
-    // schedules background ANALYZE of it, which writes more rows and
-    // retriggers itself — especially with a low change-ratio threshold.
+    // The aggregator must not schedule background ANALYZE for .metadata/statistics_v2
+    // to avoid a self-retriggering loop. SchemeShard still sends basic stats for it.
     Y_UNIT_TEST_TWIN(SkipMetadataFromBackgroundAnalyze, ColumnShard) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
             auto* stats = settings.AppConfig->MutableStatisticsConfig();
@@ -319,61 +317,28 @@ Y_UNIT_TEST_SUITE(TraverseStatistics) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "Table", ColumnShard);
-        const ui64 ssTabletId = tableInfo.PathId.OwnerId;
 
-        TVector<THashSet<TPathId>> snapshots;
-        auto statsObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>(
-            [&](auto& ev) {
-                if (ev->Get()->Record.GetSchemeShardId() != ssTabletId) {
-                    return;
-                }
-                NKikimrStat::TSchemeShardStats record;
-                if (!record.ParseFromString(ev->Get()->Record.GetStats())) {
-                    return;
-                }
-                THashSet<TPathId> pathIds;
-                for (const auto& entry : record.GetEntries()) {
-                    pathIds.insert(TPathId::FromProto(entry.GetPathId()));
-                }
-                snapshots.push_back(std::move(pathIds));
-            });
-
-        WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
-
-        const auto metadataPathId = ResolvePathId(runtime, "/Root/Database/.metadata/statistics_v2");
+        TPathId metadataPathId;
+        for (ui32 attempt = 0; attempt < 300 && !metadataPathId; ++attempt) {
+            metadataPathId = ResolvePathId(runtime, "/Root/Database/.metadata/statistics_v2");
+            if (!metadataPathId) {
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+        }
         UNIT_ASSERT(metadataPathId);
+
+        TSaveStatisticsObserver metadataObserver(runtime, metadataPathId);
+        const auto tableInfo = PrepareTableWithIndexes(env, "Database", "Table", ColumnShard);
         UNIT_ASSERT_VALUES_UNEQUAL(metadataPathId, tableInfo.PathId);
 
-        auto assertNoMetadataInSnapshots = [&] {
-            bool userTableSeen = false;
-            for (const auto& pathIds : snapshots) {
-                UNIT_ASSERT_C(
-                    !pathIds.contains(metadataPathId),
-                    "SchemeShard stats blob included .metadata/statistics_v2");
-                userTableSeen |= pathIds.contains(tableInfo.PathId);
-            }
-            UNIT_ASSERT_C(userTableSeen, "SchemeShard never sent the user table");
-        };
-        assertNoMetadataInSnapshots();
+        WaitForPrimaryCollection(runtime, tableInfo.PathId, ColumnTableRowsNumber, 1, ColumnShard);
+        UNIT_ASSERT_VALUES_EQUAL(metadataObserver.GetSaveCount(), 0);
 
-        // statistics_v2 is created during the first ANALYZE. Wait for SS blobs
-        // sent after that so a leak cannot hide in a snapshot taken before the
-        // table existed.
-        const size_t snapshotsAfterCollection = snapshots.size();
-        runtime.WaitFor("SchemeShard stats after .metadata/statistics_v2 exists", [&] {
-            return snapshots.size() >= snapshotsAfterCollection + 2;
-        });
-        assertNoMetadataInSnapshots();
+        RebootTablet(runtime, tableInfo.SaTabletId, runtime.AllocateEdgeActor());
+        WaitForBackgroundAnalyzeToStabilize(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(metadataObserver.GetSaveCount(), 0);
 
-        // After the last user table is dropped, SchemeShard sends an empty
-        // snapshot. Metadata tables stay omitted.
         DropTable(env, "Database", "Table");
-        runtime.WaitFor("empty SchemeShard stats after drop", [&] {
-            return !snapshots.empty() && snapshots.back().empty();
-        });
-
-        // ANALYZE of a dropped table must fail rather than remain pending.
         auto result = Analyze(
             runtime, tableInfo.SaTabletId, {tableInfo.PathId},
             "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);

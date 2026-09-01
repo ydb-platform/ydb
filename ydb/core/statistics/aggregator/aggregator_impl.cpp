@@ -10,6 +10,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/base/path.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -470,6 +471,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
         {"tabletId", TabletID()});
 
     IsStatisticsTableCreated = true;
+    ResolveStatisticsTablePathId();
     if (PendingSaveStatistics) {
         PendingSaveStatistics = false;
         SaveStatisticsToTable();
@@ -478,6 +480,51 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvStatTableCreationResponse::
         PendingDeleteStatistics = false;
         DeleteStatisticsFromTable();
     }
+}
+
+void TStatisticsAggregator::ResolveStatisticsTablePathId() {
+    if (StatisticsTablePathId || Database.empty() || !IsStatisticsTableCreated) {
+        return;
+    }
+
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    TNavigate::TEntry entry;
+    entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+    entry.Path = SplitPath(Database + "/" + StatisticsTablePath);
+    entry.Operation = TNavigate::OpPath;
+    entry.ShowPrivatePath = true;
+
+    auto request = std::make_unique<TNavigate>();
+    request->DatabaseName = Database;
+    request->ResultSet.emplace_back(std::move(entry));
+
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+}
+
+void TStatisticsAggregator::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    if (StatisticsTablePathId) {
+        return;
+    }
+
+    auto* request = ev->Get()->Request.Get();
+    if (!request || request->ResultSet.empty()) {
+        YDB_LOG_WARN("Failed to resolve statistics table path id: empty navigate result",
+            {"tabletId", TabletID()});
+        return;
+    }
+
+    const auto& entry = request->ResultSet[0];
+    if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok || !entry.TableId.PathId) {
+        YDB_LOG_WARN("Failed to resolve statistics table path id",
+            {"tabletId", TabletID()},
+            {"status", entry.Status});
+        return;
+    }
+
+    StatisticsTablePathId = entry.TableId.PathId;
+    YDB_LOG_DEBUG("Resolved statistics table path id",
+        {"tabletId", TabletID()},
+        {"pathId", StatisticsTablePathId});
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
@@ -773,6 +820,9 @@ void TStatisticsAggregator::ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db,
     } else {
         chosenTable = FindStaleTable();
     }
+    if (chosenTable && IsStatisticsTable(chosenTable->PathId)) {
+        chosenTable = FindStaleTable();
+    }
 
     if (!chosenTable) {
         YDB_LOG_TRACE("Background traversal is skipped. No table is stale and no traversal interval elapsed",
@@ -949,6 +999,10 @@ std::optional<bool> TStatisticsAggregator::IsKnownTable(const TPathId& pathId) c
         return std::nullopt;
     }
     return false;
+}
+
+bool TStatisticsAggregator::IsStatisticsTable(const TPathId& pathId) const {
+    return StatisticsTablePathId && pathId == StatisticsTablePathId;
 }
 
 void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {
@@ -1420,6 +1474,9 @@ TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleTable
 
     TScheduleTraversal* stalest = nullptr;
     for (auto& [pathId, traversal] : ScheduleTraversals) {
+        if (IsStatisticsTable(pathId)) {
+            continue;
+        }
         auto it = currentCounters.find(pathId);
         TChangeCounters current = it != currentCounters.end() ? it->second : TChangeCounters{};
         TChangeCounters lastAnalyze{traversal.LastAnalyzeRowUpdates, traversal.LastAnalyzeRowDeletes, 0};

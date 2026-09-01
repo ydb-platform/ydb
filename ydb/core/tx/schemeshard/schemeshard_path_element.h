@@ -114,7 +114,6 @@ public:
     bool IsRoot() const;
     bool IsDirectory() const;
     bool IsSystemDirectory() const;
-    bool IsMetadataDirectory() const;
     bool IsTableIndex() const;
     bool IsCdcStream() const;
     bool IsTable() const;

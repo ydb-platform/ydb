@@ -9477,14 +9477,9 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
 
     int count = 0;
     int incompleteCount = 0;
-    bool hasUserTables = false;
 
     NKikimrStat::TSchemeShardStats record;
     for (const auto& [pathId, tableInfo] : Tables) {
-        if (TPath::IsInsideMetadataDirectory(pathId, this)) {
-            continue;
-        }
-        hasUserTables = true;
         const auto& stats = tableInfo->GetStats();
         const auto& aggregated = stats.Aggregated;
         bool areStatsFull = stats.AreStatsFull();
@@ -9508,10 +9503,6 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
 
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
     for (const auto& pathId : columnTablesPathIds) {
-        if (TPath::IsInsideMetadataDirectory(pathId, this)) {
-            continue;
-        }
-        hasUserTables = true;
         const auto& tableInfo = ColumnTables.GetVerified(pathId);
         const auto& stats = tableInfo->GetStats();
         const TTableAggregatedStats* aggregatedStats = nullptr;
@@ -9547,15 +9538,10 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     }
 
     if (!count) {
-        if (hasUserTables) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "SendBaseStatsToSA() No tables to send"
-                << ", at schemeshard: " << TabletID());
-            return TDuration::Seconds(30);
-        }
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "SendBaseStatsToSA() No user tables to send"
+            "SendBaseStatsToSA() No tables to send"
             << ", at schemeshard: " << TabletID());
+        return TDuration::Seconds(30);
     }
 
     record.SetAreAllStatsFull(incompleteCount == 0);
@@ -9574,13 +9560,6 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         << ", path count: " << count
         << ", paths with incomplete stats: " << incompleteCount
         << ", at schemeshard: " << TabletID());
-
-    if (!hasUserTables) {
-        // Empty snapshot so SA can drop stale paths after metadata-only or
-        // fully dropped databases. 30s backoff avoids churn; the regular
-        // interval is for databases that still have user tables.
-        return TDuration::Seconds(30);
-    }
 
     if (IsServerlessDomain(SubDomains.at(RootPathId()))) {
         // In serverless subdomains several schemeshards send stats to a single SA

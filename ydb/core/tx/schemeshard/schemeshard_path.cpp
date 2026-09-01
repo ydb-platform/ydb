@@ -1816,28 +1816,6 @@ bool TPath::IsInsideCdcStreamPath() const {
     return true;
 }
 
-bool TPath::IsInsideMetadataDirectory() const {
-    Y_ABORT_UNLESS(IsResolved());
-    return IsInsideMetadataDirectory(Base()->PathId, SS);
-}
-
-bool TPath::IsInsideMetadataDirectory(const TPathId& pathId, TSchemeShard* ss) {
-    TPathId cur = pathId;
-    while (true) {
-        auto* elem = ss->PathsById.FindPtr(cur);
-        if (!elem) {
-            return false;
-        }
-        if ((*elem)->IsMetadataDirectory()) {
-            return true;
-        }
-        if ((*elem)->IsRoot()) {
-            return false;
-        }
-        cur = (*elem)->ParentPathId;
-    }
-}
-
 bool TPath::IsTableIndex(
     const TMaybe<NKikimrSchemeOp::EIndexType>& type,
     bool failOnUnresolved) const

@@ -184,8 +184,6 @@ public:
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
-    bool IsInsideMetadataDirectory() const;
-    static bool IsInsideMetadataDirectory(const TPathId& pathId, TSchemeShard* ss);
     bool IsTableIndex(
         const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
         bool failOnUnresolved = true) const;

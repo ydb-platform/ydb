@@ -533,6 +533,10 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
     NJson::TJsonValue txPlanJson;
     NJson::ReadJsonTree(txPlan, &txPlanJson, true);
 
+    if (!txPlanJson.Has("SimplifiedPlan")) {
+        return "";
+    }
+
     AddStatsToSimplifiedPlan(txPlanJson);
     return SerializeRBOExplainPlan(txPlanJson);
 }

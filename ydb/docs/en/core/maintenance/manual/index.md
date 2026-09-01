@@ -16,7 +16,7 @@ Main topics:
 * [{#T}](failure_model.md)
 * [{#T}](node_restarting.md)
 * [{#T}](cluster_expansion.md)
-* [{#T}](config-overview.md)
+* [{#T}](../../devops/configuration-management/configuration-v1/config-overview.md)
 * [{#T}](dynamic-config-volatile-config.md)
 * [{#T}](replacing_nodes.md)
 * [{#T}](blobdepot.md)

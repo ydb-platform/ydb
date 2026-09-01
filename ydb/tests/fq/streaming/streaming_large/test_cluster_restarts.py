@@ -167,7 +167,7 @@ class TestStreamingLarge(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         time.sleep(2)
 
-        stop_node_id = random.randint(1, len(kikimr.cluster.slots))
+        stop_node_id = random.randint(1, len(kikimr.cluster.slots) - 1)
         logger.debug(f"Stop node {stop_node_id}, start node 1")
         node2 = kikimr.cluster.slots[stop_node_id]
         node2.stop()

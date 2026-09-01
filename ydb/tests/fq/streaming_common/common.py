@@ -443,16 +443,14 @@ class Kikimr:
             storage_pool_units_count={"hdd": 1},
             token=token,
         )
-        self.slot_database = tenant_database
-
-        self.cluster.register_and_start_slots(database=self.slot_database, count=2)
-        self.cluster.wait_tenant_up(self.slot_database, token=token)
+        self.cluster.register_and_start_slots(database=tenant_database, count=2)
+        self.cluster.wait_tenant_up(tenant_database, token=token)
 
         _replace_config_via_cms(self.cluster, full_yaml_config)
         _wait_cms_config_applied(self.cluster, full_yaml_config)
 
         self.first_node = random.choice(list(self.cluster.slots.values()))
-        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", self.slot_database)
+        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", tenant_database)
         logger.info(f"Creating ydb client to {self.endpoint}, database={self.endpoint.database}")
         self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
 
@@ -482,7 +480,7 @@ class Kikimr:
         self.cluster.stop()
 
     def get_database_name(self) -> str:
-        return self.slot_database
+        return self.endpoint.database
 
 
 class StreamingTestBase(TestYdsBase):

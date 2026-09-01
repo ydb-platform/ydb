@@ -104,6 +104,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             },
             column_shard_config={
                 "enable_cursor_v1": True,
+                "reader_class_name": "TRIVIAL",
             },
         )
 

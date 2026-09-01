@@ -154,6 +154,25 @@ TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
     return result;
 }
 
+TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& workingDir,
+        const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect)
+{
+    // Same precedence as DeclareTargetByIdOrName -- a local path id wins over the name --
+    // spelled once here rather than at each call site. Note the test is on the integer:
+    // InvalidLocalPathId is Max<ui64>, not zero, so a TPathId built from 0 would read as
+    // truthy and send the resolver down the by-id branch to a path that does not exist.
+    const TPath target = localPathId
+        ? TPath::ResolveTarget(ss->MakeLocalId(localPathId), workingDir, name, ss)
+        : TPath::Resolve(CanonizePath(JoinPath({workingDir, name})), ss);
+
+    if (!target.IsResolved()) {
+        TAffectedPaths unresolved;
+        unresolved.Unresolved = true;
+        return unresolved;
+    }
+    return DeclareSubTree(ss, target.Base()->PathId, includeRoot, effect);
+}
+
 TAffectedPaths DeclareCascadeTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
         const TString& name, ui64 localPathId)
 {

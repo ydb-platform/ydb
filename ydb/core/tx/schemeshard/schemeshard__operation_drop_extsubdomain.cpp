@@ -388,9 +388,20 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropExtSub
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
+    // Declared, not waved at: ListSubTree already runs at :212 and :237.
+    //
+    // includeRoot is false here and true for the force-drop family, and the difference is
+    // real: :213 does paths.erase(pathId) before DropPaths, deliberately, so the
+    // extsubdomain root stays resolvable while its nodes can still reconnect. The root is
+    // therefore not among the rows this drop writes.
+    //
+    // Chosen this way round on purpose. If the root does get written after all, that is an
+    // undeclared write and the cross-check says so; the opposite mistake -- declaring a row
+    // nobody writes -- is currently invisible.
     const auto& drop = tx.GetDrop();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
-        drop.HasId() ? drop.GetId() : 0);
+    return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0, /*includeRoot=*/false,
+        TAffectedPath::EEffect::Drop);
 }
 
 } // namespace NOperation

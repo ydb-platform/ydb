@@ -134,6 +134,13 @@ TAffectedPaths DeclareCascadeTargetByIdOrName(const TOperationContext& context,
 TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
     TAffectedPath::EEffect effect);
 
+// The same, for a request that names its root the way an ordinary target is named. Keeps
+// the id-over-name precedence in one place: it is the property that stops a declaration
+// naming a different object than the operation mutates, so it must not be re-spelled per
+// call site. Pass localPathId == 0 when absent.
+TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& workingDir,
+    const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect);
+
 // A drop that takes the target's whole subtree with it. The root is named exactly, as it
 // is what the request asked for and what the outbox records, but the descendants are
 // walked at execution time and cannot be enumerated here -- hence Incomplete, which turns

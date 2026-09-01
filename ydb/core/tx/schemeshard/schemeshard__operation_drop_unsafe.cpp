@@ -270,9 +270,18 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropUnsafe
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
+    // The subtree is declared, not waved at. Propose already walks it -- ListSubTree at
+    // :223, feeding GetRelatedTransactions and AbortRelatedOperations at :225-226 -- and
+    // that walk is ExamineTreeVFS over the in-memory PathsById with no DB reads
+    // (schemeshard_impl.cpp:6389), so running it here costs nothing new and cannot name a
+    // different set than the drop will.
+    //
+    // includeRoot: this family keeps the root in the set (:223-227), unlike
+    // TDropExtSubdomain which erases it before dropping.
     const auto& drop = tx.GetDrop();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
-        drop.HasId() ? drop.GetId() : 0);
+    return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0, /*includeRoot=*/true,
+        TAffectedPath::EEffect::Drop);
 }
 
 } // namespace NOperation
@@ -287,9 +296,18 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropSubDom
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
+    // The subtree is declared, not waved at. Propose already walks it -- ListSubTree at
+    // :223, feeding GetRelatedTransactions and AbortRelatedOperations at :225-226 -- and
+    // that walk is ExamineTreeVFS over the in-memory PathsById with no DB reads
+    // (schemeshard_impl.cpp:6389), so running it here costs nothing new and cannot name a
+    // different set than the drop will.
+    //
+    // includeRoot: this family keeps the root in the set (:223-227), unlike
+    // TDropExtSubdomain which erases it before dropping.
     const auto& drop = tx.GetDrop();
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
-        drop.HasId() ? drop.GetId() : 0);
+    return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0, /*includeRoot=*/true,
+        TAffectedPath::EEffect::Drop);
 }
 
 } // namespace NOperation

@@ -61,7 +61,7 @@ namespace NTable {
             const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
             {
                 Y_ENSURE(part == Part, "Unsupported part");
-                Y_ENSURE(groupId.IsMain(), "Unsupported column group");
+                Y_ENSURE(groupId.Index == 0, "Unsupported column group");
 
                 auto savedPage = SavedPages.find(location.Offset);
 
@@ -299,6 +299,11 @@ namespace NTable {
         NProto::TRoot Root;
         TPartView PartView;
         THolder<TLoaderEnv> LoaderEnv;
-        TVector<THolder<TBTreePartWalker>> PreloadBTreeWalkers;
+        struct TPreloadBTreeWalker {
+            THolder<TBTreePartWalker> Walker;
+            NPage::TGroupId GroupId;
+            bool SkipDataPages = false;
+        };
+        TVector<TPreloadBTreeWalker> PreloadBTreeWalkers;
     };
 }}

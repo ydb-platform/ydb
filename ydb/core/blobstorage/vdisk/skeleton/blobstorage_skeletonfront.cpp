@@ -1383,28 +1383,60 @@ namespace NKikimr {
             return nullptr;
         }
 
+        NVDiskMon::TLtcHistoPtr GetLatencyHistogramByQueueId(NKikimrBlobStorage::EVDiskQueueId queueId) const {
+            switch (queueId) {
+                case NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead:
+                    return VCtx->Histograms.GetHistogram(NKikimrBlobStorage::EGetHandleClass::AsyncRead);
+                case NKikimrBlobStorage::EVDiskQueueId::GetFastRead:
+                    return VCtx->Histograms.GetHistogram(NKikimrBlobStorage::EGetHandleClass::FastRead);
+                case NKikimrBlobStorage::EVDiskQueueId::GetDiscover:
+                    return VCtx->Histograms.GetHistogram(NKikimrBlobStorage::EGetHandleClass::Discover);
+                case NKikimrBlobStorage::EVDiskQueueId::GetLowRead:
+                    return VCtx->Histograms.GetHistogram(NKikimrBlobStorage::EGetHandleClass::LowRead);
+                case NKikimrBlobStorage::EVDiskQueueId::PutTabletLog:
+                    return VCtx->Histograms.GetHistogram(NKikimrBlobStorage::EPutHandleClass::TabletLog);
+                case NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob:
+                    return VCtx->Histograms.GetHistogram(NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+                case NKikimrBlobStorage::EVDiskQueueId::PutUserData:
+                    return VCtx->Histograms.GetHistogram(NKikimrBlobStorage::EPutHandleClass::UserData);
+                default:
+                    return nullptr;
+            }
+        }
+
+        template <typename TEvent>
+        NVDiskMon::TLtcHistoPtr GetLatencyHistogramByRequestClass(const TEvent& ev) const {
+            if (ev.Record.HasHandleClass()) {
+                return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+            }
+            if (ev.Record.HasMsgQoS() && ev.Record.GetMsgQoS().HasExtQueueId()) {
+                return GetLatencyHistogramByQueueId(ev.Record.GetMsgQoS().GetExtQueueId());
+            }
+            return nullptr;
+        }
+
         NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVPut& ev) const {
-            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+            return GetLatencyHistogramByRequestClass(ev);
         }
 
         NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVMultiPut& ev) const {
-            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+            return GetLatencyHistogramByRequestClass(ev);
         }
 
         NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVGet& ev) const {
-            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+            return GetLatencyHistogramByRequestClass(ev);
         }
 
         NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVPatchStart& ev) const {
-            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+            return GetLatencyHistogramByRequestClass(ev);
         }
 
         NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVPatchDiff& ev) const {
-            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+            return GetLatencyHistogramByRequestClass(ev);
         }
 
         NVDiskMon::TLtcHistoPtr GetLatencyHistogram(const TEvBlobStorage::TEvVPatchXorDiff& ev) const {
-            return VCtx->Histograms.GetHistogram(ev.Record.GetHandleClass());
+            return GetLatencyHistogramByRequestClass(ev);
         }
 
         bool Compatible(NKikimrBlobStorage::EVDiskQueueId extId, NKikimrBlobStorage::EVDiskInternalQueueId intId) {

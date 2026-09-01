@@ -104,18 +104,26 @@ namespace NKikimr {
             }
         }
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> GetPutUserDataLatencyGroup(
+        TIntrusivePtr<NMonitoring::TDynamicCounters> GetLatencyGroup(
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
             const TIntrusivePtr<TVDiskConfig>& config,
-            const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
+            const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+            const TString& handleClass) {
             auto group = GetServiceCounters(counters, "vdisks");
             group = FindSubgroup(group, "storagePool", config->BaseInfo.StoragePoolName);
             group = FindSubgroup(group, "group", Sprintf("%09" PRIu32, info->GroupID.GetRawId()));
             group = FindSubgroup(group, "orderNumber", Sprintf("%02" PRIu32, info->GetOrderNumber(config->BaseInfo.VDiskIdShort)));
             group = FindSubgroup(group, "pdisk", Sprintf("%09" PRIu32, config->BaseInfo.PDiskId));
             group = FindSubgroup(group, "media", "rot");
-            group = FindSubgroup(group, "handleclass", "PutUserData");
+            group = FindSubgroup(group, "handleclass", handleClass);
             return FindSubgroup(group, "subsystem", "latency_histo");
+        }
+
+        TIntrusivePtr<NMonitoring::TDynamicCounters> GetPutUserDataLatencyGroup(
+            const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
+            return GetLatencyGroup(counters, config, info, "PutUserData");
         }
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetSkeletonFrontGroup(
@@ -281,6 +289,52 @@ namespace NKikimr {
                 TDuration::Seconds(1));
             UNIT_ASSERT_VALUES_EQUAL(completed->Get()->Record.GetStatus(), status);
             return completed;
+        }
+
+        void AssertSingleInFlightLatency(TTestEnv& env, const TString& handleClass) {
+            auto latencyGroup = GetLatencyGroup(env.Counters, env.Config, env.GroupInfo, handleClass);
+            auto inFlightCount = FindCounter(latencyGroup, "InFlightCount");
+            auto inFlightLatencyUsSum = FindCounter(latencyGroup, "InFlightLatencyUsSum");
+            auto maxLatencyUs = FindCounter(latencyGroup, "LatencyUsMax");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(inFlightCount->Val(), 1, "handleClass# " << handleClass);
+            UNIT_ASSERT_GT_C(inFlightLatencyUsSum->Val(), 0, "handleClass# " << handleClass);
+            UNIT_ASSERT_VALUES_EQUAL_C(maxLatencyUs->Val(), inFlightLatencyUsSum->Val(), "handleClass# " << handleClass);
+        }
+
+        void AssertNoInFlightLatency(TTestEnv& env, const TString& handleClass) {
+            auto latencyGroup = GetLatencyGroup(env.Counters, env.Config, env.GroupInfo, handleClass);
+            auto inFlightCount = FindCounter(latencyGroup, "InFlightCount");
+            auto inFlightLatencyUsSum = FindCounter(latencyGroup, "InFlightLatencyUsSum");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(inFlightCount->Val(), 0, "handleClass# " << handleClass);
+            UNIT_ASSERT_VALUES_EQUAL_C(inFlightLatencyUsSum->Val(), 0, "handleClass# " << handleClass);
+        }
+
+        template <typename TMakePatchEvent>
+        void CheckPatchInFlightLatencyUsesExtQueueId(
+            TMakePatchEvent makePatchEvent,
+            ui32 eventType,
+            NKikimrBlobStorage::EVDiskQueueId expectedQueueId,
+            const TString& expectedHandleClass,
+            const TString& defaultHandleClass) {
+            TTestEnv env(0);
+            auto patch = makePatchEvent(env.GetVDiskId());
+            UNIT_ASSERT(!patch->Record.HasHandleClass());
+            UNIT_ASSERT_VALUES_EQUAL(patch->Record.GetMsgQoS().GetExtQueueId(), expectedQueueId);
+
+            SendToSkeletonFront(
+                env.Runtime,
+                env.SkeletonFrontId,
+                env.EdgeActor,
+                patch.release(),
+                eventType);
+
+            env.Runtime.AdvanceCurrentTime(TDuration::MilliSeconds(10));
+            UpdateStats(env.Runtime, env.SkeletonFrontId, env.EdgeActor);
+
+            AssertSingleInFlightLatency(env, expectedHandleClass);
+            AssertNoInFlightLatency(env, defaultHandleClass);
         }
 
     } // namespace
@@ -476,6 +530,56 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), remainingRequestLatencyUs);
 
             CompleteForwardedVPut(env, std::move(secondForwarded));
+        }
+
+        Y_UNIT_TEST(PatchInFlightLatencyUsesExtQueueId) {
+            const TLogoBlobID originalBlobId(1, 1, 1, 0, 1, 0);
+            const TLogoBlobID patchedBlobId(1, 1, 2, 0, 1, 0);
+
+            CheckPatchInFlightLatencyUsesExtQueueId(
+                [&](const TVDiskID& vdiskId) {
+                    return std::make_unique<TEvBlobStorage::TEvVPatchStart>(
+                        originalBlobId,
+                        patchedBlobId,
+                        vdiskId,
+                        TInstant::Max(),
+                        TMaybe<ui64>(),
+                        false);
+                },
+                TEvBlobStorage::EvVPatchStart,
+                NKikimrBlobStorage::EVDiskQueueId::GetFastRead,
+                "GetFast",
+                "GetAsync");
+
+            CheckPatchInFlightLatencyUsesExtQueueId(
+                [&](const TVDiskID& vdiskId) {
+                    return std::make_unique<TEvBlobStorage::TEvVPatchDiff>(
+                        TLogoBlobID(originalBlobId, 1),
+                        TLogoBlobID(patchedBlobId, 1),
+                        vdiskId,
+                        0,
+                        TInstant::Max(),
+                        TMaybe<ui64>());
+                },
+                TEvBlobStorage::EvVPatchDiff,
+                NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob,
+                "PutAsyncBlob",
+                "PutTabletLog");
+
+            CheckPatchInFlightLatencyUsesExtQueueId(
+                [&](const TVDiskID& vdiskId) {
+                    return std::make_unique<TEvBlobStorage::TEvVPatchXorDiff>(
+                        TLogoBlobID(originalBlobId, 1),
+                        TLogoBlobID(patchedBlobId, 1),
+                        vdiskId,
+                        1,
+                        TInstant::Max(),
+                        TMaybe<ui64>());
+                },
+                TEvBlobStorage::EvVPatchXorDiff,
+                NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob,
+                "PutAsyncBlob",
+                "PutTabletLog");
         }
 
     } // Y_UNIT_TEST_SUITE(TSkeletonFrontLatency)

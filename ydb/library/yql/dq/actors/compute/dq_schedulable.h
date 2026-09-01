@@ -46,9 +46,9 @@ struct IDqSchedulableWork {
 };
 
 ///
-/// Factory carried through TSourceArguments. Implementation lives in kqp
-/// scheduler; sources create per-actor/coroutine schedulable-work wrappers
-/// from it without pulling in kqp types.
+/// Factory carried through TSourceArguments. Implementation is provided by
+/// the scheduler layer; sources create per-actor/coroutine schedulable-work
+/// wrappers from it without pulling in scheduler internals.
 ///
 struct IDqSchedulerContext {
     virtual ~IDqSchedulerContext() = default;

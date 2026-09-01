@@ -211,6 +211,29 @@ void ShiftWindow(TTimeWindow& window, i64 offsetUs) {
     window.End = ShiftTimestamp(window.End, offsetUs);
 }
 
+void ShiftShardRead(NKqpProto::TKqpShardReadStats& shard, i64 offsetUs) {
+    if (shard.GetStartTimeMs()) {
+        shard.SetStartTimeMs(ShiftTimestamp(
+            TInstant::MilliSeconds(shard.GetStartTimeMs()), offsetUs).MilliSeconds());
+    }
+    if (shard.GetFinishTimeMs()) {
+        shard.SetFinishTimeMs(ShiftTimestamp(
+            TInstant::MilliSeconds(shard.GetFinishTimeMs()), offsetUs).MilliSeconds());
+    }
+}
+
+void ShiftShardReads(std::vector<NKqpProto::TKqpShardReadStats>& shards, i64 offsetUs) {
+    for (auto& shard : shards) {
+        ShiftShardRead(shard, offsetUs);
+    }
+}
+
+void ShiftShardAcks(std::vector<TShardAckDiagnostic>& shards, i64 offsetUs) {
+    for (auto& shard : shards) {
+        shard.AcknowledgedAt = ShiftTimestamp(shard.AcknowledgedAt, offsetUs);
+    }
+}
+
 void ShiftExecutionTrace(TExecutionTraceSnapshot& trace, i64 offsetUs) {
     ShiftWindow(trace.Timeline.Execute, offsetUs);
     for (auto& phase : trace.Timeline.Phases) {
@@ -220,37 +243,15 @@ void ShiftExecutionTrace(TExecutionTraceSnapshot& trace, i64 offsetUs) {
         ShiftWindow(stage.Window, offsetUs);
         for (auto& task : stage.InterestingTasks) {
             ShiftWindow(task.Window, offsetUs);
-            for (auto& shard : task.Shards) {
-                if (shard.GetStartTimeMs()) {
-                    shard.SetStartTimeMs(ShiftTimestamp(
-                        TInstant::MilliSeconds(shard.GetStartTimeMs()), offsetUs).MilliSeconds());
-                }
-                if (shard.GetFinishTimeMs()) {
-                    shard.SetFinishTimeMs(ShiftTimestamp(
-                        TInstant::MilliSeconds(shard.GetFinishTimeMs()), offsetUs).MilliSeconds());
-                }
-            }
+            ShiftShardReads(task.Shards, offsetUs);
         }
     }
-    for (auto& shard : trace.BufferLookup.Shards) {
-        if (shard.GetStartTimeMs()) {
-            shard.SetStartTimeMs(ShiftTimestamp(
-                TInstant::MilliSeconds(shard.GetStartTimeMs()), offsetUs).MilliSeconds());
-        }
-        if (shard.GetFinishTimeMs()) {
-            shard.SetFinishTimeMs(ShiftTimestamp(
-                TInstant::MilliSeconds(shard.GetFinishTimeMs()), offsetUs).MilliSeconds());
-        }
-    }
+    ShiftShardReads(trace.BufferLookup.Shards, offsetUs);
     ShiftWindow(trace.Commit.PrepareShards, offsetUs);
     ShiftWindow(trace.Commit.Coordinator, offsetUs);
     ShiftWindow(trace.Commit.ApplyShards, offsetUs);
-    for (auto& shard : trace.Commit.PreparedShards) {
-        shard.AcknowledgedAt = ShiftTimestamp(shard.AcknowledgedAt, offsetUs);
-    }
-    for (auto& shard : trace.Commit.CommittedShards) {
-        shard.AcknowledgedAt = ShiftTimestamp(shard.AcknowledgedAt, offsetUs);
-    }
+    ShiftShardAcks(trace.Commit.PreparedShards, offsetUs);
+    ShiftShardAcks(trace.Commit.CommittedShards, offsetUs);
 }
 
 void ShiftCompileAttempt(TCompileAttemptDiagnostic& attempt, i64 offsetUs) {

@@ -57,10 +57,17 @@ protected:
     }
 
 private:
+    NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataImpl(
+        const TString& cluster, const TString& table,
+        const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        ECompileDependencyPurpose purpose);
+
     template<typename TPath>
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataCache(
         const TString& cluster, const TPath& id, NYql::IKikimrGateway::TLoadTableMetadataSettings settings, const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        ECompileDependencyPurpose purpose = ECompileDependencyPurpose::QueryTable);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadIndexMetadataByPathId(
         const TString& cluster, const NKikimr::TIndexId& indexId, const TString& tableName, const TString& database,

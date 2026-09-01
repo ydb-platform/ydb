@@ -51,35 +51,31 @@ TUserFacingQueryDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery&
             table = table ? table : path;
         }
     };
+    auto noteTableSink = [&](const NKqpProto::TKqpInternalSink& sink) {
+        if (!sink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+            return;
+        }
+        NKikimrKqp::TKqpTableSinkSettings settings;
+        if (sink.GetSettings().UnpackTo(&settings)) {
+            if (const char* verb = GetTableSinkModeVerb(settings.GetType())) {
+                noteWriteVerb(verb);
+                noteTable(writeTable, multiWrite, settings.GetTable().GetPath());
+            }
+        }
+    };
     for (const auto& tx : query.GetTransactions()) {
         if (tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
             return {"DDL", "DDL"};
         }
         for (const auto& stage : tx.GetStages()) {
             for (const auto& sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() != NKqpProto::TKqpSink::kInternalSink
-                        || !sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    continue;
-                }
-                NKikimrKqp::TKqpTableSinkSettings settings;
-                if (sink.GetInternalSink().GetSettings().UnpackTo(&settings)) {
-                    if (const char* verb = GetTableSinkModeVerb(settings.GetType())) {
-                        noteWriteVerb(verb);
-                        noteTable(writeTable, multiWrite, settings.GetTable().GetPath());
-                    }
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                    noteTableSink(sink.GetInternalSink());
                 }
             }
             for (const auto& transform : stage.GetOutputTransforms()) {
-                if (transform.GetTypeCase() != NKqpProto::TKqpOutputTransform::kInternalSink
-                        || !transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    continue;
-                }
-                NKikimrKqp::TKqpTableSinkSettings settings;
-                if (transform.GetInternalSink().GetSettings().UnpackTo(&settings)) {
-                    if (const char* verb = GetTableSinkModeVerb(settings.GetType())) {
-                        noteWriteVerb(verb);
-                        noteTable(writeTable, multiWrite, settings.GetTable().GetPath());
-                    }
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink) {
+                    noteTableSink(transform.GetInternalSink());
                 }
             }
             for (const auto& op : stage.GetTableOps()) {

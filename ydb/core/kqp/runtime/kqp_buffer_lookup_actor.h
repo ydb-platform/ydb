@@ -44,6 +44,7 @@ public:
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const = 0;
     virtual ui32 LookupColumnsCount(ui64 cookie) const = 0;
 
+    virtual void ResetShardDiagnostics(bool collect) = 0;
     virtual void FillStats(NYql::NDqProto::TDqTaskStats* stats) = 0;
 
     // Clear all memory
@@ -73,7 +74,7 @@ struct TKqpBufferTableLookupSettings {
     TIntrusivePtr<TKqpCounters> Counters;
 
     NWilson::TTraceId ParentTraceId;
-    bool CollectDiagnostics = false;
+    bool CollectShardDiagnostics = false;
 
     TString Database;
     TString PoolId;

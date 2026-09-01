@@ -504,6 +504,7 @@ public:
     TVector<TDeferredBreakerInfo> DeferredBreakers;
 
     void CollectLockStats(const NKikimrQueryStats::TTxStats& txStats);
+    void CollectLockStats(const NKqpProto::TKqpLockStats& lockStats);
 
     void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
     void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);

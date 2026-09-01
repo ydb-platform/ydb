@@ -62,11 +62,12 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         return {devUploader, userUploader};
     }
 
-    void ExecSQL(TTestActorRuntime& runtime, TActorId sender, const TString& sql,
+    TString ExecSQL(TTestActorRuntime& runtime, TActorId sender, const TString& sql,
             bool devTracing, bool userTracing,
             Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
             const TString& sessionId = {}, ui32 proxyNodeIndex = 0, bool dml = true,
-            bool keepInCache = false, ui8 userVerbosity = 15, bool implicitTx = false) {
+            bool keepInCache = false, ui8 userVerbosity = 15, bool implicitTx = false,
+            const std::function<void(NKikimrKqp::TQueryRequest&)>& configure = {}) {
         THolder<NKqp::TEvKqp::TEvQueryRequest> request = MakeSQLRequest(sql, dml);
         if (implicitTx) {
             request->Record.MutableRequest()->ClearTxControl();
@@ -77,6 +78,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         }
         if (sessionId) {
             request->Record.MutableRequest()->SetSessionId(sessionId);
+        }
+        if (configure) {
+            configure(*request->Record.MutableRequest());
         }
         if (userTracing) {
             NWilson::TTraceId::NewTraceId(userVerbosity, 4095).Serialize(request->Record.MutableUserFacingTraceId());
@@ -89,11 +93,15 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             request.Release(), 0, 0, nullptr, std::move(devTrace)));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetYdbStatus(), code);
+        const TString txId = ev->Get()->Record.GetResponse().HasTxMeta()
+            ? ev->Get()->Record.GetResponse().GetTxMeta().id()
+            : TString{};
         if (runtime.IsRealThreads()) {
             Sleep(TDuration::Seconds(1));
         } else {
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
+        return txId;
     }
 
     const NWilson::TFakeWilsonUploader::TOtelSpan* FindSpan(
@@ -218,6 +226,50 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         uploader.Traces.clear();
     }
 
+    struct TUserTraceQueryOptions {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        TString SessionId;
+        ui32 ProxyNodeIndex = 0;
+        bool Dml = true;
+        bool KeepInCache = false;
+        ui8 Verbosity = 15;
+        bool ImplicitTx = false;
+    };
+
+    class TUserTraceHarness {
+    public:
+        TUserTraceHarness(TTestActorRuntime& runtime, TActorId sender,
+                TFakeWilsonUploader& devUploader, TFakeWilsonUploader& userUploader)
+            : Runtime_(runtime)
+            , Sender_(sender)
+            , DevUploader_(devUploader)
+            , UserUploader_(userUploader)
+        {}
+
+        void Run(const TString& sql, const TUserTraceQueryOptions& options = {}) {
+            Reset();
+            ExecSQL(Runtime_, Sender_, sql, /*devTracing*/ false, /*userTracing*/ true,
+                options.Status, options.SessionId, options.ProxyNodeIndex, options.Dml,
+                options.KeepInCache, options.Verbosity, options.ImplicitTx);
+            Validate();
+        }
+
+        void Reset() {
+            ClearUploader(DevUploader_);
+            ClearUploader(UserUploader_);
+        }
+
+        void Validate() {
+            AssertUserOnlyTrace(DevUploader_, UserUploader_);
+        }
+
+    private:
+        TTestActorRuntime& Runtime_;
+        TActorId Sender_;
+        TFakeWilsonUploader& DevUploader_;
+        TFakeWilsonUploader& UserUploader_;
+    };
+
     void CheckBasicVerbosity(TTestActorRuntime& runtime, TActorId sender,
         TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader);
     void CheckSensitiveQueryText(TTestActorRuntime& runtime, TActorId sender,
@@ -323,17 +375,15 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         auto [runtime, server, sender] = CreateServer();
         Y_UNUSED(server);
         auto [devUploader, userUploader] = RegisterUploaders(runtime);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, R"(
+        trace.Run(R"(
             CREATE TABLE `/Root/ForwardedTrace` (
                 Key Uint64,
                 PRIMARY KEY (Key)
             );
-        )",
-            /*devTracing*/ false, /*userTracing*/ true,
-            Ydb::StatusIds::SUCCESS, {}, 0, /*dml*/ false);
+        )", {.Dml = false});
 
-        AssertUserOnlyTrace(*devUploader, *userUploader);
         UNIT_ASSERT_C(FindSpan(*userUploader, "KQP proxy"), "forwarded script lost proxy snapshot");
         const auto* root = FindSpan(*userUploader, "DDL");
         UNIT_ASSERT_C(root, "forwarded DDL root span missing");
@@ -493,6 +543,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);",
             /*devTracing*/ false, /*userTracing*/ false);
         auto [devUploader, userUploader] = RegisterUploaders(runtime);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
         ExecSQL(runtime, sender,
             "SELECT SUM(value) AS total FROM `/Root/table-1` WHERE key > 0u;",
@@ -595,8 +646,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(queryTextChecked, "db.query.text attribute missing");
         AssertChildSpansAreWithinParents(*userUploader);
 
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        trace.Reset();
         ExecSQL(runtime, sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 200);",
             /*devTracing*/ true, /*userTracing*/ false);
@@ -606,14 +656,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(FindRootChild(*devUploader, "Session.query.QUERY_ACTION_EXECUTE"),
             "dev tree missing when user tracing is off");
 
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
-        ExecSQL(runtime, sender,
-            "UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 400);",
-            /*devTracing*/ false, /*userTracing*/ true);
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT_C(userUploader->BuildTraceTrees(),
-            "missing parents: " << DescribeMissingParents(*userUploader));
+        trace.Run("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 400);");
         UNIT_ASSERT_VALUES_EQUAL(userUploader->Traces.size(), 1u);
         UNIT_ASSERT_C(FindRootChild(*userUploader, "UPSERT /Root/table-1"),
             "user tree missing when dev tracing is off");
@@ -622,7 +665,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         const auto* commitShard = FindSpanWithAttribute(*userUploader, "ydb.shard_id");
         UNIT_ASSERT_C(commitShard && TStringBuf(commitShard->name()).StartsWith("Commit shard "),
             "immediate commit DataShard span missing");
-        AssertChildSpansAreWithinParents(*userUploader);
 
         CheckBasicVerbosity(runtime, sender, devUploader, userUploader);
         CheckSensitiveQueryText(runtime, sender, devUploader, userUploader);
@@ -630,14 +672,11 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
     void CheckQueryErrors(TTestActorRuntime& runtime, TActorId sender,
             TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, "SELECT * FRM `/Root/missing`;",
-            /*devTracing*/ false, /*userTracing*/ true, Ydb::StatusIds::GENERIC_ERROR);
+        trace.Run("SELECT * FRM `/Root/missing`;",
+            {.Status = Ydb::StatusIds::GENERIC_ERROR});
 
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
         AssertSpanStatus(FindSpan(*userUploader, "Compile"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "compile error was exported as successful");
@@ -646,9 +685,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         AssertSpanStatus(FindSpan(*userUploader, "EXECUTE"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "compile error root span was exported as successful");
-
-        userUploader->Spans.clear();
-        userUploader->Traces.clear();
 
         ExecSQL(runtime, sender, R"(
             CREATE TABLE `/Root/UniqueValues` (
@@ -662,12 +698,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         ExecSQL(runtime, sender,
             "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, 10u);",
             /*devTracing*/ false, /*userTracing*/ false);
-        ExecSQL(runtime, sender,
+        trace.Run(
             "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (2u, 10u);",
-            /*devTracing*/ false, /*userTracing*/ true,
-            Ydb::StatusIds::PRECONDITION_FAILED);
+            {.Status = Ydb::StatusIds::PRECONDITION_FAILED});
 
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
         AssertSpanStatus(FindSpan(*userUploader, "Execute"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "runtime error Execute span was exported as successful");
@@ -676,7 +710,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         AssertSpanStatus(FindSpan(*userUploader, "UPSERT /Root/UniqueValues"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "runtime error root span was exported as successful");
-        AssertChildSpansAreWithinParents(*userUploader);
     }
 
     void CheckClientLost(TTestActorRuntime& runtime, TActorId sender,
@@ -739,12 +772,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         auto [runtime, server, sender] = CreateServer(1, std::move(appConfig));
         CreateShardedTable(server, sender, "/Root", "table-1", 16, false);
         auto [devUploader, userUploader] = RegisterUploaders(runtime);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, "SELECT * FROM `/Root/table-1`;",
-            /*devTracing*/ false, /*userTracing*/ true);
-
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        trace.Run("SELECT * FROM `/Root/table-1`;");
 
         std::unordered_map<TString, size_t> tasksByStage;
         std::unordered_map<TString, size_t> shardsByTask;
@@ -784,11 +814,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         ExecSQL(runtime, sender, query, /*devTracing*/ false, /*userTracing*/ false,
             Ydb::StatusIds::SUCCESS, {}, 0, true, /*keepInCache*/ true);
         auto [devUploader, userUploader] = RegisterUploaders(runtime);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, query, /*devTracing*/ false, /*userTracing*/ true,
-            Ydb::StatusIds::SUCCESS, {}, 0, true, /*keepInCache*/ true);
+        trace.Run(query, {.KeepInCache = true});
 
-        AssertUserOnlyTrace(*devUploader, *userUploader);
         const auto* querySpan = FindSpanWithAttribute(*userUploader, "ydb.compile.cache_hit");
         UNIT_ASSERT_C(querySpan, "compile cache hit is not recorded on the query span");
         const auto* cacheHit = FindAttribute(*querySpan, "ydb.compile.cache_hit");
@@ -798,9 +827,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             "compile service span emitted for a local cache hit");
         UNIT_ASSERT_C(!FindSpan(*userUploader, "Compile query"),
             "compile actor span emitted for a cache hit");
-        AssertChildSpansAreWithinParents(*userUploader);
-
-        ClearUploader(*userUploader);
         ExecSQL(runtime, sender, "ALTER TABLE `/Root/table-1` ADD COLUMN extra Uint64;",
             /*devTracing*/ false, /*userTracing*/ false, Ydb::StatusIds::SUCCESS,
             {}, 0, /*dml*/ false);
@@ -815,16 +841,12 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         };
         previousFilter = runtime.SetEventFilter(filter);
 
-        ExecSQL(runtime, sender, query, /*devTracing*/ false, /*userTracing*/ true,
-            Ydb::StatusIds::SUCCESS, {}, 0, true, /*keepInCache*/ true);
+        trace.Run(query, {.KeepInCache = true});
         runtime.SetEventFilter(std::move(previousFilter));
 
         UNIT_ASSERT_VALUES_EQUAL(recompileRequests.load(), 1u);
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
         UNIT_ASSERT_C(FindSpan(*userUploader, "Compile"),
             "stale cache recompilation is missing from Compile");
-        AssertChildSpansAreWithinParents(*userUploader);
 
         CheckMultiStatementNaming(runtime, server, sender, devUploader, userUploader);
         CheckQueryErrors(runtime, sender, devUploader, userUploader);
@@ -834,16 +856,13 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             TActorId sender, TFakeWilsonUploader* devUploader,
             TFakeWilsonUploader* userUploader) {
         CreateShardedTable(server, sender, "/Root", "table-2", 1, false);
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, R"(
+        trace.Run(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);
             DELETE FROM `/Root/table-2` WHERE key = 2u;
-        )", /*devTracing*/ false, /*userTracing*/ true);
+        )");
 
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
         UNIT_ASSERT_C(FindRootChild(*userUploader, "EXECUTE SCRIPT"),
             "multi-statement query kept the first operation as its root name");
     }
@@ -937,15 +956,13 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
     void CheckDistributedCommit(TTestActorRuntime& runtime, TActorId sender,
             TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, R"(
+        trace.Run(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES
                 (1u, 10u), (4000000000u, 20u);
-        )", /*devTracing*/ false, /*userTracing*/ true);
+        )");
 
-        AssertUserOnlyTrace(*devUploader, *userUploader);
         UNIT_ASSERT_C(FindSpan(*userUploader, "Prepare shards"),
             "distributed commit prepare phase missing");
         UNIT_ASSERT_C(FindSpan(*userUploader, "Coordinator"),
@@ -957,18 +974,47 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             commitShards += TStringBuf(span.name()).StartsWith("Commit shard ");
         }
         UNIT_ASSERT_VALUES_EQUAL(commitShards, 2u);
+
+        bool injected = false;
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        auto filter = [&](TTestActorRuntimeBase& runtimeBase, TAutoPtr<IEventHandle>& ev) {
+            if (!injected
+                    && ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                const auto* result = ev->Get<NEvents::TDataEvents::TEvWriteResult>();
+                auto error = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                    result->Record.GetOrigin(),
+                    result->Record.GetTxId(),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
+                    "injected distributed commit failure");
+                runtime.Send(ev->Recipient, ev->Sender, error.release());
+                injected = true;
+                return true;
+            }
+            return previousFilter ? previousFilter(runtimeBase, ev) : false;
+        };
+        previousFilter = runtime.SetEventFilter(filter);
+        trace.Run(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES
+                (2u, 30u), (4000000001u, 40u);
+        )", {.Status = Ydb::StatusIds::UNAVAILABLE});
+        runtime.SetEventFilter(std::move(previousFilter));
+
+        UNIT_ASSERT_C(injected, "distributed commit failure was not injected");
+        AssertSpanStatus(FindSpan(*userUploader, "Commit"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "failed distributed commit was exported as successful");
+        UNIT_ASSERT_C(FindSpan(*userUploader, "Prepare shards"),
+            "failed distributed commit lost its prepare diagnostics");
     }
 
     void CheckBasicVerbosity(TTestActorRuntime& runtime, TActorId sender,
             TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, "SELECT * FROM `/Root/table-1`;",
-            /*devTracing*/ false, /*userTracing*/ true, Ydb::StatusIds::SUCCESS,
-            {}, 0, true, false, TComponentTracingLevels::TQueryProcessor::Basic);
+        trace.Run("SELECT * FROM `/Root/table-1`;", {
+            .Verbosity = TComponentTracingLevels::TQueryProcessor::Basic,
+        });
 
-        AssertUserOnlyTrace(*devUploader, *userUploader);
         UNIT_ASSERT(FindSpan(*userUploader, "KQP proxy"));
         UNIT_ASSERT(FindSpan(*userUploader, "Session"));
         UNIT_ASSERT(FindSpan(*userUploader, "Execute"));
@@ -1178,13 +1224,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
     void CheckSensitiveQueryText(TTestActorRuntime& runtime, TActorId sender,
             TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
 
-        ExecSQL(runtime, sender, "SELECT 1 -- password 'swordfish'",
-            /*devTracing*/ false, /*userTracing*/ true);
+        trace.Run("SELECT 1 -- password 'swordfish'");
 
-        UNIT_ASSERT(devUploader->Spans.empty());
         const TFakeWilsonUploader::TOtelSpan* querySpan = nullptr;
         for (const auto& span : userUploader->Spans) {
             if (FindAttribute(span, "db.query.text")) {
@@ -1209,25 +1252,21 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
     void CheckPartitionedBatch(TTestActorRuntime& runtime, TActorId sender,
             TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
         ExecSQL(runtime, sender, R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES
                 (1, 10), (2, 20), (3, 30), (4, 40);
         )", /*devTracing*/ false, /*userTracing*/ false);
-        ExecSQL(runtime, sender, "BATCH UPDATE `/Root/table-1` SET value = 100;",
-            /*devTracing*/ false, /*userTracing*/ true, Ydb::StatusIds::SUCCESS,
-            {}, 0, true, false, 15, /*implicitTx*/ true);
+        trace.Run("BATCH UPDATE `/Root/table-1` SET value = 100;", {
+            .ImplicitTx = true,
+        });
 
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
         size_t executions = 0;
         for (const auto& span : userUploader->Spans) {
             executions += span.name() == "Execute";
         }
         UNIT_ASSERT_C(executions > 1,
             "partitioned BATCH UPDATE exported only one or no child execution");
-        AssertChildSpansAreWithinParents(*userUploader);
     }
 
     Y_UNIT_TEST(ProductionSamplingAndSdkReadPaths) {
@@ -1279,8 +1318,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
     void CheckProxyForwarding(TTestActorRuntime& runtime, TServer::TPtr server,
             TActorId sender, TFakeWilsonUploader* devUploader,
             TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
         const TActorId remoteSender = runtime.AllocateEdgeActor(1);
@@ -1290,14 +1328,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_VALUES_EQUAL(createSession->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         const TString sessionId = createSession->Get()->Record.GetResponse().GetSessionId();
 
-        ExecSQL(runtime, sender, "SELECT * FROM `/Root/table-1`;",
-            /*devTracing*/ false, /*userTracing*/ true, Ydb::StatusIds::SUCCESS,
-            sessionId, /*proxyNodeIndex*/ 0);
-        runtime.SimulateSleep(TDuration::Seconds(1));
+        trace.Run("SELECT * FROM `/Root/table-1`;", {.SessionId = sessionId});
 
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT_C(userUploader->BuildTraceTrees(),
-            "missing parents: " << DescribeMissingParents(*userUploader));
         UNIT_ASSERT_VALUES_EQUAL(userUploader->Traces.size(), 1u);
         UNIT_ASSERT_C(FindRootChild(*userUploader, "SELECT /Root/table-1"),
             "forwarded request did not keep a single descriptive root");
@@ -1319,7 +1351,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             proxySpans += span.name() == "KQP proxy";
         }
         UNIT_ASSERT_VALUES_EQUAL(proxySpans, 2u);
-        AssertChildSpansAreWithinParents(*userUploader);
     }
 
     void CheckFullTextRead(NKqp::TKikimrRunner& kikimr,
@@ -1362,8 +1393,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
     void CheckBufferLookup(TTestActorRuntime& runtime, TActorId sender,
             TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
         ExecSQL(runtime, sender, R"(
             CREATE TABLE `/Root/UniqueValues` (
                 Key Uint32,
@@ -1384,23 +1414,71 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             return previousFilter ? previousFilter(runtimeBase, ev) : false;
         };
         previousFilter = runtime.SetEventFilter(filter);
-        ExecSQL(runtime, sender,
-            "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, 10u);",
-            /*devTracing*/ false, /*userTracing*/ true);
+        trace.Run("UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, 10u);");
         runtime.SetEventFilter(std::move(previousFilter));
 
         UNIT_ASSERT_C(bufferReads.load() > 0, "query did not use KQP buffer lookup actor");
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
         UNIT_ASSERT_C(FindReadShardSpan(*userUploader),
             "buffer lookup did not export a DataShard span");
-        AssertChildSpansAreWithinParents(*userUploader);
+        const bool hasIndexDependency = std::ranges::any_of(userUploader->Spans, [&](const auto& span) {
+            const auto* purpose = FindAttribute(span, "ydb.compile_dependency.purpose");
+            return purpose
+                && purpose->value().string_value() == "index_implementation";
+        });
+        UNIT_ASSERT_C(hasIndexDependency,
+            "index metadata dependencies are indistinguishable from query-table dependencies");
+
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
+            new NKqp::TEvKqp::TEvCreateSessionRequest()));
+        auto createSession = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvCreateSessionResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(createSession->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        const TString sessionId = createSession->Get()->Record.GetResponse().GetSessionId();
+
+        const auto beginTx = [](NKikimrKqp::TQueryRequest& request) {
+            request.ClearTxControl();
+            auto* control = request.MutableTxControl();
+            control->mutable_begin_tx()->mutable_serializable_read_write();
+            control->set_commit_tx(false);
+        };
+        const TString txId = ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (2u, 20u);",
+            /*devTracing*/ false, /*userTracing*/ false,
+            Ydb::StatusIds::SUCCESS, sessionId, 0, true, false, 15, false, beginTx);
+        UNIT_ASSERT_C(!txId.empty(), "explicit transaction id missing");
+
+        const auto continueTx = [&](bool commit) {
+            return [&, commit](NKikimrKqp::TQueryRequest& request) {
+                request.ClearTxControl();
+                auto* control = request.MutableTxControl();
+                control->set_tx_id(txId);
+                control->set_commit_tx(commit);
+            };
+        };
+
+        trace.Reset();
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (3u, 30u);",
+            /*devTracing*/ false, /*userTracing*/ true,
+            Ydb::StatusIds::SUCCESS, sessionId, 0, true, false, 15, false,
+            continueTx(false));
+        trace.Validate();
+        UNIT_ASSERT_C(FindReadShardSpan(*userUploader),
+            "sampled statement did not enable diagnostics on the existing transaction buffer");
+
+        trace.Reset();
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (7u, 70u);",
+            /*devTracing*/ false, /*userTracing*/ true,
+            Ydb::StatusIds::SUCCESS, sessionId, 0, true, false, 15, false,
+            continueTx(true));
+        trace.Validate();
+        UNIT_ASSERT_C(!FindReadShardSpan(*userUploader),
+            "buffer lookup diagnostics leaked from the preceding statement");
     }
 
     void CheckStreamLookup(TTestActorRuntime& runtime, TActorId sender,
             TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
-        ClearUploader(*devUploader);
-        ClearUploader(*userUploader);
+        TUserTraceHarness trace(runtime, sender, *devUploader, *userUploader);
         ExecSQL(runtime, sender, R"(
             CREATE TABLE `/Root/LookupTable` (
                 Key Uint32,
@@ -1423,7 +1501,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             return previousFilter ? previousFilter(runtimeBase, ev) : false;
         };
         previousFilter = runtime.SetEventFilter(filter);
-        ExecSQL(runtime, sender, R"(
+        trace.Run(R"(
             $data = AsList(
                 AsStruct(1u AS Key),
                 AsStruct(2147483648u AS Key));
@@ -1432,12 +1510,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             FROM AS_TABLE($data) AS a
             JOIN `/Root/LookupTable` AS b
             ON a.Key = b.Key;
-        )", /*devTracing*/ false, /*userTracing*/ true);
+        )");
         runtime.SetEventFilter(std::move(previousFilter));
 
         UNIT_ASSERT_C(streamReads.load() > 0, "query did not use KQP stream lookup actor");
-        UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT(userUploader->BuildTraceTrees());
         UNIT_ASSERT_C(FindReadShardSpan(*userUploader),
             "stream lookup did not export a DataShard span");
         const auto* join = FindSpan(*userUploader, "Join");
@@ -1446,7 +1522,6 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(operation);
         UNIT_ASSERT_VALUES_EQUAL(
             operation->value().string_value(), "Join");
-        AssertChildSpansAreWithinParents(*userUploader);
     }
 
     void CheckScanRead(NKqp::TKikimrRunner& kikimr,

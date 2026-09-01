@@ -3356,6 +3356,7 @@ struct TWriteSettings {
 
     bool EnableStreamWrite = false;
     ui64 QuerySpanId = 0;
+    ui64 BufferLookupDiagnosticsExecutionId = 0;
 };
 
 struct TBufferWriteMessage {
@@ -3413,7 +3414,6 @@ public:
         : SessionActorId(settings.SessionActorId)
         , MessageSettings(GetWriteActorSettings())
         , TxManager(settings.TxManager)
-        , CollectLookupDiagnostics(settings.CollectDiagnostics)
         , Alloc(settings.Alloc)
         , TypeEnv(std::make_shared<NKikimr::NMiniKQL::TTypeEnvironment>(*Alloc))
         , MemInfo("TKqpBufferWriteActor")
@@ -3717,7 +3717,7 @@ public:
             .Counters = Counters,
 
             .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
-            .CollectDiagnostics = CollectLookupDiagnostics,
+            .CollectShardDiagnostics = CollectBufferLookupDiagnostics,
             .Database = settings.Database,
         });
 
@@ -4298,6 +4298,13 @@ public:
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
             auto& settings = *ev->Get()->Settings;
+            if (BufferLookupDiagnosticsExecutionId != settings.BufferLookupDiagnosticsExecutionId) {
+                BufferLookupDiagnosticsExecutionId = settings.BufferLookupDiagnosticsExecutionId;
+                CollectBufferLookupDiagnostics = BufferLookupDiagnosticsExecutionId != 0;
+                ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
+                    actor->ResetShardDiagnostics(CollectBufferLookupDiagnostics);
+                });
+            }
             if (!WriteInfos.empty()) {
                 AFL_ENSURE(LockTxId == settings.TransactionSettings.LockTxId);
                 AFL_ENSURE(LockNodeId == settings.TransactionSettings.LockNodeId);
@@ -6307,7 +6314,8 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
-    bool CollectLookupDiagnostics = false;
+    bool CollectBufferLookupDiagnostics = false;
+    ui64 BufferLookupDiagnosticsExecutionId = 0;
     std::unique_ptr<TCommitDiagnosticsCapture> CommitDiagnosticsCapture;
 
     ui64 LocksBrokenAsBreaker = 0;
@@ -6658,6 +6666,7 @@ private:
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .QuerySpanId = Settings.GetQuerySpanId(),
+                .BufferLookupDiagnosticsExecutionId = Settings.GetBufferLookupDiagnosticsExecutionId(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {

@@ -25,8 +25,15 @@ enum class ECompileDependencyStatus {
     Error,
 };
 
+enum class ECompileDependencyPurpose {
+    QueryTable,
+    IndexImplementation,
+    ExternalDataSource,
+};
+
 struct TCompileDependencyDiagnostic {
     ECompileDependency Dependency;
+    ECompileDependencyPurpose Purpose = ECompileDependencyPurpose::QueryTable;
     TString Target;
     TInstant Start;
     TInstant End;
@@ -88,7 +95,8 @@ public:
 
     virtual ~ICompileDependencyDiagnostics() = default;
 
-    virtual THandle Begin(ECompileDependency dependency, TString target) = 0;
+    virtual THandle Begin(ECompileDependency dependency, TString target,
+        ECompileDependencyPurpose purpose = ECompileDependencyPurpose::QueryTable) = 0;
     virtual void Finish(THandle handle, ECompileDependencyStatus status) = 0;
 };
 
@@ -99,10 +107,11 @@ class TCompileDiagnosticsCollector final : public ICompileDependencyDiagnostics 
     };
 
 public:
-    THandle Begin(ECompileDependency dependency, TString target) override {
+    THandle Begin(ECompileDependency dependency, TString target,
+            ECompileDependencyPurpose purpose = ECompileDependencyPurpose::QueryTable) override {
         const TInstant start = TInstant::Now();
         std::lock_guard guard(Mutex);
-        return {.Id = AddLocked(dependency, std::move(target), start)};
+        return {.Id = AddLocked(dependency, purpose, std::move(target), start)};
     }
 
     void Finish(THandle handle, ECompileDependencyStatus status) override {
@@ -123,7 +132,8 @@ public:
     }
 
 private:
-    ui64 AddLocked(ECompileDependency dependency, TString target, TInstant start,
+    ui64 AddLocked(ECompileDependency dependency, ECompileDependencyPurpose purpose,
+            TString target, TInstant start,
             TInstant end = TInstant::Zero(),
             ECompileDependencyStatus status = ECompileDependencyStatus::Unknown) {
         const ui64 id = NextId++;
@@ -142,10 +152,10 @@ private:
             if (least == Dependencies.end()) {
                 return 0;
             }
-            *least = {id, {dependency, std::move(target), start, end, status}};
+            *least = {id, {dependency, purpose, std::move(target), start, end, status}};
             return id;
         }
-        Dependencies.push_back({id, {dependency, std::move(target), start, end, status}});
+        Dependencies.push_back({id, {dependency, purpose, std::move(target), start, end, status}});
         return id;
     }
 

@@ -29,6 +29,15 @@ struct TTimeWindow {
     }
 };
 
+inline auto ShardReadDiagnosticsRank(const NKqpProto::TKqpShardReadStats& shard) {
+    const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
+        && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
+    const ui64 durationMs = shard.GetStartTimeMs()
+            && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
+        ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
+    return std::tuple(failed, shard.GetRetries() > 0, durationMs);
+}
+
 class TShardReadDiagnosticsCollector {
 public:
     ui64 OnStart(ui64 shardId, TInstant now = TInstant::Now()) {
@@ -129,22 +138,15 @@ public:
     }
 
 private:
-    static auto Rank(const NKqpProto::TKqpShardReadStats& shard) {
-        const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
-            && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
-        const ui64 durationMs = shard.GetStartTimeMs()
-                && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
-            ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
-        return std::tuple(failed, shard.GetRetries() > 0, durationMs);
-    }
-
     size_t FindLessInterestingThan(const NKqpProto::TKqpShardReadStats& candidate) const {
         size_t result = Reads_.size();
         for (size_t i = 0; i < Reads_.size(); ++i) {
-            if (Rank(Reads_[i]) >= Rank(candidate)) {
+            if (ShardReadDiagnosticsRank(Reads_[i]) >= ShardReadDiagnosticsRank(candidate)) {
                 continue;
             }
-            if (result == Reads_.size() || Rank(Reads_[i]) < Rank(Reads_[result])) {
+            if (result == Reads_.size()
+                    || ShardReadDiagnosticsRank(Reads_[i])
+                        < ShardReadDiagnosticsRank(Reads_[result])) {
                 result = i;
             }
         }

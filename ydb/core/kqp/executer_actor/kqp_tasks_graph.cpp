@@ -3363,6 +3363,9 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
     settings.SetCollectAffectedRows(
         GetMeta().CollectAffectedRows && !settings.GetIsIndexImplTable());
 
+    if (GetMeta().CollectBufferLookupDiagnostics) {
+        settings.SetBufferLookupDiagnosticsExecutionId(GetMeta().ExecuterId.LocalId());
+    }
         // Use per-transaction QuerySpanId if available (for deferred effects),
         // otherwise fall back to global QuerySpanId; apply per-table suppression.
         {

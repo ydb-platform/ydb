@@ -2401,10 +2401,6 @@ public:
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
-                .CollectDiagnostics = [&] {
-                    const auto policy = MakeExecutionDiagnosticsPolicy(QueryState.get());
-                    return policy && policy->CollectBufferLookup;
-                }(),
             };
 
             settings.UserCtx = CreateUserContext();
@@ -3003,7 +2999,11 @@ public:
         }
 
         if (ExecuterId) {
-            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+            Send(ExecuterId, new TEvKqpBuffer::TEvError{
+                msg.StatusCode,
+                std::move(msg.Issues),
+                std::move(msg.Stats),
+                std::move(msg.CommitDiagnostics)}, IEventHandle::FlagTrackDelivery);
         } else {
             // No executer to forward to; emit victim TLI stats directly since
             // ProcessExecuterResult (which normally handles this) won't be called.
@@ -3050,7 +3050,11 @@ public:
                 {"traceId", TraceId()});
         }
 
-        Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+        Send(ExecuterId, new TEvKqpBuffer::TEvError{
+            msg.StatusCode,
+            std::move(msg.Issues),
+            std::move(msg.Stats),
+            std::move(msg.CommitDiagnostics)}, IEventHandle::FlagTrackDelivery);
     }
 
     void CollectSystemViewQueryStats(const TKqpQueryStats* stats, TDuration queryDuration,

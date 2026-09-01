@@ -11,13 +11,6 @@ bool Failed(Ydb::StatusIds::StatusCode status) {
         && status != Ydb::StatusIds::SUCCESS;
 }
 
-auto ShardRank(const NKqpProto::TKqpShardReadStats& shard) {
-    const ui64 durationMs = shard.GetStartTimeMs()
-            && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
-        ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
-    return std::tuple(Failed(shard.GetStatus()), shard.GetRetries() > 0, durationMs);
-}
-
 auto TaskRank(const TTaskTraceSnapshot& task) {
     return std::tuple(task.Failed, task.HasAnomaly(), task.SpilledBytes > 0, task.ReadRetries > 0,
         task.DurationUs());
@@ -38,6 +31,9 @@ auto ExecutionRank(const TExecutionTraceSnapshot& trace) {
     return std::tuple(Failed(trace.Status), anomalous, durationUs);
 }
 
+// Online shard collection, compile dependency collection, and final query-wide top-N intentionally
+// stay separate: they update entries differently, protect different in-flight state, and apply
+// distinct eviction rules; one generic container would obscure these invariants.
 template <class T, class TBetter>
 void RetainBest(std::vector<T>& items, size_t limit, TBetter better) {
     if (items.size() <= limit) {
@@ -223,7 +219,7 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
         }
     }
     RetainBest(shards, MaxShardTraceSnapshotsPerQuery, [](const auto& lhs, const auto& rhs) {
-        return ShardRank(lhs.Value) > ShardRank(rhs.Value);
+        return ShardReadDiagnosticsRank(lhs.Value) > ShardReadDiagnosticsRank(rhs.Value);
     });
     for (auto& shard : shards) {
         snapshots[shard.Execution].Stages[shard.Stage].InterestingTasks[shard.Task].Shards.push_back(
@@ -237,7 +233,7 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
                 snapshot.ShardsTruncated += originalShards[execution][stage][task]
                     - snapshot.Shards.size();
                 std::sort(snapshot.Shards.begin(), snapshot.Shards.end(), [](const auto& lhs, const auto& rhs) {
-                    return ShardRank(lhs) > ShardRank(rhs);
+                    return ShardReadDiagnosticsRank(lhs) > ShardReadDiagnosticsRank(rhs);
                 });
             }
         }
@@ -280,7 +276,7 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
         source.clear();
     }
     RetainBest(bufferShards, MaxBufferLookupDiagnosticsPerQuery, [](const auto& lhs, const auto& rhs) {
-        return ShardRank(lhs.Value) > ShardRank(rhs.Value);
+        return ShardReadDiagnosticsRank(lhs.Value) > ShardReadDiagnosticsRank(rhs.Value);
     });
     for (auto& shard : bufferShards) {
         snapshots[shard.Execution].BufferLookup.Shards.push_back(std::move(shard.Value));

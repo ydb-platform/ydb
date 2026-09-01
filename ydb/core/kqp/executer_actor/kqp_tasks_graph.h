@@ -224,6 +224,7 @@ struct TGraphMeta {
     bool CollectAffectedRows = false;
     bool AllowCheckpoints = false;
     bool CollectShardDiagnostics = false;
+    bool CollectBufferLookupDiagnostics = false;
     bool CollectTimeline = false;
 
     // TODO: stuff about shards on nodes should be private or protected.

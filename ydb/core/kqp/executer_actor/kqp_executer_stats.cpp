@@ -1154,6 +1154,26 @@ void TQueryExecutionStats::CollectLockStats(const NKikimrQueryStats::TTxStats& t
     }
 }
 
+void TQueryExecutionStats::CollectLockStats(const NKqpProto::TKqpLockStats& lockStats) {
+    LocksBrokenAsBreaker += lockStats.GetBrokenAsBreaker();
+    LocksBrokenAsVictim += lockStats.GetBrokenAsVictim();
+    for (ui64 id : lockStats.GetBreakerQuerySpanIds()) {
+        if (id != 0) {
+            BreakerQuerySpanIds.push_back(id);
+        }
+    }
+    const auto& deferredIds = lockStats.GetDeferredBreakerQuerySpanIds();
+    const auto& deferredNodeIds = lockStats.GetDeferredBreakerNodeIds();
+    for (size_t i = 0; i < static_cast<size_t>(deferredIds.size()); ++i) {
+        if (deferredIds[i] != 0) {
+            DeferredBreakers.push_back({
+                deferredIds[i],
+                i < static_cast<size_t>(deferredNodeIds.size()) ? deferredNodeIds[i] : 0u
+            });
+        }
+    }
+}
+
 void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
     CollectLockStats(txStats);
 
@@ -1201,25 +1221,7 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
             }
             BufferLookupDiagnostics.ShardsTruncated += extraStats.GetShardReadsTruncated();
         }
-        LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
-        LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
-        for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
-            if (id != 0) {
-                BreakerQuerySpanIds.push_back(id);
-            }
-        }
-        {
-            const auto& deferredIds = extraStats.GetLockStats().GetDeferredBreakerQuerySpanIds();
-            const auto& deferredNodeIds = extraStats.GetLockStats().GetDeferredBreakerNodeIds();
-            for (size_t i = 0; i < static_cast<size_t>(deferredIds.size()); ++i) {
-                if (deferredIds[i] != 0) {
-                    DeferredBreakers.push_back({
-                        deferredIds[i],
-                        i < static_cast<size_t>(deferredNodeIds.size()) ? deferredNodeIds[i] : 0u
-                    });
-                }
-            }
-        }
+        CollectLockStats(extraStats.GetLockStats());
     }
     UpdateStorageTables(taskStats, nullptr);
 }
@@ -1330,23 +1332,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         if (taskStats.HasExtra()) {
             NKqpProto::TKqpTaskExtraStats extraStats;
             if (taskStats.GetExtra().UnpackTo(&extraStats)) {
-                LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
-                LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
-                for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
-                    if (id != 0) {
-                        BreakerQuerySpanIds.push_back(id);
-                    }
-                }
-                const auto& deferredIds = extraStats.GetLockStats().GetDeferredBreakerQuerySpanIds();
-                const auto& deferredNodeIds = extraStats.GetLockStats().GetDeferredBreakerNodeIds();
-                for (size_t i = 0; i < static_cast<size_t>(deferredIds.size()); ++i) {
-                    if (deferredIds[i] != 0) {
-                        DeferredBreakers.push_back({
-                            deferredIds[i],
-                            i < static_cast<size_t>(deferredNodeIds.size()) ? deferredNodeIds[i] : 0u
-                        });
-                    }
-                }
+                CollectLockStats(extraStats.GetLockStats());
             }
         }
 
@@ -1431,13 +1417,15 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     }
                     durations.SumUs += durationUs;
                     ++durations.Count;
-                    ++stage.Tasks;
                     stage.FailedTasks += task.Failed;
-                    stage.CpuUs += task.ComputeCpuUs + task.BuildCpuUs;
-                    stage.InputRows += task.InputRows;
-                    stage.OutputRows += task.OutputRows;
-                    stage.WaitUs += task.WaitUs;
-                    stage.SpilledBytes += task.SpilledBytes;
+                    if (!CollectFullStats(StatsMode)) {
+                        ++stage.Tasks;
+                        stage.CpuUs += task.ComputeCpuUs + task.BuildCpuUs;
+                        stage.InputRows += task.InputRows;
+                        stage.OutputRows += task.OutputRows;
+                        stage.WaitUs += task.WaitUs;
+                        stage.SpilledBytes += task.SpilledBytes;
+                    }
                 }
                 if (task.Window) {
                     stage.Window.Start = stage.Window.Start == TInstant::Zero()

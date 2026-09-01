@@ -177,6 +177,8 @@ public:
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         TasksGraph.GetMeta().CollectShardDiagnostics = Request.DiagnosticsPolicy
             && Request.DiagnosticsPolicy->CollectShardSamples;
+        TasksGraph.GetMeta().CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy
+            && Request.DiagnosticsPolicy->CollectBufferLookup;
         TasksGraph.GetMeta().CollectTimeline = Request.DiagnosticsPolicy
             && Request.DiagnosticsPolicy->CollectTimeline;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {

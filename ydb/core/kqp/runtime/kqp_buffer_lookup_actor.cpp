@@ -79,7 +79,7 @@ public:
         , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
-        , ShardReadDiagnostics(Settings.CollectDiagnostics
+        , ShardReadDiagnostics(Settings.CollectShardDiagnostics
             ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
     }
@@ -830,6 +830,12 @@ public:
         Settings.Callbacks->OnLookupError(statusCode, id, message, subIssues);
     }
 
+    void ResetShardDiagnostics(bool collect) override {
+        ShardReadDiagnostics = collect
+            ? std::make_unique<TShardReadDiagnosticsCollector>()
+            : nullptr;
+    }
+
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) override {
         NYql::NDqProto::TDqTableStats* tableStats = nullptr;
         for (size_t i = 0; i < stats->TablesSize(); ++i) {
@@ -860,6 +866,7 @@ public:
             }
             if (ShardReadDiagnostics) {
                 ShardReadDiagnostics->Export(extraStats, 0);
+                ResetShardDiagnostics(true);
             }
             stats->MutableExtra()->PackFrom(extraStats);
             BrokenLocksCount = 0;

@@ -558,8 +558,14 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpUpgradeSubDomai
 {
     // Commit and Undo both walk the same subtree the upgrade touched
     // (schemeshard__operation_upgrade_subdomain.cpp:847, :993, :1045, :1051).
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
-        tx.GetUpgradeSubDomain().GetName(), 0);
+    //
+    // Unlike UpgradeSubDomain, this op's own Propose does not walk -- but the declaration
+    // does not need it to. DeclareSubTree runs its own ListSubTree over the in-memory tree
+    // at declaration time, and the decision is taken on a subdomain that is mid-upgrade and
+    // structurally frozen, so that set is the set the commit or undo rewrites.
+    return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(),
+        tx.GetUpgradeSubDomain().GetName(), 0, /*includeRoot=*/true,
+        TAffectedPath::EEffect::Alter);
 }
 
 } // namespace NOperation

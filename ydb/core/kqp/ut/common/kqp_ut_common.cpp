@@ -194,16 +194,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
             return new TSynchronizedStreamLogBackend(logStream, mutex);
         };
         if (settings.NodeCount > 1) {
-<<<<<<< HEAD
-            auto* logStream = settings.LogStream;
-            ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
-                runtime.SetLogBackendFactory([logStream]() {
-                    return new TStreamLogBackend(logStream);
-                });
-=======
             ServerSettings->SetLoggerInitializer([makeBackend](NActors::TTestActorRuntime& runtime) {
                 runtime.SetLogBackendFactory(makeBackend);
->>>>>>> 7aa69649b07 (Fixes TSAN/ASAN races when KQP tests capture logs into a shared TStringStream (#51698))
             });
         } else {
             ServerSettings->SetLogBackend(makeBackend());

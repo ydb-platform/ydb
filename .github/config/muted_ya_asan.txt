@@ -108,6 +108,7 @@ ydb/core/kqp/ut/view TCreateAndDropViewTest.ParsingSecurityInvoker
 ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
 ydb/core/mind/hive/ut THiveTestWithTenants.TestDrain
+ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/ut unittest.sole chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldHoldSafeBarrierForInflightWrite
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldKeepWatermarkWhenCopyFails

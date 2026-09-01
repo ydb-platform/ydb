@@ -234,6 +234,10 @@ protected:
         ActTestFSM(ctx);
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
+        ActTestFSM(ctx);
+    }
+
 public:
     TBaseTest(TTestConfig *cfg)
         : TActor(&TThis::StateRegister)
@@ -247,6 +251,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(NMon::TEvHttpInfoRes, Handle);
             //HFunc(NNodeWhiteboard::TEvWhiteboard::, Handle);
+            HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvTablet::TEvBoot, HandleBoot);
         }
     }
@@ -330,6 +335,8 @@ public:
 };
 
 class TTestHttpPostReaction : public TBaseTest {
+    // Shared control inspected after each HTTP state transition.
+    TControlWrapper Control{10};
     TAutoPtr<THttpRequest> HttpRequest;
     NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
 
@@ -350,9 +357,8 @@ class TTestHttpPostReaction : public TBaseTest {
                 TAtomicBase value;
                 Dcb->GetValue("unexistentParameter", value, isControlExists);
                 ASSERT_YTHROW(!isControlExists, "Parameter mustn't be created by POST request");
-                VERBOSE_COUT("Testing POST request with an existentParameter");
-                TControlWrapper control(10);
-                Dcb->RegisterSharedControl(control, "existentParameter");
+                VERBOSE_COUT("Testing an explicit override");
+                Dcb->RegisterSharedControl(Control, "existentParameter");
                 Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
@@ -369,10 +375,16 @@ class TTestHttpPostReaction : public TBaseTest {
                 TAtomicBase value;
                 Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
-                ASSERT_YTHROW(value == 15, "Parameter haven't changed by POST request");
-                VERBOSE_COUT("Test of restoreDefaults POST request");
+                ASSERT_YTHROW(value == 15, "Parameter hasn't changed by POST request");
+                const auto override = Control.GetOverride();
+                ASSERT_YTHROW(override && *override == 15, "Explicit override was not recorded");
+                auto counters = GetServiceCounters(Counters, "utils");
+                ASSERT_YTHROW(
+                    counters->GetCounter("Icb/ChangedControlsCount")->Val() == 1,
+                    "Explicit override was not counted");
+                VERBOSE_COUT("Testing an update of an active override");
                 HttpRequest->CgiParameters.clear();
-                HttpRequest->CgiParameters.emplace("restoreDefaults", "");
+                HttpRequest->CgiParameters.emplace("existentParameter", "16");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             }
@@ -384,7 +396,112 @@ class TTestHttpPostReaction : public TBaseTest {
                 TAtomicBase value;
                 Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
-                ASSERT_YTHROW(value == 10,  "Parameter haven't restored default value");
+                ASSERT_YTHROW(value == 16, "Parameter hasn't changed by POST request");
+                const auto override = Control.GetOverride();
+                ASSERT_YTHROW(override && *override == 16, "Active override was not updated");
+                auto counters = GetServiceCounters(Counters, "utils");
+                ASSERT_YTHROW(
+                    counters->GetCounter("Icb/ChangedControlsCount")->Val() == 1,
+                    "Updating an active override changed the active-control count");
+                Control.UpdateDefault(16);
+                ASSERT_YTHROW(Control.GetOverride(), "Default update cleared the active override");
+                VERBOSE_COUT("Testing a flag-only clear by setting the current default");
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("existentParameter", "16");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            }
+            case 40:
+            {
+                ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
+                        "Unexpected response message type, expected is HttpInfoRes");
+                bool isControlExists;
+                TAtomicBase value;
+                Dcb->GetValue("existentParameter", value, isControlExists);
+                ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
+                ASSERT_YTHROW(value == 16, "Setting the default changed the numeric value");
+                ASSERT_YTHROW(!Control.GetOverride(), "Setting the default did not clear the override");
+                auto counters = GetServiceCounters(Counters, "utils");
+                ASSERT_YTHROW(
+                    counters->GetCounter("Icb/ChangedControlsCount")->Val() == 0,
+                    "Setting the default did not clear the active-control count");
+                const TString& answer = LastResponse.HttpResult->Answer;
+                const size_t historyPos = answer.find("<h3>History</h3>");
+                ASSERT_YTHROW(historyPos != TString::npos, "History section is missing");
+                ui32 historyRecords = 0;
+                size_t recordPos = historyPos;
+                while ((recordPos = answer.find("existentParameter", recordPos)) != TString::npos) {
+                    ++historyRecords;
+                    ++recordPos;
+                }
+                ASSERT_YTHROW(historyRecords == 3, "Flag-only clear was not added to history");
+                Control.UpdateDefault(10);
+                VERBOSE_COUT("Testing the per-control reset action");
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("existentParameter", "15");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            }
+            case 50:
+            {
+                ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
+                        "Unexpected response message type, expected is HttpInfoRes");
+                ASSERT_YTHROW(Control.GetOverride(), "Explicit override was not restored for the bulk-clear test");
+                auto counters = GetServiceCounters(Counters, "utils");
+                ASSERT_YTHROW(
+                    counters->GetCounter("Icb/ChangedControlsCount")->Val() == 1,
+                    "Explicit override was not counted before the per-control reset");
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("__icb_action", "resetOverride");
+                HttpRequest->CgiParameters.emplace("__icb_board", "dynamic");
+                HttpRequest->CgiParameters.emplace("__icb_control", "existentParameter");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            }
+            case 60:
+            {
+                ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
+                        "Unexpected response message type, expected is HttpInfoRes");
+                bool isControlExists;
+                TAtomicBase value;
+                Dcb->GetValue("existentParameter", value, isControlExists);
+                ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
+                ASSERT_YTHROW(value == 10, "Per-control reset hasn't restored the default value");
+                ASSERT_YTHROW(!Control.GetOverride(), "Per-control reset did not clear the override");
+                auto counters = GetServiceCounters(Counters, "utils");
+                ASSERT_YTHROW(
+                    counters->GetCounter("Icb/ChangedControlsCount")->Val() == 0,
+                    "Per-control reset did not clear the active-control count");
+                VERBOSE_COUT("Testing restoreDefaults POST request");
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("existentParameter", "15");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            }
+            case 70:
+            {
+                ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
+                        "Unexpected response message type, expected is HttpInfoRes");
+                ASSERT_YTHROW(Control.GetOverride(), "Explicit override was not restored for the bulk-clear test");
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("restoreDefaults", "");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            }
+            case 80:
+            {
+                ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
+                        "Unexpected response message type, expected is HttpInfoRes");
+                bool isControlExists;
+                TAtomicBase value;
+                Dcb->GetValue("existentParameter", value, isControlExists);
+                ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
+                ASSERT_YTHROW(value == 10, "RestoreDefaults hasn't restored the default value");
+                ASSERT_YTHROW(!Control.GetOverride(), "RestoreDefaults did not clear the override");
+                auto counters = GetServiceCounters(Counters, "utils");
+                ASSERT_YTHROW(
+                    counters->GetCounter("Icb/ChangedControlsCount")->Val() == 0,
+                    "RestoreDefaults did not clear the active-control count");
                 VERBOSE_COUT("Test is bounds pulling wokrs");
                 TControlWrapper control1(10, 5, 15);
                 TControlWrapper control2(10, 5, 15);
@@ -402,7 +519,7 @@ class TTestHttpPostReaction : public TBaseTest {
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             }
-            case 40:
+            case 90:
             {
                 ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
                         "Unexpected response message type, expected is HttpInfoRes");
@@ -435,6 +552,62 @@ public:
     {}
 };
 
+// Actor test for periodic counter reconciliation after non-HTTP mutations.
+class TTestCounterReconciliation : public TBaseTest {
+public:
+    TTestCounterReconciliation(TTestConfig *cfg)
+        : TBaseTest(cfg)
+    {}
+
+private:
+    // Dynamic control mutated without going through the ICB HTTP actor.
+    TControlWrapper Control{10};
+
+    void TestFSM(const TActorContext &ctx) override {
+        auto counters = GetServiceCounters(Counters, "utils");
+        auto changedCount = counters->GetCounter("Icb/ChangedControlsCount");
+        VERBOSE_COUT("Counter reconciliation test step " << TestStep);
+        switch (TestStep) {
+            case 0:
+            {
+                ASSERT_YTHROW(
+                    Dcb->RegisterSharedControl(Control, "periodicCounterControl"),
+                    "Error in control creation and registration");
+                TControlMutation mutation;
+                ASSERT_YTHROW(
+                    Dcb->SetValue("periodicCounterControl", 15, mutation),
+                    "External override was not applied");
+                ASSERT_YTHROW(Control.GetOverride(), "External override was not recorded");
+                ctx.Schedule(TDuration::MilliSeconds(2500), new TEvents::TEvWakeup());
+                break;
+            }
+            case 10:
+            {
+                ASSERT_YTHROW(
+                    changedCount->Val() == 1,
+                    "Periodic reconciliation did not count the external override");
+                TControlMutation mutation;
+                ASSERT_YTHROW(
+                    Dcb->ClearOverride("periodicCounterControl", mutation),
+                    "External override was not cleared");
+                ASSERT_YTHROW(!Control.GetOverride(), "External override remained active");
+                ctx.Schedule(TDuration::MilliSeconds(2500), new TEvents::TEvWakeup());
+                break;
+            }
+            case 20:
+                ASSERT_YTHROW(
+                    changedCount->Val() == 0,
+                    "Periodic reconciliation did not remove the external override");
+                SignalDoneEvent();
+                break;
+            default:
+                ythrow TWithBackTrace<yexception>()
+                    << "Unexpected TestStep " << TestStep << Endl;
+        }
+        TestStep += 10;
+    }
+};
+
 Y_UNIT_TEST_SUITE(IcbAsActorTests) {
     Y_UNIT_TEST(TestHttpGetResponse) {
         Run<TTestHttpGetResponse>();
@@ -442,6 +615,10 @@ Y_UNIT_TEST_SUITE(IcbAsActorTests) {
 
     Y_UNIT_TEST(TestHttpPostReaction) {
         Run<TTestHttpPostReaction>();
+    }
+
+    Y_UNIT_TEST(TestCounterReconciliation) {
+        Run<TTestCounterReconciliation>();
     }
 };
 

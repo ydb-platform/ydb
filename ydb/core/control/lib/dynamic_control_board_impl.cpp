@@ -45,12 +45,41 @@ void TDynamicControlBoard::RestoreDefault(TString name) {
 }
 
 bool TDynamicControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
-    TIntrusivePtr<TControl> control;
-    if (Board.Get(name, control)) {
-        outPrevValue = control->SetFromHtmlRequest(value);
-        return control->IsDefault();
+    TControlMutation mutation;
+    if (SetValue(std::move(name), value, mutation)) {
+        outPrevValue = mutation.Before.Value;
+        return !mutation.After.Overridden;
     }
     return true;
+}
+
+bool TDynamicControlBoard::SetValue(TString name, TAtomic value, TControlMutation& outMutation) {
+    TIntrusivePtr<TControl> control;
+    if (Board.Get(name, control)) {
+        outMutation = control->SetFromHtmlRequestWithState(value);
+        return true;
+    }
+    return false;
+}
+
+bool TDynamicControlBoard::ClearOverride(TString name, TControlMutation& outMutation) {
+    TIntrusivePtr<TControl> control;
+    if (Board.Get(name, control)) {
+        outMutation = control->ClearOverride();
+        return true;
+    }
+    return false;
+}
+
+ui64 TDynamicControlBoard::GetOverriddenCount() const {
+    ui64 count = 0;
+    for (const auto& bucket : Board.Buckets) {
+        TReadGuard guard(bucket.GetLock());
+        for (const auto& [_, control] : bucket.GetMap()) {
+            count += control->HasOverride();
+        }
+    }
+    return count;
 }
 
 // Only for tests

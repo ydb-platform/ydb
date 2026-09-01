@@ -36,6 +36,16 @@ TIntrusivePtr<TControl> TControlBoard::GetControlByName(const TString& name) con
     return nullptr;
 }
 
+ui64 TControlBoard::GetOverriddenCount() const {
+    ui64 count = 0;
+    for (const auto& [_, control] : GetAllAvailableControls()) {
+        if (control) {
+            count += control->HasOverride();
+        }
+    }
+    return count;
+}
+
 void TControlBoard::RegisterSharedControl(TControlWrapper& newControl, THotSwap<TControl>& icbControl) {
     auto oldControlValue = icbControl.AtomicLoad();
     if (oldControlValue) {

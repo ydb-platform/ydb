@@ -1,6 +1,7 @@
 #include "immediate_control_board_impl.h"
 #include "immediate_control_board_wrapper.h"
 #include "dynamic_control_board_impl.h"
+#include "immediate_control_board_html_renderer.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/mersenne64.h>
@@ -8,6 +9,8 @@
 #include <util/string/printf.h>
 #include <util/system/thread.h>
 #include <array>
+#include <tuple>
+#include <utility>
 
 namespace NKikimr {
 
@@ -57,6 +60,120 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
             UNIT_ASSERT_EQUAL(control->Get(), defaultValue);
             UNIT_ASSERT_EQUAL(control->GetDefault(), defaultValue);
         }
+    }
+
+    Y_UNIT_TEST(TestExplicitOverrideLifecycle) {
+        constexpr i64 defaultValue = 10;
+        TIntrusivePtr<TControl> control(new TControl(defaultValue, 0, 20));
+
+        UNIT_ASSERT(control->IsDefault());
+        UNIT_ASSERT_VALUES_EQUAL(control->SetFromHtmlRequest(defaultValue), defaultValue);
+        UNIT_ASSERT(control->IsDefault());
+        UNIT_ASSERT(!control->HasOverride());
+        UNIT_ASSERT(!control->GetOverride());
+
+        const TControlMutation overridden = control->SetFromHtmlRequestWithState(15);
+        UNIT_ASSERT(!overridden.Before.Overridden);
+        UNIT_ASSERT(overridden.After.Overridden);
+        UNIT_ASSERT_VALUES_EQUAL(overridden.After.Value, 15);
+
+        control->UpdateDefault(15);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 15);
+        UNIT_ASSERT_VALUES_EQUAL(control->GetDefault(), 15);
+        UNIT_ASSERT_VALUES_EQUAL(*control->GetOverride(), 15);
+
+        const TControlMutation clearedByDefault =
+            control->SetFromHtmlRequestWithState(15);
+        UNIT_ASSERT(clearedByDefault.Before.Overridden);
+        UNIT_ASSERT(!clearedByDefault.After.Overridden);
+        UNIT_ASSERT_VALUES_EQUAL(
+            clearedByDefault.Before.Value,
+            clearedByDefault.After.Value);
+
+        const TControlMutation clamped =
+            control->SetFromHtmlRequestWithState(25);
+        UNIT_ASSERT_VALUES_EQUAL(clamped.Before.Value, 15);
+        UNIT_ASSERT(!clamped.Before.Overridden);
+        UNIT_ASSERT_VALUES_EQUAL(clamped.After.Value, 20);
+        UNIT_ASSERT(clamped.After.Overridden);
+        UNIT_ASSERT_VALUES_EQUAL(*control->GetOverride(), 20);
+
+        const TControlMutation repeated =
+            control->SetFromHtmlRequestWithState(20);
+        UNIT_ASSERT_VALUES_EQUAL(repeated.Before.Value, repeated.After.Value);
+        UNIT_ASSERT_VALUES_EQUAL(repeated.Before.Default, repeated.After.Default);
+        UNIT_ASSERT_VALUES_EQUAL(repeated.Before.Overridden, repeated.After.Overridden);
+
+        control->UpdateDefault(20);
+        UNIT_ASSERT_VALUES_EQUAL(*control->GetOverride(), 20);
+        const TControlMutation clampedToDefault =
+            control->SetFromHtmlRequestWithState(25);
+        UNIT_ASSERT(clampedToDefault.Before.Overridden);
+        UNIT_ASSERT(!clampedToDefault.After.Overridden);
+        UNIT_ASSERT_VALUES_EQUAL(clampedToDefault.After.Value, 20);
+        UNIT_ASSERT(control->IsDefault());
+        UNIT_ASSERT(!control->GetOverride());
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 20);
+
+        control->UpdateDefault(5);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(control->GetDefault(), 5);
+    }
+
+    Y_UNIT_TEST(TestCoherentStateSnapshots) {
+        TIntrusivePtr<TControl> control(new TControl(0, -100000, 100000));
+        TAtomic writersDone = 0;
+        std::tuple<TControl*, TAtomic*, TAtomicBase> firstContext(
+            control.Get(), &writersDone, 1);
+        std::tuple<TControl*, TAtomic*, TAtomicBase> secondContext(
+            control.Get(), &writersDone, 2);
+
+        auto writerFunction = [](void* opaque) -> void* {
+            auto& [control, writersDone, overrideValue] =
+                *static_cast<std::tuple<TControl*, TAtomic*, TAtomicBase>*>(opaque);
+            for (ui32 i = 0; i < 100000; ++i) {
+                control->SetFromHtmlRequestWithState(overrideValue);
+                control->ClearOverride();
+            }
+            AtomicIncrement(*writersDone);
+            return nullptr;
+        };
+        TThread firstWriter(writerFunction, &firstContext);
+        TThread secondWriter(writerFunction, &secondContext);
+
+        firstWriter.Start();
+        secondWriter.Start();
+        do {
+            const TControlState state = control->GetState();
+            UNIT_ASSERT_VALUES_EQUAL(state.Default, 0);
+            if (state.Overridden) {
+                UNIT_ASSERT(state.Value == 1 || state.Value == 2);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(state.Value, state.Default);
+            }
+        } while (AtomicGet(writersDone) != 2);
+        firstWriter.Join();
+        secondWriter.Join();
+    }
+
+    Y_UNIT_TEST(TestHtmlShowsOverrideEqualToUpdatedDefault) {
+        TIntrusivePtr<TControl> control(new TControl(10, 0, 20));
+        control->SetFromHtmlRequest(20);
+        control->UpdateDefault(20);
+
+        UNIT_ASSERT(control->HasOverride());
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), control->GetDefault());
+
+        TControlBoardTableHtmlRenderer renderer;
+        renderer.AddNewTable("Controls", EControlBoardType::Dynamic);
+        renderer.AddTableItem("TestControl", control);
+        const TString html = renderer.GetHtml();
+
+        UNIT_ASSERT(html.find("<span>override</span>") != TString::npos);
+        UNIT_ASSERT(html.find("Reset override") != TString::npos);
+        UNIT_ASSERT(html.find("name='__icb_action' value='resetOverride'") != TString::npos);
+        UNIT_ASSERT(html.find("name='__icb_board' value='dynamic'") != TString::npos);
+        UNIT_ASSERT(html.find("name='__icb_control' value='TestControl'") != TString::npos);
     }
 
     Y_UNIT_TEST(TestControlWrapperAsI64) {
@@ -142,4 +259,3 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
 }
 
 } // namespace NKikimr
-

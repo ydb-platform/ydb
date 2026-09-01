@@ -9,8 +9,6 @@
 #include "plan.h"
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/json/yson/json2yson.h>
 
 #include <util/generic/string.h>
 

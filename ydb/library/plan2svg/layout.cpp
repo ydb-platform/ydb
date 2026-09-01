@@ -54,12 +54,8 @@ void TPlan::MarkLayout() {
         Height += nodeOffsetY; // only node header
         for (auto& node : Nodes) {
             node->OffsetY = nodeOffsetY;
-            node->Height =
-                (   // (node->OutputBytes != nullptr)
-                    + 4 /* 3xMEM, CPU */
-                    // + (node->InputBytes != nullptr)
-                    // + (node->IngressBytes != nullptr)
-                ) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
+            // three memory strips and one CPU strip
+            node->Height = 4 * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
             nodeOffsetY += (GAP_Y + node->Height);
         }
         NodeIndentY = nodeOffsetY;
@@ -156,11 +152,7 @@ void TPlan::CalcHotPath() {
     ui64 leftTime = 0;
     std::unordered_map<ui32, ui64> cpuPerStageTask;
     for (const auto& tvs : cpuTimes) {
-        if (cpuPerStageTask.contains(tvs.StageId)) {
-            cpuPerStageTask[tvs.StageId] = tvs.Value;
-        } else {
-            cpuPerStageTask.emplace(tvs.StageId, tvs.Value);
-        }
+        cpuPerStageTask[tvs.StageId] = tvs.Value;
         if (first) {
             currentStageId = tvs.StageId;
             leftTime = tvs.Time;

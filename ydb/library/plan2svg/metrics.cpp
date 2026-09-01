@@ -116,7 +116,8 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
         ui64 timeRight = MinTime + (MaxTime - MinTime) * i / TIME_SERIES_RANGES;
         Deriv[i].first = timeRight;
         while (itt != times.end() && *itt <= timeRight) {
-            ui64 delta = (*itv - prevValue);
+            // A history that goes down - memory being released - would wrap around here.
+            ui64 delta = (*itv > prevValue) ? (*itv - prevValue) : 0;
             if (prevTime >= timeLeft) {
                 Deriv[i].second += delta;
             } else {
@@ -134,7 +135,8 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
     }
 
     if (itt != times.end()) {
-        Deriv[TIME_SERIES_RANGES].second += (*itv - prevValue) * (*itt - MaxTime) / (*itt - prevTime);
+        ui64 delta = (*itv > prevValue) ? (*itv - prevValue) : 0;
+        Deriv[TIME_SERIES_RANGES].second += delta * (*itt - MaxTime) / (*itt - prevTime);
     }
     for (ui32 i = 1; i <= TIME_SERIES_RANGES; i++) {
         MaxDeriv = std::max(MaxDeriv, Deriv[i].second);

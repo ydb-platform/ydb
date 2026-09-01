@@ -1166,35 +1166,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
 
         ui32 y0 = INTERNAL_GAP_Y;
-/*
-        if (node->OutputBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            auto px = Config.TimelineLeft;
-            auto pw = Config.TimelineWidth;
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->OutputBytes.get(),
-                .Colors = Config.Palette.Output,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_output", Config.Palette.Output.Light, "0.0325 0.0325"},
-            });
-            PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.Output.Medium, Config.Palette.Output.Medium);
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-
-        if (node->MaxMemoryUsage) {
-            TString tooltip;
-            auto textSum = FormatTooltip(tooltip, "Memory", node->MaxMemoryUsage.get(), FormatBytes);
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->MaxMemoryUsage.get(),
-                .Colors = Config.Palette.Mem,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6"},
-            });
-        }
-*/
         ui32 px = Config.TimelineLeft;
         ui32 pw = Config.TimelineWidth - timelineDelta;
 
@@ -1221,11 +1192,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             builder << "</g>" << Endl;
         }
 
-/*
-            if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-                PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytes.Medium, Config.Palette.SpillingBytes.Light);
-            }
-*/
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (node->MemArrowDefault.Values.size() || node->MemMkqlAllocated.Values.size() || node->MemMkqlFreeList.Values.size()) {
@@ -1291,33 +1257,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             }
         }
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-/*
-        if (node->InputBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->InputBytes.get(),
-                .Colors = Config.Palette.Input,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_input", Config.Palette.Input.Light, "0.0325 0.0325"},
-            });
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-
-        if (node->IngressBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->IngressBytes.get(),
-                .Colors = Config.Palette.Ingress,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_ingress", Config.Palette.Ingress.Medium, "0.9 0.9"},
-            });
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-*/
         if (node->Tasks) {
             PrintUnfinishedTasks(builder, node->Tasks, node->FinishedTasks);
             builder

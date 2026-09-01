@@ -57,15 +57,6 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
         auto clusterNode = std::make_shared<TClusterNode>(nodeIdNode->GetIntegerSafe());
         ReadUi64(node, "Tasks", clusterNode->Tasks);
         ReadUi64(node, "FinishedTasks", clusterNode->FinishedTasks);
-        /*
-        if (auto* outputBytesNode = node.GetValueByPath("OutputBytes")) {
-            clusterNode->OutputBytes = std::make_shared<TSingleMetric>(&NodeOutputBytes, *outputBytesNode);
-            clusterNode->OutputBytes->FirstMessage.Min = clusterNode->OutputBytes->History.MinTime;
-            clusterNode->OutputBytes->FirstMessage.Max = clusterNode->OutputBytes->FirstMessage.Min;
-            clusterNode->OutputBytes->LastMessage.Max = clusterNode->OutputBytes->History.MaxTime;
-            clusterNode->OutputBytes->LastMessage.Min = clusterNode->OutputBytes->LastMessage.Max;
-        }
-        */
         if (auto* maxMemoryUsageNode = node.GetValueByPath("MaxMemoryUsage")) {
             clusterNode->MaxMemoryUsage = std::make_shared<TSingleMetric>(&NodeMaxMemoryUsage, *maxMemoryUsageNode);
             clusterNode->MaxMemoryUsage->MinMaxDistribution = false;
@@ -140,17 +131,9 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
             }
 
         }
-        /*
-        if (auto* inputBytesNode = node.GetValueByPath("InputBytes")) {
-            clusterNode->InputBytes = std::make_shared<TSingleMetric>(&NodeInputBytes, *inputBytesNode);
-        }
-        if (auto* ingressBytesNode = node.GetValueByPath("IngressBytes")) {
-            clusterNode->IngressBytes = std::make_shared<TSingleMetric>(&NodeIngressBytes, *ingressBytesNode);
-        }
-        */
         Nodes.push_back(clusterNode);
     }
- }
+}
 
 void TPlan::ResolveCteRefs() {
     if (CtePlanRef) {
@@ -242,46 +225,46 @@ void TPlan::ResolveOperatorInputs() {
 
 void TPlan::MergeTotalCpu(const std::shared_ptr<TSingleMetric>& cpuTime) {
 
-            std::vector<ui64> updatedCpuTimes;
-            std::vector<ui64> updatedCpuValues;
+    std::vector<ui64> updatedCpuTimes;
+    std::vector<ui64> updatedCpuValues;
 
-            auto itt = TotalCpuTimes.begin();
-            auto itv = TotalCpuValues.begin();
-            auto ith = cpuTime->History.Values.begin();
+    auto itt = TotalCpuTimes.begin();
+    auto itv = TotalCpuValues.begin();
+    auto ith = cpuTime->History.Values.begin();
 
-            ui64 v0 = 0;
-            ui64 v1 = 0;
-            ui64 t = 0;
+    ui64 v0 = 0;
+    ui64 v1 = 0;
+    ui64 t = 0;
 
-            while (itt != TotalCpuTimes.end() || ith != cpuTime->History.Values.end()) {
+    while (itt != TotalCpuTimes.end() || ith != cpuTime->History.Values.end()) {
 
-                if (itt == TotalCpuTimes.end()) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else if (ith == cpuTime->History.Values.end()) {
-                    t = *itt++;
-                    v0 = *itv++;
-                } else if (*itt == ith->first) {
-                    t = *itt++;
-                    v0 = *itv++;
-                    v1 = ith->second;
-                    ith++;
-                } else if (*itt > ith->first) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else {
-                    t = *itt++;
-                    v0 = *itv++;
-                }
+        if (itt == TotalCpuTimes.end()) {
+            t = ith->first;
+            v1 = ith->second;
+            ith++;
+        } else if (ith == cpuTime->History.Values.end()) {
+            t = *itt++;
+            v0 = *itv++;
+        } else if (*itt == ith->first) {
+            t = *itt++;
+            v0 = *itv++;
+            v1 = ith->second;
+            ith++;
+        } else if (*itt > ith->first) {
+            t = ith->first;
+            v1 = ith->second;
+            ith++;
+        } else {
+            t = *itt++;
+            v0 = *itv++;
+        }
 
-                updatedCpuTimes.push_back(t);
-                updatedCpuValues.push_back(v0 + v1);
-            }
+        updatedCpuTimes.push_back(t);
+        updatedCpuValues.push_back(v0 + v1);
+    }
 
-            TotalCpuTimes.swap(updatedCpuTimes);
-            TotalCpuValues.swap(updatedCpuValues);
+    TotalCpuTimes.swap(updatedCpuTimes);
+    TotalCpuValues.swap(updatedCpuValues);
 }
 
 // What one operator entry in the plan says about itself: the text drawn on it,

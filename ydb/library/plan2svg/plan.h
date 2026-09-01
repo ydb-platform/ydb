@@ -144,12 +144,9 @@ public:
     TSummaryMetric OperatorInputRows;
     TSummaryMetric OperatorOutputRows;
     TSummaryMetric StageInputThroughput;
-    TSummaryMetric NodeOutputBytes;
     TSummaryMetric NodeMemoryUsage;
     TSummaryMetric NodeMaxMemoryUsage;
     TSummaryMetric NodeCpuTime;
-    TSummaryMetric NodeInputBytes;
-    TSummaryMetric NodeIngressBytes;
     std::vector<ui64> TotalCpuTimes;
     std::vector<ui64> TotalCpuValues;
     TMetricHistory TotalCpuTime;

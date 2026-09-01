@@ -159,7 +159,7 @@ Y_UNIT_TEST(AddIndexCompact) {
 // update only to KQP to pin that authority boundary and ensure the skew still produces one coherent layout.
 // Existing indexes must keep accepting DML/read/drop across later KQP toggles.
 Y_UNIT_TEST_TWIN(KqpCompactFlagSkewKeepsSqlIndexTypeConsistent, SchemeShardCompact) {
-    auto kikimr = SchemeShardCompact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = SchemeShardCompact ? KikimrWithCompact(true) : Kikimr();
     auto db = kikimr.GetQueryClient();
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -1106,7 +1106,7 @@ Y_UNIT_TEST_TWIN(RecoveryBeforeAndAfterCompaction, WithRelevance) {
 // barriers, so this test has no sleeps or timing assumptions. Plain and relevance layouts share the same
 // posting lifecycle.
 Y_UNIT_TEST_TWIN(MultiShardBuildDmlAndRecovery, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -1183,7 +1183,7 @@ Y_UNIT_TEST_TWIN(MultiShardBuildDmlAndRecovery, WithRelevance) {
 // no-op DELETE and a new-row UPSERT in one request, as Query Service workloads do. A custom Utf8 PK also
 // exercises the auto-provisioned __ydb_row_id path used by fulltext indexes.
 Y_UNIT_TEST(DeleteMissingThenUpsertNewWithRowId) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(

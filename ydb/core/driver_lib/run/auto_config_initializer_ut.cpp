@@ -120,4 +120,76 @@ Y_UNIT_TEST(GetServicePoolsWith4AndMoreCPUs) {
     }
 }
 
+Y_UNIT_TEST(SharedAndUnitedAutoConfigMatrix) {
+    for (ui32 cpuCount = 1; cpuCount <= 4; ++cpuCount) {
+        for (const bool useSharedThreads : {false, true}) {
+            for (const bool useUnitedPool : {false, true}) {
+                NKikimrConfig::TActorSystemConfig config;
+                config.SetCpuCount(cpuCount);
+                config.SetUseSharedThreads(useSharedThreads);
+                config.SetUseUnitedPool(useUnitedPool);
+
+                ApplyAutoConfig(&config, false, false);
+
+                bool hasBasicPool = false;
+                for (const auto& executor : config.GetExecutor()) {
+                    if (executor.GetType() != NKikimrConfig::TActorSystemConfig::TExecutor::BASIC) {
+                        continue;
+                    }
+                    hasBasicPool = true;
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        executor.GetAllThreadsAreShared(), useUnitedPool,
+                        "cpu# " << cpuCount << " shared# " << useSharedThreads
+                        << " united# " << useUnitedPool << " pool# " << executor.GetName());
+                }
+                UNIT_ASSERT_C(hasBasicPool, "cpu# " << cpuCount << " produced no BASIC pools");
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(GetManualPoolsUseExecutorIndicesDirectly) {
+    NKikimrConfig::TActorSystemConfig config;
+
+    auto* placement = config.AddExecutor();
+    placement->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+    placement->SetThreads(1);
+    placement->SetPlacement(0);
+
+    auto* system = config.AddExecutor();
+    system->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+    system->SetName("System");
+
+    auto* user = config.AddExecutor();
+    user->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+    user->SetName("User");
+
+    auto* io = config.AddExecutor();
+    io->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
+    io->SetName("IO");
+
+    auto* batch = config.AddExecutor();
+    batch->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+    batch->SetName("Batch");
+
+    config.SetSysExecutor(1);
+    config.SetUserExecutor(2);
+    config.SetIoExecutor(3);
+    config.SetBatchExecutor(4);
+
+    auto* interconnect = config.AddServiceExecutor();
+    interconnect->SetServiceName("Interconnect");
+    interconnect->SetExecutorId(3);
+
+    auto* background = config.AddServiceExecutor();
+    background->SetServiceName("Background");
+    background->SetExecutorId(4);
+
+    const TASPools pools = GetASPools(config, false);
+    ASSERT_POOLS(pools, 1, 2, 4, 3, 3);
+
+    TMap<TString, ui32> services = GetServicePools(config, false);
+    UNIT_ASSERT_VALUES_EQUAL(services, (TMap<TString, ui32>{{"Background", 4}, {"Interconnect", 3}}));
+}
+
 } // Y_UNIT_TEST_SUITE(AutoConfig)

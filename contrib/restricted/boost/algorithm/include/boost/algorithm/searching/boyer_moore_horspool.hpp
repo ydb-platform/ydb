@@ -107,7 +107,6 @@ http://www-igm.univ-mlv.fr/%7Elecroq/string/node18.html
         /// 
         /// \param corpus_first The start of the data to search (Random Access Iterator)
         /// \param corpus_last  One past the end of the data to search
-        /// \param k_corpus_length The length of the corpus to search
         ///
         template <typename corpusIter>
         std::pair<corpusIter, corpusIter>

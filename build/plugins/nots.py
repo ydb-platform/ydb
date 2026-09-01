@@ -592,6 +592,20 @@ def _TS_LEGACY_CHECKS_CONFIGURE(unit: ymake.Unit) -> None:
     _setup_biome(unit)
 
 
+@ymake.macro
+def _TS_TSC_BUILD_COMMAND(unit: ymake.Unit) -> None:
+    commands = [
+        "tsc --project {} --incremental false --composite false --pretty".format(tsconfig_path)
+        for tsconfig_path in unit.get("TS_CONFIG_PATH").split()
+    ]
+    _set_ts_build_command(unit, " && ".join(commands))
+
+
+def _set_ts_build_command(unit: ymake.Unit, command: str) -> None:
+    unit.set(["_TS_BUILD_COMMAND", command])
+    unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(command.replace('"', '\\"'))])
+
+
 def _is_tests_enabled(unit: ymake.Unit) -> bool:
     return unit.get("CPP_ANALYSIS_MODE") != "yes"
 
@@ -871,12 +885,7 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
         unit.on_ts_proto_auto_configure()
         return
 
-    in_pj = _build_directives(["hide", "input"], ["package.json"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj])
-
     unit.set(["_TS_PROTO_AUTO_ARGS", ""])
-
-    unit.on_ts_configure()
     unit.on_node_modules_configure()
 
     if unit.get("_GRPC_ENABLED") == "yes":
@@ -906,6 +915,20 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
 def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
+
+    if _use_hermetic_node_modules(unit):
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import b_rooted
+
+        _configure_hermetic_node_modules(unit)
+        __set_append(
+            unit,
+            "_NODE_MODULES_INOUTS",
+            _build_directives(
+                ["hide", "input"],
+                [b_rooted(os.path.join(unit.get("MODDIR"), constants.NODE_MODULES_LAYER_FILENAME))],
+            ),
+        )
 
     if unit.get("_GRPC_ENABLED") == "yes":
         SUPPORTED_OUTPUT_SERVICES_VALUES = ["grpc-js", "generic-definitions", "default", "false", "none"]
@@ -937,6 +960,11 @@ def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()
         return
+
+    _prepare_deps_configure(unit)
+
+
+def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -983,9 +1011,20 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-    _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    _, outs, resources = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
+    if _use_hermetic_node_modules(unit):
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import b_rooted, s_rooted
+
+        _configure_hermetic_node_modules(unit)
+        outs.append(b_rooted(os.path.join(pm.module_path, constants.NODE_MODULES_LAYER_FILENAME)))
+        deps_lockfile_path = unit.resolve(s_rooted(os.path.join(deps_path, constants.PNPM_LOCKFILE_FILENAME)))
+        resources.extend(pkg.to_uri() for pkg in pm.extract_packages_meta_from_lockfiles([deps_lockfile_path]))
+        unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
+        unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+
     package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
     unit.set(
         [
@@ -1036,17 +1075,17 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
 
-    # remove "^./" and "/$"
-    # build/, ./build, ./build/ => build
-    # build/a/, ./build/a/, ./build/a => build/a
+    # remove leading "./" or "/" and trailing "/"
+    # build/, /build, ./build, ./build/ => build
+    # build/a/, /build/a, ./build/a/, ./build/a => build/a
     def _normalize_path(p):
         if p.startswith("./"):
             p = p[2:]
-        return p.rstrip("/")
+        return p.strip("/")
 
     # checks that build outputs contains in package.json#files
     # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
-    # TS_OUTPUTS(build) -- files: ["./build", "./build/", "build/"] ✅
+    # TS_OUTPUTS(build) -- files: ["/build", "./build", "./build/", "build/"] ✅
     # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
     # TS_OUTPUTS(dist) -- files: ["build"] ❌
     # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
@@ -1073,9 +1112,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
 
     after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
     if after_build_command:
-        build_command = "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command)
-        unit.set(["_TS_BUILD_COMMAND", build_command])
-        unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(build_command.replace('"', '\\"'))])
+        _set_ts_build_command(unit, "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command))
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":

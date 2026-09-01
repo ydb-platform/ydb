@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <windows.h>
 #include <boost/predef/platform.h>
+#include <boost/core/no_exceptions_support.hpp>
 
 #if BOOST_PLAT_WINDOWS_RUNTIME
 #include <mutex>

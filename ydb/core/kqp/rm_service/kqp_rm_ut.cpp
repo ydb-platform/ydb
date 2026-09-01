@@ -566,6 +566,17 @@ void KqpRm::ConcurrentChannels() {
             }, 0, 10, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
             UNIT_ASSERT_GT(failedAllocations.load(), 0);
+
+            // the channel quota manager exposes the node level memory pressure signal of its tx,
+            // DQ channels 2.0 propagate it to the senders as back pressure. The load above drives
+            // allocations to failure, so the cookie may well be set already - toggle it explicitly.
+            UNIT_ASSERT(tx->TotalMemoryCookie);
+            const bool reached = tx->TotalMemoryCookie->SpillingPercentReached.load();
+            tx->TotalMemoryCookie->SpillingPercentReached.store(true);
+            UNIT_ASSERT(qm->IsReasonableToUseSpilling());
+            tx->TotalMemoryCookie->SpillingPercentReached.store(false);
+            UNIT_ASSERT_VALUES_EQUAL(qm->IsReasonableToUseSpilling(), tx->IsReasonableToStartSpilling());
+            tx->TotalMemoryCookie->SpillingPercentReached.store(reached);
         }
 
         AssertResourceManagerStats(rm, 1000, 100);

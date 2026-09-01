@@ -108,15 +108,19 @@ protected:
             Canceling   // after TEvCancelRequest
         };
 
-        TRequest(const TActorId& workerActorId, const TString& sessionId, const TString& requestText = "", std::shared_ptr<ISessionUpdater> wmSessionUpdater = nullptr)
+        TRequest(const TActorId& workerActorId, const TString& sessionId, ui64 queryId, const TString& requestText = "", std::shared_ptr<ISessionUpdater> wmSessionUpdater = nullptr)
             : WorkerActorId(workerActorId)
             , SessionId(sessionId)
+            , QueryId(queryId)
             , RequestText(requestText)
             , WmSessionUpdater(wmSessionUpdater)
         {}
 
         const TActorId WorkerActorId;
         const TString SessionId;
+        // Echoed back on TEvContinueRequest so the session actor can drop
+        // stale/duplicate replies (see AcceptWmAdmissionReply).
+        const ui64 QueryId;
         const TString RequestText;
         const TInstant StartTime = TInstant::Now();
         TInstant ContinueTime;
@@ -198,13 +202,14 @@ private:
         this->Send(NWorkloadManager::MakeServiceId(this->SelfId().NodeId()), new TEvPrivate::TEvPlaceRequestIntoPoolResponse(DatabaseId, PoolId, sessionId));
 
         const TActorId& workerActorId = event->Sender;
+        const ui64 queryId = event->Get()->QueryId;
         if (!InFlightLimit) {
-            this->Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::PRECONDITION_FAILED, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Resource pool " << PoolId << " was disabled due to zero concurrent query limit")}));
+            this->Send(workerActorId, new TEvContinueRequest(queryId, Ydb::StatusIds::PRECONDITION_FAILED, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Resource pool " << PoolId << " was disabled due to zero concurrent query limit")}));
             return;
         }
 
         if (LocalSessions.contains(sessionId)) {
-            this->Send(workerActorId, new TEvContinueRequest(Ydb::StatusIds::INTERNAL_ERROR, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
+            this->Send(workerActorId, new TEvContinueRequest(queryId, Ydb::StatusIds::INTERNAL_ERROR, PoolId, PoolConfig, {NYql::TIssue(TStringBuilder() << "Got duplicate session id " << sessionId << " for pool " << PoolId)}));
             return;
         }
 
@@ -213,7 +218,7 @@ private:
             this->Schedule(cancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
         }
 
-        TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, requestText, wmSessionUpdater)}).first->second;
+        TRequest* request = &LocalSessions.insert({sessionId, TRequest(workerActorId, sessionId, queryId, requestText, wmSessionUpdater)}).first->second;
         Counters.LocalDelayedRequests->Inc();
 
         UpdatePoolConfig(ev->Get()->PoolConfig);
@@ -308,7 +313,7 @@ public:
     }
 
     void ReplyContinue(TRequest* request, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const NYql::TIssues& issues = {}) {
-        this->Send(request->WorkerActorId, new TEvContinueRequest(status, PoolId, PoolConfig, issues));
+        this->Send(request->WorkerActorId, new TEvContinueRequest(request->QueryId, status, PoolId, PoolConfig, issues));
         
         if (request->WmSessionUpdater) {
             request->WmSessionUpdater->SetRequestState(ISessionUpdater::EState::EXITED, TActivationContext::Now());

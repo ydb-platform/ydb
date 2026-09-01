@@ -86,7 +86,7 @@ void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream
 }
 
 void TStatsPrinter::PrintTimeline(const TString& plan, IOutputStream& output) {
-    TPlanVisualizer planVisualizer;
+    NPlan2Svg::TPlanVisualizer planVisualizer;
     planVisualizer.LoadPlans(plan);
     output.Write(planVisualizer.PrintSvg());
 }

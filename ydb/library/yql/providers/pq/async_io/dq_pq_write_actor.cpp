@@ -192,7 +192,7 @@ public:
         EgressStats.Level = statsLevel;
 
         if (SinkParams.GetDeferredPublicationExtIdPrefix()) {
-            YQL_ENSURE(!EnableDeduplication, "Deferred publications can not be used with deduplication");
+            YQL_ENSURE(!EnableDeduplication, "Deferred publications cannot be used with deduplication");
             YQL_ENSURE(false, "Deferred publications is not supported");
         }
     }

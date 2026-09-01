@@ -814,6 +814,11 @@ public:
     // ObservePathTouched, so a declaration that misses a path the operation actually
     // writes is caught instead of being trusted.
     const THashSet<TString>* CurrentDeclaredPaths = nullptr;
+    // The declared paths that have actually been written, accumulated so that completion can
+    // ask the reverse question. Armed and cleared in lockstep with CurrentDeclaredPaths --
+    // an observed set without the declared set beside it would be filled by operations whose
+    // declaration is exempt or knowingly partial, and then read as their fulfilment.
+    THashSet<TString>* CurrentObservedPaths = nullptr;
     // writeSite names the Persist* that wrote the row. A miss is otherwise reported as a
     // bare path, which does not say whether the operation forgot the path or merely
     // touched an incidental column on it -- the difference decides how to fix it.

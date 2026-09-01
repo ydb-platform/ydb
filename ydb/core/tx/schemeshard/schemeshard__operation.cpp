@@ -63,11 +63,13 @@ public:
     {
         if (operation && operation->DeclaredPathsUsable && !operation->DeclaredPathSet.empty()) {
             SS->CurrentDeclaredPaths = &operation->DeclaredPathSet;
+            SS->CurrentObservedPaths = &operation->ObservedPathSet;
         }
     }
 
     ~TDeclaredPathsGuard() {
         SS->CurrentDeclaredPaths = nullptr;
+        SS->CurrentObservedPaths = nullptr;
     }
 
 private:
@@ -388,6 +390,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
     if (!operation->DeclaredPathSet.empty()) {
         CurrentDeclaredPaths = &operation->DeclaredPathSet;
+        CurrentObservedPaths = &operation->ObservedPathSet;
     }
 
     // Parts constructed inside an operation write path rows of their own, and they are built
@@ -421,6 +424,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 operation->DeclaredPathsUsable = false;
                 operation->DeclaredPathSet.clear();
                 CurrentDeclaredPaths = nullptr;
+                CurrentObservedPaths = nullptr;
                 continue;
             }
             if (operation->DeclaredPathsUsable) {
@@ -578,6 +582,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         // the operation's own path writes unobserved.
         Y_DEFER {
             Self->CurrentDeclaredPaths = nullptr;
+            Self->CurrentObservedPaths = nullptr;
         };
 
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.

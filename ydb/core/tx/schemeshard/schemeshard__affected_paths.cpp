@@ -13,6 +13,30 @@ bool OperationDeclaresAffectedPaths(const TTxTransaction& tx) {
     });
 }
 
+std::optional<TString> FindUnfulfilledMustWrite(
+        const TVector<std::optional<TAffectedPaths>>& declared,
+        const THashSet<TString>& observed)
+{
+    for (const auto& entry : declared) {
+        // nullopt is an exempt operation type, not an empty declaration. Incomplete is a
+        // declaration that said up front it could not enumerate what it touches -- the
+        // observation set is not armed for it at all, so every entry would read as
+        // unfulfilled. Both mean the same thing here: no claim to hold anyone to.
+        if (!entry || entry->Incomplete) {
+            continue;
+        }
+        for (const auto& affected : entry->Paths) {
+            if (affected.Expect != TAffectedPath::EObservation::MustWrite) {
+                continue;
+            }
+            if (!observed.contains(affected.Path)) {
+                return affected.Path;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString& name) {
     // Canonized, not merely joined. WorkingDir arrives from the wire and may carry a
     // trailing slash ("/MyRoot/table/indexByValue/"), which JoinPath would turn into a

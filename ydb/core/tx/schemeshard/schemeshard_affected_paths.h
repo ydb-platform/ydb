@@ -2,8 +2,11 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+
+#include <optional>
 
 namespace NKikimr::NSchemeShard {
 
@@ -97,6 +100,40 @@ class TSchemeShard;
 // ya.make line -- and a suite added later is covered without anyone remembering anything.
 // Never set in production: the point of it is that it stops the tablet.
 inline bool UndeclaredPathTouchIsFatal = false;
+
+// The reverse check's own switch, deliberately separate from UndeclaredPathTouchIsFatal and
+// deliberately not set by TTestEnv yet.
+//
+// The mechanism below is wired and proven: poisoning a declaration with a path nobody writes
+// aborts naming that path and its txId. But arming it against the tree as it stands fails 94
+// tests across ut_base/ut_index/ut_backup_collection, and every case inspected is a real
+// over-declaration rather than a defect in the check. The common root is that
+// DeclareTargetByIdOrName falls back to DeclareChildOfWorkingDir when the request carries no
+// local path id, which stamps a by-name *alter* or *drop* with Effect::Create and
+// Expect::MustWrite -- a path-row write those operations never make. TAlterTable is the
+// clearest case: schemeshard__operation_alter_table.cpp contains no path-row Persist* call at
+// all, so /MyRoot/Table can never fulfil the MustWrite its declaration claims.
+//
+// Correcting those intents means re-auditing Effect/Expect across the declaration helpers and
+// their call sites, and it changes what the outbox records, so it is not folded in here. Arm
+// this from TTestEnv in the change that fixes them -- an unarmed check proves nothing.
+inline bool UnfulfilledPathDeclarationIsFatal = false;
+
+// The reverse half of the cross-check. ObservePathTouched tests written ⊆ declared, which
+// by construction cannot see an over-declaration: a declaration naming a path nobody writes
+// passes silently, so the six subtree walks recently added are verified only in the one
+// direction the tooling can see. This tests the other direction -- every entry the
+// declaration marked MustWrite got a write -- and is answerable only at completion, once
+// every phase has had its chance to write.
+//
+// Takes the flat inputs rather than a TOperation so the semantics are testable without
+// standing up a schemeshard, the way the declarations above already are. Returns the first
+// unfulfilled path so the caller can name it; MayWrite and ReferenceOnly are skipped, and
+// an Incomplete or exempt (nullopt) declaration demands nothing, because neither was ever
+// in a position to promise its list was whole.
+std::optional<TString> FindUnfulfilledMustWrite(
+    const TVector<std::optional<TAffectedPaths>>& declared,
+    const THashSet<TString>& observed);
 
 // The common shape: an object named directly under WorkingDir. The container is part of
 // it because creating or removing a child bumps the parent's DirAlterVersion, which is a

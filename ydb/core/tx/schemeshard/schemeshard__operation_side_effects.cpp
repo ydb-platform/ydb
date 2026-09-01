@@ -239,6 +239,10 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoFireFullBackupItemDone(ss, ctx);
 
     ResumeLongOps(ss, ctx);
+
+    // Last: by now Execute has returned, so every path write the finishing phase queued
+    // through TStorageChanges has been flushed and observed.
+    DoCheckDeclarations(ctx);
 }
 
 void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
@@ -1072,8 +1076,42 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
             };
         }
 
+        // Only here, on the successful-completion path. An operation that is rejected or
+        // aborted never reaches this loop, and holding a declaration it never got to act on
+        // against it would report a refusal as a wrong declaration.
+        //
+        // Gated the same way TDeclaredPathsGuard arms: an operation whose declaration was
+        // exempt or knowingly partial never armed the observation set, so its ObservedPathSet
+        // is empty for reasons that have nothing to do with what it wrote.
+        if (operation->DeclaredPathsUsable && !operation->DeclaredPathSet.empty()) {
+            CompletedOperations.push_back(operation);
+        }
+
         ss->Operations.erase(txId);
     }
+}
+
+void TSideEffects::DoCheckDeclarations(const TActorContext& ctx) {
+    for (const auto& operation : CompletedOperations) {
+        const auto missed = FindUnfulfilledMustWrite(
+            operation->DeclaredAffectedPaths, operation->ObservedPathSet);
+        if (!missed) {
+            continue;
+        }
+        // Same opt-in as the forward check, and fatal for the same reason: a counter the
+        // harness polls costs an edge-event round trip per modification, and the abort is
+        // what names the operation and the path that has to be fixed. Never set in
+        // production, where an over-declaration is a wrong outbox record and not a reason to
+        // stop the tablet.
+        Y_ABORT_UNLESS(!UnfulfilledPathDeclarationIsFatal,
+            "operation declared a path row it must write and did not: %s, txId: %" PRIu64,
+            missed->c_str(), ui64(operation->TxId));
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "unfulfilled path declaration"
+                << ", path: " << *missed
+                << ", txId: " << operation->TxId);
+    }
+    CompletedOperations.clear();
 }
 
 void TSideEffects::DoWaitShardCreated(TSchemeShard* ss, const TActorContext&) {

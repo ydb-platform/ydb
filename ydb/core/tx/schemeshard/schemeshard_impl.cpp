@@ -2388,7 +2388,17 @@ void TSchemeShard::ObservePathTouched(const TPathId& pathId, const char* writeSi
         return;
     }
     const TPath path = TPath::Init(pathId, this);
-    if (!path.IsResolved() || CurrentDeclaredPaths->contains(path.PathString())) {
+    if (!path.IsResolved()) {
+        return;
+    }
+    const TString pathString = path.PathString();
+    if (CurrentDeclaredPaths->contains(pathString)) {
+        // Only the intersection is recorded. The reverse check asks whether each declared
+        // MustWrite got a write, so a write to something outside the declaration adds
+        // nothing to the answer -- and the branch below is already about to report it.
+        if (CurrentObservedPaths) {
+            CurrentObservedPaths->insert(pathString);
+        }
         return;
     }
     // Every create and drop rewrites the domain row as path-count bookkeeping, whatever

@@ -13,6 +13,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard;
+struct TOperation;
 
 class TSideEffects: public TSimpleRefCount<TSideEffects> {
 public:
@@ -55,6 +56,13 @@ private:
     THashSet<TOperationId> ReadyToNotifyOperations;
     THashSet<TOperationId> DoneOperations;
     THashSet<TTxId> DoneTransactions;
+    // Operations DoDoneTransactions has just finished and dropped from TSchemeShard, held
+    // alive until their declarations can be checked. The check cannot run inside
+    // DoDoneTransactions itself: ApplyOnExecute is called *before* TStorageChanges::Apply in
+    // the progress, reply and plan transactions, so the path writes of the very phase that
+    // finished the operation are still queued at that point. ApplyOnComplete runs after
+    // Execute returned, which is the earliest moment every write is in.
+    TVector<TIntrusivePtr<TOperation>> CompletedOperations;
     THashSet<TShardIdx> ToDeleteShards;
     THashSet<TShardIdx> ToDeleteSystemShards;  // temporary: special case for deleting tenant's system shards
     TDeque<TDependence> Dependencies;
@@ -188,6 +196,8 @@ private:
     void DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
 
     void DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx);
+
+    void DoCheckDeclarations(const TActorContext& ctx);
 };
 
 }

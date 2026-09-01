@@ -28,6 +28,12 @@ struct TOperation: TSimpleRefCount<TOperation> {
     // progress write in transactions of their own.
     THashSet<TString> DeclaredPathSet;
 
+    // The subset of the above that actually got a path-row write, accumulated across every
+    // phase of the operation -- propose, plan and progress each write, and a declaration is
+    // only fulfilled by the union of them. Read once, at successful completion, against the
+    // MustWrite entries of DeclaredAffectedPaths.
+    THashSet<TString> ObservedPathSet;
+
     // Cleared once anything -- a requested transaction or a constructed part -- reports an
     // Incomplete declaration, and never set again for this operation. A plain clear of
     // DeclaredPathSet is not enough: parts are admitted in a loop, so a later part would

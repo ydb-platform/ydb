@@ -152,9 +152,8 @@ class YdbCluster:
         if cls.ydb_mon_port == 0:
             return []
 
-        # Получаем таймаут из переменной окружения, как в wait_ydb_alive
-        timeout = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 2 * 60))  # По умолчанию 20 минут
-        retry_interval = 2  # Интервал между попытками в секундах
+        timeout = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 2 * 60))
+        retry_interval = 2
 
         deadline = time() + timeout
         last_error = None
@@ -167,23 +166,23 @@ class YdbCluster:
                 if path is not None:
                     url += f'&path={path}&tablets=true'
 
-                headers = {}
-                # Добавляем таймаут для каждого запроса
                 request_timeout = min(30, deadline - time())
                 if request_timeout <= 0:
                     break
 
-                response = requests.get(url, headers=headers, timeout=request_timeout)
+                response = requests.get(url, headers={}, timeout=request_timeout)
                 response.raise_for_status()
                 data = response.json()
 
                 if not isinstance(data, dict):
                     raise Exception(f'Incorrect response type: {data}')
 
-                # Create nodes from the response
-                nodes = [YdbCluster.Node(n, load_kafka_port=load_kafka_port) for n in data.get('Nodes', [])]
+                raw_nodes = data.get('Nodes') or []
+                if not raw_nodes:
+                    raise Exception(f'Viewer returned an empty Nodes list from {url}')
 
-                # Filter nodes by role if specified
+                nodes = [YdbCluster.Node(n, load_kafka_port=load_kafka_port) for n in raw_nodes]
+
                 if role is not None:
                     nodes = [node for node in nodes if node.role == role]
 
@@ -193,13 +192,11 @@ class YdbCluster:
                 last_error = e
                 LOGGER.debug(f'Failed to get cluster nodes: {e}. Retrying in {retry_interval}s...')
 
-                # Проверяем, есть ли время для следующей попытки
                 if time() + retry_interval >= deadline:
                     break
 
                 sleep(retry_interval)
 
-        # Если все попытки неудачны, логируем ошибку и возвращаем пустой список
         LOGGER.error(f'Failed to get cluster nodes after {timeout}s timeout. Last error: {last_error}')
         return []
 

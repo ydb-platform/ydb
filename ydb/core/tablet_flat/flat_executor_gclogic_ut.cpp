@@ -13,16 +13,11 @@ TLogoBlobID HistoryCutterUtBlob(ui64 tabletId, ui32 generation, ui32 channel) {
     return TLogoBlobID(tabletId, generation, 0, channel, HistoryCutterUtBlobSize, 0);
 }
 
-// Build a minimal cookie allocator for TExecutorGCLogic unit tests.
-// The allocator is only exercised during WriteToLog/SendCollectGarbage paths;
-// ApplyLogEntry only touches ChannelInfo and HistoryCutter, so a single-entry
-// slot array with a wide cookie range is sufficient.
-// The caller owns the returned pointer and must pass it to TExecutorGCLogic.
+// The allocator is only exercised on the WriteToLog/SendCollectGarbage paths;
+// ApplyLogEntry touches only ChannelInfo and HistoryCutter.
 TAutoPtr<NPageCollection::TSteppedCookieAllocator> MakeGCCookies(
         const TTabletStorageInfo& info, ui32 generation = 1) {
-    // Register every channel present in info so the allocator slot map does
-    // not assert on an unknown channel.  GroupBy() is never called in the
-    // test paths we exercise, so the group value is a placeholder.
+    // Every channel needs a slot or the allocator asserts; the group is a placeholder.
     TVector<NPageCollection::TSlot> slots;
     for (ui32 ch = 0; ch < (ui32)info.Channels.size(); ++ch) {
         const ui32 group = info.Channels[ch].History.empty()
@@ -290,16 +285,10 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT(cutter.GetHistoryToCut(0).empty());
     }
 
-    // ApplyDelta must call HistoryCutter.SeenBlob for every
-    // blob in delta.Deleted so that a pending DoNotKeep mark pins the history
-    // entry that resolves the blob's generation to a group.  Without the call
-    // the entry could be cut before GC delivers the flag, making the group
-    // irresolvable.
-    //
-    // Ablation: remove the HistoryCutter.SeenBlob(blobId) call inside the
-    // delta.Deleted loop in ApplyDelta.  With that line absent, GetHistoryToCut
-    // returns the [10, 100) entry (no blob was observed there), so the
-    // UNIT_ASSERT below fails.  Restoring the call makes the test pass.
+    // A pending DoNotKeep mark must pin the history entry that resolves its
+    // blob's generation to a group, or the entry is cut before GC delivers the
+    // flag and the group becomes irresolvable. Ablation: drop the SeenBlob call
+    // in ApplyDelta's delta.Deleted loop and GetHistoryToCut returns [10, 100).
     Y_UNIT_TEST(DeletedBlobInApplyDeltaPinsHistoryEntry) {
         const ui64 tabletId = 30;
 

@@ -1068,6 +1068,15 @@ private:
             LockSendTime.erase(it);
         }
 
+        auto lockIt = Reads.findLock(requestId);
+        if (lockIt == Reads.endLocks() || lockIt->second.State != TLockState::EState::Running) {
+            YDB_LOG_DEBUG("Dropped result for stale/blocked lock request",
+                {"logPrefix", this->LogPrefix},
+                {"requestId", requestId},
+                {"status", record.GetStatus()});
+            return;
+        }
+
         auto getIssues = [&record]() {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1159,10 +1168,7 @@ private:
 
         ReleaseLockQuota(requestId);
 
-        auto lockIt = Reads.findLock(requestId);
-        if (lockIt != Reads.endLocks()) {
-            Reads.eraseLock(lockIt->second);
-        }
+        Reads.eraseLock(lockIt->second);
 
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;

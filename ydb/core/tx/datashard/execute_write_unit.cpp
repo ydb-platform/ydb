@@ -118,7 +118,7 @@ public:
     }
 
     // Serializes the parts of a write result that must be replayed when the same
-    // pipelined uncommitted write is delivered again (Status, Issues, TxStats).
+    // uncommitted write is delivered again (Status, Issues, TxStats).
     static TString SerializeWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record) {
         NKikimrDataEvents::TEvWriteResult stored;
         stored.SetStatus(record.GetStatus());
@@ -301,7 +301,7 @@ public:
             for (const auto& lock : locks) {
                 Y_ENSURE(lock.IsError()
                              || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == maxRequested),
-                         "Pipelined write " << writerIndex << ":" << maxRequested
+                         "Uncommitted write " << writerIndex << ":" << maxRequested
                          << " reported lock with " << lock.WriterIndex << ":" << lock.WriteSeqNum);
             }
         }
@@ -985,7 +985,7 @@ public:
 
         op->ResetCurrentTimer();
 
-        if (txc.DB.HasChanges() && !writeOp->IsPipelinedWrite()) {
+        if (txc.DB.HasChanges()) {
             op->SetWaitCompletionFlag(true);
         }
 

@@ -100,9 +100,7 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
         op->SetFinishProposeTs(DataShard.ConfirmReadOnlyLease());
     }
 
-    if (!op->HasResultSentFlag() &&
-        (op->IsDirty() || op->HasVolatilePrepareFlag() || writeOp->IsPipelinedWrite() || !Pipeline.WaitCompletion(op)))
-    {
+    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op))) {
         DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
         op->SetProposeResultSentEarly();
         CompleteRequest(op, ctx);

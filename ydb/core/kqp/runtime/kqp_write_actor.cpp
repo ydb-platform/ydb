@@ -481,8 +481,8 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
-        , PipelinedWrites(
-              AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()
+        , AttachWriteSeqNum(
+              AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
               && !inconsistentTx
               && !isOlap
               && lockTxId != 0)
@@ -1373,8 +1373,8 @@ public:
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
 
-        // Set per-operation WriteSeqNum for pipelined uncommitted writes
-        if (PipelinedWrites && !isPrepare && !isImmediateCommit && !InconsistentTx) {
+        // Set per-operation WriteSeqNum for uncommitted writes
+        if (AttachWriteSeqNum && !isPrepare && !isImmediateCommit && !InconsistentTx) {
             const size_t opCount = evWrite->Record.OperationsSize();
             auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId);
             if (allocated) {
@@ -1734,12 +1734,10 @@ private:
     const ui64 LockNodeId;
     const bool InconsistentTx;
     const bool IsOlap;
-    const bool PipelinedWrites;
+    const bool AttachWriteSeqNum;
     // This writer's id in the uncommitted write chain; one write actor per table today.
     static constexpr ui64 WriterIndex = 0;
-    // Seq nums of the batch in flight at each shard, kept until the shard acks it.
-    // Assumes at most one batch in flight per shard; must become per-cookie
-    // (shardId -> cookie -> seq nums) before inflight > 1 is enabled.
+    // Seq nums of the batch in flight at each shard, reused on resend until the shard acks it.
     THashMap<ui64, TVector<ui64>> InFlightWriteSeqNum;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

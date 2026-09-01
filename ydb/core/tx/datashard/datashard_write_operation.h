@@ -258,13 +258,6 @@ public:
         return ++PageFaultCount;
     }
 
-    bool IsPipelinedWrite() const {
-        return PipelinedWrite;
-    }
-    void SetPipelinedWriteFlag(bool val = true) {
-        PipelinedWrite = val;
-    }
-
     const TValidatedWriteTx::TPtr& GetWriteTx() const {
         return WriteTx;
     }
@@ -315,7 +308,6 @@ private:
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
 
     ui64 PageFaultCount = 0;
-    bool PipelinedWrite = false;
 };
 
 } // NDataShard

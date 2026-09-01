@@ -1817,9 +1817,6 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             << opsWithWriteSeqNum << " of " << rec.OperationsSize());
         return writeOp;
     }
-    if (hasWriteSeqNum && AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()) {
-        writeOp->SetPipelinedWriteFlag();
-    }
 
     // Make config checks for immediate op.
     if (writeOp->IsImmediate()) {

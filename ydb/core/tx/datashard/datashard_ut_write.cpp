@@ -4489,11 +4489,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteChain) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumChain) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4527,11 +4527,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteSeqNumGap) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumGap) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4567,11 +4567,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\n");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteMultipleWriters) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumMultipleWriters) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4594,11 +4594,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_C(result.GetIssues(0).message().Contains("got 1"), result.GetIssues(0).message());
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteCommitIndexMismatch) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumCommitIndexMismatch) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4629,11 +4629,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteCommitExtraWriter) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumCommitExtraWriter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4665,11 +4665,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteCommitWithoutWriteSeqNum) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumCommitWithoutWriteSeqNum) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4697,11 +4697,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyApplied) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumAlreadyApplied) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4762,11 +4762,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     // A multi-operation write (WriteSeqNums [1, 2]) must be detected as a duplicate
     // when resent, not rejected as STATUS_BAD_REQUEST on the first operation.
-    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedMultiOperation) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumAlreadyAppliedMultiOperation) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4877,11 +4877,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     // A write that applies no rows still takes a position in the chain
-    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedMissingRow) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumAlreadyAppliedMissingRow) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4929,11 +4929,15 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteRepliesBeforeCommit) {
+    // WriteSeqNum is restored from the Locks table after a reboot (no in-memory
+    // migration): seq 1 then 2 persist, then seq 3 continues the chain, a gap
+    // and a stale duplicate are still detected.
+    Y_UNIT_TEST(UncommittedWriteSeqNumRestoredFromStorage) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+        serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4941,151 +4945,57 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto& columns = opts.Columns_;
         const ui64 shard = shards.at(0);
+
+        const ui64 lockTxId = 1234567890001;
         const ui64 lockNodeId = runtime.GetNodeId(0);
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
-        TBlockEvents<TEvTablet::TEvCommit> blockedCommits(runtime,
-            [&](const TEvTablet::TEvCommit::TPtr& ev) { return ev->Get()->TabletID == shard; });
-
-        const ui64 lockTxId1 = 1234567890001;
-        NLongTxService::TLockHandle lockHandle1(lockTxId1, runtime.GetActorSystem(0));
-        {
-            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId1, lockNodeId, 1, 11, 0, 1);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks().at(0)).GetWriteSeqNum(), 1u);
-        }
-
-        // The reply above was released before the executor even issued the commit
-        runtime.WaitFor("pipelined write commit", [&]{ return blockedCommits.size() >= 1; });
-
-        // Legacy (no WriteSeqNum) must still wait for persistence.
-        const ui64 lockTxId2 = 1234567890002;
-        NLongTxService::TLockHandle lockHandle2(lockTxId2, runtime.GetActorSystem(0));
-        auto legacySender = runtime.AllocateEdgeActor();
-        {
-            auto req = MakeWriteRequestOneKeyValue(std::nullopt,
-                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
-                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-                tableId, columns, 2, 22);
-            req->SetLockId(lockTxId2, lockNodeId);
-            runtime.SendToPipe(shard, legacySender, req.release());
-        }
-
-        {
-            auto ev = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(legacySender, TDuration::MilliSeconds(200));
-            UNIT_ASSERT_C(!ev, "Legacy uncommitted write must not reply while its commit is blocked");
-        }
-
-        blockedCommits.Unblock();
-        blockedCommits.Stop();
-
-        {
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(legacySender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        }
-    }
-
-    // Drops write 2's tablet commit and restarts, losing an acknowledged write.
-    // Returns the lock KQP believes it holds.
-    NKikimrDataEvents::TLock LoseUncommittedWrite(
-            TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
-            const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
-            ui64 lockTxId, ui64 lockNodeId)
-    {
-        TDisableDataShardLogBatching disableDataShardLogBatching;
+        UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
 
         NKikimrDataEvents::TLock lock;
         {
-            TBlockEvents<TEvTablet::TEvCommit> blockedCommits(runtime,
-                [&](const TEvTablet::TEvCommit::TPtr& ev) { return ev->Get()->TabletID == shard; });
-
-            // Write 1 persists normally
-            UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
-            runtime.WaitFor("write 1 commit", [&]{ return blockedCommits.size() >= 1; });
-            blockedCommits.Unblock();
-
-            // Write 2 is acknowledged early, before its commit is durable
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
             UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
-
-            // The reply was released before the executor even issued the commit
-            runtime.WaitFor("write 2 commit", [&]{ return blockedCommits.size() >= 1; });
-
-            // Stop intercepting without delivering: write 2 is lost for good.
-            blockedCommits.Stop();
         }
 
         RebootTablet(runtime, shard, sender);
 
-        return lock;
-    }
-
-    Y_UNIT_TEST(PipelinedUncommittedWriteLostAfterRestart) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
-
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-        TShardedTableOptions opts;
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-        const auto& columns = opts.Columns_;
-        const ui64 shard = shards.at(0);
-
-        const ui64 lockTxId = 1234567890001;
-        const ui64 lockNodeId = runtime.GetNodeId(0);
-        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
-
-        auto staleLock = LoseUncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId);
-
-        // The chain is short of what KQP reports: the transaction aborts.
-        CommitLock(runtime, sender, shard, staleLock, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-
-        auto tableState = ReadTable(server, shards, tableId);
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "");
-    }
-
-    Y_UNIT_TEST(PipelinedUncommittedWriteRestoredFromStorage) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
-
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-        TShardedTableOptions opts;
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-        const auto& columns = opts.Columns_;
-        const ui64 shard = shards.at(0);
-
-        const ui64 lockTxId = 1234567890001;
-        const ui64 lockNodeId = runtime.GetNodeId(0);
-        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
-
-        LoseUncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId);
-
-        // Restored from storage as 1, not from in-memory migration, so 2 is free again.
-        NKikimrDataEvents::TLock lock;
         {
-            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 222, 0, 2);
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 222, 0, 2,
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(result.GetIsDuplicate());
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks().at(0)).GetWriteSeqNum(), 2u);
+        }
+
+        {
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 4, 44, 0, 4,
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("must continue the writer chain"),
+                result.GetIssues(0).message());
+            UNIT_ASSERT_C(result.GetIssues(0).message().Contains("at 3"),
+                result.GetIssues(0).message());
+        }
+
+        {
+            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 3, 33, 0, 3);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
             lock = result.GetTxLocks().at(0);
-            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 3u);
         }
 
         CommitLock(runtime, sender, shard, lock);
 
         auto tableState = ReadTable(server, shards, tableId);
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 222\n");
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\n");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteAlreadyAppliedAfterStateMigration) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumAlreadyAppliedAfterStateMigration) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
         serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
@@ -5099,18 +5009,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
-        // Wait for write 1's commit to become durable before rebooting.
         NKikimrDataEvents::TLock lock;
         {
-            TDisableDataShardLogBatching disableDataShardLogBatching;
-            TBlockEvents<TEvTablet::TEvCommit> blockedCommits(runtime,
-                [&](const TEvTablet::TEvCommit::TPtr& ev) { return ev->Get()->TabletID == shard; });
-
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
             lock = result.GetTxLocks().at(0);
-
-            runtime.WaitFor("write 1 commit", [&]{ return blockedCommits.size() >= 1; });
-            blockedCommits.Unblock();
         }
 
         // The in-memory state actor transfers the lock state, including the serialized result.
@@ -5142,11 +5044,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     // A duplicate arriving after a restart without in-memory state migration:
     // the lock's WriteSeqNum is restored from storage, but the serialized result
     // is gone, so the duplicate is answered with a bare STATUS_COMPLETED (no stats).
-    Y_UNIT_TEST(PipelinedUncommittedWriteDuplicateAfterRestartNoResult) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumDuplicateAfterRestartNoResult) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
         serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
@@ -5160,18 +5062,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
-        // Wait for write 1's commit to become durable before rebooting.
         NKikimrDataEvents::TLock lock;
         {
-            TDisableDataShardLogBatching disableDataShardLogBatching;
-            TBlockEvents<TEvTablet::TEvCommit> blockedCommits(runtime,
-                [&](const TEvTablet::TEvCommit::TPtr& ev) { return ev->Get()->TabletID == shard; });
-
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 1, 11, 0, 1);
             lock = result.GetTxLocks().at(0);
-
-            runtime.WaitFor("write 1 commit", [&]{ return blockedCommits.size() >= 1; });
-            blockedCommits.Unblock();
         }
 
         // No in-memory state migration: the lock row is restored from storage,
@@ -5199,11 +5093,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     // A multi-operation duplicate arriving after in-memory state migration:
     // the serialized result for the whole batch must be replayed, not just one op.
-    Y_UNIT_TEST(PipelinedUncommittedWriteMultiOpDuplicateAfterStateMigration) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumMultiOpDuplicateAfterStateMigration) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
         serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
@@ -5217,22 +5111,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 lockNodeId = runtime.GetNodeId(0);
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
 
-        // Wait for the multi-op write's commit to become durable before rebooting.
         NKikimrDataEvents::TLock lock;
         NKikimrQueryStats::TTableAccessStats access;
         {
-            TDisableDataShardLogBatching disableDataShardLogBatching;
-            TBlockEvents<TEvTablet::TEvCommit> blockedCommits(runtime,
-                [&](const TEvTablet::TEvCommit::TPtr& ev) { return ev->Get()->TabletID == shard; });
-
             TVector<TUncommittedWriteOp> ops{{1, 11, 1}, {2, 22, 2}};
             auto result = UncommittedWrite(runtime, sender, shard, tableId, columns,
                 lockTxId, lockNodeId, 0, ops);
             lock = result.GetTxLocks().at(0);
             access = result.GetTxStats().GetTableAccessStats(0);
-
-            runtime.WaitFor("multi-op write commit", [&]{ return blockedCommits.size() >= 1; });
-            blockedCommits.Unblock();
         }
 
         // The in-memory state actor transfers the lock state, including the serialized result.
@@ -5260,11 +5146,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\nkey = 2, value = 22\n");
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteBreaksOwnLock) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumBreaksOwnLock) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -5305,11 +5191,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             "Expected a broken lock, got " << lock.ShortDebugString());
     }
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteBadRequest) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumBadRequest) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -5377,11 +5263,11 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     // A batch where some operations have WriteSeqNum and others don't must be rejected.
-    Y_UNIT_TEST(PipelinedUncommittedWriteMixedBatchRejected) {
+    Y_UNIT_TEST(UncommittedWriteSeqNumMixedBatchRejected) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -5398,64 +5284,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         TVector<TUncommittedWriteOp> ops{{1, 11, 1}, {2, 22, 0}};
         UncommittedWrite(runtime, sender, shard, tableId, columns,
             lockTxId, lockNodeId, 0, ops,
-            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-    }
-
-    // A shard that is not pipelining (rolling restart: KQP already sends WriteSeqNum) must still
-    // wait for persistence before replying, and still track the chain it is sent.
-    Y_UNIT_TEST(PipelinedUncommittedWriteShardNotPipelining) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.AppConfig->MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(false);
-
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-        TShardedTableOptions opts;
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-        const auto& columns = opts.Columns_;
-        const ui64 shard = shards.at(0);
-
-        const ui64 lockTxId = 1234567890001;
-        const ui64 lockNodeId = runtime.GetNodeId(0);
-        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
-
-        TBlockEvents<TEvTablet::TEvCommit> blockedCommits(runtime,
-            [&](const TEvTablet::TEvCommit::TPtr& ev) { return ev->Get()->TabletID == shard; });
-
-        auto writeSender = runtime.AllocateEdgeActor();
-        {
-            auto req = MakeWriteRequestOneKeyValue(std::nullopt,
-                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
-                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-                tableId, columns, 1, 11);
-            req->SetLockId(lockTxId, lockNodeId);
-            req->Record.MutableOperations(0)->MutableWriteSeqNum()->SetWriteSeqNum(1);
-            runtime.SendToPipe(shard, writeSender, req.release());
-        }
-
-        {
-            // With the flag off, the shard must still wait for persistence before replying
-            auto ev = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(writeSender, TDuration::MilliSeconds(200));
-            UNIT_ASSERT_C(!ev, "With the flag off, the pipelined write must still wait for persistence");
-        }
-
-        blockedCommits.Unblock();
-        blockedCommits.Stop();
-
-        {
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(writeSender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxLocks().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(ev->Get()->Record.GetTxLocks().at(0)).GetWriteSeqNum(), 1u);
-        }
-
-        // The chain is still tracked even with the flag off
-        {
-            auto result = UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 2, 22, 0, 2);
-            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(result.GetTxLocks().at(0)).GetWriteSeqNum(), 2u);
-        }
-        UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 3, 33, 0, 1,
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
     }
 

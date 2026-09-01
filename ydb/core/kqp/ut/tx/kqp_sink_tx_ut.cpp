@@ -547,14 +547,14 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     }
 
     // Reads between upserts force a chain of uncommitted writes; results must be identical
-    // whether or not the shard acknowledges them before they are persistent.
-    class TPipelinedUncommittedWrites : public TTableDataModificationTester {
+    // whether or not KQP attaches WriteSeqNum.
+    class TUncommittedWriteSeqNum : public TTableDataModificationTester {
     protected:
         YDB_ACCESSOR(bool, Enabled, true);
         YDB_ACCESSOR(TString, Table, "/Root/KV");
 
         void Setup(TKikimrSettings& settings) override {
-            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(Enabled);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(Enabled);
         }
 
         void DoExecute() override {
@@ -614,16 +614,16 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     // Keys 10 and 4000000010 land on different shards, so the commit goes through ValidateLocks.
-    Y_UNIT_TEST_TWIN(PipelinedUncommittedWrites, Enabled) {
-        TPipelinedUncommittedWrites tester;
+    Y_UNIT_TEST_TWIN(UncommittedWriteSeqNum, Enabled) {
+        TUncommittedWriteSeqNum tester;
         tester.SetEnabled(Enabled);
         tester.SetIsOlap(false);
         tester.Execute();
     }
 
     // KQP must skip ColumnShard, which does not implement WriteSeqNum
-    Y_UNIT_TEST(PipelinedUncommittedWritesOlap) {
-        TPipelinedUncommittedWrites tester;
+    Y_UNIT_TEST(UncommittedWriteSeqNumOlap) {
+        TUncommittedWriteSeqNum tester;
         tester.SetEnabled(true);
         tester.SetIsOlap(true);
         tester.Execute();
@@ -631,10 +631,10 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     // A resent uncommitted write is answered twice: with the original result and, once the
     // shard has seen it, with IsDuplicate set. KQP must take only the first one.
-    class TPipelinedUncommittedWriteAnsweredTwice : public TTableDataModificationTester {
+    class TUncommittedWriteSeqNumAnsweredTwice : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
-            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardPipelinedUncommittedWrites(true);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
         }
 
         void DoExecute() override {
@@ -698,8 +698,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         }
     };
 
-    Y_UNIT_TEST(PipelinedUncommittedWriteAnsweredTwice) {
-        TPipelinedUncommittedWriteAnsweredTwice tester;
+    Y_UNIT_TEST(UncommittedWriteSeqNumAnsweredTwice) {
+        TUncommittedWriteSeqNumAnsweredTwice tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

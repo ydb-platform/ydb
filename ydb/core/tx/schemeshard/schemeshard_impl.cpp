@@ -6287,6 +6287,47 @@ bool TSchemeShard::ShardIsUnderSplitMergeOp(const TShardIdx& idx) const {
 TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TPathId targetPath, TPathId sourcePath) {
     Y_VERIFY_S(!TxInFlight.contains(opId),
                "Trying to create duplicate Tx " << opId);
+    // Every family that creates tx state passes through here with both its operation id and
+    // the target it resolved, which makes this the one place the plan can be checked against
+    // all of them at once rather than a Propose body at a time.
+    //
+    // The test is membership, not equality, and that distinction was measured rather than
+    // guessed. Equality against the part's declared Target aborts 5 tests -- the indexed-table
+    // and migrated-table families -- because an "*AtTable" part deliberately creates tx state
+    // on the *main table* while declaring the index or stream it modifies. Those are two
+    // different objects on purpose, so equality is the wrong invariant.
+    //
+    // What must hold is weaker and actually true: an operation may not act on a path it never
+    // declared at all. Same shape as the write cross-check, one step earlier -- it catches a
+    // target the plan never mentioned, which is what would make the outbox record describe a
+    // different object than the operation touched.
+    if (UndeclaredPathTouchIsFatal || PlanDivergenceIsFatal) {
+        if (const auto operation = Operations.find(opId.GetTxId()); operation != Operations.end()
+            && operation->second->DeclaredPathsUsable
+            && !operation->second->DeclaredPathSet.empty())
+        {
+            const TString targetStr = TPath::Init(targetPath, this).PathString();
+            if (!operation->second->DeclaredPathSet.contains(targetStr)) {
+                // Reports, does not abort -- deliberately, and this is the one check on this
+                // branch that is not armed. It found 22 violations; 20 were the extsubdomain
+                // root and are fixed (see drop_extsubdomain). Two are not yet understood:
+                //
+                //   TIncrementalRestoreTests::BackupCollectionRestoreOpApiMultipleOperationsListing
+                //   TIncrementalRestoreTests::PathStatesNormalizedAfterPartialFailure
+                //     -> /MyRoot/.backups/collections/FailCollection, internal txId
+                //
+                // Arming it now would either turn the branch red or invite someone to silence
+                // it, and a check made fatal before its last findings are explained is how a
+                // real signal gets a suppression written around it. Explain those two, then
+                // arm from TTestEnv beside the others.
+                LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "undeclared tx target"
+                        << ", target: " << targetStr
+                        << ", opId: " << opId);
+            }
+        }
+    }
+
     TTxState& txState = TxInFlight[opId];
     txState = TTxState(txType, targetPath, sourcePath);
     TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Add(1);

@@ -390,17 +390,21 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropExtSub
 {
     // Declared, not waved at: ListSubTree already runs at :212 and :237.
     //
-    // includeRoot is false here and true for the force-drop family, and the difference is
-    // real: :213 does paths.erase(pathId) before DropPaths, deliberately, so the
-    // extsubdomain root stays resolvable while its nodes can still reconnect. The root is
-    // therefore not among the rows this drop writes.
+    // includeRoot was false here, on the reasoning that :213 does paths.erase(pathId) before
+    // DropPaths -- deliberately, so the extsubdomain root stays resolvable while its nodes can
+    // still reconnect -- so the root is not among the rows this drop *writes*.
     //
-    // Chosen this way round on purpose. If the root does get written after all, that is an
-    // undeclared write and the cross-check says so; the opposite mistake -- declaring a row
-    // nobody writes -- is currently invisible.
+    // That reasoning was about writes, and this is a plan of semantic effects. Dropping
+    // /MyRoot/USER_0 is an effect on /MyRoot/USER_0 whether or not its path row is rewritten,
+    // and a plan that omits it tells Schema CDC nothing happened to the database that was just
+    // dropped. The operation agrees: it creates tx state targeting the root, which is how the
+    // CreateTx membership check found this.
+    //
+    // So the root is declared, with the default MayWrite rather than MustWrite -- the write
+    // genuinely may not happen, and demanding one would be the over-claim E22/E23 warn about.
     const auto& drop = tx.GetDrop();
     return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
-        drop.HasId() ? drop.GetId() : 0, /*includeRoot=*/false,
+        drop.HasId() ? drop.GetId() : 0, /*includeRoot=*/true,
         TAffectedPath::EEffect::Drop);
 }
 

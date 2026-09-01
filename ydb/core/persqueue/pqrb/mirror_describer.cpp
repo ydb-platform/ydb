@@ -35,7 +35,7 @@ void TMirrorDescriber::StartInit(const TActorContext& ctx) {
     ++DescribeGeneration;
     DescribeTopicRequestInFlight = false;
     CredentialsRequestInFlight = false;
-    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
+    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials, 0, DescribeGeneration);
 }
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
@@ -133,7 +133,14 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     DescribeTopicRequestInFlight = true;
 }
 
-void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
+void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != 0 && ev->Cookie != DescribeGeneration) {
+        YDB_LOG_DEBUG("Ignoring stale credentials init",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"cookie", ev->Cookie},
+            {"generation", DescribeGeneration});
+        return;
+    }
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
             {"logPrefix", NPQ_LOG_PREFIX});
@@ -147,7 +154,8 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
     future.Subscribe(
         [
             actorSystem = ctx.ActorSystem(),
-            selfId = SelfId()
+            selfId = SelfId(),
+            generation = DescribeGeneration
         ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
             THolder<TEvPQ::TEvCredentialsCreated> ev;
             if (result.HasException()) {
@@ -161,13 +169,20 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
             } else {
                 ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
         }
     );
     CredentialsRequestInFlight = true;
 }
 
 void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != DescribeGeneration) {
+        YDB_LOG_DEBUG("Ignoring stale credentials",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"cookie", ev->Cookie},
+            {"generation", DescribeGeneration});
+        return;
+    }
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
         YDB_LOG_WARN("Cannot initialize credentials",
@@ -195,15 +210,6 @@ void TMirrorDescriber::ScheduleDescription(const TActorContext& ctx) {
 
 TString TMirrorDescriber::BuildLogPrefix() const {
     return TStringBuilder() << "[MirrorDescriber][" << TopicName << "] ";
-}
-
-TString TMirrorDescriber::GetCurrentState() const {
-    if (CurrentStateFunc() == &TThis::StateInit) {
-        return "StateInitConsumer";
-    } else if (CurrentStateFunc() == &TThis::StateWork) {
-        return "StateWork";
-    }
-    return "UNKNOWN";
 }
 
 NActors::IActor* CreateMirrorDescriber(

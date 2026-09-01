@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/base/path.h>
 #include "ydb/core/base/tablet_pipe.h"
 #include "ydb/core/persqueue/events/internal.h"
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -52,7 +51,6 @@ private:
             HFunc(TEvents::TEvPoisonPill, Handle);
         }
     }
-    std::pair<TString, TString> SplitPath(const TString& path);
     void SendProposeRequest(const NActors::TActorContext &ctx);
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
     bool IsOurPipe(const TActorId& clientId) const;

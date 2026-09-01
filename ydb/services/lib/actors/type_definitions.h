@@ -6,8 +6,6 @@
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/map.h>
-#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 #include <mutex>
@@ -39,7 +37,6 @@ struct TTopicHolderBase {
 
     explicit TTopicHolderBase(const TTopicInitInfo& info) {
         TabletID = info.TabletID;
-        ACLRequestInfly = false;
         CloudId = info.CloudId;
         DbId = info.DbId;
         DbPath = info.DbPath;
@@ -52,7 +49,6 @@ struct TTopicHolderBase {
 
     ui64 TabletID = 0;
     TActorId PipeClient;
-    bool ACLRequestInfly = false;
     TString CloudId;
     TString DbId;
     TString DbPath;
@@ -60,7 +56,6 @@ struct TTopicHolderBase {
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     NPQ::NNameResolver::TTopicNamesPtr FullConverter;
-    TMaybe<TString> CdcStreamPath;
 
     TVector<ui32> Groups;
     THashMap<ui32, TPartitionInfo> Partitions;

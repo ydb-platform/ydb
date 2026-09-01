@@ -12,6 +12,8 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
+#include <library/cpp/lwtrace/all.h>
+
 namespace NKikimr::NColumnShard {
 
 TWriteOperation::TWriteOperation(const TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
@@ -29,12 +31,13 @@ TWriteOperation::TWriteOperation(const TUnifiedPathId& pathId, const TOperationW
 {
 }
 
-void TWriteOperation::Start(
-    TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context) {
+void TWriteOperation::Start(TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
+    const NOlap::TWritingContext& context, const std::shared_ptr<NLWTrace::TOrbit>& orbit, const ui64 txId, const TMonotonic orbitStartInstant) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
     auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>(
-        (ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(), context.GetWritingCounters()->GetWriteFlowCounters());
+        (ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(), context.GetWritingCounters()->GetWriteFlowCounters(), orbit,
+        context.GetTabletId(), Cookie, txId, orbitStartInstant);
     writeMeta->SetModificationType(ModificationType);
     writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);

@@ -77,7 +77,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         AnswerError("empty topic in commit offset request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    topicsToResolve.insert(request->path());
+    topicsToResolve.insert(Request_->GetDatabaseRelativePath(request->path()));
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
             topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())

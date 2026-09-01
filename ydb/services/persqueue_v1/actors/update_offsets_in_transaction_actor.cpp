@@ -57,7 +57,7 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
 
     for (const auto& topic : req->topics()) {
         auto* newTopic = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
-        newTopic->set_path(topic.path());
+        newTopic->set_path(Request_->GetDatabaseRelativePath(topic.path()));
 
         for (const auto& partition : topic.partitions()) {
             auto* newPartition = newTopic->add_partitions();

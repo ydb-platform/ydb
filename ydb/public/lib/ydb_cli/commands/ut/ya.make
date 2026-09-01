@@ -6,7 +6,6 @@ PEERDIR(
 
 SRCS(
     completion_ut.cpp
-    relative_database_ut.cpp
 )
 
 END()

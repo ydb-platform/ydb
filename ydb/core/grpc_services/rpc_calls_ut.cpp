@@ -24,6 +24,10 @@ Y_UNIT_TEST_SUITE(SplitPathTests) {
                 auto pair = NGRpcService::SplitPath(db, "/root/db/" + subpath);
                 UNIT_ASSERT_VALUES_EQUAL(pair.first, "/root/db");
                 UNIT_ASSERT_VALUES_EQUAL(pair.second, subpath);
+
+                pair = NGRpcService::SplitPath(db, "root/db/" + subpath);
+                UNIT_ASSERT_VALUES_EQUAL(pair.first, "/root/db");
+                UNIT_ASSERT_VALUES_EQUAL(pair.second, "root/db/" + subpath);
             }
         }
     }

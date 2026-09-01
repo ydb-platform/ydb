@@ -851,11 +851,11 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
     }
 
 
-    auto getTopicPath = [](const auto& settings) {
+    auto getTopicPath = [this](const auto& settings) {
         if constexpr (Protocol == EProtocol::PQv1) {
-            return settings.topic();
+            return TString(settings.topic());
         } else {
-            return settings.path();
+            return Request->GetDatabaseRelativePath(settings.path());
         }
     };
 

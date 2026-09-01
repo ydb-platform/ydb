@@ -20,10 +20,12 @@ public:
     void DoAction() {
         Become(&TCreateTopicActor::StateWork);
 
+        auto request = *GetProtoRequest();
+        ResolveTopicRequestPaths(request, Request_->GetDatabaseName());
         Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Request = *GetProtoRequest(),
+            .Request = std::move(request),
             .UserToken = GetUserToken(),
         }));
     }

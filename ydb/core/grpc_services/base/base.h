@@ -85,8 +85,7 @@ inline TString ResolvePathToDatabase(const TMaybe<TString>& database, TStringBuf
         return TString(path);
     }
 
-    const TString canonizedPath = CanonizePath(TString(path));
-    return NormalizePath(CanonizePath(database.GetOrElse(TString())), canonizedPath);
+    return CanonizePath(TStringBuilder() << database.GetOrElse(TString()) << '/' << path);
 }
 
 TString DatabaseFromDomain(const TAppData* appdata);

@@ -57,6 +57,7 @@ Y_UNIT_TEST_SUITE(YdbRelativeDatabase) {
 
 Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     TKikimrWithGrpcAndRootSchema server({}, {}, {}, false, nullptr, [](auto& settings) {
+        settings.StoragePoolTypes.clear();
         settings.AddStoragePool(TenantPoolKind, TStringBuilder() << TenantPath << ':' << TenantPoolKind);
     });
 
@@ -217,8 +218,10 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     AssertSuccess(coordinationSession.Close().GetValueSync());
     AssertSuccess(coordinationClient.DropNode("relative_dir/coordination").GetValueSync());
 
+    AssertSuccess(schemeClient.MakeDirectory("Root").GetValueSync());
     NYdb::NTopic::TTopicClient topicClient(driver);
-    const TString topicPath = "relative_dir/relative_topic";
+    // A slashless resource remains relative even when it starts with the database name.
+    const TString topicPath = "Root/mydb";
     AssertSuccess(topicClient.CreateTopic(topicPath).GetValueSync());
     {
         auto writeSession = topicClient.CreateSimpleBlockingWriteSession(
@@ -231,6 +234,7 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
         UNIT_ASSERT(writeSession->Close());
     }
     AssertSuccess(topicClient.DropTopic(topicPath).GetValueSync());
+    AssertSuccess(schemeClient.RemoveDirectory("Root").GetValueSync());
 
     AssertSuccess(session.DropTable("relative_dir/relative_path_test").GetValueSync());
     AssertSuccess(session.DropTable("relative_dir/copied_once").GetValueSync());

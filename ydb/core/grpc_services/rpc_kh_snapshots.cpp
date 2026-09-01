@@ -115,10 +115,12 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
+            const auto localDbPath = TryParseLocalDbPath(::NKikimr::SplitPath(path));
+            if (proto->ignore_system_views() && localDbPath) {
                 continue;
             }
-            tx->AddTables()->SetTablePath(path);
+            tx->AddTables()->SetTablePath(
+                localDbPath ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
         if (proto->ignore_system_views()) {
@@ -251,10 +253,12 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
+            const auto localDbPath = TryParseLocalDbPath(::NKikimr::SplitPath(path));
+            if (proto->ignore_system_views() && localDbPath) {
                 continue;
             }
-            tx->AddTables()->SetTablePath(path);
+            tx->AddTables()->SetTablePath(
+                localDbPath ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);
@@ -392,10 +396,12 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
+            const auto localDbPath = TryParseLocalDbPath(::NKikimr::SplitPath(path));
+            if (proto->ignore_system_views() && localDbPath) {
                 continue;
             }
-            tx->AddTables()->SetTablePath(path);
+            tx->AddTables()->SetTablePath(
+                localDbPath ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);

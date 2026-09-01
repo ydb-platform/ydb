@@ -6,7 +6,6 @@
 #include "rpc_common/rpc_common.h"
 
 #include <ydb/core/base/auth.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/ydb_convert/kesus_description.h>
@@ -102,15 +101,9 @@ public:
     }
 
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        const TString databaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
-        const TString coordinationNodePath = CanonizePath(GetCoordinationNodePath());
-        const bool belongsToDatabase = databaseName.empty()
-            || coordinationNodePath == databaseName
-            || (coordinationNodePath.size() > databaseName.size()
-                && coordinationNodePath.StartsWith(databaseName)
-                && coordinationNodePath[databaseName.size()] == '/');
+        const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
 
-        if (!belongsToDatabase) {
+        if (!GetCoordinationNodePath().StartsWith(databaseName)) {
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue(TStringBuilder()
                 << "Coordination node path: " << GetCoordinationNodePath()

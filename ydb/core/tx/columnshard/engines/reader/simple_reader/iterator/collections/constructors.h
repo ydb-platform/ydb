@@ -96,8 +96,8 @@ private:
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const EPortionsSorting portionsSorting, const bool needDuplicateFiltering = false)
-        : TBase(portionsSorting)
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ESourcesSorting sourcesSorting, const bool needDuplicateFiltering = false)
+        : TBase(sourcesSorting)
     {
         if (needDuplicateFiltering) {
             // Cursor drops already processed portions.
@@ -118,7 +118,7 @@ public:
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {
         std::deque<TSourceConstructor> sources;
-        return std::make_unique<TPortionsSources>(std::move(sources), EPortionsSorting::PortionIdAsc);
+        return std::make_unique<TPortionsSources>(std::move(sources), ESourcesSorting::EntityIdAsc);
     }
 };
 

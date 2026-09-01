@@ -21,22 +21,23 @@ enum class ERequestSorting {
     DESC,
 };
 
-enum class EPortionsSorting {
-    PortionIdAsc = 0,
+enum class ESourcesSorting {
+    // by the source's own id: portion id for a table, (tablet, path/schema id) for a sys view
+    EntityIdAsc = 0,
     FirstPkAsc,
     LastPkAsc,
     LastPkDesc,
 };
 
-inline EPortionsSorting GetPortionsSorting(const ERequestSorting sorting, const bool deduplicationEnabled) {
+inline ESourcesSorting GetSourcesSorting(const ERequestSorting sorting, const bool deduplicationEnabled) {
     switch (sorting) {
         case ERequestSorting::ASC:
-            return EPortionsSorting::FirstPkAsc;
+            return ESourcesSorting::FirstPkAsc;
         case ERequestSorting::DESC:
-            return EPortionsSorting::LastPkDesc;
+            return ESourcesSorting::LastPkDesc;
         case ERequestSorting::NONE:
             // deduplication needs key order; last_pk keeps the duplicates filter borders window small
-            return deduplicationEnabled ? EPortionsSorting::LastPkAsc : EPortionsSorting::PortionIdAsc;
+            return deduplicationEnabled ? ESourcesSorting::LastPkAsc : ESourcesSorting::EntityIdAsc;
     }
 }
 
@@ -67,8 +68,8 @@ public:
     // portions that the current tx has written
     std::optional<THashSet<TInsertWriteId>> ownPortions;
 
-    EPortionsSorting GetPortionsSorting() const {
-        return NReader::GetPortionsSorting(Sorting, NeedDuplicateFiltering());
+    ESourcesSorting GetSourcesSorting() const {
+        return NReader::GetSourcesSorting(Sorting, NeedDuplicateFiltering());
     }
 
     bool NeedDuplicateFiltering() const {

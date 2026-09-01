@@ -5,8 +5,8 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
 TConstructor::TConstructor(const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-    const EPortionsSorting portionsSorting)
-    : TBase(portionsSorting, tabletId)
+    const ESourcesSorting sourcesSorting)
+    : TBase(sourcesSorting, tabletId)
 {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::vector<ISnapshotSchema::TPtr> schemasAll;

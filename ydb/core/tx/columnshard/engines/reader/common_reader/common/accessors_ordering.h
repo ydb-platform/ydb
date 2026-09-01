@@ -120,7 +120,7 @@ public:
     // Comparator for std::make_heap/pop_heap, which is a max heap. We need a min heap, so we swap arguments.
     class TReversedComparator {
     private:
-        EPortionsSorting PortionsSorting;
+        ESourcesSorting SourcesSorting;
 
         bool Less(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
             if (l.Conflicting != r.Conflicting) {
@@ -129,25 +129,25 @@ public:
             if (l.Conflicting) {
                 return false;   // both conflicting: equivalent, relative order is unspecified
             }
-            switch (PortionsSorting) {
-                case EPortionsSorting::PortionIdAsc:
+            switch (SourcesSorting) {
+                case ESourcesSorting::EntityIdAsc:
                     return TSimpleLess()(l, r);
-                case EPortionsSorting::FirstPkAsc:
-                case EPortionsSorting::LastPkDesc:
+                case ESourcesSorting::FirstPkAsc:
+                case ESourcesSorting::LastPkDesc:
                     // the same comparator for them because we know
                     // that TReplaceKeyAdapter swaps first/last already,
                     // so we should not do that here.
                     // Not a very smart and obvious code contract, I know,
                     // some day, maybe, we will fix it
                     return TLessByStart()(l, r);
-                case EPortionsSorting::LastPkAsc:
+                case ESourcesSorting::LastPkAsc:
                     return TLessByFinish()(l, r);
             }
         }
 
     public:
-        TReversedComparator(const EPortionsSorting portionsSorting)
-            : PortionsSorting(portionsSorting)
+        TReversedComparator(const ESourcesSorting sourcesSorting)
+            : SourcesSorting(sourcesSorting)
         {
         }
 
@@ -161,20 +161,20 @@ public:
 template <std::derived_from<TDataSourceConstructor> TObject>
 class TOrderedObjects {
 private:
-    const EPortionsSorting PortionsSorting;
+    const ESourcesSorting SourcesSorting;
     std::deque<TObject> HeapObjects;
     YDB_READONLY_DEF(std::deque<TObject>, AlreadySorted);
     bool Initialized = false;
     ui32 NextObjectIdx = 0;
 
 public:
-    TOrderedObjects(const EPortionsSorting portionsSorting)
-        : PortionsSorting(portionsSorting)
+    TOrderedObjects(const ESourcesSorting sourcesSorting)
+        : SourcesSorting(sourcesSorting)
     {
     }
 
-    EPortionsSorting GetPortionsSorting() const {
-        return PortionsSorting;
+    ESourcesSorting GetSourcesSorting() const {
+        return SourcesSorting;
     }
 
     template <typename F>
@@ -208,13 +208,13 @@ public:
         Initialized = true;
         HeapObjects = std::move(objects);
         // we need a min heap, so we use a reversed comparator to achieve that
-        std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(PortionsSorting));
+        std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(SourcesSorting));
     }
 
     void PrepareOrdered(const ui32 count) {
         while (AlreadySorted.size() < count && HeapObjects.size()) {
             // we need a min heap, so we use a reversed comparator to achieve that
-            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(PortionsSorting));
+            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(SourcesSorting));
             HeapObjects.back().SetIndex(NextObjectIdx++);
             AlreadySorted.emplace_back(std::move(HeapObjects.back()));
             HeapObjects.pop_back();
@@ -328,7 +328,7 @@ private:
     }
 
     virtual TString GetClassName() const override {
-        return "GENERAL_ORDERING::" + ::ToString(Constructors.GetPortionsSorting());
+        return "GENERAL_ORDERING::" + ::ToString(Constructors.GetSourcesSorting());
     }
 
     virtual void DoClear() override {
@@ -434,8 +434,8 @@ public:
         return result;
     }
 
-    TSourcesConstructorWithAccessors(const EPortionsSorting portionsSorting)
-        : Constructors(portionsSorting)
+    TSourcesConstructorWithAccessors(const ESourcesSorting sourcesSorting)
+        : Constructors(sourcesSorting)
     {
     }
 

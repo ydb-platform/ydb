@@ -395,4 +395,7 @@ message TFeatureFlags {
     // databases. Without it nothing compiles WASM modules to native code:
     // dinodes only ever compile what this tablet assigns them.
     optional bool EnableWasmCompileController = 332 [default = false];
+    optional bool EnableLocalDBBtreeIndexV2 = 333 [default = false];
+    // When EnableLocalDBBtreeIndexV2 is on complete it with V1 shadow index off
+    optional bool EnableLocalDBBtreeIndexV2ShadowV1Write = 334 [default = true];
 }

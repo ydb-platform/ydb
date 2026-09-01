@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 
 namespace NKikimr::NCms {
 

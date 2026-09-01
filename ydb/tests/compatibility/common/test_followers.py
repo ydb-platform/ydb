@@ -220,4 +220,4 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
         for _ in self.roll():
             self.write_data()
             self.read_data()
-            self.check_statistics()
+        self.check_statistics()

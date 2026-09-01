@@ -157,7 +157,9 @@ public:
                                             secureParamsProvider.get(),
                                             logProvider.Get(),
                                             State_->Types->LangVer,
-                                            State_->Types->RuntimeSettings);
+                                            State_->Types->RuntimeSettings,
+                                            State_->Types->BridgeMode,
+                                            State_->Types->BridgeBinaryPath);
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
 
@@ -171,7 +173,9 @@ public:
                                                /*countersProvider=*/nullptr,
                                                logProvider.Get(),
                                                State_->Types->LangVer,
-                                               State_->Types->RuntimeSettings);
+                                               State_->Types->RuntimeSettings,
+                                               State_->Types->BridgeMode,
+                                               State_->Types->BridgeBinaryPath);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();

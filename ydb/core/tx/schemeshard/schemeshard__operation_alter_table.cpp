@@ -681,7 +681,7 @@ public:
             ? std::optional<TString>()
             : FindPlanDivergence(context.SS, OperationId, path.PathString());
         if (const auto& declaredPath = divergence) {
-            Y_ABORT_UNLESS(!PlanDivergenceIsFatal,
+            Y_ABORT_UNLESS(!context.SS->PathCheckModes.DivergenceIsFatal,
                 "part resolved a different path than its plan declared: resolved %s, declared"
                 " %s, txId: %" PRIu64 ", subTxId: %" PRIu64,
                 path.PathString().c_str(), declaredPath->c_str(),

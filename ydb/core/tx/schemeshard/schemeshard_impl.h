@@ -824,6 +824,22 @@ public:
     // touched an incidental column on it -- the difference decides how to fix it.
     void ObservePathTouched(const TPathId& pathId, const char* writeSite);
 
+    // Whether each path cross-check aborts this tablet, held per tablet rather than per
+    // process. The switches in schemeshard_affected_paths.h are now only the *default*, read
+    // once here at construction.
+    //
+    // The difference matters as soon as a test has more than one schemeshard, which the
+    // extsubdomain and serverless suites all do: a process-wide flag cannot arm the root
+    // schemeshard while leaving a tenant's alone, so investigating a failure on one of them
+    // means disarming both and losing the signal from the other. It also stops one test's
+    // arming from leaking into the next through global state.
+    struct TPathCheckModes {
+        bool UndeclaredTouchIsFatal = false;
+        bool UnfulfilledDeclarationIsFatal = false;
+        bool DivergenceIsFatal = false;
+    };
+    TPathCheckModes PathCheckModes;
+
     // path
     void PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TPtr path);

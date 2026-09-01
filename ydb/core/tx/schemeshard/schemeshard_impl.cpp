@@ -2415,7 +2415,7 @@ void TSchemeShard::ObservePathTouched(const TPathId& pathId, const char* writeSi
     // perturbed any test asserting on event ordering. Failing here instead costs nothing
     // when off, and when on it stops at the offending write with the path and the Persist*
     // that made it -- which is the information needed to fix the declaration anyway.
-    Y_ABORT_UNLESS(!UndeclaredPathTouchIsFatal,
+    Y_ABORT_UNLESS(!PathCheckModes.UndeclaredTouchIsFatal,
         "operation wrote path row it had not declared: %s, writeSite: %s",
         path.PathString().c_str(), writeSite);
     LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -5678,6 +5678,15 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
         })
 {
+    // Read once, so the process-wide switches are only a default and each tablet then owns
+    // its own answer. A test that wants two schemeshards to differ assigns to this member on
+    // the one it cares about; no check consults the globals again after this point.
+    PathCheckModes = {
+        .UndeclaredTouchIsFatal = NSchemeShard::UndeclaredPathTouchIsFatal,
+        .UnfulfilledDeclarationIsFatal = NSchemeShard::UnfulfilledPathDeclarationIsFatal,
+        .DivergenceIsFatal = NSchemeShard::PlanDivergenceIsFatal,
+    };
+
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
                             ECumulativeCounters_descriptor,
@@ -6301,7 +6310,7 @@ TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TP
     // declared at all. Same shape as the write cross-check, one step earlier -- it catches a
     // target the plan never mentioned, which is what would make the outbox record describe a
     // different object than the operation touched.
-    if (UndeclaredPathTouchIsFatal || PlanDivergenceIsFatal) {
+    if (PathCheckModes.UndeclaredTouchIsFatal || PathCheckModes.DivergenceIsFatal) {
         if (const auto operation = Operations.find(opId.GetTxId()); operation != Operations.end()
             && operation->second->DeclaredPathsUsable
             && !operation->second->DeclaredPathSet.empty())

@@ -197,7 +197,7 @@ private:
 
     void DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx);
 
-    void DoCheckDeclarations(const TActorContext& ctx);
+    void DoCheckDeclarations(TSchemeShard* ss, const TActorContext& ctx);
 };
 
 }

@@ -3,11 +3,13 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -50,6 +52,40 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_C(NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal,
             "TTestEnv no longer arms the affected-paths cross-check: every schemeshard suite "
             "would now pass without verifying any declaration");
+    }
+
+    // The switches above are the process-wide *default*; each tablet copies them once at
+    // construction and owns its answer thereafter. This asserts that copy really is per
+    // tablet, because the property only shows up with more than one schemeshard -- exactly
+    // the extsubdomain and serverless configurations, where a process-wide flag would force
+    // the root and a tenant to be armed together.
+    Y_UNIT_TEST(PathCheckModesAreHeldPerTablet) {
+        // Reaches the live tablet the way ut_counters does, since the modes are internal
+        // state with no wire representation.
+        NKikimr::NSchemeShard::TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new NKikimr::NSchemeShard::TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+
+        UNIT_ASSERT_C(schemeshard, "no schemeshard was constructed");
+        UNIT_ASSERT_C(schemeshard->PathCheckModes.UndeclaredTouchIsFatal,
+            "the tablet did not take the armed default at construction");
+
+        // The real property: the tablet owns its answer. Flipping the process-wide default
+        // afterwards must not reach a tablet that already exists -- otherwise arming or
+        // disarming for one schemeshard would silently move every other one in the process,
+        // which is what made a per-tablet mode necessary in the first place.
+        const bool savedDefault = NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal;
+        NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal = false;
+        Y_DEFER { NKikimr::NSchemeShard::UndeclaredPathTouchIsFatal = savedDefault; };
+
+        UNIT_ASSERT_C(schemeshard->PathCheckModes.UndeclaredTouchIsFatal,
+            "the tablet still reads the process-wide switch, so two schemeshards cannot hold "
+            "different path-check modes");
     }
 
     // Batch harness for the migration: exercise many object types in one run and assert

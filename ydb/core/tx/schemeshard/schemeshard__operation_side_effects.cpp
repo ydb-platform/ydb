@@ -242,7 +242,7 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
 
     // Last: by now Execute has returned, so every path write the finishing phase queued
     // through TStorageChanges has been flushed and observed.
-    DoCheckDeclarations(ctx);
+    DoCheckDeclarations(ss, ctx);
 }
 
 void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
@@ -1091,7 +1091,7 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
     }
 }
 
-void TSideEffects::DoCheckDeclarations(const TActorContext& ctx) {
+void TSideEffects::DoCheckDeclarations(TSchemeShard* ss, const TActorContext& ctx) {
     for (const auto& operation : CompletedOperations) {
         // Before the check, and unconditionally for every operation that got here: a test
         // asserting what a request planned wants the plan whether or not it also fulfilled it.
@@ -1109,7 +1109,7 @@ void TSideEffects::DoCheckDeclarations(const TActorContext& ctx) {
         // what names the operation and the path that has to be fixed. Never set in
         // production, where an over-declaration is a wrong outbox record and not a reason to
         // stop the tablet.
-        Y_ABORT_UNLESS(!UnfulfilledPathDeclarationIsFatal,
+        Y_ABORT_UNLESS(!ss->PathCheckModes.UnfulfilledDeclarationIsFatal,
             "operation declared a path row it must write and did not: %s, txId: %" PRIu64,
             missed->c_str(), ui64(operation->TxId));
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

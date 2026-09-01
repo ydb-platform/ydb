@@ -234,7 +234,7 @@ Client certificate verification during [device authentication](#device-auth) and
 
 {% endnote %}
 
-Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#iam-auth-config) of `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Name=Value,...@<domain>` notation. The order of attributes corresponds to the order of fields in the certificate. Example:
+Successful certificate authentication creates a user SID with the suffix `@<domain>`, where `<domain>` is the [parameter value](../reference/configuration/auth_config.md#iam-auth-config) of `certificate_authentication_domain` in the `auth_config` section (default: `cert`). The name is formed from all attributes of the certificate's Subject field in `Имя=Значение,...@<domain>` notation. The order of attributes corresponds to the order of fields in the certificate. Example:
 
 
 ```text
@@ -281,6 +281,8 @@ Device authentication is optional and configured independently: the mechanism ca
 - **Interconnect** — when TLS is enabled in the [interconnect_config](../reference/configuration/tls.md#interconnect) section, [Interconnect](../concepts/glossary.md#actor-system-interconnect) requires a client certificate.
 - **gRPC** — you can enable client certificate request for device authentication, and also separately enable mandatory verification (an untrusted certificate is always rejected). Server configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#activated-profile) section.
 - **Kafka API** — when mTLS is enabled, it requires a client certificate; only the trust chain to the CA is verified, a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection — in the [Device authentication via mTLS](../reference/kafka-api/auth.md#mtls-auth) section.
+
+**gRPC** and **YDB Monitoring** — you can enable client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section; YDB Monitoring configuration is described in the [monitoring_config](../reference/configuration/monitoring_config.md#tls) section.
 
 ## Authentication using a third-party IAM provider {#iam}
 

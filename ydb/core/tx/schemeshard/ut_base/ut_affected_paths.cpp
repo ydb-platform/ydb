@@ -138,6 +138,27 @@ Y_UNIT_TEST(ExemptDeclarationDemandsNothing) {
     UNIT_ASSERT(!FindUnfulfilledMustWrite(declared, THashSet<TString>{}).has_value());
 }
 
+Y_UNIT_TEST(AbsentPathIdFallsBackToTheName) {
+    // The TPathId overload distinguishes "no id in the request" by falsiness, and the ui64
+    // wrapper depends on that: it passes a default TPathId for localPathId == 0. Worth
+    // pinning, because the obvious-looking alternative is wrong -- InvalidLocalPathId is
+    // Max<ui64>, not zero, so TPathId(0, 0) is *truthy* and a test on LocalPathId == 0 would
+    // send a legitimate id down the by-name branch.
+    //
+    // nullptr is safe here and only here: with no id the helper resolves nothing and never
+    // dereferences the schemeshard, it just reuses the string arithmetic below.
+    const TAffectedPaths declared =
+        DeclareTargetByIdOrName(nullptr, "/MyRoot/DirA", "Table1", TPathId());
+
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths.size(), 2u);
+    UNIT_ASSERT(!declared.Unresolved);
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths[0].Path, "/MyRoot/DirA/Table1");
+    UNIT_ASSERT(declared.Paths[0].Locator == TAffectedPath::ELocator::ByPath);
+    // Acting on an existing object, so Alter/MayWrite rather than the create's claim.
+    UNIT_ASSERT(declared.Paths[0].Effect == TAffectedPath::EEffect::Alter);
+    UNIT_ASSERT(declared.Paths[0].Expect == TAffectedPath::EObservation::MayWrite);
+}
+
 // There was an IncompleteDeclarationDemandsNothing here, covering a declaration that said up
 // front it could not enumerate what it touched. That flag is gone: all 26 of its
 // justifications were wrong, and an operation that writes no path rows now takes an explicit

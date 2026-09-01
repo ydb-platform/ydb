@@ -323,11 +323,11 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         return response;
     }
 
-    // A cascade drop, or a backup collection expanded over its contents, knows its entry
-    // points but not the subtree it will walk, and says so with Incomplete. Cross-checking
-    // against a knowingly partial list would report every descendant as undeclared, which
-    // is noise rather than a finding. The declaration still reaches the outbox; only the
-    // cross-check is off, and only for that operation.
+    // A cascade drop, or a backup collection expanded over its contents, used to say it could
+    // not enumerate its subtree and switch the cross-check off for itself. That escape hatch
+    // is gone: a cascade drop walks the same ListSubTree the operation itself calls, and a
+    // backup collection's fan-out happens at propose, so both are enumerable and both are
+    // now checked like everything else.
     //
     // A directory that gains its first child, or loses its last, flips its ChildrenExist
     // property, and that property is part of its *parent's* description -- so both

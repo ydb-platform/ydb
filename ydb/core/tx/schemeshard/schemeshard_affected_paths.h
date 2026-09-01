@@ -184,6 +184,16 @@ TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString
 TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
     const TString& name, ui64 localPathId);
 
+// Same, for a request that carries a full TPathId. Prefer this wherever one is available:
+// the ui64 form can only describe a path this schemeshard owns, because it rebuilds the id
+// with MakeLocalId, which hardcodes the owner to this tablet. Passing GetLocalId() from a
+// wire TPathId silently discards its OwnerId, and a migrated path owned by another
+// schemeshard then declares against an id that does not resolve -- which refuses the whole
+// operation, since IgniteOperation treats an unresolved declaration as PreconditionFailed.
+// Pass a default-constructed TPathId when the request has none.
+TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
+    const TString& name, const TPathId& pathId);
+
 // Overloads taking the context rather than the schemeshard, so a declaration can be written
 // as a single line in the traits table. TOperationContext is only forward-declared there;
 // binding a reference to an incomplete type is fine, and the member access happens in the

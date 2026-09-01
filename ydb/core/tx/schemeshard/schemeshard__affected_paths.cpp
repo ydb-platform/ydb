@@ -78,7 +78,17 @@ TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString
 TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
         const TString& name, ui64 localPathId)
 {
-    if (localPathId == 0) {
+    // A bare local id can only mean a path this schemeshard owns. Callers holding a full
+    // TPathId must use the overload below rather than passing GetLocalId() -- see the note
+    // there for what that costs.
+    return DeclareTargetByIdOrName(ss, workingDir, name,
+        localPathId ? ss->MakeLocalId(localPathId) : TPathId());
+}
+
+TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
+        const TString& name, const TPathId& pathId)
+{
+    if (!pathId) {
         // Same paths, different claim. DeclareChildOfWorkingDir describes a create: it
         // stamps the target Create/MustWrite because a create really does write the new row
         // and really does bump its parent. This helper is for an operation acting on an
@@ -102,7 +112,15 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
     // from the resolved target rather than from the transaction.
     // Same resolver the suboperations use, so the declaration cannot name a different
     // object than the operation mutates.
-    const TPath target = TPath::ResolveTarget(ss->MakeLocalId(localPathId), workingDir, name, ss);
+    //
+    // The id is taken whole. This used to be a ui64 rebuilt with MakeLocalId, which hardcodes
+    // the owner to this tablet (schemeshard_impl.h) -- so a request carrying a path id owned
+    // by another schemeshard, as migrated paths are, was declared against a *different*
+    // TPathId than TAlterTable::Propose resolves from TPathId::FromProto. That is not a
+    // cosmetic divergence: an unresolved declaration refuses the whole operation with
+    // StatusPreconditionFailed (schemeshard__operation.cpp), so the declaration could reject
+    // a DDL that Propose would have carried out correctly.
+    const TPath target = TPath::ResolveTarget(pathId, workingDir, name, ss);
     if (!target.IsResolved()) {
         TAffectedPaths unresolved;
         unresolved.Unresolved = true;

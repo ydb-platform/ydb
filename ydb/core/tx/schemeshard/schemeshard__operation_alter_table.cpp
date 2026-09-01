@@ -812,10 +812,17 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterTable>(
     const auto& alter = tx.GetAlterTable();
     // TAlterTable::Propose (this file) and CreateConsistentAlterTable both prefer the
     // pathId over the name when both are present; Id_Deprecated is the legacy scalar form.
-    const ui64 localPathId = alter.HasPathId() ? alter.GetPathId().GetLocalId()
-        : alter.HasId_Deprecated() ? alter.GetId_Deprecated() : 0;
+    //
+    // The full TPathId, not GetLocalId(): Propose resolves TPathId::FromProto(GetPathId())
+    // at :610, so taking only the local id and letting MakeLocalId supply this tablet as the
+    // owner would declare a different object than Propose mutates whenever the path is owned
+    // by another schemeshard. Id_Deprecated has no owner to lose and stays local.
+    const TPathId pathId = alter.HasPathId()
+        ? TPathId::FromProto(alter.GetPathId())
+        : alter.HasId_Deprecated() ? context.SS->MakeLocalId(alter.GetId_Deprecated())
+        : TPathId();
     TAffectedPaths result =
-        DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), localPathId);
+        DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), pathId);
 
     // Two alter shapes reach past the table into its index children, both by walking
     // GetChildren() at propose time, so which paths they touch depends on state rather than

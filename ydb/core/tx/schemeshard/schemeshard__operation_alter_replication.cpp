@@ -584,8 +584,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterReplicatio
     // TAlterReplication::Propose (this file, shared by Replication and Transfer) prefers
     // pathId (a TPathID proto) over Name when present.
     const auto& op = tx.GetAlterReplication();
+    // The full TPathId: Propose resolves TPathId::FromProto(op.GetPathId()), so passing only
+    // GetLocalId() would let MakeLocalId substitute this tablet as the owner and declare a
+    // different object for any path owned by another schemeshard.
     return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(),
-        op.HasPathId() ? op.GetPathId().GetLocalId() : 0);
+        op.HasPathId() ? TPathId::FromProto(op.GetPathId()) : TPathId());
 }
 
 template <>
@@ -597,8 +600,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterTransfer>(
     // Same TAlterReplication::Propose (this file), reused for Transfer via TTransferStrategy;
     // the wire proto is still TReplicationDescription (GetAlterReplication).
     const auto& op = tx.GetAlterReplication();
+    // The full TPathId: Propose resolves TPathId::FromProto(op.GetPathId()), so passing only
+    // GetLocalId() would let MakeLocalId substitute this tablet as the owner and declare a
+    // different object for any path owned by another schemeshard.
     return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(),
-        op.HasPathId() ? op.GetPathId().GetLocalId() : 0);
+        op.HasPathId() ? TPathId::FromProto(op.GetPathId()) : TPathId());
 }
 
 } // namespace NOperation

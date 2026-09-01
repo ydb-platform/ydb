@@ -838,3 +838,7 @@ void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWr
 Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TWriteOperation, stream, tx) {
     stream << '[' << tx.GetStep() << ':' << tx.GetTxId() << ']';
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

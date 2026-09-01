@@ -9,6 +9,7 @@ Main topics:
 * [{#T}](./capacity-planning.md)
 * [{#T}](./versioning.md)
 * [{#T}](./maintenance-without-downtime.md)
+* [{#T}](./node-authorization.md)
 
 See also:
 

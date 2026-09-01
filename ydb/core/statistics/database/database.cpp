@@ -12,8 +12,6 @@
 
 namespace NKikimr::NStat {
 
-static constexpr TStringBuf STATISTICS_TABLE = ".metadata/statistics_v2";
-
 // Canonical `column_tags` key for a statistic: the comma-joined ordered tag tuple for multi-column
 // stats, the single decimal tag for single-column stats, or the empty string for stats with no
 // column (SIMPLE/TABLE_SUMMARY). Producer (save) and consumer (load) must agree on this encoding.
@@ -129,7 +127,7 @@ public:
                 |>;
             };
 
-            UPSERT INTO `)" << STATISTICS_TABLE << R"(`
+            UPSERT INTO `)" << StatisticsTablePath << R"(`
                 (owner_id, local_path_id, stat_type, column_tags, data)
             SELECT owner_id, local_path_id, stat_type, column_tags, data FROM
             AS_TABLE(ListMap(ListZip($stat_types, $column_tags, $data), $to_struct));
@@ -238,7 +236,7 @@ void DispatchLoadStatisticsQuery(
         {"columnTags", serializedColumnTags});
 
     const auto statisticsTablePath = CanonizePath(
-        TStringBuilder() << database << '/' << STATISTICS_TABLE);
+        TStringBuilder() << database << '/' << StatisticsTablePath);
 
     auto readRowsRequest = Ydb::Table::ReadRowsRequest();
     readRowsRequest.set_path(statisticsTablePath);
@@ -316,7 +314,7 @@ public:
             DECLARE $owner_id AS Uint64;
             DECLARE $local_path_id AS Uint64;
 
-            DELETE FROM `)" << STATISTICS_TABLE << R"(`
+            DELETE FROM `)" << StatisticsTablePath << R"(`
             WHERE
                 owner_id = $owner_id AND
                 local_path_id = $local_path_id;

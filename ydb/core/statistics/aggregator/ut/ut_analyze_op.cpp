@@ -2,6 +2,7 @@
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/core/base/hive.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/statistics/events.h>
@@ -231,7 +232,13 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         // The AnalyzeActor reports progress to the Statistics Aggregator as each
         // shard's scan completes. Verify that intermediate progress is reflected
         // by GetAnalyzeOperation while the analyze is still in flight.
-        TTestEnv env(1, 1);
+        // Threshold 0 disables whole-table scans so the column-table branch
+        // still dispatches one scan per shard.
+        TTestEnv env(1, 1, /*useRealThreads=*/false,
+            [](Tests::TServerSettings& settings) {
+                settings.AppConfig->MutableStatisticsConfig()
+                    ->SetAnalyzeWholeTableScanMaxBytes(0);
+            });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
 
@@ -292,6 +299,83 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_VALUES_EQUAL(op.InProgressPathsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(op.GetInProgressPaths(0), tableInfo.Path);
         UNIT_ASSERT_VALUES_EQUAL(op.DonePathsSize(), 0);
+    }
+
+    Y_UNIT_TEST(SmallColumnTableWholeTableScan) {
+        // Small column tables (default 10 GiB threshold) skip Hive locate
+        // and scan the whole table in one query. Wait for base statistics so
+        // table size is known; unknown size would fall back to per-shard scans.
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareColumnTable(env, "Database", "Table", /*shardCount=*/4);
+        WaitForSchemeShardStatsUpdate(runtime, tableInfo.PathId.OwnerId, /*requireFull=*/true);
+
+        ui32 hiveDistributionRequests = 0;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
+            [&](auto&) { ++hiveDistributionRequests; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opWhole", "/Root/Database");
+
+        UNIT_ASSERT_VALUES_EQUAL(hiveDistributionRequests, 0);
+        ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(ColumnTablePerShardScanWhenSizeUnknown) {
+        // When the table is known but BytesSize is absent, TableBytesSize is
+        // unset and a column table must use per-shard scans rather than
+        // treating a missing size as 0 (small).
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+
+        bool statsSeen = false;
+        auto stripBytesSize = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>(
+            [&](auto& ev) {
+                NKikimrStat::TSchemeShardStats statRecord;
+                if (!statRecord.ParseFromString(ev->Get()->Record.GetStats())) {
+                    return;
+                }
+                for (auto& entry : *statRecord.MutableEntries()) {
+                    entry.ClearBytesSize();
+                }
+                TString stats;
+                UNIT_ASSERT(statRecord.SerializeToString(&stats));
+                ev->Get()->Record.SetStats(stats);
+                statsSeen = true;
+            });
+
+        const auto tableInfo = PrepareColumnTable(env, "Database", "Table", /*shardCount=*/4);
+        runtime.WaitFor("SchemeShard stats without BytesSize", [&]{ return statsSeen; });
+
+        ui32 hiveDistributionRequests = 0;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
+            [&](auto&) { ++hiveDistributionRequests; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opUnknownSize", "/Root/Database");
+
+        UNIT_ASSERT_GT(hiveDistributionRequests, 0);
+        ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(ColumnTablePerShardScanWhenThresholdDisabled) {
+        TTestEnv env(1, 1, /*useRealThreads=*/false,
+            [](Tests::TServerSettings& settings) {
+                settings.AppConfig->MutableStatisticsConfig()
+                    ->SetAnalyzeWholeTableScanMaxBytes(0);
+            });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareColumnTable(env, "Database", "Table", /*shardCount=*/4);
+
+        ui32 hiveDistributionRequests = 0;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
+            [&](auto&) { ++hiveDistributionRequests; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opPerShard", "/Root/Database");
+
+        UNIT_ASSERT_GT(hiveDistributionRequests, 0);
+        ValidateStatistics(runtime, tableInfo.PathId);
     }
 
     Y_UNIT_TEST_TWIN(ForgetTerminal, ColumnShard) {

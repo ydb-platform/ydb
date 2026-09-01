@@ -349,7 +349,24 @@ void TAnalyzeActor::HandleNavigateResult() {
         return;
     }
 
-    if (IsColumnTable) {
+    // Per-shard scans for column tables unless size is known and at or below
+    // the whole-table threshold. Unknown size (missing/unparsed base stats)
+    // stays per-shard to avoid a full-table scan of a potentially large table.
+    UsePerShardScans = IsColumnTable
+        && (Config.WholeTableScanMaxBytes == 0
+            || !Config.TableBytesSize
+            || *Config.TableBytesSize > Config.WholeTableScanMaxBytes);
+    YDB_LOG_DEBUG("Scan strategy",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId},
+        {"isColumnTable", IsColumnTable},
+        {"tableBytesSizeKnown", Config.TableBytesSize.has_value()},
+        {"tableBytesSize", Config.TableBytesSize.value_or(0)},
+        {"wholeTableScanMaxBytes", Config.WholeTableScanMaxBytes},
+        {"usePerShardScans", UsePerShardScans});
+
+    if (UsePerShardScans) {
         // Resolve table shard ids.
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
@@ -427,7 +444,7 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     }
 
     // Report initial progress: shards known, none done yet
-    ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    ui32 shardsTotal = UsePerShardScans ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
     SendProgressEvent(shardsTotal, 0);
 
     Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
@@ -460,13 +477,13 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(!PendingTasks.empty());
 
 
-    if (IsColumnTable) {
+    if (UsePerShardScans) {
         for (const auto& [tabletId, nodeId] : TabletId2NodeId) {
             NodeId2State.try_emplace(nodeId, nodeId).first->second.PendingTablets.push_back(tabletId);
         }
     }
 
-    SelectBuilder.emplace(/*isIntermediateAggregation=*/IsColumnTable);
+    SelectBuilder.emplace(/*isIntermediateAggregation=*/UsePerShardScans);
     size_t totalSize = 0;
 
     if (!CountSeq && !RowCount) {
@@ -511,7 +528,7 @@ void TAnalyzeActor::DispatchSomeScanActors() {
         };
     };
 
-    if (!IsColumnTable) {
+    if (!UsePerShardScans) {
         Y_ENSURE(ScanActorsInFlight.empty());
         YDB_LOG_DEBUG("Dispatching scan actor for the whole table",
             {"selfId", SelfId()});
@@ -568,7 +585,7 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     ScanActorsInFlight.erase(actorIt);
 
     ++ScansCompletedTotal;
-    const ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    const ui32 shardsTotal = UsePerShardScans ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
     // Cap intermediate progress below 100%: simple-stats and stage-2 rounds share
     // ScansCompletedTotal, so 100% is only emitted from the final-result branch.
     const ui32 shardsDoneCap = shardsTotal > 0 ? shardsTotal - 1 : 0;

@@ -151,6 +151,7 @@ private:
         hFunc(TEvCheckpointStorage::TEvAbortCheckpointRequest, Handle);
         hFunc(TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest, Handle);
         hFunc(TEvCheckpointStorage::TEvGcFinished, Handle);
+        hFunc(TEvCheckpointStorage::TEvDeleteGraphRequest, Handle);
 
         hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskState, Handle);
         hFunc(NYql::NDq::TEvDqCompute::TEvGetTaskState, Handle);
@@ -170,6 +171,7 @@ private:
 
     void Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::TPtr& ev);
     void Handle(TEvCheckpointStorage::TEvGcFinished::TPtr& ev);
+    void Handle(TEvCheckpointStorage::TEvDeleteGraphRequest::TPtr& ev);
 
     void Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev);
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
@@ -680,6 +682,40 @@ bool TStorageProxy::CheckStatus(TEvent& ev) {
     }
 }
 
+void TStorageProxy::Handle(TEvCheckpointStorage::TEvDeleteGraphRequest::TPtr& ev) {
+    const auto* event = ev->Get();
+    YDB_LOG_DEBUG("Got TEvDeleteGraphRequest",
+        {"graphId", event->GraphId});
+    if (!CheckStatus(ev)) {
+        return;
+    }
+
+    auto checkpointFuture = CheckpointStorage->DeleteGraph(event->GraphId);
+    auto stateFuture = StateStorage->DeleteGraph(event->GraphId);
+
+    std::vector<NThreading::TFuture<NYql::TIssues>> futures{checkpointFuture, stateFuture};
+    NThreading::WaitAll(futures).Apply([
+        graphId = event->GraphId,
+        cookie = ev->Cookie,
+        sender = ev->Sender,
+        actorSystem = TActivationContext::ActorSystem(),
+        checkpointFuture,
+        stateFuture](const auto&) mutable {
+            NYql::TIssues issues;
+            issues.AddIssues(checkpointFuture.GetValue());
+            issues.AddIssues(stateFuture.GetValue());
+            if (!issues.Empty()) {
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to delete graph",
+                    {"graphId", graphId},
+                    {"issues", issues.ToOneLineString()});
+            } else {
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Graph deleted",
+                    {"graphId", graphId});
+            }
+            actorSystem->Send(sender, new TEvCheckpointStorage::TEvDeleteGraphResponse(std::move(issues)), 0, cookie);
+        });
+}
+
 void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::TIssues issues) {
     switch (ev->GetTypeRewrite()) {
         case TEvCheckpointStorage::TEvRegisterCoordinatorRequest::EventType: {
@@ -725,6 +761,13 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
                 {"issues", issues.ToOneLineString()});
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvAbortCheckpointRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(event->CheckpointId, std::move(issues));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            break;
+        }
+        case TEvCheckpointStorage::TEvDeleteGraphRequest::EventType: {
+            YDB_LOG_WARN("Send TEvDeleteGraphResponse with",
+                {"issues", issues.ToOneLineString()});
+            auto response = std::make_unique<TEvCheckpointStorage::TEvDeleteGraphResponse>(std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             break;
         }

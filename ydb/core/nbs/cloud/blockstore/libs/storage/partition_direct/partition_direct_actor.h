@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -58,6 +59,8 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
+    // Chaos controllers are indexed by DirectBlockGroup index.
+    TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -273,6 +276,7 @@ private:
         size_t dbgId,
         THostIndex newHostIndex);
 
+    // Mon-page related methods.
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     [[nodiscard]] TString GetSocketPath() const;

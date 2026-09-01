@@ -1649,13 +1649,19 @@ TProducer::TProducer(
 
     TDescribeTopicSettings describeTopicSettings;
     auto topicConfig = DescribeTopicWithRetries(client.get(), settings.Path_, describeTopicSettings, DbDriverState, LogPrefix());
+    if (!topicConfig.IsSuccess()) {
+        ythrow TContractViolation(TStringBuilder()
+            << "Failed to describe topic '" << settings.Path_ << "': " << topicConfig.GetStatus()
+            << ", " << topicConfig.GetIssues().ToOneLineString()
+            << " (check that the topic path and the database are correct)");
+    }
     auto partitions = topicConfig.GetTopicDescription().GetPartitions();
     std::sort(partitions.begin(), partitions.end(), [](const auto& a, const auto& b) -> bool {
         return a.GetPartitionId() < b.GetPartitionId();
     });
 
     if (partitions.empty()) {
-        ythrow TContractViolation("Topic has no partitions");
+        ythrow TContractViolation(TStringBuilder() << "Topic '" << settings.Path_ << "' has no partitions");
     }
 
     auto partitionChooserStrategy = settings.PartitionChooserStrategy_;

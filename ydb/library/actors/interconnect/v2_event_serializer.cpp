@@ -11,8 +11,14 @@
 namespace NActors {
 
     TRcBuf AllocateXdcSectionBuffer(size_t size, size_t headroom, size_t tailroom, size_t alignment) {
+        // The geometry reaches here straight off the wire on the receive path, so the invariants the
+        // arithmetic below relies on are enforced unconditionally: a non-power-of-two alignment makes
+        // `extra - shift` wrap, and an oversized sum makes the allocation wrap.
+        Y_ABORT_UNLESS((alignment & (alignment - 1)) == 0, "alignment %zu is not a power of two", alignment);
+        Y_ABORT_UNLESS(size <= EventMaxByteSize && headroom <= EventMaxByteSize && tailroom <= EventMaxByteSize
+            && alignment <= EventMaxByteSize, "section geometry out of range: size# %zu headroom# %zu"
+            " tailroom# %zu alignment# %zu", size, headroom, tailroom, alignment);
         if (alignment > 1) {
-            Y_DEBUG_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
             // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base
             // buffer, but headroom may still shift the visible data away from the requested alignment, so
             // we always keep up to alignment - 1 bytes of extra slack and spend part of it as additional
@@ -241,6 +247,9 @@ namespace NActors {
         queue.SectionIndex = 0;
         queue.SectionBytesRemain = 0;
         queue.XdcDeclareIndex = 0;
+        queue.EventMainEnd = 0;
+        queue.EventXdcEnd = 0;
+        queue.ChecksumExternal = true;
         queue.EvSerInfo = nullptr;
         queue.EvSerInfoHolder = {};
         queue.Buffer = nullptr;
@@ -249,6 +258,11 @@ namespace NActors {
     size_t TEventSerializer::ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
             TStreamState& main, TStreamState *xdc) {
         size_t numBytesProduced = 0;
+
+        main.EventEnd = &queue.EventMainEnd;
+        if (xdc) {
+            xdc->EventEnd = &queue.EventXdcEnd;
+        }
 
         auto produceOutputSpan = [&](TStreamState& st, TContiguousSpan span, bool addToChecksum) {
             if (Y_UNLIKELY(addToChecksum)) {
@@ -270,6 +284,7 @@ namespace NActors {
             maxBytesToProduce -= span.size();
             numBytesProduced += span.size();
             *st.CumulativeProduced += span.size();
+            *st.EventEnd = *st.CumulativeProduced;
             if (st.LastSpanEnd != span.data()) {
                 st.Out->push_back(span);
             } else {
@@ -358,7 +373,7 @@ namespace NActors {
                 };
                 const ui16 n = static_cast<ui16>(payload.size());
                 memcpy(takeInBuffer(sizeof(ui16)), &n, sizeof(n));
-                produceOutputSpan(*xdc, payload, Checksumming);
+                produceOutputSpan(*xdc, payload, Checksumming && queue.ChecksumExternal);
                 Y_ABORT_UNLESS(payload.size() <= queue.SerializedBytesPending);
                 queue.SerializedBytesPending -= payload.size();
                 Y_ABORT_UNLESS(payload.size() <= queue.SectionBytesRemain);
@@ -413,6 +428,10 @@ namespace NActors {
                     ev.TraceId.Serialize(&queue.EventHeader.TraceId);
 
                     queue.UseXdcForEvent = UseExternalDataChannel && xdc && HasExternalSections(queue.EvSerInfo);
+                    // The peer applies the same rule off the transmitted header flag, so both ends digest
+                    // the same byte range. Old v2 peers never declare sections, so they always digest
+                    // everything and stay compatible.
+                    queue.ChecksumExternal = !(ev.Flags & IEventHandle::FlagDisablePayloadChecksums);
                     queue.SectionIndex = 0;
                     queue.SectionBytesRemain = 0;
                     queue.XdcDeclareIndex = 0;
@@ -488,7 +507,11 @@ namespace NActors {
                             addEventChunkBytes(queue.Iter.ContiguousData(), numBytes);
                             queue.Iter += numBytes;
                         }
-                    } else if (xdc) {
+                    } else {
+                        // An external section can only have been chosen while an XDC stream was present,
+                        // and the engine keeps it present for the session's lifetime. Losing it mid-event
+                        // would otherwise leave this channel unable to make progress forever.
+                        Y_ABORT_UNLESS(xdc, "XDC stream went away mid-event");
                         while (queue.Iter.Valid() && queue.SectionBytesRemain
                                 && maxBytesToProduce > XdcPushFraming
                                 && main.Buffer.size() >= XdcPushFraming) {
@@ -500,8 +523,6 @@ namespace NActors {
                             emitXdcPush({queue.Iter.ContiguousData(), n});
                             queue.Iter += n;
                         }
-                    } else {
-                        break;
                     }
                     if (!queue.Iter.Valid()) {
                         queue.SerializeStage = ESerializeStage::kHeader;
@@ -541,7 +562,14 @@ namespace NActors {
                                 addEventChunkBytes(chunk.Buf, chunk.Size);
                             }
                         }
-                    } else if (xdc && maxBytesToProduce > XdcPushFraming && main.Buffer.size() >= XdcPushFraming) {
+                    } else {
+                        // An external section can only have been chosen while an XDC stream was present,
+                        // and the engine keeps it present for the session's lifetime.
+                        Y_ABORT_UNLESS(xdc, "XDC stream went away mid-event");
+                        if (maxBytesToProduce <= XdcPushFraming || main.Buffer.size() < XdcPushFraming) {
+                            SerializeEventTime += UpdateTimestamp();
+                            break; // no room for the PUSH command; resume on the next call
+                        }
                         TMutableContiguousSpan span = xdc->Buffer;
                         const size_t payloadLimit = Min(maxBytesToProduce - XdcPushFraming, queue.SectionBytesRemain,
                             size_t(Max<ui16>()));
@@ -562,7 +590,8 @@ namespace NActors {
                                 const ui16 n = static_cast<ui16>(total);
                                 memcpy(takeInBuffer(sizeof(ui16)), &n, sizeof(n));
                                 for (const auto& chunk : chunks) {
-                                    produceOutputSpan(*xdc, {chunk.Buf, chunk.Size}, Checksumming);
+                                    produceOutputSpan(*xdc, {chunk.Buf, chunk.Size},
+                                        Checksumming && queue.ChecksumExternal);
                                 }
                                 Y_ABORT_UNLESS(total <= queue.SerializedBytesPending);
                                 queue.SerializedBytesPending -= total;
@@ -570,15 +599,12 @@ namespace NActors {
                                 queue.SectionBytesRemain -= total;
                             }
                         }
-                    } else {
-                        SerializeEventTime += UpdateTimestamp();
-                        break;
                     }
 
                     if (auto& cords = queue.CoroutineChunkSerializer.GetCords(); !cords.empty()) {
                         RefcountItems.push_back({
-                            .MainEndOffset = CumulativeProducedMain,
-                            .XdcEndOffset = CumulativeProducedXdc,
+                            .MainEndOffset = queue.EventMainEnd,
+                            .XdcEndOffset = queue.EventXdcEnd,
                             .Cords = std::exchange(cords, {}),
                         });
                     }
@@ -618,8 +644,8 @@ namespace NActors {
 
                     if (queue.EventHeaderOffset == sizeof(TEventHeader)) {
                         RefcountItems.push_back({
-                            .MainEndOffset = CumulativeProducedMain,
-                            .XdcEndOffset = CumulativeProducedXdc,
+                            .MainEndOffset = queue.EventMainEnd,
+                            .XdcEndOffset = queue.EventXdcEnd,
                             .Buffer = std::exchange(queue.Buffer, nullptr),
                             .Event{ev.ReleaseBase().Release()},
                             .EventReceivedTimestamp = reinterpret_cast<const ui64&>(ev.OriginScopeId),
@@ -667,6 +693,9 @@ namespace NActors {
             TXdcSection rec;
             memcpy(&rec, data + i * sizeof(TXdcSection), sizeof(rec));
             const bool isInline = rec.Flags & TXdcSection::FlagInline;
+            ev.DeclaredSize += rec.Size;
+            Y_ABORT_UNLESS(ev.DeclaredSize <= EventMaxByteSize,
+                "declared section sizes total %zu, over the maximum event size", ev.DeclaredSize);
             ev.EvSerInfo.Sections.push_back(TEventSectionInfo{
                 rec.Headroom, rec.Size, rec.Tailroom, rec.Alignment, isInline, false});
             if (!isInline && rec.Size) {
@@ -758,8 +787,27 @@ namespace NActors {
             if (ev.EventHeader.Checksum) {
                 XXH3_state_t state;
                 XXH3_64bits_reset(&state);
-                for (auto iter = payload.begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
-                    XXH3_64bits_update(&state, iter.ContiguousData(), iter.ContiguousSize());
+                // Mirror of the sender: an event flagged FlagDisablePayloadChecksums keeps its external
+                // (XDC) sections out of the digest. Sections are only ever populated when the peer used
+                // XDC, so events from peers that digest everything take the plain path below.
+                if ((ev.EventHeader.Flags & IEventHandle::FlagDisablePayloadChecksums)
+                        && !ev.EvSerInfo.Sections.empty()) {
+                    auto iter = payload.begin();
+                    for (const auto& s : ev.EvSerInfo.Sections) {
+                        for (size_t remain = s.Size; remain; ) {
+                            Y_ABORT_UNLESS(iter.Valid());
+                            const size_t n = Min(remain, iter.ContiguousSize());
+                            if (s.IsInline) {
+                                XXH3_64bits_update(&state, iter.ContiguousData(), n);
+                            }
+                            iter += n;
+                            remain -= n;
+                        }
+                    }
+                } else {
+                    for (auto iter = payload.begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+                        XXH3_64bits_update(&state, iter.ContiguousData(), iter.ContiguousSize());
+                    }
                 }
                 const ui64 expected = std::exchange(ev.EventHeader.Checksum, 0);
                 XXH3_64bits_update(&state, &ev.EventHeader, sizeof(ev.EventHeader));

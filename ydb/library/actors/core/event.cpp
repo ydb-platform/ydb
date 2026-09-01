@@ -53,11 +53,11 @@ namespace NActors {
         return new TEventSerializedData;
     }
 
-    void IEventHandle::Preserialize() {
+    void IEventHandle::Preserialize(bool allowExternalDataChannel) {
         if (Event && !Buffer) {
             TAllocChunkSerializer serializer;
             Event->SerializeToArcadiaStream(&serializer);
-            Buffer = serializer.Release(Event->CreateSerializationInfo(true));
+            Buffer = serializer.Release(Event->CreateSerializationInfo(allowExternalDataChannel));
             Event.Reset();
         }
     }

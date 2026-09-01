@@ -161,6 +161,16 @@ namespace NActors {
             size_t SectionIndex = 0;
             size_t SectionBytesRemain = 0;
             size_t XdcDeclareIndex = 0;
+
+            // Absolute stream offsets just past the bytes *this* event produced on each medium, or 0 when
+            // it produced none there. Stamping a refcount item with the global CumulativeProduced* instead
+            // would make a main-only event wait for an unrelated earlier event's XDC bytes to drain.
+            ui64 EventMainEnd = 0;
+            ui64 EventXdcEnd = 0;
+
+            // Cleared for events carrying IEventHandle::FlagDisablePayloadChecksums: their external
+            // (XDC) sections are left out of the digest, mirroring v1's PUSH_DATA_NO_CHECKSUMS.
+            bool ChecksumExternal = true;
         };
         std::array<TPerChannelQueue, NumDefaultChannels> PerChannelQueue;
         THashMap<ui16, TPerChannelQueue> PerChannelQueueMap;
@@ -250,6 +260,8 @@ namespace NActors {
             const char *LastSpanEnd = nullptr;
             ui64 *CumulativeProduced = nullptr;
             ui64 *BufferProduced = nullptr;
+            // High-water mark of the queue currently being served; retargeted per channel.
+            ui64 *EventEnd = nullptr;
             bool Enabled = false;
         };
 
@@ -278,6 +290,7 @@ namespace NActors {
             TEventHeader EventHeader;
             size_t EventHeaderOffset = 0;
             size_t XdcSizeLeft = 0;
+            size_t DeclaredSize = 0; // sum of all declared section sizes, bounded against EventMaxByteSize
             std::deque<TMutableContiguousSpan> XdcBuffers;
             bool HeaderComplete = false;
             bool Declared = false;

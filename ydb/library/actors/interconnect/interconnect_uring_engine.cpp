@@ -297,9 +297,27 @@ namespace NActors {
             void Serialize(size_t minWriteBufferSize, size_t maxWriteBufferSize) {
                 Serializer.ResetCounters();
 
-                while (UnsentBytes + XdcUnsentBytes < SerializeWindowSize
-                        && OutgoingSpans.size() < MaxSpansPerWrite
-                        && (!XdcSocket || XdcOutgoingSpans.size() < MaxSpansPerWrite)) {
+                for (;;) {
+                    if (OutgoingSpans.size() >= MaxSpansPerWrite) {
+                        break;
+                    }
+                    if (XdcSocket && XdcOutgoingSpans.size() >= MaxSpansPerWrite) {
+                        break;
+                    }
+                    const size_t unsent = UnsentBytes + XdcUnsentBytes;
+                    size_t budget = unsent < SerializeWindowSize ? SerializeWindowSize - unsent : 0;
+                    if (!budget) {
+                        // The window is exhausted, which on a session with XDC can mean the XDC socket
+                        // alone is backed up. Liveness must not depend on payload progress: the peer
+                        // declares us dead if it stops seeing pings, so out-of-band system traffic gets
+                        // its own small budget on top of the window. It is emitted first (the system
+                        // channel sits at the head of the quota heap), and the loop ends as soon as it
+                        // drains, so the overshoot is bounded by one grant.
+                        if (!Serializer.HasOutOfBandTraffic()) {
+                            break;
+                        }
+                        budget = minWriteBufferSize;
+                    }
                     if (WriteBuffer.size() < minWriteBufferSize) {
                         WriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
                     }
@@ -311,7 +329,7 @@ namespace NActors {
                     const size_t numBytesProduced = Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
                         XdcSocket ? &XdcWriteBuffer : nullptr,
                         XdcSocket ? &XdcOutgoingSpans : nullptr,
-                        SerializeWindowSize - UnsentBytes - XdcUnsentBytes);
+                        budget);
 
                     if (!numBytesProduced) {
                         break;
@@ -1787,9 +1805,11 @@ namespace NActors {
                 // Produce only when neither socket has a write in flight. Producing XDC payload while
                 // the corresponding PUSH commands are stuck behind an in-flight main write fills the
                 // XDC TCP buffer with bytes the receiver cannot place (no destinations yet) and stalls
-                // under small socket buffers.
+                // under small socket buffers. Out-of-band system traffic is exempt: pings are what keep
+                // dead-peer detection quiet, so they must never queue behind payload on either socket.
                 const bool xdcWriteBusy = session.XdcSocket && session.XdcWritePending;
-                if (session.Serializer.IsTrafficPending() && !session.WritePending && !xdcWriteBusy) {
+                const bool idle = !session.WritePending && !xdcWriteBusy;
+                if (session.Serializer.IsTrafficPending() && (idle || session.Serializer.HasOutOfBandTraffic())) {
                     ACTIVITY(&SerializeTotalTime) {
                         session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
                         const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
@@ -1858,8 +1878,16 @@ namespace NActors {
             }
 
             void MaybeIssueXdcReadForSession(TSession& session) {
-                if (!session.XdcSocket || session.XdcReadPending || session.Terminated
-                        || session.MigrateTargetShard != ShardIdx) {
+                if (!session.XdcSocket) {
+                    // The peer framed XDC destinations on a session we have no second socket for, so
+                    // nothing will ever fill them and every channel involved would stall silently.
+                    // Negotiation is symmetric, so this only happens if the peer is misbehaving.
+                    if (session.Deserializer.HasXdcReadPending() && !session.Terminated) {
+                        session.Disconnect(TDisconnectReason::FormatError());
+                    }
+                    return;
+                }
+                if (session.XdcReadPending || session.Terminated || session.MigrateTargetShard != ShardIdx) {
                     return;
                 }
                 if (!session.Deserializer.HasXdcReadPending()) {

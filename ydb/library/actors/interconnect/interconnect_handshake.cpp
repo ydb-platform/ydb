@@ -1058,6 +1058,8 @@ namespace NActors {
                     Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
                     TUringContext::IsAvailable();
                 request.SetRequestSessionV2(requestSessionV2);
+                // Pure capability bit: whether XDC is actually used is decided by the separately
+                // negotiated UseExternalDataChannel, which EnableExternalDataChannel already governs.
                 request.SetRequestSessionV2Xdc(requestSessionV2);
                 request.SetHandshakeId(*HandshakeId);
 

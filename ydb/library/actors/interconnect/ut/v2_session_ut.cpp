@@ -1082,5 +1082,6 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         }, "main-channel bytes observed");
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 0);
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "BytesSentXdc"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 2, 1, "BytesReceivedXdc"), 0);
     }
 }

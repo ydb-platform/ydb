@@ -184,7 +184,7 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::EnqueueOutgoing(TAutoPtr<IEventHandle> ev) {
         if (Proxy->Common->Settings.V2.EnablePreserializeEvents) {
-            ev->Preserialize();
+            ev->Preserialize(Params.UseExternalDataChannel && Params.UseSessionV2Xdc);
         }
         Proxy->Common->UringEngineV2->Send(EngineHandle, std::unique_ptr<IEventHandle>(ev.Release()));
     }

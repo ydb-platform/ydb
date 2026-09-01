@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         ev->AddPayload(TRope(TString(payloadLen, 'P')));
         auto h = std::make_unique<IEventHandle>(recipient, sender, ev.release(), 0, cookie);
         if (buffer) {
-            h->Preserialize();
+            h->Preserialize(/*allowExternalDataChannel=*/true);
         }
 
         TEventSerializer ser(true, /*useExternalDataChannel=*/true);
@@ -885,4 +885,217 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
             "the flooded XDC channel blocks the other one: floodBeforeLastOther# " << floodBeforeLastOther);
     }
 
+    // Round-trips one event over both media and checks every payload came back byte-identical. Used to
+    // cover section-table shapes the single-payload tests above never produce.
+    void CheckXdcPayloads(const std::vector<TString>& payloads, bool setRecordFields, bool preserialize,
+            ui32 extraFlags = 0) {
+        auto ev = std::make_unique<TEvPrivate::TEvProto>();
+        if (setRecordFields) {
+            ev->Record.SetMeta("sections");
+        }
+        for (const TString& p : payloads) {
+            ev->AddPayload(TRope(p));
+        }
+        auto h = std::make_unique<IEventHandle>(TActorId(2, 3, 4, 5), TActorId(1, 2, 3, 4), ev.release(),
+            extraFlags, 777);
+        if (preserialize) {
+            h->Preserialize(/*allowExternalDataChannel=*/true);
+        }
+
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        ser.Push(std::move(h));
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        auto& out = *processor.Events.front()->Get<TEvPrivate::TEvProto>();
+        UNIT_ASSERT_VALUES_EQUAL(out.GetPayloadCount(), payloads.size());
+        for (size_t i = 0; i < payloads.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(i).ConvertToString(), payloads[i]);
+        }
+    }
+
+    Y_UNIT_TEST(XdcMultiplePayloads) {
+        CheckXdcPayloads({TString(2000, 'a'), TString(2000, 'b'), TString(2000, 'c')}, true, false);
+    }
+
+    // A zero-size rope produces a zero-size external section, which must not consume a PUSH or a buffer.
+    Y_UNIT_TEST(XdcEmptyPayloadAmongLarge) {
+        CheckXdcPayloads({TString(), TString(8192, 'x'), TString()}, true, false);
+    }
+
+    // An empty protobuf record leaves a zero-size inline section last, so the section table runs out
+    // while the coroutine still has to be driven to completion.
+    Y_UNIT_TEST(XdcEmptyRecordWithPayload) {
+        CheckXdcPayloads({TString(8192, 'z')}, /*setRecordFields=*/false, false);
+        CheckXdcPayloads({TString(8192, 'z')}, /*setRecordFields=*/false, /*preserialize=*/true);
+    }
+
+    // More sections than fit one kXdcDeclare chunk, so DECLARE has to be split and reassembled.
+    Y_UNIT_TEST(XdcDeclareSpansSeveralChunks) {
+        std::vector<TString> payloads;
+        for (size_t i = 0; i < 5000; ++i) {
+            payloads.push_back(TString(4, static_cast<char>('a' + i % 26)));
+        }
+        CheckXdcPayloads(payloads, true, false);
+    }
+
+    // FlagDisablePayloadChecksums leaves the external sections out of the digest; sender and receiver
+    // must agree on exactly which bytes are covered or delivery aborts on a checksum mismatch.
+    Y_UNIT_TEST(XdcPayloadChecksumsDisabled) {
+        CheckXdcPayloads({TString(8192, 'q')}, true, false, IEventHandle::FlagDisablePayloadChecksums);
+        CheckXdcPayloads({TString(4000, 'q'), TString(4000, 'r')}, true, true,
+            IEventHandle::FlagDisablePayloadChecksums);
+    }
+
+    // Pulls the event header out of the main stream so the transmitted checksum can be inspected.
+    TEventSerializer::TEventHeader ExtractEventHeader(TStringBuf main) {
+        using TChunkHeader = TEventSerializer::TChunkHeader;
+        TEventSerializer::TEventHeader header{};
+        size_t headerOffset = 0;
+        size_t pos = 0;
+        while (pos + sizeof(TChunkHeader) <= main.size()) {
+            TChunkHeader chunk;
+            memcpy(&chunk, main.data() + pos, sizeof(chunk));
+            pos += sizeof(chunk);
+            UNIT_ASSERT(pos + chunk.Length <= main.size());
+            if (chunk.GetType() == TChunkHeader::kEventHeader) {
+                UNIT_ASSERT(headerOffset + chunk.Length <= sizeof(header));
+                memcpy(reinterpret_cast<char*>(&header) + headerOffset, main.data() + pos, chunk.Length);
+                headerOffset += chunk.Length;
+            }
+            pos += chunk.Length;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(headerOffset, sizeof(header));
+        return header;
+    }
+
+    ui64 SerializeOneAndGetChecksum(const TString& payload, ui32 flags) {
+        auto ev = std::make_unique<TEvPrivate::TEvProto>();
+        ev->Record.SetMeta("digest");
+        ev->AddPayload(TRope(payload));
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        ser.Push(std::make_unique<IEventHandle>(TActorId(2, 3, 4, 5), TActorId(1, 2, 3, 4), ev.release(),
+            flags, 5));
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        UNIT_ASSERT(!xdcSpans.empty());
+        const TString main = ConcatSpans(mainSpans);
+        return ExtractEventHeader(main).Checksum;
+    }
+
+    // Two events differing only in the bytes that travel over XDC: with the flag set those bytes are
+    // outside the digest, so the transmitted checksum is identical; without it, it must differ.
+    Y_UNIT_TEST(XdcPayloadChecksumsDisabledActuallySkipsPayload) {
+        const TString a(8192, 'a');
+        const TString b(8192, 'b');
+
+        const ui64 skippedA = SerializeOneAndGetChecksum(a, IEventHandle::FlagDisablePayloadChecksums);
+        const ui64 skippedB = SerializeOneAndGetChecksum(b, IEventHandle::FlagDisablePayloadChecksums);
+        UNIT_ASSERT(skippedA);
+        UNIT_ASSERT_VALUES_EQUAL_C(skippedA, skippedB,
+            "external payload still contributes to the digest despite FlagDisablePayloadChecksums");
+
+        const ui64 coveredA = SerializeOneAndGetChecksum(a, 0);
+        const ui64 coveredB = SerializeOneAndGetChecksum(b, 0);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(coveredA, coveredB,
+            "external payload must be covered by the digest by default");
+    }
+
+    // Drives production through tiny scratch buffers and quota slices so DECLARE, PUSH and event-header
+    // framing all straddle call boundaries.
+    void CheckXdcWithBuffers(size_t bufSize, size_t maxPerCall, size_t payloadLen, size_t numEvents,
+            bool preserialize) {
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        for (size_t i = 0; i < numEvents; ++i) {
+            auto ev = std::make_unique<TEvPrivate::TEvProto>();
+            ev->Record.SetMeta(ToString(i));
+            ev->AddPayload(TRope(MakePayloadData(i, payloadLen)));
+            auto h = std::make_unique<IEventHandle>(TActorId(2, 3, 4, 5), TActorId(1, 2, 3, 4),
+                ev.release(), IEventHandle::MakeFlags(1, 0), i);
+            if (preserialize) {
+                h->Preserialize(/*allowExternalDataChannel=*/true);
+            }
+            ser.Push(std::move(h));
+        }
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        for (;;) {
+            if (mainBufs.empty() || mainBufs.back().size() < bufSize) {
+                mainBufs.push_back(TRcBuf::Uninitialized(bufSize));
+            }
+            if (xdcBufs.empty() || xdcBufs.back().size() < bufSize) {
+                xdcBufs.push_back(TRcBuf::Uninitialized(bufSize));
+            }
+            if (!ser.ProduceOutputStream(mainBufs.back(), &mainSpans, &xdcBufs.back(), &xdcSpans, maxPerCall)) {
+                break;
+            }
+        }
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), numEvents);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        for (size_t i = 0; i < numEvents; ++i) {
+            auto& out = *processor.Events[i]->Get<TEvPrivate::TEvProto>();
+            UNIT_ASSERT_VALUES_EQUAL(out.Record.GetMeta(), ToString(i));
+            UNIT_ASSERT_VALUES_EQUAL(out.GetPayload(0).ConvertToString(), MakePayloadData(i, payloadLen));
+        }
+    }
+
+    Y_UNIT_TEST(XdcTinyBuffersAndSlices) {
+        CheckXdcWithBuffers(/*bufSize=*/64, /*maxPerCall=*/64, /*payloadLen=*/8192, /*numEvents=*/5, false);
+        CheckXdcWithBuffers(64, 64, 8192, 5, /*preserialize=*/true);
+        CheckXdcWithBuffers(/*bufSize=*/128, /*maxPerCall=*/37, /*payloadLen=*/5000, /*numEvents=*/8, false);
+    }
+
+    // A payload well past the ui16 PUSH limit has to be split across many PUSH commands.
+    Y_UNIT_TEST(XdcLargePayloadManyPushes) {
+        CheckXdcWithBuffers(65536, Max<size_t>(), 1 << 20, 2, false);
+        CheckXdcWithBuffers(65536, Max<size_t>(), 1 << 20, 2, /*preserialize=*/true);
+    }
+
+    // A main-only event must not be held hostage by an unrelated earlier event's XDC bytes: it produced
+    // nothing on that socket, so committing the main stream alone has to release it.
+    Y_UNIT_TEST(XdcMainOnlyEventReleasedWhileXdcInFlight) {
+        TEventSerializer ser(false, /*useExternalDataChannel=*/true);
+        ser.Push(MakeIndexedEvent(1, 0, 8192, true));  // goes on both media
+        ser.Push(MakeIndexedEvent(2, 1, 8, false));    // main only
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+        const ui64 producedMain = ser.GetCumulativeProducedMain();
+        const ui64 producedXdc = ser.GetCumulativeProducedXdc();
+        UNIT_ASSERT_GT(producedXdc, 0u);
+
+        // Main drained, XDC still entirely in flight.
+        std::vector<std::unique_ptr<IEventBase>> events;
+        std::vector<TIntrusivePtr<TEventSerializedData>> buffers;
+        ser.CommitProducedBytes(producedMain, 0, nullptr, &events, &buffers);
+        UNIT_ASSERT_VALUES_EQUAL_C(events.size(), 1u,
+            "the main-only event should be released as soon as the main stream is committed");
+
+        ser.CommitProducedBytes(0, producedXdc, nullptr, &events, &buffers);
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 2u);
+    }
 }

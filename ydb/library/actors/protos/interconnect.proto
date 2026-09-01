@@ -150,7 +150,6 @@ message THandshakeRequest {
     optional bool RequestXdcShuffle = 25;
     optional bool RequestAllowDisablingPayloadChecksums = 28; // Can be requested per event. Affects XDC and RDMA payloads.
     optional bool RequestSessionV2 = 29; // request TInterconnectSessionTCPv2 (no continuation, no encryption)
-    optional bool RequestSessionV2Xdc = 30; // v2 peer understands kXdcDeclare/kXdcPush chunks
 
     optional bytes CompatibilityInfo = 22;
 
@@ -190,7 +189,6 @@ message THandshakeSuccess {
     optional bool UseXdcShuffle = 17;
     optional bool AllowDisablingPayloadChecksums = 21;
     optional bool UseSessionV2 = 22; // negotiated TInterconnectSessionTCPv2 usage
-    optional bool UseSessionV2Xdc = 23; // negotiated v2 XDC command chunks (kXdcDeclare/kXdcPush)
 
     optional bytes CompatibilityInfo = 15;
 

@@ -1058,9 +1058,6 @@ namespace NActors {
                     Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
                     TUringContext::IsAvailable();
                 request.SetRequestSessionV2(requestSessionV2);
-                // Pure capability bit: whether XDC is actually used is decided by the separately
-                // negotiated UseExternalDataChannel, which EnableExternalDataChannel already governs.
-                request.SetRequestSessionV2Xdc(requestSessionV2);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -1159,7 +1156,6 @@ namespace NActors {
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
                 Params.AllowDisablingPayloadChecksums = success.GetAllowDisablingPayloadChecksums();
                 Params.UseSessionV2 = success.GetUseSessionV2();
-                Params.UseSessionV2Xdc = success.GetUseSessionV2Xdc();
                 // Kernel liveness mode is a local transport decision: it depends on whether this side
                 // configured keepalive/user-timeout on its own socket.
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
@@ -1448,7 +1444,6 @@ namespace NActors {
                 Params.UseSessionV2 = request.GetRequestSessionV2() &&
                     Common->Settings.V2.Enable && !Params.Encryption &&
                     TUringContext::IsAvailable();
-                Params.UseSessionV2Xdc = request.GetRequestSessionV2Xdc() && Params.UseSessionV2;
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1530,7 +1525,6 @@ namespace NActors {
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
                     success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
                     success.SetUseSessionV2(Params.UseSessionV2);
-                    success.SetUseSessionV2Xdc(Params.UseSessionV2Xdc);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;

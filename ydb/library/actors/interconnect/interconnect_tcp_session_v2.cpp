@@ -89,7 +89,7 @@ namespace NActors {
             as->Send(selfId, new TEvPrivate::TEvTerminate(reason));
         };
         SetNonBlock(*Socket, false);
-        const bool useXdc = Params.UseExternalDataChannel && Params.UseSessionV2Xdc && XdcSocket;
+        const bool useXdc = Params.UseExternalDataChannel && XdcSocket;
         if (useXdc) {
             SetNonBlock(*XdcSocket, false);
         }
@@ -184,7 +184,7 @@ namespace NActors {
 
     void TInterconnectSessionTCPv2::EnqueueOutgoing(TAutoPtr<IEventHandle> ev) {
         if (Proxy->Common->Settings.V2.EnablePreserializeEvents) {
-            ev->Preserialize(Params.UseExternalDataChannel && Params.UseSessionV2Xdc);
+            ev->Preserialize(Params.UseExternalDataChannel);
         }
         Proxy->Common->UringEngineV2->Send(EngineHandle, std::unique_ptr<IEventHandle>(ev.Release()));
     }
@@ -241,7 +241,7 @@ namespace NActors {
     }
 
     std::optional<ui8> TInterconnectSessionTCPv2::GetXDCFlags() const {
-        if (Params.UseExternalDataChannel && Params.UseSessionV2Xdc && XdcSocket) {
+        if (Params.UseExternalDataChannel && XdcSocket) {
             return TInterconnectProxyTCP::TProxyStats::NONE;
         }
         return std::nullopt;
@@ -256,7 +256,6 @@ namespace NActors {
         str << "<tr><td>EngineHandle</td><td>" << EngineHandle << "</td></tr>";
         str << "<tr><td>Subscribers.size()</td><td>" << Subscribers.size() << "</td></tr>";
         str << "<tr><td>Params.UseExternalDataChannel</td><td>" << Params.UseExternalDataChannel << "</td></tr>";
-        str << "<tr><td>Params.UseSessionV2Xdc</td><td>" << Params.UseSessionV2Xdc << "</td></tr>";
         str << "</table>";
         str << "</div></div>";
         Proxy->Common->UringEngineV2->IssueMonRequest(EngineHandle, std::move(ev));

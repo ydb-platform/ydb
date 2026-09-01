@@ -1041,7 +1041,6 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
                 return false;
             }
         }, "XDC bytes observed on both sides");
-        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseSessionV2Xdc"), 1);
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 1);
     }
 

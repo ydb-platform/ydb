@@ -178,11 +178,10 @@ private:
     TNextRequestError NextRequestError;
 
     THashMap<TString, NGRpcProxy::TTopicHolderBase> TopicsInfo; // topic -> info
-    NPersQueue::TTopicsToConverter TopicsToConverter;
     THashSet<TString> TopicsToReadNames;
     THashMap<TString, TString> OriginalTopicNames;
     THashMap<TString, TPartitionsInfo> TopicPartitions;
-    THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
+    THashMap<TString, NKikimr::NPQ::NNameResolver::TTopicNamesPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashMap<TString, TVector<TNewPartitionToLockInfo>> NewPartitionsToLockOnTime; // Topic -> PartitionsToLock
 
     static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {

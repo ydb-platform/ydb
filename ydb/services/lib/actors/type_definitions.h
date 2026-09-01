@@ -1,13 +1,11 @@
 #pragma once
 
 #include "ydb/core/persqueue/public/utils.h"
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/map.h>
-#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 #include <mutex>
@@ -20,7 +18,7 @@ struct TPartitionInfo {
 };
 
 struct TTopicInitInfo {
-    NPersQueue::TTopicConverterPtr TopicNameConverter;
+    NPQ::NNameResolver::TTopicNamesPtr TopicNameConverter;
     ui64 TabletID;
     TString CloudId;
     TString DbId;
@@ -39,7 +37,6 @@ struct TTopicHolderBase {
 
     explicit TTopicHolderBase(const TTopicInitInfo& info) {
         TabletID = info.TabletID;
-        ACLRequestInfly = false;
         CloudId = info.CloudId;
         DbId = info.DbId;
         DbPath = info.DbPath;
@@ -52,16 +49,13 @@ struct TTopicHolderBase {
 
     ui64 TabletID = 0;
     TActorId PipeClient;
-    bool ACLRequestInfly = false;
     TString CloudId;
     TString DbId;
     TString DbPath;
     bool IsServerless;
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
-    NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
-    NPersQueue::TTopicConverterPtr FullConverter;
-    TMaybe<TString> CdcStreamPath;
+    NPQ::NNameResolver::TTopicNamesPtr FullConverter;
 
     TVector<ui32> Groups;
     THashMap<ui32, TPartitionInfo> Partitions;

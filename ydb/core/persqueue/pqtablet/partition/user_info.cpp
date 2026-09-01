@@ -51,7 +51,7 @@ TUserInfo::TUserInfo(
     TConstArrayRef<NMonitoring::TDynamicCounterPtr> partitionCountersSubgroups,
     const TString& user,
     const ui64 readRuleGeneration, const bool important, const TDuration availabilityPeriod,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
     const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
     const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
@@ -146,7 +146,7 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
         if (it == BytesReadFromDC.end()) {
             auto pos = TopicConverter->GetFederationPath().find("/");
             if (pos != TString::npos) {
-                auto labels = NPersQueue::GetLabelsForCustomCluster(TopicConverter, clientDC);
+                auto labels = NPersQueue::GetLabelsForCustomCluster(TopicConverter->CounterNames(), clientDC);
                 if (!labels.empty()) {
                     labels.pop_back();
                 }
@@ -234,7 +234,7 @@ void TUserInfo::SetupTopicCounters(const TActorContext& ctx, const TString& dcId
     auto subgroup = [&](const TString& subsystem) {
         return GetServiceCounters(AppData(ctx)->Counters, subsystem);
     };
-    auto aggr = NPersQueue::GetLabels(TopicConverter);
+    auto aggr = NPersQueue::GetLabels(TopicConverter->CounterNames());
     TVector<std::pair<TString, TString>> additional_labels = {{"Client", User},
                                 {"ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx)}
                             };
@@ -316,7 +316,7 @@ void TUserInfo::SetImportant(bool important, TDuration availabilityPeriod) {
 
 TUsersInfoStorage::TUsersInfoStorage(
     TString dcId,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     ui32 partition,
     const NKikimrPQ::TPQTabletConfig& config,
     const TString& cloudId,
@@ -349,7 +349,7 @@ void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, cons
 
     if (AppData(ctx)->Counters && AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
         StreamCountersSubgroup = NPersQueue::GetCountersForTopic(AppData(ctx)->Counters, IsServerless);
-        auto subgroups = NPersQueue::GetSubgroupsForTopic(TopicConverter, CloudId, DbId, DbPath, FolderId);
+        auto subgroups = NPersQueue::GetSubgroupsForTopic(TopicConverter->CounterNames(), CloudId, DbId, DbPath, FolderId);
         for (auto& group : subgroups) {
             StreamCountersSubgroup = StreamCountersSubgroup->GetSubgroup(group.first, group.second);
         }

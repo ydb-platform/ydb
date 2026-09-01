@@ -2,6 +2,7 @@
 #include "yql_kikimr_gateway.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>

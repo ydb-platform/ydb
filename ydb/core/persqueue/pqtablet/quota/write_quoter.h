@@ -9,7 +9,7 @@ class TWriteQuoter : public TPartitionQuoterBase {
 
 public:
     TWriteQuoter(
-        const NPersQueue::TTopicConverterPtr& topicConverter,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
         const NKikimrPQ::TPQConfig& pqConfig,
         const TPartitionId& partition,

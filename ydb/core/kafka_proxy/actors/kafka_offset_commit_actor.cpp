@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include "kafka_metadata_service.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
@@ -389,27 +390,13 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
         topicsToResolve.insert(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
     }
 
-    auto topicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-        true, "", ""
-    );
-
-    auto topicHandler = std::make_unique<NPersQueue::TTopicsListController>(
-        topicConverterFactory
-    );
-
-    auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath);
-    if (!topicsToConverter.IsValid) {
-        YDB_LOG_CRIT("Commit offsets failed. topicsToConverter is not valid",
-            {LogPrefix()});
-        Error = INVALID_REQUEST;
-        SendFailedForAllPartitions(Error, ctx);
-        return;
-    }
-
+    // Kafka always used TTopicNamesConverterFactory(true, …): first-class paths.
+    // topicsToResolve are already NormalizePath'd; skip ExpandReadTopics (AppData FCC /
+    // empty cluster list would drop all topics when the test flips FCC off).
     AuthInitActor = ctx.Register(new NKikimr::NGRpcProxy::V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, Message->GroupId.value(), 0, "",
-            NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NKikimr::MakeSchemeCacheID(), nullptr, Context->Token.UserToken, topicsToConverter,
-        topicHandler->GetLocalCluster(), false)
+            TActorId(), NKikimr::MakeSchemeCacheID(), nullptr, Context->Token.UserToken, topicsToResolve,
+            Context->DatabasePath, {}, false)
     );
 }
 

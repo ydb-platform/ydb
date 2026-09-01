@@ -5,6 +5,7 @@
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -34,14 +35,11 @@ void TPQReadService::TSession::OnCreated() {
         return;
 
     }
-    if (!TopicConverterFactory->GetLocalCluster().empty()) {
-        TopicConverterFactory->SetLocalCluster(localCluster);
-    }
-    auto topicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-        TopicConverterFactory, clusters
-    );
+    NPQ::NNameResolver::TReadTopicsContext topicsHandler;
+    topicsHandler.LocalCluster = localCluster;
+    topicsHandler.Clusters = clusters;
 
-    CreateActor(std::move(topicsHandler));
+    CreateActor(topicsHandler);
     ReadyForNextRead();
 }
 
@@ -127,8 +125,7 @@ bool TPQReadService::TSession::IsShuttingDown() const {
 
 TPQReadService::TSession::TSession(std::shared_ptr<TPQReadService> proxy,
          grpc::ServerCompletionQueue* cq, ui64 cookie, const TActorId& schemeCache, const TActorId& newSchemeCache,
-         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,  bool needDiscoverClusters,
-         const NPersQueue::TConverterFactoryPtr& converterFactory)
+         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,  bool needDiscoverClusters)
     : ISession(cq)
     , Proxy(proxy)
     , Cookie(cookie)
@@ -137,7 +134,6 @@ TPQReadService::TSession::TSession(std::shared_ptr<TPQReadService> proxy,
     , NewSchemeCache(newSchemeCache)
     , Counters(counters)
     , NeedDiscoverClusters(needDiscoverClusters)
-    , TopicConverterFactory(converterFactory)
 {
 }
 
@@ -151,11 +147,11 @@ void TPQReadService::TSession::SendEvent(IEventBase* ev) {
     Proxy->ActorSystem->Send(ActorId, ev);
 }
 
-void TPQReadService::TSession::CreateActor(std::unique_ptr<NPersQueue::TTopicsListController>&& topicsHandler) {
+void TPQReadService::TSession::CreateActor(const NPQ::NNameResolver::TReadTopicsContext& topicsHandler) {
     auto classifier = Proxy->GetClassifier();
 
     auto g(Guard(Lock));
-    auto* actor = new TReadSessionActor(this, *topicsHandler, Cookie, SchemeCache, NewSchemeCache, Counters,
+    auto* actor = new TReadSessionActor(this, topicsHandler, Cookie, SchemeCache, NewSchemeCache, Counters,
                                     classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown");
     ui32 poolId = Proxy->ActorSystem->AppData<::NKikimr::TAppData>()->UserPoolId;
     ActorId = Proxy->ActorSystem->Register(actor, TMailboxType::HTSwap, poolId);
@@ -188,9 +184,6 @@ TPQReadService::TPQReadService(NKikimr::NGRpcService::TGRpcPersQueueService* ser
     NewSchemeCache = ActorSystem->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
     // ToDo[migration]: Other conditions;
     NeedDiscoverClusters = !ActorSystem->AppData<TAppData>()->PQConfig.GetTopicsAreFirstClassCitizen();
-    TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-            ActorSystem->AppData<TAppData>()->PQConfig, ""
-    );
 
     if (NeedDiscoverClusters) {
         ClustersUpdaterStatus = std::make_shared<TClustersUpdater::TStatus>();
@@ -215,7 +208,6 @@ void TPQReadService::ReleaseSession(ui64 cookie) {
 void TPQReadService::CheckClusterChange(const TString& localCluster, const bool) {
     auto g(Guard(Lock));
     LocalCluster = localCluster;
-    TopicConverterFactory->SetLocalCluster(localCluster);
 }
 
 void TPQReadService::NetClassifierUpdated(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier) {
@@ -248,7 +240,7 @@ void TPQReadService::WaitReadSession() {
     ActorSystem->Send(MakeGRpcProxyStatusID(ActorSystem->NodeId), new TEvGRpcProxyStatus::TEvUpdateStatus(0,0,1,0));
 
     TSessionRef session(new TSession(shared_from_this(), CQS[cookie % CQS.size()], cookie, SchemeCache, NewSchemeCache, Counters,
-                                     NeedDiscoverClusters, TopicConverterFactory));
+                                     NeedDiscoverClusters));
 
     {
         auto g(Guard(Lock));

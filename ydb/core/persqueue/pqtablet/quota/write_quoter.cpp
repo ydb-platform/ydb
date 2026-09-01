@@ -5,7 +5,7 @@
 namespace NKikimr::NPQ  {
 
 TWriteQuoter::TWriteQuoter(
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
     const NKikimrPQ::TPQConfig& pqConfig,
     const TPartitionId& partition,
@@ -128,7 +128,7 @@ TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::
 
 NActors::IActor* CreateWriteQuoter(
     const NKikimrPQ::TPQConfig& pqConfig,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
     const TPartitionId& partition,
     TActorId tabletActor,

@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName);
         auto source = BuildSource();
         StartSession(ReadActorId1, source);
-        ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "no path");
+        ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "does not exist");
         StopSession(ReadActorId1, source);
     }
 
@@ -738,7 +738,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName);
         auto source = BuildSource();
         StartSession(ReadActorId1, source);
-        ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "no path");
+        ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "does not exist");
         
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
@@ -749,7 +749,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
             "QueryId");
         Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, event));
 
-        ExpectSessionError(ReadActorId2, EStatusId::SCHEME_ERROR, "no path");
+        ExpectSessionError(ReadActorId2, EStatusId::SCHEME_ERROR, "does not exist");
     }
 }
 

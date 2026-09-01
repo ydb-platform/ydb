@@ -38,7 +38,7 @@ public:
 
     TAbstractPartitionChooserActor(TActorId parentId,
                                    const std::shared_ptr<IPartitionChooser>& chooser,
-                                   NPersQueue::TTopicConverterPtr& fullConverter,
+                                   NKikimr::NPQ::NNameResolver::TTopicNamesPtr& fullConverter,
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition,
                                    NWilson::TTraceId traceId,

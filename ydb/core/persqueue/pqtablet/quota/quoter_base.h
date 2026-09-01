@@ -57,7 +57,7 @@ const TDuration WAKE_UP_TIMEOUT = TDuration::MilliSeconds(50);
 
 public:
     TPartitionQuoterBase(
-        const NPersQueue::TTopicConverterPtr& topicConverter,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
         const TPartitionId& partition,
         TActorId tabletActor,
@@ -146,7 +146,7 @@ protected:
     THashMap<ui64, TInstant> QuotaRequestedTimes;
     NKikimrPQ::TPQTabletConfig PQTabletConfig;
     TMaybe<TQuotaTracker> PartitionTotalQuotaTracker;
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
     TTabletCountersBase Counters;
 
 private:

@@ -16,7 +16,7 @@ using namespace PersQueue::V1;
 
 
 TReadInfoActor::TReadInfoActor(
-        TEvPQReadInfoRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
+        TEvPQReadInfoRequest* request, const NKikimr::NPQ::NNameResolver::TReadTopicsContext& topicsHandler,
         const TActorId& schemeCache, const TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
@@ -64,9 +64,8 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
         }
         topicsToResolve.insert(t.path());
     }
-    auto topicsList = TopicsHandler.GetReadTopicsList(
-            topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString())
-    );
+    const auto database = Request().GetDatabaseName().GetOrElse(TString());
+    auto topicsList = TopicsHandler.ExpandRead(database, topicsToResolve, readOnlyLocal);
     if (!topicsList.IsValid) {
         return AnswerError(
                 topicsList.Reason,
@@ -76,7 +75,7 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler.GetLocalCluster()
+            SchemeCache, NewSchemeCache, Counters, token, topicsList.Paths, database, TopicsHandler.LocalCluster
     ));
 }
 

@@ -22,7 +22,7 @@ namespace NKikimr::NPQ::NPartitionChooser {
 
 class TTableHelper {
 public:
-    TTableHelper(const NPersQueue::TTopicConverterPtr& fullConverter,
+    TTableHelper(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& fullConverter,
                   const NKikimrPQ::TPQTabletConfig::TTopicId* topicId = nullptr)
         : TopicName(fullConverter->GetClientsideName())
         , TopicHashName(fullConverter->GetTopicForSrcIdHash())

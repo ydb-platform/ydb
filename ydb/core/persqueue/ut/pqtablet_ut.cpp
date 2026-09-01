@@ -462,7 +462,7 @@ protected:
 
     struct TReadQuoter {
         NKikimrPQ::TPQConfig PQConfig;
-        NPersQueue::TTopicConverterPtr TopicConverter;
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig PQTabletConfig;
         TPartitionId PartitionId;
         std::shared_ptr<TTabletCountersBase> Counters = std::make_shared<TTabletCountersBase>();

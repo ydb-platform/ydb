@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/generic/hash.h>
@@ -82,9 +83,9 @@ private:
     TString LocalCluster;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
-    std::shared_ptr<NPersQueue::TTopicNamesConverterFactory> TopicConverterFactory;
-    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
+    NPQ::NNameResolver::TReadTopicsContext TopicsHandler;
     bool HaveClusters;
+    bool TopicsHandlerReady = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -127,7 +128,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
         return;
     } else {
 
-        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
+        AFL_ENSURE(TopicsHandlerReady)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
         const ui64 cookie = NextCookie();
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New session created cookie",
@@ -138,7 +139,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
         TActorId worker = ctx.Register(new TReadSessionActor<Protocol>(
                 ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
-                *TopicsHandler
+                TopicsHandler
         ));
 
         Sessions[cookie] = worker;

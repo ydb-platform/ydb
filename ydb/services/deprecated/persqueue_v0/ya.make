@@ -20,6 +20,8 @@ PEERDIR(
     ydb/core/mind/address_classification
     ydb/core/persqueue/events
     ydb/core/persqueue/public/counters
+    ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/nameresolver
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/library/aclib

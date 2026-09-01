@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/pipe_utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -77,7 +78,7 @@ NActors::IActor* CreatePartitionChooserActor(TActorId parentId,
                                              const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                                              const std::shared_ptr<NPQ::IPartitionChooser>& chooser,
                                              const std::shared_ptr<NPQ::TPartitionGraph>& graph,
-                                             NPersQueue::TTopicConverterPtr& fullConverter,
+                                             NKikimr::NPQ::NNameResolver::TTopicNamesPtr& fullConverter,
                                              const TString& sourceId,
                                              std::optional<ui32> preferedPartition,
                                              NWilson::TTraceId traceId);

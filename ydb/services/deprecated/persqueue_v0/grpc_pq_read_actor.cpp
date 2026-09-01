@@ -6,6 +6,9 @@
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/library/persqueue/topic_parser/type_definitions.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -154,7 +157,7 @@ TString PartitionResponseToLog(const NKikimrClient::TPersQueuePartitionResponse&
 class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor> {
 public:
      TPartitionActor(const TActorId& parentId, const TString& clientId, const ui64 cookie, const TString& session, const ui32 generation,
-                        const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition, const ui64 tabletID,
+                        const ui32 step, const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const TString& database, const ui32 partition, const ui64 tabletID,
                         const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder);
     ~TPartitionActor();
 
@@ -232,7 +235,7 @@ private:
     const ui32 Generation;
     const ui32 Step;
 
-    NPersQueue::TTopicConverterPtr Topic;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr Topic;
     TString Database;
     const ui32 Partition;
 
@@ -283,7 +286,7 @@ private:
 
 
 TReadSessionActor::TReadSessionActor(
-        IReadSessionHandlerRef handler, const NPersQueue::TTopicsListController& topicsHandler, const ui64 cookie,
+        IReadSessionHandlerRef handler, const NPQ::NNameResolver::TReadTopicsContext& topicsHandler, const ui64 cookie,
         const TActorId& pqMetaCache, const TActorId& newSchemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
         const TMaybe<TString> clientDC
 )
@@ -759,9 +762,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
             return;
         }
     }
-    TopicsList = TopicsHandler.GetReadTopicsList(
-            topicsToResolve, ReadOnlyLocal, Database
-    );
+    TopicsList = TopicsHandler.ExpandRead(Database, topicsToResolve, ReadOnlyLocal);
     if (!TopicsList.IsValid) {
         return CloseSession(
                 TopicsList.Reason,
@@ -789,24 +790,28 @@ void TReadSessionActor::SendAuthRequest(const TActorContext& ctx) {
         return;
     }
     Y_ABORT_UNLESS(TopicsList.IsValid);
-    TVector<TDiscoveryConverterPtr> topics;
-    for(const auto& t : TopicsList.Topics) {
-        if (topics.size() >= 10) {
+    absl::flat_hash_set<TString> paths;
+    ui32 n = 0;
+    for (const auto& path : TopicsList.Paths) {
+        paths.insert(path);
+        if (++n >= 10) {
             break;
         }
-        topics.push_back(t.second);
     }
-    ctx.Send(PqMetaCache, new TEvDescribeTopicsRequest(topics, false));
+    NPQ::NDescriber::TDescribeSettings settings;
+    settings.LocalDc = TopicsHandler.LocalCluster;
+    ctx.Register(NPQ::NDescriber::CreateDescriberActor(SelfId(), Database.empty() ? "/Root" : Database, std::move(paths), settings));
 }
 
 
 
-void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor::HandleDescribeTopicsResponse(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+    const auto ctx = ActorContext();
     TString dbId, folderId;
-    for (const auto& entry : ev->Get()->Result->ResultSet) {
-        if (!entry.PQGroupInfo)
+    for (const auto& [_, info] : ev->Get()->Topics) {
+        if (info.Status != NPQ::NDescriber::EStatus::SUCCESS || !info.Info)
             continue;
-        auto& pqDescr = entry.PQGroupInfo->Description;
+        auto& pqDescr = info.Info->Description;
         dbId = pqDescr.GetPQTabletConfig().GetYdbDatabaseId();
         folderId = pqDescr.GetPQTabletConfig().GetYcFolderId();
         break;
@@ -838,7 +843,7 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
 void TReadSessionActor::CreateInitAndAuthActor(const TActorContext& ctx) {
     AuthInitActor = ctx.Register(new V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, InternalClientId, Cookie, Session, PqMetaCache, NewSchemeCache, Counters, Token,
-            TopicsList, TopicsHandler.GetLocalCluster()
+            TopicsList.Paths, Database, TopicsHandler.LocalCluster
     ));
 }
 
@@ -933,13 +938,13 @@ void TReadSessionActor::SetupCounters()
 }
 
 
-void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic)
+void TReadSessionActor::SetupTopicCounters(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic)
 {
     auto& topicCounters = TopicCounters[topic->GetInternalName()];
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
 //client/consumerPath Account/Producer OriginDC Topic/TopicPath
 
-    auto aggr = GetLabels(topic);
+    auto aggr = GetLabels(topic->CounterNames());
     TVector<std::pair<TString, TString>> cons = {{"Client", InternalClientId}, {"ConsumerPath", ClientPath}};
 
     topicCounters.PartitionsLocked       = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsLocked"}, true);
@@ -954,13 +959,13 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic)
     SetupBytesReadByUserAgentCounter();
 }
 
-void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, const TString& cloudId,
+void TReadSessionActor::SetupTopicCounters(const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const TString& cloudId,
                                            const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     auto& topicCounters = TopicCounters[topic->GetInternalName()];
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
 //client/consumerPath Account/Producer OriginDC Topic/TopicPath
-    auto subgroups = GetSubgroupsForTopic(topic, cloudId, dbId, dbPath, folderId);
+    auto subgroups = GetSubgroupsForTopic(topic->CounterNames(), cloudId, dbId, dbPath, folderId);
     subgroups.push_back({"consumer", ClientPath});
 
     topicCounters.PartitionsLocked       = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.started"}, true, "name");
@@ -1035,10 +1040,6 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
             topicHolder->FullConverter = t.TopicNameConverter;
             topicHolder->SetPartitionGraph(t.PartitionGraph);
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
-            const auto& second = t.TopicNameConverter->GetSecondaryPath();
-            if (!second.empty()) {
-                FullPathToConverter[second] = t.TopicNameConverter;
-            }
         }
 
         for (auto& t : Topics) {
@@ -1959,7 +1960,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const T
 
 TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& internalClientId, const ui64 cookie, const TString& session,
-        const ui32 generation, const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition,
+        const ui32 generation, const ui32 step, const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topic, const TString& database, const ui32 partition,
         const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder
 )
     : ParentId(parentId)

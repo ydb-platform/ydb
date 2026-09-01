@@ -16,7 +16,7 @@ class TReadInfoActor : public TRpcOperationRequestActor<TReadInfoActor, TEvPQRea
 using TBase = TRpcOperationRequestActor<TReadInfoActor, TEvPQReadInfoRequest>;
 public:
      TReadInfoActor(
-             NKikimr::NGRpcService::TEvPQReadInfoRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
+             NKikimr::NGRpcService::TEvPQReadInfoRequest* request, const NKikimr::NPQ::NNameResolver::TReadTopicsContext& topicsHandler,
              const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
@@ -64,7 +64,7 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     TString ClientId;
-    NPersQueue::TTopicsListController TopicsHandler;
+    NKikimr::NPQ::NNameResolver::TReadTopicsContext TopicsHandler;
 };
 
 }

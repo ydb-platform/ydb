@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/public/api/grpc/draft
     ydb/public/api/protos
+    ydb/core/persqueue/public/nameresolver
     ydb/library/persqueue/topic_parser
     ydb/core/persqueue/events/internal/protos
 )

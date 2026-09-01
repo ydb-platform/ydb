@@ -51,7 +51,7 @@ public:
         const TActorId& schemeCache, const TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         const TMaybe<TString> clientDC,
-        const NPersQueue::TTopicsListController& topicsHandler);
+        const NKikimr::NPQ::NNameResolver::TReadTopicsContext& topicsHandler);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -153,9 +153,10 @@ private:
 
     bool ForceACLCheck;
     TInstant LastACLCheckTimestamp;
+    TString Database;
 
     //THashMap<TString, TTopicHolder> Topics; // topic -> info
-    THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
+    THashMap<TString, NKikimr::NPQ::NNameResolver::TTopicNamesPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
 
    // Response that currenly pending quota
@@ -173,8 +174,8 @@ private:
 
     TInstant StartTime;
 
-    NPersQueue::TTopicsListController TopicsHandler;
-    NPersQueue::TTopicsToConverter TopicsList;
+    NKikimr::NPQ::NNameResolver::TReadTopicsContext TopicsHandler;
+    NKikimr::NPQ::NNameResolver::TExpandReadTopicsResult TopicsList;
 
     bool Initing = false;
 };

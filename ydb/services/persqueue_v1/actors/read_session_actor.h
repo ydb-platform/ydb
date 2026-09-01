@@ -10,6 +10,7 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -33,7 +34,7 @@ inline TActorId GetPQReadServiceActorID() {
 struct TPartitionActorInfo {
     const TActorId Actor;
     const TPartitionId Partition;
-    NPersQueue::TTopicConverterPtr Topic;
+    NPQ::NNameResolver::TTopicNamesPtr Topic;
     std::deque<ui64> Commits;
     bool Reading;
     bool Releasing;
@@ -71,7 +72,7 @@ struct TPartitionActorInfo {
     explicit TPartitionActorInfo(
             const TActorId& actor,
             const TPartitionId& partition,
-            const NPersQueue::TTopicConverterPtr& topic,
+            const NPQ::NNameResolver::TTopicNamesPtr& topic,
             const TInstant& timestamp)
         : Actor(actor)
         , Partition(partition)
@@ -90,7 +91,7 @@ struct TPartitionActorInfo {
         , NodeId(0)
         , ReadingFinished(false)
     {
-        AFL_ENSURE(partition.DiscoveryConverter != nullptr)
+        AFL_ENSURE(partition.TopicNames != nullptr)
             ("partition", partition.Partition)("assign_id", partition.AssignId);
     }
 
@@ -216,7 +217,7 @@ public:
         const TActorId& schemeCache, const TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         const TMaybe<TString> clientDC,
-        const NPersQueue::TTopicsListController& topicsHandler);
+        const NPQ::NNameResolver::TReadTopicsContext& topicsHandler);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -339,8 +340,8 @@ private:
 
     void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
-    void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
-    void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic,
+    void SetupTopicCounters(const NPQ::NNameResolver::TTopicNamesPtr& topic);
+    void SetupTopicCounters(const NPQ::NNameResolver::TTopicNamesPtr& topic,
         const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
     void ProcessReads(const TActorContext& ctx);
@@ -356,7 +357,7 @@ private:
     void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
     void InformBalancerAboutRelease(TPartitionsMapIterator it, const TActorContext& ctx);
 
-    std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const;
+    std::tuple<TString, ui32, ui64> GetReadFrom(const NPQ::NNameResolver::TTopicNamesPtr& topic, const TActorContext& ctx) const;
 
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
@@ -406,7 +407,7 @@ private:
     TPartitionsMap Partitions; // assignId -> info
 
     THashMap<TString, TTopicHolder::TPtr> Topics; // topic -> info
-    THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
+    THashMap<TString, NPQ::NNameResolver::TTopicNamesPtr> FullPathToConverter; // path -> names, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
     THashMap<TString, i64> ReadFromTimestamp;
@@ -479,8 +480,9 @@ private:
     NPQ::TMultiCounter SLIBigReadLatency;
     NPQ::TMultiCounter ReadsTotal;
 
-    NPersQueue::TTopicsListController TopicsHandler;
-    NPersQueue::TTopicsToConverter TopicsList;
+    NPQ::NNameResolver::TReadTopicsContext TopicsHandler;
+    NPQ::NNameResolver::TExpandReadTopicsResult TopicsList;
+    TString Database;
 
     bool DirectRead;
     bool AutoPartitioningSupport;

@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
 #include <ydb/core/persqueue/writer/pipe_utils.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 using namespace NKikimr::NPQ;
 
@@ -196,8 +197,9 @@ struct TWriteSessionMock: public NActors::TActorBootstrapped<TWriteSessionMock> 
     }
 };
 
-NPersQueue::TTopicConverterPtr CreateTopicConverter() {
-    return NPersQueue::TTopicNameConverter::ForFirstClass(CreateConfig(SMDisabled).GetPQTabletConfig());
+NKikimr::NPQ::NNameResolver::TTopicNamesPtr CreateTopicConverter() {
+    return NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(
+        NKikimr::NPQ::NNameResolver::NamesFromConfig(CreateConfig(SMDisabled).GetPQTabletConfig(), true));
 }
 
 TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
@@ -205,7 +207,7 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition = std::nullopt) {
 
-    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr fullConverter = CreateTopicConverter();
     TWriteSessionMock* mock = new TWriteSessionMock();
 
     auto chooser = NPQ::CreatePartitionChooser(config, true);
@@ -277,7 +279,7 @@ void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32
     auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                : ESourceIdTableGeneration::SrcIdMeta2;
 
-    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr fullConverter = CreateTopicConverter();
     const TString hashKey = topicKey ? topicKey : fullConverter->GetTopicForSrcIdHash();
     const TString topicColumn = topicKey ? topicKey : fullConverter->GetClientsideName();
     NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(
@@ -306,7 +308,7 @@ TMaybe<NYdb::TResultSet> SelectTable(NPersQueue::TTestServer& server, const TStr
     auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                : ESourceIdTableGeneration::SrcIdMeta2;
 
-    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr fullConverter = CreateTopicConverter();
     const TString hashKey = topicKey ? topicKey : fullConverter->GetTopicForSrcIdHash();
     const TString topicColumn = topicKey ? topicKey : fullConverter->GetClientsideName();
     NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(

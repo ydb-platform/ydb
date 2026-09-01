@@ -58,12 +58,7 @@ void TPQReadService::Bootstrap(const TActorContext& ctx) {
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     } else {
-        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-                AppData(ctx)->PQConfig, ""
-        );
-        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-                TopicConverterFactory
-        );
+        TopicsHandlerReady = true;
     }
     ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
     Become(&TThis::StateFunc);
@@ -89,7 +84,7 @@ void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, cons
         std::unique_ptr<TEvCommitOffsetRequest> e;
         e.reset(dynamic_cast<TEvCommitOffsetRequest*>(ev->Release().Release()));
         AFL_ENSURE(e)("reason", "unexpected event type for commit offset")("local_cluster", LocalCluster);
-        ctx.Register(new TCommitOffsetActor(e.release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+        ctx.Register(new TCommitOffsetActor(e.release(), TopicsHandler, SchemeCache, NewSchemeCache, Counters));
     }
 }
 
@@ -103,7 +98,7 @@ void TPQReadService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdat
     DatacenterClassifier = ev->Get()->Classifier;
 }
 
-void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
+void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext&) {
     AFL_ENSURE(ev->Get()->ClustersList)("local_cluster", LocalCluster);
 
     AFL_ENSURE(ev->Get()->ClustersList->Clusters.size())
@@ -123,15 +118,9 @@ void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClusters
     for (size_t i = 0; i < clusters.size(); ++i) {
         Clusters[i] = clusters[i].Name;
     }
-    if (TopicConverterFactory == nullptr) {
-        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-                AppData(ctx)->PQConfig, LocalCluster
-        );
-        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-                TopicConverterFactory, Clusters
-        );
-    }
-    TopicsHandler->UpdateClusters(Clusters);
+    TopicsHandler.LocalCluster = LocalCluster;
+    TopicsHandler.Clusters = Clusters;
+    TopicsHandlerReady = true;
 }
 
 
@@ -163,7 +152,7 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr&
         // TODO: Inc SLI Errors
         return;
     } else {
-        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
+        AFL_ENSURE(TopicsHandlerReady)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
         auto ip = ev->Get()->GetPeerName();
 
         const ui64 cookie = NextCookie();
@@ -174,7 +163,7 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr&
         TActorId worker = ctx.Register(new TDirectReadSessionActor(
                 ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
-                *TopicsHandler
+                TopicsHandler
         ));
         Sessions[cookie] = worker;
     }
@@ -199,7 +188,7 @@ void TPQReadService::HandleReadInfo(TAutoPtr<NActors::IEventHandle>& evHandle, c
         ev->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
-        ctx.Register(new TReadInfoActor(evHandle->Release<TEvPQReadInfoRequest>().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+        ctx.Register(new TReadInfoActor(evHandle->Release<TEvPQReadInfoRequest>().Release(), TopicsHandler, SchemeCache, NewSchemeCache, Counters));
     }
 }
 

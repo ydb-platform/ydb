@@ -4,10 +4,6 @@
 #include "distributed_commit_helper.h"
 
 
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/grpc_services/rpc_deferrable.h>
-#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -21,15 +17,12 @@ class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, 
 
     using TBase = TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>;
 
-    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
-    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
-
 public:
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
 
 public:
      TCommitOffsetActor(
-             NKikimr::NGRpcService::TEvCommitOffsetRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
+             NKikimr::NGRpcService::TEvCommitOffsetRequest* request, const NKikimr::NPQ::NNameResolver::TReadTopicsContext& topicsHandler,
              const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
@@ -98,8 +91,7 @@ private:
 
     TActorId PipeClient;
 
-    std::shared_ptr<NPersQueue::TTopicNamesConverterFactory> TopicConverterFactory;
-    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler = nullptr;
+    NKikimr::NPQ::NNameResolver::TReadTopicsContext TopicsHandler;
 
     std::unique_ptr<TDistributedCommitHelper> Kqp;
 };

@@ -33,7 +33,7 @@ TDirectReadSessionActor::TDirectReadSessionActor(
         const TActorId& schemeCache, const TActorId& newSchemeCache,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
         const TMaybe<TString> clientDC,
-        const NPersQueue::TTopicsListController& topicsHandler)
+        const NKikimr::NPQ::NNameResolver::TReadTopicsContext& topicsHandler)
     : TRlHelpers({}, request, READ_BLOCK_SIZE, false, TDuration::Minutes(1))
     , Request(request)
     , Cookie(cookie)
@@ -265,6 +265,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
     PeerName = ev->Get()->PeerName;
 
     auto database = Request->GetDatabaseName().GetOrElse(TString());
+    Database = database;
 
     for (const auto& topic : init.topics_read_settings()) {
         const TString path = topic.path();
@@ -286,7 +287,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, true, database);
+    TopicsList = TopicsHandler.ExpandRead(database, TopicsToResolve, true);
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason);
@@ -504,8 +505,8 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
 void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
-        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
+        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token,
+        TopicsList.Paths, Database, TopicsHandler.LocalCluster, ReadWithoutConsumer));
 }
 
 void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {

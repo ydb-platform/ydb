@@ -147,8 +147,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         TEvPQ::TEvWrite::TMsg& msg) const;
 
     static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
-                                     NPersQueue::TConverterFactoryPtr& converterFactory,
-                                     NPersQueue::TTopicConverterPtr& topicConverter,
+                                     NNameResolver::TTopicNamesPtr& topicConverter,
                                      const TActorContext& ctx);
 
     //client request
@@ -246,8 +245,7 @@ private:
 
     TString TopicName;
     TString TopicPath;
-    NPersQueue::TConverterFactoryPtr TopicConverterFactory;
-    NPersQueue::TTopicConverterPtr TopicConverter;
+    NNameResolver::TTopicNamesPtr TopicConverter;
     TString DCId;
     bool IsServerless = false;
     NKikimrPQ::TPQTabletConfig Config;
@@ -425,15 +423,15 @@ private:
     TActorId GetPartitionQuoter(const TPartitionId& partitionId);
 
     IActor* CreatePartitionActor(const TPartitionId& partitionId,
-                                     const NPersQueue::TTopicConverterPtr topicConverter,
+                                     const NNameResolver::TTopicNamesPtr topicConverter,
                                      const NKikimrPQ::TPQTabletConfig& config,
                                      bool newPartition,
                                      const TActorContext& ctx);
     void CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
-                             NPersQueue::TTopicConverterPtr topicConverter,
+                             NNameResolver::TTopicNamesPtr topicConverter,
                              const TActorContext& ctx);
     void CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& config,
-                                 NPersQueue::TTopicConverterPtr topicConverter,
+                                 NNameResolver::TTopicNamesPtr topicConverter,
                                  const TPartitionId& partitionId,
                                  bool newPartition,
                                  const TActorContext& ctx);

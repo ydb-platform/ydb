@@ -65,7 +65,7 @@ TMirrorer::TMirrorer(
     ui64 tabletId,
     TActorId tabletActor,
     TActorId partitionActor,
-    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
     ui32 partition,
     bool localDC,
     ui64 endOffset,
@@ -96,17 +96,17 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
         TString suffix = IsLocalDC ? "Remote" : "Internal";
         MirrorerErrors = NKikimr::NPQ::TMultiCounter(
             GetServiceCounters(counters, "pqproxy|writeSession"),
-            GetLabels(TopicConverter), {}, {"MirrorerErrors" + suffix}, true
+            GetLabels(TopicConverter->CounterNames()), {}, {"MirrorerErrors" + suffix}, true
         );
         MirrorerTimeLags = THolder<TPercentileCounter>(new TPercentileCounter(
             GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"),
-            GetLabels(TopicConverter),
+            GetLabels(TopicConverter->CounterNames()),
             {{"sensor", "TimeLags" + suffix}},
             "Interval", SLOW_LATENCY_MS_INTERVALS, true
         ));
         InitTimeoutCounter = NKikimr::NPQ::TMultiCounter(
             GetServiceCounters(counters, "pqproxy|writeSession"),
-            GetLabels(TopicConverter), {}, {"MirrorerInitTimeout" + suffix}, true
+            GetLabels(TopicConverter->CounterNames()), {}, {"MirrorerInitTimeout" + suffix}, true
         );
         WriteTimeoutCounter = NKikimr::NPQ::TMultiCounter(
             GetServiceCounters(counters, "pqproxy|writeSession"),
@@ -929,7 +929,7 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
 NActors::IActor* CreateMirrorer(const ui64 tabletId,
                                 const NActors::TActorId& tabletActor,
                                 const NActors::TActorId& partitionActor,
-                                const NPersQueue::TTopicConverterPtr& topicConverter,
+                                const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter,
                                 const ui32 partition,
                                 const bool localDC,
                                 const ui64 endOffset,

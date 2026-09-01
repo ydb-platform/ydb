@@ -82,8 +82,6 @@ private:
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier; // Detects client's datacenter by IP. May be null
     bool HaveClusters;
-    NPersQueue::TConverterFactoryPtr ConverterFactory;
-    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -128,14 +126,6 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
         }
         return;
     } else {
-        if (ConverterFactory == nullptr) {
-            ConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-                    AppData(ctx)->PQConfig, localCluster
-            );
-        }
-        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-                ConverterFactory, TVector<TString>{}
-        );
         const ui64 cookie = NextCookie();
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New session created cookie",
@@ -145,7 +135,7 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
         TActorId worker = ctx.Register(new TWriteSessionActor<Protocol>(
                 ev->Release().Release(), cookie, SchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
-                *TopicsHandler
+                localCluster
         ));
 
         Sessions[cookie] = worker;

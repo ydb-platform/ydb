@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/nameresolver
     ydb/core/persqueue/writer
     ydb/core/testlib/default
     ydb/library/persqueue/topic_parser

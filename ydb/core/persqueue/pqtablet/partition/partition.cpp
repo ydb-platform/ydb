@@ -339,7 +339,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 }
 
 TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
-                       const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
+                       const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const std::shared_ptr<TTabletCountersBase>& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        const TActorId& writeQuoterActorId,
                        const TActorId& batchProcessorActorId,
@@ -2711,7 +2711,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         CompacterKvRequestInflight = false;
         YDB_LOG_DEBUG_COMP(Service, "Topic partition Got compacter KV response, release RW lock",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"clientSideName", TopicConverter->GetClientsideName()},
+            {"clientSideName", TopicConverter->Path},
             {"partition", Partition});
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
@@ -4131,7 +4131,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           const TEvPQ::TMessageGroupsPtr& explicitMessageGroups,
-                                          NPersQueue::TTopicConverterPtr topicConverter,
+                                          NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter,
                                           const TActorContext& ctx)
 {
     bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
@@ -5339,7 +5339,7 @@ void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& re
         ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
     YDB_LOG_DEBUG_COMP(Service, "Topic partition Acquire RW Lock",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"clientSideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->Path},
         {"partition", Partition});
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvAcquireExclusiveLock());
     CompacterKvRequestInflight = true;
@@ -5349,13 +5349,13 @@ void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& re
 void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
     YDB_LOG_DEBUG_COMP(Service, "Topic partition Acquired RW Lock, send compacter KV request",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"clientSideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->Path},
         {"partition", Partition});
     Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
 }
 
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
-    const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
+    const TActorId& blobCache, const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& topicConverter, TString dcId, bool isServerless,
     const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace,
     ui32 numChannels, const TActorId& writeQuoterActorId, const TActorId& batchProcessorActorId,
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition

@@ -244,6 +244,9 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
 
         auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetDC(), "dc1");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetProducer(), "test_account");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTopic(), "topic_id_attr_federation");
         UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 1234567u);
         UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetOwnerId(), 0u);
         UNIT_ASSERT(config.GetId().HasTxStep());

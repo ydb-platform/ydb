@@ -4,6 +4,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -37,7 +38,7 @@ public:
     TThrowingPartitionChooserActor(
         TActorId parentId,
         const std::shared_ptr<IPartitionChooser>& chooser,
-        NPersQueue::TTopicConverterPtr& fullConverter)
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr& fullConverter)
         : TParent(parentId, chooser, fullConverter, "source", std::nullopt, {})
     {
     }
@@ -51,12 +52,13 @@ public:
     }
 };
 
-NPersQueue::TTopicConverterPtr MakeTopicConverter() {
+NKikimr::NPQ::NNameResolver::TTopicNamesPtr MakeTopicConverter() {
     NKikimrSchemeOp::TPersQueueGroupDescription config;
     auto* pqConfig = config.MutablePQTabletConfig();
     pqConfig->SetTopicName("topic-1");
     pqConfig->SetTopicPath("/Root/topic-1");
-    return NPersQueue::TTopicNameConverter::ForFirstClass(*pqConfig);
+    return NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(
+        NKikimr::NPQ::NNameResolver::NamesFromConfig(*pqConfig, true));
 }
 
 } // namespace

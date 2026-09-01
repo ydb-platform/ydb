@@ -1111,7 +1111,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.DropTopic();
 
-        testCase.CheckTransferStateError("Discovery for all topics failed. The last error was: no path '");
+        testCase.CheckTransferStateError("Discovery for all topics failed");
 
         testCase.DropTransfer();
         testCase.DropTable();

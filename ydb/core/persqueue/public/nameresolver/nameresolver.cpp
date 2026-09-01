@@ -3,8 +3,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
 
+#include <util/generic/maybe.h>
 #include <util/string/builder.h>
 #include <util/system/yassert.h>
 
@@ -428,10 +430,23 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     // Root-like database: path with '/' is federation account/topic; otherwise legacy name.
-    // Absolute path under PQ with empty LbRoot → classic PrimaryPath under PQ (leaf as-is).
+    // Empty LbRoot: classic discovery PrimaryPath is PQ root + full legacy leaf
+    // (TDiscoveryConverter::BuildFromLegacyName / BuildFromFederationPath).
+    // Already-stripped /Root/PQ/rt3... paths and rt3.* names stay as that leaf.
     // With LbRoot → modern path under LbRoot (federation, no miss→retry).
-    if (strippedPqPrefix && lbRoot.empty() && !pqPrefix.empty()) {
-        return wrap(JoinStrippedRoot(pqPrefix, TString{ctx.Topic}));
+    if (lbRoot.empty() && !pqPrefix.empty()) {
+        if (strippedPqPrefix || ctx.Topic.StartsWith("rt3.")) {
+            return wrap(JoinStrippedRoot(pqPrefix, TString{ctx.Topic}));
+        }
+        const TStringBuf topicDc = !dc.empty() ? dc : localDc;
+        if (!topicDc.empty()) {
+            return wrap(JoinStrippedRoot(
+                pqPrefix,
+                TString{NPersQueue::BuildFullTopicName(TString{ctx.Topic}, TString{topicDc})}));
+        }
+        if (IsExplicitLegacyName(ctx.Topic)) {
+            return wrap(JoinStrippedRoot(pqPrefix, TString{ctx.Topic}));
+        }
     }
 
     if (ctx.Topic.Contains("/")) {
@@ -464,42 +479,740 @@ std::expected<TResolvedName, TString> ResolveName(
     return wrap(JoinWithRoot(lbRoot, database, std::move(*parsed)));
 }
 
-std::optional<TFederationAccountTarget> TryFederationAccountTarget(
-    TStringBuf path,
-    TStringBuf federationRoot
-) {
-    if (federationRoot.empty() || path.empty()) {
-        return std::nullopt;
+namespace {
+
+#define CHECK_SET_VALID(cond, reason, statement) \
+    if (!(cond)) {                               \
+        Valid = false;                           \
+        Reason = Reason + (reason) + ". ";       \
+        statement;                               \
     }
 
-    // Prefer slash-stripped prefix checks over CanonizePath/JoinPath allocations.
-    const TStringBuf root = StripSlashes(federationRoot);
-    TStringBuf rest = StripLeadingSlash(path);
-    if (root.empty() || !IsPathPrefix(rest, root)) {
-        return std::nullopt;
+TString StripLeadSlash(const TString& path) {
+    if (!path.StartsWith("/")) {
+        return path;
     }
-    SkipPathPrefix(rest, root);
-    if (rest.empty()) {
-        return std::nullopt;
-    }
+    return path.substr(1);
+}
 
-    TStringBuf account;
-    TStringBuf topicRest;
-    if (!rest.TrySplit("/", account, topicRest) || account.empty() || topicRest.empty()) {
-        return std::nullopt;
+void NormalizeAsFullPath(TString& path) {
+    if (!path.empty() && !path.StartsWith("/")) {
+        path = TString("/") + path;
     }
+}
 
-    TString canonPath;
-    if (path.StartsWith('/') && !path.EndsWith('/') && !path.Contains("//")) {
-        canonPath = TString{path};
+void ConverterSkipPathPrefix(TStringBuf& path, const TStringBuf& prefix) {
+    auto copy = path;
+    if (prefix.EndsWith('/')) {
+        path.SkipPrefix(prefix);
     } else {
-        canonPath = CanonizePath(TString{path});
+        const bool skip = path.SkipPrefix(prefix) && path.SkipPrefix("/");
+        if (!skip) {
+            path = copy;
+        }
+    }
+}
+
+TString NormalizePqPrefix(const TString& pqRoot) {
+    TStringBuf prefix(pqRoot);
+    prefix.SkipPrefix("/");
+    prefix.ChopSuffix("/");
+    return TString{prefix};
+}
+
+// Port of TDiscoveryConverter + TTopicNameConverter (BuildFrom*, BuildInternals, ForFederation create).
+struct TNameBuilder {
+    bool FstClass = false;
+    bool Valid = true;
+    TString Reason;
+
+    TString OriginalTopic;
+    TString Dc;
+    TString LocalDc;
+    TMaybe<TString> Database;
+    TString PQPrefix;
+
+    TString PrimaryPath;
+    TString FullModernPath;
+    TString ModernName;
+    TString FullModernName;
+    TString ShortLegacyName;
+    TString FullLegacyName;
+    TString LegacyProducer;
+    TString LegacyLogtype;
+    TMaybe<TString> LbPath;
+    TMaybe<TString> Account_;
+    TMaybe<TString> SecondaryPath;
+
+    TString ClientsideName;
+    TString ShortClientsideName;
+    TString Account;
+    TString InternalName;
+
+    bool BuildFromShortModernName() {
+        CHECK_SET_VALID(
+            !ModernName.empty(), TStringBuilder() << "Could not parse topic name: " << OriginalTopic, return false);
+
+        TStringBuf pathBuf(ModernName);
+        TStringBuilder legacyName;
+        TString lbPath;
+        legacyName << Account_.GetOrElse("undef-account");
+        if (Account_.Defined()) {
+            lbPath = NKikimr::JoinPath({*Account_, ModernName});
+        }
+
+        TStringBuf fst, snd, logtype;
+        auto res = pathBuf.TryRSplit("/", fst, logtype);
+        if (!res) {
+            logtype = pathBuf;
+        } else {
+            pathBuf = fst;
+            while (true) {
+                res = pathBuf.TrySplit("/", fst, snd);
+                if (res) {
+                    legacyName << "@" << fst;
+                    pathBuf = snd;
+                } else {
+                    legacyName << "@" << pathBuf;
+                    break;
+                }
+            }
+        }
+        const TString legacyProducer = legacyName;
+        legacyName << "--" << logtype;
+        ShortLegacyName = legacyName;
+        if (Dc.empty()) {
+            Dc = LocalDc;
+            CHECK_SET_VALID(!LocalDc.empty(),
+                "Cannot determine DC: should specify either with Dc option or LocalDc option",
+                return false);
+        }
+        LbPath = lbPath;
+        FullLegacyName = TStringBuilder() << "rt3." << Dc << "--" << ShortLegacyName;
+        LegacyProducer = legacyProducer;
+        LegacyLogtype = logtype;
+        return true;
     }
 
-    return TFederationAccountTarget{
-        .Path = std::move(canonPath),
-        .AccountDatabase = TStringBuilder() << '/' << root << '/' << account,
+    bool ParseModernPath(const TStringBuf& path) {
+        TStringBuilder pathAfterAccount;
+        if (!Dc.empty() && !LocalDc.empty() && Dc != LocalDc) {
+            TStringBuf directories, topicName;
+            if (path.TrySplit("/", directories, topicName)) {
+                pathAfterAccount << directories << "/" << topicName << "-mirrored-from-" << Dc;
+            } else {
+                pathAfterAccount << path << "-mirrored-from-" << Dc;
+            }
+        } else {
+            pathAfterAccount << path;
+        }
+        CHECK_SET_VALID(BasicNameChecks(pathAfterAccount), "Bad topic name", return false);
+        ModernName = path;
+        FullModernName = pathAfterAccount;
+        if (Account_.Defined()) {
+            return BuildFromShortModernName();
+        }
+        return true;
+    }
+
+    bool TryParseModernMirroredPath(TStringBuf path) {
+        if (!path.Contains("-mirrored-from-")) {
+            CHECK_SET_VALID(!path.Contains("mirrored-from"),
+                "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic",
+                return false);
+            return false;
+        }
+        TStringBuf fst, snd;
+        auto res = path.TryRSplit("-mirrored-from-", fst, snd);
+        CHECK_SET_VALID(res, "Malformed mirrored topic path - expected to end with '-mirrored-from-<cluster>'",
+            return false);
+        CHECK_SET_VALID(!snd.empty(), "Malformed mirrored topic path - expected to end with valid cluster name",
+            return false);
+        Dc = snd;
+        CHECK_SET_VALID(LocalDc != Dc, "Local topic cannot contain '-mirrored-from' part", return false);
+        FullModernName = path;
+        ModernName = fst;
+        if (Account_.Defined()) {
+            return BuildFromShortModernName();
+        }
+        return true;
+    }
+
+    bool BuildFromFederationPath(const TString& rootPrefix) {
+        TStringBuf topic(OriginalTopic);
+        LbPath = OriginalTopic;
+        TStringBuf fst, snd;
+        auto res = topic.TrySplit("/", fst, snd);
+        CHECK_SET_VALID(res, TStringBuilder() << "Could not split federation path: " << OriginalTopic, return false);
+        Account_ = fst;
+
+        if (!ParseModernPath(snd)) {
+            return false;
+        }
+        if (!BuildFromShortModernName()) {
+            return false;
+        }
+        CHECK_SET_VALID(
+            !FullLegacyName.empty(),
+            TStringBuilder() << "Internal error: couldn't build legacy-style name for topic " << OriginalTopic,
+            return false);
+
+        PrimaryPath = NKikimr::JoinPath({rootPrefix, FullLegacyName});
+        NormalizeAsFullPath(PrimaryPath);
+        return true;
+    }
+
+    bool BuildFromLegacyName(const TString& rootPrefix, bool forceFullName = false) {
+        TStringBuf topic(OriginalTopic);
+        const bool hasDcInName = topic.Contains("rt3.");
+        TStringBuf fst, snd;
+        Account_ = Nothing();
+        TString shortLegacyName, fullLegacyName;
+        if (forceFullName) {
+            CHECK_SET_VALID(hasDcInName,
+                TStringBuilder() << "Invalid topic name - " << OriginalTopic
+                                 << " - expected legacy-style name like rt3.<dc>--<account>--<topic>",
+                return false);
+        }
+        if (Dc.empty() && !hasDcInName) {
+            CHECK_SET_VALID(!FstClass,
+                TStringBuilder() << "Internal error: FirstClass mode enabled, but trying to parse Legacy-style name: "
+                                 << OriginalTopic,
+                return false);
+            CHECK_SET_VALID(!LocalDc.empty(),
+                "Cannot determine DC: should specify either in topic name, Dc option or LocalDc option",
+                return false);
+            Dc = LocalDc;
+        }
+
+        if (hasDcInName) {
+            fullLegacyName = topic;
+            auto res = topic.SkipPrefix("rt3.");
+            CHECK_SET_VALID(res, "Malformed full legacy topic name", return false);
+            res = topic.TrySplit("--", fst, snd);
+            CHECK_SET_VALID(res, "Malformed legacy style topic name: contains 'rt3.', but no '--'.", return false);
+            CHECK_SET_VALID(Dc.empty() || Dc == fst,
+                "DC specified both in topic name and separate option and they mismatch", return false);
+            Dc = fst;
+            topic = snd;
+        } else {
+            CHECK_SET_VALID(!Dc.empty(),
+                TStringBuilder() << "Internal error: Could not determine DC (despite beleiving the name contins one) for topic "
+                                 << OriginalTopic,
+                return false);
+            fullLegacyName = TStringBuilder() << "rt3." << Dc << "--" << topic;
+        }
+        shortLegacyName = topic;
+        TStringBuilder modernName, fullModernName;
+        auto res = topic.TryRSplit("--", fst, snd);
+        if (res) {
+            LegacyProducer = fst;
+            LegacyLogtype = snd;
+        } else {
+            LegacyProducer = "unknown";
+            LegacyLogtype = topic;
+        }
+        while (true) {
+            auto splitRes = topic.TrySplit("@", fst, snd);
+            if (!splitRes) {
+                break;
+            }
+            if (!Account_.Defined()) {
+                Account_ = fst;
+            } else {
+                modernName << fst << "/";
+            }
+            topic = snd;
+        }
+        fullModernName << modernName;
+        TString topicName;
+        res = topic.TrySplit("--", fst, snd);
+        if (res) {
+            if (!Account_.Defined()) {
+                Account_ = fst;
+            } else {
+                modernName << fst << "/";
+                fullModernName << fst << "/";
+            }
+            topicName = snd;
+        } else {
+            if (!Account_.Defined()) {
+                Account_ = "";
+            }
+            topicName = topic;
+        }
+        modernName << topicName;
+        CHECK_SET_VALID(!Dc.empty(),
+            TStringBuilder() << "Internal error: Could not determine DC for topic: " << OriginalTopic,
+            return false);
+
+        const bool isMirrored = (!LocalDc.empty() && Dc != LocalDc);
+        if (isMirrored) {
+            fullModernName << topicName << "-mirrored-from-" << Dc;
+        } else {
+            fullModernName << topicName;
+        }
+        CHECK_SET_VALID(!fullLegacyName.empty(),
+            TStringBuilder() << "Could not form a full legacy name for topic: " << OriginalTopic,
+            return false);
+
+        ShortLegacyName = shortLegacyName;
+        FullLegacyName = fullLegacyName;
+        PrimaryPath = NKikimr::JoinPath({rootPrefix, fullLegacyName});
+        NormalizeAsFullPath(PrimaryPath);
+        FullModernName = fullModernName;
+        ModernName = modernName;
+        LbPath = NKikimr::JoinPath({*Account_, modernName});
+        return true;
+    }
+
+    void BuildFstClassNames() {
+        TStringBuf normTopic(OriginalTopic);
+        normTopic.SkipPrefix("/");
+        if (Database.Defined()) {
+            TStringBuf normDb(*Database);
+            normDb.SkipPrefix("/");
+            normDb.ChopSuffix("/");
+            normTopic.SkipPrefix(normDb);
+            normTopic.SkipPrefix("/");
+            PrimaryPath = NKikimr::JoinPath({TString(normDb), TString(normTopic)});
+        } else {
+            PrimaryPath = TString(normTopic);
+            Database = "";
+        }
+        NormalizeAsFullPath(PrimaryPath);
+        FullModernPath = PrimaryPath;
+        CHECK_SET_VALID(
+            !FullModernPath.empty(),
+            TStringBuilder() << "Internal error: could not build modern name for first class topic: " << OriginalTopic,
+            return);
+    }
+
+    void BuildForFederation(const TStringBuf& databaseBuf, TStringBuf topicPath) {
+        topicPath.SkipPrefix("/");
+        CHECK_SET_VALID(!topicPath.empty(), "Invalid topic path (only account provided?)", return);
+        CHECK_SET_VALID(!topicPath.EndsWith("/"), "Invalid topic path or trailing '/'", return);
+        if (FstClass) {
+            OriginalTopic = topicPath;
+            Database = databaseBuf;
+            BuildFstClassNames();
+            return;
+        }
+        bool isRootDb = databaseBuf.empty();
+        TString root;
+        if (!databaseBuf.empty()) {
+            if (IsPathPrefix(PQPrefix, databaseBuf)) {
+                isRootDb = true;
+                root = PQPrefix;
+                ConverterSkipPathPrefix(topicPath, PQPrefix);
+            }
+        } else if (IsPathPrefix(topicPath, PQPrefix)) {
+            isRootDb = true;
+            ConverterSkipPathPrefix(topicPath, PQPrefix);
+            root = PQPrefix;
+        }
+        if (!isRootDb) {
+            ConverterSkipPathPrefix(topicPath, databaseBuf);
+            Database = databaseBuf;
+        }
+        CHECK_SET_VALID(!topicPath.empty(), "Bad topic name (only account provided?)", return);
+
+        OriginalTopic = topicPath;
+        if (!isRootDb && Database.Defined()) {
+            auto parsed = TryParseModernMirroredPath(topicPath);
+            if (!Valid) {
+                return;
+            }
+            if (!parsed) {
+                if (!ParseModernPath(topicPath)) {
+                    return;
+                }
+            }
+            CHECK_SET_VALID(
+                !FullModernName.empty(),
+                TStringBuilder() << "Internal error: Could not parse topic name (federation path was assumed)" << OriginalTopic,
+                return);
+
+            PrimaryPath = NKikimr::JoinPath({*Database, FullModernName});
+            NormalizeAsFullPath(PrimaryPath);
+            if (!FullLegacyName.empty()) {
+                SecondaryPath = NKikimr::JoinPath({PQPrefix, FullLegacyName});
+                NormalizeAsFullPath(SecondaryPath.GetRef());
+            }
+            if (!BuildFromShortModernName()) {
+                return;
+            }
+        } else {
+            if (root.empty()) {
+                root = PQPrefix;
+            }
+            if (topicPath.find("/") != TString::npos) {
+                Y_UNUSED(BuildFromFederationPath(root));
+            } else {
+                Y_UNUSED(BuildFromLegacyName(root));
+            }
+        }
+    }
+
+    void SetDatabaseFromConfig(const TString& database) {
+        if (database.empty()) {
+            return;
+        }
+        AFL_ENSURE(!FullModernName.empty())("database", database)("original_topic", OriginalTopic);
+        if (!SecondaryPath.Defined()) {
+            SecondaryPath = NKikimr::JoinPath({database, FullModernName});
+            NormalizeAsFullPath(SecondaryPath.GetRef());
+        }
+        FullModernPath = SecondaryPath.GetRef();
+    }
+
+    void BuildInternals(const NKikimrPQ::TPQTabletConfig& config) {
+        if (!config.GetFederationAccount().empty()) {
+            Account = config.GetFederationAccount();
+        } else {
+            Account = Account_.GetOrElse("");
+        }
+        TStringBuf path = OriginalTopic;
+        TStringBuf db = config.GetYdbDatabasePath();
+        path.SkipPrefix("/");
+        db.SkipPrefix("/");
+        db.ChopSuffix("/");
+        Database = db;
+        if (FstClass) {
+            AFL_ENSURE(!path.empty())("topic_path", OriginalTopic)("database", db);
+            path.SkipPrefix(db);
+            path.SkipPrefix("/");
+            ClientsideName = path;
+            ShortClientsideName = path;
+            FullModernName = path;
+            InternalName = PrimaryPath;
+        } else {
+            SetDatabaseFromConfig(*Database);
+            AFL_ENSURE(!FullLegacyName.empty())("topic_path", config.GetTopicPath())("database", db);
+            ClientsideName = FullLegacyName;
+            ShortClientsideName = ShortLegacyName;
+            const auto& producer = config.GetProducer();
+            if (!producer.empty()) {
+                LegacyProducer = producer;
+                LegacyLogtype = config.GetTopic();
+            }
+            if (LegacyProducer.empty()) {
+                LegacyProducer = Account;
+            }
+            AFL_ENSURE(!FullModernName.empty())("topic_path", config.GetTopicPath())("database", db);
+            InternalName = FullLegacyName;
+        }
+    }
+
+    void InitFromTabletConfig(
+        bool firstClass,
+        const TString& pqNormalizedPrefix,
+        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+        const TString& ydbDatabaseRootOverride,
+        const TString& topicPath)
+    {
+        PQPrefix = pqNormalizedPrefix;
+        auto name = pqTabletConfig.GetTopicName();
+        auto path = topicPath.empty() ? pqTabletConfig.GetTopicPath() : topicPath;
+        if (name.empty()) {
+            AFL_ENSURE(!path.empty())("topic_path", path)("topic_name", name);
+            TStringBuf pathBuf(path), fst, snd;
+            auto res = pathBuf.TryRSplit("/", fst, snd);
+            AFL_ENSURE(res)("topic_path", path);
+            name = snd;
+        } else if (path.empty()) {
+            path = name;
+        }
+        Y_UNUSED(name);
+        if (!ydbDatabaseRootOverride.empty()) {
+            TStringBuf pathBuf(path);
+            TStringBuf dbRoot(ydbDatabaseRootOverride);
+            auto res_ = pathBuf.SkipPrefix(dbRoot);
+            if (res_) {
+                dbRoot.SkipPrefix("/");
+                pathBuf.SkipPrefix("/");
+                TStringBuf acc, rest;
+                if (pathBuf.TrySplit("/", acc, rest)) {
+                    Database = NKikimr::JoinPath({TString(dbRoot), TString(acc)});
+                } else {
+                    Database = TString(dbRoot);
+                }
+            }
+        }
+        if (!Database.Defined()) {
+            TStringBuf dbPath = pqTabletConfig.GetYdbDatabasePath();
+            dbPath.SkipPrefix("/");
+            dbPath.ChopSuffix("/");
+            Database = dbPath;
+        }
+        FstClass = firstClass;
+        Dc = pqTabletConfig.GetDC();
+        const auto& acc = pqTabletConfig.GetFederationAccount();
+        if (!acc.empty()) {
+            Account_ = acc;
+        }
+        if (FstClass) {
+            OriginalTopic = path;
+            BuildFstClassNames();
+        } else {
+            BuildForFederation(*Database, path);
+        }
+        if (Valid) {
+            BuildInternals(pqTabletConfig);
+        }
+    }
+
+    void InitForCreate(
+        const TString& pqRoot,
+        const TString& ydbTestDatabaseRoot,
+        const TString& schemeName,
+        const TString& schemeDir,
+        const TString& database,
+        bool isLocal,
+        const TString& localDc,
+        const TString& federationAccount)
+    {
+        bool isRoot = false;
+        TStringBuf normDb(database);
+        TStringBuf normRoot(pqRoot);
+        TStringBuf normDir(schemeDir);
+
+        normDb.ChopSuffix("/");
+        normRoot.SkipPrefix("/");
+        normDir.SkipPrefix("/");
+        normDb.SkipPrefix("/");
+
+        if (!ydbTestDatabaseRoot.empty()) {
+            TStringBuf dbRoot(ydbTestDatabaseRoot);
+            dbRoot.SkipPrefix("/");
+            if (normDir.StartsWith(dbRoot)) {
+                normDb = dbRoot;
+            }
+        }
+
+        if (normDb.empty()) {
+            isRoot = IsPathPrefix(normDir, normRoot);
+        } else if (!normRoot.empty() && IsPathPrefix(normRoot, normDb)) {
+            isRoot = true;
+        }
+
+        Database = normDb;
+
+        if (isRoot) {
+            if (normDir != normRoot) {
+                Valid = false;
+                Reason = TStringBuilder() << "Topics with database '" << database << "' should be created in pqRoot: "
+                                           << pqRoot;
+                return;
+            }
+
+            OriginalTopic = schemeName;
+            if (!BuildFromLegacyName(TString(normRoot), true)) {
+                return;
+            }
+            if (Valid && !isLocal && Dc == localDc) {
+                Valid = false;
+                Reason = TStringBuilder() << "Topic '" << schemeName << "' created as non-local in local cluster";
+            }
+        } else {
+            if (federationAccount.empty()) {
+                Valid = false;
+                Reason = "Should specify federation account for modern-style topics";
+                return;
+            }
+            Account_ = federationAccount;
+            normDir.SkipPrefix(normDb);
+            normDir.SkipPrefix("/");
+            TString fullPath = NKikimr::JoinPath({TString(normDir), schemeName});
+            auto parsed = TryParseModernMirroredPath(fullPath);
+            if (!Valid) {
+                return;
+            }
+            if (isLocal) {
+                if (localDc.empty()) {
+                    Valid = false;
+                    Reason = "Local DC option is mandatory when creating local modern-style topic";
+                    return;
+                }
+                Dc = localDc;
+                if (!ParseModernPath(fullPath)) {
+                    return;
+                }
+            } else {
+                if (!parsed) {
+                    Valid = false;
+                    Reason = TStringBuilder() << "Topic in modern style with non-mirrored-name: " << schemeName
+                                               << ", created as non-local";
+                    return;
+                }
+            }
+            if (FullModernName.empty()) {
+                Valid = false;
+                Reason = TStringBuilder()
+                    << "Internal error: FullModernName empty in TopicConverter(for schema) for topic: "
+                    << schemeName;
+                return;
+            }
+            PrimaryPath = NKikimr::JoinPath({*Database, FullModernName});
+            NormalizeAsFullPath(PrimaryPath);
+        }
+        if (Valid) {
+            AFL_ENSURE(Account_.Defined())("scheme_name", schemeName)("database", database);
+            AFL_ENSURE(!LegacyProducer.empty())("scheme_name", schemeName)("database", database);
+            AFL_ENSURE(!LegacyLogtype.empty())("scheme_name", schemeName)("database", database);
+            AFL_ENSURE(!Dc.empty())("scheme_name", schemeName)("database", database);
+            AFL_ENSURE(!FullLegacyName.empty())("scheme_name", schemeName)("database", database);
+            Account = *Account_;
+            InternalName = FullLegacyName;
+        }
+    }
+
+    TTopicNames ToTopicNames(bool fromConfig) const {
+        TTopicNames names;
+        names.Valid = Valid;
+        names.Reason = Reason;
+        if (!names.Valid) {
+            return names;
+        }
+        names.Path = PrimaryPath;
+        names.Account = Account;
+        names.Cluster = Dc;
+        names.LegacyProducer = LegacyProducer;
+        names.LegacyLogtype = LegacyLogtype;
+        names.ModernName = FullModernName;
+        if (FstClass) {
+            names.FederationPath = ClientsideName;
+            names.FederationPathWithDC = ClientsideName;
+        } else {
+            names.FederationPath = LbPath.GetOrElse("");
+            names.FederationPathWithDC = Account_.Defined()
+                ? (*Account_ + "/" + FullModernName)
+                : LbPath.GetOrElse("");
+        }
+        if (fromConfig) {
+            AFL_ENSURE(!FullModernName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+            names.InternalName = InternalName;
+            AFL_ENSURE(!ClientsideName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+            names.ClientsideName = ClientsideName;
+            names.ShortClientsideName = ShortClientsideName;
+            if (FstClass) {
+                names.TopicForSrcIdHash = StripLeadSlash(FullModernPath);
+            } else {
+                names.TopicForSrcIdHash = ShortLegacyName;
+            }
+        } else {
+            names.InternalName = names.Path;
+        }
+        return names;
+    }
+};
+
+#undef CHECK_SET_VALID
+
+} // namespace
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath, bool firstClassCitizen) {
+    TNameBuilder builder;
+    builder.InitFromTabletConfig(firstClassCitizen, {}, config, "", topicPath);
+    return builder.ToTopicNames(true);
+}
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen) {
+    return NamesFromConfig(config, TString(), firstClassCitizen);
+}
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath) {
+    const auto& pqConfig = AppData()->PQConfig;
+    const bool firstClassCitizen = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
+    TNameBuilder builder;
+    builder.InitFromTabletConfig(
+        firstClassCitizen,
+        NormalizePqPrefix(pqConfig.GetRoot()),
+        config,
+        pqConfig.GetTestDatabaseRoot(),
+        topicPath);
+    auto names = builder.ToTopicNames(true);
+    // Request-side FCC converters used to keep names valid when AppData FCC is off
+    // for a first-class tablet config (kafka BalanceScenarioForFederation).
+    if (!names.IsValid() && !firstClassCitizen) {
+        return NamesFromConfig(config, topicPath, true);
+    }
+    return names;
+}
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config) {
+    return NamesFromConfig(config, TString());
+}
+
+TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clientsideName) {
+    if (names.Valid && !clientsideName.empty()) {
+        names.ClientsideName = clientsideName;
+        names.FederationPath = clientsideName;
+        names.FederationPathWithDC = clientsideName;
+    }
+    return names;
+}
+
+TTopicNames NamesForCreate(
+    const TString& schemeName,
+    const TString& schemeDir,
+    const TString& database,
+    bool isLocal,
+    const TString& localDc,
+    const TString& federationAccount
+) {
+    const auto& pqConfig = AppData()->PQConfig;
+    TNameBuilder builder;
+    builder.InitForCreate(
+        pqConfig.GetRoot(),
+        pqConfig.GetTestDatabaseRoot(),
+        schemeName,
+        schemeDir,
+        database,
+        isLocal,
+        localDc,
+        federationAccount);
+    return builder.ToTopicNames(false);
+}
+
+TExpandReadTopicsResult ExpandReadTopics(
+    TStringBuf database,
+    const THashSet<TString>& clientTopics,
+    bool onlyLocal,
+    TStringBuf localDc,
+    const TVector<TString>& clusters
+) {
+    TExpandReadTopicsResult result;
+    const bool firstClass = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
+
+    auto putTopic = [&](const TString& topic, TStringBuf dc) {
+        auto resolved = ResolveName(database, topic, localDc, dc);
+        if (!resolved) {
+            result.IsValid = false;
+            result.Reason = TStringBuilder() << "Invalid topic format in init request: '" << topic
+                                             << "': " << resolved.error();
+            return;
+        }
+        result.ClientTopics[topic].push_back(resolved->Path);
+        result.Paths.insert(resolved->Path);
     };
+
+    for (const auto& topic : clientTopics) {
+        if (onlyLocal || firstClass) {
+            putTopic(topic, firstClass ? TStringBuf{} : localDc);
+        } else {
+            for (const auto& cluster : clusters) {
+                putTopic(topic, cluster);
+                if (!result.IsValid) {
+                    break;
+                }
+            }
+        }
+        if (!result.IsValid) {
+            break;
+        }
+    }
+    return result;
 }
 
 } // namespace NKikimr::NPQ::NNameResolver

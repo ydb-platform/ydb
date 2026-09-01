@@ -1,6 +1,8 @@
 #include "msgbus_server_pq_metarequest.h"
 #include "msgbus_server_pq_read_session_info.h"
 
+#include <ydb/core/base/path.h>
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 using namespace NSchemeCache;
@@ -71,6 +73,12 @@ void TPersQueueGetTopicMetadataTopicWorker::Answer(const TActorContext& ctx, ERe
             const auto& desc = SchemeEntry.PQGroupInfo->Description;
             topicInfo->SetTopic(Name);
             topicInfo->MutableConfig()->CopyFrom(desc.GetPQTabletConfig());
+            // Scheme description often omits TopicPath (filled when schemeshard
+            // configures a tablet). Do not write it into describer Info: ALTER
+            // copies that config back to schemeshard. Fill it only here.
+            if (topicInfo->GetConfig().GetTopicPath().empty() && !SchemeEntry.Path.empty()) {
+                topicInfo->MutableConfig()->SetTopicPath(CanonizePath(SchemeEntry.Path));
+            }
             topicInfo->MutableConfig()->SetVersion(desc.GetAlterVersion());
             topicInfo->SetNumPartitions(desc.PartitionsSize());
         }
@@ -112,6 +120,10 @@ TPersQueueGetPartitionOffsetsTopicWorker::TPersQueueGetPartitionOffsetsTopicWork
 }
 
 void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext &ctx) {
+    if (ProcessingResult.IsFatal) {
+        SendErrorReplyAndDie(ctx, ProcessingResult.Status, ProcessingResult.ErrorCode, ProcessingResult.Reason);
+        return;
+    }
     size_t partitionsAsked = 0;
     THashSet<ui64> parts;
     if (SchemeEntry.PQGroupInfo) {
@@ -349,6 +361,10 @@ TPersQueueGetPartitionLocationsTopicWorker::TPersQueueGetPartitionLocationsTopic
 }
 
 void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorContext& ctx) {
+    if (ProcessingResult.IsFatal) {
+        SendErrorReplyAndDie(ctx, ProcessingResult.Status, ProcessingResult.ErrorCode, ProcessingResult.Reason);
+        return;
+    }
     size_t partitionsAsked = 0;
     THashSet<ui64> parts;
     if (SchemeEntry.PQGroupInfo) {

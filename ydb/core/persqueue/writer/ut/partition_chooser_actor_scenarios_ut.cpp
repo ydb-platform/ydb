@@ -14,6 +14,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -75,8 +76,9 @@ NKikimrSchemeOp::TPersQueueGroupDescription MakeOldConfig() {
     return result;
 }
 
-NPersQueue::TTopicConverterPtr MakeConverter(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
-    return NPersQueue::TTopicNameConverter::ForFirstClass(config.GetPQTabletConfig());
+NKikimr::NPQ::NNameResolver::TTopicNamesPtr MakeConverter(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+    return NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(
+        NKikimr::NPQ::NNameResolver::NamesFromConfig(config.GetPQTabletConfig(), true));
 }
 
 Ydb::ResultSet MakeSelectResultSet(std::optional<ui32> partition, std::optional<ui64> seqNo) {
@@ -379,7 +381,7 @@ public:
     TThrowInOnSelectedActor(
         TActorId parentId,
         const std::shared_ptr<IPartitionChooser>& chooser,
-        NPersQueue::TTopicConverterPtr& fullConverter)
+        NKikimr::NPQ::NNameResolver::TTopicNamesPtr& fullConverter)
         : TParent(parentId, chooser, fullConverter, "source", std::nullopt, {})
     {
     }
@@ -402,7 +404,7 @@ struct TEnv {
     TActorId Edge;
     TKqpMock* Kqp = nullptr;
     TActorId KqpId;
-    NPersQueue::TTopicConverterPtr Converter;
+    NKikimr::NPQ::NNameResolver::TTopicNamesPtr Converter;
     NKikimrSchemeOp::TPersQueueGroupDescription Config;
     std::shared_ptr<IPartitionChooser> Chooser;
     std::shared_ptr<TPartitionGraph> Graph;

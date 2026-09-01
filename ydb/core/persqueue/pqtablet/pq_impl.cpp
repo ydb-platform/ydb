@@ -380,10 +380,7 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
         TopicName = Config.GetTopicName();
         TopicPath = Config.GetTopicPath();
 
-        CreateTopicConverter(Config,
-                             TopicConverterFactory,
-                             TopicConverter,
-                             ctx);
+        CreateTopicConverter(Config, TopicConverter, ctx);
 
         PQ_ENSURE(TopicName.size())("description", "Need topic name here");
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(TopicName, cacheSize));
@@ -569,7 +566,7 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
 }
 
 void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& config,
-                                         NPersQueue::TTopicConverterPtr topicConverter,
+                                         NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter,
                                          const TPartitionId& partitionId,
                                          bool newPartition,
                                          const TActorContext& ctx)
@@ -601,11 +598,7 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
         SendEvTxCalcPredicateToPartitions(ctx, tx);
         break;
     case NKikimrPQ::TTransaction::KIND_CONFIG: {
-        NPersQueue::TConverterFactoryPtr converterFactory;
-        CreateTopicConverter(tx.TabletConfig,
-                             converterFactory,
-                             tx.TopicConverter,
-                             ctx);
+        CreateTopicConverter(tx.TabletConfig, tx.TopicConverter, ctx);
         CreateNewPartitions(tx.TabletConfig,
                             tx.TopicConverter,
                             ctx);
@@ -711,10 +704,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         TopicName = Config.GetTopicName();
         TopicPath = Config.GetTopicPath();
 
-        CreateTopicConverter(Config,
-                             TopicConverterFactory,
-                             TopicConverter,
-                             ctx);
+        CreateTopicConverter(Config, TopicConverter, ctx);
 
         ui32 cacheSize = CACHE_SIZE;
         if (Config.HasCacheSize())
@@ -1168,7 +1158,7 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Topic counters. CacheSize CachedBlobs",
         {"logPrefix", LogPrefix()},
-        {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+        {"topic", (TopicConverter ? TopicConverter->Path : "Undefined")},
         {"cacheSizeBytes", CacheCounters.CacheSizeBytes},
         {"cacheSizeBlobs", CacheCounters.CacheSizeBlobs});
 }
@@ -1256,18 +1246,13 @@ void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iter
 
 
 void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
-                                      NPersQueue::TConverterFactoryPtr& converterFactory,
-                                      NPersQueue::TTopicConverterPtr& topicConverter,
+                                      NNameResolver::TTopicNamesPtr& topicConverter,
                                       const TActorContext& ctx)
 {
-    auto& pqConfig = AppData(ctx)->PQConfig;
-    converterFactory =
-        std::make_shared<NPersQueue::TTopicNamesConverterFactory>(pqConfig,
-                                                                  "",
-                                                                  config.GetLocalDC());
-    topicConverter = converterFactory->MakeTopicConverter(config);
-    AFL_ENSURE(topicConverter);
-    AFL_ENSURE(topicConverter->IsValid())("reason", topicConverter->GetReason());
+    Y_UNUSED(ctx);
+    auto names = NNameResolver::NamesFromConfig(config);
+    AFL_ENSURE(names.IsValid())("reason", names.GetReason());
+    topicConverter = NNameResolver::MakeTopicNamesPtr(std::move(names));
 }
 
 void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
@@ -1705,7 +1690,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             auto it = BytesWrittenFromDC.find(clientDC);
             if (it == BytesWrittenFromDC.end()) {
 
-                auto labels = NPersQueue::GetLabelsForCustomCluster(TopicConverter, clientDC);
+                auto labels = NPersQueue::GetLabelsForCustomCluster(TopicConverter->CounterNames(), clientDC);
                 if (!labels.empty()) {
                     labels.pop_back();
                 }
@@ -1869,7 +1854,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 uncompressedSize = 0;
                 YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got client PART message",
                     {"logPrefix", LogPrefix()},
-                    {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+                    {"topic", (TopicConverter ? TopicConverter->Path : "Undefined")},
                     {"partition", req.GetPartition()},
                     {"sourceId", EscapeC(msgs.back().SourceId)},
                     {"seqNo", msgs.back().SeqNo},
@@ -1932,7 +1917,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         }
         YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got client message",
             {"logPrefix", LogPrefix()},
-            {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+            {"topic", (TopicConverter ? TopicConverter->Path : "Undefined")},
             {"partition", req.GetPartition()},
             {"sourceId", EscapeC(msgs.back().SourceId)},
             {"seqNo", msgs.back().SeqNo},
@@ -2649,7 +2634,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got client message batch for topic partition",
         {"logPrefix", LogPrefix()},
-        {"topic", (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined")},
+        {"topic", (TopicConverter ? TopicConverter->Path : "Undefined")},
         {"partition", partition});
 
     if (it == Partitions.end()) {
@@ -5265,7 +5250,7 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
 }
 
 IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
-                                             const NPersQueue::TTopicConverterPtr topicConverter,
+                                             const NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter,
                                              const NKikimrPQ::TPQTabletConfig& config,
                                              bool newPartition,
                                              const TActorContext& ctx)
@@ -5292,7 +5277,7 @@ IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
 }
 
 void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
-                                     NPersQueue::TTopicConverterPtr topicConverter,
+                                     NKikimr::NPQ::NNameResolver::TTopicNamesPtr topicConverter,
                                      const TActorContext& ctx)
 {
     EnsurePartitionsAreNotDeleted(config);

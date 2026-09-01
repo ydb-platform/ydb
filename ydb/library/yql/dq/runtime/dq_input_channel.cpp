@@ -156,7 +156,7 @@ public:
         if (Y_UNLIKELY(data.Proto.GetChunks() == 0)) {
             return;
         }
-        if (QuotaManager && !QuotaManager->AllocateQuota(data.Size())) {
+        if (QuotaManager && !QuotaManager->AllocateQuota(data.Size(), false)) {
             throw NKikimr::TMemoryLimitExceededException();
         }
         StoredSerializedBytes += data.Size();

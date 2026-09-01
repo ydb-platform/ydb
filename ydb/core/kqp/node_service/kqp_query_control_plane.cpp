@@ -34,7 +34,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         });
     }
 
-    bool AllocateExtraQuota(ui64 extraSize) override {
+    bool AllocateExtraQuota(ui64 extraSize, bool isOptional) override {
+        Y_UNUSED(isOptional);
         auto result = ResourceManager->AllocateResources(*Tx, TaskId,
             NRm::TKqpResourcesRequest{.Memory = extraSize});
 
@@ -55,8 +56,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return Tx->IsReasonableToStartSpilling();
+    i64 GetMemoryAvailability() const override {
+        return Tx->IsReasonableToStartSpilling() ? 0 : 1'000'000'000;
     }
 
     TString MemoryConsumptionDetails() const override {
@@ -95,7 +96,8 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         });
     }
 
-    bool AllocateQuota(ui64 memorySize) override {
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
+        Y_UNUSED(isOptional);
         i64 quota = AvailableQuota.fetch_sub(memorySize);
 
         if (static_cast<i64>(memorySize) > quota) {
@@ -126,8 +128,8 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 
     // Node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling.
     // Channels do not spill on it, but propagate it as back pressure, see TInputDescriptor::MemoryPressure
-    bool IsReasonableToUseSpilling() const override {
-        return Tx->IsReasonableToStartSpilling();
+    i64 GetMemoryAvailability() const override {
+        return Tx->IsReasonableToStartSpilling() ? 0 : 1'000'000'000;
     }
 
     void FreeQuota(ui64 memorySize) override {

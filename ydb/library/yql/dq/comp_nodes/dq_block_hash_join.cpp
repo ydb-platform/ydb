@@ -304,7 +304,8 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
 
 } // namespace
 
-IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx, NYql::NDq::TDqComputeContextBase& computeCtx) {
+    Y_ENSURE(computeCtx.MemoryQuota);
     MKQL_ENSURE(callable.GetInputsCount() >= BaseInputs, "Expected at least " << BaseInputs << " args");
     TDqBlockJoinContext meta;
 

@@ -30,7 +30,7 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
 
     auto computeFactory = NMiniKQL::GetKqpBaseComputeFactory(computeCtx);
     context->ComputationFactory =
-        [computeFactory](NMiniKQL::TCallable& callable, const NMiniKQL::TComputationNodeFactoryContext& ctx)
+        [computeFactory, computeCtx](NMiniKQL::TCallable& callable, const NMiniKQL::TComputationNodeFactoryContext& ctx)
         -> NMiniKQL::IComputationNode*
     {
         if (auto compute = computeFactory(callable, ctx)) {
@@ -43,11 +43,11 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
         }
 
         if (name == "DqHashCombine"sv) {
-            return WrapDqHashCombine(callable, ctx);
+            return WrapDqHashCombine(callable, ctx, *computeCtx);
         }
 
         if (name == "DqHashAggregate"sv) {
-            return WrapDqHashAggregate(callable, ctx);
+            return WrapDqHashAggregate(callable, ctx, *computeCtx);
         }
         return nullptr;
     };

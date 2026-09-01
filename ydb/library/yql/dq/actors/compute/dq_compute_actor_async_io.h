@@ -40,11 +40,11 @@ struct IMemoryQuotaManager {
     using TPtr = std::shared_ptr<IMemoryQuotaManager>;
     using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
     virtual ~IMemoryQuotaManager() = default;
-    virtual bool AllocateQuota(ui64 memorySize) = 0;
+    virtual bool AllocateQuota(ui64 memorySize, bool isOptional) = 0;
     virtual void FreeQuota(ui64 memorySize) = 0;
     virtual ui64 GetCurrentQuota() const = 0;
     virtual ui64 GetMaxMemorySize() const = 0;
-    virtual bool IsReasonableToUseSpilling() const = 0;
+    virtual i64 GetMemoryAvailability() const = 0;
     virtual TString MemoryConsumptionDetails() const = 0;
 };
 

@@ -289,13 +289,13 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         MaxMemorySize = Limit;
     }
 
-    bool AllocateQuota(ui64 memorySize) override {
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
         if (Quota + memorySize > Limit) {
             ui64 delta = Quota + memorySize - Limit;
             ui64 alignMask = Step - 1;
             delta = (delta + alignMask) & ~alignMask;
 
-            if (!AllocateExtraQuota(delta)) {
+            if (!AllocateExtraQuota(delta, isOptional)) {
                 return false;
             }
 
@@ -309,8 +309,8 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return true;
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return false;
+    i64 GetMemoryAvailability() const override {
+        return 1;
     }
 
     void FreeQuota(ui64 memorySize) override {
@@ -337,11 +337,14 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return TString();
     }
 
-    virtual bool AllocateExtraQuota(ui64) {
+    virtual bool AllocateExtraQuota(ui64 extraSize, bool isOptional) {
+        Y_UNUSED(extraSize);
+        Y_UNUSED(isOptional);
         return false;
     }
 
-    virtual void FreeExtraQuota(ui64) {
+    virtual void FreeExtraQuota(ui64 extraSize) {
+        Y_UNUSED(extraSize);
     }
 
     ui64 Limit;     // current consumption (Quota + leftover from allocation chunk)
@@ -358,8 +361,8 @@ struct TChainedQuotaManager : public TGuaranteeQuotaManager {
     , ExtraQuotaManager(extraQuotaManager) {
     }
 
-    bool AllocateExtraQuota(ui64 memorySize) override {
-        return ExtraQuotaManager->AllocateQuota(memorySize);
+    bool AllocateExtraQuota(ui64 memorySize, bool isOptional) override {
+        return ExtraQuotaManager->AllocateQuota(memorySize, isOptional);
     }
 
     void FreeExtraQuota(ui64 memorySize) override {

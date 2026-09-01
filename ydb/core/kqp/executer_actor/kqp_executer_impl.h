@@ -1254,9 +1254,10 @@ protected:
         if (Planner && Planner->SendStartKqpTasksRequest(ev->Get()->RequestId, ev->Get()->Target)) {
             return;
         }
-        InvalidateNode(Target.NodeId());
-        return InternalError(TStringBuilder()
-            << "TEvKqpNode::TEvStartKqpTasksRequest lost: ActorUnknown");
+        const ui32 nodeId = ev->Get()->Target.NodeId();
+        InvalidateNode(nodeId);
+        return ReplyUnavailable(TStringBuilder()
+            << "Failed to send EvStartKqpTasksRequest because node is unavailable: " << nodeId);
     }
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

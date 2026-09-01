@@ -12,7 +12,7 @@ public:
     TDqSchedulerContext(NHdrf::NDynamic::TQueryPtr query, bool isSchedulable);
 
     std::unique_ptr<NYql::NDq::IDqSchedulableWork> CreateSchedulableWork() override;
-    NYql::NDq::TPoolKey GetPoolKey() const override;
+    NYql::NDq::TWorkScope GetWorkScope() const override;
 
 private:
     const NHdrf::NDynamic::TQueryPtr Query;

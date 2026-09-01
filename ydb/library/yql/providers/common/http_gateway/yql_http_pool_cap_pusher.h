@@ -11,7 +11,7 @@
 
 namespace NYql {
 
-using TPoolSharesProvider = std::function<THashMap<NDq::TPoolKey, double>()>;
+using TPoolSharesProvider = std::function<THashMap<NDq::TWorkScope, double>()>;
 
 // Actor that periodically pulls per-pool shares from `provider` and pushes
 // derived per-pool caps (MaxHandlers * share) into the gateway via

@@ -11,16 +11,14 @@
 
 namespace NYql::NDq {
 
-using TPoolId = TString;
-using TDatabaseId = TString;
+///
+/// Opaque two-part identifier of a scheduling scope.
+///
+struct TWorkScope {
+    TString Namespace;
+    TString Name;
 
-// Fully-qualified resource pool identifier. Pool names are not unique across
-// databases on a shared node — the (database, pool) pair disambiguates.
-struct TPoolKey {
-    TDatabaseId DatabaseId;
-    TPoolId PoolId;
-
-    bool operator==(const TPoolKey&) const = default;
+    bool operator==(const TWorkScope&) const = default;
 };
 
 ///
@@ -45,7 +43,7 @@ struct IDqSchedulableWork {
     // TEvWakeup from the scheduler.
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;
 
-    virtual TPoolKey GetPoolKey() const = 0;
+    virtual TWorkScope GetWorkScope() const = 0;
 };
 
 ///
@@ -60,9 +58,9 @@ struct IDqSchedulerContext {
     // state is not thread-safe and not shareable across actors.
     virtual std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() = 0;
 
-    // Pool identity without creating a Work object. Use when a caller only
-    // needs the (database, pool) tag (e.g. for HTTP request routing).
-    virtual TPoolKey GetPoolKey() const = 0;
+    // Scope identity without creating a Work object. Use when a caller only
+    // needs the routing/tagging token (e.g. for HTTP request routing).
+    virtual TWorkScope GetWorkScope() const = 0;
 };
 
 using IDqSchedulerContextPtr = std::shared_ptr<IDqSchedulerContext>;
@@ -70,8 +68,8 @@ using IDqSchedulerContextPtr = std::shared_ptr<IDqSchedulerContext>;
 } // namespace NYql::NDq
 
 template <>
-struct THash<NYql::NDq::TPoolKey> {
-    size_t operator()(const NYql::NDq::TPoolKey& k) const {
-        return CombineHashes(THash<TString>{}(k.DatabaseId), THash<TString>{}(k.PoolId));
+struct THash<NYql::NDq::TWorkScope> {
+    size_t operator()(const NYql::NDq::TWorkScope& k) const {
+        return CombineHashes(THash<TString>{}(k.Namespace), THash<TString>{}(k.Name));
     }
 };

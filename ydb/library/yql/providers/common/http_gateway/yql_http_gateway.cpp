@@ -282,8 +282,8 @@ public:
         Context = std::move(context);
     }
 
-    NDq::TPoolKey GetPoolKey() const {
-        return Context ? Context->GetPoolKey() : NDq::TPoolKey{{}, TString{IHTTPGateway::DefaultPoolId}};
+    NDq::TWorkScope GetWorkScope() const {
+        return Context ? Context->GetWorkScope() : NDq::TWorkScope{{}, TString{IHTTPGateway::DefaultPoolId}};
     }
 
 protected:
@@ -708,8 +708,8 @@ public:
         InitCurl();
     }
 
-    static NDq::TPoolKey DefaultPoolKey() {
-        return NDq::TPoolKey{{}, TString{DefaultPoolId}};
+    static NDq::TWorkScope DefaultPoolKey() {
+        return NDq::TWorkScope{{}, TString{DefaultPoolId}};
     }
 
     ~THTTPMultiGateway() {
@@ -808,9 +808,9 @@ private:
                         break;
                     case TEasyCurlStream::EAction::Drop: {
                         curl_multi_remove_handle(Handle.get(), streamHandle);
-                        NDq::TPoolKey poolKey;
+                        NDq::TWorkScope poolKey;
                         if (const auto ait = Allocated.find(streamHandle); ait != Allocated.end()) {
-                            poolKey = ait->second->GetPoolKey();
+                            poolKey = ait->second->GetWorkScope();
                             Allocated.erase(ait);
                         }
                         ReleasePoolSlot(poolKey);
@@ -825,7 +825,7 @@ private:
         }
 
         while (!Delayed.empty() && Delayed.top().first <= TInstant::Now()) {
-            const auto poolKey = Delayed.top().second->GetPoolKey();
+            const auto poolKey = Delayed.top().second->GetWorkScope();
             AwaitPerPool[poolKey].emplace_back(std::move(Delayed.top().second));
             Delayed.pop();
             SyncPoolAwaitCounter(poolKey);
@@ -924,7 +924,7 @@ private:
                     group->GetCounter("count", true)->Inc();
                 }
 
-                const auto poolKey = easy->GetPoolKey();
+                const auto poolKey = easy->GetWorkScope();
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
                     AllocatedSize -= buffer->GetSizeLimit();
                     if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(result, httpResponseCode)) {
@@ -992,7 +992,7 @@ private:
 
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         easy->SetContext(std::move(context));
-        const auto poolKey = easy->GetPoolKey();
+        const auto poolKey = easy->GetWorkScope();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolKey].emplace_back(std::move(easy));
         SyncPoolAwaitCounter(poolKey);
@@ -1004,7 +1004,7 @@ private:
 
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, "", std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         easy->SetContext(std::move(context));
-        const auto poolKey = easy->GetPoolKey();
+        const auto poolKey = easy->GetWorkScope();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolKey].emplace_back(std::move(easy));
         SyncPoolAwaitCounter(poolKey);
@@ -1029,7 +1029,7 @@ private:
         }
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
         easy->SetContext(std::move(context));
-        const auto poolKey = easy->GetPoolKey();
+        const auto poolKey = easy->GetWorkScope();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolKey].emplace_back(std::move(easy));
         SyncPoolAwaitCounter(poolKey);
@@ -1049,7 +1049,7 @@ private:
     {
         auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, Handle, BuffersSizePerStream, InitConfig, DnsGateway.GetDNSCurlList());
         stream->SetContext(std::move(context));
-        const auto poolKey = stream->GetPoolKey();
+        const auto poolKey = stream->GetWorkScope();
         TEasyCurlStream::TWeakPtr weak = stream;
         {
             const std::unique_lock lock(SyncRef());
@@ -1076,25 +1076,25 @@ private:
         return BuffersSizePerStream;
     }
 
-    void UpdatePoolCaps(THashMap<NDq::TPoolKey, size_t> caps) final {
+    void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t> caps) final {
         TStringBuilder log;
         log << "HTTPGateway UpdatePoolCaps:";
         for (const auto& [poolKey, cap] : caps) {
-            log << " [" << poolKey.DatabaseId << "/" << poolKey.PoolId << "]=" << cap;
+            log << " [" << poolKey.Namespace << "/" << poolKey.Name << "]=" << cap;
         }
         YQL_LOG(DEBUG) << log;
         const std::unique_lock lock(SyncRef());
         PoolCaps = std::move(caps);
         PoolCaps.emplace(DefaultPoolKey(), MaxHandlers);
         for (const auto& [poolKey, cap] : PoolCaps) {
-            if (!poolKey.PoolId.empty()) {
+            if (!poolKey.Name.empty()) {
                 GetPoolCounters(poolKey).PerPoolCapFloor->Set(cap);
             }
         }
     }
 
     void OnRetry(TEasyCurlBuffer::TPtr easy) {
-        const auto poolKey = easy->GetPoolKey();
+        const auto poolKey = easy->GetWorkScope();
         const size_t sizeLimit = easy->GetSizeLimit();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolKey].emplace_back(std::move(easy));
@@ -1113,16 +1113,16 @@ private:
         }
     }
 
-    size_t GetPoolCap(const NDq::TPoolKey& poolKey) const {
+    size_t GetPoolCap(const NDq::TWorkScope& poolKey) const {
         return PoolCaps.Value(poolKey, PoolCaps.Value(DefaultPoolKey(), MaxHandlers));
     }
 
-    TPoolCounters& GetPoolCounters(const NDq::TPoolKey& poolKey) {
+    TPoolCounters& GetPoolCounters(const NDq::TWorkScope& poolKey) {
         auto [it, inserted] = PoolCounters.try_emplace(poolKey);
         if (inserted) {
             auto sub = Counters
-                ->GetSubgroup("db", poolKey.DatabaseId)
-                ->GetSubgroup("pool", poolKey.PoolId);
+                ->GetSubgroup("db", poolKey.Namespace)
+                ->GetSubgroup("pool", poolKey.Name);
             it->second.PerPoolCapFloor = sub->GetCounter("PerPoolCapFloor");
             it->second.PerPoolAllocated = sub->GetCounter("PerPoolAllocated");
             it->second.PerPoolAwait = sub->GetCounter("PerPoolAwait");
@@ -1130,15 +1130,15 @@ private:
         return it->second;
     }
 
-    void SyncPoolAllocatedCounter(const NDq::TPoolKey& poolKey) {
-        if (poolKey.PoolId.empty()) {
+    void SyncPoolAllocatedCounter(const NDq::TWorkScope& poolKey) {
+        if (poolKey.Name.empty()) {
             return;
         }
         GetPoolCounters(poolKey).PerPoolAllocated->Set(AllocatedPerPool[poolKey]);
     }
 
-    void SyncPoolAwaitCounter(const NDq::TPoolKey& poolKey) {
-        if (poolKey.PoolId.empty()) {
+    void SyncPoolAwaitCounter(const NDq::TWorkScope& poolKey) {
+        if (poolKey.Name.empty()) {
             return;
         }
         size_t depth = 0;
@@ -1148,8 +1148,8 @@ private:
         GetPoolCounters(poolKey).PerPoolAwait->Set(depth);
     }
 
-    void ReleasePoolSlot(const NDq::TPoolKey& poolKey) {
-        if (poolKey.PoolId.empty()) {
+    void ReleasePoolSlot(const NDq::TWorkScope& poolKey) {
+        if (poolKey.Name.empty()) {
             return;
         }
         if (auto& n = AllocatedPerPool[poolKey]; n > 0) {
@@ -1170,13 +1170,13 @@ private:
 
     std::shared_ptr<CURLM> Handle;
 
-    THashMap<NDq::TPoolKey, std::deque<TEasyCurl::TPtr>> AwaitPerPool;
+    THashMap<NDq::TWorkScope, std::deque<TEasyCurl::TPtr>> AwaitPerPool;
     std::vector<TEasyCurlStream::TWeakPtr> Streams;
 
-    THashMap<NDq::TPoolKey, size_t> PoolCaps;
-    THashMap<NDq::TPoolKey, size_t> AllocatedPerPool;
+    THashMap<NDq::TWorkScope, size_t> PoolCaps;
+    THashMap<NDq::TWorkScope, size_t> AllocatedPerPool;
 
-    THashMap<NDq::TPoolKey, TPoolCounters> PoolCounters;
+    THashMap<NDq::TWorkScope, TPoolCounters> PoolCounters;
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
     std::priority_queue<

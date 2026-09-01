@@ -480,9 +480,9 @@ public:
         // lz4 decompressor reads signature in ctor, w/o actual data it will be deadlocked
         IHttpRequestContext::TPtr context;
         if (Work) {
-            const auto poolKey = Work->GetPoolKey();
-            LOG_CORO_D("S3 Download: db=" << poolKey.DatabaseId << " pool=" << poolKey.PoolId);
-            context = MakeIntrusive<TDefaultHttpRequestContext>(poolKey);
+            const auto scope = Work->GetWorkScope();
+            LOG_CORO_D("S3 Download: db=" << scope.Namespace << " pool=" << scope.Name);
+            context = MakeIntrusive<TDefaultHttpRequestContext>(scope);
         }
         DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(context));
 
@@ -630,9 +630,9 @@ public:
         }
         IHttpRequestContext::TPtr context;
         if (Work) {
-            const auto poolKey = Work->GetPoolKey();
-            LOG_CORO_D("S3 GetOrCreate: db=" << poolKey.DatabaseId << " pool=" << poolKey.PoolId);
-            context = MakeIntrusive<TDefaultHttpRequestContext>(poolKey);
+            const auto scope = Work->GetWorkScope();
+            LOG_CORO_D("S3 GetOrCreate: db=" << scope.Namespace << " pool=" << scope.Name);
+            context = MakeIntrusive<TDefaultHttpRequestContext>(scope);
         }
         RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
                             range.Offset,
@@ -1135,7 +1135,7 @@ public:
         if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
             IHttpRequestContext::TPtr retryContext;
             if (Work) {
-                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetPoolKey());
+                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetWorkScope());
             }
             GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
             if (!InputBuffer.empty()) {

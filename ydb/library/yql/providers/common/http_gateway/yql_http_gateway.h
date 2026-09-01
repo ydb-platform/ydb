@@ -24,18 +24,18 @@ struct IHttpRequestContext : public TThrRefBase {
     using TPtr = TIntrusivePtr<IHttpRequestContext>;
 
     virtual ~IHttpRequestContext() = default;
-    virtual NDq::TPoolKey GetPoolKey() const = 0;
+    virtual NDq::TWorkScope GetWorkScope() const = 0;
 };
 
 class TDefaultHttpRequestContext final : public IHttpRequestContext {
 public:
-    explicit TDefaultHttpRequestContext(NDq::TPoolKey key)
-        : Key(std::move(key)) {}
+    explicit TDefaultHttpRequestContext(NDq::TWorkScope scope)
+        : Scope(std::move(scope)) {}
 
-    NDq::TPoolKey GetPoolKey() const override { return Key; }
+    NDq::TWorkScope GetWorkScope() const override { return Scope; }
 
 private:
-    const NDq::TPoolKey Key;
+    const NDq::TWorkScope Scope;
 };
 
 class IHTTPGateway {
@@ -159,7 +159,7 @@ public:
         
     virtual ui64 GetBuffersSizePerStream() = 0;
 
-    virtual void UpdatePoolCaps(THashMap<NDq::TPoolKey, size_t> caps) = 0;
+    virtual void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t> caps) = 0;
 
     static constexpr const char* DefaultPoolId = "default";
 

@@ -34,8 +34,7 @@ public:
     void UpdateFairShare();
 
     // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1],
-    // keyed by fully-qualified (databaseId, poolId).
-    THashMap<NYql::NDq::TPoolKey, double> GetLeafPoolFairShares() const;
+    THashMap<NYql::NDq::TWorkScope, double> GetLeafPoolFairShares() const;
 
 private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;

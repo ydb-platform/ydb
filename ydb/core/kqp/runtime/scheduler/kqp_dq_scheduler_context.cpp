@@ -22,18 +22,18 @@ std::unique_ptr<NYql::NDq::IDqSchedulableWork> TDqSchedulerContext::CreateSchedu
     });
 }
 
-NYql::NDq::TPoolKey TDqSchedulerContext::GetPoolKey() const {
-    NYql::NDq::TPoolKey key;
+NYql::NDq::TWorkScope TDqSchedulerContext::GetWorkScope() const {
+    NYql::NDq::TWorkScope scope;
     if (!Query) {
-        return key;
+        return scope;
     }
     if (auto* pool = Query->GetParent()) {
-        key.PoolId = std::get<NHdrf::TPoolId>(pool->GetId());
+        scope.Name = std::get<NHdrf::TPoolId>(pool->GetId());
         if (auto* database = pool->GetParent()) {
-            key.DatabaseId = std::get<NHdrf::TDatabaseId>(database->GetId());
+            scope.Namespace = std::get<NHdrf::TDatabaseId>(database->GetId());
         }
     }
-    return key;
+    return scope;
 }
 
 } // namespace NKikimr::NKqp::NScheduler

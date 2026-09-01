@@ -30,7 +30,7 @@ protected:
     void StopExecution(bool& forcedResume) override;
     TDuration CalculateDelay(TMonotonic now) const override;
     void RegisterForResume(const NActors::TActorId& actorId) override;
-    NYql::NDq::TPoolKey GetPoolKey() const override { return Key; }
+    NYql::NDq::TWorkScope GetWorkScope() const override { return Scope; }
 
     static inline TMonotonic Now() {
         return TMonotonic::Now();
@@ -47,7 +47,7 @@ private:
     void Resume();
 
     TSchedulableTaskPtr SchedulableTask;
-    const NYql::NDq::TPoolKey Key;
+    const NYql::NDq::TWorkScope Scope;
     const bool IsSchedulable;
 
     THPTimer Timer;

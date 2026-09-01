@@ -102,7 +102,7 @@ public:
         return 0;
     }
 
-    void UpdatePoolCaps(THashMap<NDq::TPoolKey, size_t>) final {
+    void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t>) final {
     }
 
     void AddDefaultResponse(TDataDefaultResponse response) {

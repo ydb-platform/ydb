@@ -198,7 +198,7 @@ public:
         , PatternType(patternType)
         , AllowLocalFiles(allowLocalFiles) {
         if (schedulerContext) {
-            HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(schedulerContext->GetPoolKey());
+            HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(schedulerContext->GetWorkScope());
         }
         for (size_t i = 0; i < paths.size(); ++i) {
             NS3::FileQueue::TObjectPath object;

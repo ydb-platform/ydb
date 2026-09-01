@@ -13,23 +13,23 @@ static constexpr TDuration AverageExecutionTime = TDuration::MicroSeconds(100); 
 using namespace NHdrf::NDynamic;
 
 namespace {
-    NYql::NDq::TPoolKey ExtractKey(const NHdrf::NDynamic::TQueryPtr& query) {
-        NYql::NDq::TPoolKey key;
+    NYql::NDq::TWorkScope ExtractScope(const NHdrf::NDynamic::TQueryPtr& query) {
+        NYql::NDq::TWorkScope scope;
         if (!query) {
-            return key;
+            return scope;
         }
         if (auto* pool = query->GetParent()) {
-            key.PoolId = std::get<NHdrf::TPoolId>(pool->GetId());
+            scope.Name = std::get<NHdrf::TPoolId>(pool->GetId());
             if (auto* database = pool->GetParent()) {
-                key.DatabaseId = std::get<NHdrf::TDatabaseId>(database->GetId());
+                scope.Namespace = std::get<NHdrf::TDatabaseId>(database->GetId());
             }
         }
-        return key;
+        return scope;
     }
 } // namespace
 
 TSchedulableBase::TSchedulableBase(const TOptions& options)
-    : Key(ExtractKey(options.Query))
+    : Scope(ExtractScope(options.Query))
     , IsSchedulable(options.IsSchedulable)
     , LastExecutionTime(AverageExecutionTime)
 {

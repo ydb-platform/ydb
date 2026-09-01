@@ -14,6 +14,17 @@ Y_UNIT_TEST_SUITE(ScanLimit) {
 
     constexpr ui32 PortionsCount = 10;
 
+    void RunDdl(TSession& session, const TString& query) {
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    TExecuteQueryResult RunQuery(TSession& session, const TString& query) {
+        auto result = session.ExecuteQuery(Q_(query), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return result;
+    }
+
     // Number of portions the shard has walked so far, over every scan in this runner.
     // TScanCounters::OnSourceFinished bumps it once per portion, so the difference across a
     // single query is exactly how many portions that query read.
@@ -39,11 +50,9 @@ Y_UNIT_TEST_SUITE(ScanLimit) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
 
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
 
-        auto result = session
-                          .ExecuteQuery(R"(
+        RunDdl(session, R"(
             CREATE TABLE `/Root/KV` (
                 id Uint64 NOT NULL,
                 vn Int32,
@@ -54,50 +63,34 @@ Y_UNIT_TEST_SUITE(ScanLimit) {
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
             );
-        )",
-                              TTxControl::NoTx())
-                          .GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        )");
 
+        // Every INSERT commits on its own, so each one becomes a separate portion.
         for (ui32 i = 0; i < PortionsCount; ++i) {
-            result = session
-                         .ExecuteQuery(Q_(Sprintf(R"(
-                INSERT INTO `/Root/KV` (id, vn) VALUES (%uu, %u);
-            )",
-                                       i, i * 10)),
-                             TTxControl::BeginTx().CommitTx())
-                         .GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            RunQuery(session, Sprintf("INSERT INTO `/Root/KV` (id, vn) VALUES (%uu, %u);", i, i * 10));
         }
 
         // Without several portions the test proves nothing: one portion is read either way.
-        result = session
-                     .ExecuteQuery(Q_(R"(
-            SELECT COUNT(*) AS Portions
-            FROM `/Root/KV/.sys/primary_index_portion_stats`
-            WHERE Activity == 1;
-        )"),
-                         TTxControl::BeginTx().CommitTx())
-                     .GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        auto portions = result.GetResultSetParser(0);
-        UNIT_ASSERT(portions.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(portions.ColumnParser("Portions").GetUint64(), PortionsCount);
+        {
+            auto result = RunQuery(session, R"(
+                SELECT COUNT(*) AS Portions
+                FROM `/Root/KV/.sys/primary_index_portion_stats`
+                WHERE Activity == 1;
+            )");
+            auto portions = result.GetResultSetParser(0);
+            UNIT_ASSERT(portions.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(portions.ColumnParser("Portions").GetUint64(), PortionsCount);
+        }
 
         const i64 processedBefore = GetProcessedSourceCount(kikimr);
 
-        result = session
-                     .ExecuteQuery(Q_(R"(
+        auto result = RunQuery(session, R"(
             SELECT vn FROM `/Root/KV` LIMIT 1;
-        )"),
-                         TTxControl::BeginTx().CommitTx())
-                     .GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        )");
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
 
-        // The single portion holding the row the limit needs, and not one of the other nine.
-        const i64 processedPortions = GetProcessedSourceCount(kikimr) - processedBefore;
-        UNIT_ASSERT_VALUES_EQUAL(processedPortions, 1);
+        // The one portion holding the row the limit needs, and not one of the other nine.
+        UNIT_ASSERT_VALUES_EQUAL(GetProcessedSourceCount(kikimr) - processedBefore, 1);
     }
 
     }   // namespace

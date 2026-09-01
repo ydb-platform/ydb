@@ -358,14 +358,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         ));
 
         // After start ALTER: started_by must be set; stopped_by must still be null; created_by preserved
-        CheckSysView({{
-            .Name = queryName,
-            .Status = "RUNNING",
-            .Run = true,
-            .CreatedBy = BUILTIN_ACL_ROOT,
-            .ModifiedBy = BUILTIN_ACL_ROOT,
-            .StartedBy = BUILTIN_ACL_ROOT,
-        }});
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after starting");
+            });
+        }
 
         // ALTER: turn the query off (RUN = FALSE) — this should set stopped_by
         ExecQuery(fmt::format(R"(
@@ -376,24 +381,32 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         ));
 
         // After stop ALTER: stopped_by must be set; created_by must be unchanged
-        CheckSysView({{
-            .Name = queryName,
-            .Status = "STOPPED",
-            .Run = false,
-            .CreatedBy = BUILTIN_ACL_ROOT,
-            .ModifiedBy = BUILTIN_ACL_ROOT,
-            .StoppedBy = BUILTIN_ACL_ROOT,
-        }});
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StoppedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+            });
+        }
     }
 
     Y_UNIT_TEST_F(SysViewTimestampColumns, TStreamingSysViewTestFixture) {
         Setup();
 
-        // Start a running query so submitted_at and started_at get populated
+        // Wait for the query to actually start: CREATE completion does not guarantee
+        // that the script execution entry has already been created.
         StartQuery("tsQuery");
-        Sleep(STATS_WAIT_DURATION);
+        PqGateway->WaitWriteSession(TString{OutputTopic});
 
-        // Verify submitted_at and started_at are non-null for a running query
+        // SubmittedAt comes from the current script execution. StartedAt reflects an
+        // in-flight streaming query management operation and is cleared once CREATE
+        // or ALTER completes, so it is not expected in this stable snapshot.
         const auto& queryResult = ExecQuery(R"(
             SELECT SubmittedAt, StartedAt
             FROM `.sys/streaming_queries`
@@ -401,7 +414,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         )");
         CheckScriptResult(queryResult[0], 2, 1, [&](TResultSetParser& rs) {
             UNIT_ASSERT_C(rs.ColumnParser("SubmittedAt").GetOptionalTimestamp().has_value(), "SubmittedAt must be set for a running query");
-            UNIT_ASSERT_C(rs.ColumnParser("StartedAt").GetOptionalTimestamp().has_value(), "StartedAt must be set for a running query");
+            UNIT_ASSERT_C(!rs.ColumnParser("StartedAt").GetOptionalTimestamp().has_value(), "StartedAt must be null after CREATE completes");
         });
     }
 

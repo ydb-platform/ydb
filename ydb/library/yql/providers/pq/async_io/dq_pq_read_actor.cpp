@@ -41,6 +41,7 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
+#include <limits>
 #include <queue>
 #include <variant>
 
@@ -854,13 +855,28 @@ private:
             topicReadSettings.AppendPartitionIds(partitionId);
         }
 
+        auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
+            /* minDelay           */ TDuration::MilliSeconds(500),
+            /* minLongRetryDelay  */ TDuration::Seconds(30),
+            /* maxDelay           */ TDuration::Seconds(30),
+            /* maxRetries         */ std::numeric_limits<size_t>::max(),
+            /* maxTime            */ TDuration::Seconds(30),
+            /* scaleFactor        */ 2.0,
+            /* customRetryClass   */ [](NYdb::EStatus status) {
+                if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                    return ERetryErrorClass::LongRetry;
+                }
+                return NYdb::NTopic::GetRetryErrorClass(status);
+            });
+
         auto settings = NYdb::NTopic::TReadSessionSettings();
         settings
             .TraceId(LogPrefix)
             .AppendTopics(topicReadSettings)
             .MaxMemoryUsageBytes(BufferSize)
             .ReadFromTimestamp(StartingMessageTimestamp)
-            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets());    // In table mode the query will not fail query by TEndPartitionSessionEvent.
+            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets())     // In table mode the query will not fail query by TEndPartitionSessionEvent.
+            .RetryPolicy(retryPolicy);
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());

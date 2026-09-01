@@ -32,6 +32,7 @@
 #include <util/string/builder.h>
 
 #include <algorithm>
+#include <limits>
 #include <queue>
 #include <variant>
 
@@ -342,13 +343,28 @@ private:
     }
 
     NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
+        auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
+            /* minDelay           */ TDuration::MilliSeconds(500),
+            /* minLongRetryDelay  */ TDuration::Seconds(30),
+            /* maxDelay           */ TDuration::Seconds(30),
+            /* maxRetries         */ std::numeric_limits<size_t>::max(),
+            /* maxTime            */ TDuration::Seconds(30),
+            /* scaleFactor        */ 2.0,
+            /* customRetryClass   */ [](NYdb::EStatus status) {
+                if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                    return ERetryErrorClass::LongRetry;
+                }
+                return NYdb::NTopic::GetRetryErrorClass(status);
+            });
+
         auto settings = NYdb::NTopic::TWriteSessionSettings()
             .Path(SinkParams.GetTopicPath())
             .TraceId(LogPrefix)
             .MaxMemoryUsage(FreeSpace)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
-                : NYdb::NTopic::ECodec::GZIP);
+                : NYdb::NTopic::ECodec::GZIP)
+            .RetryPolicy(retryPolicy);
 
         settings.DeduplicationEnabled(EnableDeduplication);
         if (EnableDeduplication) {

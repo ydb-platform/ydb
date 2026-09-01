@@ -384,7 +384,7 @@ Status (severity) of the current problem:
 
 #### LoadAverage above 100%
 
-**Description:** A physical host is overloaded, meaning the system is operating at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. For more information on load, see [Load (computing)](https://en.wikipedia.org/wiki/Load_(computing)).
+**Description:** A physical host is overloaded ([Load](https://en.wikipedia.org/wiki/Load_(computing))). This indicates that the system is operating at its limit, most likely due to a large number of processes waiting for I/O operations.
 
 Load Information:
 

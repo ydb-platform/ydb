@@ -666,6 +666,7 @@ ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[1]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[20]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[21]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[22]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[7]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[9]
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWM.test

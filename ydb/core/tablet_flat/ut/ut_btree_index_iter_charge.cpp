@@ -20,7 +20,7 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto pageId = location.GetPageIndex();
+            auto pageId = ResolvePageId(part, location, groupId);
             if (Sticky[groupId].contains(pageId)) {
                 Loaded[groupId].insert(pageId);
             }
@@ -79,7 +79,12 @@ namespace {
             // this should be resolved using slices (see ChargeRange)
             if (allowAdditionalFirstLastPartPages) {
                 for (auto additionalLoc : {IndexTools::GetFirstPageLocation(part, groupId), IndexTools::GetLastPageLocation(part, groupId)}) {
-                    auto additionalPageId = additionalLoc.GetPageIndex();
+                    TPageId additionalPageId;
+                    if (additionalLoc.Offset.IsByteOffset()) {
+                        additionalPageId = part.Store->ResolveByteOffset(groupId.Index, additionalLoc.Offset.AsByteOffset());
+                    } else {
+                        additionalPageId = additionalLoc.Offset.AsPageIndex();
+                    }
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
@@ -243,11 +248,11 @@ namespace {
         part.Slices->Describe(Cerr);
         Cerr << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
+        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), params.Levels);
         if (params.Groups) {
-            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[1].LevelCount, params.Levels);
-            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount, 2);
-            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[3].LevelCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[1].LevelCount(), params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[3].LevelCount(), 1);
         }
 
         return eggs;
@@ -545,7 +550,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         }
 
                         // The B-Tree implementation ignores the limits when the tree has no levels
-                        if ((itemsLimit == 0) || (part.IndexPages.GetBTree({}).LevelCount == 0)) {
+                        if ((itemsLimit == 0) || (part.IndexPages.GetBTree({}).LevelCount() == 0)) {
                             UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.ItemsPrecharged, rowId2 - rowId1 + 1, message);
                         } else {
                             // The B-Tree implementation can overcharge items by up to the size
@@ -613,7 +618,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
                                 // The B-Tree implementation ignores the limits and keys when the tree has no levels,
                                 // except for the case when the history or the groups are turned on
-                                if ((part.IndexPages.GetBTree({}).LevelCount == 0) && (!params.Groups) && (!params.History)) {
+                                if ((part.IndexPages.GetBTree({}).LevelCount() == 0) && (!params.Groups) && (!params.History)) {
                                     UNIT_ASSERT_VALUES_EQUAL_C(
                                         treeChargeResult.ItemsPrecharged,
                                         part.IndexPages.GetBTree({}).GetRowCount(),
@@ -1079,7 +1084,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
 
                             // The B-Tree implementation ignores the limits and keys when the tree has no levels,
                             // except for the case when the history or the groups are turned on
-                            if ((part.IndexPages.GetBTree({}).LevelCount == 0) && (!params.Groups) && (!params.History)) {
+                            if ((part.IndexPages.GetBTree({}).LevelCount() == 0) && (!params.Groups) && (!params.History)) {
                                 if (treeChargeResult.ItemsPrecharged != 0) {
                                     UNIT_ASSERT_VALUES_EQUAL_C(
                                         treeChargeResult.ItemsPrecharged,

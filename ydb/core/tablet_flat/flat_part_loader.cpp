@@ -82,20 +82,31 @@ void TLoader::StageParseMeta()
             FlatHistoricIndexes.push_back(id);
         }
 
+        auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
+            ui32 lv1 = proto.HasLevelCount() ? proto.GetLevelCount() : Max<ui32>();
+            ui32 lv2 = proto.HasLevelCountV2() ? proto.GetLevelCountV2() : Max<ui32>();
+            auto v2RootType = (lv2 == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2);
+            auto v1Root = proto.HasRootPageId()
+                ? proto.GetRootPageId()
+                : Max<TPageId>();
+            auto v2Root = proto.HasRootOffset()
+                ? NPage::TBtreeIndexMeta::RootV2Location(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), v2RootType)
+                : NPage::TPageLocation::Max();
+            Y_ENSURE(v1Root != Max<TPageId>() || v2Root, "TBtreeIndexMeta has neither RootPageId nor RootOffset");
+            Y_ENSURE(v2Root ? lv2 != Max<ui32>() : lv1 != Max<ui32>(), "TBtreeIndexMeta has no valid level count");
+
+            return { v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
+                proto.GetErasedRowCount(), lv1, lv2, proto.GetIndexSize() };
+        };
+
         BTreeGroupIndexes.clear();
         BTreeHistoricIndexes.clear();
-        if (layout.HasBTreeIndexesFormatVersion() && layout.GetBTreeIndexesFormatVersion() == NPage::TBtreeIndexNode::FormatVersion) {
+        if (layout.HasBTreeIndexesFormatVersion() &&
+            layout.GetBTreeIndexesFormatVersion() == NPage::TBtreeIndexNode::FormatVersion) {
             for (bool history : {false, true}) {
-                for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
-                    NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(),
-                        meta.GetRowCount(),
-                        meta.GetDataSize(),
-                        meta.GetGroupDataSize(),
-                        meta.GetErasedRowCount()},
-                        meta.GetLevelCount(),
-                        meta.GetIndexSize()};
-                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                for (const auto& meta :
+                     history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(loadMeta(meta));
                 }
             }
         }
@@ -152,7 +163,7 @@ void TLoader::StageParseMeta()
             << " " << PageCollections.size() << "s " << meta.TotalPages() << "pg"
             << ", Scheme " << SchemeId
             << ", FlatIndex " << (FlatGroupIndexes.size() ? FlatGroupIndexes[0] : Max<TPageId>())
-            << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].GetPageId() : Max<TPageId>())
+            << ", BTreeIndex " << (BTreeGroupIndexes.size() ? BTreeGroupIndexes[0].RootV1PageId() : Max<TPageId>())
             << ", Blobs " << GlobsId << ", Small " << SmallId
             << ", Large " << LargeId << ", ByKey " << ByKeyId
             << ", Garbage " << GarbageStatsId
@@ -170,15 +181,19 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
             ? nullptr
             : LoaderEnv->TryGetPage(nullptr, PageCollections[0]->PageCollection->GetLocation(pageId), {});
     };
+    auto getMetaPage = [&](const NPage::TBtreeIndexMeta& meta) {
+        return meta.HasRootV2() ? LoaderEnv->TryGetPage(nullptr, meta.RootV2, {})
+                                : getPage(meta.RootV1PageId());
+    };
 
     if (BTreeGroupIndexes) {
         if (preloadIndex) {
             // Note: preload root nodes only because we don't want to have multiple restarts here
             for (const auto& meta : BTreeGroupIndexes) {
-                if (meta.LevelCount) getPage(meta.GetPageId());
+                if (meta.LevelCount()) getMetaPage(meta);
             }
             for (const auto& meta : BTreeHistoricIndexes) {
-                if (meta.LevelCount) getPage(meta.GetPageId());
+                if (meta.LevelCount()) getMetaPage(meta);
             }
         }
     } else if (FlatGroupIndexes) {

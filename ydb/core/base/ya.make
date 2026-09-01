@@ -28,6 +28,7 @@ SRCS(
     defs.h
     domain.cpp
     domain.h
+    storage_pool_kinds.h
     event_filter.cpp
     event_filter.h
     events.h

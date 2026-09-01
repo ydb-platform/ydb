@@ -134,7 +134,9 @@ void CopyIndices(const TInput* values, const i64 length, const TStringBuf validi
             outputPosition += size;
         } else {
             for (i64 i = 0; i < count; ++i) {
-                const TOutput value = values[position + i];
+                const TInput input = values[position + i];
+                AFL_VERIFY(input <= Max<TOutput>())("value", input)("max", Max<TOutput>());
+                const TOutput value = input;
                 memcpy(output + outputPosition, &value, sizeof(value));
                 outputPosition += sizeof(value);
             }

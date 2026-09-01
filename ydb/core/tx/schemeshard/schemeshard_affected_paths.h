@@ -114,20 +114,22 @@ inline bool UndeclaredPathTouchIsFatal = false;
 // which is the only claim that helper is in a position to make. That took the armed failures
 // from 94 to 10.
 //
-// The remaining 10 are one class and need per-call-site classification rather than a helper
-// change: operations that are not creates call DeclareChildOfWorkingDir directly, and so
-// assert Create/MustWrite on a container that never gains a child. Named by the armed run:
+// Per-call-site pass done for the non-creates that reached this helper wrongly: Backup and
+// Restore act on a table that already exists, CreateLock takes a lock on one, and
+// AssignBlockStoreVolume assigns an existing volume -- none of them gives a container a new
+// child, so none may assert Create/MustWrite. That took the armed failures from 10 to 2.
 //
-//   AssignBlockStoreVolume, AssignBlockStoreVolumeDuringAlter   -> /MyRoot/BSVolume
-//   AlterMigratedIndexTable                                     -> /MyRoot/Tenant/Table/Index
-//   AlterIndexTableDirectly, ConsistentCopyAfterDropIndexes,
-//   CopyLockedTableForBackup, CopyTableForBackup, OnlineBuild,
-//   DefaultStorageConfigTableWithChannelProfileIdBuildIndex,
-//   PersistUniqueIndexKeySize-OnCreate-false                    -> /MyRoot
+// Two remain, both index-shaped, and both look like a create declaration whose write does not
+// happen on some flow rather than another mis-stamped helper:
 //
-// Each wants its own answer -- an assign is not a create, a lock on an existing table does not
-// give its parent a child -- and the fix changes what the outbox records, since Effect is part
-// of the record. Arm this from TTestEnv in that change; an unarmed check proves nothing.
+//   TSchemeShardTest::AlterMigratedIndexTable              -> /MyRoot/Tenant/Table/Index
+//   TSchemeShardTest::PersistUniqueIndexKeySize-OnCreate-false
+//                                                          -> /MyRoot/Table/idx_uniq/indexImplTable
+//
+// Deliberately not fixed by loosening the index creates to MayWrite. That would turn both
+// green and would be a guess: if the write genuinely should happen, MayWrite hides a real gap,
+// which is the one direction this check exists to close. Find out which flow skips the write
+// first, then decide. Arm this from TTestEnv in that change.
 inline bool UnfulfilledPathDeclarationIsFatal = false;
 
 // The reverse half of the cross-check. ObservePathTouched tests written ⊆ declared, which

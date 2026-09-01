@@ -136,10 +136,13 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpBackup>(
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    Y_UNUSED(context);
     // TBackup::GetTableName, resolved as WorkingDir.Dive(name)
     // (schemeshard__operation_backup_restore_common.h:716-717, :748).
-    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetBackup().GetTableName());
+    //
+    // Not DeclareChildOfWorkingDir: a backup does not create the table it names, so it must
+    // not claim the Create/MustWrite that helper asserts. Same paths, honest intent.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+        tx.GetBackup().GetTableName(), 0);
 }
 
 } // namespace NOperation
@@ -155,8 +158,9 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRestore>(
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    Y_UNUSED(context);
-    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetRestore().GetTableName());
+    // Restores into a table that already exists, so not a create -- see TBackup above.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+        tx.GetRestore().GetTableName(), 0);
 }
 
 } // namespace NOperation
@@ -176,9 +180,9 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAssignBlockStor
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    Y_UNUSED(context);
-    return DeclareChildOfWorkingDir(tx.GetWorkingDir(),
-        tx.GetAssignBlockStoreVolume().GetName());
+    // An assign, not a create: the volume is already there.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+        tx.GetAssignBlockStoreVolume().GetName(), 0);
 }
 
 } // namespace NOperation
@@ -198,8 +202,10 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateLock>(
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    Y_UNUSED(context);
-    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetLockConfig().GetName());
+    // A lock is taken on a table that already exists. Nothing gains a child, so the
+    // container must not be told it does.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+        tx.GetLockConfig().GetName(), 0);
 }
 
 } // namespace NOperation

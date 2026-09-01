@@ -24,6 +24,9 @@ TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString
     result.Paths.push_back(TAffectedPath{
         .Role = TAffectedPath::ERole::Target,
         .Path = target,
+        .Class = TAffectedPath::EEffectClass::SchemaEffect,
+        .Effect = TAffectedPath::EEffect::Create,
+        .Expect = TAffectedPath::EObservation::MustWrite,
     });
     // Not WorkingDir. A create may carry a relative path rather than a leaf -- MkDir
     // "DirB/DirC" under /MyRoot/DirA -- and then the directory that gains the child is
@@ -37,6 +40,11 @@ TAffectedPaths DeclareChildOfWorkingDir(const TString& workingDir, const TString
         result.Paths.push_back(TAffectedPath{
             .Role = TAffectedPath::ERole::Container,
             .Path = TString(container),
+            .Class = TAffectedPath::EEffectClass::SchemaEffect,
+            .Effect = TAffectedPath::EEffect::ChildrenChanged,
+            // Gaining a child bumps the parent's DirAlterVersion, so the write is demanded
+            // here, unlike the alter case below.
+            .Expect = TAffectedPath::EObservation::MustWrite,
         });
     }
     return result;
@@ -66,6 +74,9 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
         .Role = TAffectedPath::ERole::Target,
         .Path = target.PathString(),
         .PathId = target.Base()->PathId,
+        .Class = TAffectedPath::EEffectClass::SchemaEffect,
+        .Effect = TAffectedPath::EEffect::Alter,
+        .Expect = TAffectedPath::EObservation::MustWrite,
     });
     if (!target.IsEmpty() && target.Base()->ParentPathId) {
         const TPath parent = TPath::Init(target.Base()->ParentPathId, ss);
@@ -73,6 +84,11 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
             result.Paths.push_back(TAffectedPath{
                 .Role = TAffectedPath::ERole::Container,
                 .Path = parent.PathString(),
+                .Class = TAffectedPath::EEffectClass::SchemaEffect,
+                .Effect = TAffectedPath::EEffect::ChildrenChanged,
+                // MayWrite, not MustWrite: a plain alter of an existing object does not
+                // necessarily bump the parent, so a container no-op is legitimate here.
+                .Expect = TAffectedPath::EObservation::MayWrite,
             });
         }
     }

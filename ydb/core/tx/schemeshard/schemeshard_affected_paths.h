@@ -23,6 +23,32 @@ struct TAffectedPath {
         ByPathId,
     };
 
+    // What kind of thing this entry is, for a consumer that filters. A consumer that only
+    // wants the schema story reads SchemaEffect and skips the rest; one auditing physical
+    // writes needs all three.
+    enum class EEffectClass : ui8 {
+        SchemaEffect,          // a logical change to the object
+        Reference,             // a dependency the DDL names but does not change
+        BookkeepingInternal,   // a path-row write with no logical meaning
+    };
+
+    // The logical change itself.
+    enum class EEffect : ui8 {
+        Create,
+        Alter,
+        Drop,
+        MoveFrom,
+        MoveTo,
+        ChildrenChanged,
+    };
+
+    // Intent, NOT outcome. Whether a physical path-row write is expected of this entry.
+    enum class EObservation : ui8 {
+        MustWrite,      // a write must happen, or the declaration is wrong
+        MayWrite,       // a successful no-op is legitimate
+        ReferenceOnly,  // no write expected at all
+    };
+
     ELocator Locator = ELocator::ByPath;
     ERole Role = ERole::Target;
 
@@ -35,6 +61,18 @@ struct TAffectedPath {
     // A create names a path that does not exist yet, so resolution must fall back
     // to the parent rather than treating absence as failure.
     bool MustExist = false;
+
+    // Defaults chosen so a declaration that sets none of these keeps the meaning it had
+    // before the typed model existed: an unqualified schema change whose path-row write is
+    // permitted but not demanded.
+    EEffectClass Class = EEffectClass::SchemaEffect;
+    EEffect      Effect = EEffect::Alter;
+
+    // Intent only: what the declaration claims should happen. There is deliberately no
+    // Outcome (Applied/NotApplied) beside it -- what actually happened is known only after
+    // execution, and belongs in memory at completion rather than in the declaration, where
+    // it would read as a claim the declarer was never in a position to make.
+    EObservation Expect = EObservation::MayWrite;
 };
 
 struct TAffectedPaths {

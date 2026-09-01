@@ -1,0 +1,75 @@
+#include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+using namespace NKikimr;
+using namespace NSchemeShard;
+
+// DeclareChildOfWorkingDir is a free function over strings: no tablet, no runtime, no
+// test env. Keep it that way -- the point of these cases is that the declaration shape
+// is checkable without standing up a schemeshard.
+
+Y_UNIT_TEST_SUITE(TAffectedPathsTest) {
+
+Y_UNIT_TEST(ChildOfWorkingDirIsACreate) {
+    const TAffectedPaths declared = DeclareChildOfWorkingDir("/MyRoot/DirA", "DirB");
+
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths.size(), 2u);
+
+    const TAffectedPath& target = declared.Paths[0];
+    UNIT_ASSERT_VALUES_EQUAL(target.Path, "/MyRoot/DirA/DirB");
+    UNIT_ASSERT(target.Role == TAffectedPath::ERole::Target);
+    UNIT_ASSERT(target.Effect == TAffectedPath::EEffect::Create);
+    UNIT_ASSERT(target.Class == TAffectedPath::EEffectClass::SchemaEffect);
+    UNIT_ASSERT(target.Expect == TAffectedPath::EObservation::MustWrite);
+
+    const TAffectedPath& container = declared.Paths[1];
+    UNIT_ASSERT_VALUES_EQUAL(container.Path, "/MyRoot/DirA");
+    UNIT_ASSERT(container.Role == TAffectedPath::ERole::Container);
+    UNIT_ASSERT(container.Effect == TAffectedPath::EEffect::ChildrenChanged);
+    UNIT_ASSERT(container.Expect == TAffectedPath::EObservation::MustWrite);
+}
+
+Y_UNIT_TEST(ChildOfWorkingDirCanonizes) {
+    // WorkingDir arrives from the wire and may carry a trailing slash. A plain join would
+    // produce "/MyRoot/DirA//DirB", a path that matches nothing but would still be
+    // recorded verbatim.
+    const TAffectedPaths declared = DeclareChildOfWorkingDir("/MyRoot/DirA/", "DirB");
+
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths[0].Path, "/MyRoot/DirA/DirB");
+}
+
+Y_UNIT_TEST(ChildOfWorkingDirRelativeName) {
+    // A create may name a relative path rather than a leaf. The directory that gains the
+    // child is then the target's parent, NOT WorkingDir. Load-bearing: declaring
+    // WorkingDir here would name the right container only for a bare leaf.
+    const TAffectedPaths declared = DeclareChildOfWorkingDir("/MyRoot/DirA", "DirB/DirC");
+
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths[0].Path, "/MyRoot/DirA/DirB/DirC");
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths[1].Path, "/MyRoot/DirA/DirB");
+    UNIT_ASSERT(declared.Paths[1].Role == TAffectedPath::ERole::Container);
+}
+
+Y_UNIT_TEST(RootChildHasNoContainer) {
+    // A target directly under the root has no container path to name. Pushing one anyway
+    // would put an empty string in the outbox record.
+    const TAffectedPaths declared = DeclareChildOfWorkingDir("/", "MyRoot");
+
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(declared.Paths[0].Path, "/MyRoot");
+    UNIT_ASSERT(declared.Paths[0].Role == TAffectedPath::ERole::Target);
+}
+
+Y_UNIT_TEST(DefaultsPreserveExistingMeaning) {
+    // The typed effect model is additive: the 125 per-op declarations set none of these
+    // fields, so the defaults must carry what those declarations already meant.
+    const TAffectedPath defaulted;
+
+    UNIT_ASSERT(defaulted.Class == TAffectedPath::EEffectClass::SchemaEffect);
+    UNIT_ASSERT(defaulted.Effect == TAffectedPath::EEffect::Alter);
+    UNIT_ASSERT(defaulted.Expect == TAffectedPath::EObservation::MayWrite);
+}
+
+}

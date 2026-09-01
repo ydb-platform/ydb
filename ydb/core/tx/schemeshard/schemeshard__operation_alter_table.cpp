@@ -625,7 +625,18 @@ public:
             return result;
         }
 
-        TPath path = TPath::ResolveTarget(pathId, parentPathStr, name, context.SS);
+        // (e) slice 4: take the target from the plan when the plan resolved one, so this part
+        // and the record the outbox writes are the same answer rather than two that agree.
+        // Falls back to resolving for every shape the plan cannot supply an id for -- a
+        // by-name alter, or a part built outside IgniteOperation and never admitted.
+        //
+        // Safe to adopt because it was measured first, not assumed: with the divergence check
+        // armed and fatal, 53 suites reported no disagreement between these two routes
+        // (OK 3327). The check below still guards the fallback path.
+        const auto plannedPathId = FindPlanTargetPathId(context.SS, OperationId);
+        TPath path = plannedPathId
+            ? TPath::Init(*plannedPathId, context.SS)
+            : TPath::ResolveTarget(pathId, parentPathStr, name, context.SS);
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -662,7 +673,14 @@ public:
         // Only reports; it does not yet resolve *from* the plan. Turning a suspicion into a
         // measurement across the whole suite has to come before any part changes how it
         // resolves, or the change lands with no evidence about what it altered.
-        if (const auto declaredPath = FindPlanDivergence(context.SS, OperationId, path.PathString())) {
+        // Only on the fallback. When the path came from the plan the comparison is against
+        // itself and cannot fail, and a check that cannot fail is worse than none -- it reads
+        // as coverage. This keeps it pointed at the one route that still computes its own
+        // answer.
+        const std::optional<TString> divergence = plannedPathId
+            ? std::optional<TString>()
+            : FindPlanDivergence(context.SS, OperationId, path.PathString());
+        if (const auto& declaredPath = divergence) {
             Y_ABORT_UNLESS(!PlanDivergenceIsFatal,
                 "part resolved a different path than its plan declared: resolved %s, declared"
                 " %s, txId: %" PRIu64 ", subTxId: %" PRIu64,

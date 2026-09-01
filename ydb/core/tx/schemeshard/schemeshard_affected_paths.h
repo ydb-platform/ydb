@@ -155,6 +155,19 @@ class TOperationId;
 std::optional<TString> FindPlanDivergence(TSchemeShard* ss, const TOperationId& opId,
     const TString& resolvedPath);
 
+// The PathId the plan resolved for this part's target, when it resolved one.
+//
+// This is what makes the plan authoritative rather than parallel: a part that takes its target
+// from here is reading the same answer the outbox will record, instead of recomputing one that
+// merely ought to match. FindPlanDivergence measured that they do match today (no divergence
+// across 53 suites) -- which is what makes adopting it a refactor rather than a gamble.
+//
+// nullopt when the part has no declaration, when the declaration named its target by path
+// rather than by id (a create has no id yet, and a by-name alter never resolved one), or when
+// there is no Target entry. Callers must keep their own resolution as the fallback; this
+// narrows where the second computation happens, it does not remove it.
+std::optional<TPathId> FindPlanTargetPathId(TSchemeShard* ss, const TOperationId& opId);
+
 // Arms the above, the same way the two checks above are armed and for the same reason: a
 // mismatch names the operation and both paths, which is what makes it actionable. Never set
 // in production -- a divergence there is a wrong record, not a reason to stop the tablet.

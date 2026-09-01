@@ -32,6 +32,30 @@ std::optional<TString> FindPlanDivergence(TSchemeShard* ss, const TOperationId& 
     return std::nullopt;
 }
 
+std::optional<TPathId> FindPlanTargetPathId(TSchemeShard* ss, const TOperationId& opId) {
+    const auto operation = ss->Operations.find(opId.GetTxId());
+    if (operation == ss->Operations.end()) {
+        return std::nullopt;
+    }
+    const auto declared = operation->second->DeclaredPartPaths.find(opId.GetSubTxId());
+    if (declared == operation->second->DeclaredPartPaths.end()) {
+        return std::nullopt;
+    }
+    for (const auto& affected : declared->second.Paths) {
+        if (affected.Role != TAffectedPath::ERole::Target) {
+            continue;
+        }
+        // Only a ByPathId declaration carries an id the plan actually resolved. A ByPath one
+        // named a string -- a create whose target does not exist yet, or a by-name alter --
+        // and its PathId field is the default, which must not be mistaken for an answer.
+        if (affected.Locator != TAffectedPath::ELocator::ByPathId || !affected.PathId) {
+            return std::nullopt;
+        }
+        return affected.PathId;
+    }
+    return std::nullopt;
+}
+
 bool OperationDeclaresAffectedPaths(const TTxTransaction& tx) {
     return DispatchAffectedPaths(tx, [](auto traits) {
         return decltype(traits)::Declares;

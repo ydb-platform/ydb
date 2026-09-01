@@ -82,7 +82,7 @@ public:
 
     void UpdateConfig(NKikimrConfig::TAppConfig& appConfig);
 
-    TIntrusivePtr<NTestUtils::IMockPqGateway> SetupMockPqGateway();
+    TIntrusivePtr<NTestUtils::IMockPqGateway> SetupMockPqGateway(NTestUtils::TMockPqGatewaySettings settings = {});
 
     TIntrusivePtr<NYql::IPqGateway> SetupRealPqGateway();
 
@@ -116,7 +116,7 @@ public:
 
     std::shared_ptr<NYdb::NTopic::TTopicClient> GetTopicClient(bool local = false);
 
-    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> GetDeferredPublishClient(bool local = false, const TString& user = "");
+    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> GetDeferredPublishClient(bool local = false, const TString& user = "", std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = nullptr);
 
     std::shared_ptr<NYdb::NQuery::TQueryClient> GetExternalQueryClient();
 
@@ -132,12 +132,12 @@ public:
 
     void WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition = 0, bool local = false);
 
-    void WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition = 0);
+    void WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition = 0, bool local = false);
 
-    void ReadTopicMessage(const std::string& topicName, const std::string& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false);
+    void ReadTopicMessage(const TString& topicName, const std::string& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false);
 
     std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
-        const std::string& topicName,
+        const TString& topicName,
         std::vector<std::string> expectedMessages,
         TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
         bool sort = false,
@@ -145,12 +145,16 @@ public:
         bool checkResult = true);
 
     std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
-        const std::string& topicName,
+        const TString& topicName,
         std::vector<std::string> expectedMessages,
         NYdb::NTopic::TTopicClient& topicClient,
         TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
         bool sort = false,
         bool checkResult = true);
+
+    void EnsureTopicEndOffset(const TString& topicName, ui64 endOffset = 0, bool local = false);
+
+    void EnsureTopicEndOffset(const TString& topicName, ui64 endOffset, NYdb::NTopic::TTopicClient& topicClient);
 
     void TestReadTopicBasic(const std::string& testSuffix);
 
@@ -166,7 +170,7 @@ public:
 
     void CreatePqSource(const std::string& pqSourceName);
 
-    void CreatePqSourceBasicAuth(const std::string& pqSourceName, const bool useSchemaSecrets = false);
+    void CreatePqSourceBasicAuth(const std::string& pqSourceName, const bool useSchemaSecrets = false, const bool createSecrets = true);
 
     void CreateS3Source(const std::string& bucket, const std::string& s3SourceName);
 
@@ -208,13 +212,19 @@ public:
 
     void WaitCheckpointUpdate(const TString& checkpointId);
 
-    void CheckNoCheckpointUpdate(const TString& checkpointId, TDuration waitDuration = TDuration::Seconds(5));
+    ui64 GetLastCheckpointSeqNo(const TString& checkpointId);
+
+    ui64 CheckNoCheckpointUpdate(const TString& checkpointId, TDuration waitDuration = TDuration::Seconds(5), std::optional<ui64> expectedSeqNo = std::nullopt);
 
     TString GetStreamingQueryCheckpointId(const TString& queryName);
 
     void CheckStreamingQueryProperty(const TString& queryName, const TString& propertyName, const TString& expectedValue);
 
     void WaitStreamingQueryStatus(const TString& queryName, const TString& expectedStatus = "RUNNING");
+
+    void ValidateStreamingQueryAst(const TString& queryName, std::function<void(const TString&)> validator);
+
+    TString GetStreamingQueryIssues(const TString& queryName);
 
     // Mock Connector utils
 
@@ -243,6 +253,7 @@ private:
 protected:
     ui32 NodeCount = 1;
     ui32 DynamicNodeCount = 0;
+    ui32 DqChannelsVersion = 2;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
@@ -318,7 +329,7 @@ protected:
 
 protected:
     std::string InputTopic;
-    std::string OutputTopic;
+    TString OutputTopic;
 };
 
 class TTestTopicLoader : public TActorBootstrapped<TTestTopicLoader> {

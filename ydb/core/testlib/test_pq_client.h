@@ -100,7 +100,7 @@ struct TRequestCreatePQ {
         const TVector<TString>& readRules = {"user"},
         const TVector<TString>& important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
-        ui64 sourceIdMaxCount = 6000000,
+        ui64 sourceIdMaxCount = NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts(),
         ui64 sourceIdLifetime = 86400,
         std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     )
@@ -1096,7 +1096,7 @@ public:
         });
         settings.AddAttribute("_allow_unauthenticated_read", "true");
         settings.AddAttribute("_allow_unauthenticated_write", "true");
-        if (createRequest.SourceIdMaxCount != 6000000) {
+        if (createRequest.SourceIdMaxCount != NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts()) {
             settings.AddAttribute("_max_partition_message_groups_seqno_stored", ToString(createRequest.SourceIdMaxCount));
         }
         if (createRequest.SourceIdLifetime != 86400) {
@@ -1236,7 +1236,7 @@ public:
         TVector<TString> rr = {"user"},
         TVector<TString> important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
-        ui64 sourceIdMaxCount = 6000000,
+        ui64 sourceIdMaxCount = NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts(),
         ui64 sourceIdLifetime = 86400,
         std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     ) {

@@ -238,6 +238,30 @@ class _UnixDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
             yield self.user_data_dir
         yield from self._site_data_dirs
 
+    def iter_cache_dirs(self) -> Iterator[str]:
+        """:yield: all user and site cache directories."""
+        if not self._use_site:
+            yield self.user_cache_dir
+        yield self.site_cache_dir
+
+    def iter_state_dirs(self) -> Iterator[str]:
+        """:yield: all user and site state directories."""
+        if not self._use_site:
+            yield self.user_state_dir
+        yield self.site_state_dir
+
+    def iter_log_dirs(self) -> Iterator[str]:
+        """:yield: all user and site log directories."""
+        if not self._use_site:
+            yield self.user_log_dir
+        yield self.site_log_dir
+
+    def iter_runtime_dirs(self) -> Iterator[str]:
+        """:yield: all user and site runtime directories."""
+        if not self._use_site:
+            yield self.user_runtime_dir
+        yield self.site_runtime_dir
+
 
 class Unix(XDGMixin, _UnixDefaults):
     """On Unix/Linux, we follow the `XDG Basedir Spec <https://specifications.freedesktop.org/basedir/latest/>`_.

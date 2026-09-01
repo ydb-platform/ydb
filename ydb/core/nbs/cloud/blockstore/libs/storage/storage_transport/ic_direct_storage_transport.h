@@ -104,7 +104,7 @@ private:
 
 // Convenience factory: creates the shared registry, transport actor and
 // TICDirectStorageTransport bound together.
-[[nodiscard]] std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
+[[nodiscard]] TStorageTransportPtr CreateDirectStorageTransport(
     NActors::TActorSystem* actorSystem,
     const TDiskDescription& diskDescription,
     ui32 dbgIndex,

@@ -164,7 +164,11 @@ namespace NKikimr::NDDisk {
     ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin, size_t numBytes) {
         Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
 
-        XXH3_state_t state;
+        // XXH3_64bits_reset() does not zero the whole state (buffer, customSecret, reserved64,
+        // trailing alignment padding — see XXH3_reset_internal). Digest then reads those fields,
+        // which MSAN reports as use-of-uninitialized-value. xxHash documents value-init / memset
+        // as the supported way to construct a stack-allocated XXH3_state_t.
+        XXH3_state_t state{};
         XXH3_64bits_reset(&state);
         for (auto it = begin; numBytes && it.Valid(); it.AdvanceToNextContiguousBlock()) {
             const size_t n = Min(numBytes, it.ContiguousSize());

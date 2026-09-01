@@ -94,8 +94,13 @@ private:
     FetchResult<TPackResult> FlushBatch() {
         MKQL_ENSURE(BatchCount_ > 0, "INTERNAL LOGIC ERROR");
         TPackResult packed;
-        Converter_->PackBatch(BatchValues_.data(), BatchCount_, packed);
-        BatchValues_.clear();
+        if (Columns_ == 0) {
+            packed.PackedTuples.resize(Converter_->GetTupleLayout()->TotalRowSize * BatchCount_, 0);
+            packed.NTuples = BatchCount_;
+        } else {
+            Converter_->PackBatch(BatchValues_.data(), BatchCount_, packed);
+            BatchValues_.clear();
+        }
         BatchCount_ = 0;
         return One<TPackResult>{std::move(packed)};
     }
@@ -225,24 +230,18 @@ private:
         {}
 
         EFetchResult FetchValues(NUdf::TUnboxedValue* const* output) {
-            const int expectedWidth = Output_.Columns();
-            if (!Buffer_.has_value()) {
-                auto res = FillBuffer();
-                if (res != EFetchResult::One) {
-                    return res;
-                }
-            }
+            const int width = Output_.Columns();
             if (!HasRow()) {
                 auto res = FillBuffer();
                 if (res != EFetchResult::One) {
                     return res;
                 }
             }
-            for (int index = 0; index < expectedWidth; ++index) {
+            for (int index = 0; index < width; ++index) {
                 *output[index] = Buffer_->Buffer[BufferPos_ + index];
             }
-            BufferPos_ += expectedWidth;
-            if (BufferPos_ >= Buffer_->Buffer.size()) {
+            BufferPos_ += width ? width : 1;
+            if (!HasRow()) {
                 Buffer_.reset();
                 BufferPos_ = 0;
             }
@@ -251,11 +250,19 @@ private:
 
     private:
         bool HasRow() const {
-            return Buffer_.has_value() && BufferPos_ + Output_.Columns() <= Buffer_->Buffer.size();
+            if (!Buffer_.has_value()) {
+                return false;
+            }
+            const int width = Output_.Columns();
+            return width ? BufferPos_ + width <= Buffer_->Buffer.size()
+                         : BufferPos_ < static_cast<size_t>(Buffer_->Packs.Probe.NTuples);
         }
 
         EFetchResult FillBuffer() {
-            const auto flushSink = [&](auto flush) { Buffer_ = std::move(flush); };
+            const auto flushSink = [&](auto flush) {
+                Buffer_ = std::move(flush);
+                BufferPos_ = 0;
+            };
             return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink,
                                                             PairFilter_ ? &*PairFilter_ : nullptr);
         }
@@ -308,7 +315,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
     const auto joinComponents = GetWideComponents(joinType);
-    MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
 
     TDqScalarJoinMetadata meta;
     for (auto* type : joinComponents) {
@@ -320,7 +326,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const auto leftFlowType = AS_TYPE(TFlowType, leftType);
     MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(), "Expected Multi as a left flow item type");
     const auto leftFlowComponents = GetWideComponents(leftFlowType);
-    MKQL_ENSURE(!leftFlowComponents.empty(), "Expected at least one column");
     for (auto* type : leftFlowComponents) {
         meta.InputTypes.Probe.push_back(type);
     }
@@ -330,7 +335,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const auto rightFlowType = AS_TYPE(TFlowType, rightType);
     MKQL_ENSURE(rightFlowType->GetItemType()->IsMulti(), "Expected Multi as a right flow item type");
     const auto rightFlowComponents = GetWideComponents(rightFlowType);
-    MKQL_ENSURE(!rightFlowComponents.empty(), "Expected at least one column");
     for (auto* type : rightFlowComponents) {
         meta.InputTypes.Build.push_back(type);
     }
@@ -339,6 +343,12 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const auto joinKind = parsed.Kind;
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
+
+    if (joinKind != EJoinKind::Cross) {
+        MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
+        MKQL_ENSURE(!leftFlowComponents.empty(), "Expected at least one column");
+        MKQL_ENSURE(!rightFlowComponents.empty(), "Expected at least one column");
+    }
 
     const auto leftFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
     const auto rightFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 1));

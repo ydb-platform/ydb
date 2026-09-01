@@ -8,7 +8,6 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -206,7 +205,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
-    std::unique_ptr<NTransport::IStorageTransport> storageTransport,
+    NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
@@ -2101,17 +2100,19 @@ TVChunkStatsGatherResult TDirectBlockGroup::DoGatherVChunkStats(
 TConnectionSnapshot TDirectBlockGroup::MakeConnectionSnapshot(
     size_t hostIndex) const
 {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(DDiskConnections.size() == PBufferConnections.size());
+
     const auto& ddisk = DDiskConnections[hostIndex];
-    const bool hasPBuffer = hostIndex < PBufferConnections.size();
-    const auto* pbuffer = hasPBuffer ? &PBufferConnections[hostIndex] : nullptr;
+    const auto& pbuffer = PBufferConnections[hostIndex];
 
     return {
         .HostIndex = static_cast<THostIndex>(hostIndex),
         .DDiskId = ddisk.HostConnection.DDiskId,
-        .PBufferId = pbuffer ? std::optional(pbuffer->HostConnection.DDiskId)
-                             : std::nullopt,
+        .PBufferId = pbuffer.HostConnection.DDiskId,
         .DDiskSession = ToString(ddisk.SessionState),
-        .PBufferConnected = pbuffer && pbuffer->ConnectPromise.HasValue(),
+        .DDiskConnected = ddisk.ConnectPromise.HasValue(),
+        .PBufferConnected = pbuffer.ConnectPromise.HasValue(),
     };
 }
 

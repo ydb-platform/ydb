@@ -974,8 +974,17 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextRelevance, UTF8, EnableIndexStreamWrite) {
     }
 }
 
+// Shared setup for prefixed-index tests: fulltext + prefix feature flags on.
+static TKikimrRunner KikimrPrefix(bool compact) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    return Kikimr(std::move(featureFlags));
+}
+
 void DoTestLuceneRelevanceComparison(bool Compact, bool AfterBuild, bool Prefixed) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = Prefixed ? KikimrPrefix(Compact) : KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     // Create table with fulltext index using relevance layout
@@ -1417,7 +1426,7 @@ Y_UNIT_TEST(SelectWithFulltextRequiredTermsRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchAndSnowball, Compact) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -3747,26 +3756,8 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
     }
 }
 
-// Shared setup for prefixed-index tests: fulltext + prefix feature flags on.
-static TKikimrRunner KikimrPrefix() {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableCompactFulltextIndex(false);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    return Kikimr(std::move(featureFlags));
-}
-
-// Same as KikimrPrefix() but also enables the compact (delta-segment) fulltext format.
-static TKikimrRunner KikimrPrefixCompact() {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableCompactFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    return Kikimr(std::move(featureFlags));
-}
-
-Y_UNIT_TEST(SelectWithFulltextMatchPrefixed) {
-    auto kikimr = KikimrPrefix();
+Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixed, Compact) {
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 
     { // Create table with a prefixed fulltext index ON (UserId, Text)
@@ -3897,11 +3888,7 @@ Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
 }
 
 Y_UNIT_TEST(SelectWithFulltextRelevancePrefixed) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    featureFlags.SetEnableCompactFulltextIndex(true);
-    auto kikimr = Kikimr(std::move(featureFlags));
+    auto kikimr = KikimrPrefix(true);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3958,11 +3945,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchMultiPrefixReversedOrder) {
     // otherwise the posting-table read key is wrong and matches are missed. Uses the relevance index
     // so the equality predicates are extracted from the lambda (in predicate traversal order), which
     // is exactly the path that needs the reorder.
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    featureFlags.SetEnableCompactFulltextIndex(true);
-    auto kikimr = Kikimr(std::move(featureFlags));
+    auto kikimr = KikimrPrefix(true);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -4082,7 +4065,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedIncrementalInserts, Compact) {
     // rows added after the index exists are indexed under their own prefix, including a prefix value
     // that did not exist before. Compact indexes are build-only (no online writes), so the compact
     // twin runs the shared build+read part and skips the incremental-write part.
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4152,7 +4135,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedDeleteAndReplace, Compact) {
     // Online delete and overwrite maintenance for a prefixed plain index: removing a row and changing
     // a row's text must update the per-prefix posting (the prefix-aware delete-keys path). Compact is
     // build-only, so the compact twin runs the shared build+read part and skips the writes.
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4216,7 +4199,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedStringPrefixInt64DocId, Compact)
     // Variable-width (Utf8) prefix column over an Int64 doc-id primary key. Fulltext indexes require
     // a single integer primary key, so "complex key" coverage here means a non-default doc-id type
     // (Int64) combined with a variable-length prefix cell, plus incremental inserts (plain only).
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4273,7 +4256,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedMultiColumnTyped, Compact) {
     // of predicate order, the missing-equality rejection, and (plain only) incremental inserts. The
     // compact twin also exercises the build/compaction pipeline grouping per (prefix..., token) with
     // more than one prefix cell.
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4344,7 +4327,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedPerPrefixStats) {
     // aggregated per prefix, not corpus-globally. The same document text under two prefixes scores
     // differently because each prefix is its own corpus. Built via ALTER ADD INDEX so the plain and
     // compact (delta-segment) formats share the same build path (compact has no online write maintenance).
-    auto kikimr = KikimrPrefixCompact();
+    auto kikimr = KikimrPrefix(true);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4403,7 +4386,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedWriteMaintenance) {
     // Online write maintenance for a prefixed relevance index must keep the per-prefix BM25 statistics
     // (DocCount / SumDocLength) in sync. INSERT / UPDATE / DELETE on one prefix change that prefix's
     // scores while other prefixes stay isolated. Plain format only: compact relevance is build-only.
-    auto kikimr = KikimrPrefixCompact();
+    auto kikimr = KikimrPrefix(true);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4530,7 +4513,7 @@ static void SetupPrefixedDocs(NYdb::NQuery::TQueryClient& db, bool covered = fal
 }
 
 void DoTestPrefixedInsert(bool Compact, bool Covered) {
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db, Covered);
 
@@ -4573,7 +4556,7 @@ Y_UNIT_TEST(PrefixedInsertCovered) {
 }
 
 void DoTestPrefixedUpsert(bool Compact, bool Covered) {
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db, Covered);
 
@@ -4624,7 +4607,7 @@ Y_UNIT_TEST(PrefixedUpsertCovered) {
 }
 
 void DoTestPrefixedUpdate(bool Compact, bool Covered) {
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db, Covered);
 
@@ -4673,7 +4656,7 @@ Y_UNIT_TEST(PrefixedUpdateCovered) {
 }
 
 void DoTestPrefixedReplace(bool Compact, bool Covered) {
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
     SetupPrefixedDocs(db, Covered);
 
@@ -4723,7 +4706,7 @@ Y_UNIT_TEST(PrefixedReplaceCovered) {
 }
 
 Y_UNIT_TEST(PrefixedRelevanceStatsEmptyDoc) {
-    auto kikimr = KikimrPrefixCompact();
+    auto kikimr = KikimrPrefix(true);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4774,19 +4757,24 @@ Y_UNIT_TEST(PrefixedRelevanceStatsEmptyDoc) {
     )sql"));
 }
 
+// Feature flags for a prefixed fulltext index whose doc-id is an auto-provisioned __ydb_row_id.
+static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableUniqConstraint(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    return Kikimr(std::move(featureFlags));
+}
+
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedRowIdComplexKey, Compact) {
     // Prefixed fulltext index over a table with a COMPLEX (multi-column, non-integer) primary key.
     // Fulltext requires a single integer doc-id; for such a PK, adding the index auto-provisions a
     // __ydb_row_id (Uint64 NOT NULL) doc-id column + unique secondary index, backfills existing rows,
     // and builds the posting [prefix..., token, __ydb_row_id]. __ydb_row_id is never named by the
     // user; the runtime resolves it back to (Org, Pk) before reading the main table.
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    featureFlags.SetEnableUniqConstraint(true);
-    featureFlags.SetEnableAddUniqueIndex(true);
-    featureFlags.SetEnableCompactFulltextIndex(Compact);
-    auto kikimr = Kikimr(std::move(featureFlags));
+    auto kikimr = KikimrPrefixRowId(Compact);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4845,17 +4833,6 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedRowIdComplexKey, Compact) {
     UNIT_ASSERT_VALUES_EQUAL("a2", matchedPks(R"sql(
         SELECT Pk FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE Tenant = "red" AND FulltextMatch(Text, "dogs");)sql"));
-}
-
-// Feature flags for a prefixed fulltext index whose doc-id is an auto-provisioned __ydb_row_id.
-static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    featureFlags.SetEnableUniqConstraint(true);
-    featureFlags.SetEnableAddUniqueIndex(true);
-    featureFlags.SetEnableCompactFulltextIndex(compact);
-    return Kikimr(std::move(featureFlags));
 }
 
 // Builds a table with a complex (multi-column, non-integer) primary key and a prefixed fulltext index

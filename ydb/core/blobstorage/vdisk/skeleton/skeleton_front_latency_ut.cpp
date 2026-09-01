@@ -23,6 +23,7 @@ namespace NKikimr {
         constexpr ui64 PDiskGuid = 1;
         constexpr ui64 OwnerRound = 1;
         constexpr ui32 MinHugeBlobInBytes = 64 << 10;
+        constexpr size_t MaxTrackerSlots = 15;
         const TString StoragePoolName = "test_storage_pool";
 
         TIntrusivePtr<TPDiskParams> MakePDiskParams() {
@@ -302,6 +303,7 @@ namespace NKikimr {
             auto latencyGroup = GetPutUserDataLatencyGroup(env.Counters, env.Config, env.GroupInfo);
             auto inFlightCount = FindCounter(latencyGroup, "InFlightCount");
             auto inFlightLatencyUsSum = FindCounter(latencyGroup, "InFlightLatencyUsSum");
+            auto maxLatencyUs = FindCounter(latencyGroup, "LatencyUsMax");
             auto skeletonFrontGroup = GetSkeletonFrontGroup(env.Counters, env.Config, env.GroupInfo);
             auto hugePutsForegroundDelayedCount = FindCounter(skeletonFrontGroup, "SkeletonFront/HugePutsForeground/DelayedCount");
             auto hugePutsForegroundInFlightCount = FindCounter(skeletonFrontGroup, "SkeletonFront/HugePutsForeground/InFlightCount");
@@ -314,6 +316,8 @@ namespace NKikimr {
                                        "delayed# " << hugePutsForegroundDelayedCount->Val()
                                                    << " queueInFlight# " << hugePutsForegroundInFlightCount->Val());
             UNIT_ASSERT_GT(inFlightLatencyUsSum->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), inFlightLatencyUsSum->Val());
+            const ui64 maxLatencyUsBeforeError = maxLatencyUs->Val();
 
             SendToSkeletonFront(
                 env.Runtime,
@@ -330,6 +334,7 @@ namespace NKikimr {
             UpdateStats(env.Runtime, env.SkeletonFrontId, env.EdgeActor);
             UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(inFlightLatencyUsSum->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), maxLatencyUsBeforeError);
         }
 
         Y_UNIT_TEST(CompletedDelayedPutUserDataRemovesInFlightLatency) {
@@ -358,6 +363,7 @@ namespace NKikimr {
             auto latencyGroup = GetPutUserDataLatencyGroup(env.Counters, env.Config, env.GroupInfo);
             auto inFlightCount = FindCounter(latencyGroup, "InFlightCount");
             auto inFlightLatencyUsSum = FindCounter(latencyGroup, "InFlightLatencyUsSum");
+            auto maxLatencyUs = FindCounter(latencyGroup, "LatencyUsMax");
             auto skeletonFrontGroup = GetSkeletonFrontGroup(env.Counters, env.Config, env.GroupInfo);
             auto hugePutsForegroundDelayedCount = FindCounter(skeletonFrontGroup, "SkeletonFront/HugePutsForeground/DelayedCount");
             auto hugePutsForegroundInFlightCount = FindCounter(skeletonFrontGroup, "SkeletonFront/HugePutsForeground/InFlightCount");
@@ -370,6 +376,8 @@ namespace NKikimr {
                                        "delayed# " << hugePutsForegroundDelayedCount->Val()
                                                    << " queueInFlight# " << hugePutsForegroundInFlightCount->Val());
             UNIT_ASSERT_GT(inFlightLatencyUsSum->Val(), 0);
+            UNIT_ASSERT_GT(maxLatencyUs->Val(), 0);
+            UNIT_ASSERT_LE(maxLatencyUs->Val(), inFlightLatencyUsSum->Val());
 
             CompleteForwardedVPut(env, std::move(firstForwarded));
             auto secondForwarded = GrabForwardedVPut(env);
@@ -383,6 +391,8 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(hugePutsForegroundInFlightCount->Val(), 1);
             UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
             UNIT_ASSERT_GT(inFlightLatencyUsSum->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), inFlightLatencyUsSum->Val());
+            const ui64 maxLatencyUsBeforeComplete = maxLatencyUs->Val();
 
             CompleteForwardedVPut(env, std::move(secondForwarded));
 
@@ -391,6 +401,81 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(hugePutsForegroundInFlightCount->Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(inFlightLatencyUsSum->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), maxLatencyUsBeforeComplete);
+        }
+
+        Y_UNIT_TEST(MaxLatencyUsesMaxInFlightRequestLatency) {
+            TTestEnv env(2);
+
+            const TDuration firstAgeBeforeSecond = TDuration::MilliSeconds(10);
+            const TDuration ageAfterSecond = TDuration::MilliSeconds(20);
+
+            const TString data(MinHugeBlobInBytes, 'x');
+            const TLogoBlobID firstBlobId(1, 1, 1, 0, data.size(), 0);
+            auto firstPut = MakeUserDataPut(firstBlobId, data, env.GetVDiskId());
+            SendToSkeletonFront(
+                env.Runtime,
+                env.SkeletonFrontId,
+                env.EdgeActor,
+                firstPut.release(),
+                TEvBlobStorage::EvVPut);
+            auto firstForwarded = GrabForwardedVPut(env);
+
+            auto latencyGroup = GetPutUserDataLatencyGroup(env.Counters, env.Config, env.GroupInfo);
+            auto inFlightCount = FindCounter(latencyGroup, "InFlightCount");
+            auto inFlightLatencyUsSum = FindCounter(latencyGroup, "InFlightLatencyUsSum");
+            auto maxLatencyUs = FindCounter(latencyGroup, "LatencyUsMax");
+
+            env.Runtime.AdvanceCurrentTime(firstAgeBeforeSecond);
+            UpdateStats(env.Runtime, env.SkeletonFrontId, env.EdgeActor);
+
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightLatencyUsSum->Val(), firstAgeBeforeSecond.MicroSeconds());
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), firstAgeBeforeSecond.MicroSeconds());
+
+            const TLogoBlobID secondBlobId(1, 1, 2, 0, data.size(), 0);
+            auto secondPut = MakeUserDataPut(secondBlobId, data, env.GetVDiskId());
+            SendToSkeletonFront(
+                env.Runtime,
+                env.SkeletonFrontId,
+                env.EdgeActor,
+                secondPut.release(),
+                TEvBlobStorage::EvVPut);
+            auto secondForwarded = GrabForwardedVPut(env);
+            UpdateStats(env.Runtime, env.SkeletonFrontId, env.EdgeActor);
+
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightLatencyUsSum->Val(), firstAgeBeforeSecond.MicroSeconds());
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), firstAgeBeforeSecond.MicroSeconds());
+
+            env.Runtime.AdvanceCurrentTime(ageAfterSecond);
+            UpdateStats(env.Runtime, env.SkeletonFrontId, env.EdgeActor);
+
+            const auto expectedMaxLatencyUs = (firstAgeBeforeSecond + ageAfterSecond).MicroSeconds();
+            const auto expectedInFlightLatencyUsSum = expectedMaxLatencyUs + ageAfterSecond.MicroSeconds();
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightLatencyUsSum->Val(), expectedInFlightLatencyUsSum);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), expectedMaxLatencyUs);
+
+            CompleteForwardedVPut(env, std::move(firstForwarded));
+            UpdateStats(env.Runtime, env.SkeletonFrontId, env.EdgeActor);
+
+            const auto remainingRequestLatencyUs = ageAfterSecond.MicroSeconds();
+            const auto maxLatencyUsBeforeRoll = maxLatencyUs->Val();
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightLatencyUsSum->Val(), remainingRequestLatencyUs);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUsBeforeRoll, expectedMaxLatencyUs);
+
+            for (size_t i = 0; i < MaxTrackerSlots; ++i) {
+                UpdateStats(env.Runtime, env.SkeletonFrontId, env.EdgeActor);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(inFlightLatencyUsSum->Val(), remainingRequestLatencyUs);
+            UNIT_ASSERT_LT(maxLatencyUs->Val(), maxLatencyUsBeforeRoll);
+            UNIT_ASSERT_VALUES_EQUAL(maxLatencyUs->Val(), remainingRequestLatencyUs);
+
+            CompleteForwardedVPut(env, std::move(secondForwarded));
         }
 
     } // Y_UNIT_TEST_SUITE(TSkeletonFrontLatency)

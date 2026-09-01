@@ -351,14 +351,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     };
 
-    bool declarationIsComplete = true;
     bool anyRequestedPartDeclared = false;
     for (const auto& declared : operation->DeclaredAffectedPaths) {
         if (!declared) {
             continue;
         }
         anyRequestedPartDeclared = true;
-        declarationIsComplete = declarationIsComplete && !declared->Incomplete;
         admit(*declared);
     }
 
@@ -384,7 +382,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // reported. What the generated declarations are for is the opposite: keeping the
     // intermediate directories from being reported when the requested operation *has*
     // declared. So the requested parts decide whether to arm; the generated ones only widen.
-    if (!declarationIsComplete || !anyRequestedPartDeclared) {
+    if (!anyRequestedPartDeclared) {
         operation->DeclaredPathsUsable = false;
         operation->DeclaredPathSet.clear();
     }
@@ -411,20 +409,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             // above already ran, and by this point the operation is committed to proposing.
             // Widening with nothing is the safe reading.
             if (!declared || declared->Unresolved) {
-                continue;
-            }
-            // A part can be knowingly partial for the same reasons a request can, and that
-            // has to travel upward: the CDC *AtTable parts share a completion handler that
-            // walks the table's index children (schemeshard__operation_common_cdc_stream.cpp).
-            // Leaving the check armed against a set a part has just told us is incomplete
-            // would report those children as undeclared. Clearing the set is not enough by
-            // itself -- CurrentDeclaredPaths still points at it, and an empty set matches
-            // nothing, so every subsequent write would be reported instead.
-            if (declared->Incomplete) {
-                operation->DeclaredPathsUsable = false;
-                operation->DeclaredPathSet.clear();
-                CurrentDeclaredPaths = nullptr;
-                CurrentObservedPaths = nullptr;
                 continue;
             }
             if (operation->DeclaredPathsUsable) {

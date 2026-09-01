@@ -138,18 +138,10 @@ Y_UNIT_TEST(ExemptDeclarationDemandsNothing) {
     UNIT_ASSERT(!FindUnfulfilledMustWrite(declared, THashSet<TString>{}).has_value());
 }
 
-Y_UNIT_TEST(IncompleteDeclarationDemandsNothing) {
-    // A cascade drop knows its entry points but not the subtree it walks. Its own entries
-    // may still be MustWrite, but the operation was never in a position to promise the
-    // list was whole, so the reverse check cannot hold it to one.
-    TAffectedPaths declared;
-    declared.Incomplete = true;
-    declared.Paths.push_back(TAffectedPath{
-        .Path = "/MyRoot/DirA",
-        .Expect = TAffectedPath::EObservation::MustWrite,
-    });
-
-    UNIT_ASSERT(!FindUnfulfilledMustWrite({declared}, THashSet<TString>{}).has_value());
-}
+// There was an IncompleteDeclarationDemandsNothing here, covering a declaration that said up
+// front it could not enumerate what it touched. That flag is gone: all 26 of its
+// justifications were wrong, and an operation that writes no path rows now takes an explicit
+// SS_EXEMPT_AFFECTED_PATHS, which ExemptDeclarationDemandsNothing above covers. Deleted rather
+// than adapted -- there is no longer a semantics for it to assert.
 
 }

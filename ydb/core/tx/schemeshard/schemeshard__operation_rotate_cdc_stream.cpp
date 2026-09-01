@@ -729,7 +729,6 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRotateCdcStream
 
     TAffectedPaths result = std::move(oldStream);
     std::move(newStream.Paths.begin(), newStream.Paths.end(), std::back_inserter(result.Paths));
-    result.Incomplete = result.Incomplete || newStream.Incomplete;
     return result;
 }
 

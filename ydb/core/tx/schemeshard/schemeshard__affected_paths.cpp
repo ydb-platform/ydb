@@ -18,11 +18,9 @@ std::optional<TString> FindUnfulfilledMustWrite(
         const THashSet<TString>& observed)
 {
     for (const auto& entry : declared) {
-        // nullopt is an exempt operation type, not an empty declaration. Incomplete is a
-        // declaration that said up front it could not enumerate what it touches -- the
-        // observation set is not armed for it at all, so every entry would read as
-        // unfulfilled. Both mean the same thing here: no claim to hold anyone to.
-        if (!entry || entry->Incomplete) {
+        // nullopt is an exempt operation type, not an empty declaration: it made no claim,
+        // so there is nothing to hold it to.
+        if (!entry) {
             continue;
         }
         for (const auto& affected : entry->Paths) {
@@ -223,28 +221,10 @@ TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& working
     return DeclareSubTree(ss, target.Base()->PathId, includeRoot, effect, expect);
 }
 
-TAffectedPaths DeclareCascadeTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
-        const TString& name, ui64 localPathId)
-{
-    TAffectedPaths result = DeclareTargetByIdOrName(ss, workingDir, name, localPathId);
-    // Not set on the unresolved result: that already carries a stronger verdict, and
-    // marking it Incomplete as well would only muddy which of the two the caller sees.
-    if (!result.Unresolved) {
-        result.Incomplete = true;
-    }
-    return result;
-}
-
 TAffectedPaths DeclareTargetByIdOrName(const TOperationContext& context,
         const TString& workingDir, const TString& name, ui64 localPathId)
 {
     return DeclareTargetByIdOrName(context.SS, workingDir, name, localPathId);
-}
-
-TAffectedPaths DeclareCascadeTargetByIdOrName(const TOperationContext& context,
-        const TString& workingDir, const TString& name, ui64 localPathId)
-{
-    return DeclareCascadeTargetByIdOrName(context.SS, workingDir, name, localPathId);
 }
 
 namespace NOperation {

@@ -618,14 +618,15 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpBackupBackupCol
     // copy-from-table create, it declares the destination, its parent and the source, so the
     // copy parts cover themselves.
     //
-    // Still blocked, on a second and unrelated gap. Retiring this marker now aborts on
+    // The second gap that blocked this is closed as well. It was
     //   /MyRoot/TestTable/19700101000009Z_continuousBackupImpl
     // -- the continuous-backup CDC stream, whose name is minted from Now() inside
     // CreateAlterContinuousBackup (schemeshard__operation_alter_continuous_backup.cpp:176-180)
-    // rather than coming from the request. The part that creates it does carry the name in
-    // its own tx, but that part is an ESchemeOpCreateCdcStream, which is itself still
-    // Incomplete (schemeshard__operation_create_cdc_stream.cpp:944). Retire this with the
-    // CDC *AtTable* family, not before.
+    // rather than coming from the request. The part that creates it carries that name in its
+    // own tx, and now that the CDC family declares exactly, the part covers it. So this
+    // operation is no longer knowingly partial: the union across its parts is the plan, and
+    // TBackupCollectionTests::BackupPlanNamesSourcesAndCreatedTables asserts that union
+    // contains the sources and the backup tables the request never names.
     return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetBackupBackupCollection().GetName(), 0);
 }
@@ -676,9 +677,9 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRestoreBackupCo
     // to stop disclaiming a copy-from-table create. That is now done, and both halves are
     // covered by the copy part that writes them.
     //
-    // Held with BackupBackupCollection above for the same second reason: the incremental
-    // path reaches the continuous-backup CDC stream whose name is minted from Now(), and the
-    // part that creates it is still Incomplete. Retire the pair with the CDC *AtTable* family.
+    // The second reason it was held with BackupBackupCollection above is gone with it: the
+    // incremental path reaches the continuous-backup CDC stream whose name is minted from
+    // Now(), and the part that creates it now declares that name itself.
     return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetRestoreBackupCollection().GetName(), 0);
 }

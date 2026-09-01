@@ -80,22 +80,12 @@ std::optional<TAffectedPaths> GetAffectedPaths(
     }                                                                               \
     }
 
-// Same, but the operation takes the target's whole subtree with it. Turns the cross-check
-// off for the operation, so use it only when the subtree genuinely cannot be enumerated.
-#define SS_DECLARES_CASCADE_TARGET(op, accessor)                                    \
-    SS_DECLARES_AFFECTED_PATHS(op);                                                 \
-    namespace NOperation {                                                          \
-    template <>                                                                     \
-    inline std::optional<TAffectedPaths>                                            \
-    GetAffectedPaths<TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>>(    \
-        TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::op>,                  \
-        const TTxTransaction& tx, const TOperationContext& context)                 \
-    {                                                                               \
-        const auto& request = tx.accessor();                                        \
-        return DeclareCascadeTargetByIdOrName(context, tx.GetWorkingDir(),          \
-            request.GetName(), request.HasId() ? request.GetId() : 0);              \
-    }                                                                               \
-    }
+// There is no SS_DECLARES_CASCADE_TARGET. It declared the root and gave up on the subtree,
+// switching the cross-check off for the whole operation -- which meant the operations with the
+// least obvious paths were the only ones nobody checked. All 16 of its users were converted to
+// exact enumeration; a cascade drop walks the same ListSubTree the operation itself calls, so
+// the set is knowable at propose. Write that shape with DeclareSubTreeByIdOrName, as the drop
+// families in schemeshard__affected_paths_other.cpp do.
 
 #define SS_DECLARES_AFFECTED_PATHS(op)                                              \
     template <>                                                                     \

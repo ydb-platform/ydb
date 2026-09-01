@@ -623,7 +623,6 @@ private:
                     TString error = TStringBuilder()
                         << "Reading VIRTUAL generated column '" << col.Name
                         << "' through ReadTable is not supported";
-                    TXLOG_E(error);
                     IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, error));
                     UnresolvedKeys.emplace_back(error);
                     return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError,

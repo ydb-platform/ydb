@@ -28,16 +28,17 @@ enum class ENodeState : ui8 {
 class TTableHistogramBuilderBtreeIndex {
     struct TNodeState {
         const TPart* Part;
-        TPageId PageId;
+        TPageRef Ref;
         ui32 Level;
         TRowId BeginRowId, EndRowId;
         ui64 BeginDataSize, EndDataSize;
         TCellsIterable BeginKey, EndKey;
         ENodeState State = ENodeState::Initial;
 
-        TNodeState(const TPart* part, TPageId pageId, ui32 level, TRowId beginRowId, TRowId endRowId, TRowId beginDataSize, TRowId endDataSize, TCellsIterable beginKey, TCellsIterable endKey)
+        TNodeState(const TPart* part, TPageRef ref, ui32 level, TRowId beginRowId, TRowId endRowId,
+                   TRowId beginDataSize, TRowId endDataSize, TCellsIterable beginKey, TCellsIterable endKey)
             : Part(part)
-            , PageId(pageId)
+            , Ref(std::move(ref))
             , Level(level)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
@@ -49,9 +50,17 @@ class TTableHistogramBuilderBtreeIndex {
         }
 
         TString ToString(const TKeyCellDefaults &keyDefaults) const {
-            return TStringBuilder() 
+            NPage::TPageOffset offset = std::visit([](const auto& val) -> NPage::TPageOffset {
+                using T = std::decay_t<decltype(val)>;
+                if constexpr (std::is_same_v<T, TPageId>) {
+                    return NPage::TPageOffset::FromPageIndex(val);
+                } else {
+                    return val.Offset;
+                }
+            }, Ref);
+            return TStringBuilder()
                 << "Part: " << Part->Label.ToString()
-                << " PageId: " << PageId
+                << " Offset: " << offset
                 << " Level: " << Level
                 << " BeginRowId: " << BeginRowId
                 << " EndRowId: " << EndRowId
@@ -243,8 +252,11 @@ public:
             if (part.Slices && part.Slices->back().LastKey.GetCells()) {
                 endKey = MakeCellsIterableKey(part.Part.Get(), part.Slices->back().LastKey);
             }
-            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetTotalDataSize(), beginKey, endKey);
-            ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
+            auto* pageColl = part->GetPageCollection(0);
+            auto rootLoc = GetBTreeRootLocation(meta, pageColl, pageColl);
+            LoadedStateNodes.emplace_back(part.Part.Get(), TPageRef(rootLoc), meta.LevelCount(), 0, meta.GetRowCount(), 0,
+                                          meta.GetTotalDataSize(), beginKey, endKey);
+            if (part.Slices) ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
         }
 
         if (!ready) {
@@ -538,28 +550,35 @@ private:
         histogram.push_back({serializedKey, value});
     }
 
+    static TNodeState BuildChildState(const TNodeState& parent, const TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel, TColumns colsKeyData) {
+        return TNodeState(parent.Part, node.GetChild(pos, isLeafLevel), parent.Level - 1,
+            pos ? node.GetChildRowCount(pos - 1) : parent.BeginRowId,
+            node.GetChildRowCount(pos),
+            pos ? node.GetChildTotalDataSize(pos - 1) : parent.BeginDataSize,
+            node.GetChildTotalDataSize(pos),
+            pos ? node.GetKeyCellsIterable(pos - 1, colsKeyData) : parent.BeginKey,
+            pos < node.GetKeysCount() ? node.GetKeyCellsIterable(pos, colsKeyData) : parent.EndKey);
+    }
+
     bool TryLoadNode(const TNodeState& parent, const auto& addNode) {
         Y_ENSURE(parent.Level);
 
-        auto page = Env->TryGetPage(parent.Part, parent.Part->GetPageLocation(parent.PageId, {}), {});
+        auto location = ResolvePageLocation(parent.Part, parent.Ref, {});
+        auto page = Env->TryGetPage(parent.Part, location, {});
         if (!page) {
             return false;
         }
 
-        LoadedBTreeNodes.emplace_back(*page);
+        bool v2Format = parent.Part->IndexPages.GetBTree({}).HasRootV2();
+        LoadedBTreeNodes.emplace_back(*page, v2Format);
         auto &bTreeNode = LoadedBTreeNodes.back();
         auto& groupInfo = parent.Part->Scheme->GetLayout({});
 
+        bool isLeafLevel = (parent.Level == 1);
+
         for (auto pos : xrange(bTreeNode.GetChildrenCount())) {
-            auto& child = bTreeNode.GetChild(pos);
-
-            LoadedStateNodes.emplace_back(parent.Part, child.GetPageId(), parent.Level - 1,
-                pos ? bTreeNode.GetChild(pos - 1).GetRowCount() : parent.BeginRowId, child.GetRowCount(),
-                pos ? bTreeNode.GetChild(pos - 1).GetTotalDataSize() : parent.BeginDataSize, child.GetTotalDataSize(),
-                pos ? bTreeNode.GetKeyCellsIterable(pos - 1, groupInfo.ColsKeyData) : parent.BeginKey,
-                pos < bTreeNode.GetKeysCount() ? bTreeNode.GetKeyCellsIterable(pos, groupInfo.ColsKeyData) : parent.EndKey);
-
-            addNode(LoadedStateNodes.back());
+            auto& child = LoadedStateNodes.emplace_back(BuildChildState(parent, bTreeNode, pos, isLeafLevel, groupInfo.ColsKeyData));
+            addNode(child);
         }
 
         return true;
@@ -580,12 +599,13 @@ private:
     TCellsIterable MakeCellsIterableKey(const TPart* part, TSerializedCellVec serializedKey) {
         // Note: this method is only called for root nodes and don't worth optimizing
         // so let's simply create a new fake b-tree index node with a given key
+        // writeV2=false is fine: key encoding is same in V1/V2, children are dummy
         NPage::TBtreeIndexNodeWriter writer(part->Scheme, {});
         writer.AddChild({1, 1, 1, 0, 0});
         writer.AddKey(serializedKey.GetCells());
         writer.AddChild({2, 2, 2, 0, 0});
         TSharedData serializedNode = writer.Finish();
-        LoadedBTreeNodes.emplace_back(serializedNode);
+        LoadedBTreeNodes.emplace_back(serializedNode, /*v2Format=*/false);
         return LoadedBTreeNodes.back().GetKeyCellsIterable(0, part->Scheme->GetLayout({}).ColsKeyData);
     }
 

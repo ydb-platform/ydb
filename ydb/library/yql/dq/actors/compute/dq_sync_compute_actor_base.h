@@ -278,7 +278,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
         ui64 checkpointedInputChannels = 0;
         ui64 emptyInputChannels = 0;
-        ui64 finishedOrPausedInputChannels = 0;
+        ui64 pausedInputChannels = 0;
+        ui64 finishedInputChannels = 0;
         ui64 bytesInInputChannels = 0;
         i64 inputChannelsFreeSpace = 0;
         for (const auto& [_, channelInfo] : this->InputChannelsMap) {
@@ -287,7 +288,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
                 if (channelInfo.Channel) {
                     emptyInputChannels += channelInfo.Channel->Empty();
-                    finishedOrPausedInputChannels += channelInfo.IsPaused() || channelInfo.Channel->IsFinished();
+                    pausedInputChannels += channelInfo.IsPaused();
+                    finishedInputChannels += channelInfo.Channel->IsFinished();
                     bytesInInputChannels += channelInfo.Channel->GetStoredBytes();
                     inputChannelsFreeSpace += channelInfo.Channel->GetFreeSpace();
                 }
@@ -308,7 +310,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
 
         diagnostics << "Inputs state. ["
-            << "Channels paused or finished: " << finishedOrPausedInputChannels << " / " << checkpointedInputChannels
+            << "Channels paused: " << pausedInputChannels << " / " << checkpointedInputChannels
+            << ". Channels finished: " << finishedInputChannels << " / " << checkpointedInputChannels
             << ". Channels empty: " << emptyInputChannels << " / " << checkpointedInputChannels << " (stored bytes: " << bytesInInputChannels << ", fs: " << inputChannelsFreeSpace << ")"
             << ". Sources empty: " << emptySources << " / " << this->SourcesMap.size() << " (stored bytes: " << bytesInSources << ", fs: " << sourcesFreeSpace << ")"
             << ". Transforms empty: " << emptyInputTransforms << " / " << this->InputTransformsMap.size() << " (stored bytes: " << bytesInInputTransforms << ", fs: " << inputTransformsFreeSpace << ")"
@@ -335,7 +338,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 }
             }
 
-            return TStringBuilder() << " no + soft + hard limit: {" << noLimit << " + " << softLimit << " + " << hardLimit << "} / " << objects.size();
+            return TStringBuilder() << "no + soft + hard limit: {" << noLimit << " + " << softLimit << " + " << hardLimit << "} / " << objects.size();
         };
 
         diagnostics

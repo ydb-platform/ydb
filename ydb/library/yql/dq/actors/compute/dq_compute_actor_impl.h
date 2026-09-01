@@ -185,7 +185,7 @@ public:
 
             if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
                 if (reportStatsSettings->MaxInterval) {
-                    CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval);
+                    CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval << ", has checkpoints: " << (Checkpoints ? "true" : "false"));
                     this->Schedule(reportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
             }
@@ -549,6 +549,8 @@ protected:
             // So, if there is space in the channel buffer (and on previous step is was full), we send ChannelDataAck
             // event with the last known seqNo, and the process on the other side of this channel updates its state
             // and sends us a new batch of data.
+            //
+            // Note: in case of handling `Finished` status with Checkpoints, there is always DataWasSent=true, because outputs are finished.
             if (Channels) {
                 bool pollSent = false;
                 for (auto& [channelId, inputChannel] : InputChannelsMap) {
@@ -600,6 +602,7 @@ protected:
                         return;
                     }
                 }
+
                 if ((!Channels || Channels->CheckInFlight("Tasks execution finished")) && AllAsyncOutputsFinished()) {
                     State = NDqProto::COMPUTE_STATE_FINISHED;
                     CA_LOG_D("Compute state finished. All channels and sinks finished");
@@ -902,6 +905,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 channelInfo.ResumeByCheckpoint();
             }
         }
+
         // sources or input channels was unpaused, trigger new poll
         ResumeExecution(EResumeSource::CAResumeByCheckpoint);
     }
@@ -1306,7 +1310,10 @@ protected:
                     Checkpoints // Tasks with checkpoints should stay after finishing
                 ) {
                     ReportStats();
-                    this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+
+                    const auto statsInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
+                    CA_LOG_T("Schedule next periodic stats " << statsInterval);
+                    this->Schedule(statsInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
                 break;
             }
@@ -2291,8 +2298,8 @@ protected:
         it->second.Failed = true;
     }
 
-    void HandleAsyncOutputError(const TEvPrivate::TEvAsyncOutputError::TPtr& ev) {
-        InternalError(ev->Get()->StatusCode, ev->Get()->Issues);
+    void HandleAsyncOutputError(TEvPrivate::TEvAsyncOutputError::TPtr& ev) {
+        InternalError(ev->Get()->StatusCode, std::move(ev->Get()->Issues));
     }
 
     void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {

@@ -105,6 +105,7 @@ public:
         NYql::NDq::TComputeActorState state;
         state.Sources = Sources;
         state.Sinks = Sinks;
+
         TString result;
         for (const auto& [nodeNum, nodeState] : NodeStates) {
             if (!nodeState) {
@@ -118,6 +119,7 @@ public:
                 result.AppendNoAlias(savedBuf.data(), savedBuf.size());
             }
         }
+
         auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
         stateData.Blob = result;
         Y_ENSURE(LastVersion, "LastVersion is empty");
@@ -1140,12 +1142,11 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
         {"taskCount", context->Tasks.size()});
 
     std::vector<NYql::NDq::TComputeActorState> states;
+
     try {
-        for (auto& task : context->Tasks)
-        {
+        for (auto& task : context->Tasks) {
             TIncrementLogic logic;
-            for (auto& state : task.States)
-            {
+            for (auto& state : task.States) {
                 logic.Apply(state);
             }
             states.push_back(std::move(logic.Build()));
@@ -1153,6 +1154,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     } catch (...) {
         issues.AddIssue(CurrentExceptionMessage());
     }
+
     return states;
 }
 

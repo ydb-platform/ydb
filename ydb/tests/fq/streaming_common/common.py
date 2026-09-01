@@ -371,29 +371,48 @@ def _replace_config_via_cms(cluster, full_yaml_config):
         os.unlink(tmp_path)
 
 
-def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 240) -> None:
+def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 30) -> None:
     expected_sections = {section: full_yaml_config[section] for section in _SECTIONS_FOR_CMS}
     deadline = time.monotonic() + timeout
+    attempt = 0
 
     while time.monotonic() < deadline:
+        attempt += 1
         try:
             for node in cluster.slots.values():
+                node_endpoint = f"http://{node.host}:{node.mon_port}/actors/configs_dispatcher"
                 response = requests.get(
-                    f"http://{node.host}:{node.mon_port}/actors/configs_dispatcher",
-                    headers={"Content-Type": "application/json"},
+                    node_endpoint,
+                    headers={
+                        "Authorization": "root@builtin",
+                        "Content-Type": "application/json",
+                    },
                     timeout=5,
                 )
                 response.raise_for_status()
                 applied_config = yaml.safe_load(json.loads(response.text)["yaml_config"])["config"]
-                if any(applied_config.get(section) != value for section, value in expected_sections.items()):
+                mismatched_sections = [
+                    section
+                    for section, value in expected_sections.items()
+                    if applied_config.get(section) != value
+                ]
+                if mismatched_sections:
+                    logger.info(
+                        "CMS config has not been applied to node %s yet (attempt %d): mismatched sections: %s",
+                        node.host,
+                        attempt,
+                        ", ".join(mismatched_sections),
+                    )
                     break
             else:
+                logger.info("CMS config was applied to all dynamic nodes after %d attempts", attempt)
                 return
-        except (KeyError, TypeError, ValueError, requests.RequestException, yaml.YAMLError):
-            pass
+        except (KeyError, TypeError, ValueError, requests.RequestException, yaml.YAMLError) as error:
+            logger.info("Failed to check CMS config application (attempt %d): %s", attempt, error)
 
         time.sleep(0.5)
 
+    logger.error("CMS configuration was not applied to all dynamic nodes within %d seconds", timeout)
     raise AssertionError("CMS configuration was not applied to all dynamic nodes")
 
 

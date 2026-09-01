@@ -304,8 +304,23 @@ namespace {
 // The index build ops all name a main table and, optionally, one index under it, then
 // fan out over the index's impl tables. Which impl tables those are is decided by the
 // index type inside the CalcXxxImplTableDesc helpers on create, and read from the
-// index's existing children on apply/cancel -- neither set is in the request, hence
-// Incomplete.
+// index's existing children on apply/cancel -- so that set is genuinely absent from the
+// request. This used to be marked Incomplete for that reason, which was the wrong
+// conclusion from a true premise: the fan-out is propose-time, not execution-time, and
+// every impl table becomes a CONSTRUCTED PART carrying its own transaction, so admitParts
+// (schemeshard__operation.cpp:401) asks each one and widens the set with it.
+//   create: index/operation_create_build_index.cpp:215-242 pushes CreateNewTableIndex,
+//     CreateInitializeBuildIndexMainTable and one CreateInitializeBuildIndexImplTable per
+//     impl table; the impl table names its own path via GetCreateTable().GetName().
+//   apply/cancel: index/operation_apply_build_index.cpp:127-172 and :221-241 loop over the
+//     index's existing children, and each part -- FinalizeBuildIndexImplTable, DropTable,
+//     FinalizeBuildIndexMainTable -- carries the impl table name in its own tx with
+//     WorkingDir set to the index path.
+// Verified rather than assumed: poisoning the ESchemeOpInitiateBuildIndexImplTable
+// declaration alone makes 98 ut_index_build tests abort on
+//   "wrote path row it had not declared: /MyRoot/ServerLessDB/Table/index1/indexImplTable"
+// which shows both that the cross-check is armed for these ops and that the impl-table
+// coverage comes from the part, not from anything this helper needs to say.
 TAffectedPaths DeclareIndexBuildRoots(const TString& tablePath, const TString& indexName) {
     TAffectedPaths result;
     AddAbsoluteTarget(result, tablePath);
@@ -315,7 +330,6 @@ TAffectedPaths DeclareIndexBuildRoots(const TString& tablePath, const TString& i
             .Path = JoinPath({tablePath, indexName}),
         });
     }
-    result.Incomplete = true;
     return result;
 }
 
@@ -398,16 +412,28 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateConsisten
 {
     Y_UNUSED(context);
     // The request enumerates the table pairs (schemeshard__operation_consistent_copy_
-    // tables.cpp:185-187), but each pair then fans out over the source's children --
-    // indexes and their impl tables (:267, :282, :343), cdc streams (:395) and
-    // sequences (:415) -- synthesizing destination paths that are nowhere in the
-    // request. The pairs are the entry points; the descendants cannot be enumerated.
+    // tables.cpp:185-187), and each pair then fans out over the source's children --
+    // indexes and their impl tables (:282, :343), and sequences (:387, :412) --
+    // synthesizing destination paths that are nowhere in the request. That was the
+    // stated reason for Incomplete, and it describes the request correctly; it is still
+    // the wrong conclusion, because the fan-out happens at propose. Every descendant is
+    // pushed as a constructed part -- CreateNewTableIndex at :336/:340, CreateCopyAnyTable
+    // at :381, CreateCopySequence at :428 -- and admitParts asks each part for its own
+    // declaration, which each one can answer from its own tx.
+    //
+    // Note this marker was NOT unreachable, contrary to the note at :553 below. That note
+    // is right that CreateConsistentCopyTables expands inline for a backup/restore of a
+    // collection, so the marker never travels upward there. But schemeshard__operation.cpp
+    // :1587 dispatches a genuine top-level ESchemeOpCreateConsistentCopyTables, proposed by
+    // grpc_services/rpc_copy_tables.cpp:37, schemeshard_export_flow_proposals.cpp:52 and
+    // ut_helpers/helpers.cpp:1009. For those the request-level loop at
+    // schemeshard__operation.cpp:300 does read this declaration, and the Incomplete did
+    // disarm the check for the whole copy.
     TAffectedPaths result;
     for (const auto& descr : tx.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
         AddAbsoluteTarget(result, descr.GetSrcPath(), TAffectedPath::ERole::Source);
         AddAbsoluteTarget(result, descr.GetDstPath(), TAffectedPath::ERole::Target);
     }
-    result.Incomplete = true;
     return result;
 }
 
@@ -550,9 +576,12 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpBackupBackupCol
     // in principle be a plain target.
     //
     // It cannot be yet. CreateConsistentCopyTables expands inline into the caller's part
-    // list rather than proposing an ESchemeOpCreateConsistentCopyTables part, so the
-    // Incomplete on that op's own declaration (:410 here) never travels upward. What
-    // admitParts actually asks is each copy part, whose transaction is ESchemeOpCreateTable
+    // list rather than proposing an ESchemeOpCreateConsistentCopyTables part, so nothing
+    // from that op's own declaration travels upward here. (That declaration no longer
+    // carries an Incomplete anyway -- it was retired once its fan-out was confirmed to be
+    // propose-time; but it was never dead weight, since the top-level CopyTables and export
+    // paths do consult it. See the note above it.) What admitParts actually asks for a
+    // backup or restore is each copy part, whose transaction is ESchemeOpCreateTable
     // with CopyFromTable set -- and that declaration disclaims itself, returning nullopt
     // (schemeshard__operation_create_table.cpp:874). The disclaimer is right for a top-level
     // request, where MakeOperationParts re-dispatches such a tx to CreateCopyTable

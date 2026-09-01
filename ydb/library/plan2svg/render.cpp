@@ -59,7 +59,7 @@ void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, co
         << "</g>" << Endl;
 }
 
-void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor) {
+void TPlan::PrintWaitTime(TStringBuilder& background, const std::shared_ptr<TSingleMetric>& metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor) {
 
     if (metric->WaitTime.MaxDeriv == 0) {
         return;
@@ -78,7 +78,7 @@ void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMet
         << "' stroke='none' fill='" << fillColor << "' />" << Endl;
 }
 
-void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed) {
+void TPlan::PrintSeries(TStringBuilder& canvas, const std::vector<std::pair<ui64, ui64>>& series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed) {
     if (MaxTime == 0 || maxValue == 0 || series.empty()) {
         return;
     }
@@ -502,7 +502,7 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
     ui32 y0 = INTERNAL_GAP_Y;
     ui32 index = 0;
-    for (auto op : s->Operators) {
+    for (const auto& op : s->Operators) {
         ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
         s->Svg
             << "<g><title>" << SvgEscape(op.Name) << ": " << SvgEscape(op.Info) << (op.Blocks ? " Blocks: True" : "") << "</title>";
@@ -827,25 +827,25 @@ void TPlan::PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui
         if (!c->KeyColumns.empty()) {
             c->Svg << " KeyColumns: ";
             bool first = true;
-            for (auto k : c->KeyColumns) {
+            for (const auto& keyColumn : c->KeyColumns) {
                 if (first) {
                     first = false;
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << SvgEscape(k);
+                c->Svg << SvgEscape(keyColumn);
             }
         }
         if (!c->SortColumns.empty()) {
             c->Svg << " SortColumns: ";
             bool first = true;
-            for (auto s : c->SortColumns) {
+            for (const auto& sortColumn : c->SortColumns) {
                 if (first) {
                     first = false;
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << SvgEscape(s);
+                c->Svg << SvgEscape(sortColumn);
             }
         }
         if (c->Blocks) {
@@ -1087,7 +1087,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     offsetY += Height;
 }
 
-void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c) {
+void TPlan::PrintStage(TStringBuilder& builder, const std::shared_ptr<TStage>& stage, TConnection* c) {
 
     if (stage->Connections.size() > 1) {
         builder
@@ -1101,7 +1101,7 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
     builder << "</svg>" << Endl;
 
     auto y = stage->Height + GAP_Y;
-    for (auto c : stage->Connections) {
+    for (const auto& c : stage->Connections) {
         if (c->CteConnection) {
             builder << "<svg data-stage='outer cte' data-height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << y << "'>" << Endl;
             builder << "<svg data-stage='inner cte' data-height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << GAP_Y << "'>" << Endl;
@@ -1416,15 +1416,15 @@ TString TVisualizer::PrintSvg() {
             << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
             << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, Sprintf("%lu:%.2lu", t / 60, t % 60)) << Endl
             << "</g>" << Endl;
-        for (auto plan : Plans) {
+        for (auto& plan : Plans) {
             plan->SummaryBuilder << timeLabel;
         }
     }
-    for (auto plan : Plans) {
+    for (auto& plan : Plans) {
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
 
-    for (auto plan : Plans) {
+    for (auto& plan : Plans) {
         plan->PrintSvg(background, MaxTime, timelineDelta);
     }
 

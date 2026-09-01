@@ -61,7 +61,11 @@ public:
         : GroupId(groupId), NodeType(nodeType), Config(config), Viz(viz) {}
 
     void Load(const NJson::TJsonValue& node);
-    void MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime);
+    void MergeTotalCpu(const std::shared_ptr<TSingleMetric>& cpuTime);
+    // stage is taken by value on purpose: callers pass Stages.back(), and loading
+    // the sub-plans appends to Stages. A reference would be left dangling by the
+    // reallocation, and every reference below borrows this copy rather than the
+    // vector.
     void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection);
     void LoadOperators(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue& operators, std::vector<TOperatorInfo>& externalOperators);
     void LoadTableIngress(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue& subNode, const TString& name, std::vector<TOperatorInfo>& externalOperators);
@@ -72,13 +76,13 @@ public:
     void LoadStageTimings(const std::shared_ptr<TStage>& stage, const NJson::TJsonValue* inputNode);
     void LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode);
     void LoadNode(const NJson::TJsonValue& node);
-    void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
+    void MarkStageIndent(ui32 indentX, ui32& offsetY, const std::shared_ptr<TStage>& stage);
     void MarkLayout();
     void ResolveCteRefs();
     void ResolveOperatorInputs();
-    void PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed = true);
+    void PrintSeries(TStringBuilder& canvas, const std::vector<std::pair<ui64, ui64>>& series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed = true);
     void PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, const TString& title, TAggregation& firstMessage, TAggregation& lastMessage, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf color, bool backgroundRect = false);
-    void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor);
+    void PrintWaitTime(TStringBuilder& canvas, const std::shared_ptr<TSingleMetric>& metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor = "");
     void PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor = "");
     void PrintStageSummary(TStringBuilder& background, const TViewBox& box, const TStageSummary& bar);
@@ -106,7 +110,7 @@ public:
     void PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw);
     void PrintIngressStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw);
     void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
-    void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
+    void PrintStage(TStringBuilder& builder, const std::shared_ptr<TStage>& stage, TConnection* c);
     void PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void CalcHotPath();
     void CalcCriticals(TStage& stage);

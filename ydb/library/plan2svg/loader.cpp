@@ -45,7 +45,7 @@ void TPlan::Load(const NJson::TJsonValue& node) {
             LoadNode(node);
         }
         std::sort(Nodes.begin(), Nodes.end(),
-            [](std::shared_ptr<TClusterNode>& a, std::shared_ptr<TClusterNode>& b) {
+            [](const std::shared_ptr<TClusterNode>& a, const std::shared_ptr<TClusterNode>& b) {
                 return a->NodeId < b->NodeId;
             }
         );
@@ -240,7 +240,7 @@ void TPlan::ResolveOperatorInputs() {
     }
 }
 
-void TPlan::MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime) {
+void TPlan::MergeTotalCpu(const std::shared_ptr<TSingleMetric>& cpuTime) {
 
             std::vector<ui64> updatedCpuTimes;
             std::vector<ui64> updatedCpuValues;

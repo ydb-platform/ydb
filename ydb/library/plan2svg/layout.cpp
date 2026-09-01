@@ -7,7 +7,7 @@
 
 namespace NPlan2Svg {
 
-void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> stage) {
+void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, const std::shared_ptr<TStage>& stage) {
     if (stage->IndentX < indent) {
         stage->IndentX = indent;
     }
@@ -29,7 +29,7 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
         indent += (INDENT_X + GAP_X);
     }
 
-    for (auto c : stage->Connections) {
+    for (const auto& c : stage->Connections) {
         if (c->CteConnection) {
             c->CteIndentX = indent;
             offsetY += GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
@@ -137,7 +137,7 @@ void TPlan::CalcHotPath() {
     if (!Stages.empty()) {
         CalcCriticals(*Stages[0]);
     }
-    for (auto s : Stages) {
+    for (const auto& s : Stages) {
         if (!s->External && s->CpuTime && s->Tasks && !s->CpuTime->History.Values.empty()) {
             auto stageId = s->PhysicalStageId;
             StageIdToStage.emplace(stageId, s.get());

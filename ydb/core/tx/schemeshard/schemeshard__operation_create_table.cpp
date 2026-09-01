@@ -880,17 +880,38 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTable>(
     // backup or restore of a collection the part admitParts asks *is* this one, and nullopt
     // left the whole copy undeclared.
     //
-    // TCopyTable::Propose persists three rows (schemeshard__operation_copy_table.cpp:819-821):
-    // the new table, its parent, and the source. The first two come from
+    // TCopyTable::Propose persists the new table, its parent and the source
+    // (schemeshard__operation_copy_table.cpp:819-821). The first two come from
     // DeclareChildOfWorkingDir above; the source is added here. On the top-level path those
     // rows are written too, just by a lower part, so naming them is not an over-declaration.
     if (create.HasCopyFromTable()) {
         // Absolute, and resolved as such -- TPath::Resolve(GetCopyFromTable()) at
         // schemeshard__operation_copy_table.cpp:568, never joined with WorkingDir.
+        const TString source = CanonizePath(create.GetCopyFromTable());
         result.Paths.push_back(TAffectedPath{
             .Role = TAffectedPath::ERole::Source,
-            .Path = CanonizePath(create.GetCopyFromTable()),
+            .Path = source,
         });
+
+        // And a fourth row, easy to miss because it is 100 lines above the other three:
+        // a copy that carries DropSrcCdcStream marks each named stream under the SOURCE
+        // table as dropped and persists its path row (copy_table.cpp:696-726). Those are
+        // children of the source, not of the new table, and they are named in the request,
+        // so they are exactly derivable here.
+        //
+        // Found by attributing a queued write to its part: DbChanges.PersistPath only
+        // enqueues, and the whole queue flushes at TStorageChanges::Apply after every part
+        // has proposed -- so an abort at flush time names no part, and reading the three
+        // adjacent Persist calls at :819-821 missed this one entirely.
+        if (create.HasDropSrcCdcStream()) {
+            for (const auto& streamName : create.GetDropSrcCdcStream().GetStreamName()) {
+                result.Paths.push_back(TAffectedPath{
+                    .Role = TAffectedPath::ERole::Source,
+                    .Path = CanonizePath(JoinPath({source, streamName})),
+                    .Effect = TAffectedPath::EEffect::Drop,
+                });
+            }
+        }
     }
     return result;
 }

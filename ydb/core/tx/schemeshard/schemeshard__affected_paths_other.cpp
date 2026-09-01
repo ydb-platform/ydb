@@ -618,7 +618,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpBackupBackupCol
     // its own tx, but that part is an ESchemeOpCreateCdcStream, which is itself still
     // Incomplete (schemeshard__operation_create_cdc_stream.cpp:944). Retire this with the
     // CDC *AtTable* family, not before.
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetBackupBackupCollection().GetName(), 0);
 }
 
@@ -671,7 +671,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRestoreBackupCo
     // Held with BackupBackupCollection above for the same second reason: the incremental
     // path reaches the continuous-backup CDC stream whose name is minted from Now(), and the
     // part that creates it is still Incomplete. Retire the pair with the CDC *AtTable* family.
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetRestoreBackupCollection().GetName(), 0);
 }
 

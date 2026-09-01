@@ -29,9 +29,8 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateContinuou
     // stream name to a Now()-derived value when the request doesn't supply one -- a value this
     // declaration cannot reproduce deterministically. Declare the table itself, which is known
     // from the request, and mark Incomplete rather than guess the generated stream path.
-    TAffectedPaths result = DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateContinuousBackup().GetTableName());
-    result.Incomplete = true;
-    return result;
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(),
+        tx.GetCreateContinuousBackup().GetTableName());
 }
 
 } // namespace NOperation

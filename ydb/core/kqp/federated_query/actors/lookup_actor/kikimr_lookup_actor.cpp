@@ -559,7 +559,7 @@ namespace {
                 default:
                     CleanupStreamProcessor(session);
                     if (auto& lookup = session->PendingLookup) {
-                        SendRetryOrError(std::exchange(lookup, {}), response.status(), IssuesFromProtoMessage(response));
+                        SendRetryOrError(std::exchange(lookup, {}), status, IssuesFromProtoMessage(response));
                     }
                     return;
             }

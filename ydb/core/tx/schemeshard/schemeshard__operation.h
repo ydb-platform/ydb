@@ -22,6 +22,24 @@ struct TOperation: TSimpleRefCount<TOperation> {
     // distinguishable or an unmigrated op reads as "touches no paths".
     TVector<std::optional<TAffectedPaths>> DeclaredAffectedPaths;
 
+    // The declaration of each constructed part, keyed by its SubTxId.
+    //
+    // DeclaredAffectedPaths above is indexed by *transaction*, so it covers what the request
+    // asked for and not the parts an operation fans out into. admitParts already computes a
+    // TAffectedPaths per part and, before this existed, folded it into DeclaredPathSet and
+    // dropped the structure -- which left a part unable to find its own plan entry even
+    // though the plan contained it.
+    //
+    // Keyed by SubTxId because that is fixed when the part is constructed
+    // (ISubOperation::GetOperationId) and admitParts runs before those parts propose, so a
+    // part can look itself up during its own Propose.
+    //
+    // Nothing consumes this yet: it is the enabling step for having parts resolve *from* the
+    // plan rather than alongside it. Kept deliberately, since the alternative is recomputing
+    // at the point of use and reintroducing the second answer this whole mechanism exists to
+    // eliminate.
+    THashMap<TSubTxId, TAffectedPaths> DeclaredPartPaths;
+
     // The above flattened to absolute paths, for ObservePathTouched to compare against.
     // Lives on the operation rather than on the propose stack because path rows are written
     // well after IgniteOperation returns -- TStorageChanges is applied later, and plan and

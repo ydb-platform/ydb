@@ -411,6 +411,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             if (!declared || declared->Unresolved) {
                 continue;
             }
+            // Keep the per-part declaration before flattening it away. admit() folds it into
+            // a set of strings, which is all the write cross-check needs but loses which part
+            // claimed what -- and that is exactly what a part needs to resolve from the plan
+            // instead of alongside it. Stored unconditionally: it describes what the part
+            // declared, independent of whether the cross-check is armed.
+            operation->DeclaredPartPaths[part->GetOperationId().GetSubTxId()] = *declared;
             if (operation->DeclaredPathsUsable) {
                 admit(*declared);
             }

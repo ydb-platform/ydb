@@ -15,14 +15,8 @@ Main topics:
 * [{#T}](../../devops/deployment-options/manual/decommissioning.md)
 * [{#T}](failure_model.md)
 * [{#T}](node_restarting.md)
-<<<<<<< HEAD
-* [{#T}](cluster_expansion.md)
 * [{#T}](../../devops/configuration-management/configuration-v1/config-overview.md)
 * [{#T}](../../devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md)
-=======
-* [{#T}](config-overview.md)
-* [{#T}](dynamic-config-volatile-config.md)
->>>>>>> 61d86872e7f (Resolve Merge Conflicts)
 * [{#T}](replacing_nodes.md)
 * [{#T}](blobdepot.md)
 * [{#T}](blobdepot_decommit.md)

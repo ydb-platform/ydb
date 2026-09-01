@@ -2005,6 +2005,25 @@ protected:
 
         if (Planner) {
             Planner->Unsubscribe();
+
+            if (CheckpointCoordinatorId) {
+                // For streaming queries compute actors persist after finish, so we should abort them
+                for (const auto& computeActorId : Planner->GetAllComputeActors()) {
+                    this->Send(computeActorId, NYql::NDq::TEvDq::TEvAbortExecution::Aborted("Query execution finished."));
+                }
+            }
+        }
+
+        if (CheckpointCoordinatorId) {
+            this->Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
+            CheckpointCoordinatorId = TActorId{};
+
+            const auto context = TasksGraph.GetMeta().UserRequestContext;
+            if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && context && !context->StreamingQueryPath.empty()) {
+                auto counters = Counters->Counters->GetKqpCounters();
+                counters = counters->GetSubgroup("host", "");
+                counters->RemoveSubgroup("path", context->StreamingQueryPath);
+            }
         }
 
         if (KqpTableResolverId) {

@@ -1283,7 +1283,9 @@ protected:
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
-                if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN) {
+                if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN ||
+                    Checkpoints // Tasks with checkpoints should stay after finishing
+                ) {
                     ReportStats();
                     this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
@@ -2760,7 +2762,6 @@ protected:
     void ReportStats() {
         auto now = TInstant::Now();
         if ((State != NDqProto::COMPUTE_STATE_EXECUTING && !Task.GetCreateSuspended())      // non streaming queries
-            || ((State != NDqProto::COMPUTE_STATE_UNKNOWN && State != NDqProto::COMPUTE_STATE_EXECUTING) && Task.GetCreateSuspended())
             || !RuntimeSettings.ReportStatsSettings
             || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
             return;

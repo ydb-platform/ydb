@@ -750,15 +750,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRotateCdcStream
     // itself (tablePath, resolved as workingDirPath.Child(tableName)); the old/new streams it
     // validates are already declared by the sibling RotateCdcStreamImpl part.
     const auto& op = tx.GetRotateCdcStream();
-    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
-    // TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp), shared by
-    // every CdcStreamAtTable op, also walks path->GetChildren() to sync AlterVersion/
-    // DirAlterVersion on any table-index children -- discovered at execution time, not
-    // enumerable from this request.
-    if (!result.Unresolved) {
-        result.Incomplete = true;
-    }
-    return result;
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
 }
 
 } // namespace NOperation

@@ -652,9 +652,15 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropCdcStream>(
     const TOperationContext& context)
 {
     // TDropCdcStream names one table and one-or-more streams under it (TDropCdcStream has
-    // no id field for either). Each stream is cascaded independently in DoDropStream, which
-    // discovers and drops its PQ-group implementation children at execution time -- so every
-    // named stream is its own cascade root, with the table declared as their shared container.
+    // no id field for either), with the table as their shared container.
+    //
+    // No cascade. Each stream's PQ-group implementation children are not discovered by some
+    // later execution phase: DoDropStream (this file) walks streamPath.GetChildren() while
+    // constructing parts and synthesizes an explicit ESchemeOpDropPersQueueGroup part per
+    // child, so IgniteOperation's admitParts asks each of them for its own declaration
+    // before anything is proposed. Declaring the streams as cascade roots only turned the
+    // cross-check off for the whole drop -- which is what left every path row this
+    // operation writes unobserved.
     const auto& op = tx.GetDropCdcStream();
     const TString tablePath = JoinPath({tx.GetWorkingDir(), op.GetTableName()});
 
@@ -665,12 +671,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropCdcStream>(
     });
 
     for (const auto& streamName : op.GetStreamName()) {
-        TAffectedPaths stream = DeclareCascadeTargetByIdOrName(context.SS, tablePath, streamName, 0);
+        TAffectedPaths stream = DeclareTargetByIdOrName(context.SS, tablePath, streamName, 0);
         if (stream.Unresolved) {
             return stream;
         }
         std::move(stream.Paths.begin(), stream.Paths.end(), std::back_inserter(result.Paths));
-        result.Incomplete = result.Incomplete || stream.Incomplete;
     }
 
     return result;
@@ -695,15 +700,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropCdcStreamAt
     // TPath::Resolve(workingDir).Dive(tableName)); each named stream's own row is dropped
     // by the sibling DropCdcStreamImpl part declared below, so no cascade is needed here.
     const auto& op = tx.GetDropCdcStream();
-    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
-    // TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp), shared by
-    // every CdcStreamAtTable op, also walks path->GetChildren() to sync AlterVersion/
-    // DirAlterVersion on any table-index children -- discovered at execution time, not
-    // enumerable from this request.
-    if (!result.Unresolved) {
-        result.Incomplete = true;
-    }
-    return result;
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
 }
 
 } // namespace NOperation

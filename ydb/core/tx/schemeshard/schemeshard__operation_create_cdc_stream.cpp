@@ -933,16 +933,13 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStream
 {
     Y_UNUSED(context);
     // CreateNewCdcStream (above) expands into a lock, CreateCdcStreamImpl/AtTable, and a
-    // CreatePersQueueGroup sub-tx, each declared separately under its own op type. The
-    // stream's own path is known from the request, so name it here for the outbox record,
-    // but mark Incomplete: this declaration does not attempt to re-derive the PQ topic path
-    // or the index-rebuild AlterTableIndex touch that CreateNewCdcStream may also emit.
+    // CreatePersQueueGroup sub-tx. Those are constructed at propose and IgniteOperation asks
+    // each for its own declaration, so the PQ topic and the AlterTableIndex touch are covered
+    // by the parts that make them. Name the stream itself, which the request does give us.
     const auto& op = tx.GetCreateCdcStream();
-    TAffectedPaths result = DeclareChildOfWorkingDir(
+    return DeclareChildOfWorkingDir(
         JoinPath({tx.GetWorkingDir(), op.GetTableName()}),
         op.GetStreamDescription().GetName());
-    result.Incomplete = true;
-    return result;
 }
 
 } // namespace NOperation
@@ -980,16 +977,21 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStream
     // DoCreateStream (above) synthesizes this part with WorkingDir == the table's parent,
     // so it alters the table itself: TNewCdcStreamAtTable::Propose resolves
     // workingDirPath.Child(tableName), the same field used here.
+    //
+    // The table alone is enough, and this is the reasoning for all four *AtTable ops, which
+    // share TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp).
+    // That handler does walk the table's index children, but what it writes for them is
+    // PersistTableIndexAlterData (:188, :236) and PersistTableIndexAlterVersion (:190, :238)
+    // -- rows in TableIndexes, not in Schema::Paths, so they never reach ObservePathTouched
+    // and are not ours to declare. The only instrumented writes in that handler are
+    // PersistPathDirAlterVersion at :197 on the index path and :209 on the main table, both
+    // on the index-impl-table branch, and both already covered: the index path is this
+    // declaration's Container, and the cross-check admits the parent of a declared Container.
+    //
+    // These ops carried Incomplete on the belief that the index fan-out was a path-row write.
+    // It is not. Verified by removing all five markers and running the cdc suites clean.
     const auto& op = tx.GetCreateCdcStream();
-    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
-    // TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp), shared by
-    // every CdcStreamAtTable op, also walks path->GetChildren() to sync AlterVersion/
-    // DirAlterVersion on any table-index children -- discovered at execution time, not
-    // enumerable from this request.
-    if (!result.Unresolved) {
-        result.Incomplete = true;
-    }
-    return result;
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
 }
 
 } // namespace NOperation

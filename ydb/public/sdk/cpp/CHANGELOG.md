@@ -6,6 +6,8 @@
 
 * Added the initial process-wide SDK runtime infrastructure. Driver cancellation and callback accounting are now isolated per driver, without changing public APIs or resource-sharing behavior.
 
+* Fixed direct topic write sessions with relative database paths while preserving compatibility with existing servers for absolute database paths.
+
 ## v3.21.1
 
 * Fix read session close deadlock in topic sdk.

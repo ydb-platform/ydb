@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -215,6 +216,21 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     auto coordinationSession = startSessionResult.ExtractResult();
     AssertSuccess(coordinationSession.Close().GetValueSync());
     AssertSuccess(coordinationClient.DropNode("relative_dir/coordination").GetValueSync());
+
+    NYdb::NTopic::TTopicClient topicClient(driver);
+    const TString topicPath = "relative_dir/relative_topic";
+    AssertSuccess(topicClient.CreateTopic(topicPath).GetValueSync());
+    {
+        auto writeSession = topicClient.CreateSimpleBlockingWriteSession(
+            NYdb::NTopic::TWriteSessionSettings()
+                .Path(topicPath)
+                .ProducerId("relative-database-test")
+                .PartitionId(0)
+                .DirectWriteToPartition(true));
+        UNIT_ASSERT(writeSession->Write("message"));
+        UNIT_ASSERT(writeSession->Close());
+    }
+    AssertSuccess(topicClient.DropTopic(topicPath).GetValueSync());
 
     AssertSuccess(session.DropTable("relative_dir/relative_path_test").GetValueSync());
     AssertSuccess(session.DropTable("relative_dir/copied_once").GetValueSync());

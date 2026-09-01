@@ -82,6 +82,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
             TMockDiscoveryService discovery;
             discovery.SetGoodEndpoints(*setup);
             auto driverConfig = CreateConfig(*setup, discovery.GetDiscoveryAddr());
+            driverConfig.SetDatabase(setup->GetDatabase().substr(1));
             auto* tracingBackend = new TTracingBackend();
             driverConfig.SetLog(std::unique_ptr<TLogBackend>(CreateCompositeLogBackend({new TStreamLogBackend(&Cerr), tracingBackend}).Release()));
             TDriver driver(driverConfig);
@@ -158,10 +159,10 @@ namespace NYdb::inline Dev::NTopic::NTests {
             TExpectedTrace expected{
                 "InitRequest !partition_id !partition_with_generation",
                 "InitResponse partition_id=0",
-                "DescribePartitionRequest partition_id=0",
+                "DescribePartitionRequest path=/Root/test-topic partition_id=0",
                 std::format("DescribePartitionResponse partition_id=0 pl_generation=1 pl_node_id={}", node1_id),
                 "Error status=UNAVAILABLE",
-                "DescribePartitionRequest partition_id=0",
+                "DescribePartitionRequest path=/Root/test-topic partition_id=0",
                 std::format("DescribePartitionResponse partition_id=0 pl_generation=1 pl_node_id={}", node1_id),
                 std::format("PreferredPartitionLocation Generation=1 NodeId={}", node1_id),
                 "InitRequest !partition_id pwg_partition_id=0 pwg_generation=1",

@@ -35,7 +35,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
 
     auto readCopy = read;
     if (readCopy.GetSorting() == ERequestSorting::NONE) {
-        readCopy.SetSorting(ERequestSorting::ASC);
+        readCopy.OverrideSorting(ERequestSorting::ASC);
     }
     auto readMetadata = std::make_shared<TReadMetadata>(index->GetVersionedIndexReadonlyCopy(), readCopy);
 

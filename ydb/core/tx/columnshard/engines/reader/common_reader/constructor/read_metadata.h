@@ -206,7 +206,7 @@ public:
     TReadMetadata& operator=(const TReadMetadata&) = delete;
 
     bool OrderByLimitAllowed() const {
-        return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+        return TableMetadataAccessor->OrderByLimitAllowed();
     }
 
     EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {

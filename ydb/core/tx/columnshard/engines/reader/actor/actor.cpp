@@ -387,12 +387,10 @@ bool TColumnShardScan::ProduceResults() noexcept {
     if (CurrentLastReadKey && result.GetScanCursor()->GetPKCursor() && CurrentLastReadKey->GetPKCursor()) {
         auto pNew = result.GetScanCursor()->GetPKCursor();
         auto pOld = CurrentLastReadKey->GetPKCursor();
-        if (!ReadMetadataRange->GetFakeSort()) {
-            if (ReadMetadataRange->IsAscSorted()) {
-                AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
-            } else if (ReadMetadataRange->IsDescSorted()) {
-                AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
-            }
+        if (ReadMetadataRange->IsAscSorted()) {
+            AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
+        } else if (ReadMetadataRange->IsDescSorted()) {
+            AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
         }
     }
     CurrentLastReadKey = result.GetScanCursor();

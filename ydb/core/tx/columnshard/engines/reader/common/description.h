@@ -16,15 +16,29 @@ class TOrbit;
 namespace NKikimr::NOlap::NReader {
 
 enum class ERequestSorting {
-    NONE = 0 /* "not_sorted" */,
-    ASC /* "ascending" */,
-    DESC /* "descending" */,
+    NONE = 0,
+    ASC,
+    DESC,
 };
 
-enum class EDeduplicationPolicy {
-    ALLOW_DUPLICATES = 0,
-    PREVENT_DUPLICATES,
+enum class EPortionsSorting {
+    PortionIdAsc = 0,
+    FirstPkAsc,
+    LastPkAsc,
+    LastPkDesc,
 };
+
+inline EPortionsSorting GetPortionsSorting(const ERequestSorting sorting, const bool deduplicationEnabled) {
+    switch (sorting) {
+        case ERequestSorting::ASC:
+            return EPortionsSorting::FirstPkAsc;
+        case ERequestSorting::DESC:
+            return EPortionsSorting::LastPkDesc;
+        case ERequestSorting::NONE:
+            // deduplication needs key order; last_pk keeps the duplicates filter borders window small
+            return deduplicationEnabled ? EPortionsSorting::LastPkAsc : EPortionsSorting::PortionIdAsc;
+    }
+}
 
 // Describes read/scan request
 class TReadDescription {
@@ -33,8 +47,8 @@ private:
     TProgramContainer Program;
     std::optional<std::shared_ptr<IScanCursor>> ScanCursor;
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
-    YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
-    YDB_ACCESSOR_DEF(bool, FakeSort);
+    YDB_READONLY(ERequestSorting, Sorting, ERequestSorting::NONE);
+    YDB_READONLY(bool, DeduplicationEnabled, false);
     YDB_READONLY(ui64, TabletId, 0);
 
 public:
@@ -46,7 +60,6 @@ public:
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
-    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<NLWTrace::TOrbit> Orbit;
     bool readNonconflictingPortions;
@@ -54,9 +67,13 @@ public:
     // portions that the current tx has written
     std::optional<THashSet<TInsertWriteId>> ownPortions;
 
+    EPortionsSorting GetPortionsSorting() const {
+        return NReader::GetPortionsSorting(Sorting, NeedDuplicateFiltering());
+    }
+
     bool NeedDuplicateFiltering() const {
         AFL_VERIFY(TableMetadataAccessor);
-        return DeduplicationPolicy == EDeduplicationPolicy::PREVENT_DUPLICATES && TableMetadataAccessor->NeedDuplicateFiltering();
+        return DeduplicationEnabled && TableMetadataAccessor->NeedDuplicateFiltering();
     }
 
     bool IsReverseSort() const {
@@ -117,12 +134,17 @@ public:
         }
     }
 
-    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting)
+    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting, const bool deduplicationEnabled)
         : Snapshot(snapshot)
         , Sorting(sorting)
+        , DeduplicationEnabled(deduplicationEnabled)
         , TabletId(tabletId)
         , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
     {
+    }
+
+    void OverrideSorting(const ERequestSorting sorting) {
+        Sorting = sorting;
     }
 
     void SetProgram(TProgramContainer&& value) {

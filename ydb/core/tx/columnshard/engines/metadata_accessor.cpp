@@ -59,7 +59,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
                 sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
             }
             return std::make_unique<NReader::NSimple::TPortionsSources>(
-                std::move(sources), readDescription.GetSorting(), needDuplicateFiltering);
+                std::move(sources), readDescription.GetPortionsSorting(), needDuplicateFiltering);
         }
         case NReader::EReaderClass::Trivial: {
             std::deque<NReader::NTrivial::TSourceConstructor> sources;
@@ -67,7 +67,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
                 sources.emplace_back(NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
             }
             return std::make_unique<NReader::NTrivial::TPortionsSources>(
-                std::move(sources), readDescription.GetSorting(), readDescription.GetFakeSort(), needDuplicateFiltering);
+                std::move(sources), readDescription.GetPortionsSorting(), needDuplicateFiltering);
         }
     }
     return nullptr;

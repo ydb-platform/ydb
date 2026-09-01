@@ -6,8 +6,8 @@ namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NPortions {
 
 TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
     const IColumnEngine& engine, const ui64 tabletId, const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-    const ERequestSorting sorting)
-    : TBase(sorting, tabletId)
+    const EPortionsSorting portionsSorting)
+    : TBase(portionsSorting, tabletId)
 {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());

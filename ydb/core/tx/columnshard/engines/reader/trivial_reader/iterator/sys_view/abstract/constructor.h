@@ -71,8 +71,8 @@ protected:
     const ui64 TabletId;
 
 public:
-    TConstructor(const ERequestSorting sorting, const ui64 tabletId)
-        : Constructors(sorting)
+    TConstructor(const EPortionsSorting portionsSorting, const ui64 tabletId)
+        : Constructors(portionsSorting)
         , TabletId(tabletId)
     {
     }

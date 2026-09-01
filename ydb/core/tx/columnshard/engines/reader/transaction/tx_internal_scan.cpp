@@ -55,7 +55,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     TScannerConstructorContext context(snapshot, 0, sorting);
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
-        TReadDescription read(Self->TabletID(), snapshot, sorting);
+        TReadDescription read(Self->TabletID(), snapshot, sorting, true);
         read.SetScanIdentifier(request.TaskIdentifier);
         {
             auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(
@@ -72,7 +72,6 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.SetLock(request.GetLockId(), lockNodeId, NKikimrDataEvents::OPTIMISTIC,
             request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr,
             request.GetReadOnlyConflicts());
-        read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NTrivial::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
         read.SetScanCursor(nullptr);

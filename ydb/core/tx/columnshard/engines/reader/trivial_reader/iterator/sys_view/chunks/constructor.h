@@ -66,7 +66,7 @@ private:
 public:
     TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine,
         const ui64 tabletId, const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-        const ERequestSorting sorting);
+        const EPortionsSorting portionsSorting);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NChunks

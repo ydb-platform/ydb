@@ -63,8 +63,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const TReadMetadataBase::ESorting sorting = [&]() {
         if (request.HasReverse()) {
             return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
-        } else if (deduplicationEnabled) {
-            return TReadMetadataBase::ESorting::ASC;
         } else {
             return TReadMetadataBase::ESorting::NONE;
         }
@@ -96,9 +94,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
-        TReadDescription read(Self->TabletID(), snapshot, sorting);
-        read.SetFakeSort(!request.HasReverse() && deduplicationEnabled);
-        read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
+        TReadDescription read(Self->TabletID(), snapshot, sorting, deduplicationEnabled);
         read.GroupedMemoryLimiterOperator =
             request.GetCSScanPolicy() == "EXPORT" ? EScanGroupedMemoryLimiterOperator::Deduplication : EScanGroupedMemoryLimiterOperator::Scan;
         read.Orbit = orbit;
@@ -194,9 +190,6 @@ void TTxScan::Complete(const TActorContext& ctx) {
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (newRange.IsSuccess()) {
                 Self->Counters.GetScanCounters().OnReadMetadata((TAppData::TimeProvider->Now() - buildReadMetadataStart));
-                if (!request.HasReverse() && deduplicationEnabled) {
-                    (*newRange)->SetFakeSort(true);
-                }
                 readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
             } else {
                 return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);

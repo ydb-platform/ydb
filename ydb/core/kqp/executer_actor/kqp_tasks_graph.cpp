@@ -4013,16 +4013,16 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
     if (!taskCountHint) {
         taskCountHint = scheduledTaskCount;
     }
-
+Cerr << "CountReadTasksFromSource resourceSnapshotSize " << resourceSnapshotSize << Endl;
     ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
     if (taskCountHint) {
         taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
         if (externalSource.GetType() == NYql::PqSource) {
-            constexpr ui32 AveragePartitionsPerTask = 5;
-            const ui32 tasksByPartitions = (taskCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask;
-            const ui32 tasksByThread = (((TStagePredictor::GetUsableThreads() * 2) + 2) / 3);
-            taskCount = std::min<ui32>(tasksByPartitions, tasksByThread * resourceSnapshotSize);
+            const ui32 tasksByThread = TStagePredictor::GetUsableThreads();
+            
+            taskCount = std::min<ui32>(taskCount, tasksByThread * resourceSnapshotSize);
+            Cerr << "CountReadTasksFromSource tasksByThread " << tasksByThread  << " taskCount  " << taskCount << Endl;
         } else {
             taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
         }

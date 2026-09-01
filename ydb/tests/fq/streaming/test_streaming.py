@@ -2409,23 +2409,36 @@ FROM `{table_name}`"""
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
-    def test_pq_source_actor_count_for_many_partitions(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+    @pytest.mark.parametrize(
+        "max_tasks_per_stage, expected_actor_count",
+        [(0, 20), (2, 2), (50, 27)],
+        ids=["default", "max_tasks_2", "max_tasks_50"],
+    )
+    def test_pq_source_actor_count(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        max_tasks_per_stage: int,
+        expected_actor_count: int,
+    ) -> None:
 
         partitions_count = 100
+        test_name = f"test_pq_source_actor_count_{max_tasks_per_stage or 'default'}"
         inp, out, _ = self.get_io_names(
             kikimr,
-            "test_pq_source_actor_count_for_many_partitions",
+            test_name,
             True,
             entity_name,
             partitions_count=partitions_count,
         )
-        query_name = "test_pq_source_actor_count_for_many_partitions"
+        query_name = test_name
         path = f"/Root/{query_name}"
 
         kikimr.ydb_client.query(
             f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                {f'PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";' if max_tasks_per_stage else ''}
                 INSERT INTO {out} SELECT Data FROM {inp};
             END DO;
             """
@@ -2434,7 +2447,6 @@ FROM `{table_name}`"""
 
         def pq_source_actor_count():
             return sum(self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR") for node_id in kikimr.cluster.nodes)
-        expected_actor_count = partitions_count / 5
         assert wait_for(lambda: pq_source_actor_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (
             f"Expected {expected_actor_count} DQ_PQ_READ_ACTOR actors, got {pq_source_actor_count()}"
         )

@@ -1956,7 +1956,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(10, 10));
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 

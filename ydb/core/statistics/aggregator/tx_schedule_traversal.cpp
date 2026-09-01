@@ -40,6 +40,7 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
 
         // Next, if there is no analyze operation, try to schedule background traversal.
         if (!Self->TraversalPathId
+                && Self->StatisticsTablePathId
                 && !Self->ScheduleTraversals.empty()
                 && Self->StatisticsConfig.GetEnableBackgroundColumnStatsCollection()) {
             Self->ScheduleNextBackgroundTraversal(db, ctx);

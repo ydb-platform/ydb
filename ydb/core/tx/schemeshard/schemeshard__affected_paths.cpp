@@ -95,6 +95,65 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
     return result;
 }
 
+TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
+        TAffectedPath::EEffect effect)
+{
+    const TPath rootPath = TPath::Init(root, ss);
+    if (!rootPath.IsResolved()) {
+        TAffectedPaths unresolved;
+        unresolved.Unresolved = true;
+        return unresolved;
+    }
+
+    TAffectedPaths result;
+
+    // The same walk the operation itself runs at propose -- ExamineTreeVFS over PathsById
+    // (schemeshard_impl.cpp:6389), no DB reads -- so this cannot enumerate a different set
+    // than the loop that writes the rows.
+    for (const TPathId pathId : ss->ListSubTree(root, TlsActivationContext->AsActorContext())) {
+        if (pathId == root && !includeRoot) {
+            continue;
+        }
+        const TPath path = TPath::Init(pathId, ss);
+        if (!path.IsResolved()) {
+            TAffectedPaths unresolved;
+            unresolved.Unresolved = true;
+            return unresolved;
+        }
+        result.Paths.push_back(TAffectedPath{
+            .Locator = TAffectedPath::ELocator::ByPathId,
+            .Role = TAffectedPath::ERole::Target,
+            .Path = path.PathString(),
+            .PathId = pathId,
+            // SchemaEffect, not BookkeepingInternal: a descendant of a force drop is really
+            // gone and a descendant of an owner change really has a new owner. The write is
+            // about the object, not about the shape of the tree.
+            .Class = TAffectedPath::EEffectClass::SchemaEffect,
+            .Effect = effect,
+            // MustWrite: the operation's own loop rewrites every one of these rows -- the
+            // whole reason the subtree has to be declared rather than left Incomplete.
+            .Expect = TAffectedPath::EObservation::MustWrite,
+        });
+    }
+
+    if (rootPath.Base()->ParentPathId) {
+        const TPath parent = TPath::Init(rootPath.Base()->ParentPathId, ss);
+        if (parent.IsResolved()) {
+            result.Paths.push_back(TAffectedPath{
+                .Role = TAffectedPath::ERole::Container,
+                .Path = parent.PathString(),
+                .Class = TAffectedPath::EEffectClass::SchemaEffect,
+                .Effect = TAffectedPath::EEffect::ChildrenChanged,
+                // MustWrite: losing (or re-owning) a child bumps the container's
+                // DirAlterVersion in every one of these operations -- drop_unsafe.cpp:236,
+                // drop_extsubdomain.cpp:356, modify_acl.cpp:145.
+                .Expect = TAffectedPath::EObservation::MustWrite,
+            });
+        }
+    }
+    return result;
+}
+
 TAffectedPaths DeclareCascadeTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,
         const TString& name, ui64 localPathId)
 {

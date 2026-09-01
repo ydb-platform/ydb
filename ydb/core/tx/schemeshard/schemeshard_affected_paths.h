@@ -120,6 +120,20 @@ TAffectedPaths DeclareTargetByIdOrName(const TOperationContext& context,
 TAffectedPaths DeclareCascadeTargetByIdOrName(const TOperationContext& context,
     const TString& workingDir, const TString& name, ui64 localPathId);
 
+// Every path in the target's subtree, for an operation that writes a row per descendant
+// itself rather than fanning out into parts. Uses the same ListSubTree the operations
+// already call at propose, so the declaration cannot name a different set than the walk.
+//
+// includeRoot says whether that walk covers the root: TDropExtSubdomain erases it from the
+// set before dropping (schemeshard__operation_drop_extsubdomain.cpp:213) while
+// TDropForceUnsafe does not (schemeshard__operation_drop_unsafe.cpp:223).
+//
+// The effect is the caller's to state and cannot be inferred here: a force drop takes its
+// descendants with it, an owner change only alters them. The container of the root is
+// declared as well -- all of these operations bump its DirAlterVersion.
+TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
+    TAffectedPath::EEffect effect);
+
 // A drop that takes the target's whole subtree with it. The root is named exactly, as it
 // is what the request asked for and what the outbox records, but the descendants are
 // walked at execution time and cannot be enumerated here -- hence Incomplete, which turns

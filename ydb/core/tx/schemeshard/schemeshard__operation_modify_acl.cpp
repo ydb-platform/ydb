@@ -187,14 +187,21 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpModifyACL>(
         DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(), 0);
 
     // Setting an owner on a table rewrites the owner and DirAlterVersion of every path in
-    // its subtree, which Propose gets from ListSubTree at :96 -- a walk of live children, so
-    // the set depends on state rather than on the request. The ACL branch only republishes
-    // the subtree; it persists a row for the named path alone, so it stays exact.
+    // its subtree: Propose gets that set from ListSubTree at :98 and writes a row per member
+    // at :131 and :134. That walk runs at propose, on the in-memory tree, so it can be run
+    // here too -- the declaration then names exactly the set the loop will write, rather
+    // than switching the cross-check off for the operation.
+    //
+    // Effect::Alter: an owner change is a real change to each descendant, and nothing is
+    // created or dropped by it. The ACL branch is different and needs none of this -- it
+    // only republishes the subtree, persisting a row for the named path alone.
     if (!result.Unresolved && !op.GetNewOwner().empty()) {
         const TPath target = TPath::Resolve(
             JoinPath({tx.GetWorkingDir(), op.GetName()}), context.SS);
         if (target.IsResolved() && target.Base()->IsTable()) {
-            result.Incomplete = true;
+            // includeRoot: the loop at :122 iterates the subtree including the table itself.
+            return DeclareSubTree(context.SS, target.Base()->PathId, /*includeRoot=*/true,
+                TAffectedPath::EEffect::Alter);
         }
     }
     return result;

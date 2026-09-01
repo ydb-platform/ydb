@@ -3,7 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/gtest/gtest.h>
 
 namespace NKikimr::NBsQueue {
 namespace {
@@ -45,33 +45,31 @@ private:
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TBSQueueTimerTest) {
-    Y_UNIT_TEST(HighPrecisionTimer) {
-        TBSQueueTimer timer(false);
-        Sleep(TDuration::MilliSeconds(1));
-        const double first = timer.Passed();
-        Sleep(TDuration::MilliSeconds(1));
-        const double second = timer.Passed();
+TEST(TBSQueueTimerTest, HighPrecisionTimer) {
+    TBSQueueTimer timer(false);
+    Sleep(TDuration::MilliSeconds(1));
+    const double first = timer.Passed();
+    Sleep(TDuration::MilliSeconds(1));
+    const double second = timer.Passed();
 
-        UNIT_ASSERT_C(first > 0, first);
-        UNIT_ASSERT_C(second >= first, first << " " << second);
-        UNIT_ASSERT_VALUES_EQUAL(sizeof(timer), 16);
-    }
+    ASSERT_GT(first, 0) << first;
+    ASSERT_GE(second, first) << first << " " << second;
+    ASSERT_EQ(sizeof(timer), 16u);
+}
 
-    Y_UNIT_TEST(ActorSystemTimerUsesVirtualTime) {
-        TTestActorRuntime runtime;
-        runtime.Initialize(MakeTestRuntimeEgg());
-        runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector);
+TEST(TBSQueueTimerTest, ActorSystemTimerUsesVirtualTime) {
+    TTestActorRuntime runtime;
+    runtime.Initialize(MakeTestRuntimeEgg());
+    runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector);
 
-        const TActorId edge = runtime.AllocateEdgeActor();
-        double passed = 0;
-        const TActorId actor = runtime.Register(new TVirtualTimerActor(edge, passed));
-        runtime.EnableScheduleForActor(actor);
-        runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPing));
+    const TActorId edge = runtime.AllocateEdgeActor();
+    double passed = 0;
+    const TActorId actor = runtime.Register(new TVirtualTimerActor(edge, passed));
+    runtime.EnableScheduleForActor(actor);
+    runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPing));
 
-        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge, TDuration::Seconds(10));
-        UNIT_ASSERT_DOUBLES_EQUAL(passed, 5.0, 1e-5);
-    }
+    runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge, TDuration::Seconds(10));
+    ASSERT_NEAR(passed, 5.0, 1e-5);
 }
 
 } // namespace NKikimr::NBsQueue

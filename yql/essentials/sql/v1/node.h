@@ -1182,6 +1182,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Data;
         TNodePtr Compression;
         TNodePtr CompressionLevel;
+        TNodePtr ExternalThreshold;
     };
 
     struct TVectorIndexSettings {

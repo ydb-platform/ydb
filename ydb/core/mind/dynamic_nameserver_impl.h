@@ -205,6 +205,13 @@ public:
         DynamicConfigs[domain]->DynamicNodes.emplace(node.GetNodeId(), info);
     }
 
+    ~TDynamicNameserver() {
+        for (auto& config : DynamicConfigs) {
+            config->PendingCacheMisses.Clear();
+            config->CacheMissHolders.clear();
+        }
+    }
+
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvResolveNode, Handle);

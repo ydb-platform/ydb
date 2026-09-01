@@ -342,6 +342,7 @@ class YdbClient:
                 result.extend(_read_batch())
             return result
 
+
 _SECTIONS_FOR_CMS = [
     "table_service_config",
     "federated_query_config",
@@ -392,9 +393,7 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
                 response.raise_for_status()
                 applied_config = yaml.safe_load(json.loads(response.text)["yaml_config"])["config"]
                 mismatched_sections = [
-                    section
-                    for section, value in expected_sections.items()
-                    if applied_config.get(section) != value
+                    section for section, value in expected_sections.items() if applied_config.get(section) != value
                 ]
                 if mismatched_sections:
                     logger.info(

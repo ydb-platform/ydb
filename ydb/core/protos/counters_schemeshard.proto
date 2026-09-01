@@ -515,6 +515,18 @@ enum ECumulativeCounters {
 
     // A declaring operation wrote a path row it had not declared. Always a bug in that
     // operation's GetAffectedPaths; tests assert this stays zero.
+    //
+    // MERGE HAZARD, and it cannot be pre-empted from this branch. The RFC-0129 outbox slices
+    // (1a-write-path, 1b-protocol, o-observability, x-redaction) all define
+    // COUNTER_SCHEME_CHANGE_* over 152-155 in this same enum. Both sides merge without a git
+    // conflict and silently collapse onto one id.
+    //
+    // Leaving a gap does not work: this enum must be dense. The counters framework verifies
+    // number == positional index and aborts the tablet otherwise -- moving this to 156 fails
+    // 116 ut_base tests with
+    //   counter 'COUNTER_UNDECLARED_PATH_TOUCH' number (156) != index (152)
+    // So whichever side lands second has to renumber. This branch is a prerequisite for the
+    // outbox work, so it takes 152 and the COUNTER_SCHEME_CHANGE_* block shifts to 153-156.
     COUNTER_UNDECLARED_PATH_TOUCH = 152 [(CounterOpts) = {Name: "UndeclaredPathTouch"}];
 }
 

@@ -778,6 +778,15 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
             batches.push_back(std::move(b));
         }
 
+        // Spans may alias event payloads, which the serializer is free to drop once the bytes behind
+        // them are committed. Snapshot the wire while nothing has been committed yet.
+        TString main;
+        TString xdc;
+        for (const auto& b : batches) {
+            main += ConcatSpans(b.MainSpans);
+            xdc += ConcatSpans(b.XdcSpans);
+        }
+
         volatile ui64 acc = 0;
         ui64 committedMain = 0;
         ui64 committedXdc = 0;
@@ -805,12 +814,6 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
         TEventDeserializer deser(TScopeId{});
         TEventProcessor processor;
-        TString main;
-        TString xdc;
-        for (const auto& b : batches) {
-            main += ConcatSpans(b.MainSpans);
-            xdc += ConcatSpans(b.XdcSpans);
-        }
         size_t xdcPos = 0;
         deser.Push(TRcBuf::Copy(TContiguousSpan(main)), &processor, {});
         FeedXdc(deser, xdc, xdcPos, processor);

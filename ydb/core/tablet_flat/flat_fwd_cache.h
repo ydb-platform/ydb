@@ -18,7 +18,7 @@ namespace NFwd {
     template<size_t Capacity>
     class TLoadedPagesCircularBuffer {
     public:
-        const TSharedData* Get(TPageOffset offset) const
+        const TSharedData* Get(TPageOffset offset, bool allowMissingBeforeMax = false) const
         {
             if (!MaxSeenOffset.IsMax() && offset <= MaxSeenOffset) {
                 for (const auto& page : LoadedPages) {
@@ -26,10 +26,14 @@ namespace NFwd {
                         return &page.Data;
                     }
                 }
+
+                if (!allowMissingBeforeMax) {
+                    Y_TABLET_ERROR("Failed to locate page within forward trace");
+                }
             }
 
-            // Not in buffer (or offset beyond what was ever loaded) —
-            // caller falls through to load the page.
+            // Next pages may be requested. V2 byte offsets may also be lower
+            // than previously seen offsets, so their misses fall through.
             return nullptr;
         }
 
@@ -342,7 +346,7 @@ namespace NFwd {
             auto levelId = GetLevel(offset, type);
             auto& level = Levels[levelId];
 
-            if (auto *page = level.Trace.Get(offset)) {
+            if (auto *page = level.Trace.Get(offset, Meta.HasRootV2())) {
                 return {page, false, true};
             }
 

@@ -78,7 +78,23 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
         const TString& name, ui64 localPathId)
 {
     if (localPathId == 0) {
-        return DeclareChildOfWorkingDir(workingDir, name);
+        // Same paths, different claim. DeclareChildOfWorkingDir describes a create: it
+        // stamps the target Create/MustWrite because a create really does write the new row
+        // and really does bump its parent. This helper is for an operation acting on an
+        // object that already exists, and those do not necessarily write a path row at all --
+        // TAlterTable is the extreme case, its whole file contains no path-row Persist call,
+        // so demanding a write of /MyRoot/Table is a claim it can never satisfy.
+        //
+        // Reuse the path arithmetic, restate the intent. MayWrite: the write is permitted,
+        // not demanded, which is the only thing this helper is in a position to know.
+        TAffectedPaths result = DeclareChildOfWorkingDir(workingDir, name);
+        for (auto& affected : result.Paths) {
+            affected.Effect = affected.Role == TAffectedPath::ERole::Container
+                ? TAffectedPath::EEffect::ChildrenChanged
+                : TAffectedPath::EEffect::Alter;
+            affected.Expect = TAffectedPath::EObservation::MayWrite;
+        }
+        return result;
     }
 
     // WorkingDir is not a path at all on a by-id request, so the container has to come
@@ -100,7 +116,10 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
         .PathId = target.Base()->PathId,
         .Class = TAffectedPath::EEffectClass::SchemaEffect,
         .Effect = TAffectedPath::EEffect::Alter,
-        .Expect = TAffectedPath::EObservation::MustWrite,
+        // MayWrite for the same reason as the by-name branch above: acting on an existing
+        // object does not imply rewriting its path row, and several operations that resolve
+        // by id write only their own typed table.
+        .Expect = TAffectedPath::EObservation::MayWrite,
     });
     if (!target.IsEmpty() && target.Base()->ParentPathId) {
         const TPath parent = TPath::Init(target.Base()->ParentPathId, ss);

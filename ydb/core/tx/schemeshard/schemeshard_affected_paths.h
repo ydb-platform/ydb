@@ -104,19 +104,30 @@ inline bool UndeclaredPathTouchIsFatal = false;
 // The reverse check's own switch, deliberately separate from UndeclaredPathTouchIsFatal and
 // deliberately not set by TTestEnv yet.
 //
-// The mechanism below is wired and proven: poisoning a declaration with a path nobody writes
-// aborts naming that path and its txId. But arming it against the tree as it stands fails 94
-// tests across ut_base/ut_index/ut_backup_collection, and every case inspected is a real
-// over-declaration rather than a defect in the check. The common root is that
-// DeclareTargetByIdOrName falls back to DeclareChildOfWorkingDir when the request carries no
-// local path id, which stamps a by-name *alter* or *drop* with Effect::Create and
-// Expect::MustWrite -- a path-row write those operations never make. TAlterTable is the
-// clearest case: schemeshard__operation_alter_table.cpp contains no path-row Persist* call at
-// all, so /MyRoot/Table can never fulfil the MustWrite its declaration claims.
+// The mechanism is wired and proven: poisoning a declaration with a path nobody writes aborts
+// naming that path and its txId.
 //
-// Correcting those intents means re-auditing Effect/Expect across the declaration helpers and
-// their call sites, and it changes what the outbox records, so it is not folded in here. Arm
-// this from TTestEnv in the change that fixes them -- an unarmed check proves nothing.
+// The helper-level half of the audit is done. DeclareTargetByIdOrName used to inherit
+// Create/MustWrite wholesale from DeclareChildOfWorkingDir on its by-name branch, demanding a
+// path-row write from every by-name alter and drop -- TAlterTable being the extreme case, its
+// file contains no path-row Persist* call at all. Both of its branches now say Alter/MayWrite,
+// which is the only claim that helper is in a position to make. That took the armed failures
+// from 94 to 10.
+//
+// The remaining 10 are one class and need per-call-site classification rather than a helper
+// change: operations that are not creates call DeclareChildOfWorkingDir directly, and so
+// assert Create/MustWrite on a container that never gains a child. Named by the armed run:
+//
+//   AssignBlockStoreVolume, AssignBlockStoreVolumeDuringAlter   -> /MyRoot/BSVolume
+//   AlterMigratedIndexTable                                     -> /MyRoot/Tenant/Table/Index
+//   AlterIndexTableDirectly, ConsistentCopyAfterDropIndexes,
+//   CopyLockedTableForBackup, CopyTableForBackup, OnlineBuild,
+//   DefaultStorageConfigTableWithChannelProfileIdBuildIndex,
+//   PersistUniqueIndexKeySize-OnCreate-false                    -> /MyRoot
+//
+// Each wants its own answer -- an assign is not a create, a lock on an existing table does not
+// give its parent a child -- and the fix changes what the outbox records, since Effect is part
+// of the record. Arm this from TTestEnv in that change; an unarmed check proves nothing.
 inline bool UnfulfilledPathDeclarationIsFatal = false;
 
 // The reverse half of the cross-check. ObservePathTouched tests written ⊆ declared, which

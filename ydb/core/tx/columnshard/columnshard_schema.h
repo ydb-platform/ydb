@@ -55,7 +55,8 @@ struct Schema: NIceDb::Schema {
         NormalizersTableId,
         NormalizerEventsTableId,
         ColumnsV1TableId,
-        ColumnsV2TableId
+        ColumnsV2TableId,
+        LockWriteSeqNumsTableId
     };
 
     enum class ETierTables: ui32 {
@@ -612,14 +613,8 @@ struct Schema: NIceDb::Schema {
 
         struct Flags: Column<6, NScheme::NTypeIds::Uint64> {};
 
-        struct WriteSeqNum: Column<7, NScheme::NTypeIds::Uint64> {};
-
-        struct WriterIndex: Column<8, NScheme::NTypeIds::Uint64> {};
-
-        struct WriteResult: Column<9, NScheme::NTypeIds::String> {};
-
         using TKey = TableKey<LockId>;
-        using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags, WriteSeqNum, WriterIndex, WriteResult>;
+        using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
     };
 
     struct LockRanges: Table<LockRangesTableId> {
@@ -655,6 +650,20 @@ struct Schema: NIceDb::Schema {
 
         using TKey = TableKey<LockId, TxId>;
         using TColumns = TableColumns<LockId, TxId>;
+    };
+
+    // Per-writer uncommitted write seq num.
+    struct LockWriteSeqNums: Table<LockWriteSeqNumsTableId> {
+        struct LockId: Column<1, NScheme::NTypeIds::Uint64> {};
+
+        struct WriterIndex: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        struct WriteSeqNum: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        struct WriteResult: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<LockId, WriterIndex>;
+        using TColumns = TableColumns<LockId, WriterIndex, WriteSeqNum, WriteResult>;
     };
 
     struct IndexPortions: NIceDb::Schema::Table<PortionsTableId> {
@@ -785,7 +794,8 @@ struct Schema: NIceDb::Schema {
         TableInfo, TableVersionInfo, LongTxWrites, BlobsToKeep, BlobsToDelete, BlobsToDeleteWT, InsertTable, IndexGranules, IndexColumns,
         IndexCounters, SmallBlobs, OneToOneEvictedBlobs, Operations, TierBlobsDraft, TierBlobsToDelete, TierBlobsToDeleteWT, IndexIndexes,
         SharedBlobIds, BorrowedBlobIds, SourceSessions, DestinationSessions, OperationTxIds, IndexPortions, BackgroundSessions, ShardingInfo,
-        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1>;
+        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1,
+        LockWriteSeqNums>;
 
     //
 

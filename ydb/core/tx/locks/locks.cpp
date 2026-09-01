@@ -114,8 +114,12 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , VictimQuerySpanId(row.VictimQuerySpanId)
     , BreakerQuerySpanId_(row.BreakerQuerySpanId)
     , BreakerNodeId_(row.BreakerNodeId)
-    , WriteSeqNumState(row.WriteSeqNumState)
 {
+    for (const auto& state : row.WriteSeqNumStates) {
+        if (state.WriteSeqNum) {
+            WriteSeqNumStates[state.WriterIndex] = state;
+        }
+    }
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
     } else if (Counter == Max<ui64>()) {
@@ -288,6 +292,12 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     }
     PersistentRanges.clear();
 
+    // Remove write seq nums
+    for (const auto& pr : WriteSeqNumStates) {
+        db->PersistRemoveLockWriteSeqNum(LockId, pr.first);
+    }
+    WriteSeqNumStates.clear();
+
     // Remove the lock itself
     db->PersistRemoveLock(LockId);
     Flags |= ELockFlags::Removed;
@@ -458,12 +468,14 @@ bool TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
         }
     }
 
-    if (!lockRow.WriteSeqNumState.SerializedResult.empty() &&
-        lockRow.WriteSeqNumState.WriterIndex == WriteSeqNumState.WriterIndex &&
-        lockRow.WriteSeqNumState.WriteSeqNum == WriteSeqNumState.WriteSeqNum &&
-        WriteSeqNumState.WriteSeqNum != 0)
-    {
-        SetWriteSeqNumResult(lockRow.WriteSeqNumState.SerializedResult);
+    for (const auto& incoming : lockRow.WriteSeqNumStates) {
+        if (incoming.SerializedResult.empty() || incoming.WriteSeqNum == 0) {
+            continue;
+        }
+        auto it = WriteSeqNumStates.find(incoming.WriterIndex);
+        if (it != WriteSeqNumStates.end() && it->second.WriteSeqNum == incoming.WriteSeqNum) {
+            SetWriteSeqNumResult(incoming.WriterIndex, incoming.SerializedResult);
+        }
     }
 
     return true;
@@ -560,9 +572,10 @@ void TLockInfo::SetFrozen(ILocksDb* db) {
 }
 
 bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db) {
-    WriteSeqNumState.WriterIndex = writerIndex;
-    WriteSeqNumState.WriteSeqNum = writeSeqNum;
-    WriteSeqNumState.SerializedResult.clear();
+    auto& state = WriteSeqNumStates[writerIndex];
+    state.WriterIndex = writerIndex;
+    state.WriteSeqNum = writeSeqNum;
+    state.SerializedResult.clear();
     if (db && IsPersistent()) {
         db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum, {});
         return true;
@@ -570,12 +583,13 @@ bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db)
     return false;
 }
 
-void TLockInfo::SetWriteSeqNumResult(TString serializedResult, ILocksDb* db) {
-    Y_ENSURE(WriteSeqNumState.WriteSeqNum, "Result of an uncommitted write imply its position in the chain");
-    WriteSeqNumState.SerializedResult = std::move(serializedResult);
+void TLockInfo::SetWriteSeqNumResult(ui64 writerIndex, TString serializedResult, ILocksDb* db) {
+    auto it = WriteSeqNumStates.find(writerIndex);
+    Y_ENSURE(it != WriteSeqNumStates.end() && it->second.WriteSeqNum,
+        "Result of an uncommitted write imply its position in the chain");
+    it->second.SerializedResult = std::move(serializedResult);
     if (db && IsPersistent()) {
-        db->PersistLockWriteSeqNum(LockId, WriteSeqNumState.WriterIndex, WriteSeqNumState.WriteSeqNum,
-            WriteSeqNumState.SerializedResult);
+        db->PersistLockWriteSeqNum(LockId, writerIndex, it->second.WriteSeqNum, it->second.SerializedResult);
     }
 }
 
@@ -1364,8 +1378,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     for (auto& table : Update->AffectedTables) {
         out.emplace_back(MakeLock(Update->LockTxId, lock ? lock->GetGeneration() : Self->Generation(), counter,
             table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock(),
-            Update->Lock ? Update->Lock->GetWriterIndex() : 0,
-            Update->Lock ? Update->Lock->GetWriteSeqNum() : 0));
+            Update->Lock ? Update->Lock->GetWriteSeqNums() : TVector<std::pair<ui64, ui64>>{}));
     }
     return {out, brokenLocks};
 }
@@ -1445,7 +1458,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
             Y_ENSURE(tableIds.size() == 1);
-            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock(), txLock->GetWriterIndex(), txLock->GetWriteSeqNum());
+            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock(), txLock->GetWriteSeqNums());
         } else { // locks v2
             Y_ENSURE(key.size() == 4);
             TPathId tableId;
@@ -1453,7 +1466,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
             if (ok && tableId) {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
-                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock(), txLock->GetWriterIndex(), txLock->GetWriteSeqNum());
+                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock(), txLock->GetWriteSeqNums());
                 } else {
                     YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock exists, but not set for table",
                         {"lockTxId", lockTxId},
@@ -1749,7 +1762,9 @@ bool TSysLocks::PersistWriteSeqNum(const TLockWriteSeqNum& seq, ILocksDb* db) {
     return true;
 }
 
-TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites, ui64 writerIndex, ui64 writeSeqNum) const {
+TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
+    const TVector<std::pair<ui64, ui64>>& writeSeqNums) const
+{
     TLock lock;
     lock.LockId = lockTxId;
     lock.DataShard = Self->TabletID();
@@ -1758,14 +1773,18 @@ TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counte
     lock.SchemeShard = pathId.OwnerId;
     lock.PathId = pathId.LocalPathId;
     lock.HasWrites = hasWrites;
-    lock.WriterIndex = writerIndex;
-    lock.WriteSeqNum = writeSeqNum;
     lock.WriteSeqNumKnown = true;
+    if (writeSeqNums.size() == 1) {
+        lock.WriterIndex = writeSeqNums[0].first;
+        lock.WriteSeqNum = writeSeqNums[0].second;
+    }
     return lock;
 }
 
-TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites, ui64 writerIndex, ui64 writeSeqNum) const {
-    TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites, writerIndex, writeSeqNum);
+TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
+    const TVector<std::pair<ui64, ui64>>& writeSeqNums) const
+{
+    TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites, writeSeqNums);
     if (AccessLog)
         AccessLog->Locks[lockTxId] = lock;
     return lock;

@@ -2759,7 +2759,7 @@ message TInMemoryLockInfo {
     optional uint64 VictimQuerySpanId = 10;
     optional uint64 BreakerQuerySpanId = 11;
     optional uint32 BreakerNodeId = 12;
-    optional TWriteSeqNumResult WriteSeqNumResult = 13;
+    repeated TWriteSeqNumResult WriteSeqNumResults = 13;
 }
 
 // In-memory ranges associated with the lock

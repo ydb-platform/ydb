@@ -170,11 +170,14 @@ private:
                     row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
                     row.BreakerNodeId = protoLock.GetBreakerNodeId();
                 }
-                if (protoLock.HasWriteSeqNumResult()) {
-                    const auto& proto = protoLock.GetWriteSeqNumResult();
-                    row.WriteSeqNumState.WriterIndex = proto.GetWriterIndex();
-                    row.WriteSeqNumState.WriteSeqNum = proto.GetWriteSeqNum();
-                    row.WriteSeqNumState.SerializedResult = proto.GetSerializedResult();
+                for (const auto& proto : protoLock.GetWriteSeqNumResults()) {
+                    TWriteSeqNumState state;
+                    state.WriterIndex = proto.GetWriterIndex();
+                    state.WriteSeqNum = proto.GetWriteSeqNum();
+                    state.SerializedResult = proto.GetSerializedResult();
+                    if (state.WriteSeqNum) {
+                        row.WriteSeqNumStates.push_back(std::move(state));
+                    }
                 }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
@@ -652,10 +655,12 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
         }
-        if (ui64 writeSeqNum = lockInfo.GetWriteSeqNum(); writeSeqNum != 0) {
-            const auto& state = lockInfo.GetWriteSeqNumState();
-            auto* proto = protoLockInfo->MutableWriteSeqNumResult();
-            proto->SetWriterIndex(state.WriterIndex);
+        for (const auto& [writerIndex, state] : lockInfo.GetWriteSeqNumStates()) {
+            if (state.WriteSeqNum == 0) {
+                continue;
+            }
+            auto* proto = protoLockInfo->AddWriteSeqNumResults();
+            proto->SetWriterIndex(writerIndex);
             proto->SetWriteSeqNum(state.WriteSeqNum);
             if (!state.SerializedResult.empty()) {
                 proto->SetSerializedResult(state.SerializedResult);

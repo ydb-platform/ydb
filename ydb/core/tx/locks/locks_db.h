@@ -40,9 +40,6 @@ public:
                 lock.Counter = rowset.template GetValue<typename Schema::Locks::Counter>();
                 lock.CreateTs = rowset.template GetValue<typename Schema::Locks::CreateTimestamp>();
                 lock.Flags = rowset.template GetValue<typename Schema::Locks::Flags>();
-                lock.WriteSeqNumState.WriterIndex = rowset.template GetValue<typename Schema::Locks::WriterIndex>();
-                lock.WriteSeqNumState.WriteSeqNum = rowset.template GetValue<typename Schema::Locks::WriteSeqNum>();
-                lock.WriteSeqNumState.SerializedResult = rowset.template GetValueOrDefault<typename Schema::Locks::WriteResult>();
                 lockIndex[lock.LockId] = rows.size() - 1;
                 if (!rowset.Next()) {
                     return false;
@@ -113,6 +110,31 @@ public:
             }
         }
 
+        // Load write seq nums
+        if (db.HaveTable<typename Schema::LockWriteSeqNums>()) {
+            auto rowset = db.Table<typename Schema::LockWriteSeqNums>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+            while (!rowset.EndOfSet()) {
+                auto lockId = rowset.template GetValue<typename Schema::LockWriteSeqNums::LockId>();
+                auto it = lockIndex.find(lockId);
+                if (it != lockIndex.end()) {
+                    auto& lock = rows[it->second];
+                    NDataShard::TWriteSeqNumState state;
+                    state.WriterIndex = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriterIndex>();
+                    state.WriteSeqNum = rowset.template GetValue<typename Schema::LockWriteSeqNums::WriteSeqNum>();
+                    state.SerializedResult = rowset.template GetValueOrDefault<typename Schema::LockWriteSeqNums::WriteResult>();
+                    if (state.WriteSeqNum) {
+                        lock.WriteSeqNumStates.push_back(std::move(state));
+                    }
+                }
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -124,10 +146,7 @@ public:
             NIceDb::TUpdate<typename Schema::Locks::Generation>(generation),
             NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
             NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
-            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags),
-            NIceDb::TUpdate<typename Schema::Locks::WriterIndex>(0),
-            NIceDb::TUpdate<typename Schema::Locks::WriteSeqNum>(0),
-            NIceDb::TUpdate<typename Schema::Locks::WriteResult>(TString()));
+            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
         HasChanges_ = true;
     }
 
@@ -150,10 +169,16 @@ public:
     void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::Locks>().Key(lockId).Update(
-            NIceDb::TUpdate<typename Schema::Locks::WriterIndex>(writerIndex),
-            NIceDb::TUpdate<typename Schema::Locks::WriteSeqNum>(writeSeqNum),
-            NIceDb::TUpdate<typename Schema::Locks::WriteResult>(serializedResult));
+        db.Table<typename Schema::LockWriteSeqNums>().Key(lockId, writerIndex).Update(
+            NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteSeqNum>(writeSeqNum),
+            NIceDb::TUpdate<typename Schema::LockWriteSeqNums::WriteResult>(serializedResult));
+        HasChanges_ = true;
+    }
+
+    void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) override {
+        using Schema = TSchemaDescription;
+        NIceDb::TNiceDb db(DB);
+        db.Table<typename Schema::LockWriteSeqNums>().Key(lockId, writerIndex).Delete();
         HasChanges_ = true;
     }
 

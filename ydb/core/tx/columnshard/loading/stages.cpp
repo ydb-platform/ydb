@@ -66,7 +66,8 @@ bool TDBLocksInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& tx
 
 bool TDBLocksInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<NColumnShard::Schema::Locks>(db, txc.DB.GetScheme());
+    return (int)Schema::Precharge<NColumnShard::Schema::Locks>(db, txc.DB.GetScheme()) &
+           (int)Schema::Precharge<NColumnShard::Schema::LockWriteSeqNums>(db, txc.DB.GetScheme());
 }
 
 bool TBackgroundSessionsInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

@@ -174,16 +174,18 @@ public:
         const ui64 tabletId = DataShard.TabletID();
         auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
 
-        if (lock && lock->GetWriteSeqNum() && lock->GetWriterIndex() != writerIndex) {
-            // DataShard tracks a single writer per lock.
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                << "Multiple writers per lock are not supported: lock already has writer "
-                << lock->GetWriterIndex() << ", got " << writerIndex);
-            return EExecutionStatus::Executed;
+        if (lock) {
+            if (auto other = lock->FindOtherWriter(writerIndex)) {
+                // DataShard tracks a single writer per lock.
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                    << "Multiple writers per lock are not supported: lock already has writer "
+                    << *other << ", got " << writerIndex);
+                return EExecutionStatus::Executed;
+            }
         }
 
         // No lock means nothing applied yet, so current is 0.
-        const ui64 current = lock ? lock->GetWriteSeqNum() : 0;
+        const ui64 current = lock ? lock->GetWriteSeqNum(writerIndex) : 0;
 
         // WriteSeqNums form a single contiguous chain per (writer, shard): no gaps
         // within one EvWrite and no gaps between EvWrites. KQP allocates them
@@ -217,14 +219,16 @@ public:
             res->Record.SetTxId(writeOp->GetTxId());
             res->Record.SetIsDuplicate(true);
 
-            FillDuplicateWriteResult(lock->GetWriteSeqNumState(), res->Record);
+            auto* stored = lock->FindWriteSeqNumState(writerIndex);
+            Y_ENSURE(stored);
+            FillDuplicateWriteResult(*stored, res->Record);
 
             THashSet<TPathId> tables = lock->GetReadTables();
             tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
             for (const TPathId& pathId : tables) {
                 res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
                                lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
-                               lock->IsWriteLock(), writerIndex, current);
+                               lock->IsWriteLock(), lock->GetWriteSeqNums());
             }
             writeOp->SetWriteResult(std::move(res));
             writeOp->ReleaseTxData(txc);
@@ -274,7 +278,8 @@ public:
                     {"lock", lock});
             }
 
-            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites, lock.WriterIndex, lock.WriteSeqNum);
+            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites,
+                TVector<std::pair<ui64, ui64>>{{lock.WriterIndex, lock.WriteSeqNum}});
 
             YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add lock",
                 {"result", writeResult.Record.GetTxLocks().rbegin()->ShortDebugString()});
@@ -310,8 +315,9 @@ public:
             return;
         }
         auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
-        if (lock && lock->GetWriteSeqNum() == guardLocks.SetWriteSeqNum->WriteSeqNum) {
-            lock->SetWriteSeqNumResult(SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record), db);
+        if (lock && lock->GetWriteSeqNum(guardLocks.SetWriteSeqNum->WriterIndex) == guardLocks.SetWriteSeqNum->WriteSeqNum) {
+            lock->SetWriteSeqNumResult(guardLocks.SetWriteSeqNum->WriterIndex,
+                SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record), db);
         }
     }
 

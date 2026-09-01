@@ -12,8 +12,9 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/core/issue/yql_issue.h>
-
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <util/generic/vector.h>
 
 namespace NKikimr::NEvents {
 
@@ -158,7 +159,9 @@ struct TDataEvents {
             return result;
         }
 
-        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeSeqNum = 0) {
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites,
+            const TVector<std::pair<ui64, ui64>>& writeSeqNums = {})
+        {
             auto entry = Record.AddTxLocks();
             entry->SetLockId(lockId);
             entry->SetDataShard(shard);
@@ -169,10 +172,12 @@ struct TDataEvents {
             if (hasWrites) {
                 entry->SetHasWrites(true);
             }
-            if (writeSeqNum) {
-                auto* entryWriteSeqNum = entry->AddWriteSeqNums();
-                entryWriteSeqNum->SetWriterIndex(writerIndex);
-                entryWriteSeqNum->SetWriteSeqNum(writeSeqNum);
+            for (const auto& [writerIndex, writeSeqNum] : writeSeqNums) {
+                if (writeSeqNum) {
+                    auto* entryWriteSeqNum = entry->AddWriteSeqNums();
+                    entryWriteSeqNum->SetWriterIndex(writerIndex);
+                    entryWriteSeqNum->SetWriteSeqNum(writeSeqNum);
+                }
             }
         }
 

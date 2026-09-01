@@ -27,6 +27,7 @@
 
 #include <util/generic/intrlist.h>
 
+#include <optional>
 #include <random>
 
 namespace NKikimr::NStat {
@@ -175,6 +176,9 @@ private:
     bool IsChangeRatioAboveThreshold(
         const TChangeCounters& lastAnalyze, const TChangeCounters& current) const;
     TChangeCounters GetCurrentChangeCounters(const TPathId& pathId) const;
+    std::optional<ui64> GetTableBytesSize(const TPathId& pathId) const;
+    const NKikimrStat::TPathEntry* FindBaseStatisticsEntry(
+        const TPathId& pathId, NKikimrStat::TSchemeShardStats& stats) const;
 
     // Returns cached change counters, rebuilding the cache from BaseStatistics
     // if it is invalid. The cache is invalidated when BaseStatistics is updated

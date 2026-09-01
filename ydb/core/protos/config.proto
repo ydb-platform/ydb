@@ -3387,6 +3387,10 @@ message TStatisticsConfig {
     // When (RowUpdates + RowDeletes since last ANALYZE) / RowCount * 100 >= this value,
     // column statistics are considered stale and will be recalculated.
     optional uint32 BackgroundAnalyzeChangeRatioThresholdPercent = 8 [default = 20];
+
+    // Column tables smaller than or equal to this size are scanned as a whole table
+    // rather than per shard. 0 disables the optimization (always per-shard).
+    optional uint64 AnalyzeWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
 };
 
 message TSystemTabletBackupConfig {

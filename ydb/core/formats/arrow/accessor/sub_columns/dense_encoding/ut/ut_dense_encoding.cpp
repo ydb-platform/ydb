@@ -1,6 +1,7 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
@@ -165,6 +166,51 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
             constructor.DeserializeFromString(blobAndMeta.Blob, constructionData.WithAdditionalAccessorData(blobAndMeta.Meta)).DetachResult());
         UNIT_ASSERT(restored->GetDictionary()->Equals(*dictionary));
         UNIT_ASSERT(restored->GetPositions()->Equals(*positions));
+    }
+
+    // Dictionary has <256 positions, but uint16 index - index will be encoded as uint8
+    Y_UNIT_TEST(DictionaryWithWidePositionsRoundTrips) {
+        const auto dictionary = MakeBinary({ "alpha" });
+        arrow::UInt16Builder positionsBuilder;
+        UNIT_ASSERT(positionsBuilder.Append(0).ok());
+        std::shared_ptr<arrow::UInt16Array> positions;
+        UNIT_ASSERT(positionsBuilder.Finish(&positions).ok());
+        const auto array = std::make_shared<NAccessor::TDictionaryArray>(dictionary, positions);
+        const auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        const NAccessor::TChunkConstructionData constructionData(array->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const TDictionaryDenseConstructor constructor;
+
+        const auto blobAndMeta = constructor.SerializeToBlobAndMeta(array, constructionData);
+        const auto restored = std::static_pointer_cast<NAccessor::TDictionaryArray>(
+            constructor.DeserializeFromString(blobAndMeta.Blob, constructionData.WithAdditionalAccessorData(blobAndMeta.Meta)).DetachResult());
+        UNIT_ASSERT(restored->GetChunkedArray()->Equals(*array->GetChunkedArray()));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restored->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
+    }
+
+    // Dictionary has 256 positions, but after slicing it has less and index fits uint8
+    Y_UNIT_TEST(DictionarySliceWithWidePositionsRoundTrips) {
+        auto builder = NAccessor::TTrivialArray::MakeBuilderBinary(256, 1024);
+        for (ui32 i = 0; i < 256; ++i) {
+            builder.AddRecord(i, ToString(i));
+        }
+        const auto source = builder.Finish(256);
+        const auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        const NAccessor::TChunkConstructionData sourceData(source->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const auto dictionary = std::static_pointer_cast<NAccessor::TDictionaryArray>(
+            NAccessor::NDictionary::TConstructor().Construct(source, sourceData).DetachResult());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(dictionary->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT16));
+
+        const auto slice = std::static_pointer_cast<NAccessor::TDictionaryArray>(dictionary->ISlice(0, 1));
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->length(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(slice->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
+
+        const NAccessor::TChunkConstructionData sliceData(slice->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const TDictionaryDenseConstructor constructor;
+        const auto blobAndMeta = constructor.SerializeToBlobAndMeta(slice, sliceData);
+        const auto restored = std::static_pointer_cast<NAccessor::TDictionaryArray>(
+            constructor.DeserializeFromString(blobAndMeta.Blob, sliceData.WithAdditionalAccessorData(blobAndMeta.Meta)).DetachResult());
+        UNIT_ASSERT(restored->GetChunkedArray()->Equals(*slice->GetChunkedArray()));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restored->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
     }
 
 }

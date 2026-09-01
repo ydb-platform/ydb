@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/data.h>
@@ -12,6 +13,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/byte_stream_split.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/endian.h>
+
+#include <type_traits>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -119,6 +122,30 @@ ui32 CountSetBits(const TStringBuf bitmap, const ui32 count) {
 
 ui32 GetIndexByteWidth(const arrow::FixedWidthType& type) {
     return type.bit_width() / CHAR_BIT;
+}
+
+template <class TOutput, class TInput>
+void CopyIndices(const TInput* values, const i64 length, const TStringBuf validity, char* output, size_t& outputPosition) {
+    // If types are different, each value must be converted
+    const auto copyRun = [&](const i64 position, const i64 count) {
+        if constexpr (std::is_same_v<TOutput, TInput>) {
+            const size_t size = count * sizeof(TOutput);
+            memcpy(output + outputPosition, values + position, size);
+            outputPosition += size;
+        } else {
+            for (i64 i = 0; i < count; ++i) {
+                const TOutput value = values[position + i];
+                memcpy(output + outputPosition, &value, sizeof(value));
+                outputPosition += sizeof(value);
+            }
+        }
+    };
+    if (validity.empty()) {
+        copyRun(0, length);
+    } else {
+        arrow::internal::VisitSetBitRunsVoid(
+            GetBitmapData(validity), 0, length, [&](const i64 position, const i64 count) { copyRun(position, count); });
+    }
 }
 
 std::shared_ptr<arrow::Buffer> CopyToBuffer(const void* data, size_t size) {
@@ -353,9 +380,7 @@ std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
 TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const std::shared_ptr<arrow::FixedWidthType>& indexType,
     const std::shared_ptr<arrow::util::Codec>& codec) {
     VerifyLittleEndian();
-    AFL_VERIFY(positions->type()->Equals(*indexType))("positions_type", positions->type()->ToString())("index_type", indexType->ToString());
     const ui32 width = GetIndexByteWidth(*indexType);
-    const auto& data = *positions->data();
     const i64 length = positions->length();
 
     const TValidityBitmap validity(*positions);
@@ -372,16 +397,24 @@ TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const s
         outputPosition += validityData.size();
     }
     if (length) {
-        const ui8* values = data.buffers[1]->data() + data.offset * width;
-        if (!hasNulls) {
-            memcpy(output + outputPosition, values, width * length);
-        } else {
-            arrow::internal::VisitSetBitRunsVoid(GetBitmapData(validityData), 0, length, [&](const i64 position, const i64 count) {
-                const size_t bytes = count * width;
-                memcpy(output + outputPosition, values + position * width, bytes);
-                outputPosition += bytes;
-            });
-        }
+        AFL_VERIFY(SwitchType(positions->type_id(), [&](const auto type) {
+            if constexpr (type.IsIndexType()) {
+                const auto* source = type.CastArray(positions.get());
+                if (indexType->id() == arrow::Type::UINT8) {
+                    CopyIndices<ui8>(source->raw_values(), length, validityData, output, outputPosition);
+                    return true;
+                }
+                if (indexType->id() == arrow::Type::UINT16) {
+                    CopyIndices<ui16>(source->raw_values(), length, validityData, output, outputPosition);
+                    return true;
+                }
+                if (indexType->id() == arrow::Type::UINT32) {
+                    CopyIndices<ui32>(source->raw_values(), length, validityData, output, outputPosition);
+                    return true;
+                }
+            }
+            return false;
+        }))("positions_type", positions->type()->ToString())("index_type", indexType->ToString());
     }
     return FrameCompress(payload, codec);
 }

@@ -90,24 +90,31 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         }
         dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
     }
-    // Remap positions to indices into the filtered dictionary.
-    std::unique_ptr<arrow::ArrayBuilder> positionsBuilder = NArrow::MakeBuilder(positionsNew->type());
+    // Remap positions to indices into the filtered dictionary and choose their width based on new dictionary size.
+    const auto positionsTargetType = NDictionary::TConstructor::GetTypeByVariantsCount(dictArray->length());
+    std::unique_ptr<arrow::ArrayBuilder> positionsBuilder = NArrow::MakeBuilder(positionsTargetType);
     AFL_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
         using TRecordsWrap = std::decay_t<decltype(type)>;
         using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
         if constexpr (TRecordsWrap::IsIndexType()) {
             const auto* arrPositionsImpl = static_cast<const TRecordsArray*>(positionsNew.get());
-            auto* builder = type.CastBuilder(positionsBuilder.get());
-            using CType = typename TRecordsWrap::ValueType;
-            for (int64_t i = 0; i < arrPositionsImpl->length(); ++i) {
-                if (arrPositionsImpl->IsNull(i)) {
-                    TStatusValidator::Validate(builder->AppendNull());
-                } else {
-                    const ui32 oldIdx = arrPositionsImpl->Value(i);
-                    TStatusValidator::Validate(builder->Append(static_cast<CType>(oldToNew[oldIdx])));
+            return SwitchType(positionsTargetType->id(), [&](const auto& targetType) {
+                using TTargetWrap = std::decay_t<decltype(targetType)>;
+                if constexpr (TTargetWrap::IsIndexType()) {
+                    auto* builder = targetType.CastBuilder(positionsBuilder.get());
+                    using CType = typename TTargetWrap::ValueType;
+                    for (int64_t i = 0; i < arrPositionsImpl->length(); ++i) {
+                        if (arrPositionsImpl->IsNull(i)) {
+                            TStatusValidator::Validate(builder->AppendNull());
+                        } else {
+                            const ui32 oldIdx = arrPositionsImpl->Value(i);
+                            TStatusValidator::Validate(builder->Append(static_cast<CType>(oldToNew[oldIdx])));
+                        }
+                    }
+                    return true;
                 }
-            }
-            return true;
+                return false;
+            });
         }
         return false;
     }));

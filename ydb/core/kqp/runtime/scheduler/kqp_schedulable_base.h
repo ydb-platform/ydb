@@ -24,13 +24,13 @@ public:
     explicit TSchedulableBase(const TOptions& options);
 
 protected:
-    // Public via IDqSchedulableWork vtable, protected for direct-inheritance users
-    // (CA base), matching the pre-merge visibility.
-    bool StartExecution(TMonotonic now) override;
+    std::optional<TDuration> TryStartExecution(TMonotonic now) override;
     void StopExecution(bool& forcedResume) override;
-    TDuration CalculateDelay(TMonotonic now) const override;
     void RegisterForResume(const NActors::TActorId& actorId) override;
     NYql::NDq::TWorkScope GetWorkScope() const override { return Scope; }
+
+    bool StartExecution(TMonotonic now);
+    TDuration CalculateDelay(TMonotonic now) const;
 
     static inline TMonotonic Now() {
         return TMonotonic::Now();

@@ -73,7 +73,7 @@ private:
     // are throttled — one per peer's StopExecution. StartUnit's WaitForSpecificEvent
     // consumes only the first; extras leak into the general event flow and reach
     // StateFunc via WaitForEvent in ProcessOneEvent. Ignore them here; StartUnit
-    // re-checks StartExecution on every wakeup anyway.
+    // re-checks TryStartExecution on every wakeup anyway.
     void HandleWakeup() {}
 
     void Handle(TEvS3Provider::TEvDecompressDataRequest::TPtr& ev) {
@@ -91,10 +91,15 @@ private:
         if (!Work || Working) {
             return;
         }
-        while (!Work->StartExecution(TMonotonic::Now())) {
+        for (;;) {
+            const auto now = TMonotonic::Now();
+            const auto delay = Work->TryStartExecution(now);
+            if (!delay) {
+                break;
+            }
             (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
                 &TS3DecompressorCoroImpl::ProcessUnexpectedEvent,
-                TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+                now + *delay);
         }
         Working = true;
     }

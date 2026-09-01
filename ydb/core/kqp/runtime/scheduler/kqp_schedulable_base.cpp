@@ -48,6 +48,13 @@ void TSchedulableBase::RegisterForResume(const NActors::TActorId& actorId) {
     }
 }
 
+std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {
+    if (StartExecution(now)) {
+        return std::nullopt;
+    }
+    return CalculateDelay(now);
+}
+
 bool TSchedulableBase::StartExecution(TMonotonic now) {
     Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);

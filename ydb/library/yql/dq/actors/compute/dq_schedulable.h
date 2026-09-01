@@ -8,6 +8,7 @@
 #include <util/generic/string.h>
 
 #include <memory>
+#include <optional>
 
 namespace NYql::NDq {
 
@@ -27,17 +28,15 @@ struct TWorkScope {
 struct IDqSchedulableWork {
     virtual ~IDqSchedulableWork() = default;
 
-    // Gate before a unit of work. Returns false when quota is exhausted.
-    virtual bool StartExecution(TMonotonic now) = 0;
+    // Gate before a unit of work. Returns nullopt on success — the caller may
+    // proceed with the unit. On failure returns the estimated delay until
+    // quota is likely available again, e.g. WaitForEvent(now + *delay).
+    virtual std::optional<TDuration> TryStartExecution(TMonotonic now) = 0;
 
     // Called after the unit finishes. `forcedResume` is passed through to
     // signal whether the actor was woken up by resume rather than natural
     // completion.
     virtual void StopExecution(bool& forcedResume) = 0;
-
-    // Estimated delay until quota is likely available again. Use after a
-    // failed StartExecution, e.g. WaitForEvent(now + CalculateDelay(now)).
-    virtual TDuration CalculateDelay(TMonotonic now) const = 0;
 
     // Subscribe on wake-up when quota frees up. The actor will receive
     // TEvWakeup from the scheduler.

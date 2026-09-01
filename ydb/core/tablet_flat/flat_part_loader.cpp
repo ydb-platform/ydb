@@ -463,35 +463,36 @@ TLoader::TFetch TLoader::StagePreloadData()
 {
     auto partStore = PartView.As<TPartStore>();
 
-    // V2 preload: walk all groups' B-trees to discover pages
+    // V2 preload: walk current and historic B-trees to discover room 0 pages
     if (partStore->IndexPages.HasBTree() && !BTreeGroupIndexes.empty() && BTreeGroupIndexes[0].HasRootV2())
     {
-        // Ensure walker array is sized and all walkers are started
         if (PreloadBTreeWalkers.empty()) {
-            PreloadBTreeWalkers.resize(BTreeGroupIndexes.size());
-            for (ui32 i = 0; i < BTreeGroupIndexes.size(); i++) {
-                if (BTreeGroupIndexes[i].HasRootV2()) {
-                    PreloadBTreeWalkers[i] = MakeHolder<TBTreePartWalker>();
-                    PreloadBTreeWalkers[i]->Start(BTreeGroupIndexes[i]);
+            auto addWalkers = [&](const auto& indexes, bool historic) {
+                for (ui32 groupIndex : xrange(indexes.size())) {
+                    if (indexes[groupIndex].HasRootV2()) {
+                        auto& item = PreloadBTreeWalkers.emplace_back();
+                        item.Walker = MakeHolder<TBTreePartWalker>();
+                        item.Walker->Start(indexes[groupIndex]);
+                        item.GroupId = NPage::TGroupId(groupIndex, historic);
+                        item.SkipDataPages = groupIndex != 0;
+                    }
                 }
-            }
+            };
+
+            addWalkers(BTreeGroupIndexes, false);
+            addWalkers(BTreeHistoricIndexes, true);
         }
 
         bool anyMissed = false;
-        for (ui32 i = 0; i < BTreeGroupIndexes.size(); i++) {
-            auto& walker = PreloadBTreeWalkers[i];
-            if (!walker) {
+        for (auto& item : PreloadBTreeWalkers) {
+            if (!item.Walker) {
                 continue;
             }
 
-            // Data pages for non-main groups are handled later
-            // by RequestStickyPagesForPartStore
-            bool skipData = (i != 0);
-
-            if (walker->Step(PartView.Part.Get(), LoaderEnv.Get(), NPage::TGroupId(i), skipData))
+            if (item.Walker->Step(
+                    PartView.Part.Get(), LoaderEnv.Get(), item.GroupId, item.SkipDataPages))
             {
-                // This group's walker complete — index pages sticky-pinned.
-                walker.Reset();
+                item.Walker.Reset();
             } else {
                 anyMissed = true;
             }

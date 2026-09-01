@@ -6413,7 +6413,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         WakeupSharedCache(env);
     }
 
-    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
+    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}, bool bTreeIndexV2 = false) {
         env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
         env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
 
@@ -6421,6 +6421,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             auto &appData = env->GetAppData();
             appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex.value());
             appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex.value());
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(bTreeIndex.value() && bTreeIndexV2);
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2ShadowV1Write(false);
         }
     }
 
@@ -6524,6 +6526,36 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         // should have the same behaviour
+        DoFullScan(env, failedAttempts, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+    }
+
+    Y_UNIT_TEST(TestSticky_BTreeIndexV2History) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env, true, true);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+
+        // 10 historic pages followed by 10 current pages.
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        DoFullScan(env, failedAttempts);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
     }

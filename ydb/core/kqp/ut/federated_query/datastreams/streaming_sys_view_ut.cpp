@@ -397,12 +397,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
     }
 
     Y_UNIT_TEST_F(SysViewTimestampColumns, TStreamingSysViewTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
         Setup();
 
         // Wait for the query to actually start: CREATE completion does not guarantee
         // that the script execution entry has already been created.
         StartQuery("tsQuery");
-        PqGateway->WaitWriteSession(TString{OutputTopic});
+        pqGateway->WaitWriteSession(TString{OutputTopic});
 
         // SubmittedAt comes from the current script execution. StartedAt reflects an
         // in-flight streaming query management operation and is cleared once CREATE

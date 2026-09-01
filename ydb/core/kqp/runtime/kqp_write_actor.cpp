@@ -201,6 +201,13 @@ namespace {
         }
     }
 
+    std::optional<NKikimr::NKqp::TCommitTimestamp> ExtractCommitTimestamp(const NKikimrDataEvents::TEvWriteResult& record) {
+        if (!record.HasStep()) {
+            return std::nullopt;
+        }
+        return NKikimr::NKqp::TCommitTimestamp{record.GetStep(), record.GetTxId()};
+    }
+
     std::optional<bool> HandleAttachResult(NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, NKikimr::TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
@@ -271,7 +278,7 @@ struct IKqpTableWriterCallbacks {
 
     // EvWrite statuses
     virtual void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64 dataSize) = 0;
-    virtual void OnCommitted(ui64 shardId, ui64 dataSize) = 0;
+    virtual void OnCommitted(ui64 shardId, ui64 dataSize, std::optional<TCommitTimestamp> writeResultTimestamp = {}) = 0;
     virtual void OnMessageAcknowledged(ui64 dataSize) = 0;
 
     virtual void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) = 0;
@@ -1143,7 +1150,7 @@ public:
 
         if (Mode == EMode::COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
             return;
         }
 
@@ -1152,7 +1159,7 @@ public:
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else if (result) {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
@@ -3036,7 +3043,7 @@ private:
         AFL_ENSURE(false);
     }
 
-    void OnCommitted(ui64, ui64) override {
+    void OnCommitted(ui64, ui64, std::optional<TCommitTimestamp>) override {
         AFL_ENSURE(false);
     }
 
@@ -5444,7 +5451,7 @@ public:
               ", topic tablet: " << event.GetOrigin() <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
 
-        OnCommitted(event.GetOrigin(), 0);
+        OnCommitted(event.GetOrigin(), 0, std::nullopt);
     }
 
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -5486,7 +5493,7 @@ public:
 
         CollectTliStats(ev->Get()->Record);
 
-        OnCommitted(ev->Get()->Record.GetOrigin(), 0);
+        OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
     }
 
     void OnReady() override {
@@ -5516,7 +5523,19 @@ public:
         Process();
     }
 
-    void OnCommitted(ui64 shardId, ui64) override {
+    void OnCommitted(ui64 shardId, ui64, std::optional<TCommitTimestamp> writeResultTimestamp) override {
+        if (CommitTimestamp && writeResultTimestamp) {
+            AFL_ENSURE(CommitTimestamp->PlanStep == writeResultTimestamp->PlanStep)
+                ("reason", "commit timestamp PlanStep mismatch")
+                ("coordinator", CommitTimestamp->PlanStep)
+                ("writeResult", writeResultTimestamp->PlanStep)
+                ("shardId", shardId);
+            AFL_ENSURE(CommitTimestamp->TxId == writeResultTimestamp->TxId)
+                ("reason", "commit timestamp TxId mismatch")
+                ("coordinator", CommitTimestamp->TxId)
+                ("writeResult", writeResultTimestamp->TxId)
+                ("shardId", shardId);
+        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }

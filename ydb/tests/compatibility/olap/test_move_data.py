@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class TestMoveDataDormant(RollingUpgradeAndDowngradeFixture):
-    """NEW code rolled against OLD config. EnableColumnshardMoveData is deliberately
+    """NEW code rolled against OLD config. EnableColumnshardGroupDecommission is deliberately
     absent — naming it in static YAML would fail config parsing on every pre-26.4
     binary (unknown proto field), so old-code+new-config is impossible by
     construction for text config and the safe rollout is: roll the binary first,
@@ -87,7 +87,7 @@ class TestMoveData(RollingUpgradeAndDowngradeFixture):
 
         yield from self.setup_cluster(
             tenant_db="move_data",
-            extra_feature_flags=["enable_columnshard_move_data"],
+            extra_feature_flags=["enable_columnshard_group_decommission"],
             column_shard_config={
                 "alter_object_enabled": True,
             },

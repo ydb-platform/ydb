@@ -23,7 +23,7 @@ class TestOlapWorkloadMoveData(StressFixture):
             erasure=Erasure.NONE,
             extra_feature_flags={
                 "enable_move_column_table": True,
-                "enable_columnshard_move_data": True,
+                "enable_columnshard_group_decommission": True,
             },
             column_shard_config={
                 "generate_internal_path_id": True,

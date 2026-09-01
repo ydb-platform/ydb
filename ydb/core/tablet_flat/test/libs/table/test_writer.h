@@ -152,18 +152,23 @@ namespace NTest {
                 indexHistoricPages.push_back(pageId);
             }
 
+            auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
+                ui32 lv1 = proto.HasLevelCount() ? proto.GetLevelCount() : Max<ui32>();
+                ui32 lv2 = proto.HasLevelCountV2() ? proto.GetLevelCountV2() : Max<ui32>();
+                auto rootType = (lv2 == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2);
+                auto v1Root = proto.HasRootPageId()
+                    ? proto.GetRootPageId()
+                    : Max<TPageId>();
+                auto v2Root = proto.HasRootOffset()
+                    ? NPage::TBtreeIndexMeta::RootV2Location(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), rootType)
+                    : NPage::TPageLocation::Max();
+                return { v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
+                    proto.GetErasedRowCount(), lv1, lv2, proto.GetIndexSize() };
+            };
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes, BTreeHistoricIndexes;
             for (bool history : {false, true}) {
                 for (const auto &meta : history ? lay.GetBTreeHistoricIndexes() : lay.GetBTreeGroupIndexes()) {
-                    NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(),
-                        meta.GetRowCount(),
-                        meta.GetDataSize(),
-                        meta.GetGroupDataSize(),
-                        meta.GetErasedRowCount()}, 
-                        meta.GetLevelCount(), 
-                        meta.GetIndexSize()};
-                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(loadMeta(meta));
                 }
             }
 
@@ -220,7 +225,7 @@ namespace NTest {
             return Back().WriteOuter(blob);
         }
 
-        TPageOffset Write(TSharedData page, EPage type, ui32 group) override
+        TPageLocation Write(TSharedData page, EPage type, ui32 group) override
         {
             return Back().Write(page, type, group);
         }
@@ -230,9 +235,9 @@ namespace NTest {
             Back().WriteInplace(page, body);
         }
 
-        ui32 GetWrittenPageId(ui32 group) const noexcept override
+        ui32 GetLastWrittenPageId(ui32 group) const noexcept override
         {
-            return Store->GetWrittenPageId(group);
+            return Store->GetLastWrittenPageId(group);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override

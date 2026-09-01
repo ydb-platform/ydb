@@ -2822,6 +2822,15 @@ Y_UNIT_TEST(GroupByHopRtmr) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(DataWatermarksPragmaIsAccepted) {
+    auto res = SqlToYql(R"sql(
+        PRAGMA DataWatermarks = "obsolete";
+        SELECT COUNT(*) AS value FROM plato.Input
+        GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(GroupByHopRtmrSubquery) {
     // 'use plato' intentially avoided
     NYql::TAstParseResult res = SqlToYql(R"(

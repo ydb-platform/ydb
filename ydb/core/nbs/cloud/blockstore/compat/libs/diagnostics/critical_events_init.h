@@ -1,5 +1,3 @@
-#pragma once
-
 /*******************************************************************************
 
 This file is intended for initialization only and must not be included in

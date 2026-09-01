@@ -10,19 +10,19 @@ namespace NYdb::NBS {
 const TVector<TPercentileDesc>& GetDefaultPercentiles()
 {
     static const TVector<TPercentileDesc> DefaultPercentiles = {
-        {{000.5, "50"},
-         {000.9, "90"},
-         {00.99, "99"},
-         {0.999, "99.9"},
-         {1.000, "100"}}};
+        {000.5, "50"},
+        {000.9, "90"},
+        {00.99, "99"},
+        {0.999, "99.9"},
+        {1.000, "100"}};
 
     return DefaultPercentiles;
 }
 
 const TVector<TString>& GetDefaultPercentileNames()
 {
-    static const TVector<TString> DefaultPercentiles = {
-        {"50", "90", "99", "99.9", "100"}};
+    static const TVector<TString> DefaultPercentiles =
+        {"50", "90", "99", "99.9", "100"};
 
     return DefaultPercentiles;
 }

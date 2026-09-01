@@ -3,9 +3,12 @@ import tempfile
 import unittest
 
 from ydb.public.tools.lib.cmds import (
+    EmptyArguments,
     generic_connector_config,
     parse_grpc_tls_enable,
+    produce_arguments,
     resolve_deploy_config_action,
+    resolve_http_proxy_config,
     same_config_path,
     should_generate_grpc_tls_data,
     should_preserve_existing_config,
@@ -112,3 +115,53 @@ def test_should_generate_grpc_tls_data_uses_explicit_path():
                 pass
             assert should_generate_grpc_tls_data(tmpdir) is False
             os.unlink(path)
+
+
+def test_resolve_http_proxy_config_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv('YDB_ENABLE_HTTP_PROXY', raising=False)
+    monkeypatch.delenv('YDB_ENABLE_SQS_TOPIC_API', raising=False)
+
+    assert resolve_http_proxy_config(EmptyArguments()) is None
+
+
+def test_resolve_http_proxy_config_enables_datastreams_proxy(monkeypatch):
+    monkeypatch.setenv('YDB_ENABLE_HTTP_PROXY', 'true')
+    monkeypatch.delenv('YDB_ENABLE_SQS_TOPIC_API', raising=False)
+
+    assert resolve_http_proxy_config(EmptyArguments()) == {
+        'enabled': True,
+        'yandex_cloud_service_region': ['ru-central1', 'ru-central-1'],
+    }
+
+
+def test_resolve_http_proxy_config_enables_topic_sqs_and_proxy(monkeypatch):
+    monkeypatch.delenv('YDB_ENABLE_HTTP_PROXY', raising=False)
+    monkeypatch.setenv('YDB_ENABLE_SQS_TOPIC_API', 'true')
+
+    assert resolve_http_proxy_config(EmptyArguments()) == {
+        'enabled': True,
+        'sqs_topic_enabled': True,
+        'ymq_enabled': False,
+        'yandex_cloud_service_region': ['ru-central1', 'ru-central-1'],
+    }
+
+
+def test_resolve_http_proxy_config_accepts_command_line_options(monkeypatch):
+    monkeypatch.delenv('YDB_ENABLE_HTTP_PROXY', raising=False)
+    monkeypatch.delenv('YDB_ENABLE_SQS_TOPIC_API', raising=False)
+    arguments = EmptyArguments()
+    arguments.enable_sqs_topic_api = True
+
+    assert resolve_http_proxy_config(arguments) == {
+        'enabled': True,
+        'sqs_topic_enabled': True,
+        'ymq_enabled': False,
+        'yandex_cloud_service_region': ['ru-central1', 'ru-central-1'],
+    }
+
+
+def test_produce_arguments_accepts_http_proxy_options():
+    arguments = produce_arguments(['--enable-http-proxy', '--enable-sqs-topic-api'])
+
+    assert arguments.enable_http_proxy is True
+    assert arguments.enable_sqs_topic_api is True

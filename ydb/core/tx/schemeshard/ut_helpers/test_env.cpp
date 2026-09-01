@@ -649,6 +649,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.EnableCompactFulltextIndex_) {
         app.FeatureFlags.SetEnableCompactFulltextIndex(*opts.EnableCompactFulltextIndex_);
     }
+    app.FeatureFlags.SetEnableSuperLemmer(opts.EnableSuperLemmer_);
     app.FeatureFlags.SetEnableJsonIndex(true);
     app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);

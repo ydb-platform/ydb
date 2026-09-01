@@ -255,6 +255,7 @@ namespace NActors {
                           TSessionParams params);
     protected:
         STATEFN(WorkingState);
+        bool ProcessWorkingEvent(TAutoPtr<IEventHandle>& ev);
         bool ReadyToReceive() const noexcept {
             return bool(Context);
         }

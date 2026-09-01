@@ -127,6 +127,7 @@ class Platform(object):
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
+        self.is_tc3xx = self.arch in ('tc3xx', )
 
         self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
         self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
@@ -163,7 +164,7 @@ class Platform(object):
         self.is_32_bit = (
             self.is_x86 or
             self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
-            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32 or self.is_arm_ats3089p
+            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32 or self.is_arm_ats3089p or self.is_tc3xx
         )
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_armv9a or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
@@ -271,6 +272,7 @@ class Platform(object):
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
+            (self.is_tc3xx, 'ARCH_TC3XX'),
             (self.is_wasm32, 'ARCH_WASM32'),
             (self.is_wasm64, 'ARCH_WASM64'),
             (self.is_32_bit, 'ARCH_TYPE_32'),

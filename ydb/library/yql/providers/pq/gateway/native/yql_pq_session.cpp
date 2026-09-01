@@ -192,7 +192,12 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 try {
                     const auto& response = f.GetValue();
                     if (response.IsSuccess()) {
-                        info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
+                        const auto& topicDescription = response.GetTopicDescription();
+                        info.PartitionsCount = topicDescription.GetTotalPartitionsCount();
+                        info.Consumers.reserve(topicDescription.GetConsumers().size());
+                        for (const auto& consumer : topicDescription.GetConsumers()) {
+                            info.Consumers.emplace(consumer.GetConsumerName());
+                        }
                     } else {
                         setError(response.GetIssues().ToString());
                     }
@@ -267,7 +272,12 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                                 ex << describeTopicResult.GetIssues().ToString();
                                 continue;
                             }
-                            results[i].PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
+                            const auto& topicDescription = describeTopicResult.GetTopicDescription();
+                            results[i].PartitionsCount = topicDescription.GetTotalPartitionsCount();
+                            results[i].Consumers.reserve(topicDescription.GetConsumers().size());
+                            for (const auto& consumer : topicDescription.GetConsumers()) {
+                                results[i].Consumers.emplace(consumer.GetConsumerName());
+                            }
                             gotAnyTopic = true;
                         } catch (...) {
                             addErrorCluster();

@@ -34,6 +34,7 @@ PEERDIR(
     ydb/core/sys_view/common
     ydb/core/protos
     ydb/core/testlib
+    ydb/library/grpc/server/actors
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
     ydb/library/testlib/s3_recipe_helper

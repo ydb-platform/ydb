@@ -1139,6 +1139,8 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
     auto analyzeActorConfig = TAnalyzeActor::TConfig{
         .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
         .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
+        .WholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeWholeTableScanMaxBytes(),
+        .TableBytesSize = GetTableBytesSize(pathId),
     };
     AnalyzeActorId = ctx.Register(new TAnalyzeActor(
         SelfId(), operationId, database, pathId, columnTags, analyzeActorConfig),
@@ -1331,22 +1333,41 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
  }
 
 TStatisticsAggregator::TChangeCounters TStatisticsAggregator::GetCurrentChangeCounters(const TPathId& pathId) const {
+    NKikimrStat::TSchemeShardStats stats;
+    const auto* entry = FindBaseStatisticsEntry(pathId, stats);
+    if (!entry) {
+        return {};
+    }
+    return {entry->GetRowUpdates(), entry->GetRowDeletes(), entry->GetRowCount()};
+}
+
+std::optional<ui64> TStatisticsAggregator::GetTableBytesSize(const TPathId& pathId) const {
+    NKikimrStat::TSchemeShardStats stats;
+    const auto* entry = FindBaseStatisticsEntry(pathId, stats);
+    if (!entry || !entry->HasBytesSize()) {
+        return std::nullopt;
+    }
+    return entry->GetBytesSize();
+}
+
+const NKikimrStat::TPathEntry* TStatisticsAggregator::FindBaseStatisticsEntry(
+    const TPathId& pathId, NKikimrStat::TSchemeShardStats& stats) const
+{
     // A path is owned by the schemeshard identified by pathId.OwnerId, so its
     // base stats live in that schemeshard's blob (see IsKnownTable).
     auto it = BaseStatistics.find(pathId.OwnerId);
     if (it == BaseStatistics.end() || !it->second.Latest) {
-        return {};
+        return nullptr;
     }
-    NKikimrStat::TSchemeShardStats stats;
     if (!stats.ParseFromString(*it->second.Latest)) {
-        return {};
+        return nullptr;
     }
     for (const auto& entry : stats.GetEntries()) {
         if (TPathId::FromProto(entry.GetPathId()) == pathId) {
-            return {entry.GetRowUpdates(), entry.GetRowDeletes(), entry.GetRowCount()};
+            return &entry;
         }
     }
-    return {};
+    return nullptr;
 }
 
 bool TStatisticsAggregator::IsChangeRatioAboveThreshold(

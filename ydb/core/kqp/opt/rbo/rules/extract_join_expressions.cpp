@@ -17,7 +17,6 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     }
 
     auto filter = CastOperator<TOpFilter>(input);
-
     if (filter->GetInput()->Kind != EOperator::Join) {
         return false;
     }
@@ -26,7 +25,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     auto leftInput = join->GetLeftInput();
     auto rightInput = join->GetRightInput();
 
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     TVector<TExpression> newConjuncts;
     TVector<TMapElement> mapElements;
@@ -63,8 +62,8 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
         return false;
     }
 
-    filter->FilterExpr = MakeConjunction(newConjuncts, props.PgSyntax);
-    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
+    filter->SetFilterExpression(MakeConjunction(newConjuncts, props.PgSyntax));
+    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements);
     filter->SetInput(newMap);
     return true;
 }

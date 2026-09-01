@@ -930,6 +930,14 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         // abort here (topic balancing stress, write session reconnect).
         const bool missingDelayContext = delay && !connectDelayContext;
         if (!connectContext || !connectTimeoutContext || missingDelayContext) {
+            // Drop children before AbortImpl resets ClientContext; otherwise a
+            // live child keeps CQ Contexts_ non-empty and driver.Stop(true) hangs.
+            Cancel(connectContext);
+            Cancel(connectDelayContext);
+            Cancel(connectTimeoutContext);
+            connectContext.reset();
+            connectDelayContext.reset();
+            connectTimeoutContext.reset();
             AbortImpl();
             return;
         }
@@ -2168,6 +2176,12 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
+        // Drop children before ClientContext: ~TContextImpl aborts if children
+        // remain, and leftover child ptrs keep CQ alive so driver.Stop(true) hangs.
+        DescribePartitionContext.reset();
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
 

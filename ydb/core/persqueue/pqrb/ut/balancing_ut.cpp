@@ -342,6 +342,30 @@ Y_UNIT_TEST(MergeFreeFamilyIntoReleasingKeepsPartitionMapping) {
     UNIT_ASSERT_C(!env.SessionOf(2).empty(), "merge child must be assigned");
 }
 
+Y_UNIT_TEST(DisconnectPreferredDuringMergeDoesNotLeaveDanglingFamily) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+
+    env.Finish("session-common", 0);
+    env.RegisterSession("session-steal", {1}, /*pump=*/false);
+    env.Finish("session-pref", 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    // Disconnect while the preferred family is still waiting to merge. Reset(Merge)
+    // used to Destroy the family and still return true, so UnregisterReadingSession
+    // stuffed a dangling pointer into UnreadableFamilies and the next
+    // GetReadSessionsInfo crashed: "Use of destroyed hash table".
+    env.DisconnectSession("session-pref");
+    env.SessionsInfo();
+
+    env.Pump();
+    UNIT_ASSERT_C(!env.SessionOf(0).empty(), "parent 0 must stay assigned");
+}
+
 Y_UNIT_TEST(CommitThenRebalanceKeepsMergeChildIndependent) {
     TScaleEnv env;
     env.CreateParents(2);

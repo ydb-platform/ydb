@@ -290,11 +290,13 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
             }
             auto* targetFamily = it->second.get();
             if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
-                Consumer.MergeFamilies(targetFamily, this, ctx);
-            } else {
-                WantedPartitions.clear();
+                // MergeFamilies destroys rhs (`this`) when the merge is applied.
+                // Returning true here used to re-insert a dangling pointer into
+                // UnreadableFamilies from UnregisterReadingSession.
+                auto [_, merged] = Consumer.MergeFamilies(targetFamily, this, ctx);
+                return !merged;
             }
-
+            WantedPartitions.clear();
             return true;
     }
 }
@@ -707,16 +709,18 @@ void TPartitionFamily::UpdateSpecialSessions() {
             hasChanges = true;
         }
     } else {
-        for (auto it = SpecialSessions.begin(); it != SpecialSessions.end();) {
-            auto* session = it->second;
+        std::vector<TActorId> stale;
+        for (const auto& [pipe, session] : SpecialSessions) {
             if (session->WithGroups()
                     && session->AllPartitionsReadable(Partitions)
                     && session->AllPartitionsReadable(WantedPartitions)) {
-                ++it;
-            } else {
-                SpecialSessions.erase(it++);
-                hasChanges = true;
+                continue;
             }
+            stale.push_back(pipe);
+        }
+        for (const auto& pipe : stale) {
+            SpecialSessions.erase(pipe);
+            hasChanges = true;
         }
         for (auto& [_, session] : Consumer.Sessions) {
             if (session->WithGroups() && session->AllPartitionsReadable(Partitions) && session->AllPartitionsReadable(WantedPartitions)) {
@@ -1249,11 +1253,14 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
             }
 
             if (family->Reset(targetStatus, ctx)) {
-                UnreadableFamilies[family->Id] = family;
-                FamiliesRequireBalancing.erase(family->Id);
+                auto live = Families.find(family->Id);
+                if (live != Families.end() && live->second.get() == family) {
+                    UnreadableFamilies[family->Id] = family;
+                    FamiliesRequireBalancing.erase(family->Id);
+                }
             } else {
                 for (auto& r : roots) {
-                    if (IsReadable(r)) {
+                    if (IsReadable(r) && !FindFamily(r)) {
                         CreateFamily({r}, ctx);
                     }
                 }
@@ -1658,7 +1665,11 @@ void TConsumer::Balance(const TActorContext& ctx) {
     auto startTime = TAppData::TimeProvider->Now();
 
     // We try to balance the partitions by sessions that clearly want to read them, even if the distribution is not uniform.
-    for (auto& [_, family] : Families) {
+    for (auto* family : Snapshot(Families)) {
+        auto it = Families.find(family->Id);
+        if (it == Families.end() || it->second.get() != family) {
+            continue;
+        }
         if (family->Status != TPartitionFamily::EStatus::Active || family->IsCommon()) {
             continue;
         }

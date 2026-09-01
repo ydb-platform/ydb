@@ -449,6 +449,12 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
 
         const bool missingDelayContext = delay && !connectDelayContext;
         if (!connectContext || !connectTimeoutContext || missingDelayContext) {
+            Cancel(connectContext);
+            Cancel(connectDelayContext);
+            Cancel(connectTimeoutContext);
+            connectContext.reset();
+            connectDelayContext.reset();
+            connectTimeoutContext.reset();
             AbortImpl();
             return;
         }
@@ -1446,7 +1452,9 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
     }

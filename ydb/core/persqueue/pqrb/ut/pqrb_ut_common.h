@@ -246,12 +246,14 @@ struct TScaleEnv {
         UNIT_ASSERT_C(it != Pipes.end(), name);
         tc.Runtime->ClosePipe(it->second, tc.Edge, 0);
         Pipes.erase(it);
-        for (auto locked = LockedBy.begin(); locked != LockedBy.end(); ) {
-            if (locked->second == name) {
-                LockedBy.erase(locked++);
-            } else {
-                ++locked;
+        std::vector<ui32> drop;
+        for (const auto& [partition, session] : LockedBy) {
+            if (session == name) {
+                drop.push_back(partition);
             }
+        }
+        for (auto partition : drop) {
+            LockedBy.erase(partition);
         }
         Pump();
     }

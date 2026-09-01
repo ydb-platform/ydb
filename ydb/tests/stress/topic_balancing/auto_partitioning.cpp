@@ -1110,8 +1110,10 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
     rewindWorkers.Join();
     readWorkers.Join();
     writeWorkers.Join();
+    writers.clear();
     sessions.CloseAll();
-    driver.Stop(true);
+    // wait=true deadlocks: in-flight session contexts keep CQ from shutting down.
+    driver.Stop(false);
 
     Cerr << "Stress finished partitions=" << partitionCount
         << " sessionsOpened=" << opened.load()

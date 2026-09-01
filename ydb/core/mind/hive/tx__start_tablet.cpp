@@ -79,9 +79,6 @@ public:
             } else {
                 db.Table<Schema::TabletFollowerTablet>().Key(TabletId.first, TabletId.second).Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
             }
-            // usage impact estimate is kept across restarts as a prior - it is a property of the
-            // tablet's workload, not of the node it happens to run on. It is replaced once the
-            // measurement on the new node completes, see TNodeInfo::UpdateResourceTotalUsage.
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStartingOnNode(Local.NodeId()) || BootingSuppressed && External) {

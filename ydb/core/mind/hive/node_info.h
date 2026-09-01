@@ -80,8 +80,7 @@ public:
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
     std::unordered_map<TTabletTypes::EType, std::unordered_set<TTabletInfo*>> TabletsRunningByType;
     std::unordered_map<TFullObjectId, std::unordered_set<TTabletInfo*>> TabletsOfObject;
-    // Resource-draining tablets with a high UsageImpact. Expected to hold zero or one element, which is
-    // what makes GetMaxTabletImpact cheap enough to call from FindBestNode's per-node loop.
+    // Resource-draining tablets with a high UsageImpact. Expected to hold zero or one elements
     std::unordered_set<TTabletInfo*> HighImpactTablets;
     std::vector<TFullTabletId> FrozenTablets;
     TResourceRawValues ResourceValues; // accumulated resources from tablet metrics
@@ -125,7 +124,7 @@ public:
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
     void UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after);
     void UpdateHighImpactTablet(TTabletInfo* tablet);
-    void LowerOverestimatedImpacts(NIceDb::TNiceDb& db);
+    void UpdateUsageImpacts(NIceDb::TNiceDb& db);
 
     // Largest UsageImpact among the node's high-impact tablets, ignoring `exclude` if given.
     // Used as a floor on the node's expected usage, see GetNodeUsageForTablet.

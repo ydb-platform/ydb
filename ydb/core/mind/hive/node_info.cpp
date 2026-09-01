@@ -500,12 +500,8 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     auto current = alreadyHere ? nodeValues : nodeValues + tabletValues;
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);
-    // A high-impact tablet loads the node mostly through shared pools, which takes a while to show up
-    // in the node's own metrics. Reserve its estimated share up front so that the window right after it
-    // lands here is not spent filling the node up with other tablets. A max rather than a sum: the
-    // estimate is a marginal effect measured one tablet at a time, so the impacts do not add up.
     double reserved = GetMaxTabletImpact(&tablet);
-    if (reserved > 0) {
+    if (reserved > 0 && Hive.GetUseTabletUsageEstimate()) {
         if (!alreadyHere) {
             reserved += TTabletInfo::GetUsage(tabletValues, maximum);
         }
@@ -571,17 +567,10 @@ bool TNodeInfo::CanBeDeleted(TInstant now) const {
     }
 }
 
-void TNodeInfo::LowerOverestimatedImpacts(NIceDb::TNiceDb& db) {
-    // A tablet's impact cannot exceed the usage of the node it runs on. That bound is worth little on a
-    // crowded node, but it becomes a direct measurement once the tablet is nearly alone here - which is
-    // precisely the state a high-impact tablet is driven into, and the state in which it is no longer
-    // moved and so is never measured again. Without this, an estimate that was wrong to begin with would
-    // keep the tablet isolated forever.
-    //
-    // This can only ever lower an estimate, so it cannot promote a tablet to high-impact by itself, and
-    // a tablet that really did get heavier is corrected upwards by the usual measurement the next time
-    // it is scheduled somewhere. Only high-impact tablets are checked: they are the ones an overestimate
-    // actually harms, and there are at most a couple of them per node.
+void TNodeInfo::UpdateUsageImpacts(NIceDb::TNiceDb& db) {
+    // Simple logic: a tablet's usage impact cannot be bigger than total node usage
+    // We need this because we try not to move high-impact tablets, so we need a way to lower the estimate w/o moving the tablet
+    // If a low-impact tablet became high-impact, we will move it and notice it then
     std::vector<TTabletInfo*> overestimated;
     for (TTabletInfo* tablet : HighImpactTablets) {
         if (tablet->GetUsageImpact() > NodeTotalUsage) {
@@ -589,8 +578,6 @@ void TNodeInfo::LowerOverestimatedImpacts(NIceDb::TNiceDb& db) {
         }
     }
     for (TTabletInfo* tablet : overestimated) {
-        BLOG_D("Lowering impact estimate of tablet " << tablet->GetFullTabletId()
-                << " from " << tablet->GetUsageImpact() << " to usage of node " << Id << " (" << NodeTotalUsage << ")");
         tablet->SetUsageImpact(NodeTotalUsage); // updates HighImpactTablets, hence the copy above
         db.Table<Schema::Metrics>().Key(tablet->GetFullTabletId()).Update<Schema::Metrics::UsageImpact>(NodeTotalUsage);
     }
@@ -629,7 +616,7 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
         }
         NodeTotalUsage = AveragedNodeTotalUsage.GetValue();
         if (!LastScheduledTablet) {
-            LowerOverestimatedImpacts(db);
+            UpdateUsageImpacts(db);
         }
     }
     if (metrics.HasTotalNodeCpuUsage()) {

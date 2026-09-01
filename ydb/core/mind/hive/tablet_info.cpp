@@ -228,12 +228,10 @@ void TTabletInfo::SetUsageImpact(double usageImpact) {
 }
 
 bool TTabletInfo::IsHighImpact() const {
-    return Hive.GetUseTabletUsageEstimate() && UsageImpact >= Hive.GetTabletImpactToIsolate();
+    return Hive.GetUseTabletUsageEstimate() && UsageImpact >= Hive.GetTabletImpactToPin();
 }
 
 bool TTabletInfo::IsPinnedToNode() const {
-    // The IsHighImpact() check is what keeps a negligible tablet on a nearly idle node from
-    // satisfying the share test and pinning itself there forever.
     return IsHighImpact()
             && Node != nullptr
             && UsageImpact >= Hive.GetTabletImpactShareToPin() * Node->GetNodeUsage();

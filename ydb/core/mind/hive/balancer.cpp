@@ -246,10 +246,6 @@ protected:
             // load. Leave it where it is and let the balancer drain the rest of the node instead.
             return false;
         }
-        if (tablet->IsHighImpact() && Settings.Type != EBalancerType::Emergency) {
-            // Only genuine overload justifies moving a high-impact tablet
-            return false;
-        }
         return true;
     }
 

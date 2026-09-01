@@ -1064,8 +1064,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetUseTabletUsageEstimate();
     }
 
-    double GetTabletImpactToIsolate() const {
-        return CurrentConfig.GetTabletImpactToIsolate();
+    double GetTabletImpactToPin() const {
+        return CurrentConfig.GetTabletImpactToPin();
     }
 
     double GetTabletImpactShareToPin() const {

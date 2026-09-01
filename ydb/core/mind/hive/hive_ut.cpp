@@ -6008,6 +6008,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
             app.HiveConfig.SetMinPeriodBetweenEmergencyBalance(0);
             app.HiveConfig.SetMinPeriodBetweenBalance(0);
+            app.HiveConfig.SetMinNetworkScatterToBalance(0.1);
         });
         const int nodeBase = runtime.GetNodeId(0);
         TActorId senderA = runtime.AllocateEdgeActor();
@@ -6238,101 +6239,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         UNIT_ASSERT_LE(moves, 2);
         UNIT_ASSERT_VALUES_EQUAL(distribution[*nodeWithTablet].size(), 1);
-    }
-
-    Y_UNIT_TEST(TestHiveBalancerEvictsCheapTabletsFirst) {
-        // One high-impact tablet sharing an overloaded node with a crowd of cheap ones, and a single
-        // empty node to move to. The cheap tablets should be the ones that leave.
-        static constexpr ui64 NUM_NODES = 2;
-        static constexpr ui64 NUM_TABLETS = 10;
-        TTestBasicRuntime runtime(NUM_NODES, false);
-        Setup(runtime, true, 1, [](TAppPrepare& app) {
-            app.HiveConfig.SetTabletKickCooldownPeriod(0);
-            app.HiveConfig.SetResourceChangeReactionPeriod(0);
-            app.HiveConfig.SetMinPeriodBetweenEmergencyBalance(0);
-        });
-        const int nodeBase = runtime.GetNodeId(0);
-        TActorId senderA = runtime.AllocateEdgeActor();
-        const ui64 hiveTablet = MakeDefaultHiveID();
-        const ui64 testerTablet = MakeTabletID(false, 1);
-
-        using TDistribution = std::array<std::vector<ui64>, NUM_NODES>;
-        auto getDistribution = [hiveTablet, nodeBase, senderA, &runtime]() -> TDistribution {
-            std::array<std::vector<ui64>, NUM_NODES> nodeTablets = {};
-            {
-                runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
-                TAutoPtr<IEventHandle> handle;
-                TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
-                for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
-                    if (tablet.GetNodeID() == 0) {
-                        continue;
-                    }
-                    UNIT_ASSERT_C(((int)tablet.GetNodeID() - nodeBase >= 0) && (tablet.GetNodeID() - nodeBase < NUM_NODES),
-                            "nodeId# " << tablet.GetNodeID() << " nodeBase# " << nodeBase);
-                    nodeTablets[tablet.GetNodeID() - nodeBase].push_back(tablet.GetTabletID());
-                }
-            }
-            return nodeTablets;
-        };
-
-        auto tabletNode = [](const TDistribution& distribution, ui64 tabletId) -> std::optional<size_t> {
-            auto hasTablet = [tabletId](const std::vector<ui64>& tablets) {
-                return std::find(tablets.begin(), tablets.end(), tabletId) != tablets.end();
-            };
-            auto it = std::find_if(distribution.begin(), distribution.end(), hasTablet);
-            if (it == distribution.end()) {
-                return std::nullopt;
-            }
-            return it - distribution.begin();
-        };
-
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
-            runtime.DispatchEvents(options);
-        }
-
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
-        std::vector<ui64> tablets;
-        tablets.reserve(NUM_TABLETS);
-        for (size_t i = 0; i < NUM_TABLETS; ++i) {
-            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
-            ev->Record.SetObjectId(i);
-            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
-            tablets.push_back(tabletId);
-            MakeSureTabletIsUp(runtime, tabletId, 0);
-        }
-
-        const ui64 highImpactTablet = tablets.front();
-        auto distribution = getDistribution();
-        const size_t loadedNode = *tabletNode(distribution, highImpactTablet);
-        Ctest << "picked tablet " << highImpactTablet << " on node " << loadedNode << Endl;
-
-        for (int i = 0; i < 20; ++i) {
-            for (int j = 0; j < 5; ++j) {
-                for (ui32 node = 0; node < NUM_NODES; ++node) {
-                    TActorId sender = runtime.AllocateEdgeActor(node);
-                    THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
-                    metrics->Record.SetTotalNodeUsage(node == loadedNode ? .95 : .05);
-
-                    runtime.SendToPipe(hiveTablet, sender, metrics.Release(), node);
-                }
-            }
-
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
-            runtime.DispatchEvents(options, TDuration::MilliSeconds(10));
-            runtime.AdvanceCurrentTime(TDuration::MilliSeconds(500));
-
-            distribution = getDistribution();
-            Ctest << "distribution: " << distribution[0].size() << " " << distribution[1].size() << Endl;
-        }
-
-        // the high-impact tablet has not been shuffled off to the other node, and its neighbours have
-        UNIT_ASSERT_VALUES_EQUAL(tabletNode(distribution, highImpactTablet), loadedNode);
-        UNIT_ASSERT_VALUES_EQUAL(distribution[loadedNode].size(), 1);
     }
 
     Y_UNIT_TEST(TestHiveBalancerPinnedTabletStaysPut) {

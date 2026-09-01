@@ -2818,10 +2818,10 @@ public:
                 double nodeUsage = node.GetNodeUsage();
                 TStringBuilder usage;
                 usage << GetConditionalRedString(Sprintf("%.3f", nodeUsage), nodeUsage >= 1);
-                double reservedImpact = node.GetMaxTabletImpact();
-                if (reservedImpact > 0) {
+                double maxTabletImpact = node.GetMaxTabletImpact();
+                if (maxTabletImpact > 0) {
                     TStringBuilder title;
-                    title << "Reserved for a high-impact tablet: " << Sprintf("%.3f", reservedImpact);
+                    title << "Max tablet impact: " << Sprintf("%.3f", maxTabletImpact);
                     const TTabletInfo* pinned = node.GetPinnedTablet();
                     if (pinned != nullptr) {
                         title << ", " << pinned->ToString() << " is pinned here";

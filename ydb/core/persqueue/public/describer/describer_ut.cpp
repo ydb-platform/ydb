@@ -263,6 +263,8 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT(topicInfo.Names);
         UNIT_ASSERT_C(topicInfo.Names->IsValid(), topicInfo.Names->GetReason());
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names->GetClientsideName(), "/Root/table1/feed");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names->GetFederationPath(), "/Root/table1/feed");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Names->GetFederationPathWithDC(), "/Root/table1/feed");
     }
 
     Y_UNIT_TEST(TopicWithoutDatabase) {

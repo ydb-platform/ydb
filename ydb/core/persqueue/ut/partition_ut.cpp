@@ -476,7 +476,9 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                         config.MeteringMode);
     Config.SetLocalDC(true);
 
-    TopicConverter = NNameResolver::MakeTopicNamesPtr(NNameResolver::NamesFromConfig(Config));
+    const auto& pqConfig = Ctx->Runtime->GetAppData(0).PQConfig;
+    TopicConverter = NNameResolver::MakeTopicNamesPtr(NNameResolver::NamesFromConfig(
+        Config, pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled()));
     TActorId quoterId;
     if (Ctx->Runtime->GetAppData(0).PQConfig.GetQuotingConfig().GetEnableQuoting()) {
         quoterId = Ctx->Runtime->Register(CreateWriteQuoter(

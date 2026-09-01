@@ -278,6 +278,7 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT(info.Names);
         UNIT_ASSERT_C(info.Names->IsValid(), info.Names->GetReason());
         UNIT_ASSERT_VALUES_EQUAL(info.Names->GetClientsideName(), "/Root/table1/feed");
+        UNIT_ASSERT_VALUES_EQUAL(info.Names->GetFederationPath(), "/Root/table1/feed");
     }
 
     Y_UNIT_TEST(CdcThenStreamImplNotFound) {

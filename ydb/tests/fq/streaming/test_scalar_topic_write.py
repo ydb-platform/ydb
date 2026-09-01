@@ -364,7 +364,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
             ref = f"`{path}`" if local_topics else f"`{test_source_name}`.`{path}`"
             self._expect_error(
-                kikimr, f'INSERT INTO {ref} SELECT "Data";', ["access to topic", "test_topic in database:", "denied for", "test@builtin", "no WriteTopic rights"], client=test_client
+                kikimr, f'INSERT INTO {ref} SELECT "Data";', ["access to topic", "test_topic", "denied for", "test@builtin", "no WriteTopic rights"], client=test_client
             )
 
             if not local_topics:

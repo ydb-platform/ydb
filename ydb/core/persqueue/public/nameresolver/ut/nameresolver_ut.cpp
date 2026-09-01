@@ -935,6 +935,8 @@ Y_UNIT_TEST_F(WithClientsideNameOverride, TNameResolverFixture) {
     auto names = WithClientsideNameOverride(NamesFromConfig(cfg), "/Root/table/feed");
     UNIT_ASSERT_C(names.IsValid(), names.GetReason());
     UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "/Root/table/feed");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "/Root/table/feed");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPathWithDC(), "/Root/table/feed");
 }
 
 Y_UNIT_TEST_F(NamesForCreateBadLegacy, TNameResolverFixture) {

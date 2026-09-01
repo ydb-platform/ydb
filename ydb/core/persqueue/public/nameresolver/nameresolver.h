@@ -220,7 +220,10 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TStr
 // const char* would convert to bool and skip topicPath. Pass TString.
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const char*) = delete;
 
-/** CDC: override ClientsideName with the stream path (not streamImpl). */
+/**
+ * CDC: replace the names clients see (ClientsideName / FederationPath*) with the
+ * stream path (not streamImpl).
+ */
 TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clientsideName);
 
 /**

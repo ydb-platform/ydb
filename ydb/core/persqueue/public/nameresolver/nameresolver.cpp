@@ -1147,6 +1147,8 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config) {
 TTopicNames WithClientsideNameOverride(TTopicNames names, const TString& clientsideName) {
     if (names.Valid && !clientsideName.empty()) {
         names.ClientsideName = clientsideName;
+        names.FederationPath = clientsideName;
+        names.FederationPathWithDC = clientsideName;
     }
     return names;
 }

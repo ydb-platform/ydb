@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/config.h>
 #include <ydb/library/actors/util/cpu_topology.h>
 
+#include <util/generic/vector.h>
+
 namespace NKikimr {
 
 namespace NActorSystemConfigHelpers {
@@ -13,6 +15,9 @@ namespace NActorSystemConfigHelpers {
 void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig& systemConfig, NMonitoring::TDynamicCounterPtr counters);
 void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig& systemConfig,
     NMonitoring::TDynamicCounterPtr counters, const TCpuTopology& cpuTopology);
+
+// Returns the pool ids referenced by InterconnectSessionExecutor.
+TVector<ui32> GetInterconnectSessionExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig);
 
 NActors::TSchedulerConfig CreateSchedulerConfig(const NKikimrConfig::TActorSystemConfig::TScheduler& config);
 

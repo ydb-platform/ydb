@@ -218,6 +218,10 @@ protected:
             return {};
         }
         auto ranges = maybeRanges.Cast();
+        if (!ranges.Ranges().Maybe<TCoVoid>()) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Right-side predicate pushdown blocks mandatory streamlookup rewrite"));
+            return {};
+        }
         const auto inputSeqType = node.Raw()->GetTypeAnn();
         return Build<TDqLookupSourceWrap>(ctx, node.Pos())
             .Input<TKqpReadRangesSourceSettings>()

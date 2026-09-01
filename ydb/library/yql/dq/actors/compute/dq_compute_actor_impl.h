@@ -853,13 +853,15 @@ protected:
     }
 
     void OnSinkFinished(ui64 outputIndex) override final {
-        SinksMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute(EResumeSource::CASinkFinished);
+        if (!std::exchange(SinksMap.at(outputIndex).FinishIsAcknowledged, true)) {
+            ContinueExecute(EResumeSource::CASinkFinished);
+        }
     }
 
     void OnTransformFinished(ui64 outputIndex) override final {
-        OutputTransformsMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute(EResumeSource::CATransformFinished);
+        if (!std::exchange(OutputTransformsMap.at(outputIndex).FinishIsAcknowledged, true)) {
+            ContinueExecute(EResumeSource::CATransformFinished);
+        }
     }
 
 protected: //TDqComputeActorCheckpoints::ICallbacks

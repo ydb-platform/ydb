@@ -1,5 +1,7 @@
 #include "kqp_sink_common.h"
 
+#include <deque>
+
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -1105,6 +1107,132 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         UNIT_ASSERT_GT_C(quotaExceededAfter, quotaExceededBefore,
             TStringBuilder() << "expected StreamLookupLockTotalQuotaBytesExceeded to increase, "
             << "before=" << quotaExceededBefore << ", after=" << quotaExceededAfter);
+
+        auto verify = kikimr.RunCall([&] {
+            return session.ExecuteQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/LockTest` WHERE Val == "updated";
+            )"), TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+        CompareYson(TStringBuilder() << "[[" << rowCount << "u]]", FormatResultSetYson(verify.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StreamLookupLock_LockRetriesExceededRequeuesBatch) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        auto* retrySettings = appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings();
+        retrySettings->SetMaxRowsProcessingStreamLookup(10000);
+        retrySettings->SetMaxInFlightLocksStreamLookup(10);
+        retrySettings->SetMaxShardRetries(1);
+        retrySettings->SetMaxShardResolves(100);
+        retrySettings->SetMaxTotalRetries(100);
+        retrySettings->SetStartDelayMs(5);
+        retrySettings->SetMaxDelayMs(10);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.AppConfig = appConfig;
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/LockTest` (
+                        Id Int64 NOT NULL,
+                        Val String,
+                        PRIMARY KEY (Id)
+                    ) WITH (
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1,
+                        UNIFORM_PARTITIONS = 1
+                    );
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const size_t rowCount = 20;
+        {
+            TStringBuilder dml;
+            dml << "REPLACE INTO `/Root/LockTest` (Id, Val) VALUES ";
+            for (size_t i = 0; i < rowCount; ++i) {
+                if (i) dml << ", ";
+                dml << "(" << i << ", \"v" << i << "\")";
+            }
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(dml), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        // Drop the first lock requests on the way to the datashard and reply with OVERLOADED
+        // to exhaust the shard retry limit. The stream lookup actor must re-queue the dropped
+        // batch after re-resolving the shards, otherwise the query never completes.
+        // Note: only the inner TEvLockRows is dropped, not the TEvPipeCache::TEvForward wrapping
+        // it, so the pipe to the shard is still established for the retried requests.
+        constexpr size_t HijackBudget = 2;
+        std::deque<std::pair<NActors::TActorId, ui64>> HijackedLocks;
+        std::vector<std::pair<NActors::TActorId, ui64>> OpenHijacks;
+
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
+                auto* forward = ev->Get<TEvPipeCache::TEvForward>();
+                if (forward->Ev->Type() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType
+                        && HijackedLocks.size() < HijackBudget) {
+                    auto* lockEv = static_cast<NKikimr::NEvents::TDataEvents::TEvLockRows*>(forward->Ev.Get());
+                    OpenHijacks.emplace_back(ev->Sender, lockEv->Record.GetRequestId());
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType
+                    && HijackedLocks.size() < HijackBudget) {
+                auto* lockEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvLockRows>();
+                const ui64 requestId = lockEv->Record.GetRequestId();
+                for (auto it = OpenHijacks.begin(); it != OpenHijacks.end(); ++it) {
+                    if (it->second == requestId) {
+                        HijackedLocks.emplace_back(*it);
+                        OpenHijacks.erase(it);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER {
+            runtime.SetObserverFunc(saveObserver);
+        };
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteQuery(Q_(R"(
+                UPDATE `/Root/LockTest` SET Val = "updated";
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+        });
+
+        size_t sentReplies = 0;
+        while (sentReplies < HijackBudget) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return HijackedLocks.size() > sentReplies;
+            });
+            runtime.DispatchEvents(opts, TDuration::Seconds(30));
+            UNIT_ASSERT_C(HijackedLocks.size() > sentReplies, "lock request was not captured by the observer");
+
+            const auto& [actorId, requestId] = HijackedLocks[sentReplies];
+            auto result = MakeHolder<NEvents::TDataEvents::TEvLockRowsResult>(
+                1, requestId, NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED);
+            runtime.Send(new NActors::IEventHandle(actorId, NActors::TActorId(), result.Release()));
+            ++sentReplies;
+        }
+
+        auto result = runtime.WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto verify = kikimr.RunCall([&] {
             return session.ExecuteQuery(Q_(R"(

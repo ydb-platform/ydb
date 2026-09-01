@@ -1354,6 +1354,7 @@ private:
 
         if (Reads.CheckShardRetriesExceededLock(failedLock)) {
             ReleaseLockQuota(failedLock.Id);
+            StreamLockWorker->ResetLockRowsProcessing(failedLock.Id);
             Reads.eraseLock(failedLock);
             return ResolveTableShards();
         }

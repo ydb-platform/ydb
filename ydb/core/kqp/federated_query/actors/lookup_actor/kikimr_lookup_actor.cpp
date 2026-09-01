@@ -290,6 +290,11 @@ namespace {
                 CleanupStreamProcessor(state);
             }
             InflightRequests.clear();
+            PendingPassAway = true;
+            if (InflightCreateSession != 0) {
+                // we must receive reply and delete session first
+                return;
+            }
             Free();
             TBase::PassAway();
         }
@@ -340,6 +345,11 @@ namespace {
         }
 
         void Handle(IDqAsyncLookupSource::TEvLookupRequest::TPtr ev) {
+            if (PendingPassAway) {
+                YDB_LOG_DEBUG("TEvLookupRequest after PassAway", COMMON_LOG);
+                SendError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Request received after PassAway");
+                return;
+            }
             auto guard = Guard(*Alloc);
             CreateRequest(ev->Get()->Request.lock(), ev->Get()->FullscanLimit);
         }
@@ -445,6 +455,7 @@ namespace {
 
             while (!state->SessionState) { // reuse or create session
                 if (Sessions.empty()) {
+                    ++InflightCreateSession;
                     SendCreateSession(std::move(state));
                     return;
                 }
@@ -479,6 +490,10 @@ namespace {
         }
 
         void Handle(TEvQueryExecuteQueryResponsePart::TPtr ev) {
+            if (PendingPassAway) { // already passed away
+                YDB_LOG_DEBUG("TEvQueryExecuteQueryResponsePart after PassAway", COMMON_LOG);
+                return;
+            }
             auto state = std::move(ev->Get()->State);
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
@@ -531,6 +546,18 @@ namespace {
 
         void Handle(TEvQuerySessionState::TPtr ev) {
             auto session = std::move(ev->Get()->State);
+            if (session->PendingLookup) {
+                --InflightCreateSession;
+                if (Y_UNLIKELY(PendingPassAway)) {
+                    SendDeleteSession(session->SessionId);
+                    CleanupStreamProcessor(session);
+                    PassAway();
+                    return;
+                }
+            }
+            if (Y_UNLIKELY(PendingPassAway)) {
+                return;
+            }
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQuerySessionState",
                     COMMON_LOG,
@@ -620,7 +647,18 @@ namespace {
                     COMMON_LOG,
                     {"response", response.DebugString()});
             if (response.status() != Ydb::StatusIds::SUCCESS) {
+                --InflightCreateSession;
+                if (PendingPassAway) {
+                    PassAway();
+                    return;
+                }
                 SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
+                return;
+            }
+            if (Y_UNLIKELY(PendingPassAway)) {
+                SendDeleteSession(response.session_id());
+                --InflightCreateSession;
+                PassAway();
                 return;
             }
             auto sessionState = std::make_shared<TSessionState>();
@@ -744,9 +782,6 @@ namespace {
 
         void FinalizeRequest(TLookupState::TPtr state) {
             CleanupStreamProcessor(state);
-            if (InflightRequests.empty()) { // PassAway was called
-                return;
-            }
             auto removed = InflightRequests.erase(state);
             Y_DEBUG_ABORT_UNLESS(removed);
             auto guard = Guard(*Alloc);
@@ -952,6 +987,8 @@ namespace {
         const TString SelectWithKeys;
         TVector<TSessionState::TPtr> Sessions;
         TSet<TLookupState::TPtr> InflightRequests;
+        ui64 InflightCreateSession = 0;
+        bool PendingPassAway = false;
 
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;
         ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;

@@ -546,7 +546,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpUpgradeSubDomai
     // full set, unlike the type check above it which skips the root).
     return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetUpgradeSubDomain().GetName(), 0, /*includeRoot=*/true,
-        TAffectedPath::EEffect::Alter);
+        TAffectedPath::EEffect::Alter,
+        // MayWrite, unlike the force drops: the upgrade marks its descendants migrated in
+        // memory and persists the root alone (upgrade_subdomain.cpp:566-579), so a
+        // descendant that gets no path-row write is correct, not a missing one.
+        TAffectedPath::EObservation::MayWrite);
 }
 
 } // namespace NOperation
@@ -571,7 +575,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpUpgradeSubDomai
     // structurally frozen, so that set is the set the commit or undo rewrites.
     return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetUpgradeSubDomain().GetName(), 0, /*includeRoot=*/true,
-        TAffectedPath::EEffect::Alter);
+        TAffectedPath::EEffect::Alter,
+        // MayWrite, unlike the force drops: the upgrade marks its descendants migrated in
+        // memory and persists the root alone (upgrade_subdomain.cpp:566-579), so a
+        // descendant that gets no path-row write is correct, not a missing one.
+        TAffectedPath::EObservation::MayWrite);
 }
 
 } // namespace NOperation

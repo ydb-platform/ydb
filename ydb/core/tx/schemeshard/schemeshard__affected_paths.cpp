@@ -139,7 +139,7 @@ TAffectedPaths DeclareTargetByIdOrName(TSchemeShard* ss, const TString& workingD
 }
 
 TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
-        TAffectedPath::EEffect effect)
+        TAffectedPath::EEffect effect, TAffectedPath::EObservation expect)
 {
     const TPath rootPath = TPath::Init(root, ss);
     if (!rootPath.IsResolved()) {
@@ -173,9 +173,10 @@ TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
             // about the object, not about the shape of the tree.
             .Class = TAffectedPath::EEffectClass::SchemaEffect,
             .Effect = effect,
-            // MustWrite: the operation's own loop rewrites every one of these rows -- the
-            // whole reason the subtree has to be declared rather than left Incomplete.
-            .Expect = TAffectedPath::EObservation::MustWrite,
+            // Usually MustWrite -- the operation's own loop rewrites every one of these
+            // rows, which is the whole reason the subtree has to be declared rather than
+            // left Incomplete. Not universal: see the note on the declaration.
+            .Expect = expect,
         });
     }
 
@@ -198,7 +199,8 @@ TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
 }
 
 TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& workingDir,
-        const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect)
+        const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect,
+        TAffectedPath::EObservation expect)
 {
     // Same precedence as DeclareTargetByIdOrName -- a local path id wins over the name --
     // spelled once here rather than at each call site. Note the test is on the integer:
@@ -213,7 +215,7 @@ TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& working
         unresolved.Unresolved = true;
         return unresolved;
     }
-    return DeclareSubTree(ss, target.Base()->PathId, includeRoot, effect);
+    return DeclareSubTree(ss, target.Base()->PathId, includeRoot, effect, expect);
 }
 
 TAffectedPaths DeclareCascadeTargetByIdOrName(TSchemeShard* ss, const TString& workingDir,

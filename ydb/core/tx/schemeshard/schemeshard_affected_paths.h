@@ -119,17 +119,24 @@ inline bool UndeclaredPathTouchIsFatal = false;
 // AssignBlockStoreVolume assigns an existing volume -- none of them gives a container a new
 // child, so none may assert Create/MustWrite. That took the armed failures from 10 to 2.
 //
-// Two remain, both index-shaped, and both look like a create declaration whose write does not
-// happen on some flow rather than another mis-stamped helper:
+// Third pass: DeclareSubTree stamped every descendant MustWrite on the reasoning that the
+// operation's own loop rewrites each row. True for the force drops and for an owner change,
+// false for a subdomain upgrade, which marks descendants migrated in memory and persists the
+// root alone (upgrade_subdomain.cpp:566-579). The expectation is a parameter now and the two
+// upgrade sites pass MayWrite. That cleared the descendant claim; what remains:
 //
-//   TSchemeShardTest::AlterMigratedIndexTable              -> /MyRoot/Tenant/Table/Index
+//   TSchemeShardTest::AlterMigratedIndexTable                 -> /MyRoot, txId 105
 //   TSchemeShardTest::PersistUniqueIndexKeySize-OnCreate-false
-//                                                          -> /MyRoot/Table/idx_uniq/indexImplTable
+//              -> /MyRoot/Table/idx_uniq/indexImplTable, txId 281474976710760 (internal range)
 //
-// Deliberately not fixed by loosening the index creates to MayWrite. That would turn both
-// green and would be a guess: if the write genuinely should happen, MayWrite hides a real gap,
-// which is the one direction this check exists to close. Find out which flow skips the write
-// first, then decide. Arm this from TTestEnv in that change.
+// Both are still create-shaped declarations whose write is skipped on some flow. Note the
+// second txId is schemeshard-generated, so its declaration comes from an internally
+// synthesized request rather than a user one -- worth checking whether internal operations
+// should be held to MustWrite at all.
+//
+// Do not clear these by loosening the index creates to MayWrite. That turns them green by
+// guessing, and if the write should happen MayWrite hides the one thing this check exists to
+// find. Identify the flow that skips the write first. Arm from TTestEnv in that change.
 inline bool UnfulfilledPathDeclarationIsFatal = false;
 
 // The reverse half of the cross-check. ObservePathTouched tests written ⊆ declared, which
@@ -181,15 +188,22 @@ TAffectedPaths DeclareCascadeTargetByIdOrName(const TOperationContext& context,
 // The effect is the caller's to state and cannot be inferred here: a force drop takes its
 // descendants with it, an owner change only alters them. The container of the root is
 // declared as well -- all of these operations bump its DirAlterVersion.
+// `expect` is the caller's to state and is not uniform: a force drop and an owner change
+// really do rewrite every descendant's row, but a subdomain upgrade only marks its
+// descendants migrated in memory and persists the root alone
+// (schemeshard__operation_upgrade_subdomain.cpp:566-579). Demanding a write of every node
+// there is a claim the operation never makes.
 TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
-    TAffectedPath::EEffect effect);
+    TAffectedPath::EEffect effect,
+    TAffectedPath::EObservation expect = TAffectedPath::EObservation::MustWrite);
 
 // The same, for a request that names its root the way an ordinary target is named. Keeps
 // the id-over-name precedence in one place: it is the property that stops a declaration
 // naming a different object than the operation mutates, so it must not be re-spelled per
 // call site. Pass localPathId == 0 when absent.
 TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& workingDir,
-    const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect);
+    const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect,
+    TAffectedPath::EObservation expect = TAffectedPath::EObservation::MustWrite);
 
 // A drop that takes the target's whole subtree with it. The root is named exactly, as it
 // is what the request asked for and what the outbox records, but the descendants are

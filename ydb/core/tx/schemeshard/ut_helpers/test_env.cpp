@@ -631,6 +631,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     // the only version of this that survives contact with a growing codebase.
     NSchemeShard::UndeclaredPathTouchIsFatal = opts.CheckDeclaredPaths_;
     NSchemeShard::UnfulfilledPathDeclarationIsFatal = opts.CheckDeclaredPaths_;
+    NSchemeShard::PlanDivergenceIsFatal = opts.CheckDeclaredPaths_;
 
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;

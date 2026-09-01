@@ -139,6 +139,27 @@ inline bool UndeclaredPathTouchIsFatal = false;
 // deletes.
 inline bool UnfulfilledPathDeclarationIsFatal = false;
 
+// Reports a part whose own resolution disagrees with what the plan said it would touch.
+//
+// This is the measurement (e) turns on before any part changes how it resolves. Today a part
+// and its declaration compute the same path twice, by different routes, and nothing compares
+// them: the forward check only tests written-subset-of-declared, so a declaration naming a
+// *different* object than the part mutates is invisible whenever the part writes no path row
+// -- which TAlterTable never does. E29 was exactly that shape, and it could refuse a DDL.
+//
+// Returns the declared target path when it differs from what the part resolved, nullopt when
+// they agree or when there is nothing to compare (no operation, no declaration for this
+// SubTxId, no Target entry). Silence is deliberately not evidence here: an operation whose
+// part was never admitted has made no claim to contradict.
+class TOperationId;
+std::optional<TString> FindPlanDivergence(TSchemeShard* ss, const TOperationId& opId,
+    const TString& resolvedPath);
+
+// Arms the above, the same way the two checks above are armed and for the same reason: a
+// mismatch names the operation and both paths, which is what makes it actionable. Never set
+// in production -- a divergence there is a wrong record, not a reason to stop the tablet.
+inline bool PlanDivergenceIsFatal = false;
+
 // Test-only sink for the finished plan of a top-level operation.
 //
 // The union across an operation's parts *is* the plan the requirement asks for -- every

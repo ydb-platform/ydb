@@ -653,6 +653,28 @@ public:
             }
         }
 
+        // (e) slice 3, measurement only: this part and its declaration resolved the same
+        // request by different routes, so compare them once the target is known good.
+        // TAlterTable is the right family to start with -- it is where E29's owner-id
+        // divergence lived, and it writes no path row at all, so the forward cross-check
+        // cannot see a wrong path here even in principle.
+        //
+        // Only reports; it does not yet resolve *from* the plan. Turning a suspicion into a
+        // measurement across the whole suite has to come before any part changes how it
+        // resolves, or the change lands with no evidence about what it altered.
+        if (const auto declaredPath = FindPlanDivergence(context.SS, OperationId, path.PathString())) {
+            Y_ABORT_UNLESS(!PlanDivergenceIsFatal,
+                "part resolved a different path than its plan declared: resolved %s, declared"
+                " %s, txId: %" PRIu64 ", subTxId: %" PRIu64,
+                path.PathString().c_str(), declaredPath->c_str(),
+                ui64(OperationId.GetTxId()), ui64(OperationId.GetSubTxId()));
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "plan divergence"
+                    << ", resolved: " << path.PathString()
+                    << ", declared: " << *declaredPath
+                    << ", opId: " << OperationId);
+        }
+
         THashSet<TString> localSequences;
 
         for (const auto& column: alter.GetColumns()) {

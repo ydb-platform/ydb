@@ -7,6 +7,31 @@
 
 namespace NKikimr::NSchemeShard {
 
+std::optional<TString> FindPlanDivergence(TSchemeShard* ss, const TOperationId& opId,
+        const TString& resolvedPath)
+{
+    const auto operation = ss->Operations.find(opId.GetTxId());
+    if (operation == ss->Operations.end()) {
+        return std::nullopt;
+    }
+    const auto declared = operation->second->DeclaredPartPaths.find(opId.GetSubTxId());
+    if (declared == operation->second->DeclaredPartPaths.end()) {
+        return std::nullopt;
+    }
+    for (const auto& affected : declared->second.Paths) {
+        // Only the Target is comparable. A Container is the parent rather than the thing the
+        // part resolved, and a Source belongs to the other end of a move or copy.
+        if (affected.Role != TAffectedPath::ERole::Target) {
+            continue;
+        }
+        if (affected.Path != resolvedPath) {
+            return affected.Path;
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 bool OperationDeclaresAffectedPaths(const TTxTransaction& tx) {
     return DispatchAffectedPaths(tx, [](auto traits) {
         return decltype(traits)::Declares;

@@ -91,39 +91,33 @@ bool IsPredicateType(EJsonPathItemType type) {
     }
 }
 
-static bool ReadPathKey(TStringBuf path, size_t& pos, TStringBuf& key) {
-    if ((ui8)path[pos] < (ui8)EPathSeparator::Max) {
-        return false;
-    }
-    size_t encodedSize = 0;
-    size_t shift = 0;
-    while (pos < path.size()) {
-        const ui8 byte = (ui8)path[pos++];
-        encodedSize |= (size_t)(byte & 0x7F) << shift;
-        if ((byte & 0x80) == 0) {
-            break;
-        }
-        shift += 7;
-    }
-    if (encodedSize == 0 || encodedSize - (ui8)EPathSeparator::Max > path.size() - pos) {
-        return false;
-    }
-    key = TStringBuf(path.data() + pos, encodedSize - (ui8)EPathSeparator::Max);
-    pos += encodedSize - (ui8)EPathSeparator::Max;
-    return true;
-}
-
 TStringBuf GetPathPrefix(TStringBuf pathToken) {
     size_t pos = 0;
+    if (pos < pathToken.size() && (ui8)pathToken[pos] == (ui8)EPathSeparator::LaxMarker) {
+        pos++;
+    }
     while (pos < pathToken.size()) {
         if ((ui8)pathToken[pos] == (ui8)EPathSeparator::ArrayItem) {
             pos++;
             continue;
         }
-        TStringBuf key;
-        if (!ReadPathKey(pathToken, pos, key)) {
-            return pathToken.substr(0, pos);
+        if ((ui8)pathToken[pos] < (ui8)EPathSeparator::Max) {
+            return pathToken.SubStr(0, pos);
         }
+        size_t encodedSize = 0;
+        size_t shift = 0;
+        while (pos < pathToken.size()) {
+            const ui8 byte = static_cast<ui8>(pathToken[pos++]);
+            encodedSize |= static_cast<size_t>(byte & 0x7F) << shift;
+            if ((byte & 0x80) == 0) {
+                break;
+            }
+            shift += 7;
+        }
+        if (encodedSize < (ui8)EPathSeparator::Max || encodedSize - (ui8)EPathSeparator::Max > pathToken.size() - pos) {
+            return pathToken;
+        }
+        pos += encodedSize - (ui8)EPathSeparator::Max;
     }
     return pathToken;
 }
@@ -436,6 +430,9 @@ TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, 
 }
 
 TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
+    if (IsLax()) {
+        return Collect(Reader.ReadInput(item), mode);
+    }
     auto result = Collect(Reader.ReadInput(item), mode);
     if (!result.CanCollect()) {
         return result;
@@ -704,11 +701,11 @@ bool TQueryCollector::ArePredicatesAllowed(EMode mode) const {
     }
 }
 
-void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens);
+void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, bool lax, TVector<TString>& tokens);
 
-void TokenizeBinaryJson(const NBinaryJson::TEntryCursor& element, const TString& prefix, TVector<TString>& tokens) {
+void TokenizeBinaryJson(const NBinaryJson::TEntryCursor& element, const TString& prefix, bool lax, TVector<TString>& tokens) {
     if (element.GetType() == NBinaryJson::EEntryType::Container) {
-        TokenizeBinaryJson(element.GetContainer(), prefix, tokens);
+        TokenizeBinaryJson(element.GetContainer(), prefix, lax, tokens);
         return;
     }
     TString token = prefix;
@@ -745,16 +742,22 @@ TString TokenizeJsonArrayPrefix(const TString& prefix) {
     return newPrefix;
 }
 
-void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens) {
+void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, bool lax, TVector<TString>& tokens) {
     switch (root.GetType()) {
         case NBinaryJson::EContainerType::TopLevelScalar:
-            TokenizeBinaryJson(root.GetElement(0), prefix, tokens);
+            TokenizeBinaryJson(root.GetElement(0), prefix, lax, tokens);
             break;
         case NBinaryJson::EContainerType::Array: {
-            TString nextPrefix = TokenizeJsonArrayPrefix(prefix);
-            tokens.push_back(nextPrefix);
-            for (ui32 pos = 0; pos < root.GetSize(); pos++) {
-                TokenizeBinaryJson(root.GetElement(pos), nextPrefix, tokens);
+            if (lax) {
+                for (ui32 pos = 0; pos < root.GetSize(); pos++) {
+                    TokenizeBinaryJson(root.GetElement(pos), prefix, lax, tokens);
+                }
+            } else {
+                TString nextPrefix = TokenizeJsonArrayPrefix(prefix);
+                tokens.push_back(nextPrefix);
+                for (ui32 pos = 0; pos < root.GetSize(); pos++) {
+                    TokenizeBinaryJson(root.GetElement(pos), nextPrefix, lax, tokens);
+                }
             }
             break;
         }
@@ -765,7 +768,7 @@ void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString
                 Y_ENSURE(kv.first.GetType() == NBinaryJson::EEntryType::String);
                 TString nextPrefix = TokenizeJsonNextPrefix(prefix, kv.first.GetString());
                 tokens.push_back(nextPrefix);
-                TokenizeBinaryJson(kv.second, nextPrefix, tokens);
+                TokenizeBinaryJson(kv.second, nextPrefix, lax, tokens);
             }
             break;
     }
@@ -835,10 +838,6 @@ bool TCollectResult::CanCollect() const {
     return !IsError() && !Stopped && GetTokens().size() == 1;
 }
 
-bool TCollectResult::CanAppendLiteral() const {
-    return !IsError() && !Stopped && !GetTokens().empty();
-}
-
 TCollectResult::ETokensMode TCollectResult::GetTokensMode() const {
     return TokensMode;
 }
@@ -853,7 +852,8 @@ TVector<TString> TokenizeBinaryJson(TStringBuf text) {
         return tokens;
     }
     auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(text);
-    TokenizeBinaryJson(reader->GetRootCursor(), "", tokens);
+    TokenizeBinaryJson(reader->GetRootCursor(), "", false, tokens);
+    TokenizeBinaryJson(reader->GetRootCursor(), TString((char)EPathSeparator::LaxMarker), true, tokens);
     return tokens;
 }
 
@@ -868,68 +868,6 @@ TVector<TString> TokenizeJson(TStringBuf text, TString& error) {
     return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
 }
 
-TTokens ExpandLaxToken(const TToken& token) {
-    // Generate all variants of the path portion. In lax mode a member access
-    // implicitly descends one array level, so an array-item marker may optionally
-    // precede each key segment.
-    TVector<TString> variants{ "" };
-    auto multiply = [&](TStringBuf segment) {
-        TVector<TString> nextVariants;
-        nextVariants.reserve(variants.size() * 2);
-        for (auto& variant : variants) {
-            nextVariants.push_back(variant + segment);
-            nextVariants.push_back(variant + (char)EPathSeparator::ArrayItem + segment);
-        }
-        variants = std::move(nextVariants);
-    };
-
-    size_t pos = 0;
-    bool inArray = false;
-    TStringBuf literal;
-    while (pos < token.PathToken.size()) {
-        if (token.PathToken[pos] == (char)EPathSeparator::ArrayItem) {
-            multiply("");
-            pos++;
-            inArray = true;
-            continue;
-        }
-        TStringBuf segment;
-        const size_t segmentStart = pos;
-        if (!ReadPathKey(token.PathToken, pos, segment)) {
-            literal = TStringBuf(token.PathToken.data() + segmentStart, token.PathToken.size() - segmentStart);
-            break;
-        }
-        segment = TStringBuf(token.PathToken.data() + segmentStart, pos - segmentStart);
-        if (inArray) {
-            // Already in array item, don't unpack second time
-            for (auto& variant : variants) {
-                variant += segment;
-            }
-            inArray = false;
-        } else {
-            multiply(segment);
-        }
-    }
-    if (!inArray) {
-        multiply("");
-    }
-
-    TTokens result;
-    for (auto& variant : variants) {
-        result.emplace(variant + literal, token.ParamName);
-    }
-    return result;
-}
-
-TTokens ExpandLaxTokens(const TTokens& tokens) {
-    TTokens result;
-    for (const auto& token : tokens) {
-        auto expanded = ExpandLaxToken(token);
-        result.insert(expanded.begin(), expanded.end());
-    }
-    return result;
-}
-
 TCollectResult CollectJsonPath(const TJsonPathPtr& path, ECallableType callableType, const std::unordered_map<TString, TString>& variables,
     const std::unordered_map<TString, TString>& paramVariables) {
     TQueryCollector collector(path, callableType, variables, paramVariables);
@@ -937,13 +875,16 @@ TCollectResult CollectJsonPath(const TJsonPathPtr& path, ECallableType callableT
     if (!result.IsError()) {
         if (result.GetTokens().empty()) {
             result = TCollectResult(TIssue("Cannot collect tokens for the given JSON path"));
-        } else {
-            if (collector.IsLax()) {
-                result.GetTokens() = ExpandLaxTokens(result.GetTokens());
-                if (result.GetTokens().size() > 1) {
-                    result.SetTokensMode(TCollectResult::ETokensMode::Or);
+        } else if (collector.IsLax()) {
+            TTokens prefixed;
+            for (const auto& token : result.GetTokens()) {
+                if (token.PathToken != "") {
+                    prefixed.emplace(TString((char)EPathSeparator::LaxMarker) + token.PathToken, token.ParamName);
+                } else {
+                    prefixed.insert(token);
                 }
             }
+            result.GetTokens() = std::move(prefixed);
         }
 
         if (callableType != ECallableType::JsonValue) {
@@ -967,16 +908,20 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
     NJson::TJsonWriter writer(&ss, /* formatOutput */ false);
     writer.OpenMap();
 
-    const TStringBuf pathPart = GetPathPrefix(pathToken);
-    const bool hasLiteral = pathPart.size() != pathToken.size();
+    size_t nullPos = pathToken.find('\0');
+    size_t pathEnd = (nullPos == TString::npos) ? pathToken.size() : nullPos;
 
     // Decode LEB128-prefixed key segments and array-item markers from the path portion
-    if (!pathPart.empty()) {
+    if (pathEnd > 0) {
         std::vector<TString> path;
         size_t pos = 0;
 
-        while (pos < pathPart.size()) {
-            if (pathPart[pos] == (char)EPathSeparator::ArrayItem) {
+        if (pos < pathEnd && pathToken[pos] == (char)EPathSeparator::LaxMarker) {
+            pos++;
+        }
+
+        while (pos < pathEnd) {
+            if (pathToken[pos] == (char)EPathSeparator::ArrayItem) {
                 path.push_back("[*]");
                 pos++;
                 continue;
@@ -984,25 +929,25 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
 
             size_t encodedLength = 0;
             int shift = 0;
-            while (pos < pathPart.size()) {
-                ui8 byte = (ui8)pathPart[pos++];
-                encodedLength |= (size_t)(byte & 0x7F) << shift;
+            while (pos < pathEnd) {
+                ui8 byte = static_cast<ui8>(pathToken[pos++]);
+                encodedLength |= static_cast<size_t>(byte & 0x7F) << shift;
                 shift += 7;
                 if (!(byte & 0x80)) {
                     break;
                 }
             }
 
-            if (encodedLength == 0) {
+            if (encodedLength < (ui8)EPathSeparator::Max) {
                 break;
             }
 
             size_t keyLength = encodedLength - (ui8)EPathSeparator::Max;
-            if (pos + keyLength > pathPart.size()) {
+            if (pos + keyLength > pathEnd) {
                 break;
             }
 
-            path.push_back(TString(pathPart.substr(pos, keyLength)));
+            path.push_back(pathToken.substr(pos, keyLength));
             pos += keyLength;
         }
 
@@ -1012,9 +957,8 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
     }
 
     // Decode literal suffix
-    if (hasLiteral && pathPart.size() + 1 < pathToken.size()) {
-        auto typeCode = (NBinaryJson::EEntryType)pathToken[pathPart.size() + 1];
-        const size_t payloadPos = pathPart.size() + 2;
+    if (nullPos != TString::npos && nullPos + 1 < pathToken.size()) {
+        auto typeCode = static_cast<NBinaryJson::EEntryType>(static_cast<ui8>(pathToken[nullPos + 1]));
 
         switch (typeCode) {
             case NBinaryJson::EEntryType::BoolFalse:
@@ -1027,12 +971,12 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
                 writer.Write("literal", NJson::TJsonValue(NJson::JSON_NULL));
                 break;
             case NBinaryJson::EEntryType::String:
-                writer.Write("literal", pathToken.substr(payloadPos));
+                writer.Write("literal", pathToken.substr(nullPos + 2));
                 break;
             case NBinaryJson::EEntryType::Number:
-                if (payloadPos + sizeof(double) <= pathToken.size()) {
+                if (nullPos + 2 + sizeof(double) <= pathToken.size()) {
                     double d = 0.0;
-                    memcpy(&d, pathToken.data() + payloadPos, sizeof(double));
+                    memcpy(&d, pathToken.data() + nullPos + 2, sizeof(double));
                     writer.Write("literal", d);
                 }
                 break;

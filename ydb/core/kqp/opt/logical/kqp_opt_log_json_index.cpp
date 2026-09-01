@@ -483,27 +483,19 @@ TPredicateCollectResult AppendComparisonValue(
     const TString& columnName, TCollectResult collectResult, std::optional<TExprBase> comparisonValue) {
     YQL_ENSURE(!collectResult.IsError(), "Expected valid collect result");
 
-    if (comparisonValue.has_value() && collectResult.CanAppendLiteral()) {
-        TString paramName;
-        TString literal;
+    auto& tokens = collectResult.GetTokens();
+    if (collectResult.CanCollect() && comparisonValue.has_value()) {
+        YQL_ENSURE(tokens.size() == 1, "Expected exactly one token");
+        auto node = tokens.extract(tokens.begin());
+
         if (comparisonValue->Maybe<TCoParameter>()) {
-            paramName = TString(comparisonValue->Cast<TCoParameter>().Name().Value());
+            const auto paramName = TString(comparisonValue->Cast<TCoParameter>().Name().Value());
+            node.value().ParamName = paramName;
         } else if (const auto encodedValue = EncodeValueToJsonPath(*comparisonValue)) {
-            literal = *encodedValue;
+            node.value().PathToken += *encodedValue;
         }
 
-        auto& tokens = collectResult.GetTokens();
-        TTokens updated;
-        for (const auto& token : tokens) {
-            TToken newToken = token;
-            if (!paramName.empty()) {
-                newToken.ParamName = paramName;
-            } else {
-                newToken.PathToken += literal;
-            }
-            updated.insert(std::move(newToken));
-        }
-        tokens = std::move(updated);
+        tokens.insert(std::move(node));
         collectResult.StopCollecting();
     }
 
@@ -653,12 +645,26 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
             return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
         }
 
-        auto result = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, TExprBase(param.Ptr()), ctx, jsonLookup.Pos());
-        if (!result.Collect.IsError()) {
-            result.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
+        auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, std::nullopt, ctx, jsonLookup.Pos());
+        if (baseResult.Collect.IsError()) {
+            return baseResult;
         }
 
-        return result;
+        if (baseResult.Collect.CanCollect()) {
+            auto& tokens = baseResult.Collect.GetTokens();
+            YQL_ENSURE(tokens.size() == 1);
+
+            auto paramName = TString(param.Name().Value());
+
+            auto nodeHandle = tokens.extract(tokens.begin());
+            nodeHandle.value().ParamName = std::move(paramName);
+            tokens.insert(std::move(nodeHandle));
+
+            baseResult.Collect.StopCollecting();
+            baseResult.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
+        }
+
+        return baseResult;
     }
 
     std::vector<TExprBase> items;
@@ -690,6 +696,11 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         return MakeCollectError(ctx, collection.Pos(), "Unsupported collection type in SQL IN");
     }
 
+    auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, std::nullopt, ctx, jsonLookup.Pos());
+    if (baseResult.Collect.IsError()) {
+        return baseResult;
+    }
+
     std::optional<TPredicateCollectResult> acc;
     for (const auto& item : items) {
         const auto literal = UnwrapValue(item);
@@ -698,7 +709,7 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
             return MakeCollectError(ctx, literal.Pos(), extracted.error());
         }
 
-        auto itemResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, *extracted, ctx, literal.Pos());
+        auto itemResult = AppendComparisonValue(baseResult.ColumnName, baseResult.Collect, *extracted);
         if (!acc.has_value()) {
             acc = std::move(itemResult);
         } else {

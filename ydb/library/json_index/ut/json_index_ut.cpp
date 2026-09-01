@@ -25,6 +25,7 @@ const TString boolTrueSuffix = TString("\0\1", 2);
 const TString boolFalseSuffix = TString("\0\0", 2);
 const TString nullSuffix = TString("\0\2", 2);
 const TString arrayItemSuffix = TString("\1");
+const TString laxMarker = TString("\2");
 
 TString encodeKey(TStringBuf key) {
     TString result;
@@ -211,13 +212,15 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(R"({"a":1})", error), (TVector<TString>{
             encodeKey("a"), encodeKey("a") + numSuffix(1),
+
+            laxMarker + encodeKey("a"), laxMarker + encodeKey("a") + numSuffix(1),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[]", error), TVector<TString>{arrayItemSuffix});
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{numSuffix(42)}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{numSuffix(42), laxMarker + numSuffix(42)}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
@@ -2838,7 +2841,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"invalid json", error), TVector<TString>{});
         UNIT_ASSERT(!error.empty());
 
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), (TVector<TString>{strSuffix("literal string")}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), (TVector<TString>{strSuffix("literal string"), laxMarker + strSuffix("literal string")}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         TString obj = "{\"id\":42042,\"brand\":\"bricks\",\"part_count\":1401,\"price\":null,\"parts\":"
@@ -2846,6 +2849,28 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         auto tokens = TokenizeJson(obj, error);
         std::sort(tokens.begin(), tokens.end());
         UNIT_ASSERT_VALUES_EQUAL(tokens, (TVector<TString>{
+            laxMarker + encodeKey("id"),
+            laxMarker + encodeKey("id") + numSuffix(42042),
+            laxMarker + encodeKey("brand"),
+            laxMarker + encodeKey("brand") + strSuffix("bricks"),
+            laxMarker + encodeKey("parts"),
+            laxMarker + encodeKey("parts") + encodeKey("id"),
+            laxMarker + encodeKey("parts") + encodeKey("id"),
+            laxMarker + encodeKey("parts") + encodeKey("id") + numSuffix(32526),
+            laxMarker + encodeKey("parts") + encodeKey("id") + numSuffix(32523),
+            laxMarker + encodeKey("parts") + encodeKey("name"),
+            laxMarker + encodeKey("parts") + encodeKey("name"),
+            laxMarker + encodeKey("parts") + encodeKey("name") + strSuffix("1x3"),
+            laxMarker + encodeKey("parts") + encodeKey("name") + strSuffix("3x5"),
+            laxMarker + encodeKey("parts") + encodeKey("count"),
+            laxMarker + encodeKey("parts") + encodeKey("count"),
+            laxMarker + encodeKey("parts") + encodeKey("count") + numSuffix(7),
+            laxMarker + encodeKey("parts") + encodeKey("count") + numSuffix(17),
+            laxMarker + encodeKey("price"),
+            laxMarker + encodeKey("price") + nullSuffix,
+            laxMarker + encodeKey("part_count"),
+            laxMarker + encodeKey("part_count") + numSuffix(1401),
+
             encodeKey("id"),
             encodeKey("id") + numSuffix(42042),
             encodeKey("brand"),
@@ -2876,6 +2901,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             encodeKey(""),
             encodePath({"", "a"}),
             encodePath({"", "a"}) + strSuffix("b"),
+
+            laxMarker + encodeKey(""),
+            laxMarker + encodePath({"", "a"}),
+            laxMarker + encodePath({"", "a"}) + strSuffix("b"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2888,6 +2917,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             encodeKey(longKey),
             encodePath({longKey, "short"}),
             encodePath({longKey, "short"}) + strSuffix("b"),
+
+            laxMarker + encodeKey(longKey),
+            laxMarker + encodePath({longKey, "short"}),
+            laxMarker + encodePath({longKey, "short"}) + strSuffix("b"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2900,18 +2933,18 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level number literal
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{numSuffix(42)}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{numSuffix(42), laxMarker + numSuffix(42)}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level boolean literals
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("true", error), (TVector<TString>{boolTrueSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("true", error), (TVector<TString>{boolTrueSuffix, laxMarker + boolTrueSuffix}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("false", error), (TVector<TString>{boolFalseSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("false", error), (TVector<TString>{boolFalseSuffix, laxMarker + boolFalseSuffix}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level null literal
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("null", error), (TVector<TString>{nullSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("null", error), (TVector<TString>{nullSuffix, laxMarker + nullSuffix}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level array: elements are tokenized at the root prefix (no key added for array indices)
@@ -2920,6 +2953,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             arrayItemSuffix + numSuffix(1),
             arrayItemSuffix + numSuffix(2),
             arrayItemSuffix + numSuffix(3),
+
+            laxMarker + numSuffix(1),
+            laxMarker + numSuffix(2),
+            laxMarker + numSuffix(3),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2932,6 +2969,11 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             arrayItemSuffix + arrayItemSuffix,
             arrayItemSuffix + arrayItemSuffix + numSuffix(3),
             arrayItemSuffix + arrayItemSuffix + numSuffix(4),
+
+            laxMarker + numSuffix(1),
+            laxMarker + numSuffix(2),
+            laxMarker + numSuffix(3),
+            laxMarker + numSuffix(4),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2944,6 +2986,11 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             arrayItemSuffix + arrayItemSuffix + arrayItemSuffix + numSuffix(2),
             arrayItemSuffix + arrayItemSuffix + arrayItemSuffix + numSuffix(3),
             arrayItemSuffix + numSuffix(4),
+
+            laxMarker + numSuffix(1),
+            laxMarker + numSuffix(2),
+            laxMarker + numSuffix(3),
+            laxMarker + numSuffix(4),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2955,6 +3002,12 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             arrayItemSuffix + boolTrueSuffix,
             arrayItemSuffix + boolFalseSuffix,
             arrayItemSuffix + nullSuffix,
+
+            laxMarker + numSuffix(1),
+            laxMarker + strSuffix("hello"),
+            laxMarker + boolTrueSuffix,
+            laxMarker + boolFalseSuffix,
+            laxMarker + nullSuffix,
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2973,12 +3026,19 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             arrayItemSuffix + encodeKey("a") + numSuffix(1),
             arrayItemSuffix + encodeKey("a"),
             arrayItemSuffix + encodeKey("a") + numSuffix(2),
+
+            laxMarker + encodeKey("a"),
+            laxMarker + encodeKey("a") + numSuffix(1),
+            laxMarker + encodeKey("a"),
+            laxMarker + encodeKey("a") + numSuffix(2),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Simple root-level object
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":1}", error), (TVector<TString>{
             encodeKey("a"), encodeKey("a") + numSuffix(1),
+
+            laxMarker + encodeKey("a"), laxMarker + encodeKey("a") + numSuffix(1),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2991,6 +3051,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
                 encodeKey("b"), encodeKey("b") + boolTrueSuffix,
                 encodeKey("n"), encodeKey("n") + nullSuffix,
                 encodeKey("s"), encodeKey("s") + strSuffix("val"),
+
+                laxMarker + encodeKey("b"), laxMarker + encodeKey("b") + boolTrueSuffix,
+                laxMarker + encodeKey("n"), laxMarker + encodeKey("n") + nullSuffix,
+                laxMarker + encodeKey("s"), laxMarker + encodeKey("s") + strSuffix("val"),
             };
             std::sort(expected.begin(), expected.end());
             UNIT_ASSERT_VALUES_EQUAL(objAllTypes, expected);
@@ -2999,12 +3063,16 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // Empty key with a scalar value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"\":42}", error), (TVector<TString>{
             encodeKey(""), encodeKey("") + numSuffix(42),
+
+            laxMarker + encodeKey(""), laxMarker + encodeKey("") + numSuffix(42),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Object with an empty string value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":\"\"}", error), (TVector<TString>{
             encodeKey("a"), encodeKey("a") + strSuffix(""),
+
+            laxMarker + encodeKey("a"), laxMarker + encodeKey("a") + strSuffix(""),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -3013,12 +3081,17 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             encodeKey("a"),
             encodeKey("b"),
             encodeKey("b") + arrayItemSuffix,
+
+            laxMarker + encodeKey("a"),
+            laxMarker + encodeKey("b"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode string value (ASCII key, Unicode value)
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"key\":\"Привет\"}", error), (TVector<TString>{
             encodeKey("key"), encodeKey("key") + strSuffix("Привет"),
+
+            laxMarker + encodeKey("key"), laxMarker + encodeKey("key") + strSuffix("Привет"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -3030,6 +3103,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             TVector<TString> expected{
                 encodeKey("a"), encodeKey("a") + strSuffix("Привет"),
                 encodeKey("b"), encodeKey("b") + strSuffix("Мир"),
+
+                laxMarker + encodeKey("a"), laxMarker + encodeKey("a") + strSuffix("Привет"),
+                laxMarker + encodeKey("b"), laxMarker + encodeKey("b") + strSuffix("Мир"),
             };
             std::sort(expected.begin(), expected.end());
             UNIT_ASSERT_VALUES_EQUAL(unicodeVals, expected);
@@ -3038,36 +3114,52 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // Unicode key (ASCII value)
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":\"val\"}", error), (TVector<TString>{
             encodeKey("ключ"), encodeKey("ключ") + strSuffix("val"),
+
+            laxMarker + encodeKey("ключ"), laxMarker + encodeKey("ключ") + strSuffix("val"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key and unicode value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":\"значение\"}", error), (TVector<TString>{
             encodeKey("ключ"), encodeKey("ключ") + strSuffix("значение"),
+
+            laxMarker + encodeKey("ключ"), laxMarker + encodeKey("ключ") + strSuffix("значение"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Nested unicode key
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":{\"поле\":\"v\"}}", error), (TVector<TString>{
-            encodeKey("ключ"), encodePath({"ключ", "поле"}), encodePath({"ключ", "поле"}) + strSuffix("v"),
+            encodeKey("ключ"),
+            encodePath({"ключ", "поле"}),
+            encodePath({"ключ", "поле"}) + strSuffix("v"),
+
+            laxMarker + encodeKey("ключ"),
+            laxMarker + encodePath({"ключ", "поле"}),
+            laxMarker + encodePath({"ключ", "поле"}) + strSuffix("v"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key with numeric value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":42}", error), (TVector<TString>{
             encodeKey("ключ"), encodeKey("ключ") + numSuffix(42),
+
+            laxMarker + encodeKey("ключ"), laxMarker + encodeKey("ключ") + numSuffix(42),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key with boolean value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":true}", error), (TVector<TString>{
             encodeKey("ключ"), encodeKey("ключ") + boolTrueSuffix,
+
+            laxMarker + encodeKey("ключ"), laxMarker + encodeKey("ключ") + boolTrueSuffix,
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key with null value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":null}", error), (TVector<TString>{
             encodeKey("ключ"), encodeKey("ключ") + nullSuffix,
+
+            laxMarker + encodeKey("ключ"), laxMarker + encodeKey("ключ") + nullSuffix,
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -3076,6 +3168,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             arrayItemSuffix,
             arrayItemSuffix + strSuffix("Привет"),
             arrayItemSuffix + strSuffix("Мир"),
+
+            laxMarker + strSuffix("Привет"),
+            laxMarker + strSuffix("Мир"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -3085,11 +3180,15 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             encodeKey("ключ") + arrayItemSuffix,
             encodeKey("ключ") + arrayItemSuffix + strSuffix("а"),
             encodeKey("ключ") + arrayItemSuffix + strSuffix("б"),
+
+            laxMarker + encodeKey("ключ"),
+            laxMarker + encodeKey("ключ") + strSuffix("а"),
+            laxMarker + encodeKey("ключ") + strSuffix("б"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level unicode string literal
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"Привет\"", error), (TVector<TString>{strSuffix("Привет")}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"Привет\"", error), (TVector<TString>{strSuffix("Привет"), laxMarker + strSuffix("Привет")}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 

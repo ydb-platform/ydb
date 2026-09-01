@@ -2574,8 +2574,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         CompareYsonUnordered(R"([
-            [[1u];"\x09ключ"];
-            [[1u];"\x09ключ\0\3я mop"]
+            [[1u];"\x18ключ"];
+            [[1u];"\x18ключ\0\3я mop"]
         ])", FormatFulltextIndex(kikimr));
     }
 
@@ -2598,23 +2598,23 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             // JE: Cyrillic key in jsonpath
             ValidatePredicate(db, R"(JSON_EXISTS(Text, '$."ключ"'))");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$."ключ"'))", {"\x09ключ"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$."ключ"'))", {"\x18ключ"});
 
             // JE: Cyrillic key with Cyrillic string value in equality filter
             ValidatePredicate(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))", {std::string("\x09ключ") + strSuffix("Я моп")});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))", {std::string("\x18ключ") + strSuffix("Я моп")});
 
             ValidatePredicate(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" starts with "Я")'))");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" starts with "Я")'))", {"\x09ключ"});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" starts with "Я")'))", {"\x18ключ"});
 
             // JV: Cyrillic key compared to Cyrillic Utf8 literal
             ValidatePredicate(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)", {std::string("\x09ключ") + strSuffix("Я моп")});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)", {std::string("\x18ключ") + strSuffix("Я моп")});
 
             // JV: Cyrillic key compared to external Utf8 parameter
             auto cyrParam = TParamsBuilder().AddParam("$p").Utf8("я").Build().Build();
             ValidatePredicate(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == $p)", cyrParam);
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == $p)", {NJsonIndex::TToken{"\x09ключ", "$p"}}, cyrParam);
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == $p)", {NJsonIndex::TToken{"\x18ключ", "$p"}}, cyrParam);
         });
     }
 

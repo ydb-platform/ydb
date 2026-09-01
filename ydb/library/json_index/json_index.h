@@ -81,11 +81,6 @@ public:
     // It does not affect collecting multiple tokens (AND, OR, etc.)
     bool CanCollect() const;
 
-    // Returns true if the collected tokens can be extended with a literal suffix or a
-    // parameter name. Unlike CanCollect(), it does not require the result to contain
-    // exactly one token, since lax-mode array expansion may produce several tokens.
-    bool CanAppendLiteral() const;
-
     // Stops the collection process
     // It means that the result token is completed and cannot be extended
     // It does not affect collecting multiple tokens (AND, OR, etc.)
@@ -114,7 +109,8 @@ enum class ECallableType : ui8 {
 enum class EPathSeparator : ui8 {
     Literal = 0,
     ArrayItem = 1,
-    // 2-15 are reserved for future use
+    LaxMarker = 2,
+    // 3-15 are reserved for future use
     Max = 0x10,
 };
 
@@ -139,17 +135,6 @@ TCollectResult MergeOr(TCollectResult left, TCollectResult right);
 
 // Appends NULL, binary JSON entry type byte, and scalar payload (the index token layout)
 void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {}, const double* numberPayload = nullptr);
-
-// Expands a collected token for lax-mode array auto-unwrapping.
-// In lax mode a member access and a comparison each implicitly descend one array
-// level, so an array-item marker may optionally precede each key segment and the
-// literal suffix (or the end of the path for parametric tokens, whose value is
-// appended at runtime). Returns the input token as a singleton when there is
-// nothing to expand (empty path without a literal suffix).
-TTokens ExpandLaxToken(const TToken& token);
-
-// Expands every token in the set for lax-mode array auto-unwrapping (see ExpandLaxToken).
-TTokens ExpandLaxTokens(const TTokens& tokens);
 
 // Formats an index token and optional parameter name as a JSON-like object string.
 // The path portion is decoded from length-prefixed key segments joined by '.'.

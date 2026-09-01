@@ -295,7 +295,6 @@ void ValidateTokens(TQueryClient& db, const std::string& predicate,
     auto success = NJson::ReadJsonTree(*plan, &planJson, true);
     UNIT_ASSERT_C(success, "Failed to read plan as JSON");
 
-    auto defaultOp = defaultOperator.empty() ? (expected.size() == 1 || predicate.find("strict ") != std::string::npos ? "and" : "or") : defaultOperator;
     auto op = planJson["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Operators"][0]["DefaultOperator"].GetString();
     UNIT_ASSERT_VALUES_EQUAL_C(op, '"' + defaultOperator + '"', "for predicate = " << predicate);
 

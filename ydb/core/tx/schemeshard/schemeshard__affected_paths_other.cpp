@@ -528,9 +528,19 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpUpgradeSubDomai
     // The upgrade rewrites every path in the subdomain: ListSubTree feeds PersistLastTxId
     // (schemeshard__operation_upgrade_subdomain.cpp:46, :73), PersistPath (:566, :578)
     // and PersistPathDirAlterVersion (:637, :644, :1045, :1051). The request names only
-    // the subdomain root.
-    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(),
-        tx.GetUpgradeSubDomain().GetName(), 0);
+    // the subdomain root -- but Propose already walks the subtree at :1184, so the
+    // declaration can walk it too instead of switching the check off.
+    //
+    // The path-type check at :1187-:1199 does not narrow that set. It is a precondition:
+    // one descendant of a forbidden type rejects the whole operation with
+    // StatusPreconditionFailed, so either nothing is written or all of it is.
+    //
+    // Effect::Alter, includeRoot: an upgrade rewrites paths rather than creating or
+    // dropping them, and the root is rewritten along with the rest (:1202 iterates the
+    // full set, unlike the type check above it which skips the root).
+    return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(),
+        tx.GetUpgradeSubDomain().GetName(), 0, /*includeRoot=*/true,
+        TAffectedPath::EEffect::Alter);
 }
 
 } // namespace NOperation

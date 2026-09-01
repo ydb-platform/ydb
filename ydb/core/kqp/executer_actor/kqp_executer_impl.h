@@ -1031,7 +1031,8 @@ protected:
                 NJson::TJsonReaderConfig jsonConfig;
                 NJson::TJsonValue jsonNode;
                 if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
-                    viz.LoadPlans(jsonNode);
+                    // A plan this loader chokes on must not throw out of the handler.
+                    viz.LoadPlansSafe(jsonNode);
                 }
 
                 auto svg = viz.PrintSvgSafe();

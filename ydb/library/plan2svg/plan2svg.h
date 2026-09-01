@@ -27,13 +27,21 @@ public:
     TPlanVisualizer();
     ~TPlanVisualizer();
 
-    // Accepts the plan JSON either as text or already parsed. Both are lenient:
-    // input that is not a plan simply loads nothing.
+    // Accepts the plan JSON either as text or already parsed. Both are lenient
+    // about input that is not a plan - it simply loads nothing - but a plan that
+    // is malformed or that the loader does not understand throws.
     void LoadPlans(const TString& plans, bool simplified = false);
     void LoadPlans(const NJson::TJsonValue& root);
 
-    // PrintSvg throws on a plan it cannot render; PrintSvgSafe returns an SVG
-    // carrying the error message instead.
+    // The non-throwing counterparts, for callers that cannot let an exception
+    // out: an actor handler, or any path where a bad plan should degrade to a
+    // picture of the error. The failure is reported by the following
+    // PrintSvgSafe, so a caller pairing these two needs no try at all.
+    void LoadPlansSafe(const TString& plans, bool simplified = false);
+    void LoadPlansSafe(const NJson::TJsonValue& root);
+
+    // PrintSvg throws on a plan it cannot render, and on a load that failed
+    // earlier; PrintSvgSafe returns an SVG carrying the error message instead.
     TString PrintSvg();
     TString PrintSvgSafe();
 

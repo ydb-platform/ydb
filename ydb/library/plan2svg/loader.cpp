@@ -6,6 +6,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
 
@@ -1135,6 +1136,22 @@ void TVisualizer::LoadPlans(const NJson::TJsonValue& root) {
         }
     }
     PostProcessPlans();
+}
+
+void TVisualizer::LoadPlansSafe(const TString& plans, bool simplified) {
+    try {
+        LoadPlans(plans, simplified);
+    } catch (...) {
+        LoadError = CurrentExceptionMessage();
+    }
+}
+
+void TVisualizer::LoadPlansSafe(const NJson::TJsonValue& root) {
+    try {
+        LoadPlans(root);
+    } catch (...) {
+        LoadError = CurrentExceptionMessage();
+    }
 }
 
 void TVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {

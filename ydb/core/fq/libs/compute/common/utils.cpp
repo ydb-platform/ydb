@@ -493,8 +493,8 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
     }
     if (timeline) {
         NPlan2Svg::TPlanVisualizer planViz;
-        planViz.LoadPlans(plan);
-        *timeline = planViz.PrintSvg();
+        planViz.LoadPlansSafe(plan);
+        *timeline = planViz.PrintSvgSafe();
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());

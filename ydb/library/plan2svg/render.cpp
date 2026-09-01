@@ -1362,6 +1362,9 @@ static TString ErrorSvg(TStringBuf message) {
 }
 
 TString TVisualizer::PrintSvgSafe() {
+    if (LoadError) {
+        return ErrorSvg(LoadError);
+    }
     try {
         return PrintSvg();
     } catch (std::exception& e) {
@@ -1370,6 +1373,12 @@ TString TVisualizer::PrintSvgSafe() {
 }
 
 TString TVisualizer::PrintSvg() {
+    // Reached only by mixing LoadPlansSafe with the throwing printer; report the
+    // load failure rather than rendering the half-loaded plans behind it.
+    if (LoadError) {
+        ythrow yexception() << LoadError;
+    }
+
     TStringBuilder background;
     TStringBuilder svg;
 

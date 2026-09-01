@@ -184,6 +184,38 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
         UNIT_ASSERT(simplified.Config.Simplified);
     }
 
+    // A plan node the loader does not understand is rejected rather than drawn wrong.
+    static TString UnsupportedPlan() {
+        return R"({"Plan":{"Plans":[{"Node Type":"R","Plans":[
+            {"Node Type":"S","PlanNodeType":"<Weird & Type>"}
+        ]}]}})";
+    }
+
+    Y_UNIT_TEST(LoadPlansThrowsOnUnsupportedPlan) {
+        TVisualizer viz;
+        UNIT_ASSERT_EXCEPTION(viz.LoadPlans(UnsupportedPlan()), yexception);
+    }
+
+    // The safe pair never throws at the caller; the failure comes back as a picture.
+    Y_UNIT_TEST(LoadPlansSafeReportsErrorThroughPrintSvgSafe) {
+        TVisualizer viz;
+        viz.LoadPlansSafe(UnsupportedPlan());
+        UNIT_ASSERT(viz.LoadError);
+
+        auto svg = viz.PrintSvgSafe();
+        AssertWellFormed(svg, "error svg");
+        UNIT_ASSERT_C(svg.Contains("&lt;Weird &amp; Type&gt;"), svg);
+
+        // The half-loaded plans behind the failure are not rendered instead.
+        UNIT_ASSERT_EXCEPTION(viz.PrintSvg(), yexception);
+    }
+
+    Y_UNIT_TEST(LoadPlansSafeRendersAGoodPlanNormally) {
+        TPlanVisualizer safe;
+        safe.LoadPlansSafe(ReadPlan("cte_subplan"));
+        UNIT_ASSERT_VALUES_EQUAL(safe.PrintSvgSafe(), RenderPlan("cte_subplan", false));
+    }
+
     Y_UNIT_TEST(PrintSvgSafeOnEmptyPlan) {
         TPlanVisualizer viz;
         auto svg = viz.PrintSvgSafe();

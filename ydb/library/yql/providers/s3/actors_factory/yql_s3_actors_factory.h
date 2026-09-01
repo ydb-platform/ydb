@@ -23,7 +23,6 @@ namespace NDq {
         ui64 FileSizeLimit = 100_GB;
         ui64 BlockFileSizeLimit = 50_GB;
         std::unordered_map<std::string, ui64> FormatSizeLimits;
-        // TODO: FF
         bool EnableScheduling = false;
     };
 

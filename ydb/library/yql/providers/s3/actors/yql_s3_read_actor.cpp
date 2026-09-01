@@ -531,7 +531,6 @@ public:
     }
 
     void RunClickHouseParserOverFile() {
-        // TODO: wrap per-block Work->Start/Stop like RunCoroBlockArrowParserOverHttp
         LOG_CORO_D("RunClickHouseParserOverFile");
         YQL_ENSURE(!AsyncDecompressing, "Async decompression is not supported for file input");
 
@@ -848,7 +847,9 @@ public:
                 std::shared_ptr<arrow::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-                // TODO: split DecodeRowGroups into smaller units (arrow async / column streaming)
+                // TODO:
+                // Current unit takes <=100ms typically, which is fine; only large groups can overrun.
+                // Consider to split DecodeRowGroups for large row groups (arrow async / column streaming).
                 {
                     StartUnit();
                     Y_DEFER { StopUnit(); };
@@ -911,7 +912,6 @@ public:
     }
 
     void RunCoroBlockArrowParserOverFile() {
-        // TODO: wrap per-block Work->Start/Stop like RunCoroBlockArrowParserOver
         LOG_CORO_D("RunCoroBlockArrowParserOverFile");
 
         std::shared_ptr<arrow::io::RandomAccessFile> arrowFile =

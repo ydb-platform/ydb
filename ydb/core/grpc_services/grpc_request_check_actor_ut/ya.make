@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/core/base
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
 )

@@ -79,7 +79,6 @@ ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithManyPartitionAndData
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.UnauthorizedPurger
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
-ydb/core/persqueue/public/schema/ut DescribeOperationActor.PoisonRepliesCancelled
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStream
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsATable
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
@@ -180,7 +179,6 @@ ydb/library/actors/http/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
 ydb/services/config/ut unittest.sole chunk
-ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_set_not_null_all_types[Int8]
 ydb/tests/fq/http_api py3test.sole chunk
@@ -851,7 +849,6 @@ ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v
 ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[128MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[1GB]
-ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[256MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[512MB]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/mixedpy/tests py3test.sole chunk

@@ -684,6 +684,50 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(DictKeysLiteralPayload) {
+        auto kikimr = GetKikimrWithJoinSettings();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(sessionResult);
+        auto session = sessionResult.GetSession();
+
+        {
+            auto res = session.ExecuteQuery(R"(
+                CREATE TABLE `/Root/DictKeysLiteralPayload` (
+                    Key1 Int32,
+                    Key2 Int32,
+                    PRIMARY KEY (Key1, Key2)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        {
+            auto res = session.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DictKeysLiteralPayload` (Key1, Key2) VALUES (0, 6), (0, 7), (1, 6);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+            SELECT Key1, Key2 FROM `/Root/DictKeysLiteralPayload`
+            WHERE Key1 = 0 AND Key2 IN DictKeys({6: "payload"});
+        )";
+
+        auto explainRes = session.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explainRes.GetStatus(), EStatus::SUCCESS, explainRes.GetIssues().ToString());
+        PrintPlan(TString{*explainRes.GetStats()->GetPlan()});
+
+        auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execRes.GetStatus(), EStatus::SUCCESS, execRes.GetIssues().ToString());
+        CompareYson(R"([[[0];[6]]])", FormatResultSetYson(execRes.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_TWIN(FiveWayJoin, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/five_way_join.sql", "stats/basic.json", false, ColumnStore

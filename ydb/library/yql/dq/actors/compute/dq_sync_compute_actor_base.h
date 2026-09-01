@@ -41,8 +41,12 @@ protected:
              static_cast<TDerived*>(this)->PollSources(std::move(sourcesState));
         }
 
-        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && this->Checkpoints && this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
-            this->Checkpoints->DoCheckpoint();
+        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && this->Checkpoints) {
+            DrainCheckpointsFromInputChannelsAfterFinish(); // Drain checkpoints from finished channels
+
+            if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
+                this->Checkpoints->DoCheckpoint();
+            }
         }
 
         TBase::ProcessOutputsImpl(status);
@@ -80,6 +84,9 @@ protected:
 
     bool DoHandleChannelsAfterFinishImpl() override final {
         Y_ABORT_UNLESS(this->Checkpoints);
+
+        // Read checkpoint from input channels
+        DrainCheckpointsFromInputChannelsAfterFinish();
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
             this->Checkpoints->DoCheckpoint();
@@ -431,6 +438,35 @@ protected:
             TaskRunner->GetReadRanges(),
             TaskRunner->GetRandomProvider()
         );
+    }
+
+    // Must be called under bound MKQL allocator
+    void DrainCheckpointsFromInputChannelsAfterFinish() {
+        Y_ABORT_UNLESS(this->Checkpoints);
+
+        if (this->Channels) {
+            // There is no need to drain v1 channels, because checkpoints will be registered automatically in TakeInputChannelData() method
+            return;
+        }
+
+        CA_LOG_D("Drain #" << this->InputChannelsMap.size() << " inputs after finish");
+
+        // In v2 channels case, checkpoint must be drained manually, because after finish input producer cannot be used.
+        // All stale data, that was in channel after early finish should be drained.
+        for (const auto& [_, info] : this->InputChannelsMap) {
+            const IDqInputChannel::TPtr& channel = info.Channel;
+            Y_ENSURE(channel);
+
+            if (info.CheckpointingMode == NDqProto::ECheckpointingMode::CHECKPOINTING_MODE_DISABLED || !channel->IsFinished()) {
+                continue;
+            }
+
+            TUnboxedValueBatch batch(channel->GetInputType());
+            TMaybe<TInstant> watermark;
+            while (channel->Pop(batch, watermark)) {
+                CA_LOG_T("Skipped data batch after early finish with rows #" << batch.RowCount() << ", watermark: " << (watermark ? ToString(*watermark) : "<null>"));
+            }
+        }
     }
 
     const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() override {

@@ -102,6 +102,27 @@ TString GetValidJoinKind(const TString& joinKind) {
     return joinKind;
 }
 
+bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOContext& ctx) {
+    if (aggregate.KeyColumns.empty() || aggregate.IsDistinctAll()) {
+        return false;
+    }
+
+    const bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleEliminationForAggregation.Get()
+        .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
+    if (!enableShuffleElimination) {
+        return false;
+    }
+
+    const auto& input = aggregate.GetInput();
+    if (!input->Props.Metadata || input->Props.Metadata->ShuffledByColumns.empty()) {
+        return false;
+    }
+
+    // Example: input partitioned by {id} needs no reshuffle for GROUP BY {id, date},
+    // because every group has a single id and is already colocated.
+    return IUIsSubset(input->Props.Metadata->ShuffledByColumns, aggregate.KeyColumns);
+}
+
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {

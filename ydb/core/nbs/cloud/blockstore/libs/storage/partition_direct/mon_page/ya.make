@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     mon_render.cpp
+    mon_render_chaos.cpp
+    mon_render_overview.cpp
 )
 
 PEERDIR(

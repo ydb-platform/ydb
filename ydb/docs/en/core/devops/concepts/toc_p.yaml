@@ -9,3 +9,5 @@ items:
   href: versioning.md
 - name: Maintenance
   href: maintenance-without-downtime.md
+- name: Authentication and authorization of database nodes
+  href: node-authorization.md

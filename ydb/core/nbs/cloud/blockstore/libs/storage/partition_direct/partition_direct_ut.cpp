@@ -2096,6 +2096,80 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT(partitionDeathDelivered);
     }
 
+    Y_UNIT_TEST(ShouldRestartOnTabletPipePoison)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        TActorId bootstrapperId;
+        const ui64 tabletId =
+            CreatePartitionTablet(env, 32768, &bootstrapperId);
+
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        bool bootstrapperDeathObserved = false;
+        bool rebootObserved = false;
+        const auto isExpectedTabletDeath = [&](IEventHandle& ev)
+        {
+            if (ev.GetTypeRewrite() != TEvTablet::TEvTabletDead::EventType) {
+                return false;
+            }
+
+            const auto* msg = ev.Get<TEvTablet::TEvTabletDead>();
+            if (msg->TabletID != tabletId) {
+                return false;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TEvTablet::TEvTabletDead::ReasonPill,
+                msg->Reason);
+            return true;
+        };
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            Y_UNUSED(nodeId);
+            if (isExpectedTabletDeath(*ev) &&
+                ev->GetRecipientRewrite() == bootstrapperId)
+            {
+                bootstrapperDeathObserved = true;
+            }
+            if (ev->GetRecipientRewrite() == edge) {
+                return false;
+            }
+            return true;
+        };
+
+        // Same event RestartTablet sends over the tablet pipe.
+        runtime->SendToPipe(
+            tabletId,
+            edge,
+            new TEvents::TEvPoison(),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        runtime->Sim(
+            [&] { return !bootstrapperDeathObserved || !rebootObserved; },
+            [&](IEventHandle& ev)
+            {
+                if (ev.GetTypeRewrite() == TEvTablet::EvBoot &&
+                    bootstrapperDeathObserved)
+                {
+                    rebootObserved = true;
+                }
+            });
+
+        UNIT_ASSERT(bootstrapperDeathObserved);
+        UNIT_ASSERT(rebootObserved);
+    }
+
     Y_UNIT_TEST(ShouldKeepOtherDBGConnectionsWhenAddingHosts)
     {
         TEnvironmentSetup env{{

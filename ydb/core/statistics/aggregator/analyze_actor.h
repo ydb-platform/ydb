@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <optional>
 #include <queue>
 
 namespace NKikimr::NStat {
@@ -19,6 +20,8 @@ public:
     struct TConfig {
         ui64 MaxTotalScanActorsInFlight = 100;
         i64 MaxPerNodeScanActorsInFlight = 1;
+        ui64 WholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
+        std::optional<ui64> TableBytesSize;
     };
 
 private:
@@ -94,6 +97,7 @@ private:
 
     TString TableName;
     bool IsColumnTable = false;
+    bool UsePerShardScans = false;
     TVector<TColumnDesc> Columns;
     TVector<TMultiColumnStatDesc> MultiColumnStatDescs;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;

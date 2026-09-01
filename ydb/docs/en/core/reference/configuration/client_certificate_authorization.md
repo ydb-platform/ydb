@@ -58,7 +58,7 @@ client_certificate_authorization:
 ```
 
 
-The `CN` component may contain the server's network name rather than the user name. This option is advisable to use when [registering dynamic nodes](../../devops/deployment-options/manual/node-authorization.md#vklyuchenie-rezhima-autentifikacii-i-avtorizacii-uzlov). The following configuration fragment requires that the "Subject" field of the node's client certificate contain the `O=YDB` and `CN=server1.internal.corp` components. For such a certificate, a SID `O=YDB,CN=server1.internal.corp@cert` will be generated and the group `registerNode@cert` will be assigned:
+The `CN` component may contain the server's network name rather than the user name. This option is advisable to use when [registering dynamic nodes](../../devops/concepts/node-authorization.md#enabling-the-node-authentication-and-authorization-mode). The following configuration fragment requires that the "Subject" field of the node's client certificate contain the `O=YDB` and `CN=server1.internal.corp` components. For such a certificate, a SID `O=YDB,CN=server1.internal.corp@cert` will be generated and the group `registerNode@cert` will be assigned:
 
 
 ```yaml

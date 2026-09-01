@@ -35,6 +35,9 @@
 
 #include <util/string/join.h>
 
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TICKET_PARSER
+
 namespace NKikimr {
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
@@ -519,7 +522,7 @@ private:
         };
 
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
-            YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthorization" << (useV2 ? "V2" : "V1"),
+            YDB_LOG_TRACE("Ticket asking for AccessServiceAuthorization" << (useV2 ? "V2" : "V1"),
                 {"ticket", record.GetMaskedTicket()},
                 {"permission", permissionName}
             );
@@ -545,7 +548,7 @@ private:
             auto it = ServiceTokens.find(Config.GetAccessServiceTokenName());
             if (it != ServiceTokens.end()) {
                 request->Token = it->second;
-                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Create BulkAuthorizeV2 request",
+                YDB_LOG_TRACE("Create BulkAuthorizeV2 request",
                     {"token", MaskTicket(request->Token)}
                 );
             }
@@ -558,7 +561,7 @@ private:
             requestForPermissions << " " << permissionName;
         }
         request->Request.set_result_filter(yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED);
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceBulkAuthorizationV2",
+        YDB_LOG_TRACE("Ticket asking for AccessServiceBulkAuthorizationV2",
             {"ticket", record.GetMaskedTicket()},
             {"requestForPermissions", requestForPermissions}
         );
@@ -582,7 +585,7 @@ private:
             requestForPermissions << " " << permissionName;
             ++i;
         }
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthorizationV1(",
+        YDB_LOG_TRACE("Ticket asking for AccessServiceAuthorizationV1(",
             {"ticket", record.GetMaskedTicket()},
             {"requestForPermissions", requestForPermissions}
         );
@@ -605,7 +608,7 @@ private:
     void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         const bool useV2 = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthentication" << (useV2 ? "V2" : "V1"),
+        YDB_LOG_TRACE("Ticket asking for AccessServiceAuthentication" << (useV2 ? "V2" : "V1"),
             {"ticket", record.GetMaskedTicket()}
         );
 
@@ -633,7 +636,7 @@ private:
         const bool useNebius = static_cast<bool>(NebiusAccessServiceValidator);
         const bool useV2 = !useNebius && AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthentication" << (useNebius ? "V1(Nebius)" : (useV2 ? "V2" : "V1")),
+        YDB_LOG_TRACE("Ticket asking for AccessServiceAuthentication" << (useNebius ? "V1(Nebius)" : (useV2 ? "V2" : "V1")),
             {"ticket", record.GetMaskedTicket()}
         );
 
@@ -862,7 +865,7 @@ private:
 
         CounterTicketsExternalIdp->Inc();
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitTokenFromExternalIdp, ticket forwarded to ExternalIdpProvider",
+        YDB_LOG_TRACE("CanInitTokenFromExternalIdp, ticket forwarded to ExternalIdpProvider",
             {"maskedTicket", MaskTicket(record.Ticket)}
         );
         ++record.ResponsesLeft;
@@ -900,7 +903,7 @@ private:
             // access a tenant database, target database must be selected between the two candidates: tenant and the root,
             // based on the database (or audience) embedded in the token itself.
             auto database = NLogin::TLoginProvider::GetTokenAudience(record.Ticket);
-            YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken",
+            YDB_LOG_TRACE("CanInitLoginToken",
                 {"rootDatabase", DomainName},
                 {"requestDatabase", record.Database},
                 {"tokenDatabase", database},
@@ -910,14 +913,14 @@ private:
                 database = DomainName;
             }
             const auto& lookupDatabases = GetLookupDatabases(record);
-            YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, target database candidates",
+            YDB_LOG_TRACE("CanInitLoginToken, target database candidates",
                 {"lookupDatabasesCount", lookupDatabases.size()},
                 {"lookupDatabases", JoinSeq(", ", lookupDatabases)}
             );
             if (std::find(lookupDatabases.begin(), lookupDatabases.end(), database) == lookupDatabases.end()) {
                 SetError(key, record, {.Message = "Wrong audience"});
                 CounterTicketsLogin->Inc();
-                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A1 error Wrong audience");
+                YDB_LOG_TRACE("CanInitLoginToken, A1 error Wrong audience");
                 return true;
             }
             auto itLoginProvider = LoginProviders.find(database);
@@ -929,13 +932,13 @@ private:
                         record.TokenType = TDerived::ETokenType::Login;
                         SetError(key, record, {.Message = response.Error, .Retryable = response.ErrorRetryable});
                         CounterTicketsLogin->Inc();
-                        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A2 error",
+                        YDB_LOG_TRACE("CanInitLoginToken, A2 error",
                             {"database", database},
                             {"error", response.Error}
                         );
                         return true;
                     }
-                    YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A3 error",
+                    YDB_LOG_TRACE("CanInitLoginToken, A3 error",
                         {"database", database}
                     );
                 } else {
@@ -961,7 +964,7 @@ private:
                         .GroupSIDs = groups,
                         .AuthType = record.GetAuthType()
                     }));
-                    YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A4 success",
+                    YDB_LOG_TRACE("CanInitLoginToken, A4 success",
                         {"database", database}
                     );
                     return true;
@@ -977,7 +980,7 @@ private:
                         } else {
                             SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
                             CounterTicketsLogin->Inc();
-                            YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, login state is not available yet, cannot defer token",
+                            YDB_LOG_TRACE("CanInitLoginToken, login state is not available yet, cannot defer token",
                                 {"database", database},
                                 {"token", MaskTicket(record.Ticket)}
                             );
@@ -987,13 +990,13 @@ private:
                         static const ui64 NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE = std::max(RefreshPeriod.Seconds(), static_cast<TDuration::TValue>(2));
                         DeferredLoginTokens.insert(std::make_pair(database, std::make_pair(TlsActivationContext->Now() + TDuration::Seconds(NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE), std::unordered_set<TString>({key}))));
                     }
-                    YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, login state is not available yet, defer token",
+                    YDB_LOG_TRACE("CanInitLoginToken, login state is not available yet, defer token",
                         {"database", database},
                         {"token", MaskTicket(record.Ticket)}
                     );
                     return true;
                 }
-                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A6 error",
+                YDB_LOG_TRACE("CanInitLoginToken, A6 error",
                     {"database", database}
                 );
             }
@@ -1026,7 +1029,7 @@ private:
         auto it = userTokens.find(response->Key);
         if (it == userTokens.end()) {
             // Probably this is unnecessary. Record should be in storage
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket has expired during build",
+            YDB_LOG_ERROR("Ticket has expired during build",
                 {"ticket", MaskTicket(response->Key)}
             );
         } else {
@@ -1082,7 +1085,7 @@ private:
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
         if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
             CounterWrongPeernameFormat->Inc();
-            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Ticket has invalid peer name format",
+            YDB_LOG_WARN("Ticket has invalid peer name format",
                 {"token", MaskTicket(ev->Get()->Ticket)},
                 {"peerName", ev->Get()->PeerName},
                 {"database", ev->Get()->Database}
@@ -1116,7 +1119,7 @@ private:
             TEvTicketParser::TError error;
             error.Message = "Access key signature is not supported";
             error.Retryable = false;
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, error.Message,
+            YDB_LOG_ERROR(error.Message,
                 {"accessKeyId", MaskTicket(signature.AccessKeyId)},
                 {"error", error.LogMessage},
                 {"retryable", error.Retryable}
@@ -1128,7 +1131,7 @@ private:
             TEvTicketParser::TError error;
             error.Message = "Ticket is empty";
             error.Retryable = false;
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, error.Message,
+            YDB_LOG_ERROR(error.Message,
                 {"token", MaskTicket(ticket)},
                 {"error", error.LogMessage},
                 {"retryable", error.Retryable}
@@ -1179,7 +1182,7 @@ private:
 
         InitTokenRecord(key, record);
         if (record.Error) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket error",
+            YDB_LOG_ERROR("Ticket error",
                 {"ticket", record.GetMaskedTicket()},
                 {"error", record.Error}
             );
@@ -1223,7 +1226,7 @@ private:
         switch (record.SubjectType) {
         case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
             if (UserAccountService) {
-                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for UserAccount",
+                YDB_LOG_TRACE("Ticket asking for UserAccount",
                     {"ticket", record.GetMaskedTicket()},
                     {"subject", record.Subject}
                 );
@@ -1237,7 +1240,7 @@ private:
             break;
         case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
             if (ServiceAccountService) {
-                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for ServiceAccount",
+                YDB_LOG_TRACE("Ticket asking for ServiceAccount",
                     {"ticket", record.GetMaskedTicket()},
                     {"subject", record.Subject}
                 );
@@ -1263,7 +1266,7 @@ private:
         auto it = userTokens.find(request->Key);
         if (it == userTokens.end()) {
             // wtf? it should be there
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket has expired during build",
+            YDB_LOG_ERROR("Ticket has expired during build",
                 {"token", MaskTicket(request->Request.iam_token())}
             );
         } else {
@@ -1312,14 +1315,14 @@ private:
 
     void Handle(TEvExternalIdpProvider::TEvAuthenticateResponse::TPtr& ev) {
         TEvExternalIdpProvider::TEvAuthenticateResponse* response = ev->Get();
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Received TEvAuthenticateResponse from ExternalIdp",
+        YDB_LOG_DEBUG("Received TEvAuthenticateResponse from ExternalIdp",
             {"ticket", MaskTicket(response->Key)},
             {"status", response->Status}
         );
         auto& userTokens = GetDerived()->GetUserTokens();
         auto it = userTokens.find(response->Key);
         if (it == userTokens.end()) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket has expired during build",
+            YDB_LOG_ERROR("Ticket has expired during build",
                 {"ticket", MaskTicket(response->Key)}
             );
             return;
@@ -1335,7 +1338,7 @@ private:
                 groups.emplace_back(group + domain);
             }
             record.ExpireTime = response->ExpiresAt;
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Ticket authenticated by ExternalIdp",
+            YDB_LOG_DEBUG("Ticket authenticated by ExternalIdp",
                 {"ticket", record.GetMaskedTicket()},
                 {"sid", response->User + domain},
                 {"groupCount", groups.size()}
@@ -1347,7 +1350,7 @@ private:
                 .AuthType = record.GetAuthType()
             }));
         } else {
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket failed ExternalIdp authentication",
+            YDB_LOG_ERROR("Ticket failed ExternalIdp authentication",
                 {"ticket", record.GetMaskedTicket()},
                 {"status", response->Status},
                 {"retryable", response->Error.Retryable},
@@ -1366,7 +1369,7 @@ private:
         auto it = userTokens.find(request->Key);
         if (it == userTokens.end()) {
             // wtf? it should be there
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket has expired during build (TEvGetUserAccountResponse)");
+            YDB_LOG_ERROR("Ticket has expired during build (TEvGetUserAccountResponse)");
         } else {
             const auto& key = it->first;
             auto& record = it->second;
@@ -1388,7 +1391,7 @@ private:
         auto it = userTokens.find(request->Key);
         if (it == userTokens.end()) {
             // wtf? it should be there
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket has expired during build (TEvGetServiceAccountResponse)");
+            YDB_LOG_ERROR("Ticket has expired during build (TEvGetServiceAccountResponse)");
         } else {
             const auto& key = it->first;
             auto& record = it->second;
@@ -1423,7 +1426,7 @@ private:
         for (auto& [permissionName, permissionRecord] : record.Permissions) {
             permissionRecord.Subject.clear();
             permissionRecord.Error = {.Message = errorMessage, .Retryable = isRetryableError};
-            YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket now has an error",
+            YDB_LOG_TRACE("Ticket now has an error",
                 {"ticket", record.GetMaskedTicket()},
                 {"permission", permissionName},
                 {"error", errorMessage},
@@ -1453,7 +1456,7 @@ private:
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
         if (itToken == userTokens.end()) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket(key) has expired during permission check",
+            YDB_LOG_ERROR("Ticket(key) has expired during permission check",
                 {"ticket", MaskTicket(key)}
             );
         } else {
@@ -1478,7 +1481,7 @@ private:
                         const auto checkIt = request->Request.checks().find(resultKey);
                         if (checkIt == request->Request.checks().end()) {
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: unknown result key: " << resultKey, false);
-                            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Internal error: unknown result key for ticket",
+                            YDB_LOG_WARN("Internal error: unknown result key for ticket",
                                 {"key", resultKey},
                                 {"ticket", record.GetMaskedTicket()}
                             );
@@ -1513,11 +1516,10 @@ private:
                             if (result.resultcode() != nebius::iam::v1::AuthorizeResult::OK) {
                                 permissionDeniedCount++;
                                 permissionRecord.Subject.clear();
-                                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket access denied for subject",
+                                YDB_LOG_TRACE("Ticket access denied for subject",
                                     {"ticket", record.GetMaskedTicket()},
                                     {"permissionName", permissionName},
-                                    {"subject", (record.Subject ? record.Subject : "<not resolved>")
-                                    }
+                                    {"subject", (record.Subject ? record.Subject : "<not resolved>")}
                                 );
                                 TStringBuilder errorMessage;
                                 if (permissionRecord.IsRequired()) {
@@ -1536,7 +1538,7 @@ private:
                                 permissionRecord.Error = {.Message = errorMessage, .Retryable = false};
                             }
                         } else {
-                            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
+                            YDB_LOG_WARN("Received response for unknown permission for ticket",
                                 {"permissionName", permissionName},
                                 {"ticket", record.GetMaskedTicket()}
                             );
@@ -1558,7 +1560,7 @@ private:
                                 }
                                 return std::move(b);
                             };
-                            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response with absent permissions",
+                            YDB_LOG_WARN("Received response with absent permissions",
                                 {"permissions", printAbsentPermissions()}
                             );
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: not all permissions in authorize response", false);
@@ -1594,7 +1596,7 @@ private:
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
         if (itToken == userTokens.end()) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket(key) has expired during permission check",
+            YDB_LOG_ERROR("Ticket(key) has expired during permission check",
                 {"ticket", MaskTicket(key)}
             );
         } else {
@@ -1627,7 +1629,7 @@ private:
                             permissionDeniedCount++;
                             auto& permissionDeniedRecord = permissionDeniedIt->second;
                             permissionDeniedRecord.Subject.clear();
-                            YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket access denied for subject",
+                            YDB_LOG_TRACE("Ticket access denied for subject",
                                 {"ticket", record.GetMaskedTicket()},
                                 {"permission", result.permission()},
                                 {"subject", record.Subject}
@@ -1646,7 +1648,7 @@ private:
                             errorMessage << permissionDeniedError;
                             permissionDeniedRecord.Error = {.Message = errorMessage, .Retryable = false};
                         } else {
-                            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
+                            YDB_LOG_WARN("Received response for unknown permission for ticket",
                                 {"permission", result.permission()},
                                 {"ticket", record.GetMaskedTicket()}
                             );
@@ -1681,7 +1683,7 @@ private:
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
         if (itToken == userTokens.end()) {
-            YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket(key) has expired during permission check",
+            YDB_LOG_ERROR("Ticket(key) has expired during permission check",
                 {"ticket", MaskTicket(key)}
             );
         } else {
@@ -1698,7 +1700,7 @@ private:
                             record.Subject = itPermission->second.Subject;
                             record.SubjectType = itPermission->second.SubjectType;
                         }
-                        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket now has a valid subject",
+                        YDB_LOG_TRACE("Ticket now has a valid subject",
                             {"ticket", record.GetMaskedTicket()},
                             {"permission", permission},
                             {"subject", record.Subject}
@@ -1709,14 +1711,14 @@ private:
                     itPermission->second.Error = {.Message = TString{response->Status.Msg}, .Retryable = retryable};
                     if (itPermission->second.Subject.empty() || !retryable) {
                         itPermission->second.Subject.clear();
-                        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket now has a permanent error",
+                        YDB_LOG_TRACE("Ticket now has a permanent error",
                             {"ticket", record.GetMaskedTicket()},
                             {"permission", permission},
                             {"permissionError", itPermission->second.Error},
                             {"retryable", retryable}
                         );
                     } else if (retryable) {
-                        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket now has a retryable error",
+                        YDB_LOG_TRACE("Ticket now has a retryable error",
                             {"ticket", record.GetMaskedTicket()},
                             {"permission", permission},
                             {"statusMessage", response->Status.Msg}
@@ -1724,7 +1726,7 @@ private:
                     }
                 }
             } else {
-                YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
+                YDB_LOG_WARN("Received response for unknown permission for ticket",
                     {"permission", permission},
                     {"ticket", record.GetMaskedTicket()}
                 );
@@ -1796,14 +1798,14 @@ private:
     void Handle(TEvTicketParser::TEvUpdateLoginSecurityState::TPtr& ev) {
         auto& loginProvider = LoginProviders[ev->Get()->SecurityState.GetAudience()];
         loginProvider.UpdateSecurityState(ev->Get()->SecurityState);
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Updated key state",
+        YDB_LOG_DEBUG("Updated key state",
             {"database", loginProvider.Audience},
             {"loginProviderKeys", GetLoginProviderKeys(loginProvider)}
         );
 
         auto it = DeferredLoginTokens.find(loginProvider.Audience);
         if (it != DeferredLoginTokens.end()) {
-            YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Handle deferred tokens for database",
+            YDB_LOG_TRACE("Handle deferred tokens for database",
                 {"database", loginProvider.Audience}
             );
             for (const TString& key : it->second.second) {
@@ -1843,14 +1845,14 @@ private:
             }
             auto& record = it->second;
             if ((record.ExpireTime > now) && (record.AccessTime + GetLifeTime() > now)) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Refreshing ticket",
+                YDB_LOG_DEBUG("Refreshing ticket",
                     {"ticket", record.GetMaskedTicket()}
                 );
                 if (!RefreshTicket(key, record)) {
                     RefreshQueue.push({key, record.RefreshTime});
                 }
             } else {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Expired ticket",
+                YDB_LOG_DEBUG("Expired ticket",
                     {"ticket", record.GetMaskedTicket()}
                 );
                 if (!record.AuthorizeRequests.empty()) {
@@ -2144,7 +2146,7 @@ protected:
         } else {
             CounterTicketsHighPriorityBuildTime->Collect(ticketBuildTime);
         }
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Ticket has now valid token for subject",
+        YDB_LOG_DEBUG("Ticket has now valid token for subject",
             {"ticket", record.GetMaskedTicket()},
             {"peerName", record.PeerName},
             {"subject", record.Subject}
@@ -2165,7 +2167,7 @@ protected:
             record.ExpireTime = GetDerived()->GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
-            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Failed to process ticket",
+            YDB_LOG_WARN("Failed to process ticket",
                 {"ticket", record.GetMaskedTicket()},
                 {"peerName", record.PeerName},
                 {"error", error.Message + errorLogMessage},
@@ -2182,7 +2184,7 @@ protected:
             record.UnsetToken();
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
-            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Failed to process ticket",
+            YDB_LOG_WARN("Failed to process ticket",
                 {"ticket", record.GetMaskedTicket()},
                 {"peerName", record.PeerName},
                 {"error", error.Message + errorLogMessage},
@@ -2549,7 +2551,7 @@ protected:
         }
 
         if (Config.HasExternalIdpConfig()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "External IdP authentication is enabled");
+            YDB_LOG_DEBUG("External IdP authentication is enabled");
             ExternalIdpProvider = Register(
                 CreateExternalIdpProvider(Config.GetExternalIdpConfig(), {}),
                 TMailboxType::HTSwap, AppData()->UserPoolId);
@@ -2678,7 +2680,7 @@ void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now
         DeferredLoginTokens.erase(key);
     }
     if (!finishWaitingForLoginProviders.empty()) {
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Finish waiting for login providers",
+        YDB_LOG_TRACE("Finish waiting for login providers",
             {"databaseCount", finishWaitingForLoginProviders.size()},
             {"databases", JoinSeq(", ", finishWaitingForLoginProviders)}
         );
@@ -2688,7 +2690,7 @@ void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now
 template <typename TDerived>
 void TTicketParserImpl<TDerived>::CreateServiceTokens() const {
     if (Config.HasAccessServiceTokenName() && Config.GetTokenManager().GetEnable()) {
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Send EvSubscribeUpdateToken to service token manager");
+        YDB_LOG_TRACE("Send EvSubscribeUpdateToken to service token manager");
         Send(MakeTokenManagerID(), new TEvTokenManager::TEvSubscribeUpdateToken(Config.GetAccessServiceTokenName()));
     }
 }
@@ -2703,7 +2705,7 @@ void TTicketParserImpl<TDerived>::Handle(TEvTokenManager::TEvUpdateToken::TPtr& 
         }
     };
 
-    YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Handle TEvTokenManager::TEvUpdateToken",
+    YDB_LOG_TRACE("Handle TEvTokenManager::TEvUpdateToken",
         {"id", ev->Get()->Id},
         {"statusCode", convertStatusCode(ev->Get()->Status.Code)},
         {"statusMessage", ev->Get()->Status.Message},
@@ -2712,7 +2714,7 @@ void TTicketParserImpl<TDerived>::Handle(TEvTokenManager::TEvUpdateToken::TPtr& 
     if (ev->Get()->Status.Code == TEvTokenManager::TStatus::ECode::SUCCESS) {
         ServiceTokens[ev->Get()->Id] = ev->Get()->Token;
     } else {
-        YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Failed to update service token",
+        YDB_LOG_ERROR("Failed to update service token",
             {"id", ev->Get()->Id},
             {"statusCode", convertStatusCode(ev->Get()->Status.Code)},
             {"statusMessage", ev->Get()->Status.Message},

@@ -425,4 +425,7 @@ message TFeatureFlags {
     optional bool EnableHoppingWindowStartCheck = 346 [default = true];
     optional bool EnableBackgroundAnalyzeChangeRatio = 347 [default = true];
     optional bool EnableAnalyzeSampling = 348 [default = true];
+    optional bool EnableLocalDBBtreeIndexV2 = 349 [default = false];
+    // When EnableLocalDBBtreeIndexV2 is on complete it with V1 shadow index off
+    optional bool EnableLocalDBBtreeIndexV2ShadowV1Write = 350 [default = true];
 }

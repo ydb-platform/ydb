@@ -29,6 +29,10 @@ TMeta::TMeta(TSharedData raw, ui32 group)
         for (auto &one: blobs)
             Steps.push_back(offset += one.BlobSize());
     }
+
+    /* Crc32 stores pages - 1 per skip entry (not the raw count, see TRecord::PushSkip);
+       Total = MetaPages + SkippedPages gives the correct full page count. */
+    SkippedPages_ = (Extra[0].Type == ui32(NTable::NPage::EPage::Skip) ? Extra[0].Crc32 : 0);
 }
 
 TMeta::~TMeta()
@@ -81,6 +85,8 @@ ui64 TMeta::GetPageSize(ui32 pageId) const
 NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
 {
     Y_ENSURE(pageId < Header->Pages);
+    Y_ENSURE(Extra[pageId].Type != ui32(NTable::NPage::EPage::Skip),
+        "Cannot get location for skip page entry by pageId");
 
     const ui64 offset = (pageId == 0) ? 0 : Index[pageId - 1].Page;
     const ui64 size = Index[pageId].Page - offset;

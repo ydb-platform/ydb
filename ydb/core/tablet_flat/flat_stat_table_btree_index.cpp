@@ -9,11 +9,20 @@ namespace NKikimr::NTable {
 namespace {
 
 using TGroupId = NPage::TGroupId;
+using TRecIdx = NPage::TRecIdx;
 using TFrames = NPage::TFrames;
 using TBtreeIndexNode = NPage::TBtreeIndexNode;
+using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
 using TChild = TBtreeIndexNode::TChild;
 using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
+
+// Resolve root page location from meta, supporting both V1 and V2 formats.
+NPage::TPageLocation RootLocation(const TPart* part, const TBtreeIndexMeta& meta, TGroupId groupId) {
+    return GetBTreeRootLocation(meta,
+        part->GetPageCollection(0),          // btree index pages are always in room 0
+        part->GetPageCollection(groupId.Index)); // data pages are in the group's room
+}
 
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
     auto& meta = part->IndexPages.GetBTree(groupId);
@@ -25,21 +34,22 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
         return meta.GetDataSize();
     }
 
-    TPageId pageId = meta.GetPageId();
+    auto location = RootLocation(part, meta, groupId);
     ui64 prevDataSize = 0;
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, part->GetPageLocation(pageId, {}), {});
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
+        auto page = env->TryGetPage(part, location, {});
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(rowId);
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
-            prevDataSize = node.GetShortChild(pos - 1).GetDataSize();
+            prevDataSize = node.GetPrevChildDataSize(pos);
         }
     }
 
@@ -60,7 +70,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         return meta.GetDataSize();
     }
 
-    TPageId pageId = meta.GetPageId();
+    auto location = RootLocation(part, meta, groupId);
     ui64 prevDataSize = 0;
     historicRowId = 0;
 
@@ -74,20 +84,20 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     };
     TCells key1{ key1Cells, 3 };
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, part->GetPageLocation(pageId, {}), {});
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
+        auto page = env->TryGetPage(part, location, {});
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(ESeek::Lower, key1, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
-            const auto& prevChild = node.GetShortChild(pos - 1);
-            prevDataSize = prevChild.GetDataSize();
-            historicRowId = prevChild.GetRowCount();
+            prevDataSize = node.GetPrevChildDataSize(pos);
+            historicRowId = node.GetChildRowCount(pos - 1);
         }
     }
 

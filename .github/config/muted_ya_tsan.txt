@@ -11,6 +11,7 @@ ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.Lo
 ydb/core/fq/libs/control_plane_proxy/ut unittest.sole chunk
 ydb/core/http_proxy/ut/inside_ydb_ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.CustomQuery01
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.ShuffleEliminationHashMapping
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery02
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery03
@@ -173,6 +174,7 @@ ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideThenStopTe
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.CreateDummyTabletsInDifferentDomains
+ydb/library/actors/http/ut HttpProxy.RequestAfter307
 ydb/library/actors/http/ut HttpProxy.StreamingResponseWithProgress1
 ydb/library/actors/http/ut THttpProxyWithMTls.UntrustedClientCertificate
 ydb/library/actors/http/ut unittest.sole chunk

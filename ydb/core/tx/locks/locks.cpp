@@ -564,15 +564,19 @@ bool TLockInfo::SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db)
     WriteSeqNumState.WriteSeqNum = writeSeqNum;
     WriteSeqNumState.SerializedResult.clear();
     if (db && IsPersistent()) {
-        db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum);
+        db->PersistLockWriteSeqNum(LockId, writerIndex, writeSeqNum, {});
         return true;
     }
     return false;
 }
 
-void TLockInfo::SetWriteSeqNumResult(TString serializedResult) {
+void TLockInfo::SetWriteSeqNumResult(TString serializedResult, ILocksDb* db) {
     Y_ENSURE(WriteSeqNumState.WriteSeqNum, "Result of an uncommitted write imply its position in the chain");
     WriteSeqNumState.SerializedResult = std::move(serializedResult);
+    if (db && IsPersistent()) {
+        db->PersistLockWriteSeqNum(LockId, WriteSeqNumState.WriterIndex, WriteSeqNumState.WriteSeqNum,
+            WriteSeqNumState.SerializedResult);
+    }
 }
 
 void TLockInfo::AddWaitPersistentCallback(ILocksDb* db) {
@@ -1251,7 +1255,10 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         // Adding read/write conflicts implies locking
         Y_ENSURE(!Update->ReadConflictLocks);
         Y_ENSURE(!Update->WriteConflictLocks);
-        return {TVector<TLock>(), brokenLocks};
+        if (!Update->SetWriteSeqNum) {
+            return {TVector<TLock>(), brokenLocks};
+        }
+        // Seq num is still consumed when no ranges were taken (e.g. INCREMENT of a missing row).
     }
 
     TLockInfo::TPtr lock;
@@ -1324,8 +1331,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
 
-            if (lock->GetWriteTables() && !lock->IsPersistent()) {
-                // We need to persist a new lock
+            if (!lock->IsPersistent() && (lock->GetWriteTables() || Update->SetWriteSeqNum)) {
                 lock->PersistLock(Db);
                 // Persistent locks cannot expire
                 Locker.ExpireQueue.Remove(lock.Get());
@@ -1334,10 +1340,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
             }
 
             if (Update->SetWriteSeqNum) {
-                // Every uncommitted write advances the chain, even one that applied no rows
-                // (e.g. an update of a missing row), so that the writer's indexes stay dense.
-                // When the lock is persistent the index is stored with the data, so a restart
-                // restores the last committed index.
+                // Advance even if no rows were applied (e.g. UPDATE of a missing row).
                 if (lock->SetWriteSeqNum(Update->SetWriteSeqNum->WriterIndex, Update->SetWriteSeqNum->WriteSeqNum, Db)) {
                     waitPersistent = true;
                 }
@@ -1722,6 +1725,28 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     }
 
     return EEnsureCurrentLock::Success;
+}
+
+bool TSysLocks::PersistWriteSeqNum(const TLockWriteSeqNum& seq, ILocksDb* db) {
+    Y_ENSURE(Update && Update->LockTxId);
+    Y_ENSURE(db, "PersistWriteSeqNum needs a valid locks database");
+
+    TLockInfo::TPtr lock = Update->Lock;
+    if (!lock) {
+        lock = Locker.GetLock(Update->LockTxId);
+    }
+    if (!lock || lock->IsBroken()) {
+        return false;
+    }
+
+    if (!lock->IsPersistent()) {
+        lock->PersistLock(db);
+        Locker.ExpireQueue.Remove(lock.Get());
+    }
+    lock->SetWriteSeqNum(seq.WriterIndex, seq.WriteSeqNum, db);
+    lock->AddWaitPersistentCallback(db);
+    Update->Lock = lock;
+    return true;
 }
 
 TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites, ui64 writerIndex, ui64 writeSeqNum) const {

@@ -117,8 +117,7 @@ public:
         return otherLocksBroken.size();
     }
 
-    // Serializes the parts of a write result that must be replayed when the same
-    // uncommitted write is delivered again (Status, Issues, TxStats).
+    // Status, Issues, TxStats — replayed on a duplicate delivery.
     static TString SerializeWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record) {
         NKikimrDataEvents::TEvWriteResult stored;
         stored.SetStatus(record.GetStatus());
@@ -131,8 +130,7 @@ public:
         return serialized;
     }
 
-    // Fills a duplicate write response from the stored serialized result.
-    // Falls back to STATUS_COMPLETED when there is no stored result or the blob fails to parse.
+    // Replay the stored result; STATUS_COMPLETED if missing or corrupt.
     static void FillDuplicateWriteResult(const TWriteSeqNumState& state, NKikimrDataEvents::TEvWriteResult& record) {
         NKikimrDataEvents::TEvWriteResult stored;
         if (state.SerializedResult.empty()) {
@@ -305,6 +303,30 @@ public:
                          << " reported lock with " << lock.WriterIndex << ":" << lock.WriteSeqNum);
             }
         }
+    }
+
+    void StoreWriteSeqNumResult(TWriteOperation* writeOp, TSetupSysLocks& guardLocks, ILocksDb* db) {
+        if (!guardLocks.SetWriteSeqNum) {
+            return;
+        }
+        auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
+        if (lock && lock->GetWriteSeqNum() == guardLocks.SetWriteSeqNum->WriteSeqNum) {
+            lock->SetWriteSeqNumResult(SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record), db);
+        }
+    }
+
+    // Consume seq num and persist the error; skip this update's rolled-back ranges.
+    void PersistFailedWriteSeqNum(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
+        ILocksDb* db, const TActorContext& ctx)
+    {
+        if (!guardLocks.SetWriteSeqNum) {
+            return;
+        }
+        if (!DataShard.SysLocksTable().PersistWriteSeqNum(*guardLocks.SetWriteSeqNum, db)) {
+            return;
+        }
+        DataShard.SubscribeNewLocks(ctx);
+        StoreWriteSeqNumResult(writeOp, guardLocks, db);
     }
 
     void ResetChanges(TDataShardUserDb& userDb, TTransactionContext& txc) {
@@ -885,11 +907,7 @@ public:
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
             if (guardLocks.SetWriteSeqNum) {
-                // Remembered for a duplicate delivery of this write
-                auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
-                if (lock && lock->GetWriteSeqNum() == guardLocks.SetWriteSeqNum->WriteSeqNum) {
-                    lock->SetWriteSeqNumResult(SerializeWriteSeqNumResult(writeResult->Record));
-                }
+                StoreWriteSeqNumResult(writeOp, guardLocks, &locksDb);
             }
 
         } catch (const TNeedGlobalTxId&) {
@@ -937,6 +955,8 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeOp->GetWriteResult()->Record.MutableTxStats());
 
+            PersistFailedWriteSeqNum(writeOp, guardLocks, &locksDb, ctx);
+
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
             }
@@ -962,6 +982,8 @@ public:
 
             ResetChanges(userDb, txc);
 
+            PersistFailedWriteSeqNum(writeOp, guardLocks, &locksDb, ctx);
+
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
             }
@@ -973,6 +995,8 @@ public:
             YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "TExecuteWriteUnit::Execute: aborting, secondary index key is too big",
                 {"operation", *writeOp},
                 {"tabletId", DataShard.TabletID()});
+
+            PersistFailedWriteSeqNum(writeOp, guardLocks, &locksDb, ctx);
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;

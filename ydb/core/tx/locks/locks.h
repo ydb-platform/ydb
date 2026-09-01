@@ -27,16 +27,11 @@ struct TLockWriteSeqNum {
     ui64 WriteSeqNum = 0;
 };
 
-// All data about the last applied write at this lock's position in the writer's chain.
-// WriterIndex and WriteSeqNum are persisted via local DB columns; SerializedResult is
-// in-memory only and transferred via in-memory state migration, so a duplicate that
-// arrives after a restart is answered without the stored result, while a duplicate
-// that arrives after split/merge/move gets the original result replayed.
+// Last uncommitted write on this lock. Persisted on the Locks row.
 struct TWriteSeqNumState {
     ui64 WriterIndex = 0;
     ui64 WriteSeqNum = 0;
-    // Opaque serialized result of the last applied write, empty when absent.
-    TString SerializedResult;
+    TString SerializedResult; // last TEvWriteResult; empty if none
 };
 
 class ILocksDb {
@@ -87,7 +82,7 @@ public:
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
-    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum) = 0;
+    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -470,7 +465,7 @@ public:
     bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
 
     const TWriteSeqNumState& GetWriteSeqNumState() const { return WriteSeqNumState; }
-    void SetWriteSeqNumResult(TString serializedResult);
+    void SetWriteSeqNumResult(TString serializedResult, ILocksDb* db = nullptr);
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
@@ -1195,6 +1190,9 @@ public:
      * early, e.g. because the given LockId cannot be reused.
      */
     EEnsureCurrentLock EnsureCurrentLock(bool createMissing = true);
+
+    // Persist seq num without this update's ranges (write was rolled back).
+    bool PersistWriteSeqNum(const TLockWriteSeqNum& seq, ILocksDb* db);
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }

@@ -42,6 +42,7 @@ public:
                 lock.Flags = rowset.template GetValue<typename Schema::Locks::Flags>();
                 lock.WriteSeqNumState.WriterIndex = rowset.template GetValue<typename Schema::Locks::WriterIndex>();
                 lock.WriteSeqNumState.WriteSeqNum = rowset.template GetValue<typename Schema::Locks::WriteSeqNum>();
+                lock.WriteSeqNumState.SerializedResult = rowset.template GetValueOrDefault<typename Schema::Locks::WriteResult>();
                 lockIndex[lock.LockId] = rows.size() - 1;
                 if (!rowset.Next()) {
                     return false;
@@ -125,7 +126,8 @@ public:
             NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
             NIceDb::TUpdate<typename Schema::Locks::Flags>(flags),
             NIceDb::TUpdate<typename Schema::Locks::WriterIndex>(0),
-            NIceDb::TUpdate<typename Schema::Locks::WriteSeqNum>(0));
+            NIceDb::TUpdate<typename Schema::Locks::WriteSeqNum>(0),
+            NIceDb::TUpdate<typename Schema::Locks::WriteResult>(TString()));
         HasChanges_ = true;
     }
 
@@ -145,12 +147,13 @@ public:
         HasChanges_ = true;
     }
 
-    void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum) override {
+    void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
         db.Table<typename Schema::Locks>().Key(lockId).Update(
             NIceDb::TUpdate<typename Schema::Locks::WriterIndex>(writerIndex),
-            NIceDb::TUpdate<typename Schema::Locks::WriteSeqNum>(writeSeqNum));
+            NIceDb::TUpdate<typename Schema::Locks::WriteSeqNum>(writeSeqNum),
+            NIceDb::TUpdate<typename Schema::Locks::WriteResult>(serializedResult));
         HasChanges_ = true;
     }
 

@@ -218,12 +218,62 @@ int TCommandConfigToggleV2FeatureFlag::Run(TConfig&) {
 TCommandConfigToggleSelfManagement::TCommandConfigToggleSelfManagement()
     : TCommandConfigToggle(
         "toggle-self-management",
-        "Enable or disable self_management_config.enabled")
+        "Enable or disable self_management_config.enabled, validating static groups when enabling")
 {
 }
 
+void TCommandConfigToggleSelfManagement::Config(TConfig& config) {
+    TCommandConfigToggle::Config(config);
+    config.Opts->AddLongOption(
+        "mirror-3-dc-3-nodes",
+        "Generate self-management config for mirror-3-dc (3 nodes)")
+        .StoreTrue(&UseMirror3dc3NodesLayout);
+    config.Opts->AddLongOption("force", "Proceed despite static-group migration issues").StoreTrue(&Force);
+    config.Opts->MutuallyExclusive("mirror-3-dc-3-nodes", "force");
+}
+
+void TCommandConfigToggleSelfManagement::Parse(TConfig& config) {
+    TCommandConfigToggle::Parse(config);
+    if (!Enabled() && (UseMirror3dc3NodesLayout || Force)) {
+        ythrow yexception() << "Static-group migration options can only be used with --enable";
+    }
+}
+
 int TCommandConfigToggleSelfManagement::Run(TConfig&) {
-    auto result = NYamlConfig::SetSelfManagement(ReadMigrationConfig(InputPath), Enabled());
+    const auto input = ReadMigrationConfig(InputPath);
+    const bool enabling = Enabled() && !NYamlConfig::IsSelfManagementEnabled(input);
+    auto result = NYamlConfig::SetSelfManagement(input, Enabled());
+    const auto layout = Enabled()
+                        ? NYamlConfig::CheckStaticGroupLayout(result)
+                        : NYamlConfig::EStaticGroupLayoutCheckResult::NotApplicable;
+
+    if (Enabled() && UseMirror3dc3NodesLayout) {
+        if (layout != NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes) {
+            ythrow yexception() << "--mirror-3-dc-3-nodes requires a consistent mirror-3-dc (3 nodes) layout "
+                                << "in pool_config.geometry under domains_config and in blob_storage_config; "
+                                << "fix the configuration";
+        }
+        NYamlConfig::SetDiskFailDomainType(result);
+    } else if (enabling && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes
+               && !NYamlConfig::HasDiskFailDomainType(result)) {
+        if (Force) {
+            Cerr << "WARNING: enabling self-management without preserving the configured mirror-3-dc (3 nodes) "
+                 << "layout" << Endl;
+        } else {
+            ythrow yexception() << "Configuration is valid for mirror-3-dc (3 nodes); rerun with "
+                                << "--mirror-3-dc-3-nodes to set it in the generated config, or use --force";
+        }
+    } else if (enabling && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect) {
+        if (Force) {
+            Cerr << "WARNING: enabling self-management without a consistent mirror-3-dc layout between "
+                 << "domains_config and blob_storage_config" << Endl;
+        } else {
+            ythrow yexception() << "domains_config and blob_storage_config do not define one consistent "
+                                << "mirror-3-dc layout; fix pool_config.geometry or static-group placement, "
+                                << "or use --force";
+        }
+    }
+
     WriteMigrationConfig(result, OutputPath);
     return EXIT_SUCCESS;
 }

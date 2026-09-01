@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     migration/config_migration.cpp
     migration/config_migration.h
+    migration/static_group_layout.cpp
     yaml_config.cpp
     yaml_config.h
 )

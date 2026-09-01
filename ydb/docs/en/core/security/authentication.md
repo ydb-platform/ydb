@@ -263,7 +263,7 @@ Device authentication is the verification of the [client certificate](../concept
 Device authentication addresses the following tasks in {{ ydb-short-name }}:
 
 1. Cluster isolation — limit the set of hosts and applications that can establish a TLS connection with {{ ydb-short-name }} nodes.
-2. Protection against configuration errors — prevent connections to foreign {{ ydb-short-name }} clusters. For example, with an incorrect [node-broker](../devops/configuration-management/configuration-v1/node-authorization.md) parameter, a dynamic node will not connect to a foreign cluster, whereas with regular TLS such a connection could be established.
+2. Protection against configuration errors — prevent connections to foreign {{ ydb-short-name }} clusters. For example, with an incorrect [node-broker](../devops/deployment-options/manual/node-authorization.md) parameter, a dynamic node will not connect to a foreign cluster, whereas with regular TLS such a connection could be established.
 3. Complicating application-level attacks — a process on a foreign host without a suitable certificate does not get access to the cluster API, even if a network route to the port exists.
 
 After passing device authentication, [user or application authentication](./authentication.md) may be required to access data. It can be performed not only using the verified client certificate, but also through other authentication methods in {{ ydb-short-name }}, for example, by [login and password](./authentication.md#static-credentials).

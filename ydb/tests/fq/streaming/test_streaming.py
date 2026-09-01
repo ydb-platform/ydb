@@ -2293,7 +2293,7 @@ FROM `{table_name}`"""
         logger.info("Query checked")
 
         def get_issues(client=None):
-            """Fetch issues from .sys/streaming_queries without structural assertions (safe for polling)."""
+            """Fetch issues from .sys/streaming_queries"""
             if client is None:
                 client = kikimr.ydb_client
 
@@ -2318,7 +2318,7 @@ FROM `{table_name}`"""
             assert depth <= 30, f"Issues JSON depth {depth} exceeds limit: {issues}"
 
         self.write_stream(["2"], endpoint=endpoint)
-        wait_for(lambda: "Previous query retries" in get_issues(), timeout_seconds=60, step_seconds=1)
+        assert wait_for(lambda: "Previous query retries" in get_issues(), timeout_seconds=60, step_seconds=1), "Failed to wait for Previous query retries"
         check_issues(get_issues(), "Failed to unwrap")
 
         kikimr.ydb_client.query(f"""

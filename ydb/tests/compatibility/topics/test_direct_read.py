@@ -56,6 +56,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 STABLE_26_2 = string_version_to_tuple("stable-26-2")
+STABLE_26_3 = string_version_to_tuple("stable-26-3")
 
 # Large enough to fill PQ blobs; small ReadRequest.bytes_size then stops
 # mid-blob when ReadToBlobEnd is false (1 message) and drains the blob when
@@ -169,17 +170,23 @@ async def _open_direct_read_stream(driver, session_id, topic_name, consumer):
     stream.write(_Proto(request))
 
     deadline = time.time() + 30
-    while time.time() < deadline:
-        response = await stream.receive(timeout=5)
-        _check_status("StreamDirectRead", response)
-        kind = response.WhichOneof("server_message")
-        if kind == "init_response":
-            return stream
-        if kind == "stop_direct_read_partition_session":
-            continue
-        logger.info("unexpected StreamDirectRead message during init: %s", kind)
-    stream.close()
-    raise TimeoutError("no StreamDirectRead InitResponse")
+    try:
+        while time.time() < deadline:
+            try:
+                response = await stream.receive(timeout=5)
+            except TimeoutError:
+                continue
+            _check_status("StreamDirectRead", response)
+            kind = response.WhichOneof("server_message")
+            if kind == "init_response":
+                return stream
+            if kind == "stop_direct_read_partition_session":
+                continue
+            logger.info("unexpected StreamDirectRead message during init: %s", kind)
+        raise TimeoutError("no StreamDirectRead InitResponse")
+    except Exception:
+        stream.close()
+        raise
 
 
 async def _start_direct_read_partition(stream, partition_session_id, generation, last_direct_read_id):
@@ -208,6 +215,15 @@ def _restart_pq_tablets(fixture, topic_name):
             logger.info("topic not ready after tablet restart: %s", exc)
             time.sleep(1)
     raise AssertionError("topic did not become ready after PQ tablet restart")
+
+
+def _consumer_committed_offsets(driver, topic_name, consumer):
+    description = driver.topic_client.describe_consumer(topic_name, consumer, include_stats=True)
+    return {
+        partition.partition_id: partition.partition_consumer_stats.committed_offset
+        for partition in description.partitions
+        if partition.partition_consumer_stats is not None
+    }
 
 
 async def _pump(name, stream, queue):
@@ -251,7 +267,8 @@ async def _direct_read_messages_async(
     last_direct_read_id = {}
     session_to_partition = {}
     tablets_restarted = False
-    pending_commits = 0
+    expected_commit_end = {}
+    committed_end = {}
     started = False
     last_progress = time.time()
     incoming = asyncio.Queue()
@@ -261,13 +278,12 @@ async def _direct_read_messages_async(
         control_driver = _driver_for_node(fixture, control_node_id)
         own_control_driver = True
 
-    def send_read():
+    def send_read(size=None):
         request = ydb_topic_pb2.StreamReadMessage.FromClient()
-        request.read_request.bytes_size = bytes_size
+        request.read_request.bytes_size = size if size is not None else bytes_size
         control.write(_Proto(request))
 
     def send_commit(partition_session_id, start, end):
-        nonlocal pending_commits
         request = ydb_topic_pb2.StreamReadMessage.FromClient()
         part = request.commit_offset_request.commit_offsets.add()
         part.partition_session_id = partition_session_id
@@ -275,7 +291,10 @@ async def _direct_read_messages_async(
         offsets.start = start
         offsets.end = end
         control.write(_Proto(request))
-        pending_commits += 1
+        expected_commit_end[partition_session_id] = max(
+            expected_commit_end.get(partition_session_id, 0),
+            end,
+        )
 
     def start_pump(name, stream):
         pumps.append(asyncio.create_task(_pump(name, stream, incoming)))
@@ -287,9 +306,17 @@ async def _direct_read_messages_async(
             return False
         if idle_timeout is not None and time.time() - last_progress < idle_timeout:
             return False
-        if commit and pending_commits > 0:
+        if commit and not _commits_done():
             return False
         return True
+
+    def _commits_done():
+        if not expected_commit_end:
+            return True
+        return all(
+            committed_end.get(session_id, 0) >= end
+            for session_id, end in expected_commit_end.items()
+        )
 
     async def open_data_stream(node_id):
         if node_id not in node_drivers:
@@ -332,6 +359,7 @@ async def _direct_read_messages_async(
         init.init_request.consumer = consumer
         init.init_request.direct_read = True
         init.init_request.auto_partitioning_support = True
+        init.init_request.partition_max_in_flight_bytes = 64 * 1024 * 1024
         topic = init.init_request.topics_read_settings.add()
         topic.path = topic_name
         if read_partition_ids:
@@ -405,7 +433,12 @@ async def _direct_read_messages_async(
                     confirm.graceful = stop.graceful
                     control.write(_Proto(response))
                 elif kind == "commit_offset_response":
-                    pending_commits = max(0, pending_commits - 1)
+                    for part in message.commit_offset_response.partitions_committed_offsets:
+                        committed_end[part.partition_session_id] = max(
+                            committed_end.get(part.partition_session_id, 0),
+                            part.committed_offset,
+                        )
+                    last_progress = time.time()
                 elif kind == "read_response":
                     raise AssertionError(
                         "control session delivered ReadResponse with direct_read=true; "
@@ -423,13 +456,17 @@ async def _direct_read_messages_async(
                 received.extend((partition_id, offset, payload) for offset, payload in batch)
                 last_direct_read_id[data.partition_session_id] = data.direct_read_id
                 last_progress = time.time()
-                if commit and batch:
-                    send_commit(data.partition_session_id, batch[0][0], batch[-1][0] + 1)
                 ack = ydb_topic_pb2.StreamReadMessage.FromClient()
                 ack.direct_read_ack.partition_session_id = data.partition_session_id
                 ack.direct_read_ack.direct_read_id = data.direct_read_id
                 control.write(_Proto(ack))
-                send_read()
+                if commit and batch:
+                    send_commit(data.partition_session_id, batch[0][0], batch[-1][0] + 1)
+                # First ReadRequest stays small so ReadToBlobEnd=false stops mid-blob.
+                # After a response, restore the window: one blob of 512KiB messages is
+                # ~8MiB, and a 256KiB credit is not enough to start the next blob.
+                if len(received) < expected_count or idle_timeout is not None:
+                    send_read(max(bytes_size, data.bytes_size or bytes_size))
                 if (
                     restart_tablets_after is not None
                     and not tablets_restarted
@@ -457,8 +494,28 @@ async def _direct_read_messages_async(
                 f"DirectRead got {len(received)} messages, expected at least {expected_count}; "
                 f"messages={[(pid, offset) for pid, offset, _ in received]!r}"
             )
-        if commit and pending_commits > 0:
-            raise AssertionError(f"DirectRead timed out waiting for {pending_commits} commit responses")
+        if commit and not _commits_done():
+            committed = await asyncio.get_running_loop().run_in_executor(
+                None,
+                _consumer_committed_offsets,
+                fixture.driver,
+                topic_name,
+                consumer,
+            )
+            want_by_partition = {}
+            for session_id, end in expected_commit_end.items():
+                partition_id = session_to_partition.get(session_id, 0)
+                want_by_partition[partition_id] = max(want_by_partition.get(partition_id, 0), end)
+            missing = {
+                partition_id: (committed.get(partition_id, 0), end)
+                for partition_id, end in want_by_partition.items()
+                if committed.get(partition_id, 0) < end
+            }
+            if missing:
+                raise AssertionError(
+                    f"DirectRead timed out waiting for commits: "
+                    f"stream={committed_end!r} describe={committed!r} missing={missing!r}"
+                )
         return received
     finally:
         control.close()
@@ -796,6 +853,8 @@ class TestTopicDirectReadMixedCluster(MixedClusterFixture):
         _assert_direct_read_complete(received, expected_1, partition_id=1)
 
     def test_direct_read_max_offset(self):
+        if min(self.versions) < STABLE_26_3:
+            pytest.skip("StartPartitionSessionResponse.max_offset is ignored by 26-2 proxies")
         consumer = "max-offset-consumer"
         topic_name = _prepare_topic(self, consumer)
         expected = _write_blob_messages(self, topic_name, count=STEP_MESSAGE_COUNT)

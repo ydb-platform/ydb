@@ -55,4 +55,3 @@ To a specific directory:
 {{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
 
-

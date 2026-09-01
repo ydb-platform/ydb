@@ -197,7 +197,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     // Use appropriate field names based on breaker vs victim
     for(auto& allQueriesItem : params.OtherQueries) {
         if (isBreaker) {
-            if (allQueriesItem.Id == params.BreakerQuerySpanId) {
+            if (allQueriesItem.Id == params.BreakerQuerySpanId || params.OtherQueries.size()==1) {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
                     // {"querySpanId", allQueriesItem.Id},
@@ -212,7 +212,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
             }
         }
         else {
-            if (allQueriesItem.Id == params.VictimQuerySpanId) {
+            if (allQueriesItem.Id == params.VictimQuerySpanId || params.OtherQueries.size()==1) {
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                     message,
                     // {"querySpanId", allQueriesItem.Id},

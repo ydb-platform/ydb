@@ -661,23 +661,7 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         // TODO: move graph restoration outside of executer
-        // For streaming queries with external sources (CREATE STREAMING QUERY), skip saved task
-        // graph restoration and re-plan tasks from the physical plan instead. This recalculates
-        // the task count based on the current cluster topology (resource snapshot) rather than
-        // using the stale count persisted in the saved physical graph.
-        // Note: checkpoint/offset/aggregation state restoration may produce runtime errors,
-        // which is acceptable as the task IDs will differ from those stored in checkpoints.
-        const bool isStreamingQueryRestore = HasExternalSources && Request.QueryPhysicalGraph != nullptr;
-        const bool graphRestored = isStreamingQueryRestore ? false : RestoreTasksGraph();
-        if (isStreamingQueryRestore) {
-            YDB_LOG_INFO("Streaming query re-planning: skipping saved task graph, re-planning from physical plan",
-                {"marker", "KQPDATA"},
-                {"actorId", SelfId()},
-                {"txId", TxId},
-                {"ctx", *GetUserRequestContext()},
-                {"resourceSnapshotSize", ResourcesSnapshot.size()},
-                {"traceId", TraceId()});
-        }
+        const bool graphRestored = RestoreTasksGraph();
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
@@ -1290,19 +1274,8 @@ private:
 
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {
-            if (HasExternalSources) {
-                // Streaming query re-planning: tasks have been re-planned from the physical plan
-                // using the current cluster resource snapshot, so task IDs differ from those
-                // in the saved physical graph. Use the current TasksGraph task topology instead.
-                NKikimrKqp::TQueryPhysicalGraph currentGraph;
-                TasksGraph.PersistTasksGraphInfo(currentGraph);
-                for (const auto& task : currentGraph.GetTasks()) {
-                    *graphParams.AddTasks() = task.GetDqTask();
-                }
-            } else {
-                for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
-                    *graphParams.AddTasks() = task.GetDqTask();
-                }
+            for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
+                *graphParams.AddTasks() = task.GetDqTask();
             }
         }
 
@@ -1500,8 +1473,6 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-
-    ui64 Generation = 0;
 
     Actors::TActorId StreamingQueryNodesManagerId;
 };

@@ -6208,6 +6208,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                     TActorId sender = runtime.AllocateEdgeActor(node);
                     THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
                     metrics->Record.SetTotalNodeUsage(node == nodeWithTablet ? highImpactNodeUsage : .05);
+                    for (ui64 tablet : distribution[node]) {
+                        auto* tabletMetric = metrics->Record.AddTabletMetrics();
+                        tabletMetric->SetTabletID(tablet);
+                        tabletMetric->MutableResourceUsage()->SetNetwork(100'000'000ull);
+                    }
 
                     runtime.SendToPipe(hiveTablet, sender, metrics.Release(), node);
                 }
@@ -6215,7 +6220,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
             TDispatchOptions options;
             options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
-            runtime.DispatchEvents(options, TDuration::MilliSeconds(10));
+            runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
             runtime.AdvanceCurrentTime(TDuration::MilliSeconds(500));
 
             distribution = getDistribution();

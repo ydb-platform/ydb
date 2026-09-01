@@ -21,6 +21,7 @@ class TestYdbWorkload(StressFixture):
                 "enable_columnshard_bool": True,
                 "enable_cs_dictionary_encoding": True,
                 "enable_cut_history": True,
+                "enable_columnshard_group_decommission": True,
                 "enable_columnshard_interval": True,
                 "enable_columnshard_uuid": True,
                 "enable_columnshard_dy_number": True,

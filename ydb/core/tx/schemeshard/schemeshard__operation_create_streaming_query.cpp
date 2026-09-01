@@ -206,6 +206,9 @@ class TCreateStreamingQuery : public TSubOperation {
         auto& propertiesMap = *properties.MutableProperties();
         propertiesMap["__created_by"] = owner;
         propertiesMap["__modified_by"] = owner;
+        if (propertiesMap["run"] == "true") {
+            propertiesMap["__started_by"] = owner;
+        }
         const TString nowStr = ToString(TInstant::Now().MicroSeconds());
         propertiesMap["__created_at"] = nowStr;
         propertiesMap["__modified_at"] = nowStr;

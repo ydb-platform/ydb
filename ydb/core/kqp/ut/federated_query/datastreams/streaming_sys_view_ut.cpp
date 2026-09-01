@@ -394,6 +394,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StoppedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
             });
         }
+
+        constexpr char runningQueryName[] = "createdRunningQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                RUN = TRUE
+            ) AS DO BEGIN{text}END DO)",
+            "query_name"_a = runningQueryName,
+            "text"_a = GetQueryText(runningQueryName)
+        ));
+
+        // CREATE with RUN=TRUE starts the query and records the user who started it.
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = runningQueryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after CREATE with RUN=TRUE");
+            });
+        }
     }
 
     Y_UNIT_TEST_F(SysViewTimestampColumns, TStreamingSysViewTestFixture) {

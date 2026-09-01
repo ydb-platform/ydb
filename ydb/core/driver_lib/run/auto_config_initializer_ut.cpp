@@ -773,4 +773,67 @@ Y_UNIT_TEST(AutoConfiguredAdjacentPoolWakesAfterIdleOnRegistration) {
         EAdjacentActivationSource::Registration);
 }
 
+Y_UNIT_TEST(UnitedPoolFallsBackToForeignThreadWithoutAdjacentOwner) {
+    static constexpr ui32 TargetPoolId = 0;
+    static constexpr ui32 WorkerPoolId = 1;
+
+    auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    setup->NodeId = 1;
+    setup->CpuManager.Shared.United = true;
+    setup->CpuManager.Basic.emplace_back(NActors::TBasicExecutorPoolConfig{
+        .PoolId = TargetPoolId,
+        .PoolName = "TargetPool",
+        .Threads = 0,
+        .SpinThreshold = 0,
+        .MinThreadCount = 0,
+        .MaxThreadCount = 0,
+        .DefaultThreadCount = 0,
+        .Priority = 20,
+        .AllThreadsAreShared = true,
+        .ForcedForeignSlotCount = 1,
+    });
+    setup->CpuManager.Basic.emplace_back(NActors::TBasicExecutorPoolConfig{
+        .PoolId = WorkerPoolId,
+        .PoolName = "WorkerPool",
+        .Threads = 1,
+        .SpinThreshold = 0,
+        .MinThreadCount = 1,
+        .MaxThreadCount = 1,
+        .DefaultThreadCount = 1,
+        .Priority = 10,
+        .HasSharedThread = true,
+        .AllThreadsAreShared = true,
+    });
+    setup->Scheduler = NActors::CreateSchedulerThread(NActors::TSchedulerConfig());
+
+    NActors::TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    const bool workerIsParked = WaitForSharedThreadToPark(
+        actorSystem,
+        WorkerPoolId,
+        TDuration::Seconds(5));
+
+    TManualEvent done;
+    std::atomic<ui32> executionOwnerPoolId = Max<ui32>();
+    if (workerIsParked) {
+        actorSystem.Register(
+            new TRecordOwnerOnBootstrapActor(&done, &executionOwnerPoolId),
+            NActors::TMailboxType::HTSwap,
+            TargetPoolId);
+    }
+    const bool completed = workerIsParked
+        && done.WaitT(TDuration::Seconds(5));
+
+    actorSystem.Stop();
+    UNIT_ASSERT_C(workerIsParked,
+        "unrelated united-pool worker did not become idle");
+    UNIT_ASSERT_C(completed,
+        "pool without an adjacent owner did not wake an eligible foreign thread");
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        executionOwnerPoolId.load(std::memory_order_acquire),
+        WorkerPoolId,
+        "activation without an adjacent owner was not executed by the foreign worker");
+}
+
 } // Y_UNIT_TEST_SUITE(AutoConfig)

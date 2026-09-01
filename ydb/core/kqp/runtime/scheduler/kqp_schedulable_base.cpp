@@ -55,6 +55,11 @@ std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {
     return CalculateDelay(now);
 }
 
+void TSchedulableBase::StopExecution() {
+    bool forced = false;
+    StopExecution(forced);
+}
+
 bool TSchedulableBase::StartExecution(TMonotonic now) {
     Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);

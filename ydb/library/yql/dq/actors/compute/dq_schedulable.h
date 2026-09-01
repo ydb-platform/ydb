@@ -33,10 +33,8 @@ struct IDqSchedulableWork {
     // quota is likely available again, e.g. WaitForEvent(now + *delay).
     virtual std::optional<TDuration> TryStartExecution(TMonotonic now) = 0;
 
-    // Called after the unit finishes. `forcedResume` is passed through to
-    // signal whether the actor was woken up by resume rather than natural
-    // completion.
-    virtual void StopExecution(bool& forcedResume) = 0;
+    // Called after the unit finishes; releases the quota.
+    virtual void StopExecution() = 0;
 
     // Subscribe on wake-up when quota frees up. The actor will receive
     // TEvWakeup from the scheduler.

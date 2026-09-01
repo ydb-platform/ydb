@@ -112,8 +112,7 @@ private:
         if (!Work || !Working) {
             return;
         }
-        bool forced = false;
-        Work->StopExecution(forced);
+        Work->StopExecution();
         Working = false;
     }
 

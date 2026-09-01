@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 3 } items { uint32_value: 66 } }");
     }
 
-    Y_UNIT_TEST(FollowerAfterSysCompaction) {
+    Y_UNIT_TEST(FollowerAfterSysCompaction_BTreeIndexV2) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -275,6 +275,10 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2ShadowV1Write(false);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -310,6 +314,15 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 33 } }");
 
+        size_t preloadedDataPages = 0;
+        auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
+            if (ev->Cookie == ui64(NSharedCache::ERequestTypeCookie::PendingInit)) {
+                for (const auto& location : ev->Get()->Pages) {
+                    preloadedDataPages += location.Type == NTable::NPage::EPage::DataPage;
+                }
+            }
+        });
+
         // Now we ask the leader to compact the Sys table
         {
             NActorsProto::TRemoteHttpInfo pb;
@@ -329,6 +342,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         // Allow table to finish compaction
         Cerr << "... sleeping after compaction" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_GT(preloadedDataPages, 0u);
 
         // Read from follower must succeed
         Cerr << "... checking after compaction" << Endl;

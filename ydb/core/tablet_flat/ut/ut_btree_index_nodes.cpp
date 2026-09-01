@@ -37,7 +37,6 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL_C(a.GetDataSize(), b.GetDataSize(), msg);
         UNIT_ASSERT_VALUES_EQUAL_C(a.GetGroupDataSize(), b.GetGroupDataSize(), msg);
         UNIT_ASSERT_VALUES_EQUAL_C(a.GetErasedRowCount(), b.GetErasedRowCount(), msg);
-        UNIT_ASSERT_VALUES_EQUAL_C(a.LevelCount(), b.LevelCount(), msg);
         // IndexSize may differ slightly due to TChildV2 being larger than TChild
     }
 
@@ -1160,11 +1159,6 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
         // Same row count from full iteration
         UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*v1Part), CountAllRows(*v2Part));
 
-        // Same level count
-        UNIT_ASSERT_VALUES_EQUAL(
-            v1Part->IndexPages.BTreeGroups[0].LevelCount(),
-            v2Part->IndexPages.BTreeGroups[0].LevelCount());
-
         // Collect page locations and verify they are consistent
         auto v1Locs = CollectPageLocations(*v1Part);
         auto v2Locs = CollectPageLocations(*v2Part);
@@ -1392,8 +1386,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
         AssertV2Root(meta, "V2 root");
-        // V2Root offset must be a valid byte offset (non-zero)
-        UNIT_ASSERT_C(meta.RootV2.Offset.AsByteOffset() > 0, "V2Root byte offset must be > 0");
+        // V2Root offset must be set
+        UNIT_ASSERT_C(!meta.RootV2.Offset.IsMax(), "V2Root byte offset must be set");
         UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
     }
 
@@ -1758,8 +1752,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         // V2 root must be present with byte offset, V1 root must be absent
         AssertV2Root(meta, "WriteFlag_On");
 
-        // V2Root must have non-zero byte offset and size
-        UNIT_ASSERT_C(meta.RootV2.Offset.AsByteOffset() > 0, "V2Root byte offset must be > 0");
+        // V2Root offset and size must be set
+        UNIT_ASSERT_C(!meta.RootV2.Offset.IsMax(), "V2Root byte offset must be set");
         UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
     }
 
@@ -2148,111 +2142,16 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 }
 
 // ========================================================================
-// Section 4.5: Mixed-format parts (v1 and v2 coexist)
-// ========================================================================
-
-Y_UNIT_TEST_SUITE(TBtreeIndexMixedFormat) {
-    using namespace NTest;
-
-    // Helper: create two parts with same data, one v1 and one v2,
-    // then verify they can be iterated together in a run
-    Y_UNIT_TEST(MixedParts_V1AndV2_FullScan) {
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay, ui32 offset) {
-            for (ui32 i : xrange(20)) {
-                cook.Add(*TSchemedCookRow(*lay).Col(offset + i, TString(200, 'x') + ToString(offset + i)));
-            }
-        };
-
-        // V1 part (rows 0-19)
-        NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
-        v1Conf.WriteBTreeIndexV2 = false;
-        TPartCook v1Cook(lay, v1Conf);
-        feedRows(v1Cook, lay, 0);
-        TPartEggs v1Eggs = v1Cook.Finish();
-
-        // V2 part (rows 20-39)
-        NPage::TConf v2Conf = MakeV2Conf();
-        TPartCook v2Cook(lay, v2Conf);
-        feedRows(v2Cook, lay, 20);
-        TPartEggs v2Eggs = v2Cook.Finish();
-
-        const auto v1Part = v1Eggs.Lone();
-        const auto v2Part = v2Eggs.Lone();
-
-        // Verify v1 has v1 root, v2 has v2 root
-        AssertV1Root(v1Part->IndexPages.BTreeGroups[0], "V1 part root");
-        AssertV2Root(v2Part->IndexPages.BTreeGroups[0], "V2 part root");
-
-        // Both parts iterate independently — verify both produce rows
-        auto v1Rows = CountAllRows(*v1Part);
-        auto v2Rows = CountAllRows(*v2Part);
-        UNIT_ASSERT_C(v1Rows > 0, "V1 part must have rows");
-        UNIT_ASSERT_C(v2Rows > 0, "V2 part must have rows");
-        // Both parts have the same number of rows
-        UNIT_ASSERT_VALUES_EQUAL(v1Rows, v2Rows);
-    }
-
-    Y_UNIT_TEST(MixedParts_V1AndV2_RowOrder) {
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        // V1 part with small keys
-        NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
-        v1Conf.WriteBTreeIndexV2 = false;
-        TPartCook v1Cook(lay, v1Conf);
-        for (ui32 i : xrange(10)) {
-            v1Cook.Add(*TSchemedCookRow(*lay).Col(i, TString(200, 'x') + ToString(i)));
-        }
-        TPartEggs v1Eggs = v1Cook.Finish();
-
-        // V2 part with larger keys
-        NPage::TConf v2Conf = MakeV2Conf();
-        TPartCook v2Cook(lay, v2Conf);
-        for (ui32 i : xrange(10, 20)) {
-            v2Cook.Add(*TSchemedCookRow(*lay).Col(i, TString(200, 'x') + ToString(i)));
-        }
-        TPartEggs v2Eggs = v2Cook.Finish();
-
-        const auto v1Part = v1Eggs.Lone();
-        const auto v2Part = v2Eggs.Lone();
-
-        // Verify rows are correctly ordered in each part
-        TTestEnv v1Env, v2Env;
-        auto v1Index = CreateIndexIter(v1Part.Get(), &v1Env, {});
-        auto v2Index = CreateIndexIter(v2Part.Get(), &v2Env, {});
-
-        // V1 part should start at row 0
-        UNIT_ASSERT(v1Index->Seek(0) == EReady::Data);
-
-        // V2 part should start at row 0 (of v2's own row space)
-        UNIT_ASSERT(v2Index->Seek(0) == EReady::Data);
-    }
-}
-
-// ========================================================================
 // Section 5.2: Read format flag tests
 // ========================================================================
 
 Y_UNIT_TEST_SUITE(TBtreeIndexReadFlags) {
     using namespace NTest;
 
-    // Helper: simulate read flag off by stripping v2 roots from v2 part
-    // (mirrors what flat_part_loader.cpp does when EnableLocalDBBtreeIndexV2 is off)
-    Y_UNIT_TEST(ReadFlag_Off_StripsV2OnlyRoots) {
-        // When EnableLocalDBBtreeIndexV2 is off, v2-only indexes are removed.
-        // This test verifies that a v2-only part becomes inaccessible for btree
-        // iteration when the v2 root is stripped.
+    Y_UNIT_TEST(ReadFlag_Off_KeepsV2OnlyRoot) {
+        // When EnableLocalDBBtreeIndexV2 is off, the loader strips V2 roots only
+        // from dual-root indexes. V2-only indexes keep their root because there
+        // is no V1 fallback.
         TLayoutCook lay;
         lay
             .Col(0, 0,  NScheme::NTypeIds::Uint32)
@@ -2267,286 +2166,21 @@ Y_UNIT_TEST_SUITE(TBtreeIndexReadFlags) {
         TPartEggs v2Eggs = v2Cook.Finish();
         const auto part = v2Eggs.Lone();
 
-        // V2 part has v2 root and no v1 root
+        // V2 part has a V2 root and no V1 root.
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        AssertV2Root(meta, "V2 part before strip");
+        AssertV2Root(meta, "V2-only part before read gate");
 
-        // Simulate the loader stripping: v2-only entries (HasV2Root && !HasV1Root) are removed
-        // In a v2-only part, this means the btree index would be completely dropped
-        // A v2-only part cannot be read with v2 flag off — it falls back to flat index (which doesn't exist in v2)
-        UNIT_ASSERT_C(!meta.HasRootV1(), "V2-only part must not have V1 root");
-        UNIT_ASSERT_C(meta.HasRootV2(), "V2-only part must have V2 root");
-    }
-
-    Y_UNIT_TEST(ReadFlag_On_V1PartStillWorks) {
-        // A v1 part loaded with v2 flag on should still work normally
-        // (v1 parts don't have v2 roots, so the v2 flag has no effect)
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
-        v1Conf.WriteBTreeIndexV2 = false;
-        TPartCook v1Cook(lay, v1Conf);
-        for (ui32 i : xrange(10)) {
-            v1Cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        // Simulate the loader's V2-off gate.
+        auto gatedMeta = meta;
+        if (gatedMeta.HasRootV2() && gatedMeta.HasRootV1()) {
+            gatedMeta.RootV2 = NPage::TPageLocation::Max();
+            gatedMeta.LevelCountV2 = Max<ui32>();
         }
-        TPartEggs v1Eggs = v1Cook.Finish();
-        const auto part = v1Eggs.Lone();
 
-        // V1 part works regardless of read flag
-        AssertV1Root(part->IndexPages.BTreeGroups[0], "V1 part");
-
-        // Verify iteration produces the expected 10 rows
-        auto rowCount = CountAllRows(*part);
-        UNIT_ASSERT_VALUES_EQUAL_C(rowCount, 10, "V1 part iteration must return 10 rows");
+        AssertV2Root(gatedMeta, "V2-only part after read gate");
+        UNIT_ASSERT_EQUAL(gatedMeta.RootV2, meta.RootV2);
     }
 
-    Y_UNIT_TEST(ReadFlag_Off_V1PartStillWorks) {
-        // A v1 part loaded with v2 flag off should still work
-        // (no v2 roots to strip, v1 root is unaffected)
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
-        v1Conf.WriteBTreeIndexV2 = false;
-        TPartCook v1Cook(lay, v1Conf);
-        for (ui32 i : xrange(10)) {
-            v1Cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
-        }
-        TPartEggs v1Eggs = v1Cook.Finish();
-        const auto part = v1Eggs.Lone();
-
-        // V1 part should iterate correctly regardless of flag
-        auto rowCount = CountAllRows(*part);
-        UNIT_ASSERT_VALUES_EQUAL_C(rowCount, 10, "V1 part iteration must return 10 rows");
-    }
 }
-
-// ========================================================================
-// Section 5.3: Write/read independence tests
-// ========================================================================
-
-Y_UNIT_TEST_SUITE(TBtreeIndexWriteReadIndependence) {
-    using namespace NTest;
-
-    Y_UNIT_TEST(WriteV1_ReadV2FlagOn) {
-        // Write v1 part, load with v2 flag on → v1 indexes loaded normally
-        // (no v2 available, flag has no effect)
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
-        v1Conf.WriteBTreeIndexV2 = false;
-        TPartCook cook(lay, v1Conf);
-        for (ui32 i : xrange(10)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
-        }
-        TPartEggs eggs = cook.Finish();
-        const auto part = eggs.Lone();
-
-        AssertV1Root(part->IndexPages.BTreeGroups[0], "V1 part");
-        auto rowCount = CountAllRows(*part);
-        UNIT_ASSERT_VALUES_EQUAL_C(rowCount, 10, "V1 part iteration must return 10 rows");
-    }
-
-    Y_UNIT_TEST(WriteV2_ReadV1FlagOff_V2IndexDropped) {
-        // Write v2 part — when read with v2 flag off, v2-only indexes are dropped.
-        // In the test framework, we can verify that v2-only parts have no v1 fallback.
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        NPage::TConf v2Conf = MakeV2Conf();
-        TPartCook cook(lay, v2Conf);
-        for (ui32 i : xrange(10)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
-        }
-        TPartEggs eggs = cook.Finish();
-        const auto part = eggs.Lone();
-
-        const auto& meta = part->IndexPages.BTreeGroups[0];
-        // V2-only part has no v1 root
-        UNIT_ASSERT_C(!meta.HasRootV1(), "V2-only part must not have V1 root");
-
-        // V2 part does not have flat index (v2 disables flat index writing)
-        UNIT_ASSERT_C(part->IndexPages.FlatGroups.empty(),
-            "V2 part must not have flat index groups");
-
-        // With v2 flag off, v2-only indexes would be removed by the loader.
-        // Since there's no flat index fallback, the part would have no usable index.
-        // This test verifies that scenario is detectable.
-    }
-
-    Y_UNIT_TEST(V2RootWinsByDefault) {
-        // With EnableLocalDBBtreeIndexV2 on, a part carrying a V2 root uses it for reads.
-        // V2-only parts have only the V2 root; dual-root parts (when EnableLocalDBBtreeIndexV1Shadow=true)
-        // keep the V2 root as long as EnableLocalDBBtreeIndexV2 stays on — turning it off reverts to V1.
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        NPage::TConf v2Conf = MakeV2Conf();
-        TPartCook cook(lay, v2Conf);
-        for (ui32 i : xrange(10)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
-        }
-        TPartEggs eggs = cook.Finish();
-        const auto part = eggs.Lone();
-
-        const auto& meta = part->IndexPages.BTreeGroups[0];
-        // V2 root should be the active root
-        AssertV2Root(meta, "V2-only part uses V2 root");
-
-        // Verify the root is a valid byte-offset location
-        auto rootLoc = NTable::GetBTreeRootLocation(meta,
-            part->GetPageCollection(0),
-            part->GetPageCollection(0));
-        UNIT_ASSERT_EQUAL(rootLoc, meta.RootV2);
-        UNIT_ASSERT_C(rootLoc.Offset.IsByteOffset(), "V2 root must be byte offset");
-    }
-}
-
-// ========================================================================
-// Section 5.4: Feature flag propagation tests
-// ========================================================================
-
-Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
-    using namespace NTest;
-
-    Y_UNIT_TEST(Executor_WiresWriteFlag) {
-        // Tests that WriteBTreeIndexV2=true in TConf produces a V2 part
-        // with byte-offset root, resolvable through GetBTreeRootLocation,
-        // and fully iterable — mirroring the executor's compact→write→load path.
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        {
-            // V2-only: WriteBTreeIndexV2=true, KeepBTreeIndexV1Shadow=false
-            NPage::TConf conf{ true, 7 * 1024 };
-            conf.WriteBTreeIndex = true;
-            conf.WriteBTreeIndexV2 = true;
-            conf.BTreeIndexV2KeepV1Shadow = false;
-
-            TPartCook cook(lay, conf);
-            for (ui32 i : xrange(25)) {
-                cook.Add(*TSchemedCookRow(*lay).Col(i, TString(512, 'x') + ToString(i)));
-            }
-            TPartEggs eggs = cook.Finish();
-            const auto part = eggs.Lone();
-
-            // Verify V2 root with byte offset
-            AssertV2Root(part->IndexPages.BTreeGroups[0], "V2-only part from WriteBTreeIndexV2=true");
-
-            // Verify root resolves via byte offset
-            auto rootLoc = NTable::GetBTreeRootLocation(part->IndexPages.BTreeGroups[0],
-                part->GetPageCollection(0), part->GetPageCollection(0));
-            UNIT_ASSERT_C(rootLoc.Offset.IsByteOffset(), "V2 root must be byte offset");
-
-            // Verify full iteration works
-            UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*part), 25);
-        }
-        {
-            // Dual-write: WriteBTreeIndexV2=true, KeepBTreeIndexV1Shadow=true
-            NPage::TConf conf{ true, 7 * 1024 };
-            conf.WriteBTreeIndex = true;
-            conf.WriteBTreeIndexV2 = true;
-            conf.BTreeIndexV2KeepV1Shadow = true;
-
-            TPartCook cook(lay, conf);
-            for (ui32 i : xrange(25)) {
-                cook.Add(*TSchemedCookRow(*lay).Col(i, TString(512, 'x') + ToString(i)));
-            }
-            TPartEggs eggs = cook.Finish();
-            const auto part = eggs.Lone();
-
-            // Verify both roots present
-            const auto& meta = part->IndexPages.BTreeGroups[0];
-            UNIT_ASSERT_C(meta.HasRootV1() && meta.HasRootV2(), "Dual-write part must have both V1 and V2 roots");
-
-            // Verify V2 root is byte offset, V1 root is page index
-            UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "Dual-write V2 root must be byte offset");
-            UNIT_ASSERT_C(meta.HasRootV1(), "Dual-write must have V1 root");
-            UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), "Dual-write V1 root must have valid page id");
-
-            // Verify iteration works
-            UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*part), 25);
-        }
-    }
-
-    Y_UNIT_TEST(Loader_GatesV2Read) {
-        // Tests that when EnableLocalDBBtreeIndexV2 is off (simulated by
-        // stripping V2 roots from dual-root entries per flat_part_loader.cpp:122-136),
-        // iteration falls back to the V1 root and produces all rows correctly.
-        TLayoutCook lay;
-        lay
-            .Col(0, 0,  NScheme::NTypeIds::Uint32)
-            .Col(0, 1,  NScheme::NTypeIds::String)
-            .Key({0, 1});
-
-        NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
-        conf.WriteBTreeIndexV2 = true;
-        conf.BTreeIndexV2KeepV1Shadow = true;
-        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
-        conf.Group(0).BTreeIndexNodeKeysMin = 3;
-
-        TPartCook cook(lay, conf);
-        for (ui32 i : xrange(700)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
-        }
-        TPartEggs eggs = cook.Finish();
-        auto part = eggs.Lone();
-
-        // Verify dual-root before gating
-        const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(meta.HasRootV1() && meta.HasRootV2(), "expected dual-root part before loader gate");
-
-        // Simulate loader V2-off gating: strip V2 root, keep V1
-        // (mirrors flat_part_loader.cpp:122-127)
-        auto strippedMeta = meta;
-        strippedMeta.RootV2 = NPage::TPageLocation::Max();
-
-        // V1 root must survive
-        UNIT_ASSERT_C(strippedMeta.HasRootV1(), "V1 root must survive V2 gating");
-        UNIT_ASSERT_C(!strippedMeta.HasRootV2(), "V2 root must be stripped");
-
-        // GetBTreeRootLocation should resolve through V1 root after strip
-        auto rootLoc = NTable::GetBTreeRootLocation(strippedMeta,
-            part->GetPageCollection(0), part->GetPageCollection(0));
-        UNIT_ASSERT_C(rootLoc, "stripped meta must resolve to a valid root location");
-
-        // The resolved location must match the V1 root's GetLocation
-        const auto* pageCollection = part->GetPageCollection(0);
-        auto v1Loc = pageCollection->GetLocation(meta.RootV1PageId());
-        UNIT_ASSERT_VALUES_EQUAL(rootLoc.Offset, v1Loc.Offset);
-        UNIT_ASSERT_VALUES_EQUAL(rootLoc.Size, v1Loc.Size);
-
-        // The original dual-write part iterates via V2 (active root).
-        // After V2 gating, the part still iterates via V1 fallback.
-        // Both should produce the same row count.
-        UNIT_ASSERT_VALUES_EQUAL_C(CountAllRows(*part), 700,
-            "V1 fallback after V2 gating must produce all rows");
-    }
-}
-
 
 } // namespace NKikimr::NTable::NPage

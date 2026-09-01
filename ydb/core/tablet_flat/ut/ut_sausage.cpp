@@ -743,8 +743,8 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         // Structural pages: Frames (100 bytes), Schem2 (50 bytes)
         TString framesPage(100, 'F');
         TString schemPage(50, 'S');
-        meta.Push(0, framesPage);  // pageId 1, offset 260..360
-        meta.Push(0, schemPage);   // pageId 2, offset 360..410
+        meta.Push((ui32)NTable::NPage::EPage::Frames, framesPage);  // pageId 1, offset 260..360
+        meta.Push((ui32)NTable::NPage::EPage::Schem2, schemPage);  // pageId 2, offset 360..410
 
         auto raw = meta.Finish();
         const TMeta tmeta(raw, 0);
@@ -763,12 +763,13 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         auto loc1 = tmeta.GetLocation(1);
         UNIT_ASSERT_VALUES_EQUAL(loc1.GetByteOffset(), 260);
         UNIT_ASSERT_VALUES_EQUAL(loc1.Size, 100);
-        UNIT_ASSERT(loc1.Type == NTable::NPage::EPage::Undef);  // type=0 in Push
+        UNIT_ASSERT(loc1.Type == NTable::NPage::EPage::Frames);
 
         // Structural page 2 (Schem2): byte range [360, 410)
         auto loc2 = tmeta.GetLocation(2);
         UNIT_ASSERT_VALUES_EQUAL(loc2.GetByteOffset(), 360);
         UNIT_ASSERT_VALUES_EQUAL(loc2.Size, 50);
+        UNIT_ASSERT(loc2.Type == NTable::NPage::EPage::Schem2);
 
         // Bounds(TPageLocation) for a data page within the skip range
         // should work via TAlign — it doesn't need TEntry

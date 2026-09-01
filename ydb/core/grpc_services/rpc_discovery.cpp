@@ -44,9 +44,8 @@ public:
 
     void Bootstrap() {
         // request endpoints
-        const TString database = Request->GetDatabaseName().GetOrElse("");
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
-            database, Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
+            Request->GetDatabaseName().GetOrElse(""), Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
             SelfId(), CacheId));
 
         // request self node info

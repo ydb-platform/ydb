@@ -21,7 +21,7 @@ public:
         Become(&TAlterTopicActor::StateWork);
 
         auto request = *GetProtoRequest();
-        ResolveTopicRequestPaths(request, Request_->GetDatabaseName());
+        request.set_path(ResolveTopicPath(request.path()));
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),

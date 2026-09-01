@@ -39,19 +39,22 @@ struct TEvCheckDlqTopicsResponse
 
 struct TCheckDlqTopicsSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool TopicsAreFirstClassCitizen = false;
 };
 
 // MOVE + enabled, skip empty and sqs:// paths. Paths are normalized against database.
 absl::flat_hash_set<TString> CollectDlqTopicPaths(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TString& database
+    const TString& database,
+    bool topicsAreFirstClassCitizen = false
 );
 
 // DLQ paths present in newConfig but not in oldConfig.
 absl::flat_hash_set<TString> CollectNewDlqTopicPaths(
     const NKikimrPQ::TPQTabletConfig& newConfig,
     const NKikimrPQ::TPQTabletConfig& oldConfig,
-    const TString& database
+    const TString& database,
+    bool topicsAreFirstClassCitizen = false
 );
 
 // Builds the new-vs-old DLQ path diff. Returns nullptr when there is nothing to check

@@ -248,12 +248,14 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
         for (const auto& item : TTraits::GetItems(settings)) {
-            const TString userSpecifiedPath = CanonizePath(item.source_path());
-            const bool absolutePathWithinCommonSource = TStringBuf(item.source_path()).StartsWith('/')
-                && (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath);
-            const TString fullPath = absolutePathWithinCommonSource
-                ? userSpecifiedPath
-                : CommonSourcePath + userSpecifiedPath;
+            TString userSpecifiedPath = CanonizePath(item.source_path());
+            TString fullPath;
+            if (TStringBuf(item.source_path()).StartsWith('/')
+                && (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath)) {
+                fullPath = userSpecifiedPath; // Full path
+            } else {
+                fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
+            }
             if (IsExcludedFromExport(fullPath)) {
                 continue;
             }

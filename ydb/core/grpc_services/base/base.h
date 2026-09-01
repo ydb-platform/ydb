@@ -77,15 +77,7 @@ std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TSt
 std::pair<TString, TString> SplitPath(const TString& path);
 
 inline TString ResolvePathToDatabase(const TMaybe<TString>& database, TStringBuf path) {
-    if (path.empty()) {
-        return {};
-    }
-
-    if (path.StartsWith('/')) {
-        return TString(path);
-    }
-
-    return CanonizePath(TStringBuilder() << database.GetOrElse(TString()) << '/' << path);
+    return NKikimr::ResolvePathToDatabase(database.GetOrElse(TString()), path);
 }
 
 TString DatabaseFromDomain(const TAppData* appdata);

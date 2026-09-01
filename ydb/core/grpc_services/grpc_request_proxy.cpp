@@ -201,7 +201,7 @@ private:
             }
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
-                databaseName = ResolveDatabaseName(maybeDatabaseName.GetRef(), RootDatabase);
+                databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
                 if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();

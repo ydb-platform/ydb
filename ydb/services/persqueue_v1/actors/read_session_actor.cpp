@@ -851,11 +851,13 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
     }
 
 
-    auto getTopicPath = [this](const auto& settings) {
+    auto getTopicPath = [&](const auto& settings) {
         if constexpr (Protocol == EProtocol::PQv1) {
-            return TString(settings.topic());
+            return settings.topic();
         } else {
-            return Request->GetDatabaseRelativePath(settings.path());
+            return TopicsHandler.GetConverterFactory()->GetNoDCMode()
+                ? Request->GetDatabaseRelativePath(settings.path())
+                : TString(settings.path());
         }
     };
 

@@ -115,12 +115,11 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            const auto localDbPath = TryParseLocalDbPath(::NKikimr::SplitPath(path));
-            if (proto->ignore_system_views() && localDbPath) {
+            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
             tx->AddTables()->SetTablePath(
-                localDbPath ? path : Request_->GetDatabaseRelativePath(path));
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
         if (proto->ignore_system_views()) {
@@ -253,12 +252,11 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            const auto localDbPath = TryParseLocalDbPath(::NKikimr::SplitPath(path));
-            if (proto->ignore_system_views() && localDbPath) {
+            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
             tx->AddTables()->SetTablePath(
-                localDbPath ? path : Request_->GetDatabaseRelativePath(path));
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);
@@ -396,12 +394,11 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            const auto localDbPath = TryParseLocalDbPath(::NKikimr::SplitPath(path));
-            if (proto->ignore_system_views() && localDbPath) {
+            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
             tx->AddTables()->SetTablePath(
-                localDbPath ? path : Request_->GetDatabaseRelativePath(path));
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);

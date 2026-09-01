@@ -461,8 +461,10 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         return;
     }
     if constexpr (Protocol == EProtocol::Topic) {
-        InitRequest.set_path(Request->GetDatabaseRelativePath(topic_path));
-        topic_path = InitRequest.path();
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            InitRequest.set_path(Request->GetDatabaseRelativePath(topic_path));
+            topic_path = InitRequest.path();
+        }
     }
 
     if constexpr (Protocol == EProtocol::PQv1) {

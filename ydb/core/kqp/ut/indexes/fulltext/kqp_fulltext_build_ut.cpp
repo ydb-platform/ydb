@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_compact_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <library/cpp/json/json_reader.h>
@@ -245,17 +246,6 @@ Y_UNIT_TEST_TWIN(AddIndexWithRelevance, Covered) {
             [[400u];3u]
         ])", NYdb::FormatResultSetYson(index));
     }
-
-    index = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [3u;"cats"];
-        [2u;"chase"];
-        [2u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [2u;"small"]
-    ])", NYdb::FormatResultSetYson(index));
 
     index = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
     CompareYson(R"([
@@ -544,13 +534,6 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [[100u];1u;"love"];
         [[200u];1u;"love"]
     ])", NYdb::FormatResultSetYson(index));
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -589,13 +572,6 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [[150u];1u;"love"];
         [[200u];1u;"love"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [2u;"cats"];
-        [1u;"dogs"];
-        [2u;"foxes"];
-        [3u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -639,15 +615,6 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [[152u];1u;"rabbits"];
         [[151u];1u;"wolves"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [2u;"cats"];
-        [1u;"dogs"];
-        [4u;"foxes"];
-        [5u;"love"];
-        [1u;"rabbits"];
-        [1u;"wolves"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1005,13 +972,6 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
         AddIndexCovered(db, "fulltext_relevance");
     else
         AddIndex(db, "fulltext_relevance");
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     // Dataset is the same as in InsertWithRelevance - don't check index table contents
 
     // Pure upsert of new rows is already checked in InsertWithRelevance
@@ -1041,16 +1001,6 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
         [[100u];1u;"rabbits"];
         [[151u];1u;"wolves"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"birds"];
-        [1u;"cats"];
-        [1u;"dogs"];
-        [3u;"foxes"];
-        [4u;"love"];
-        [1u;"rabbits"];
-        [1u;"wolves"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1081,13 +1031,6 @@ Y_UNIT_TEST_TWIN(UpdateWithRelevance, Covered) {
         AddIndexCovered(db, "fulltext_relevance");
     else
         AddIndex(db, "fulltext_relevance");
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"]
-    ])", NYdb::FormatResultSetYson(dict));
     // Dataset is the same as in InsertWithRelevance - don't check index table contents
 
     // Pure upsert of new rows is already checked in InsertWithRelevance
@@ -1108,15 +1051,6 @@ Y_UNIT_TEST_TWIN(UpdateWithRelevance, Covered) {
         [[200u];1u;"love"];
         [[100u];1u;"rabbits"];
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"birds"];
-        [0u;"cats"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [1u;"rabbits"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1858,16 +1792,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[100u];1u;"small"];
         [[200u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [3u;"cats"];
-        [2u;"chase"];
-        [2u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [2u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1906,16 +1830,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[400u];1u;"love"];
         [[100u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [2u;"cats"];
-        [1u;"chase"];
-        [1u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [1u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1949,16 +1863,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[300u];1u;"love"];
         [[100u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [2u;"cats"];
-        [1u;"chase"];
-        [0u;"dogs"];
-        [0u;"foxes"];
-        [1u;"love"];
-        [1u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -1988,16 +1892,6 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [[100u];1u;"chase"];
         [[100u];1u;"small"]
     ])", NYdb::FormatResultSetYson(index));
-    dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [1u;"cats"];
-        [1u;"chase"];
-        [0u;"dogs"];
-        [0u;"foxes"];
-        [0u;"love"];
-        [1u;"small"]
-    ])", NYdb::FormatResultSetYson(dict));
     docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
     if (Covered) {
         CompareYson(R"([
@@ -2728,7 +2622,7 @@ Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
     auto verifyIndexWorksCorrectly = [&](){
         UpsertTexts(db);
         auto index = ReadIndex(db);
-        CompareYson(R"([
+        CompareYsonUnordered(R"([
             [[100u];1u;"animals"];
             [[100u];1u;"cats"];
             [[200u];1u;"cats"];
@@ -2742,7 +2636,7 @@ Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
             [[400u];1u;"love"];
             [[100u];1u;"small"];
             [[200u];1u;"small"]
-        ])", NYdb::FormatResultSetYson(index));
+        ])", FormatFulltextIndex(kikimr, "/Root/Texts/fulltext_idx", true));
     };
 
     verifyIndexWorksCorrectly();
@@ -3081,7 +2975,7 @@ Y_UNIT_TEST(FulltextIndexCreateTableNonIntegerPkRequiresUniqueIndexFeature) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithUint32Key, Compact) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3127,7 +3021,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithUint32Key, Compact) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithInt32Key, Compact) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3176,7 +3070,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithInt32Key, Compact) {
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithSerialKey, Compact) {
     // Serial / Serial4 -> Int32 backend
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3223,7 +3117,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithSerialKey, Compact) {
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithBigSerialKey, Compact) {
     // Serial8 / BigSerial -> Int64 backend
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3524,9 +3418,11 @@ Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
         "__ydb_row_id is generated server-side for tables with fulltext indexes");
 }
 
-TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) {
+TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(TKikimrRunner& kikimr, bool isRelevance) {
+    const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
     const char* indexType = isRelevance ? "relevance" : "plain";
-    const char* enumType = isRelevance ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextPlain";
+    const char* enumType = compact ? (isRelevance ? "EIndexTypeGlobalFulltextCompactRelevance" : "EIndexTypeGlobalFulltextCompact")
+        : (isRelevance ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextPlain");
     return {
         .IndexInCreateTable = std::format(
             "INDEX fulltext_idx GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true),",
@@ -3541,27 +3437,27 @@ TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) 
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_Both, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtlIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndexTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 }

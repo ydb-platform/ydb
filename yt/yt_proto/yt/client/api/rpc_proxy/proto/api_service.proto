@@ -2845,6 +2845,51 @@ message TRspReadFile
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqPartitionFile
+{
+    message TFileReadRange
+    {
+        required int64 begin = 1;
+        optional int64 end = 2; // Missing means the range extends to the end of file.
+    }
+
+    required bytes path = 1; // YPath
+    repeated TFileReadRange ranges = 2;
+
+    optional TFetchChunkSpecConfig fetch_chunk_spec_config = 3;
+    optional bool fetch_cookie_node_descriptors = 4 [default = true];
+
+    optional TTransactionalOptions transactional_options = 100;
+}
+
+message TFilePartition
+{
+    required bytes cookie = 1; // YSON-serialized TFilePartitionCookiePtr
+    required int64 length = 2;
+}
+
+message TRspPartitionFile
+{
+    repeated TFilePartition partitions = 1;
+}
+
+message TReqReadFilePartition
+{
+    required bytes cookie = 1; // YSON-serialized TFilePartitionCookiePtr
+
+    optional bytes config = 2; // YSON-serialized TFileReaderConfig
+}
+
+message TRspReadFilePartition
+{
+}
+
+message TRspReadFilePartitionMeta
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqWriteFile
 {
     required bytes path = 1; // RichYPath

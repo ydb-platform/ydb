@@ -23,9 +23,12 @@ SRCS(
     channel_profiles.h
     counters.cpp
     counters.h
+    database_kind.cpp
+    database_kind.h
     defs.h
     domain.cpp
     domain.h
+    storage_pool_kinds.h
     event_filter.cpp
     event_filter.h
     events.h
@@ -76,6 +79,7 @@ SRCS(
     storage_pools.h
     subdomain.h
     subdomain.cpp
+    superlemmer.h
     table_index.cpp
     tablet.cpp
     tablet.h
@@ -135,6 +139,12 @@ PEERDIR(
     library/cpp/json
 )
 
+IF (OPENSOURCE)
+PEERDIR(
+    ydb/library/superlemmer_stub
+)
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
@@ -146,6 +156,7 @@ ENDIF()
 GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
 GENERATE_ENUM_SERIALIZATION(auth.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(database_kind.h)
 
 END()
 
@@ -162,4 +173,3 @@ RECURSE_FOR_TESTS(
     ut_http_database_param
 )
 ENDIF()
-

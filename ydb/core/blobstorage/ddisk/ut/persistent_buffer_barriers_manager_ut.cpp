@@ -49,6 +49,53 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         UNIT_ASSERT_C(
             !(header.Header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT),
             "IS_ERASE_COMPACT must not be set when data fits in raw storage");
+
+        auto recovered = mgr.Uncompact(header.CompactLsns, false);
+        UNIT_ASSERT_VALUES_EQUAL(recovered.size(), MaxRawLsns);
+        for (ui64 i = 1; i <= MaxRawLsns; i++) {
+            UNIT_ASSERT_VALUES_EQUAL(recovered[i - 1], i * 10);
+        }
+    }
+
+    Y_UNIT_TEST(CompactZerosUnusedTailSoUncompactStops) {
+        auto mgr = MakeManager();
+
+        // Fill CompactLsns with 0xFF so a missing terminator would be decoded as extra LSNs
+        // (and is the same class of bug MSAN reports as use-of-uninitialized-value on restore).
+        TPersistentBufferFastErases header;
+        memset(&header, 0xFF, sizeof(header));
+        header.Header.Flags = 0;
+
+        std::vector<ui64> oldLsns = {10, 20};
+        std::vector<ui64> newLsns = {30};
+        UNIT_ASSERT(mgr.Compact(oldLsns, newLsns, header));
+        UNIT_ASSERT(!(header.Header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT));
+
+        auto recovered = mgr.Uncompact(header.CompactLsns, false);
+        std::vector<ui64> expected = {10ULL, 20ULL, 30ULL};
+        UNIT_ASSERT_VALUES_EQUAL(recovered, expected);
+    }
+
+    Y_UNIT_TEST(CompactLeb128ZerosUnusedTailSoUncompactStops) {
+        auto mgr = MakeManager();
+
+        TPersistentBufferFastErases header;
+        memset(&header, 0xFF, sizeof(header));
+        header.Header.Flags = 0;
+
+        std::vector<ui64> oldLsns;
+        std::vector<ui64> newLsns;
+        for (ui64 i = 1; i <= 300; i++) oldLsns.push_back(i);
+        for (ui64 i = 301; i <= MaxRawLsns + 1; i++) newLsns.push_back(i);
+
+        UNIT_ASSERT(mgr.Compact(oldLsns, newLsns, header));
+        UNIT_ASSERT(header.Header.Flags & TPersistentBufferHeader::IS_ERASE_COMPACT);
+
+        auto recovered = mgr.Uncompact(header.CompactLsns, true);
+        UNIT_ASSERT_VALUES_EQUAL(recovered.size(), MaxRawLsns + 1);
+        for (ui64 i = 1; i <= MaxRawLsns + 1; i++) {
+            UNIT_ASSERT_VALUES_EQUAL(recovered[i - 1], i);
+        }
     }
 
     Y_UNIT_TEST(CompactSetsFlagWhenExceedsRaw) {

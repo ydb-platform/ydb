@@ -105,12 +105,13 @@ std::optional<TError> TError::FindMatching(const TFilter& filter) const
     return FindMatching([&] (const TError& error) { return filter(error.GetCode()); });
 }
 
+//! NB: wrapping an OK error yields a bare wrapper; since #AddInnerError drops OK operands.
 #define IMPLEMENT_COPY_WRAP(...) \
-    return TError(__VA_ARGS__) << *this; \
+    return TError(__VA_ARGS__).With(*this); \
     static_assert(true)
 
 #define IMPLEMENT_MOVE_WRAP(...) \
-    return TError(__VA_ARGS__) << std::move(*this); \
+    return TError(__VA_ARGS__).With(std::move(*this)); \
     static_assert(true)
 
 template <class U>
@@ -184,6 +185,20 @@ TError&& TError::With(TRange&& attributes) &&
     return std::move(*this);
 }
 
+template <CConvertibleToAttributeValue TValue>
+TError& TError::Add(const TErrorAttribute::TKey& key, const TValue& value) &
+{
+    AddAttribute(TErrorAttribute(key, value));
+    return *this;
+}
+
+template <CErrorAttributeRange TRange>
+TError& TError::Add(TRange&& attributes) &
+{
+    AddAttributes(std::forward<TRange>(attributes));
+    return *this;
+}
+
 template <CErrorAttributeRange TRange>
 void TError::AddAttributes(TRange&& attributes)
 {
@@ -207,6 +222,29 @@ TError&& TError::With(TRange&& innerErrors) &&
     return std::move(*this);
 }
 
+template <class... TArgs>
+TError TError::WithIf(bool condition, TArgs&&... args) const &
+{
+    return condition
+        ? With(std::forward<TArgs>(args)...)
+        : *this;
+}
+
+template <class... TArgs>
+TError&& TError::WithIf(bool condition, TArgs&&... args) &&
+{
+    return condition
+        ? std::move(*this).With(std::forward<TArgs>(args)...)
+        : std::move(*this);
+}
+
+template <CErrorRange TRange>
+TError& TError::Add(TRange&& innerErrors) &
+{
+    AddInnerErrors(std::forward<TRange>(innerErrors));
+    return *this;
+}
+
 template <CErrorRange TRange>
 void TError::AddInnerErrors(TRange&& innerErrors)
 {
@@ -224,38 +262,6 @@ void TError::AddInnerErrors(TRange&& innerErrors)
         } else {
             AddInnerError(std::forward<decltype(innerError)>(innerError));
         }
-    }
-}
-
-template <CErrorNestable TValue>
-TError&& TError::operator << (TValue&& rhs) &&
-{
-    return std::move(*this <<= std::forward<TValue>(rhs));
-}
-
-template <CErrorNestable TValue>
-TError TError::operator << (TValue&& rhs) const &
-{
-    return TError(*this) << std::forward<TValue>(rhs);
-}
-
-template <CErrorNestable TValue>
-TError&& TError::operator << (const std::optional<TValue>& rhs) &&
-{
-    if (rhs) {
-        return std::move(*this <<= *rhs);
-    } else {
-        return std::move(*this);
-    }
-}
-
-template <CErrorNestable TValue>
-TError TError::operator << (const std::optional<TValue>& rhs) const &
-{
-    if (rhs) {
-        return TError(*this) << *rhs;
-    } else {
-        return *this;
     }
 }
 

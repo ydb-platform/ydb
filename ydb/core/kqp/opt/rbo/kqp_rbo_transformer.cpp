@@ -120,6 +120,8 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
                 return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, translated, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
+            } else if (TKqlTableEffect::Match(node.Get())) {
+                Y_ENSURE(false, "DML functionality not yet supported in new optimizer");
             } else {
                 return node;
             }
@@ -188,7 +190,7 @@ bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const TIntrusivePtr<IO
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op) {
     if (MatchOperator<TOpFilter>(op)) {
-        CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->FilterExpr, op->Props);
+        CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->GetFilterExpression(), op->Props);
     } else if (MatchOperator<TOpJoin>(op)) {
         // Fetching statistics for join cardinality correction.
         CollectJoinKeysColumns(CastOperator<TOpJoin>(op), op->Props);
@@ -517,6 +519,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // CBO stages.
     TVector<std::unique_ptr<IRule>> initialCBOStageRules;
+    initialCBOStageRules.emplace_back(std::make_unique<TPullUpMapOverCBORule>());
     initialCBOStageRules.emplace_back(std::make_unique<TBuildInitialCBOTreeRule>());
     initialCBOStageRules.emplace_back(std::make_unique<TExpandCBOTreeRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Prepare for CBO", std::move(initialCBOStageRules)));

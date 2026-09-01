@@ -740,14 +740,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
@@ -766,12 +766,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -789,9 +783,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
-
 
         {
             auto writeResult = WriteJsonIndexWithKeys(db, "UPSERT", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
@@ -799,28 +792,22 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
-                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
-                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k3"];
                 [[1u];"\3k3\0\0"];
@@ -842,7 +829,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[5u];"\3k5\0\0"];
                 [[5u];"\3k5\0\3v5"];
                 [[5u];"\3k5\0\4\0\0\0\0\0\0\x14@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -860,14 +847,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
@@ -886,12 +873,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -909,9 +890,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
-
 
         {
             auto writeResult = WriteJsonIndexWithKeys(db, "REPLACE", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
@@ -919,28 +899,22 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
-                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
-                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k3"];
                 [[1u];"\3k3\0\0"];
@@ -962,7 +936,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[5u];"\3k5\0\0"];
                 [[5u];"\3k5\0\3v5"];
                 [[5u];"\3k5\0\4\0\0\0\0\0\0\x14@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -980,14 +954,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
@@ -1006,12 +980,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -1029,7 +997,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1038,26 +1006,20 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 3"];[5u];["{\"k3\":[\"v3\",3,false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[6u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[5u];["{\"k3\":[\"v3\",3,false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 3"];[5u];["{\"k3\": [\"v3\", 3, false]}"]];
+                    CompareYsonUnordered(R"([
                         [["data 2"];[6u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[5u];["{\"k3\": [\"v3\", 3, false]}"]]
                     ])", FormatResultSetYson(writeResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -1083,7 +1045,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[6u];"\3k2\0\1"];
                 [[6u];"\3k2\0\3v2"];
                 [[6u];"\3k2\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1092,12 +1054,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -1105,8 +1061,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[1u];"\3k1\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];"\3k2"];
                 [[2u];"\3k2\0\1"];
-                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[2u];"\3k2\0\3v2"];
+                [[2u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"];
                 [[3u];"\3k3\0\3v3"];
                 [[3u];"\3k3\0\0"];
@@ -1123,7 +1079,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[6u];"\3k2\0\4\0\0\0\0\0\0\0@"];
                 [[6u];"\3k2"];
                 [[6u];"\3k2\0\3v2"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -1149,12 +1105,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -1172,7 +1122,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1190,26 +1140,20 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 10"];[3u];["{\"k10\":[\"v10\",10,true]}"]];
-                        [["data 10"];[2u];["{\"k10\":[\"v10\",10,true]}"]]
+                    CompareYsonUnordered(R"([
+                        [["data 10"];[2u];["{\"k10\":[\"v10\",10,true]}"]];
+                        [["data 10"];[3u];["{\"k10\":[\"v10\",10,true]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 10"];[3u];["{\"k10\": [\"v10\", 10, true]}"]];
-                        [["data 10"];[2u];["{\"k10\": [\"v10\", 10, true]}"]]
+                    CompareYsonUnordered(R"([
+                        [["data 10"];[2u];["{\"k10\": [\"v10\", 10, true]}"]];
+                        [["data 10"];[3u];["{\"k10\": [\"v10\", 10, true]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -1227,7 +1171,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[4u];"\3k4\0\1"];
                 [[4u];"\3k4\0\3v4"];
                 [[4u];"\3k4\0\4\0\0\0\0\0\0\x10@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1244,30 +1188,24 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
-                        [["data 100"];[4u];["{\"k100\":[\"v100\",100,false]}"]];
-                        [["data 100"];[3u];["{\"k100\":[\"v100\",100,false]}"]];
+                    CompareYsonUnordered(R"([
+                        [["data 100"];[1u];["{\"k100\":[\"v100\",100,false]}"]];
                         [["data 100"];[2u];["{\"k100\":[\"v100\",100,false]}"]];
-                        [["data 100"];[1u];["{\"k100\":[\"v100\",100,false]}"]]
+                        [["data 100"];[3u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[4u];["{\"k100\":[\"v100\",100,false]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
-                        [["data 100"];[4u];["{\"k100\": [\"v100\", 100, false]}"]];
-                        [["data 100"];[3u];["{\"k100\": [\"v100\", 100, false]}"]];
+                    CompareYsonUnordered(R"([
+                        [["data 100"];[1u];["{\"k100\": [\"v100\", 100, false]}"]];
                         [["data 100"];[2u];["{\"k100\": [\"v100\", 100, false]}"]];
-                        [["data 100"];[1u];["{\"k100\": [\"v100\", 100, false]}"]]
+                        [["data 100"];[3u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[4u];["{\"k100\": [\"v100\", 100, false]}"]]
                     ])", FormatResultSetYson(updateResult.GetResultSet(0)));
                 }
             }
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\5k100"];
                 [[1u];"\5k100\0\0"];
@@ -1285,7 +1223,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[4u];"\5k100\0\0"];
                 [[4u];"\5k100\0\3v100"];
                 [[4u];"\5k100\0\4\0\0\0\0\0\0Y@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -1322,12 +1260,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
                         [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
                         [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
@@ -1336,12 +1274,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
             CompareYsonUnordered(R"([
                 [[1u];"\3k1"];
                 [[1u];"\3k1\0\0"];
@@ -1351,7 +1283,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 [[3u];"\3k3\0\0"];
                 [[3u];"\3k3\0\3v3"];
                 [[3u];"\3k3\0\4\0\0\0\0\0\0\x08@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -1366,12 +1298,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             if (WithReturning) {
                 if (IsJsonDocument) {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
                         [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 } else {
-                    CompareYson(R"([
+                    CompareYsonUnordered(R"([
                         [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
                         [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
@@ -1380,13 +1312,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            std::string query = R"(
-                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYsonUnordered("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2099,13 +2025,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         };
 
         auto ensureIndexEmpty = [&]() {
-            auto index = ReadIndex(db);
-            UNIT_ASSERT_VALUES_EQUAL(index.RowsCount(), 0);
+            auto index = FormatFulltextIndex(kikimr);
+            UNIT_ASSERT_VALUES_EQUAL(index, "[]");
         };
 
         auto ensureIndexNonEmpty = [&]() {
-            auto index = ReadIndex(db);
-            UNIT_ASSERT_GT(index.RowsCount(), 0);
+            auto index = FormatFulltextIndex(kikimr);
+            UNIT_ASSERT(index != "[]");
         };
 
         upsertData();
@@ -2647,10 +2573,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        CompareYson(R"([
+        CompareYsonUnordered(R"([
             [[1u];"\x09ключ"];
             [[1u];"\x09ключ\0\3я mop"]
-        ])", FormatResultSetYson(ReadIndex(db)));
+        ])", FormatFulltextIndex(kikimr));
     }
 
     Y_UNIT_TEST_TWIN(CyrillicPredicates, IsJsonDocument) {
@@ -2815,16 +2741,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -2837,14 +2759,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Key 1 tokens must be gone; key 2 is unchanged.
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYsonUnordered(R"([
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2867,14 +2785,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Only key 2 has tokens; key 1 (NULL) has none.
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYsonUnordered(R"([
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -2887,16 +2801,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Now both keys have tokens.
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"];
                 [[2u];"\2b"];
                 [[2u];"\2b\0\4\0\0\0\0\0\0\0@"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2918,11 +2828,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYsonUnordered("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2942,11 +2848,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYsonUnordered("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -2956,11 +2858,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYsonUnordered("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -2981,14 +2879,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -2998,11 +2892,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYsonUnordered("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
 
         // Insert NULL for the same key.
@@ -3016,11 +2906,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         // Index must stay empty
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYsonUnordered("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -3040,11 +2926,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYsonUnordered("[]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYsonUnordered("[]", FormatFulltextIndex(kikimr));
         }
 
         {
@@ -3062,14 +2944,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
 
         {
-            auto result = db.ExecuteQuery(
-                R"(SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;)",
-                TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYsonUnordered(R"([
                 [[1u];"\2a"];
                 [[1u];"\2a\0\4\0\0\0\0\0\0\xF0?"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            ])", FormatFulltextIndex(kikimr));
         }
     }
 
@@ -3244,39 +3122,43 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
-    const TTtlNotAllowedIndexTestConfig JsonTtlNotAllowedConfig{
-        .TextColumnType = "Json",
-        .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
-        .AlterAddIndex = R"(
-            ALTER TABLE TestTable ADD INDEX json_idx
-                GLOBAL USING json ON (Text);
-        )",
-        .ExpectedError = "Table with EIndexTypeGlobalJson index doesn't support TTL",
-    };
+    TTtlNotAllowedIndexTestConfig MakeJsonTtlNotAllowedConfig(TKikimrRunner& kikimr) {
+        const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
+        const char* enumType = compact ? "EIndexTypeGlobalJsonCompact" : "EIndexTypeGlobalJson";
+        return {
+            .TextColumnType = "Json",
+            .IndexInCreateTable = "INDEX json_idx GLOBAL USING json ON (Text),",
+            .AlterAddIndex = R"(
+                ALTER TABLE TestTable ADD INDEX json_idx
+                    GLOBAL USING json ON (Text);
+            )",
+            .ExpectedError = std::format("Table with {} index doesn't support TTL", enumType),
+        };
+    }
 
     Y_UNIT_TEST(TtlNotAllowed_Both) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
         auto kikimr = Kikimr();
-        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeJsonTtlNotAllowedConfig(kikimr));
     }
 
     Y_UNIT_TEST(PrefixedJsonCreate) {

@@ -98,7 +98,7 @@ public:
         static TStatistics Zero() { return TStatistics(); }
     };
 
-    virtual ~IGraphTransformer() {}
+    virtual ~IGraphTransformer() = default;
 
     virtual TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) = 0;

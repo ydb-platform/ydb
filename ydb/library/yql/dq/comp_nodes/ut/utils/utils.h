@@ -113,6 +113,19 @@ template <typename Setup, typename... TVectors> TypeAndValue ConvertVectorsToTup
     return {tuplesNodeType, tuples};
 }
 
+template <typename Setup>
+TypeAndValue MakeZeroWidthRows(Setup& setup, size_t nRows) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    TType* emptyTupleType = pb.NewTupleType({});
+    TRuntimeNode::TList items;
+    items.reserve(nRows);
+    for (size_t i = 0; i < nRows; ++i) {
+        items.push_back(pb.NewTuple({}));
+    }
+    const auto listNode = pb.NewList(emptyTupleType, items);
+    return {listNode.GetStaticType(), setup.BuildGraph(listNode)->GetValue()};
+}
+
 template <typename Setup, typename... TVectors>
 std::pair<TArrayRef<TType* const>, NUdf::TUnboxedValue> ConvertVectorsToRuntimeTypesAndValue(Setup& setup,
                                                                                              TVectors... vectors) {

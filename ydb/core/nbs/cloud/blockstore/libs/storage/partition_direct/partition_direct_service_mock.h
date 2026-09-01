@@ -44,6 +44,9 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     ui64 LsnGenerator = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
+    size_t CopyRangeBudgetRequestCount = 0;
+    ui64 LastCopyRangeBudgetByteCount = 0;
+    TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
 
@@ -109,6 +112,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(pbufferDDiskId);
         Y_UNUSED(lsn);
         return true;
+    }
+
+    TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override
+    {
+        ++CopyRangeBudgetRequestCount;
+        LastCopyRangeBudgetByteCount = byteCount;
+        return CopyRangeBudgetDelay;
     }
 };
 

@@ -81,6 +81,9 @@ message TActorSystemConfig {
         optional uint32 Threads = 2;
         optional uint64 SpinThreshold = 3;
         optional TAffinity Affinity = 4;
+        // Index into runtime CPU topology placement groups. Supported for BASIC executors and mutually exclusive with Affinity.
+        // Placement only resolves this executor's affinity; multiple executors may use the same placement group.
+        optional uint32 Placement = 28;
         optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore
         optional string Name = 6;
         optional uint32 TimePerMailboxMicroSecs = 7;
@@ -2204,7 +2207,7 @@ message TImmediateControlsConfig {
             Description: "Upper bound for the chunk reserve of the static group VDisks, in permille of the user chunk pool of the PDisk. 0 disables the reserve",
             MinValue: 0,
             MaxValue: 1000,
-            DefaultValue: 500 }];
+            DefaultValue: 25 }];
         optional uint64 UseDeviceOverestimationRatioMerged = 9 [(ControlOptions) = {
             Description: "If enabled (default), PDisk's DeviceOverestimationRatio/DeviceNonperformanceMs "
                           "sensors report the merged (cross-source, e.g. shared with DDisk/PersistentBuffer) "
@@ -3292,6 +3295,9 @@ message TKafkaProxyConfig {
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
     optional string PublicHost = 16;
+    // How often an authenticated Kafka connection re-validates the SASL ticket via TicketParser.
+    // Zero disables periodic rechecks.
+    optional uint32 TokenRecheckIntervalMs = 21 [default = 300000];
 }
 
 message TAwsCompatibilityConfig {
@@ -3381,6 +3387,10 @@ message TStatisticsConfig {
     // When (RowUpdates + RowDeletes since last ANALYZE) / RowCount * 100 >= this value,
     // column statistics are considered stale and will be recalculated.
     optional uint32 BackgroundAnalyzeChangeRatioThresholdPercent = 8 [default = 20];
+
+    // Column tables smaller than or equal to this size are scanned as a whole table
+    // rather than per shard. 0 disables the optimization (always per-shard).
+    optional uint64 AnalyzeWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
 };
 
 message TSystemTabletBackupConfig {

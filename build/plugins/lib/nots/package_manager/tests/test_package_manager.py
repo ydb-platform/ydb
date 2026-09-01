@@ -1,7 +1,46 @@
 import importlib
 import os
 
+import fcntl
+
 package_manager_module = importlib.import_module("build.plugins.lib.nots.package_manager.package_manager")
+
+
+def test_sync_mutex_file_uses_four_slots_by_default(monkeypatch, tmp_path):
+    opened_paths = []
+    locked_slots = []
+
+    class Mutex:
+        def __init__(self, path):
+            self.path = path
+
+        def close(self):
+            pass
+
+    def open_mutex(path, mode):
+        assert mode == "w+"
+        opened_paths.append(path)
+        return Mutex(path)
+
+    def lock_mutex(mutex, operation):
+        if operation & fcntl.LOCK_UN:
+            return
+        locked_slots.append(mutex.path)
+        if len(locked_slots) < package_manager_module.LOCAL_PNPM_INSTALL_CONCURRENCY:
+            raise BlockingIOError
+
+    monkeypatch.setattr(package_manager_module, "open", open_mutex, raising=False)
+    monkeypatch.setattr(fcntl, "lockf", lock_mutex)
+    mutex_path = str(tmp_path / "install_mutex")
+
+    result = package_manager_module.sync_mutex_file(mutex_path)(lambda: "installed")()
+
+    assert result == "installed"
+    assert opened_paths == [
+        "{}.{}".format(mutex_path, slot)
+        for slot in range(package_manager_module.LOCAL_PNPM_INSTALL_CONCURRENCY)
+    ]
+    assert locked_slots == opened_paths
 
 
 def _package_manager(monkeypatch):

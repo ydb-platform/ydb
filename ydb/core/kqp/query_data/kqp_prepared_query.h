@@ -100,6 +100,10 @@ public:
         return Proto->GetHasEffects();
     }
 
+    bool GetHasPqSources() const {
+        return Proto->GetHasPqSources();
+    }
+
     const ::google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyParamBinding> & GetParamBindings() const {
         return Proto->GetParamBindings();
     }

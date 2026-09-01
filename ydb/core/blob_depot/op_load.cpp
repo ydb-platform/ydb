@@ -57,8 +57,9 @@ namespace NKikimr::NBlobDepot {
                     while (table.IsValid()) {
                         Self->BlocksManager->AddBlockOnLoad(
                             table.GetValue<Schema::Blocks::TabletId>(),
-                            table.GetValue<Schema::Blocks::BlockedGeneration>(),
-                            table.GetValue<Schema::Blocks::IssuerGuid>()
+                            table.GetValueOrDefault<Schema::Blocks::BlockedGeneration>(),
+                            table.GetValueOrDefault<Schema::Blocks::IssuerGuid>(),
+                            table.GetValueOrDefault<Schema::Blocks::Version>()
                         );
                         if (!table.Next()) {
                             return false;

@@ -410,6 +410,8 @@ message TSessionInfo {
     optional int64 WmEnterTime = 19;
     optional int64 WmExitTime = 20;
     optional string TraceId = 21;
+    // Description of how the query was classified into WmPoolId
+    optional string WmClassifiedBy = 22;
 }
 
 message TEvListSessionsRequest {
@@ -1088,6 +1090,7 @@ message TScriptExecutionOperationMeta {
     optional string CheckpointId = 14;
     optional string StreamingQueryPath = 15;
     optional string CustomerSuppliedId = 16;
+    optional google.protobuf.Duration CheckpointInterval = 17;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table

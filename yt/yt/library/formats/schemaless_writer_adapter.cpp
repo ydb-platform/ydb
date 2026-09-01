@@ -229,7 +229,7 @@ bool TSchemalessFormatWriterBase::CheckKeySwitch(TUnversionedRow row, bool isLas
         CurrentKey_ = row;
     } catch (const std::exception& ex) {
         // COMPAT(psushin): composite values are not comparable anymore.
-        THROW_ERROR_EXCEPTION("Cannot inject key switch into output stream") << ex;
+        THROW_ERROR_EXCEPTION("Cannot inject key switch into output stream").With(ex);
     }
 
     if (isLastRow && CurrentKey_) {

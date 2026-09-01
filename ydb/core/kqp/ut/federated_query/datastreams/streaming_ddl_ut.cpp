@@ -125,10 +125,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
         }
 
-        const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
-        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-            const TString issuesJson = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+        {
+            const TString issuesJson = GetStreamingQueryIssues(queryName);
             Cerr << "Issues: " << issuesJson << Endl;
 
             TJsonParser issuesParser;
@@ -142,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetValue().GetIntegerRobust(), 2);
             UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetKey("message").GetString(), "Request was canceled by user");
             UNIT_ASSERT_VALUES_EQUAL(issuesParser.GetKey("severity").GetValue().GetIntegerSafe(), static_cast<i64>(NYql::TSeverityIds::S_INFO));
-        });
+        }
     }
 
     Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
@@ -2336,7 +2334,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
 
-        constexpr char consumerName[] = "unknownConsumer";
+        constexpr char consumerName[] = "test_consumer";
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
@@ -2352,17 +2350,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "consumer_name"_a = consumerName
         ));
 
-        WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
-            const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+        WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
-            std::string issues;
+            std::string status;
             CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                issues = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+                status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
             });
 
+            error = TStringBuilder() << "Query status: " << status;
+            return status == "RUNNING";
+        });
+
+        AlterTopic(inputTopicName, NYdb::NTopic::TAlterTopicSettings{}.AppendDropConsumers(consumerName));
+
+        WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
+            const auto& issues = GetStreamingQueryIssues(queryName);
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("no read rule provided for consumer 'unknownConsumer' in topic");
+            return issues.contains("no read rule provided for consumer 'test_consumer'");
         });
 
         ExecExternalQuery(fmt::format(R"(
@@ -2539,11 +2545,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     struct TTestInfo {
-        std::string InputTopicName;
-        std::string OutputTopicName;
-        std::string PqSourceName;
-        std::string QueryName;
-        std::string QueryText;
+        TString InputTopicName;
+        TString OutputTopicName;
+        TString PqSourceName;
+        TString QueryName;
+        TString QueryText;
     };
 
     TTestInfo SetupCheckpointRecoveryTest(TStreamingTestFixture& self) {
@@ -3860,12 +3866,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSource[] = "pqSource";
         CreateTopic(topic);
         CreatePqSource(pqSource);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         const auto queryName = "streamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA pq.Consumer = "test-consumer";
                 INSERT INTO `{pq_source}`.`{topic}`
                 SELECT * FROM `{pq_source}`.`{topic}`;
             END DO;)",
@@ -3874,7 +3880,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "topic"_a = topic
         ));
 
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString status;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
+            });
+
+            error = TStringBuilder() << "Query status: " << status;
+            return status == "RUNNING";
+        });
+
+        DropTopic(topic);
 
         Sleep(TDuration::Seconds(3));
 
@@ -4122,11 +4141,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName1, "A-k1-2025-08-24T00:00:00.000000Z-1");
         ReadTopicMessage(outputTopicName2, "X-k2-2025-08-24T00:00:00.000000Z-1");
 
-        const auto& result = ExecQuery("SELECT Ast FROM `.sys/streaming_queries`");
-        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-        CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
-            check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
-        });
+        ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 3));
 
         Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
@@ -4216,11 +4231,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName1, "A-2025-08-24T00:00:00.000000Z-1");
         ReadTopicMessage(outputTopicName2, "A-2028-08-24T00:00:00.000000Z-1");
 
-        const auto& result = ExecQuery("SELECT Ast FROM `.sys/streaming_queries`");
-        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-        CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
-            check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
-        });
+        ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 3));
 
         Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
@@ -4888,25 +4899,552 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopicName, "t,es,t_m,essa,gexxx");
         ReadTopicMessage(outputTopicName, "t,es,t_m", disposition);
 
-        WaitFor(TDuration::Seconds(60), "wait streaming query ast", [&]() {
+        ValidateStreamingQueryAst(queryNameTakeWhile, [](const TString& ast) {
+            UNIT_ASSERT_STRING_CONTAINS(ast, "TakeWhile");
+        });
+    }
+
+    TTestInfo SetupCheckpointIntervalTest(TStreamingTestFixture& self, const TString& queryName) {
+        TTestInfo info = {
+            .InputTopicName = TStringBuilder() << queryName << "Input" << self.Name_,
+            .OutputTopicName = TStringBuilder() << queryName << "Output" << self.Name_,
+            .PqSourceName = "pqSourceName",
+            .QueryName = queryName
+        };
+        info.QueryText = fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            )",
+            "pq_source"_a = info.PqSourceName,
+            "input_topic"_a = info.InputTopicName,
+            "output_topic"_a = info.OutputTopicName
+        );
+
+        self.CreateTopic(info.InputTopicName);
+        self.CreateTopic(info.OutputTopicName);
+
+        return info;
+    }
+
+    Y_UNIT_TEST_F(CheckpointIntervalSettingValidation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1);
+
+        constexpr char queryName[] = "streamingQuery";
+        const auto info = SetupCheckpointIntervalTest(*this, queryName);
+        CreatePqSource(info.PqSourceName);
+
+        const auto createQuery = [&](const std::string& checkpointInterval) {
+            return fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}` WITH (
+                    RUN = FALSE,
+                    CHECKPOINT_INTERVAL = "{checkpoint_interval}"
+                ) AS DO BEGIN{query_text}END DO;)",
+                "query_name"_a = info.QueryName,
+                "checkpoint_interval"_a = checkpointInterval,
+                "query_text"_a = info.QueryText
+            );
+        };
+
+        const auto alterQuery = [&](const std::string& checkpointInterval) {
+            return fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (
+                    CHECKPOINT_INTERVAL = "{checkpoint_interval}"
+                );)",
+                "query_name"_a = info.QueryName,
+                "checkpoint_interval"_a = checkpointInterval
+            );
+        };
+
+        // Init script execution tables
+
+        ExecAndWaitScript("SELECT 42;");
+
+        // Invalid intervals are rejected on create
+
+        ExecQuery(createQuery("10s"), EStatus::BAD_REQUEST, "Invalid properties for creation new streaming query");
+        ExecQuery(createQuery("10s"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: 10s");
+        ExecQuery(createQuery(""), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration:");
+        ExecQuery(createQuery("PT1S1M"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: PT1S1M");
+        ExecQuery(createQuery("P100000D"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: P100000D");
+        ExecQuery(createQuery("-PT1S"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is should be non-negative interval, but got: -PT1S");
+
+        // Valid interval is saved as is (query is not created by failed operations above)
+
+        ExecQuery(createQuery("PT0.5S"));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "PT0.5S");
+        CheckScriptExecutionsCount(1, 0);
+
+        // Invalid intervals are rejected on alter, previous value is preserved
+
+        ExecQuery(alterQuery("10s"), EStatus::BAD_REQUEST, "Invalid properties for alter streaming query");
+        ExecQuery(alterQuery("10s"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: 10s");
+        ExecQuery(alterQuery(""), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration:");
+        ExecQuery(alterQuery("PT1S1M"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: PT1S1M");
+        ExecQuery(alterQuery("P100000D"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: P100000D");
+        ExecQuery(alterQuery("-PT1S"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is should be non-negative interval, but got: -PT1S");
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "PT0.5S");
+
+        // Valid interval with all components is accepted on alter
+
+        ExecQuery(alterQuery("P1DT2H3M4.5S"));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "P1DT2H3M4.5S");
+
+        // Interval is preserved by alter of another property
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RESOURCE_POOL = "default"
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "P1DT2H3M4.5S");
+
+        // Interval is reset to default by create or replace without setting
+
+        ExecQuery(fmt::format(R"(
+            CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
+                RUN = FALSE
+            ) AS DO BEGIN{query_text}END DO;)",
+            "query_name"_a = info.QueryName,
+            "query_text"_a = info.QueryText
+        ));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "");
+
+        CheckScriptExecutionsCount(1, 0);
+    }
+
+    Y_UNIT_TEST_F(CheckpointIntervalSettingCreation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1);
+
+        const auto pqGateway = SetupMockPqGateway();
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char defaultQueryName[] = "defaultIntervalStreamingQuery";
+        constexpr char fastQueryName[] = "fastIntervalStreamingQuery";
+        const auto defaultInfo = SetupCheckpointIntervalTest(*this, defaultQueryName);
+        const auto fastInfo = SetupCheckpointIntervalTest(*this, fastQueryName);
+        CreatePqSource(defaultInfo.PqSourceName);
+
+        // Query without setting uses cluster wide checkpointing period
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN{query_text}END DO;)",
+            "query_name"_a = defaultInfo.QueryName,
+            "query_text"_a = defaultInfo.QueryText
+        ));
+        CheckStreamingQueryProperty(defaultQueryName, "checkpoint_interval", "");
+
+        // Query with setting overrides cluster wide checkpointing period
+
+        constexpr char checkpointInterval[] = "PT0.2S";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                CHECKPOINT_INTERVAL = "{checkpoint_interval}"
+            ) AS DO BEGIN{query_text}END DO;)",
+            "query_name"_a = fastInfo.QueryName,
+            "checkpoint_interval"_a = checkpointInterval,
+            "query_text"_a = fastInfo.QueryText
+        ));
+        CheckStreamingQueryProperty(fastQueryName, "checkpoint_interval", checkpointInterval);
+
+        CheckScriptExecutionsCount(2, 2);
+        const auto defaultReadSession = pqGateway->WaitReadSession(defaultInfo.InputTopicName);
+        const auto readSession = pqGateway->WaitReadSession(fastInfo.InputTopicName);
+
+        const auto fastCheckpointId = GetStreamingQueryCheckpointId(fastQueryName);
+        const auto defaultCheckpointId = GetStreamingQueryCheckpointId(defaultQueryName);
+        UNIT_ASSERT_VALUES_UNEQUAL(fastCheckpointId, defaultCheckpointId);
+
+        // Checkpoints are performed with interval from query setting
+
+        WaitCheckpointUpdate(fastCheckpointId);
+        WaitCheckpointUpdate(fastCheckpointId);
+
+        // And query without setting still uses cluster wide period
+
+        CheckNoCheckpointUpdate(defaultCheckpointId);
+
+        // Query with checkpoint interval processes data as usual
+
+        readSession->AddDataReceivedEvent(0, "test_message");
+        pqGateway->WaitWriteSession(fastInfo.OutputTopicName)->ExpectMessage("test_message");
+
+        // Setting is restored from operation meta after internal retry
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(fastInfo.InputTopicName);
+        WaitStreamingQueryStatus(fastQueryName);
+
+        defaultReadSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(defaultInfo.InputTopicName);
+        WaitStreamingQueryStatus(defaultQueryName);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId(fastQueryName), fastCheckpointId);
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId(defaultQueryName), defaultCheckpointId);
+        WaitCheckpointUpdate(fastCheckpointId);
+        WaitCheckpointUpdate(fastCheckpointId);
+        CheckNoCheckpointUpdate(defaultCheckpointId);
+    }
+
+    Y_UNIT_TEST_F(CheckpointIntervalSettingAlter, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1);
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char queryName[] = "streamingQuery";
+        const auto info = SetupCheckpointIntervalTest(*this, queryName);
+        CreatePqSource(info.PqSourceName);
+
+        const auto alterQuery = [&](const std::string& checkpointInterval) {
+            return fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (
+                    CHECKPOINT_INTERVAL = "{checkpoint_interval}"
+                );)",
+                "query_name"_a = info.QueryName,
+                "checkpoint_interval"_a = checkpointInterval
+            );
+        };
+
+        // Query is created without setting, so cluster wide checkpointing period is used
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN{query_text}END DO;)",
+            "query_name"_a = info.QueryName,
+            "query_text"_a = info.QueryText
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "");
+        WaitStreamingQueryStatus(queryName);
+
+        const auto checkpointId = GetStreamingQueryCheckpointId(queryName);
+        CheckNoCheckpointUpdate(checkpointId);
+
+        // Alter sets up checkpoint interval and restarts query without checkpoint loss
+
+        constexpr char checkpointInterval[] = "PT0.2S";
+        ExecQuery(alterQuery(checkpointInterval));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", checkpointInterval);
+        WaitStreamingQueryStatus(queryName);
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId(queryName), checkpointId);
+
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+
+        // Query is working after restart
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, "test_message");
+        ReadTopicMessage(info.OutputTopicName, "test_message");
+
+        // Alter of another property preserves checkpoint interval
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RESOURCE_POOL = "default"
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "PT0.2S");
+        WaitStreamingQueryStatus(queryName);
+
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+
+        // Alter changes checkpoint interval
+
+        ExecQuery(alterQuery("P1D"));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", "P1D");
+        WaitStreamingQueryStatus(queryName);
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId(queryName), checkpointId);
+
+        CheckNoCheckpointUpdate(checkpointId);
+    }
+
+    Y_UNIT_TEST_F(ZeroCheckpointIntervalSetting, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1);
+
+        const auto pqGateway = SetupMockPqGateway();
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char queryName[] = "fastIntervalStreamingQuery";
+        const auto info = SetupCheckpointIntervalTest(*this, queryName);
+        CreatePqSource(info.PqSourceName);
+
+        // Query with zero checkpointing period
+
+        constexpr char checkpointInterval[] = "PT0S";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                CHECKPOINT_INTERVAL = "{checkpoint_interval}"
+            ) AS DO BEGIN{query_text}END DO;)",
+            "query_name"_a = info.QueryName,
+            "checkpoint_interval"_a = checkpointInterval,
+            "query_text"_a = info.QueryText
+        ));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", checkpointInterval);
+
+        CheckScriptExecutionsCount(1, 1);
+        const auto readSession = pqGateway->WaitReadSession(info.InputTopicName);
+        const auto checkpointId = GetStreamingQueryCheckpointId(queryName);
+
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+
+        // Query with zero checkpoint interval processes data as usual
+
+        readSession->AddDataReceivedEvent(0, "test_message");
+        pqGateway->WaitWriteSession(info.OutputTopicName)->ExpectMessage("test_message");
+    }
+
+    Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingDisabled, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableExactlyOnceTopicsWriting(false);
+
+        constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
+        constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Exactly once delivery guarantee is disabled. Please contact your system administrator to enable it.");
+
+        // Test settings validation
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DLIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Unknown setting 'dliveryguarantee'");
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Expected `DELIVERY_GUARANTEE` = value");
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQuery AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "none"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` must be 'exactly_once' or 'at_least_once'");
+    }
+
+    Y_UNIT_TEST_F(DeliveryGuarantyWriteSettingEnabled, TStreamingWithSchemaSecretsTestFixture) {
+        {
+            auto& featureFlags = *SetupAppConfig().MutableFeatureFlags();
+            featureFlags.SetEnableExactlyOnceTopicsWriting(true);
+            featureFlags.SetEnableStreamingQueriesPqSinkDeduplication(true);
+        }
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
+        constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        constexpr char pqSourceNameNoAuth[] = "sourceNameNoAuth";
+        CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets */ true);
+        CreatePqSource(pqSourceNameNoAuth);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithNoAuth AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceNameNoAuth,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Authorization is required for setting `DELIVERY_GUARANTEE` = 'exactly_once'");
+
+        constexpr char queryName[] = "deliveryGuarantyWriteSetting";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "query_name"_a = queryName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithDeduplication AS
+            DO BEGIN
+                PRAGMA pq.EnableDeduplication = "TRUE";
+                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                    DELIVERY_GUARANTEE = "exactly_once"
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` = 'exactly_once' is not supported with enabled deduplication");
+
+        Sleep(TDuration::Seconds(1));
+
+        {
             const auto& result = ExecQuery(fmt::format(R"(
-                SELECT Ast FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
-                "query_name"_a = queryNameTakeWhile
+                SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
+                "query_name"_a = queryName
             ));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-
-            TString ast;
             CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                ast = resultSet.ColumnParser("Ast").GetOptionalUtf8().value_or("");
+                UNIT_ASSERT_STRING_CONTAINS(resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Deferred publications is not supported");
             });
+        }
 
-            if (!ast) {
-                return false;
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}` WITH (
+                DELIVERY_GUARANTEE = "exactly_once"
+            ) SELECT "test_message")",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::SUCCESS, "`DELIVERY_GUARANTEE` = 'exactly_once' cannot be used in current query context, falling back to default 'at_least_once'");
+
+        ReadTopicMessage(outputTopicName, "test_message");
+    }
+
+    Y_UNIT_TEST_F(BackPressureOnWritingIntoTopics, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetMaxTotalChannelBuffersSize(1_MB);
+
+        const auto pqGateway = SetupMockPqGateway(TMockPqGatewaySettings{.LockWritingByDefault = true});
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "backPressureOnWritingIntoTopicsInputTopic";
+        constexpr char outputTopicName[] = "backPressureOnWritingIntoTopicsOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        const auto queryName = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
+        const auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        const auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
+
+        ui64 messageSentIdx = 0;
+        const TString largeMessage(512_KB, 'x');
+
+        for (ui64 i = 0; i < 10; ++i) {
+            readSession->AddDataReceivedEvent(0, TStringBuilder() << largeMessage << messageSentIdx++);
+        }
+
+        CheckNoCheckpointUpdate(checkpointId); // Checkpoint should wait for unwritten data
+        writeSession->EnsureEmpty(); // No continuation token was provided
+        UNIT_ASSERT_VALUES_EQUAL(readSession->GetInflightEventsCount(), 0);
+
+        ui64 messageReceivedIdx = 0;
+        writeSession->Unlock();
+        WaitCheckpointUpdate(checkpointId);
+
+        std::vector<TString> messages;
+        messages.reserve(messageSentIdx);
+        while (messageReceivedIdx < messageSentIdx) {
+            messages.emplace_back(TStringBuilder() << largeMessage << messageReceivedIdx++);
+        }
+        writeSession->ExpectMessages(messages);
+
+        WaitCheckpointUpdate(checkpointId);
+
+        // Check that inflight acks accounted into memory
+        writeSession->LockAcks();
+
+        bool messageConsumed = true;
+        constexpr ui64 messagesCount = 1000;
+        for (ui64 i = 0; i < messagesCount; ++i) {
+            readSession->AddDataReceivedEvent(0, TStringBuilder() << largeMessage << messageSentIdx++);
+
+            if (messageConsumed) {
+                try {
+                    WaitFor(TDuration::Seconds(1), "read input message", [&] {
+                        return readSession->GetInflightEventsCount() == 0;
+                    }, TDuration::MicroSeconds(1), /* throwException */ true);
+                } catch (const std::exception&) {
+                    messageConsumed = false;
+                }
             }
+        }
 
-            UNIT_ASSERT_STRING_CONTAINS(ast, "TakeWhile");
-            return true;
-        });
+        // Graph should be stopped by back pressure
+
+        CheckNoCheckpointUpdate(checkpointId); // Checkpoint should wait for acks
+        UNIT_ASSERT(!messageConsumed);
+        UNIT_ASSERT_GE(readSession->GetInflightEventsCount(), 1); // Messages waiting by back pressure
+
+        const auto& writtenData = writeSession->ExtractData();
+        UNIT_ASSERT_GE(messagesCount, writtenData.size() + 1);
+        for (const auto& message : writtenData) {
+            UNIT_ASSERT_VALUES_EQUAL(message, TStringBuilder() << largeMessage << messageReceivedIdx++);
+        }
+
+        // Resume after stop by back pressure
+
+        writeSession->UnlockAcks();
+        WaitCheckpointUpdate(checkpointId);
+
+        messages.clear();
+        messages.reserve(messageSentIdx - messageReceivedIdx);
+        while (messageReceivedIdx < messageSentIdx) {
+            messages.emplace_back(TStringBuilder() << largeMessage << messageReceivedIdx++);
+        }
+        writeSession->ExpectMessages(messages);
+
+        WaitCheckpointUpdate(checkpointId);
+        UNIT_ASSERT_VALUES_EQUAL(readSession->GetInflightEventsCount(), 0);
     }
 }
 

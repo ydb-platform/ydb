@@ -508,7 +508,7 @@ protected:
 
     void DrainAsyncOutput(ui64 outputIndex, typename TBase::TAsyncOutputInfoBase& outputInfo) override final {
         this->ProcessOutputsState.AllOutputsFinished &= outputInfo.Finished;
-        if (outputInfo.Finished && !this->Checkpoints) {
+        if ((outputInfo.Finished && !this->Checkpoints) || outputInfo.Failed) {
             return;
         }
 

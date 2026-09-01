@@ -1158,6 +1158,7 @@ protected:
         IDqComputeActorAsyncOutput* AsyncOutput = nullptr;
         NActors::IActor* Actor = nullptr;
         bool Finished = false; // If sink/transform is in finished state, it receives only checkpoints.
+        bool Failed = false; // If sink/transform reported fatal error, in this case we should stop pushing data
         bool FinishIsAcknowledged = false; // Async output has acknowledged its finish.
         TIssuesBuffer IssuesBuffer;
         bool PopStarted = false;
@@ -2246,23 +2247,32 @@ protected:
     }
 
     void OnSinkError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
+        const auto it = SinksMap.find(outputIndex);
+        YQL_ENSURE(it != SinksMap.end(), "Unexpected output index: " << outputIndex);
+
         if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            SinksMap.at(outputIndex).IssuesBuffer.Push(issues);
+            it->second.IssuesBuffer.Push(issues);
             return;
         }
 
+        // Resources must be cleaned up from compute actor handler, so just schedule failure event
         CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
         this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
+        it->second.Failed = true;
     }
 
     void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
+        const auto it = OutputTransformsMap.find(outputIndex);
+        YQL_ENSURE(it != OutputTransformsMap.end(), "Unexpected output index: " << outputIndex);
+
         if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-            OutputTransformsMap.at(outputIndex).IssuesBuffer.Push(issues);
+            it->second.IssuesBuffer.Push(issues);
             return;
         }
 
         CA_LOG_E("OutputTransform[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
         this->Send(this->SelfId(), new TEvPrivate::TEvAsyncOutputError(fatalCode, issues));
+        it->second.Failed = true;
     }
 
     void HandleAsyncOutputError(const TEvPrivate::TEvAsyncOutputError::TPtr& ev) {

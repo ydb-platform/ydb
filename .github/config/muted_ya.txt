@@ -20,7 +20,6 @@ ydb/services/persqueue_v1/ut unittest.[*/*] chunk
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
-ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.LoadCorruptedState
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/olap py3test.[*/*] chunk

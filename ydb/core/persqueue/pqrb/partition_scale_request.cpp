@@ -168,7 +168,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
             for (auto& issue : msg->Record.GetIssues()) {
                 issues << issue.ShortDebugString() + ", ";
             }
-            YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split",
+            YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a scale request",
                 {"logPrefix", LogPrefix()},
                 {"status", TEvTxUserProxy::TResultStatus::Str(status)},
                 {"request", issues});

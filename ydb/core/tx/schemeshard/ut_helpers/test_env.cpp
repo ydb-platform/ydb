@@ -630,8 +630,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     // line. A suite added tomorrow gets it without anyone remembering to opt in, which is
     // the only version of this that survives contact with a growing codebase.
     NSchemeShard::UndeclaredPathTouchIsFatal = opts.CheckDeclaredPaths_;
-    // The reverse check is not armed yet -- see UnfulfilledPathDeclarationIsFatal in
-    // schemeshard_affected_paths.h for what is left.
+    NSchemeShard::UnfulfilledPathDeclarationIsFatal = opts.CheckDeclaredPaths_;
 
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;

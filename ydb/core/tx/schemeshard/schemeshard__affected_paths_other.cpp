@@ -225,9 +225,11 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpPrepareIndexVal
     const TTxTransaction& tx,
     const TOperationContext& context)
 {
-    Y_UNUSED(context);
-    return DeclareChildOfWorkingDir(tx.GetWorkingDir(),
-        tx.GetPrepareIndexValidation().GetTableName());
+    // A prepare creates nothing -- the table and its index impl table are already there,
+    // this step only sets validation up. So not DeclareChildOfWorkingDir, which would assert
+    // Create/MustWrite on a row this operation never writes.
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+        tx.GetPrepareIndexValidation().GetTableName(), 0);
 }
 
 } // namespace NOperation
@@ -546,11 +548,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpUpgradeSubDomai
     // full set, unlike the type check above it which skips the root).
     return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetUpgradeSubDomain().GetName(), 0, /*includeRoot=*/true,
-        TAffectedPath::EEffect::Alter,
-        // MayWrite, unlike the force drops: the upgrade marks its descendants migrated in
-        // memory and persists the root alone (upgrade_subdomain.cpp:566-579), so a
-        // descendant that gets no path-row write is correct, not a missing one.
-        TAffectedPath::EObservation::MayWrite);
+        TAffectedPath::EEffect::Alter);
 }
 
 } // namespace NOperation
@@ -575,11 +573,7 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpUpgradeSubDomai
     // structurally frozen, so that set is the set the commit or undo rewrites.
     return DeclareSubTreeByIdOrName(context.SS, tx.GetWorkingDir(),
         tx.GetUpgradeSubDomain().GetName(), 0, /*includeRoot=*/true,
-        TAffectedPath::EEffect::Alter,
-        // MayWrite, unlike the force drops: the upgrade marks its descendants migrated in
-        // memory and persists the root alone (upgrade_subdomain.cpp:566-579), so a
-        // descendant that gets no path-row write is correct, not a missing one.
-        TAffectedPath::EObservation::MayWrite);
+        TAffectedPath::EEffect::Alter);
 }
 
 } // namespace NOperation

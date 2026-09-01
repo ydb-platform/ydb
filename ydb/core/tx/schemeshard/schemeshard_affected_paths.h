@@ -188,14 +188,19 @@ TAffectedPaths DeclareCascadeTargetByIdOrName(const TOperationContext& context,
 // The effect is the caller's to state and cannot be inferred here: a force drop takes its
 // descendants with it, an owner change only alters them. The container of the root is
 // declared as well -- all of these operations bump its DirAlterVersion.
-// `expect` is the caller's to state and is not uniform: a force drop and an owner change
-// really do rewrite every descendant's row, but a subdomain upgrade only marks its
-// descendants migrated in memory and persists the root alone
-// (schemeshard__operation_upgrade_subdomain.cpp:566-579). Demanding a write of every node
-// there is a claim the operation never makes.
+// `expect` defaults to MayWrite, and that default is a finding rather than caution. A force
+// drop does rewrite every descendant -- the first time. Run it against a subtree that is
+// already dropped (TSchemeShardTest::ForceDropTwice) and the operation succeeds having
+// written nothing, which is exactly the successful no-op MayWrite exists to describe. The
+// same is true of an owner change that sets the owner it already has, and of a subdomain
+// upgrade, which only marks descendants migrated in memory (upgrade_subdomain.cpp:566-579).
+//
+// So MustWrite is far harder to assert statically than the three-way split suggests: a
+// declaration cannot know from the request whether the operation will find work to do. Pass
+// it only where the write is unconditional.
 TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
     TAffectedPath::EEffect effect,
-    TAffectedPath::EObservation expect = TAffectedPath::EObservation::MustWrite);
+    TAffectedPath::EObservation expect = TAffectedPath::EObservation::MayWrite);
 
 // The same, for a request that names its root the way an ordinary target is named. Keeps
 // the id-over-name precedence in one place: it is the property that stops a declaration
@@ -203,7 +208,7 @@ TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
 // call site. Pass localPathId == 0 when absent.
 TAffectedPaths DeclareSubTreeByIdOrName(TSchemeShard* ss, const TString& workingDir,
     const TString& name, ui64 localPathId, bool includeRoot, TAffectedPath::EEffect effect,
-    TAffectedPath::EObservation expect = TAffectedPath::EObservation::MustWrite);
+    TAffectedPath::EObservation expect = TAffectedPath::EObservation::MayWrite);
 
 // A drop that takes the target's whole subtree with it. The root is named exactly, as it
 // is what the request asked for and what the outbox records, but the descendants are

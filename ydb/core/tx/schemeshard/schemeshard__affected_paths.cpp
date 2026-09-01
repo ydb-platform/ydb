@@ -188,10 +188,12 @@ TAffectedPaths DeclareSubTree(TSchemeShard* ss, TPathId root, bool includeRoot,
                 .Path = parent.PathString(),
                 .Class = TAffectedPath::EEffectClass::SchemaEffect,
                 .Effect = TAffectedPath::EEffect::ChildrenChanged,
-                // MustWrite: losing (or re-owning) a child bumps the container's
-                // DirAlterVersion in every one of these operations -- drop_unsafe.cpp:236,
-                // drop_extsubdomain.cpp:356, modify_acl.cpp:145.
-                .Expect = TAffectedPath::EObservation::MustWrite,
+                // Same expectation as the descendants, and for the same reason. Losing or
+                // re-owning a child bumps the container's DirAlterVersion in the drops and
+                // the owner change (drop_unsafe.cpp:236, drop_extsubdomain.cpp:356,
+                // modify_acl.cpp:145) -- but a subdomain upgrade changes no child set, so
+                // its container is not written either.
+                .Expect = expect,
             });
         }
     }

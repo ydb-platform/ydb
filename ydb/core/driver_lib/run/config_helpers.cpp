@@ -217,6 +217,11 @@ void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager,
     AddExecutorPoolsImpl(cpuManager, systemConfig, counters, &cpuTopology);
 }
 
+TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig) {
+    const auto& poolIds = systemConfig.GetBlobStorageExecutor();
+    return TVector<ui32>(poolIds.begin(), poolIds.end());
+}
+
 TVector<ui32> GetInterconnectSessionExecutorPoolIds(
         const NKikimrConfig::TActorSystemConfig& systemConfig) {
     const auto& poolIds = systemConfig.GetInterconnectSessionExecutor();

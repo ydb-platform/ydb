@@ -785,6 +785,10 @@ private:
                 return false;
             }
 
+            if (ForPartialTypeCheck_) {
+                return true;
+            }
+
             if (!Types_.UdfIndex) {
                 ctx.AddError(TIssue(pos, "UdfIndex is not available"));
                 return false;

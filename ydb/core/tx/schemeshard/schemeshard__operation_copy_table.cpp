@@ -1,6 +1,7 @@
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
@@ -524,7 +525,19 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath parent = TPath::Resolve(parentPath, context.SS);
+        // Same rule as TCreateTable: no path derivation here. A copy part built by another
+        // part's decomposition plans itself through the same planner.
+        if (!HasPlan()) {
+            auto planned = PlanCreateTableEffects(Transaction, context);
+            if (planned.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, planned.GetErrorMessage());
+                return result;
+            }
+            auto plan = planned.DetachResult();
+            SetPlannedEffects(plan.EffectsOfPart(0), plan.GetDatabaseRoot());
+        }
+
+        TPath parent = PlannedPath(EPlanRole::Container, context);
         {
             TPath::TChecker checks = parent.Check();
             checks
@@ -565,11 +578,14 @@ public:
             }
         }
 
-        // The source the plan already resolved, not a second derivation of the same proto
-        // field. A part that this planner did not describe -- an index impl table copy, say --
-        // has no plan and resolves for itself, which PlannedPath handles explicitly.
-        TPath srcPath = PlannedPath(EPlanRole::Source,
-            Transaction.GetCreateTable().GetCopyFromTable(), context);
+        // Two modes, and they are visible on purpose rather than blended behind a fallback
+        // argument. A planned part takes the source the plan resolved and does not derive one;
+        // an unplanned part -- an index impl table copy, which CreateCopyTable builds as its
+        // own decomposition and this planner does not model -- derives its own.
+        //
+        // The else-branch is the migration showing through. When the planner owns the
+        // decomposition (AP M7) it is deleted, not rewritten.
+        TPath srcPath = PlannedPath(EPlanRole::Source, context);
 
         {
             TPath::TChecker checks = srcPath.Check();
@@ -615,6 +631,8 @@ public:
         const bool isBackup = schema.GetIsBackup();
         const EPathCategory pathCategory = isBackup ? EPathCategory::Backup : EPathCategory::Regular;
 
+        // Composed, not resolved -- see the note in TCreateTable::Propose: the leaf must stay
+        // a separate component so it can be validated.
         TPath dstPath = parent.Child(name);
         {
             TPath::TChecker checks = dstPath.Check();
@@ -700,8 +718,16 @@ public:
 
         if (Transaction.GetCreateTable().HasDropSrcCdcStream()) {
             const auto& dropOp = Transaction.GetCreateTable().GetDropSrcCdcStream();
+            // From the plan, not dived from the source: these streams exist, so the plan
+            // carries their ids, and Child(name) here would be one more derivation of a path
+            // the planner already produced. Same order as the request entries.
+            const auto plannedDrops = PlannedPaths(EPlanRole::Source, EPlanEffect::Drop, context);
+            Y_ABORT_UNLESS(plannedDrops.size() == dropOp.StreamNameSize(),
+                "plan describes %zu dropped streams, the request names %d",
+                plannedDrops.size(), dropOp.StreamNameSize());
+            size_t plannedDropIndex = 0;
             for (const auto& streamName : dropOp.GetStreamName()) {
-                TPath oldStreamPath = srcPath.Child(streamName);
+                TPath oldStreamPath = plannedDrops[plannedDropIndex++];
 
                 auto checks = oldStreamPath.Check();
                 checks.NotEmpty().IsResolved().NotDeleted().IsCdcStream();

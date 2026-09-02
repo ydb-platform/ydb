@@ -468,19 +468,21 @@ public:
             return result;
         }
 
-        // Pilot finding: there is nothing here worth consuming from the plan, and trying to
-        // do so was a regression. By the time this Propose runs, SplitIntoTransactions has
-        // already rewritten WorkingDir to be the container, so the plan's container effect is
-        // the same string -- a no-op in the valid case. In the *invalid* case it is worse than
-        // a no-op: for an empty Name, deriving the container as parent-of-target yields the
-        // grandparent, and the malformed-input checks below then report the wrong status
-        // (caught by TSchemeShardTest::CreateTable).
-        //
-        // The general lesson, recorded in the pilot plan: a create has no id to consume and its
-        // path is already normalised, so for creates the plan is a *record*, not a resolution
-        // source. Consumption only pays off for operations acting on objects that already
-        // exist.
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        // No path derivation in this Propose. A part that IgniteOperation did not hand a plan
+        // -- one built by another part's decomposition -- plans itself from its own
+        // transaction, through the same planner. That is not a second computation: it is the
+        // one implementation, called later.
+        if (!HasPlan()) {
+            auto planned = NSchemeShard::PlanCreateTableEffects(Transaction, context);
+            if (planned.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, planned.GetErrorMessage());
+                return result;
+            }
+            auto plan = planned.DetachResult();
+            SetPlannedEffects(plan.EffectsOfPart(0), plan.GetDatabaseRoot());
+        }
+
+        NSchemeShard::TPath parentPath = PlannedPath(NSchemeShard::EPlanRole::Container, context);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks
@@ -520,6 +522,12 @@ public:
         ui32 shardsToCreate = TTableInfo::ShardsToCreate(schema);
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
+        // Composed, not resolved, and deliberately so. The plan holds this path too, but
+        // taking it from there means resolving the joined string -- which for an empty or
+        // malformed Name collapses onto the parent and returns it *resolved*, so the leaf
+        // checks below report "unexpected path type" instead of naming the bad component.
+        // Child() keeps the leaf a separate component that can be validated. This is not a
+        // path derivation: the object does not exist, and nothing here resolves anything.
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
@@ -971,15 +979,42 @@ TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
         parentForDomain = TPath::Resolve(probe, context.SS);
     }
     if (!parentForDomain.IsResolved()) {
-        return TConclusionStatus::Fail("cannot resolve a database root for WorkingDir");
+        // Total, deliberately. A create under a directory that does not exist must still be
+        // planned: refusing here made Propose return SchemeError before its own checks could
+        // report PathDoesNotExist, which is the status the request actually earns. The
+        // schemeshard root always resolves, so this terminates.
+        parentForDomain = TPath::Init(context.SS->RootPathId(), context.SS);
     }
     const TString dbRoot = parentForDomain.GetDomainPathString();
     const TString targetAbs = CanonizePath(JoinPath({workingDir, create.GetName()}));
+    const TString containerAbsStr = CanonizePath(workingDir);
+
+    // The source of a copy, needed here because it participates in choosing the plan's root.
+    const TString sourceAbs = create.HasCopyFromTable()
+        ? CanonizePath(create.GetCopyFromTable())
+        : TString();
+
+    // A request may name paths outside this database: "/NotMyRoot/...", or a copy whose source
+    // lives in another subdomain (TSchemeShardSubDomainTest::CopyRejects). A
+    // database-relative path cannot express those, and failing here would pre-empt Propose's
+    // own rejection with a worse status -- so such a plan is rooted at "/" and describes its
+    // paths absolutely.
+    //
+    // The root is per *operation*, not per effect (AP Q6), so it has to satisfy every path the
+    // plan will hold -- checking only the target is what let the cross-subdomain copy through.
+    const auto expressible = [&](const TString& absolute) {
+        return absolute.empty()
+            || TDatabaseRelativePath::FromAbsolute(dbRoot, absolute).IsSuccess();
+    };
+    const TString planRoot =
+        (expressible(targetAbs) && expressible(containerAbsStr) && expressible(sourceAbs))
+            ? dbRoot
+            : TString("/");
 
     TLogicalOperationPlan plan;
-    plan.SetDatabaseRoot(dbRoot);
-    auto relative = [&dbRoot](const TString& absolute) {
-        return TDatabaseRelativePath::FromAbsolute(dbRoot, absolute);
+    plan.SetDatabaseRoot(planRoot);
+    auto relative = [&planRoot](const TString& absolute) {
+        return TDatabaseRelativePath::FromAbsolute(planRoot, absolute);
     };
 
     // --- 1. the table this DDL creates ------------------------------------------------
@@ -994,7 +1029,15 @@ TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
     // --- 2. the directory that gains it -----------------------------------------------
     // Derived from the target's parent, not from WorkingDir: a create may name a relative
     // path, and then the directory gaining the child is deeper than WorkingDir.
-    if (const TStringBuf containerAbs = ExtractParent(targetAbs); !containerAbs.empty()) {
+    // The container is WorkingDir. Always -- no ExtractParent, no special case for a relative
+    // Name. This planner runs on the *post-split* transaction list, and SplitIntoTransactions
+    // has already rewritten WorkingDir to the directory that gains the child; Propose reads the
+    // same field. Deriving it from the target's parent instead was wrong twice over: for an
+    // empty Name the join collapses to WorkingDir and its parent is the grandparent, and for a
+    // create beneath a non-directory it named the target itself, so the parent checks reported
+    // "path does not exist" where the test expects "path is not a directory".
+
+    if (const TStringBuf containerAbs = containerAbsStr; !containerAbs.empty()) {
         const TPath container = TPath::Resolve(TString(containerAbs), context.SS);
 
         // MustWrite only where the row is actually bumped: :785 does that for a directory or a
@@ -1022,8 +1065,8 @@ TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
     }
 
     // --- 3. copy-from-table: the source, and drops beneath it -------------------------
-    // Absolute, never joined with WorkingDir (schemeshard__operation_copy_table.cpp:568).
-    const TString sourceAbs = CanonizePath(create.GetCopyFromTable());
+    // sourceAbs was computed above, where it took part in choosing the plan's root. Absolute,
+    // never joined with WorkingDir (schemeshard__operation_copy_table.cpp:568).
     const TPath source = TPath::Resolve(sourceAbs, context.SS);
 
     auto sourceRel = relative(sourceAbs);

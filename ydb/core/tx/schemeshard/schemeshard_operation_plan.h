@@ -131,6 +131,11 @@ public:
         if (relative == "/") {
             return DatabaseRoot;
         }
+        // A plan rooted at "/" describes paths outside any database -- see the planner's note.
+        // Concatenating would double the separator.
+        if (DatabaseRoot == "/") {
+            return TString(relative);
+        }
         return DatabaseRoot + relative;
     }
 

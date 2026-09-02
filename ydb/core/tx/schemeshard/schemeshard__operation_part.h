@@ -244,10 +244,14 @@ protected:
     // transaction is. Optional rather than empty-by-default, because "this part has no plan"
     // and "this part's plan names nothing" are different facts and must not look alike.
     std::optional<TVector<TPlannedPathEffect>> PlannedEffects;
+    TString PlannedDatabaseRoot;
 
 public:
-    void SetPlannedEffects(TVector<TPlannedPathEffect> effects) {
+    // The database root comes with the effects, because their paths are stored relative to it
+    // and the part must be able to produce an absolute path without re-deriving one.
+    void SetPlannedEffects(TVector<TPlannedPathEffect> effects, TString databaseRoot) {
         PlannedEffects = std::move(effects);
+        PlannedDatabaseRoot = std::move(databaseRoot);
     }
 
     bool HasPlan() const {
@@ -255,19 +259,24 @@ public:
     }
 
 protected:
-    // The path for this role. Three outcomes, deliberately not collapsed into one:
+    // The path the plan holds for this role.
     //
-    //   no plan at all        -> resolve for ourselves. Ordinary: a part built by another
-    //                            part's decomposition, a part restored from TTxState after
-    //                            reboot, or an operation whose planner does not exist yet.
-    //   planned, with an id   -> use it. The plan already decided which object this is.
-    //   planned, without one  -> resolve for ourselves. Also ordinary: the object does not
-    //                            exist yet, so there is no id to carry (a create's target).
-    //   planned, role absent  -> resolve, but REPORT. The part believes it is planned and the
-    //                            plan does not mention this role, which is a planning bug. An
-    //                            earlier version of this helper silently fell back here, and
-    //                            that is what let a copy part bind the main table's source.
-    TPath PlannedPath(EPlanRole role, const TString& ownResolution,
+    // Takes no fallback argument, deliberately. An earlier version was
+    // PlannedPath(role, ownResolution, context), which required the call site to derive the
+    // path anyway in order to pass it -- so the second computation was not removed, only moved
+    // into an argument, and the API defeated the thing it exists for.
+    //
+    // Total where it applies: the plan carries the path itself (database-relative, plus the
+    // root), so it can answer whether or not the object exists yet. An id gives the object
+    // directly; without one the plan's own path string is resolved. Callers ask HasPlan()
+    // first; a part that is planned and lacks the role it needs is a planning bug and aborts,
+    // because a quiet fallback there is what let a copy part bind the main table's source.
+    TPath PlannedPath(EPlanRole role, TOperationContext& context) const;
+
+    // Every planned path for a role/effect pair, in plan order. For the repeated case -- a copy
+    // that drops several streams beneath its source -- where one path per request entry is
+    // needed and diving from the source would be a derivation again.
+    TVector<TPath> PlannedPaths(EPlanRole role, EPlanEffect effect,
         TOperationContext& context) const;
 
 public:

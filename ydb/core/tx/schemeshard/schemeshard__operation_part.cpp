@@ -222,27 +222,47 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
 }
 
 
-TPath TSubOperationBase::PlannedPath(EPlanRole role, const TString& ownResolution,
-        TOperationContext& context) const
-{
-    if (!PlannedEffects) {
-        return TPath::Resolve(ownResolution, context.SS);
-    }
+TPath TSubOperationBase::PlannedPath(EPlanRole role, TOperationContext& context) const {
+    Y_ABORT_UNLESS(PlannedEffects,
+        "PlannedPath on a part with no plan; callers must check HasPlan() first");
     for (const auto& effect : *PlannedEffects) {
         if (effect.Role != role) {
             continue;
         }
-        return effect.PathId
-            ? TPath::Init(*effect.PathId, context.SS)
-            : TPath::Resolve(ownResolution, context.SS);
+        if (effect.PathId) {
+            return TPath::Init(*effect.PathId, context.SS);
+        }
+        // No id yet -- the object does not exist. The plan still knows its path, so resolving
+        // that is not a fallback: it is the other arm of the same answer.
+        const TStringBuf relative = effect.Path.Value();
+        const TString absolute = relative == "/"
+            ? PlannedDatabaseRoot
+            : PlannedDatabaseRoot + relative;
+        return TPath::Resolve(absolute, context.SS);
     }
-    // Planned, but nothing for this role. Loud rather than silent: falling back here is how a
-    // mis-planned part gets a plausible path and fails later somewhere unrelated.
-    Y_ABORT_UNLESS(!PlanDivergenceIsFatal,
-        "part has a plan that does not mention the role it needs, txId: %" PRIu64
-        ", subTxId: %" PRIu64,
-        ui64(OperationId.GetTxId()), ui64(OperationId.GetSubTxId()));
-    return TPath::Resolve(ownResolution, context.SS);
+    Y_ABORT("part is planned but its plan does not mention the role it needs");
+}
+
+TVector<TPath> TSubOperationBase::PlannedPaths(EPlanRole role, EPlanEffect effect,
+        TOperationContext& context) const
+{
+    Y_ABORT_UNLESS(PlannedEffects,
+        "PlannedPaths on a part with no plan; callers must check HasPlan() first");
+    TVector<TPath> paths;
+    for (const auto& planned : *PlannedEffects) {
+        if (planned.Role != role || planned.Effect != effect) {
+            continue;
+        }
+        if (planned.PathId) {
+            paths.push_back(TPath::Init(*planned.PathId, context.SS));
+            continue;
+        }
+        const TStringBuf relative = planned.Path.Value();
+        paths.push_back(TPath::Resolve(relative == "/"
+            ? PlannedDatabaseRoot
+            : PlannedDatabaseRoot + relative, context.SS));
+    }
+    return paths;
 }
 
 }

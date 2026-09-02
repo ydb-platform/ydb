@@ -23,6 +23,8 @@ SRCS(
     channel_profiles.h
     counters.cpp
     counters.h
+    database_kind.cpp
+    database_kind.h
     defs.h
     domain.cpp
     domain.h
@@ -146,6 +148,7 @@ ENDIF()
 GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
 GENERATE_ENUM_SERIALIZATION(auth.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(database_kind.h)
 
 END()
 

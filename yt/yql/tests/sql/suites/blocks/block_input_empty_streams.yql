@@ -1,0 +1,29 @@
+-- YQLOVERYT-418
+USE plato;
+
+PRAGMA yt.JobBlockInput;
+
+MATERIALIZE (
+    SELECT *
+    FROM Input
+    WHERE key < ""
+) INTO $empty1;
+
+MATERIALIZE (
+    SELECT *
+    FROM Input
+    WHERE key > "zzz"
+) INTO $empty2;
+
+$input =
+    SELECT * FROM Input
+    UNION ALL
+    SELECT * FROM $empty1
+    UNION ALL
+    SELECT * FROM $empty2;
+
+SELECT
+    key,
+    "value: " || value AS value
+FROM $input
+ORDER BY key;

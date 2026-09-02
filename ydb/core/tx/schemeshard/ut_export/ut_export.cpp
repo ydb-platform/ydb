@@ -3508,7 +3508,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "1ddcace3524e08b6a7e88bb82a5f9d53dd64911c9bc59ce2ae75b2219aeeb935 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -3575,7 +3575,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "1ddcace3524e08b6a7e88bb82a5f9d53dd64911c9bc59ce2ae75b2219aeeb935 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -4286,6 +4286,43 @@ state: STATE_ENABLED
         }
     }
 
+    void DoTestIndexMaterializationFulltext(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, const TString& indexType) {
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(indexType == "EIndexTypeGlobalFulltextCompact" ||
+            indexType == "EIndexTypeGlobalFulltextCompactRelevance");
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        IndexMaterialization(env, runtime, s3Mock, s3Port, true, Sprintf(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: %s
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )", indexType.c_str()));
+    }
+
+    void DoTestIndexMaterializationJson(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, bool compact) {
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        auto indexType = compact ? "EIndexTypeGlobalJsonCompact" : "EIndexTypeGlobalJson";
+        IndexMaterialization(env, runtime, s3Mock, s3Port, true, Sprintf(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["json"]
+              Type: %s
+            }
+        )", indexType));
+    }
+
     Y_UNIT_TEST(IndexMaterializationDisabled) {
         EnvOptions().EnableIndexMaterialization(false);
         IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), false, R"(
@@ -4372,59 +4409,34 @@ state: STATE_ENABLED
         )");
     }
 
-    Y_UNIT_TEST(IndexMaterializationGlobalFulltextPlain) {
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltext) {
         EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextPlain
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )");
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextPlain");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompact) {
+        EnvOptions().EnableIndexMaterialization(true);
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextCompact");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextRelevance) {
         EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextRelevance
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )");
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextRelevance");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactRelevance) {
+        EnvOptions().EnableIndexMaterialization(true);
+        DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextCompactRelevance");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalJson) {
         EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["json"]
-              Type: EIndexTypeGlobalJson
-            }
-        )");
+        DoTestIndexMaterializationJson(Env(), Runtime(), S3Mock(), S3Port(), false);
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalJsonCompact) {
+        EnvOptions().EnableIndexMaterialization(true);
+        DoTestIndexMaterializationJson(Env(), Runtime(), S3Mock(), S3Port(), true);
     }
 
     Y_UNIT_TEST(IndexMaterializationTwoTables) {

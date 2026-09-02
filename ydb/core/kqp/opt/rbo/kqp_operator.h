@@ -158,7 +158,10 @@ private:
         Cost = other.Cost;
         LeftShuffleBy = other.LeftShuffleBy;
         RightShuffleBy = other.RightShuffleBy;
-        OutputIUs = other.OutputIUs;
+        // OutputIUs depends on both the operator and its current inputs. Props
+        // are frequently copied into a newly constructed, rewritten operator,
+        // so carrying this cache across the copy can make lazy reads stale.
+        OutputIUs.reset();
         ClearLogicalAnalysis();
     }
 };
@@ -285,6 +288,7 @@ protected:
     virtual void ComputeOutputIUs() = 0;
     virtual void ComputeOutputIUsSubtree();
 
+    friend class TOpCBOTree;
     friend class TOpRoot;
 };
 
@@ -860,9 +864,6 @@ public:
     TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TPositionHandle pos);
     TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TVector<TIntrusivePtr<IOperator>> treeNodes, TPositionHandle pos);
 
-    virtual const TVector<TInfoUnit>& GetOutputIUs() override {
-        return TreeRoot->GetOutputIUs();
-    }
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;

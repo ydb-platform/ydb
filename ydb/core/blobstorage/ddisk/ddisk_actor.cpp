@@ -47,6 +47,32 @@ namespace NKikimr::NDDisk {
         }
 
         creds.SerializeResolvedForRequest(record.MutableCredentials());
+        if constexpr (requires { record.ChecksumsSize(); record.GetSelector(); }) {
+            if (!Config.EnableChecksums) {
+                // Do not forward sender-supplied checksums into the checksum-less PB v0 format.
+                // They are intentionally neither required nor validated in this mode.
+                record.ClearChecksums();
+            } else {
+                const auto& selector = record.GetSelector();
+                if (!HasRequiredBlockChecksums(record.ChecksumsSize(),
+                        selector.GetOffsetInBytes(), selector.GetSize())) {
+                    if (record.ChecksumsSize() == 0) {
+                        Counters.Checksums.WritesWithoutChecksums->Inc();
+                    }
+                    auto result = std::make_unique<TEvWritePersistentBuffersResult>();
+                    for (const auto& id : record.GetPersistentBufferIds()) {
+                        auto* item = result->Record.AddResult();
+                        item->MutablePersistentBufferId()->CopyFrom(id);
+                        item->MutableResult()->SetStatus(
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST);
+                        item->MutableResult()->SetErrorReason(
+                            "one checksum per aligned 4 KiB block is required");
+                    }
+                    SendReply(*ev, std::move(result));
+                    return;
+                }
+            }
+        }
         Y_ABORT_UNLESS(WritePersistentBuffersActor);
         TActivationContext::Send(ev->Forward(WritePersistentBuffersActor));
     }
@@ -241,6 +267,10 @@ namespace {
             .Checksums = {
                 COUNTER(Checksums, WritesWithoutChecksums, true)
                 COUNTER(Checksums, ChecksumMismatch, true)
+                COUNTER(Checksums, IntegrityPairReads, true)
+                COUNTER(Checksums, IntegrityPairWrites, true)
+                COUNTER(Checksums, IntegrityCorruption, true)
+                COUNTER(Checksums, IntegrityLostWriteDetected, true)
             },
         };
 
@@ -253,6 +283,7 @@ namespace {
         DdiskIoOpPool.Resize(IoOpPoolCapacity);
         PersistentBufferPartIoOpPool.Resize(IoOpPoolCapacity);
         InternalSyncWriteOpPool.Resize(IoOpPoolCapacity);
+        IntegrityIoOpPool.Resize(IoOpPoolCapacity);
     }
 
     TDDiskActor::~TDDiskActor() {
@@ -263,6 +294,7 @@ namespace {
         FillPool(DdiskIoOpPool);
         FillPool(PersistentBufferPartIoOpPool);
         FillPool(InternalSyncWriteOpPool);
+        FillPool(IntegrityIoOpPool);
 
         YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
             {"marker", "BSDD09"},
@@ -276,6 +308,11 @@ namespace {
         } else {
             Become(&TThis::StateFuncDDisk);
             RegisterMonPage();
+            if (!Config.EnableChecksums) {
+                YDB_LOG_NOTICE("TDDiskActor booting with integrity checksums disabled",
+                    {"marker", "BSDD55"},
+                    {"DDiskId", DDiskId});
+            }
             InitPDiskInterface();
         }
     }
@@ -382,6 +419,12 @@ namespace {
                     chunkRef.PendingEventsForChunk.pop();
                     FailPendingDDiskQuery(std::unique_ptr<IEventHandle>(pending.Release()));
                 }
+                while (!chunkRef.PendingSerializedWrites.empty()) {
+                    auto pending = chunkRef.PendingSerializedWrites.front().Release();
+                    chunkRef.PendingSerializedWrites.pop();
+                    FailPendingDDiskQuery(std::unique_ptr<IEventHandle>(pending.Release()));
+                }
+                chunkRef.SerializedWriteResumeScheduled = false;
             }
         }
 
@@ -432,8 +475,30 @@ namespace {
 
         DataChunkAllocationsInFlight.clear();
         ChunkMapIncrementsInFlight.clear();
+
+        std::vector<ui64> pendingWriteIds;
+        pendingWriteIds.reserve(PendingClientWrites.size());
+        for (auto& [operationId, pending] : PendingClientWrites) {
+            pending.IntegrityCompleted = true;
+            pending.IntegrityError = GetBrokenReason();
+            pendingWriteIds.push_back(operationId);
+        }
+        for (const ui64 operationId : pendingWriteIds) {
+            MaybeFinishClientWrite(operationId);
+        }
+
+        for (auto& [operationId, pending] : PendingChecksumReads) {
+            Y_UNUSED(operationId);
+            Counters.Interface.Read.Reply(false);
+            SendReply(*pending.Event, std::make_unique<TEvReadResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason()));
+        }
+        PendingChecksumReads.clear();
+        PendingSyncSegments.clear();
+
         if (IntegrityManager) {
             Y_UNUSED(IntegrityManager->TakeActions());
+            Y_UNUSED(IntegrityManager->TakeCompletedOperations());
         }
 
         // DDisk and PersistentBuffer are separate actor instances sharing
@@ -527,8 +592,10 @@ namespace {
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
             hFunc(NPDisk::TEvLogResult, Handle)
             hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
+            hFunc(TEvPrivate::TEvHandleSerializedWriteForChunk, Handle)
             hFunc(TEvPrivate::TEvDDiskIoResult, Handle)
             hFunc(TEvPrivate::TEvIntegrityIoResult, Handle)
+            hFunc(TEvPrivate::TEvChunkFormatIoResult, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
             hFunc(TEvReadPersistentBufferResult, Handle)
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)

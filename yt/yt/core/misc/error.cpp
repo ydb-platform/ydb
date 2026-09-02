@@ -438,7 +438,7 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
         // NB(arkady-e1ppa): Serialization may add some attributes in normal yson
         // format (in legacy versions) thus we have to reconvert them into the
         // text ones in order to make sure that everything is in the text format.
-        error <<= TErrorAttribute(key, ConvertToYsonString(value));
+        error.Add(key, ConvertToYsonString(value));
     }
 
     error.UpdateOriginAttributes();
@@ -546,7 +546,7 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
             // here as well.
             auto key = FromProto<std::string>(protoAttribute.key());
             auto value = FromProto<std::string>(protoAttribute.value());
-            (*error) <<= TErrorAttribute(key, TYsonString(value));
+            error->Add(key, TYsonString(value));
         }
         error->UpdateOriginAttributes();
     }
@@ -674,7 +674,7 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
         for (size_t index = 0; index < size; ++index) {
             auto key = Load<std::string>(context);
             auto value = Load<TYsonString>(context);
-            error <<= TErrorAttribute(key, value);
+            error.Add(key, value);
         }
     }
 
@@ -763,7 +763,7 @@ auto TErrorCodicils::MakeGuard(std::string key, TGetter getter) -> TGuard
 void TErrorCodicils::Apply(TError& error) const
 {
     for (const auto& [key, getter] : Getters_) {
-        error <<= TErrorAttribute(key, getter());
+        error.Add(key, getter());
     }
 }
 

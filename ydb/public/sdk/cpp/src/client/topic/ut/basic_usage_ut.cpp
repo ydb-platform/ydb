@@ -353,6 +353,11 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     ReadSession->Close(TDuration::MilliSeconds(10));
 }
 
+void CreateEmptyTopic(TTopicClient& client, const TString& topicName) {
+    auto status = client.CreateTopic(topicName, TCreateTopicSettings()).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+}
+
 Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(CreateTopicWithCustomName) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
@@ -447,6 +452,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         TCreateTopicSettings topics;
         topics.BeginAddConsumer()
@@ -603,6 +609,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -623,6 +630,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto status = client.CreateTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
+
+        CreateEmptyTopic(client, "deadLetterQueue-topic-new");
 
         {
             TAlterTopicSettings topics;
@@ -661,6 +670,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -719,6 +729,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -793,6 +804,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
 
+        CreateEmptyTopic(client, "dlq-topic");
+
         {
             TAlterTopicSettings topics;
             topics.BeginAlterConsumer()
@@ -825,6 +838,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "dlq-topic");
 
         {
             TCreateTopicSettings topics;
@@ -845,6 +859,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto status = client.CreateTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
+
+        CreateEmptyTopic(client, "dlq-topic-new");
 
         {
             TAlterTopicSettings topics;
@@ -1991,6 +2007,49 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }
             UNIT_ASSERT_EQUAL(messagesWritten, 50);
         }
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_WriteAfterSmallSessionIdleTimeout) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("producer_write_after_idle_timeout");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.SubSessionIdleTimeout(TDuration::MilliSeconds(500));
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        const auto& partitions = describeResult.GetTopicDescription().GetPartitions();
+        UNIT_ASSERT_EQUAL(partitions.size(), 1);
+        const auto partitionId = partitions.front().GetPartitionId();
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto producerRaw = dynamic_cast<TProducer*>(producer.get());
+        auto msgData = TString(10_KB, 'a');
+
+        UNIT_ASSERT(producer->Write(TWriteMessage(partitionId, msgData)).IsQueued());
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+
+        for (int i = 0; i < 5; ++i) {
+            if (producerRaw->GetIdleSessionsCount() == 0 && producerRaw->GetSessionsCount() == 0) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(producerRaw->GetIdleSessionsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(producerRaw->GetSessionsCount(), 0);
+
+        UNIT_ASSERT(producer->Write(TWriteMessage(partitionId, msgData)).IsQueued());
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 2);
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
     }
 

@@ -266,6 +266,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     TStringStreamWrapper wrapper(Stream);
 
+    std::optional<TString> generatedContext;
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (!column.HasDefaultFromExpression()) {
+            continue;
+        }
+
+        const auto& context = column.GetDefaultFromExpression().GetContext();
+        if (generatedContext && *generatedContext != context) {
+            return TFormatResult(
+                Ydb::StatusIds::UNSUPPORTED,
+                "Generated columns have inconsistent expression contexts");
+        }
+        generatedContext = context;
+    }
+
+    if (generatedContext && !generatedContext->empty()) {
+        Stream << *generatedContext << "\n";
+    }
+
     Ydb::Table::CreateTableRequest createRequest;
     if (temporary) {
         Stream << "CREATE TEMPORARY TABLE ";
@@ -713,6 +732,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::FulltextIndexSettings_Tokenizer_KEYWORD:
                 Stream << "keyword";
                 break;
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_ALPHANUMERIC:
+                Stream << "alphanumeric";
+                break;
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
         }
@@ -745,6 +767,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         }
         if (analyzers.has_filter_length_max()) {
             Stream << ", filter_length_max=" << analyzers.filter_length_max();
+        }
+        if (analyzers.has_use_filter_snowball()) {
+            Stream << ", use_filter_snowball=" << (analyzers.use_filter_snowball() ? "true" : "false");
         }
 
         Stream << ")";
@@ -1860,6 +1885,13 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                         EscapeName("ENABLE_NATIVE_COLUMNS", paramsStr);
                         paramsStr << "=";
                         EscapeValue(settings.GetEnableNativeColumns(), paramsStr);
+                        del = ", ";
+                    }
+                    if (settings.HasDenseEncodingVersion()) {
+                        paramsStr << del;
+                        EscapeName("DENSE_ENCODING_VERSION", paramsStr);
+                        paramsStr << "=";
+                        EscapeValue(settings.GetDenseEncodingVersion(), paramsStr);
                         del = ", ";
                     }
                     if (settings.HasDataExtractor()) {

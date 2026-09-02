@@ -356,6 +356,7 @@ public:
         ), IEventHandle::FlagTrackDelivery);
 
         QueryState->PoolHandlerActor = NWorkloadManager::MakeServiceId(SelfId().NodeId());
+        QueryState->WaitingForWmAdmission = true;
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -594,6 +595,13 @@ public:
         CompileQuery();
     }
 
+    void NotifyWmClassification(const TString& poolId,
+                                const NWorkloadManager::TResolver& resolver = NWorkloadManager::TResolver::Default()) {
+        if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+            updater->SetPoolContext(poolId, resolver.ToSysViewString());
+        }
+    }
+
     bool WmPreCompileClassify() {
         auto classifier = QueryState->QueryClassifier;
 
@@ -616,6 +624,7 @@ public:
                     {"traceId", TraceId()});
 
                 QueryState->UserRequestContext->PoolId = s.PoolId;
+                NotifyWmClassification(s.PoolId, s.Resolver);
                 if (s.SkipAdmission) {
                     QueryState->UserRequestContext->PoolConfig = s.PoolConfig;
                     return std::nullopt;
@@ -637,6 +646,7 @@ public:
                     {"logPrefix", LogPrefix()},
                     {"traceId", TraceId()});
                 QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+                NotifyWmClassification(NResourcePool::DEFAULT_POOL_ID);
                 return std::nullopt;
             },
             [this](const NWorkloadManager::IQueryClassifier::TPendingCompilation&) -> TError {
@@ -658,6 +668,9 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NWorkloadManager::TWorkloadManagerEvents::EvPlaceRequestIntoPool) {
+            if (!AcceptWmAdmissionReply("TEvUndelivered")) {
+                return;
+            }
             YDB_LOG_WARN("Failed to deliver request to workload service, bypassing WLM",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
@@ -681,8 +694,26 @@ public:
         }
     }
 
+    // Replies are addressed to the session, not to the query,
+    // so a duplicated or late one would otherwise re-enter the
+    // pipeline of the query that is running now and execute it a second time.
+    bool AcceptWmAdmissionReply(TStringBuf eventName) {
+        if (!QueryState || !QueryState->WaitingForWmAdmission) {
+            YDB_LOG_WARN("Ignoring stale workload manager reply",
+                {"marker", "KQPSA"},
+                {"logPrefix", LogPrefix()},
+                {"event", eventName},
+                {"traceId", TraceId()});
+            return false;
+        }
+        QueryState->WaitingForWmAdmission = false;
+        return true;
+    }
+
     void Handle(NWorkloadManager::TEvContinueRequest::TPtr& ev) {
-        YQL_ENSURE(QueryState);
+        if (!AcceptWmAdmissionReply("TEvContinueRequest")) {
+            return;
+        }
         QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
@@ -1060,6 +1091,7 @@ public:
                     {"skipAdmission", r.SkipAdmission},
                     {"traceId", TraceId()});
                 QueryState->UserRequestContext->PoolId = r.PoolId;
+                NotifyWmClassification(r.PoolId, r.Resolver);
                 if (r.SkipAdmission) {
                     QueryState->UserRequestContext->PoolConfig = r.PoolConfig;
                     return std::nullopt;
@@ -1073,6 +1105,7 @@ public:
                     {"marker", "KQPSA"},
                     {"logPrefix", LogPrefix()},
                     {"traceId", TraceId()});
+                NotifyWmClassification(NResourcePool::DEFAULT_POOL_ID);
                 return std::nullopt;
             },
             [this](const NWorkloadManager::IQueryClassifier::TReject& r) -> TError {
@@ -1469,7 +1502,7 @@ public:
                     }
                     QueryState->TxCtx = txCtx;
                     QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-                    if (hasTxControl && QueryState->TxId.GetValue() == TTxId()) {
+                    if (hasTxControl && !QueryState->TxId.HasValue()) {
                         QueryState->TxId.SetValue(txId);
                     }
                     break;
@@ -2340,7 +2373,7 @@ public:
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
+            llvmSettings, Settings.QueryService, ChannelService,
             (QueryState && QueryState->PreparedQuery)
                 ? QueryState->PreparedQuery->GetUseKqpTasksGraphV2()
                 : Settings.TableService.GetUseKqpTasksGraphV2()

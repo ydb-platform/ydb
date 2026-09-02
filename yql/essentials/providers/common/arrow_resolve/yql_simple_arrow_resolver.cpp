@@ -104,7 +104,6 @@ private:
         }
     }
 
-private:
     const IFunctionRegistry& FunctionRegistry_;
 };
 

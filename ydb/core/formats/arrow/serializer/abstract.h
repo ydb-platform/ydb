@@ -10,6 +10,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
@@ -96,6 +97,10 @@ public:
     }
 
     virtual bool IsHardPacker() const = 0;
+
+    virtual std::shared_ptr<arrow::util::Codec> GetCompressionCodec() const {
+        return nullptr;
+    }
 
     virtual TString GetClassName() const = 0;
 };

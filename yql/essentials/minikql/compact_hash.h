@@ -39,7 +39,6 @@ public:
     static const size_t MAX_SMALL_LIST_SIZE = 16;
     static const size_t MAX_MEDIUM_LIST_INDEX = 10;
 
-public:
     struct TPageListItem: public TIntrusiveListItem<TPageListItem> {
         template <class T>
         T* As() {
@@ -118,8 +117,7 @@ public:
     public:
         using TRaw = std::conditional_t<std::is_const<T>::value, const void*, void*>;
 
-        TListIterator() {
-        }
+        TListIterator() = default;
 
         explicit TListIterator(T* list) {
             if (LARGE_MARK == GetMark(list)) {
@@ -190,7 +188,6 @@ public:
         THeader* EndPage_ = nullptr;
     };
 
-public:
     static inline TListHeader* GetListHeader(void* addr) {
         TListHeader* header = reinterpret_cast<TListHeader*>(TAlignedPagePool::GetPageStart(addr));
         Y_ASSERT(SMALL_MARK == header->Mark || MEDIUM_MARK == header->Mark);
@@ -897,17 +894,10 @@ public:
         }
 
         // Empty iterator
-        TIteratorImpl() {
-        }
+        TIteratorImpl() = default;
 
     public:
-        TIteratorImpl& operator=(const TIteratorImpl& rhs) {
-            Hash_ = rhs.Hash_;
-            Bucket_ = rhs.Bucket_;
-            EndBucket_ = rhs.EndBucket_;
-            Pos_ = rhs.Pos_;
-            return *this;
-        }
+        TIteratorImpl& operator=(const TIteratorImpl& rhs) = default;
 
         bool Ok() const {
             return Bucket_ < EndBucket_ && Pos_.Ok();
@@ -983,8 +973,7 @@ public:
         }
 
         // Empty iterator
-        TIteratorImpl() {
-        }
+        TIteratorImpl() = default;
 
     public:
         bool Ok() const {
@@ -1045,7 +1034,6 @@ public:
             return *this;
         }
 
-    private:
         const TCompactHashBase* Hash_ = nullptr;
         size_t Bucket_ = 0;
         size_t EndBucket_ = 0;
@@ -1053,7 +1041,6 @@ public:
         TValueIter SubPos_;
     };
 
-public:
     using TIterator = TIteratorImpl<TItemType>;
     using TBucketIterator = TListPoolBase::TListIterator<TItemType, TListPoolBase::TLargeListHeader>;
     using TConstBucketIterator = TListPoolBase::TListIterator<const TItemType, const TListPoolBase::TLargeListHeader>;
@@ -1452,7 +1439,6 @@ protected:
         }
     }
 
-protected:
     size_t Size_ = 0;
     size_t UniqSize_ = 0;
     float MaxLoadFactor_ = 1.F;

@@ -118,21 +118,28 @@ public:
         return state;
     }
 
-    static EStateType GetStateType(const NYql::NDq::TComputeActorState& state) {
+    static EStateType GetStateType(const ui64 taskId, const NYql::NDq::TComputeActorState& state) {
         if (!state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
+
         const TString& blob = state.MiniKqlProgram->Data.Blob;
         TStringBuf buf(blob);
         while (!buf.empty()) {
-            auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            if (nodeStateSize == std::numeric_limits<ui64>::max()) {
+                throw yexception() << "Task " << taskId << " has incomplete program state: some stateful operators are still not initialized.";
+            }
+
             Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
             TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
             if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }
+
             buf.Skip(nodeStateSize);
         }
+
         Y_ENSURE(buf.empty(), "State/buf is corrupted");
         return EStateType::Snapshot;
     }
@@ -417,7 +424,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState, task id, blob size",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -425,7 +432,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
 
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
-    return TIncrementLogic::GetStateType(state);
+    return TIncrementLogic::GetStateType(taskInfo.TaskId, state);
 }
 
 size_t TStateStorage::SerializeState(
@@ -462,7 +469,7 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
     size_t size = 0;
 
     try {
-        type = TIncrementLogic::GetStateType(state);
+        type = TIncrementLogic::GetStateType(taskId, state);
         size = SerializeState(state, serializedState);
         if (!size || serializedState.empty()) {
             return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));
@@ -727,7 +734,7 @@ TFuture<TStatus> TStateStorage::ListStatesForGeneration(const TContextPtr& conte
                             }
                             taskIt->ListOfStatesForReading.push_back(stateInfo);
 
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration: task row count and type",
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
@@ -815,11 +822,11 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt, {}});
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "TaskId checkpoint, rows",
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListOfStates result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
-                                {"id", checkpointId},
+                                {"listedCheckpointId", checkpointId},
                                 {"count", cnt});
                         }
                     }
@@ -946,7 +953,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState: task_id, seq_no, blob_seq_num",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},

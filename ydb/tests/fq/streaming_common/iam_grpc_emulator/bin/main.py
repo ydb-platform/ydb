@@ -34,6 +34,7 @@ def parse_args():
     )
     parser.add_argument("--port", type=int, required=True, help="gRPC port to listen on")
     parser.add_argument("--token", type=str, default=DEFAULT_TOKEN, help="IAM token to return")
+    parser.add_argument("--token-from-env", type=str, help="Use IAM token from environment (preferred for secret passing)")
     parser.add_argument("--expires-in", type=int, default=DEFAULT_EXPIRES_IN,
                         help="Token TTL in seconds")
     return parser.parse_args()
@@ -196,13 +197,17 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
 def main():
     args = parse_args()
 
+    token = args.token
+    if args.token_from_env is not None:
+        token = os.getenv(args.token_from_env)
+
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
     access_service_pb2_grpc.add_AccessServiceServicer_to_server(
         AccessServicer(),
         server,
     )
     iam_token_service_pb2_grpc.add_IamTokenServiceServicer_to_server(
-        IamTokenServicer(args.token, args.expires_in),
+        IamTokenServicer(token, args.expires_in),
         server,
     )
     server.add_insecure_port(f"[::]:{args.port}")

@@ -9,6 +9,8 @@
 
 #include <yt/yt_proto/yt/client/hive/proto/cluster_directory.pb.h>
 
+#include <yt/yt/core/concurrency/context_switch.h>
+
 #include <yt/yt/core/misc/collection_helpers.h>
 
 #include <yt/yt/core/ytree/ypath_client.h>
@@ -86,6 +88,11 @@ template <std::derived_from<NApi::IConnection> TConnection>
 void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
 {
     TConnectionPtr removedConnection;
+    auto terminateConection = Finally([&] {
+        if (removedConnection) {
+            removedConnection->Terminate();
+        }
+    });
 
     {
         auto guard = Guard(Lock_);
@@ -95,7 +102,7 @@ void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
         }
         const auto& cluster = nameIt->second;
         auto cellTags = GetCellTags(cluster);
-        removedConnection = std::move(cluster.Connection);
+        removedConnection = cluster.Connection;
         if (auto tvmId = cluster.Connection->GetTvmId()) {
             auto tvmIdsIt = ClusterTvmIds_.find(*tvmId);
             YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
@@ -115,10 +122,6 @@ void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
         NConcurrency::TForbidContextSwitchGuard guard;
         OnClusterUnregistered_.Fire(name);
     }
-
-    if (removedConnection) {
-        removedConnection->Terminate();
-    }
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>
@@ -128,6 +131,7 @@ void TClusterDirectoryBase<TConnection>::Clear()
     CellTagToCluster_.clear();
     NameToCluster_.clear();
     ClusterTvmIds_.clear();
+    LastSuccessfulUpdateTime_.reset();
 
     auto Logger = HiveClientLogger;
     YT_TLOG_DEBUG("Cluster directory cleared");
@@ -140,6 +144,11 @@ TError TClusterDirectoryBase<TConnection>::TryUpdateCluster(const std::string& n
         auto Logger = HiveClientLogger;
 
         TConnectionPtr connectionToTerminate;
+        auto terminateConnection = Finally([&] {
+            if (connectionToTerminate) {
+                connectionToTerminate->Terminate();
+            }
+        });
 
         bool fire = false;
         auto addNewCluster = [&] (const TCluster& cluster) {
@@ -195,9 +204,6 @@ TError TClusterDirectoryBase<TConnection>::TryUpdateCluster(const std::string& n
             NConcurrency::TForbidContextSwitchGuard guard;
             OnClusterUpdated_.Fire(name, connectionConfig);
         }
-        if (connectionToTerminate) {
-            connectionToTerminate->Terminate();
-        }
     } catch (const std::exception& ex) {
         return TError(ex);
     }
@@ -240,6 +246,11 @@ TClusterDirectoryUpdateResult TClusterDirectoryBase<TConnection>::TryUpdateDirec
         result.ClusterToErrorMapping[name] = TryUpdateCluster(name, config);
     }
 
+    {
+        auto guard = Guard(Lock_);
+        LastSuccessfulUpdateTime_ = TInstant::Now();
+    }
+
     return result;
 }
 
@@ -276,6 +287,25 @@ bool TClusterDirectoryBase<TConnection>::HasTvmId(NAuth::TTvmId tvmId) const
 {
     auto guard = Guard(Lock_);
     return ClusterTvmIds_.find(tvmId) != ClusterTvmIds_.end();
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
+std::optional<typename TClusterDirectoryBase<TConnection>::TCluster> TClusterDirectoryBase<TConnection>::FindCluster(
+    const std::string& name) const
+{
+    auto guard = Guard(Lock_);
+    auto it = NameToCluster_.find(name);
+    if (it == NameToCluster_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
+std::optional<TInstant> TClusterDirectoryBase<TConnection>::GetLastSuccessfulUpdateTime() const
+{
+    auto guard = Guard(Lock_);
+    return LastSuccessfulUpdateTime_;
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>

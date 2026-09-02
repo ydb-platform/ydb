@@ -380,7 +380,8 @@ private:
         if (TInstant::Now() >= Deadline_) {
             auto error = TError(NRpc::EErrorCode::TransportError, "Connect timeout")
                 .With("timeout", Config_->ConnectTimeout);
-            YT_LOG_ERROR(error);
+            YT_TLOG_ERROR("Dialer session timed out")
+                .With(error);
             Finished_ = true;
             guard.Release();
             OnFinished_(error);

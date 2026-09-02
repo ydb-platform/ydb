@@ -7580,11 +7580,23 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const TString& indexProto,
         NKikimrSchemeOp::EIndexType expectedIndexType,
         const TVector<TString>& indexKeyColumns,
-        bool enableDataShardDirectPartImport)
+        bool enableDataShardDirectPartImport,
+        bool enableCompact)
     {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(enableIndexMaterialization));
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(enableCompact);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            if (expectedIndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain) {
+                expectedIndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact;
+            } else if (expectedIndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
+                expectedIndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance;
+            } else if (expectedIndexType == NKikimrSchemeOp::EIndexTypeGlobalJson) {
+                expectedIndexType = NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+            }
+        }
 
         auto scheme = TStringBuilder() << tableColumns << R"(
             primary_key: ")" << primaryKey << R"("
@@ -7645,7 +7657,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobal,
         {"value"},
-        EnableDataShardDirectPartImport);
+        EnableDataShardDirectPartImport,
+        false);
     }
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalAsyncIndexedTable, Materialized, EnableDataShardDirectPartImport) {
@@ -7658,7 +7671,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobalAsync,
         {"value"},
-        EnableDataShardDirectPartImport);
+        EnableDataShardDirectPartImport,
+        false);
     }
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalUniqueIndexedTable, Materialized, EnableDataShardDirectPartImport) {
@@ -7671,7 +7685,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobalUnique,
         {"value"},
-        EnableDataShardDirectPartImport);
+        EnableDataShardDirectPartImport,
+        false);
     }
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalVectorKmeansTreeIndexedTable, Materialized, EnableDataShardDirectPartImport) {
@@ -7703,7 +7718,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
         {"embedding"},
-        EnableDataShardDirectPartImport);
+        EnableDataShardDirectPartImport,
+        false);
     }
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalVectorKmeansTreePrefixIndexedTable, Materialized, EnableDataShardDirectPartImport) {
@@ -7736,74 +7752,62 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
         {"prefix", "embedding"},
-        EnableDataShardDirectPartImport);
+        EnableDataShardDirectPartImport,
+        false);
+    }
+
+    void ShouldSucceedOnFulltextTableImpl(bool Materialized, bool EnableDataShardDirectPartImport, bool Relevance, bool Compact) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+        )", "key", Sprintf(R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_fulltext_%s_index {
+                fulltext_settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )", Relevance ? "relevance" : "plain"),
+        (!Compact
+            ? (Relevance ? NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain)
+            : (Relevance ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance : NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact)),
+        {"value"},
+        EnableDataShardDirectPartImport,
+        Compact);
     }
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalFulltextPlainIndexedTable, Materialized, EnableDataShardDirectPartImport) {
-        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UINT64 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-        )", "key", R"(
-            indexes {
-              name: "index"
-              index_columns: "value"
-              global_fulltext_plain_index {
-                fulltext_settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )",
-        NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain,
-        {"value"},
-        EnableDataShardDirectPartImport);
+        ShouldSucceedOnFulltextTableImpl(Materialized, EnableDataShardDirectPartImport, false, false);
     }
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalFulltextRelevanceIndexedTable, Materialized, EnableDataShardDirectPartImport) {
-        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UINT64 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-        )", "key", R"(
-            indexes {
-              name: "index"
-              index_columns: "value"
-              global_fulltext_relevance_index {
-                fulltext_settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )",
-        NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance,
-        {"value"},
-        EnableDataShardDirectPartImport);
+        ShouldSucceedOnFulltextTableImpl(Materialized, EnableDataShardDirectPartImport, true, false);
     }
 
-    Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonIndexedTable, Materialized, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalFulltextCompactIndexedTable, Materialized, EnableDataShardDirectPartImport) {
+        ShouldSucceedOnFulltextTableImpl(Materialized, EnableDataShardDirectPartImport, false, true);
+    }
+
+    Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalFulltextCompactRelevanceIndexedTable, Materialized, EnableDataShardDirectPartImport) {
+        ShouldSucceedOnFulltextTableImpl(Materialized, EnableDataShardDirectPartImport, true, true);
+    }
+
+    void ShouldSucceedOnJsonTableImpl(bool Materialized, bool EnableDataShardDirectPartImport, bool Compact) {
         ShouldSucceedOnIndexedTableImpl(Materialized, R"(
             columns {
               name: "key"
@@ -7820,15 +7824,25 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               global_json_index {}
             }
         )",
-        NKikimrSchemeOp::EIndexTypeGlobalJson,
+        (Compact ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact : NKikimrSchemeOp::EIndexTypeGlobalJson),
         {"json"},
-        EnableDataShardDirectPartImport);
+        EnableDataShardDirectPartImport,
+        Compact);
     }
 
-    Y_UNIT_TEST_FLAG(ShouldSucceedOnGlobalJsonRowIdAutoProvisionAfterRestore, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonIndexedTable, Materialized, EnableDataShardDirectPartImport) {
+        ShouldSucceedOnJsonTableImpl(Materialized, EnableDataShardDirectPartImport, false);
+    }
+
+    Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonCompactIndexedTable, Materialized, EnableDataShardDirectPartImport) {
+        ShouldSucceedOnJsonTableImpl(Materialized, EnableDataShardDirectPartImport, true);
+    }
+
+    Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonRowIdAutoProvisionAfterRestore, EnableDataShardDirectPartImport, Compact) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
         ui64 txId = 200;
 
         auto& ff = runtime.GetAppData().FeatureFlags;
@@ -7903,22 +7917,25 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 "json_idx after restore+build: UseRowIdAsDocId must be true");
         }
 
-        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/Table/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
+            TestDescribeResult(DescribePrivatePath(runtime,
+                    "/MyRoot/Table/json_idx/" + TString(NTableIndex::ImplTable)), {
+                NLs::PathExist,
+                NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true),
+            });
+        }
     }
 
-    Y_UNIT_TEST_FLAG(ShouldSucceedOnGlobalJsonRowIdManualInfraAfterRestore, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonRowIdManualInfraAfterRestore, EnableDataShardDirectPartImport, Compact) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
         ui64 txId = 200;
 
         auto& ff = runtime.GetAppData().FeatureFlags;
@@ -8011,16 +8028,18 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 "json_idx after restore+build: UseRowIdAsDocId must be true");
         }
 
-        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/Table/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
+            TestDescribeResult(DescribePrivatePath(runtime,
+                    "/MyRoot/Table/json_idx/" + TString(NTableIndex::ImplTable)), {
+                NLs::PathExist,
+                NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST_FLAG(ReplicationImport, EnableDataShardDirectPartImport) {

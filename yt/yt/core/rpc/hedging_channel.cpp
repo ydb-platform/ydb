@@ -173,7 +173,7 @@ public:
             .With("RequestId", Request_->GetRequestId());
 
         if (backup) {
-            error <<= TErrorAttribute(BackupFailedKey, true);
+            error.Add(BackupFailedKey, true);
         }
         responseHandler->HandleError(std::move(error), address);
     }

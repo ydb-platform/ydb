@@ -66,7 +66,6 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
         TComputationContext& CompCtx_;
         const TTestStreamWrapper* const Parent_;
         ui64 Index_ = 0;
@@ -86,7 +85,6 @@ private:
     void RegisterDependencies() const final {
     }
 
-private:
     const ui64 PeakStep_;
 };
 

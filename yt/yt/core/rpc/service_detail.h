@@ -274,7 +274,7 @@ public:
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error deserializing request attachments")
-                    .With(TError(ex)));
+                    .With(ex));
                 return false;
             }
 
@@ -1196,7 +1196,7 @@ private:
 
     // Not std::optional to guarantee lock freeness; -1 means inf.
     std::atomic<int> QueueSizeLimit_ = -1;
-    std::atomic<int> QueueByteSizeLimit_ = -1;
+    std::atomic<i64> QueueByteSizeLimit_ = -1;
     // TODO(h0pless): Add ConcurrencyLimit and ConcurrencyByteLimit.
 
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;

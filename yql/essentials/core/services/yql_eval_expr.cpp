@@ -150,7 +150,6 @@ public:
     TNodeMap<bool> Visited;
     bool ForceConfigure = false;
 
-public:
     void Scan(const TExprNode& node) {
         VisitExpr(node, [this](const TExprNode& n) {
             if (n.IsCallable(ConfigureName)) {
@@ -265,7 +264,6 @@ private:
         it->second = hasConfigPending;
     }
 
-private:
     THashSet<TStringBuf> PendingFileAliases_;
     THashSet<TStringBuf> PendingFolderPrefixes_;
 };

@@ -86,8 +86,13 @@ void TServiceContextBase::Initialize()
     ServiceName_ = FromProto<std::string>(RequestHeader_->service());
     MethodName_ = FromProto<std::string>(RequestHeader_->method());
 
-    AuthenticationIdentity_.User = RequestHeader_->has_user() ? RequestHeader_->user() : RootUserName;
-    AuthenticationIdentity_.UserTag = RequestHeader_->has_user_tag() ? RequestHeader_->user_tag() : AuthenticationIdentity_.User;
+    // COMPAT(babenko): legacy clients may still be sending empty string
+    AuthenticationIdentity_.User = RequestHeader_->has_user() && !RequestHeader_->user().empty()
+        ? RequestHeader_->user()
+        : RootUserName;
+    AuthenticationIdentity_.UserTag = RequestHeader_->has_user_tag()
+        ? RequestHeader_->user_tag()
+        : AuthenticationIdentity_.User;
 
     YT_ASSERT(RequestMessage_.Size() >= 2);
     RequestBody_ = RequestMessage_[1];

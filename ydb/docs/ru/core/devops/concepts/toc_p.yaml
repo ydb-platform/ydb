@@ -9,3 +9,5 @@ items:
   href: versioning.md
 - name: Обслуживание
   href: maintenance-without-downtime.md
+- name: Аутентификация и авторизация узлов баз данных
+  href: node-authorization.md

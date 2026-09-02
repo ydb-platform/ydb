@@ -3,6 +3,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <util/generic/bitops.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/ymath.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/info.h>
@@ -143,6 +144,7 @@ int main(int argc, char **argv) {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
     bool disablePDiskDataEncryption = false;
+    bool disableDDiskChecksums = false;
     TVector<TString> paths;
     opts.AddLongOption("path", "path to device (can be specified multiple times for multi-device tests)")
         .RequiredArgument("FILE")
@@ -158,6 +160,9 @@ int main(int argc, char **argv) {
     opts.AddLongOption("no-logo", "disable logo printing on start").NoArgument();
     opts.AddLongOption("disable-file-lock", "disable file locking before test").NoArgument().DefaultValue("0");
     opts.AddLongOption("disable-pdisk-encryption", "disable PDisk data encryption").StoreTrue(&disablePDiskDataEncryption);
+    opts.AddLongOption("disable-ddisk-checksums",
+            "disable DDisk and Persistent Buffer checksums (use on both client and server)")
+        .StoreTrue(&disableDDiskChecksums);
     opts.AddLongOption("log-level", "log level for BS_LOAD_TEST/BS_DDISK: warn|info|debug|trace (default warn). INTERCONNECT is floored at INFO; BS_DEVICE/BS_PDISK at WARN")
         .RequiredArgument("LEVEL").DefaultValue("warn");
     ui32 serverNodeId = 0;
@@ -276,7 +281,7 @@ int main(int argc, char **argv) {
     NKikimr::TPerfTestConfig config(paths, res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
             res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"), disablePDiskDataEncryption,
-            logLevel);
+            disableDDiskChecksums, logLevel);
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
 
@@ -288,12 +293,48 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            const ui32 ioSizeBytes = record.GetDDiskLoad().GetIoSizeBytes();
+            const auto& load = record.GetDDiskLoad();
+            const ui32 ioSizeBytes = load.GetIoSizeBytes();
             if (ioSizeBytes < 4096 || !IsPowerOf2(ioSizeBytes)) {
                 Cerr << "Error: invalid DDiskLoad.IoSizeBytes in DDiskTestList[" << i
                     << "].DDiskTestList[" << j << "]: " << ioSizeBytes
                     << " (must be power of two and >= 4096)" << Endl;
                 return 1;
+            }
+
+            const float backgroundWriteRatio = load.GetBackgroundWriteRatio();
+            if (!IsValidFloat(backgroundWriteRatio)
+                    || backgroundWriteRatio < 0 || backgroundWriteRatio > 1
+                    || (backgroundWriteRatio > 0 && !load.GetIsReadLoad())) {
+                Cerr << "Error: invalid DDiskLoad.BackgroundWriteRatio in DDiskTestList[" << i
+                    << "].DDiskTestList[" << j << "]: " << backgroundWriteRatio
+                    << " (must be a finite value in [0, 1] writes per measured read, and nonzero only for read load)" << Endl;
+                return 1;
+            }
+            if (backgroundWriteRatio > 0) {
+                const ui32 backgroundWriteSizeKiB = load.GetBackgroundWriteSizeKiB();
+                if (backgroundWriteSizeKiB < 4 || !IsPowerOf2(backgroundWriteSizeKiB)
+                        || backgroundWriteSizeKiB > Max<ui32>() / 1024) {
+                    Cerr << "Error: invalid DDiskLoad.BackgroundWriteSizeKiB in DDiskTestList[" << i
+                        << "].DDiskTestList[" << j << "]: " << backgroundWriteSizeKiB
+                        << " (must be power of two and >= 4)" << Endl;
+                    return 1;
+                }
+                const ui32 backgroundWriteSizeBytes = backgroundWriteSizeKiB * 1024;
+                if (load.GetExpectedChunkSize() % backgroundWriteSizeBytes != 0) {
+                    Cerr << "Error: DDiskLoad.ExpectedChunkSize must be divisible by background write size"
+                        << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
+                    return 1;
+                }
+                for (ui32 areaIdx = 0; areaIdx < static_cast<ui32>(load.AreasSize()); ++areaIdx) {
+                    const ui32 areaSize = load.GetAreas(areaIdx).GetAreaSize();
+                    if (!areaSize || areaSize % backgroundWriteSizeBytes != 0) {
+                        Cerr << "Error: DDiskLoad.Areas[" << areaIdx
+                            << "].AreaSize must be nonzero and divisible by background write size"
+                            << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
+                        return 1;
+                    }
+                }
             }
         }
     }

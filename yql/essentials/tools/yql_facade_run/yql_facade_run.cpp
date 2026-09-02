@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
@@ -130,8 +131,7 @@ private:
 
 class TPeepHolePipelineConfigurator: public NYql::IPipelineConfigurator {
 public:
-    TPeepHolePipelineConfigurator() {
-    }
+    TPeepHolePipelineConfigurator() = default;
 
     void AfterCreate(NYql::TTransformationPipeline* pipeline) const final {
         Y_UNUSED(pipeline);
@@ -151,11 +151,9 @@ public:
 
 namespace NYql {
 
-TFacadeRunOptions::TFacadeRunOptions() {
-}
+TFacadeRunOptions::TFacadeRunOptions() = default;
 
-TFacadeRunOptions::~TFacadeRunOptions() {
-}
+TFacadeRunOptions::~TFacadeRunOptions() = default;
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
@@ -511,6 +509,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
+    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
+
     {
         TGatewaySQLFlags gatewaySqlFlags;
         for (const auto& flag : sqlFlags) {
@@ -549,8 +550,7 @@ TFacadeRunner::TFacadeRunner(TString name)
 {
 }
 
-TFacadeRunner::~TFacadeRunner() {
-}
+TFacadeRunner::~TFacadeRunner() = default;
 
 TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegistry() {
     return FuncRegistry_;

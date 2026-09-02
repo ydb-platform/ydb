@@ -4,7 +4,11 @@
 import argparse
 import os
 import subprocess
+from collections.abc import Callable, Generator, Iterable, Mapping
 from shlex import quote
+from typing import Final
+
+_Ignored = object
 
 
 def _call(*args, **kwargs):
@@ -23,12 +27,14 @@ class BaseCompleter:
 
     def __call__(
         self, *, prefix: str, action: argparse.Action, parser: argparse.ArgumentParser, parsed_args: argparse.Namespace
-    ) -> None:
+    ) -> Iterable[str]:
         raise NotImplementedError("This method should be implemented by a subclass.")
 
 
 class ChoicesCompleter(BaseCompleter):
-    def __init__(self, choices):
+    choices: Final[Mapping[str, str | bytes]]
+
+    def __init__(self, choices: Mapping[str, str | bytes]) -> None:
         self.choices = choices
 
     def _convert(self, choice):
@@ -36,11 +42,11 @@ class ChoicesCompleter(BaseCompleter):
             choice = str(choice)
         return choice
 
-    def __call__(self, **kwargs):
+    def __call__(self, **kwargs: _Ignored) -> Iterable[str]:
         return (self._convert(c) for c in self.choices)
 
 
-EnvironCompleter = ChoicesCompleter(os.environ)
+EnvironCompleter: Final[ChoicesCompleter] = ChoicesCompleter(os.environ)
 
 
 class FilesCompleter(BaseCompleter):
@@ -48,7 +54,10 @@ class FilesCompleter(BaseCompleter):
     File completer class, optionally takes a list of allowed extensions
     """
 
-    def __init__(self, allowednames=(), directories=True):
+    allowednames: Final[list[str]]
+    directories: Final[bool]
+
+    def __init__(self, allowednames: Iterable[str] | str = (), directories: bool = True) -> None:
         # Fix if someone passes in a string instead of a list
         if isinstance(allowednames, (str, bytes)):
             allowednames = [allowednames]
@@ -56,8 +65,8 @@ class FilesCompleter(BaseCompleter):
         self.allowednames = [x.lstrip("*").lstrip(".") for x in allowednames]
         self.directories = directories
 
-    def __call__(self, prefix, **kwargs):
-        completion = []
+    def __call__(self, prefix: str, **kwargs: _Ignored) -> list[str]:
+        completion: list[str] = []
         if self.allowednames:
             if self.directories:
                 # Using 'bind' in this and the following commands is a workaround to a bug in bash
@@ -90,26 +99,31 @@ class FilesCompleter(BaseCompleter):
 
 
 class _FilteredFilesCompleter(BaseCompleter):
-    def __init__(self, predicate):
+    predicate: Final[Callable[[str], bool]]
+
+    def __init__(self, predicate: Callable[[str], bool]) -> None:
         """
         Create the completer
 
         A predicate accepts as its only argument a candidate path and either
         accepts it or rejects it.
         """
-        assert predicate, "Expected a callable predicate"
+        assert predicate, "Expected a callable predicate"  # type: ignore[truthy-function]
         self.predicate = predicate
 
-    def __call__(self, prefix, **kwargs):
+    def __call__(self, prefix: str, **kwargs: _Ignored) -> Generator[str]:
         """
         Provide completions on prefix
         """
-        target_dir = os.path.dirname(prefix)
+        # Expand a leading "~" so that filesystem operations below work on a
+        # real path (os.listdir("~") would otherwise raise FileNotFoundError).
+        expanded_prefix = os.path.expanduser(prefix)
+        target_dir = os.path.dirname(expanded_prefix)
         try:
             names = os.listdir(target_dir or ".")
         except Exception:
             return  # empty iterator
-        incomplete_part = os.path.basename(prefix)
+        incomplete_part = os.path.basename(expanded_prefix)
         # Iterate on target_dir entries and filter on given predicate
         for name in names:
             if not name.startswith(incomplete_part):
@@ -121,7 +135,7 @@ class _FilteredFilesCompleter(BaseCompleter):
 
 
 class DirectoriesCompleter(_FilteredFilesCompleter):
-    def __init__(self):
+    def __init__(self) -> None:
         _FilteredFilesCompleter.__init__(self, predicate=os.path.isdir)
 
 
@@ -130,10 +144,10 @@ class SuppressCompleter(BaseCompleter):
     A completer used to suppress the completion of specific arguments
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def suppress(self):
+    def suppress(self) -> bool:
         """
         Decide if the completion should be suppressed
         """

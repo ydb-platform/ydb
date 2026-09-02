@@ -618,6 +618,8 @@ message TKqpPhyStage {
     double EstimatedRows = 19;
     repeated TKqpOutputTransform OutputTransforms = 17;
     map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
+    // Per-stage WASM UDF module names (from TCoUdf)
+    repeated string WasmUdfModules = 20;
 }
 
 message TKqpPhyResult {
@@ -746,6 +748,7 @@ message TKqpPhyTx {
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
     uint32 DqChannelVersion = 11;
+    bool HasPqSources = 12; // at least one stage has an external source of type "PqSource"
 }
 
 message TKqpTableInfo {

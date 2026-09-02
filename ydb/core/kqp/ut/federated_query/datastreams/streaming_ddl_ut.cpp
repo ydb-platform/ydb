@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 2 }},
@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 -- so in test query will be restarted after zero checkpoint completion.
 
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 2 }},
@@ -858,7 +858,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ) AS
             DO BEGIN
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 1 }},

@@ -262,6 +262,12 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
 }
 
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    if (config.HasCompositeConveyorConfig()) {
+        auto result = ValidateCompositeConveyorConfig(config.GetCompositeConveyorConfig(), msg);
+        if (result == EValidationResult::Error) {
+            return result;
+        }
+    }
     if (config.HasAuthConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {

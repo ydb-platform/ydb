@@ -2,17 +2,11 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/tools/federation_recipe/proto/config_manager_admin.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/config_manager_admin_service.grpc.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/common.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/ydb_operation.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/ydb_status_codes.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 
 using namespace NYdb;
 using namespace NYdb::NTopic;
-using AdminStub = NLogBroker::NAdmin::ConfigurationManagerAdminService::Stub;
 
 namespace NFederationTests {
 

@@ -4,7 +4,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/driver
-    ydb/public/tools/federation_recipe/proto
     contrib/libs/grpc
 )
 

@@ -33,7 +33,7 @@ def _setenv(varname, value):
     except Exception:
         pass
 
-_PQ_TABLES_DDL = [
+_PQ_CONFIG_TABLES = [
     """
 --!syntax_v1
 CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Cluster` (
@@ -135,7 +135,7 @@ class FederationRecipe(object):
         with ydb.Driver(driver_config) as ydb_driver:
             ydb_driver.wait(timeout=5)
             with ydb.QuerySessionPool(ydb_driver, size=1) as pool:
-                _exec_queries(pool, _PQ_TABLES_DDL)
+                _exec_queries(pool, _PQ_CONFIG_TABLES)
             session = ydb.retry_operation_sync(lambda: ydb_driver.table_client.session().create())
             session.create_table(
                 '/Root/PQ/SourceIdMeta2',
@@ -187,12 +187,6 @@ class FederationRecipe(object):
         logger.info("pqdiscovery tables set up on cluster={}".format(cluster_name))
 
     def _create_kesus_nodes(self, cluster_port):
-        """
-        Create coordination (Kesus) nodes for each pre-installed account on a cluster,
-        then create the root rate limiter resources write-quota and read-quota inside each node.
-        CM generates child CreateRateLimiterResource commands when a new topic is created via
-        admin API — parent resources must exist before those commands run.
-        """
         endpoint = "localhost:{}".format(cluster_port)
         driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
         with ydb.Driver(driver_config) as driver:
@@ -268,7 +262,7 @@ class FederationRecipe(object):
         with ydb.Driver(driver_config) as driver:
             driver.wait(timeout=10)
             with ydb.QuerySessionPool(driver, size=1) as pool:
-                _exec_queries(pool, _PQ_TABLES_DDL)
+                _exec_queries(pool, _PQ_CONFIG_TABLES)
 
                 pool.execute_with_retries("""
                     --!syntax_v1
@@ -406,7 +400,7 @@ class FederationRecipe(object):
 
         for cluster_name, cluster_port in cluster_ports.items():
             self._create_kesus_nodes(cluster_port)
-            logger.info("Kesus nodes created on cluster={}".format(cluster_name))
+            logger.info("Kesus created on cluster={}".format(cluster_name))
 
         cm_endpoint = self.__cm_endpoint
         assert cm_endpoint, "CM endpoint not set; _start_cm must run first"
@@ -418,6 +412,7 @@ class FederationRecipe(object):
 
         for cluster_name, cluster_port in cluster_ports.items():
             self._setup_pqdiscovery(cluster_port, cluster_name)
+
         for attempt in range(30):
             try:
                 with ydb.Driver(driver_config) as d:
@@ -436,7 +431,7 @@ class FederationRecipe(object):
             with ydb.Driver(driver_config) as driver:
                 driver.wait(timeout=10)
                 tc = ydb.TopicClient(driver, ydb.TopicClientSettings())
-                for attempt in range(5):
+                for attempt in range(3):
                     try:
                         consumerName = f"/logbroker-federation/{account}/consumer"
                         tc.create_topic("topic", consumers=[consumerName], min_active_partitions=1)

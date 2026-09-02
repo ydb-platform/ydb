@@ -26906,6 +26906,170 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             (*correlationFilter)["id"].GetStringSafe());
     }
 
+    Y_UNIT_TEST(ExportsCommonEqualityOrCorrelatedScalarSubplanFailClosed) {
+        TCorrelatedScalarExportFixture fixture;
+        const auto catalog = CaptureSemanticSnapshotCatalogV1(
+            *fixture.Root,
+            fixture.Ctx.RboCtx);
+        UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+
+        const auto makeCorrelation = [&](
+            TStringBuf callable,
+            bool reverse) {
+            auto inner = MakeColumnAccess(
+                TInfoUnit("inner.k"),
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            auto outer = MakeColumnAccess(
+                fixture.Dependency,
+                fixture.Pos,
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            auto result = MakeBinaryPredicate(
+                TString(callable),
+                reverse ? outer : inner,
+                reverse ? inner : outer);
+            AnnotateBinaryExpression(
+                result,
+                fixture.OptionalInt32,
+                fixture.OptionalInt32,
+                fixture.OptionalBool);
+            return result;
+        };
+        const auto makeBranch = [&](
+            const TVector<TExpression>& conjuncts) {
+            auto result = MakeConjunction(conjuncts);
+            AnnotateExpression(result, fixture.OptionalBool);
+            return result;
+        };
+        const auto makeOr = [&](
+            const TExpression& left,
+            const TExpression& right) {
+            TExpression result(
+                TypedCallable(
+                    fixture.Ctx,
+                    "Or",
+                    {
+                        left.GetExpressionBody(),
+                        right.GetExpressionBody(),
+                    },
+                    fixture.OptionalBool),
+                &fixture.Ctx.ExprCtx,
+                &fixture.Root->PlanProps);
+            AnnotateExpression(result, fixture.OptionalBool);
+            return result;
+        };
+
+        auto negatedResidual = MakeNegation(fixture.Residual);
+        AnnotateExpression(negatedResidual, fixture.Bool);
+        const auto equalityCopy = makeCorrelation("==", false);
+        const auto firstBranch =
+            makeBranch({fixture.Equality, fixture.Residual});
+        const auto secondBranch =
+            makeBranch({equalityCopy, negatedResidual});
+        const auto commonEqualityOr = makeOr(firstBranch, secondBranch);
+        fixture.CorrelationFilter->FilterExpr = commonEqualityOr;
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog));
+        const auto& outerBind = FindNode(snapshot, "outer_bind");
+        const NJson::TJsonValue* correlationFilter = nullptr;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "filter" &&
+                node["input"].GetStringSafe() ==
+                    outerBind["id"].GetStringSafe())
+            {
+                correlationFilter = &node;
+                break;
+            }
+        }
+        UNIT_ASSERT(correlationFilter);
+        const auto& predicate = (*correlationFilter)["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            predicate["kind"].GetStringSafe(),
+            "or");
+        const auto& branches = predicate["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(branches.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            branches[0]["kind"].GetStringSafe(),
+            "and");
+        UNIT_ASSERT_VALUES_EQUAL(
+            branches[1]["kind"].GetStringSafe(),
+            "and");
+        UNIT_ASSERT_VALUES_EQUAL(
+            branches[0]["args"][0]["kind"].GetStringSafe(),
+            "eq");
+        UNIT_ASSERT_VALUES_EQUAL(
+            branches[0]["args"][1]["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            branches[1]["args"][0]["kind"].GetStringSafe(),
+            "eq");
+        UNIT_ASSERT_VALUES_EQUAL(
+            branches[1]["args"][1]["kind"].GetStringSafe(),
+            "not");
+
+        const auto reject = [&](TStringBuf fragment) {
+            const auto result = ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                fragment);
+        };
+
+        fixture.CorrelationFilter->FilterExpr =
+            makeOr(firstBranch, negatedResidual);
+        reject("OR branch has no conjunct for its outer dependency");
+
+        const auto reversedEquality = makeCorrelation("==", true);
+        fixture.CorrelationFilter->FilterExpr = makeOr(
+            firstBranch,
+            makeBranch({reversedEquality, negatedResidual}));
+        reject("must repeat the same ordered outer-dependency conjunct");
+
+        fixture.CorrelationFilter->FilterExpr = makeOr(
+            makeBranch({
+                fixture.Equality,
+                reversedEquality,
+                fixture.Residual,
+            }),
+            secondBranch);
+        reject("outer dependency in multiple conjuncts");
+
+        const auto notEqual = makeCorrelation("!=", false);
+        const auto notEqualCopy = makeCorrelation("!=", false);
+        fixture.CorrelationFilter->FilterExpr = makeOr(
+            makeBranch({notEqual, fixture.Residual}),
+            makeBranch({notEqualCopy, negatedResidual}));
+        reject("correlation must be one strict column equality");
+
+        auto missingResidual = MakeColumnAccess(
+            TInfoUnit("inner.missing"),
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Root->PlanProps);
+        AnnotateExpression(missingResidual, fixture.Bool);
+        fixture.CorrelationFilter->FilterExpr = makeOr(
+            makeBranch({fixture.Equality, missingResidual}),
+            secondBranch);
+        reject("residual predicate references unavailable column");
+
+        fixture.CorrelationFilter->FilterExpr = commonEqualityOr;
+        UNIT_ASSERT_C(
+            ExportSemanticSnapshotV1(
+                *fixture.Root,
+                fixture.Ctx.RboCtx,
+                catalog.Catalog).IsSupported(),
+            "restored common-correlation OR must remain supported");
+    }
+
     Y_UNIT_TEST(CorrelatedScalarContractsFailClosed) {
         TCorrelatedScalarExportFixture fixture;
         const auto catalog = CaptureSemanticSnapshotCatalogV1(

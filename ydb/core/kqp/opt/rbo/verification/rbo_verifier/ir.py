@@ -4020,6 +4020,16 @@ def _conjuncts(expression: Expr) -> tuple[Expr, ...]:
     )
 
 
+def _disjuncts(expression: Expr) -> tuple[Expr, ...]:
+    if expression.kind != "or":
+        return (expression,)
+    return tuple(
+        disjunct
+        for argument in expression.args
+        for disjunct in _disjuncts(argument)
+    )
+
+
 def _validate_positive_nullable_in_binding(
     expression: Expr,
     binding: str,
@@ -4132,6 +4142,62 @@ def _direct_correlation_inner_column(
     )
     assert comparison_kind == "eq"
     return inner_column
+
+
+def _scalar_correlation_inner_column(
+    predicate: Expr,
+    dependency: str,
+    inner_schema: Mapping[str, Column],
+    path: str,
+    label: str,
+    inner_source: str,
+) -> str:
+    """Admit an exact common direct equality across scalar OR branches."""
+
+    if predicate.kind != "or":
+        return _direct_correlation_inner_column(
+            predicate,
+            dependency,
+            inner_schema,
+            path,
+            label,
+            inner_source,
+        )
+
+    branches = _disjuncts(predicate)
+    if len(branches) < 2:
+        _fail(path, f"{label} disjunction requires at least two branches")
+
+    correlations: list[Expr] = []
+    for index, branch in enumerate(branches):
+        dependent_conjuncts = tuple(
+            conjunct
+            for conjunct in _conjuncts(branch)
+            if dependency in expression_columns(conjunct)
+        )
+        if len(dependent_conjuncts) != 1:
+            _fail(
+                path,
+                f"{label} disjunction branch {index} requires exactly one "
+                "dependency-bearing conjunct",
+            )
+        correlations.append(dependent_conjuncts[0])
+
+    common = correlations[0]
+    if any(correlation != common for correlation in correlations[1:]):
+        _fail(
+            path,
+            f"{label} disjunction branches must share the same "
+            "dependency-bearing conjunct",
+        )
+    return _direct_correlation_inner_column(
+        common,
+        dependency,
+        inner_schema,
+        path,
+        label,
+        inner_source,
+    )
 
 
 def _node_expression_columns(node: PlanNode) -> frozenset[str]:
@@ -5034,7 +5100,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
 
                 inner_schema = schemas[outer_bind.input]
                 predicate = correlation_filter.predicate
-                inner_column = _direct_correlation_inner_column(
+                inner_column = _scalar_correlation_inner_column(
                     predicate,
                     dependency,
                     inner_schema,

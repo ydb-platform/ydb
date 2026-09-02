@@ -33,7 +33,17 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     auto deps = CastOperator<TOpAddDependencies>(filter->GetInput());
 
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    // Scalar aggregates can arrive with the correlation equality repeated in
+    // every OR branch, for example (corr AND a) OR (corr AND b).  Factor only
+    // the expression inspected by this rule: the original Filter predicate
+    // remains intact unless the complete pull-up succeeds below.
+    std::optional<TExpression> factoredFilterExpr;
+    if (input->Kind == EOperator::Aggregate) {
+        factoredFilterExpr = filter->FilterExpr.TryExtractCommonConjuncts();
+    }
+    const TExpression& filterExpr =
+        factoredFilterExpr ? *factoredFilterExpr : filter->FilterExpr;
+    auto conjuncts = filterExpr.SplitConjunct();
 
     // Select a subset of conditions that cover all dependencies
     TVector<TExpression> dependentSubset;

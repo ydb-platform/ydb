@@ -8896,6 +8896,97 @@ private:
         };
     }
 
+    static bool SameExpressionBody(
+        const TExpression& left,
+        const TExpression& right)
+    {
+        if (left.GetExpressionBody().Get() == right.GetExpressionBody().Get()) {
+            return true;
+        }
+
+        // Compare the complete lambdas so independently wrapped branch terms
+        // have alpha-equivalent row arguments while their bodies remain ordered.
+        const TExprNode* leftNode = left.GetLambda().Get();
+        const TExprNode* rightNode = right.GetLambda().Get();
+        return CompareExprTrees(leftNode, rightNode);
+    }
+
+    static TDirectCorrelation ExtractScalarCorrelation(
+        TStringBuf binding,
+        TStringBuf dependency,
+        const TExpression& predicate,
+        const THashSet<TString>& innerNames)
+    {
+        if (!predicate.GetExpressionBody()->IsCallable("Or")) {
+            return ExtractDirectCorrelation(
+                "Scalar",
+                binding,
+                dependency,
+                predicate,
+                innerNames);
+        }
+
+        const auto branches = predicate.SplitDisjunct();
+        if (branches.size() < 2) {
+            Unsupported(TStringBuilder()
+                << "Scalar subplan binding " << binding
+                << " common-correlation OR must have at least two branches");
+        }
+
+        std::optional<TExpression> commonCorrelation;
+        for (const auto& branch : branches) {
+            std::optional<TExpression> branchCorrelation;
+            for (const auto& conjunct : branch.SplitConjunct()) {
+                const auto columns = ExpressionColumns(conjunct);
+                if (columns.contains(dependency)) {
+                    if (branchCorrelation) {
+                        Unsupported(TStringBuilder()
+                            << "Scalar subplan binding " << binding
+                            << " common-correlation OR branch references its "
+                               "outer dependency in multiple conjuncts");
+                    }
+                    branchCorrelation = conjunct;
+                    continue;
+                }
+
+                for (const auto& column : columns) {
+                    if (!innerNames.contains(column)) {
+                        Unsupported(TStringBuilder()
+                            << "Scalar subplan binding " << binding
+                            << " residual predicate references unavailable column "
+                            << column);
+                    }
+                }
+            }
+
+            if (!branchCorrelation) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " common-correlation OR branch has no conjunct for its "
+                       "outer dependency");
+            }
+            if (commonCorrelation &&
+                !SameExpressionBody(*commonCorrelation, *branchCorrelation))
+            {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " common-correlation OR must repeat the same ordered "
+                       "outer-dependency conjunct in every branch");
+            }
+            if (!commonCorrelation) {
+                commonCorrelation = std::move(*branchCorrelation);
+            }
+        }
+
+        Y_ENSURE(commonCorrelation);
+        return ExtractDirectCorrelation(
+            "Scalar",
+            binding,
+            dependency,
+            *commonCorrelation,
+            innerNames);
+    }
+
     static TVector<TExistsDirectCorrelation> ExtractExistsCorrelations(
         TStringBuf binding,
         const TVector<TString>& dependencies,
@@ -9223,8 +9314,7 @@ private:
                 << " outer dependency collides with an inner column");
         }
 
-        const auto correlation = ExtractDirectCorrelation(
-            "Scalar",
+        const auto correlation = ExtractScalarCorrelation(
             binding,
             dependency,
             filter->FilterExpr,

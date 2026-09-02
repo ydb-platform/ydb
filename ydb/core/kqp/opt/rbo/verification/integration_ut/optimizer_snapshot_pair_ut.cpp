@@ -1275,6 +1275,170 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(!restored["nullable"].GetBooleanSafe());
     }
 
+    Y_UNIT_TEST(RealHostVerifiesMiniQ41CorrelatedScalarCount) {
+        TKikimrRunner kikimr;
+        CreateExistsColumnTables(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT
+                outer_row.Id,
+                (
+                    SELECT COUNT(*)
+                    FROM `/Root/RboExistsInner` AS inner_row
+                    WHERE
+                        (inner_row.MatchKey == outer_row.MatchKey AND inner_row.Payload == 7)
+                        OR
+                        (inner_row.MatchKey == outer_row.MatchKey AND inner_row.Payload == 8)
+                ) AS Matches
+            FROM `/Root/RboExistsOuter` AS outer_row;
+        )");
+
+        const auto& subplans = pair.Initial["plan"]["subplans"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(subplans.size(), 1);
+        const auto& subplan = subplans[0];
+        UNIT_ASSERT_VALUES_EQUAL(subplan["kind"].GetStringSafe(), "scalar");
+        UNIT_ASSERT_VALUES_EQUAL(
+            subplan["dependencies"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT(subplan["nullable"].GetBooleanSafe());
+        UNIT_ASSERT(!subplan["output"]["nullable"].GetBooleanSafe());
+
+        const TString dependency =
+            subplan["dependencies"][0].GetStringSafe();
+        const auto outerBindings = PlanNodes(pair.Initial, "outer_bind");
+        UNIT_ASSERT_VALUES_EQUAL(outerBindings.size(), 1);
+        const auto& outerBinding = *outerBindings[0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            outerBinding["dependency"].GetStringSafe(),
+            dependency);
+
+        const auto* shape = &PlanNode(
+            pair.Initial,
+            subplan["root"].GetStringSafe());
+        while ((*shape)["op"].GetStringSafe() == "project" ||
+               (*shape)["op"].GetStringSafe() == "aggregate")
+        {
+            shape = &PlanNode(
+                pair.Initial,
+                (*shape)["input"].GetStringSafe());
+        }
+        const auto& correlationFilter = *shape;
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["op"].GetStringSafe(),
+            "filter");
+        UNIT_ASSERT_VALUES_EQUAL(
+            correlationFilter["input"].GetStringSafe(),
+            outerBinding["id"].GetStringSafe());
+
+        const auto& predicate = correlationFilter["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "or");
+        const auto& branches = predicate["args"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(branches.size(), 2);
+
+        TString commonCorrelation;
+        THashSet<TString> residualPredicates;
+        for (const auto& branch : branches) {
+            TVector<const NJson::TJsonValue*> conjuncts;
+            CollectConjuncts(branch, conjuncts);
+            UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 2);
+
+            const NJson::TJsonValue* correlation = nullptr;
+            const NJson::TJsonValue* residual = nullptr;
+            for (const auto* conjunct : conjuncts) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*conjunct)["kind"].GetStringSafe(),
+                    "eq");
+                const auto& left = (*conjunct)["left"];
+                const auto& right = (*conjunct)["right"];
+                const bool isCorrelation =
+                    left["kind"].GetStringSafe() == "column" &&
+                    right["kind"].GetStringSafe() == "column" &&
+                    (left["column"].GetStringSafe() == dependency ||
+                     right["column"].GetStringSafe() == dependency);
+                if (isCorrelation) {
+                    UNIT_ASSERT_C(!correlation, NJson::WriteJson(branch, false));
+                    correlation = conjunct;
+                } else {
+                    UNIT_ASSERT_C(!residual, NJson::WriteJson(branch, false));
+                    residual = conjunct;
+                }
+            }
+            UNIT_ASSERT_C(correlation, NJson::WriteJson(branch, false));
+            UNIT_ASSERT_C(residual, NJson::WriteJson(branch, false));
+
+            const TString serializedCorrelation =
+                NJson::WriteJson(*correlation, false);
+            if (commonCorrelation.empty()) {
+                commonCorrelation = serializedCorrelation;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    serializedCorrelation,
+                    commonCorrelation);
+            }
+            UNIT_ASSERT(residualPredicates.insert(
+                NJson::WriteJson(*residual, false)).second);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(residualPredicates.size(), 2);
+
+        const auto& aggregate = OnlyPlanNode(pair.Initial, "aggregate");
+        UNIT_ASSERT(aggregate["keys"].GetArraySafe().empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["aggregates"].GetArraySafe().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["aggregates"][0]["function"].GetStringSafe(),
+            "count");
+
+        UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
+        UNIT_ASSERT(PlanNodes(pair.Final, "outer_bind").empty());
+        const auto joins = PlanNodes(pair.Final, "join");
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*joins[0])["kind"].GetStringSafe(),
+            "left");
+
+        TVector<const NJson::TJsonValue*> ifExpressions;
+        CollectExpressions(pair.Final["plan"], "if", ifExpressions);
+        const NJson::TJsonValue* repair = nullptr;
+        for (const auto* expression : ifExpressions) {
+            if (expression->Has("type") &&
+                (*expression)["type"].GetStringSafe() == "Uint64" &&
+                expression->Has("nullable") &&
+                (*expression)["nullable"].GetBooleanSafe() &&
+                expression->Has("then") &&
+                (*expression)["then"]["kind"].GetStringSafe() == "if_present")
+            {
+                UNIT_ASSERT_C(!repair, NJson::WriteJson(pair.Final, false));
+                repair = expression;
+            }
+        }
+        UNIT_ASSERT_C(repair, NJson::WriteJson(pair.Final, false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*repair)["condition"]["kind"].GetStringSafe(),
+            "literal");
+        UNIT_ASSERT((*repair)["condition"]["value"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*repair)["else"]["kind"].GetStringSafe(),
+            "null");
+        const auto& restored = (*repair)["then"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["optional"]["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["present"]["kind"].GetStringSafe(),
+            "bound");
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["present"]["depth"].GetUIntegerSafe(),
+            0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["missing"]["type"].GetStringSafe(),
+            "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(
+            restored["missing"]["value"].GetUIntegerSafe(),
+            0);
+        UNIT_ASSERT(!restored["nullable"].GetBooleanSafe());
+    }
+
     Y_UNIT_TEST(RealHostVerifiesScalarAndEqualityCorrelatedNotExists) {
         TKikimrRunner kikimr;
         CreateExistsColumnTables(kikimr);

@@ -117,6 +117,23 @@ TExpression MakeWindowColumnAccess(
         exprCtx.NewAtom(pos, "window_definition"));
 }
 
+TExpression MakeDisjunction(
+    TRuleTestContext& ctx,
+    TPositionHandle pos,
+    const TVector<TExpression>& disjuncts)
+{
+    Y_ENSURE(!disjuncts.empty());
+    TExprNode::TListType bodies;
+    bodies.reserve(disjuncts.size());
+    for (const auto& disjunct : disjuncts) {
+        bodies.push_back(disjunct.GetExpressionBody());
+    }
+    return TExpression(
+        ctx.ExprCtx.NewCallable(pos, "Or", std::move(bodies)),
+        &ctx.ExprCtx,
+        &ctx.PlanProps);
+}
+
 struct TCorrelatedCountFixture {
     explicit TCorrelatedCountFixture(
         bool grouped = false,
@@ -310,6 +327,79 @@ struct TCorrelatedCountFixture {
     TIntrusivePtr<IOperator> Subplan;
 };
 
+TExpression MakeColumnComparison(
+    TCorrelatedCountFixture& fixture,
+    TStringBuf callable,
+    const TInfoUnit& left,
+    const TInfoUnit& right)
+{
+    return MakeBinaryPredicate(
+        TString(callable),
+        MakeColumnAccess(
+            left,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Ctx.PlanProps),
+        MakeColumnAccess(
+            right,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Ctx.PlanProps));
+}
+
+TExpression MakeInt32Comparison(
+    TCorrelatedCountFixture& fixture,
+    TStringBuf callable,
+    const TInfoUnit& column,
+    TStringBuf value)
+{
+    return MakeBinaryPredicate(
+        TString(callable),
+        MakeColumnAccess(
+            column,
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx,
+            &fixture.Ctx.PlanProps),
+        MakeConstant(
+            "Int32",
+            TString(value),
+            fixture.Pos,
+            &fixture.Ctx.ExprCtx));
+}
+
+void AssertAggregatePullupRejectedWithoutMutation(
+    TCorrelatedCountFixture& fixture)
+{
+    TIntrusivePtr<IOperator> aggregate = fixture.Aggregate;
+    ComputeParents(aggregate, fixture.Pos);
+
+    TPullUpCorrelatedFilterRule rule;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        rule.MatchAndApply(
+            aggregate,
+            fixture.Ctx.RboCtx,
+            fixture.Ctx.PlanProps),
+        yexception,
+        "Only equi-join conditions");
+
+    UNIT_ASSERT_VALUES_EQUAL(aggregate.Get(), fixture.Aggregate.Get());
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.Aggregate->GetInput().Get(),
+        fixture.CorrelationFilter.Get());
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.CorrelationFilter->GetInput().Get(),
+        fixture.AddDependencies.Get());
+    UNIT_ASSERT_VALUES_EQUAL(
+        fixture.AddDependencies->GetInput().Get(),
+        fixture.InnerRead.Get());
+    UNIT_ASSERT(
+        fixture.CorrelationFilter->FilterExpr
+            .GetExpressionBody()
+            ->IsCallable("Or"));
+    UNIT_ASSERT(fixture.Aggregate->KeyColumns.empty());
+    UNIT_ASSERT(!fixture.Aggregate->WasKeylessBeforeCorrelation);
+}
+
 TIntrusivePtr<TOpMap> ApplyProjectionInline(
     TCorrelatedCountFixture& fixture)
 {
@@ -404,6 +494,138 @@ Y_UNIT_TEST_SUITE(KqpRboCorrelatedScalarRules) {
             filter->GetInput().Get(),
             dependencies.Get());
         UNIT_ASSERT_VALUES_EQUAL(dependencies->GetInput().Get(), read.Get());
+    }
+
+    Y_UNIT_TEST(PullupFactorsCommonAggregateCorrelationFromOrBranches) {
+        TCorrelatedCountFixture fixture;
+
+        auto firstEquality = MakeColumnComparison(
+            fixture, "==", fixture.InnerKey, fixture.OuterKey);
+        auto secondEquality = MakeColumnComparison(
+            fixture, "==", fixture.InnerKey, fixture.OuterKey);
+        auto firstResidual = MakeInt32Comparison(
+            fixture, ">", fixture.InnerValue, "0");
+        auto secondResidual = MakeInt32Comparison(
+            fixture, "<", fixture.InnerGroup, "10");
+        const auto originalPredicate = MakeDisjunction(
+            fixture.Ctx,
+            fixture.Pos,
+            {
+                MakeConjunction({firstEquality, firstResidual}),
+                MakeConjunction({secondEquality, secondResidual}),
+            });
+        fixture.CorrelationFilter->FilterExpr = originalPredicate;
+
+        TIntrusivePtr<IOperator> aggregate = fixture.Aggregate;
+        ComputeParents(aggregate, fixture.Pos);
+
+        TPullUpCorrelatedFilterRule rule;
+        UNIT_ASSERT(rule.MatchAndApply(
+            aggregate,
+            fixture.Ctx.RboCtx,
+            fixture.Ctx.PlanProps));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate.Get(),
+            fixture.CorrelationFilter.Get());
+        UNIT_ASSERT_VALUES_EQUAL(
+            fixture.CorrelationFilter->GetInput().Get(),
+            fixture.AddDependencies.Get());
+        UNIT_ASSERT_VALUES_EQUAL(
+            fixture.AddDependencies->GetInput().Get(),
+            fixture.Aggregate.Get());
+        UNIT_ASSERT(fixture.Aggregate->GetInput()->Kind == EOperator::Filter);
+        auto residualFilter = CastOperator<TOpFilter>(
+            fixture.Aggregate->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(
+            residualFilter->GetInput().Get(),
+            fixture.InnerRead.Get());
+
+        UNIT_ASSERT(
+            fixture.CorrelationFilter->FilterExpr
+                .GetExpressionBody()
+                ->IsCallable("=="));
+        UNIT_ASSERT(
+            residualFilter->FilterExpr
+                .GetExpressionBody()
+                ->IsCallable("Or"));
+        UNIT_ASSERT(
+            originalPredicate.GetExpressionBody()->IsCallable("Or"));
+
+        const auto& pulledIUs =
+            fixture.CorrelationFilter->FilterExpr.GetInputIUs(true, true);
+        UNIT_ASSERT_VALUES_EQUAL(pulledIUs.size(), 2);
+        UNIT_ASSERT(std::find(
+            pulledIUs.begin(),
+            pulledIUs.end(),
+            fixture.InnerKey) != pulledIUs.end());
+        UNIT_ASSERT(std::find(
+            pulledIUs.begin(),
+            pulledIUs.end(),
+            fixture.OuterKey) != pulledIUs.end());
+
+        const auto& residualIUs =
+            residualFilter->FilterExpr.GetInputIUs(true, true);
+        UNIT_ASSERT_VALUES_EQUAL(residualIUs.size(), 2);
+        UNIT_ASSERT(std::find(
+            residualIUs.begin(),
+            residualIUs.end(),
+            fixture.InnerValue) != residualIUs.end());
+        UNIT_ASSERT(std::find(
+            residualIUs.begin(),
+            residualIUs.end(),
+            fixture.InnerGroup) != residualIUs.end());
+        UNIT_ASSERT(std::find(
+            residualIUs.begin(),
+            residualIUs.end(),
+            fixture.OuterKey) == residualIUs.end());
+
+        UNIT_ASSERT(fixture.Aggregate->WasKeylessBeforeCorrelation);
+        UNIT_ASSERT(
+            fixture.Aggregate->KeyColumns ==
+            TVector<TInfoUnit>{fixture.InnerKey});
+    }
+
+    Y_UNIT_TEST(PullupRejectsOrBranchesWithDifferentCorrelationsWithoutMutation) {
+        TCorrelatedCountFixture fixture;
+
+        auto firstEquality = MakeColumnComparison(
+            fixture, "==", fixture.InnerKey, fixture.OuterKey);
+        auto secondEquality = MakeColumnComparison(
+            fixture, "==", fixture.InnerGroup, fixture.OuterKey);
+        auto firstResidual = MakeInt32Comparison(
+            fixture, ">", fixture.InnerValue, "0");
+        auto secondResidual = MakeInt32Comparison(
+            fixture, "<", fixture.InnerValue, "10");
+        fixture.CorrelationFilter->FilterExpr = MakeDisjunction(
+            fixture.Ctx,
+            fixture.Pos,
+            {
+                MakeConjunction({firstEquality, firstResidual}),
+                MakeConjunction({secondEquality, secondResidual}),
+            });
+        AssertAggregatePullupRejectedWithoutMutation(fixture);
+    }
+
+    Y_UNIT_TEST(PullupRejectsFactoredDependencyInResidualWithoutMutation) {
+        TCorrelatedCountFixture fixture;
+
+        auto firstEquality = MakeColumnComparison(
+            fixture, "==", fixture.InnerKey, fixture.OuterKey);
+        auto secondEquality = MakeColumnComparison(
+            fixture, "==", fixture.InnerKey, fixture.OuterKey);
+        auto localResidual = MakeInt32Comparison(
+            fixture, ">", fixture.InnerValue, "0");
+        auto dependentResidual = MakeColumnComparison(
+            fixture, ">", fixture.InnerGroup, fixture.OuterKey);
+        fixture.CorrelationFilter->FilterExpr = MakeDisjunction(
+            fixture.Ctx,
+            fixture.Pos,
+            {
+                MakeConjunction({firstEquality, localResidual}),
+                MakeConjunction({secondEquality, dependentResidual}),
+            });
+        AssertAggregatePullupRejectedWithoutMutation(fixture);
     }
 
     Y_UNIT_TEST(PullupMarksOriginallyKeylessAggregate) {

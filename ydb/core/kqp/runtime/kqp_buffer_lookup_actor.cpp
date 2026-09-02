@@ -278,6 +278,11 @@ public:
             worker->AddInputRow(key);
         }
 
+        if (!Partitioning) {
+            state.ResolvePending = !state.Worker->AllRowsProcessed();
+            return;
+        }
+
         StartLookupTask(cookie, state, isUnique, immediateFail);
     }
 

@@ -208,6 +208,11 @@ public:
             worker->AddInputRow(row);
         }
 
+        if (!Partitioning) {
+            state.ResolvePending = !worker->AllRowsProcessed();
+            return;
+        }
+
         StartLockTask(cookie, state);
     }
 
@@ -541,6 +546,7 @@ public:
             LockIdToState.at(newRequestId).RetryAttempts = failedRequest.RetryAttempts;
         }
         LockIdToState.erase(failedRequestId);
+        LockSendTime.erase(failedRequestId);
     }
 
     bool HandleLockRetryExceeded(ui64 failedRequestId, TLockState& lockState) {

@@ -1099,12 +1099,7 @@ private:
                 YDB_LOG_DEBUG("Lock request returned STATUS_OVERLOADED",
                     {"logPrefix", this->LogPrefix},
                     {"shard", record.GetTabletId()});
-                auto lockIt = Reads.findLock(record.GetRequestId());
-                if (lockIt != Reads.endLocks()) {
-                    return RetryLock(lockIt->second, false);
-                }
-                // Ignore unknown overloaded
-                return;
+                return RetryLock(lockIt->second, false);
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
                 YDB_LOG_DEBUG("Lock request returned STATUS_DEADLOCK",
@@ -1138,14 +1133,7 @@ private:
                 YDB_LOG_DEBUG("Lock request returned STATUS_WRONG_SHARD_STATE",
                     {"logPrefix", this->LogPrefix},
                     {"shard", record.GetTabletId()});
-                auto lockIt = Reads.findLock(record.GetRequestId());
-                if (lockIt != Reads.endLocks()) {
-                    return RetryLock(lockIt->second, false);
-                }
-                return RuntimeError(
-                    TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Wrong shard state.",
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    getIssues());
+                return RetryLock(lockIt->second, false);
             }
             default: {
                 return RuntimeError(

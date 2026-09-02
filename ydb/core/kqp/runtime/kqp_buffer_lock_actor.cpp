@@ -463,8 +463,6 @@ public:
 
         for (const auto& requestId : toRetry) {
             if (!RetryLockRequest(requestId, true)) {
-                const auto& failedRequest = LockIdToState.at(requestId);
-                Y_UNUSED(failedRequest);
                 return RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -546,20 +544,16 @@ public:
         LockIdToState.erase(failedRequestId);
         LockSendTime.erase(failedRequestId);
         lockState.ResolvePending = true;
-        ResolveTableShards();
-        return true;
+        return ResolveTableShards();
     }
 
-    void ResolveTableShards() {
+    bool ResolveTableShards() {
         if (ResolveShardsInProgress) {
-            return;
+            return true;
         }
 
         if (++TotalResolveShardsAttempts > MaxShardResolves()) {
-            return RuntimeError(
-                NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                TStringBuilder() << "Table: `" << Settings.TablePath << "` resolve attempts limit exceeded.");
+            return false;
         }
 
         YDB_LOG_DEBUG("Resolve table shards",
@@ -582,6 +576,7 @@ public:
         Settings.Counters->IteratorsShardResolve->Inc();
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        return true;
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -620,6 +615,7 @@ public:
                         NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                         TStringBuilder() << "Table: `" << Settings.TablePath
                             << "` re-resolve dispatched no lock requests.");
+                    return;
                 }
             }
         }

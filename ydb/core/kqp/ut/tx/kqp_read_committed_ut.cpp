@@ -1357,6 +1357,113 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
         CompareYson(TStringBuilder() << "[[" << rowCount << "u]]", FormatResultSetYson(verify.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(BufferLock_ResolveLimitExceededFails) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        auto* retrySettings = appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings();
+        retrySettings->SetMaxShardRetries(1);
+        retrySettings->SetMaxShardResolves(1);
+        retrySettings->SetMaxTotalRetries(100);
+        retrySettings->SetStartDelayMs(5);
+        retrySettings->SetMaxDelayMs(10);
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.AppConfig = appConfig;
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/LockTest` (
+                        Id Int64 NOT NULL,
+                        Val String,
+                        PRIMARY KEY (Id)
+                    ) WITH (
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1,
+                        UNIFORM_PARTITIONS = 1
+                    );
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const size_t rowCount = 3;
+        {
+            TStringBuilder dml;
+            dml << "REPLACE INTO `/Root/LockTest` (Id, Val) VALUES ";
+            for (size_t i = 0; i < rowCount; ++i) {
+                if (i) dml << ", ";
+                dml << "(" << i << ", \"v" << i << "\")";
+            }
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(dml), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        const auto resolvesBefore = counters.IteratorsShardResolve->Val();
+
+        // Drop every lock request from the buffer lock actor so locks never reach the
+        // datashard. Each delivered TEvDeliveryProblem either exhausts the per-request
+        // retry budget (triggering a shard re-resolve) or, once MaxShardResolves is
+        // reached, terminates the query with UNAVAILABLE.
+        std::deque<std::pair<NActors::TActorId, ui64>> HijackedLocks;
+
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
+                auto* forward = ev->Get<TEvPipeCache::TEvForward>();
+                if (forward->Ev->Type() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType
+                        && runtime.FindActorName(ev->Sender) == "KQP_BUFFER_LOCK_ACTOR") {
+                    HijackedLocks.emplace_back(ev->Sender, forward->TabletId);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteQuery(Q_(R"(
+                UPDATE `/Root/LockTest` SET Val = "updated";
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+        });
+
+        size_t sentDps = 0;
+        size_t idleRounds = 0;
+        while (!future.HasValue() && idleRounds < 60) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return HijackedLocks.size() > sentDps;
+            });
+            runtime.DispatchEvents(opts, TDuration::MilliSeconds(500));
+            if (HijackedLocks.size() > sentDps) {
+                idleRounds = 0;
+                const auto& [actorId, tabletId] = HijackedLocks[sentDps];
+                runtime.Send(new NActors::IEventHandle(actorId, NActors::TActorId(),
+                    MakeHolder<TEvPipeCache::TEvDeliveryProblem>(tabletId, true).Release()));
+                ++sentDps;
+            } else {
+                ++idleRounds;
+            }
+        }
+
+        auto result = runtime.WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE,
+            result.GetIssues().ToString());
+        UNIT_ASSERT_GE_C(sentDps, 4,
+            TStringBuilder() << "expected enough delivery problems to exhaust retries and resolve budget, got " << sentDps);
+        UNIT_ASSERT_GE_C(counters.IteratorsShardResolve->Val() - resolvesBefore, 1,
+            TStringBuilder() << "expected at least one dispatched shard resolve, got "
+                << (counters.IteratorsShardResolve->Val() - resolvesBefore));
+    }
 }
 
 } // namespace NKqp

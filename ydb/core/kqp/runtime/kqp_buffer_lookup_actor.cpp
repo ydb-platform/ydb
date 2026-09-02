@@ -499,7 +499,14 @@ public:
                     {"logPrefix", this->LogPrefix},
                     {"tablet", shardId},
                     {"issues", getIssues().ToOneLineString()});
-                HandleReadRetryExceeded(record.GetReadId(), lookupState);
+                if (!RetryTableRead(record.GetReadId(), false)) {
+                    return RuntimeError(
+                        NYql::NDqProto::StatusIds::UNAVAILABLE,
+                        NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                        TStringBuilder() << "Table: `"
+                            << lookupState.Worker->GetTablePath() << "` not found.",
+                        getIssues());
+                }
                 return;
             }
             case Ydb::StatusIds::OVERLOADED: {
@@ -625,13 +632,10 @@ public:
 
         for (const auto& readId : toRetry) {
             if (!RetryTableRead(readId, true)) {
-                const auto& failedRead = ReadIdToState.at(readId);
-                const auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
                 return RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder() << "Table: `"
-                        << lookupState.Worker->GetTablePath() << "` retry limit exceeded.",
+                    TStringBuilder() << "Table: `" << Settings.TablePath << "` retry limit exceeded.",
                     {});
             }
         }
@@ -717,20 +721,16 @@ public:
         lookupState.Worker->ResetRowsProcessing(failedReadId);
         ReadIdToState.erase(failedReadId);
         lookupState.ResolvePending = true;
-        ResolveTableShards();
-        return true;
+        return ResolveTableShards();
     }
 
-    void ResolveTableShards() {
+    bool ResolveTableShards() {
         if (ResolveShardsInProgress) {
-            return;
+            return true;
         }
 
         if (++TotalResolveShardsAttempts > MaxShardResolves()) {
-            return RuntimeError(
-                NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                TStringBuilder() << "Table: `" << Settings.TablePath << "` resolve attempts limit exceeded.");
+            return false;
         }
 
         YDB_LOG_DEBUG("Resolve table shards",
@@ -753,6 +753,7 @@ public:
         Settings.Counters->IteratorsShardResolve->Inc();
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        return true;
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -791,6 +792,7 @@ public:
                         NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                         TStringBuilder() << "Table: `" << Settings.TablePath
                             << "` re-resolve dispatched no read requests.");
+                    return;
                 }
             }
         }

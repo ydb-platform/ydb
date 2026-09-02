@@ -23,7 +23,7 @@ enum class ERequestSorting {
 
 enum class ESourcesSorting {
     // by the source's own id: portion id for a table, (tablet, path/schema id) for a sys view
-    EntityIdAsc = 0,
+    SourceIdAsc = 0,
     FirstPkAsc,
     LastPkAsc,
     LastPkDesc,
@@ -37,7 +37,7 @@ inline ESourcesSorting GetSourcesSorting(const ERequestSorting sorting, const bo
             return ESourcesSorting::LastPkDesc;
         case ERequestSorting::NONE:
             // deduplication needs key order; last_pk keeps the duplicates filter borders window small
-            return deduplicationEnabled ? ESourcesSorting::LastPkAsc : ESourcesSorting::EntityIdAsc;
+            return deduplicationEnabled ? ESourcesSorting::LastPkAsc : ESourcesSorting::SourceIdAsc;
     }
 }
 

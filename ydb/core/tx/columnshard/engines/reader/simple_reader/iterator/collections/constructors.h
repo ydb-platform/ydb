@@ -118,7 +118,7 @@ public:
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {
         std::deque<TSourceConstructor> sources;
-        return std::make_unique<TPortionsSources>(std::move(sources), ESourcesSorting::EntityIdAsc);
+        return std::make_unique<TPortionsSources>(std::move(sources), ESourcesSorting::SourceIdAsc);
     }
 };
 

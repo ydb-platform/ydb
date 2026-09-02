@@ -130,7 +130,7 @@ public:
                 return false;   // both conflicting: equivalent, relative order is unspecified
             }
             switch (SourcesSorting) {
-                case ESourcesSorting::EntityIdAsc:
+                case ESourcesSorting::SourceIdAsc:
                     return TSimpleLess()(l, r);
                 case ESourcesSorting::FirstPkAsc:
                 case ESourcesSorting::LastPkDesc:

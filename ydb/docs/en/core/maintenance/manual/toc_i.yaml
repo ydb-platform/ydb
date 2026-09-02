@@ -1,4 +1,6 @@
 items:
+- name: Expanding a cluster
+  href: cluster_expansion.md
 - name: Adding storage groups
   href: adding_storage_groups.md
 - name: Safe restart and shutdown of nodes
@@ -21,8 +23,6 @@ items:
   href: balancing_load.md
 - name: Freeing up space on physical devices
   href: disk_end_space.md
-- name: Expanding a cluster
-  href: cluster_expansion.md
 - name: Replacing a node's FQDN
   href: replacing_nodes.md
 - name: BlobDepot

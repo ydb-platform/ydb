@@ -19,5 +19,3 @@ items:
   href: replacing-nodes.md
 - name: Database node authentication and authorization
   href: node-authorization.md
-- name: Static group SelfHeal
-  href: static-group-self-heal.md

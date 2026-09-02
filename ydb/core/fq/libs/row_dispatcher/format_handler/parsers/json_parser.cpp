@@ -939,7 +939,7 @@ private:
 
                 resultValue = NKikimr::NMiniKQL::ValueFromString(dataSlot, rawString);
                 if (Y_UNLIKELY(!resultValue)) {
-                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json string: '" << TruncateString(rawString) << "'");
+                    status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString() : TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json string: '" << TruncateString(rawString) << "'");
                 }
                 return resultValue.HasValue();
             }
@@ -1022,7 +1022,7 @@ private:
 
         TJsonNumber number = jsonNumber.value();
         if (Y_UNLIKELY(number < std::numeric_limits<TResult>::min() || std::numeric_limits<TResult>::max() < number)) {
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Number is out of range [" << ToString(std::numeric_limits<TResult>::min()) << ", " << ToString(std::numeric_limits<TResult>::max()) << "]");
+            status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString() : TStringBuilder() << "Number is out of range [" << ToString(std::numeric_limits<TResult>::min()) << ", " << ToString(std::numeric_limits<TResult>::max()) << "]");
             return;
         }
 

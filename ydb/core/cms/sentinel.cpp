@@ -1303,6 +1303,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             }
             if (maintenanceChanged) {
                 info->ApplyMaintenanceStatusChanges();
+                if (!driveChanged) {
+                    reason = "maintenance only";
+                }
             }
             queueStatusChange(id, info, status, info->GetStatus(),
                 maintenanceStatus, info->GetMaintenanceStatus(), reason);

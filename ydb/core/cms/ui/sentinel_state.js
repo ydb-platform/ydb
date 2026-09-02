@@ -40,10 +40,10 @@ const EMaintenanceStatus = {
 };
 
 const EMaintenanceStatusColor = {
-    0: "red",    // NOT_SET
-    1: "green",  // NO_REQUEST
-    2: "yellow", // LONG_TERM_MAINTENANCE_PLANNED
-    3: "yellow", // NO_NEW_VDISKS
+    0: "neutral", // NOT_SET
+    1: "green",   // NO_REQUEST
+    2: "neutral", // LONG_TERM_MAINTENANCE_PLANNED
+    3: "yellow",  // NO_NEW_VDISKS
 };
 
 

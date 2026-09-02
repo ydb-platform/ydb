@@ -955,6 +955,21 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         TTestEnv env(8, 4, cmsConfig);
 
         const TPDiskID id = env.RandomPDiskID();
+        bool maintenanceOnlyReasonSeen = false;
+        auto logObserverHolder = env.AddObserver<TCms::TEvPrivate::TEvLogAndSend>([&](TCms::TEvPrivate::TEvLogAndSend::TPtr& event) {
+            const auto& logData = event->Get()->LogData;
+            if (logData.GetRecordType() != NKikimrCms::TLogRecordData::PDISK_MONITOR_ACTION) {
+                return;
+            }
+
+            const auto& action = logData.GetPDiskMonitorAction();
+            if (action.GetPDiskId().GetNodeId() == id.NodeId
+                    && action.GetPDiskId().GetDiskId() == id.DiskId
+                    && action.GetCurrentMaintenanceStatus() != action.GetRequiredMaintenanceStatus()) {
+                UNIT_ASSERT_VALUES_EQUAL(action.GetReason(), "maintenance only");
+                maintenanceOnlyReasonSeen = true;
+            }
+        });
 
         bool maintenanceStatusSeen = false;
         auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
@@ -1005,6 +1020,8 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
 
         observerHolder.Remove();
         UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status NO_REQUEST should have been sent after removing faulty marker");
+        logObserverHolder.Remove();
+        UNIT_ASSERT_C(maintenanceOnlyReasonSeen, "Maintenance-only status changes must have a meaningful reason");
     }
 } // TSentinelTests
 

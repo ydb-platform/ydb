@@ -205,7 +205,7 @@ When using an unencrypted connection, all data transmitted in requests to the LD
 
 #### LDAPS
 
-For {{ ydb-short-name }} to automatically establish an encrypted connection with the LDAP server, set the **scheme**[configuration parameter](../reference/configuration/auth_config.md#ldap-auth-config) to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
+For {{ ydb-short-name }} to automatically establish an encrypted connection with the LDAP server, set the [configuration parameter](../reference/configuration/auth_config.md#ldap-auth-config) **scheme** to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
 
 #### LDAP protocol extension `StartTls` {#starttls}
 

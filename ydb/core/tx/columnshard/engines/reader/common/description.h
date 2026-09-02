@@ -73,6 +73,8 @@ public:
                 // deduplication needs key order
                 return SortSourcesForDeduplicationByLastPk ? ESourcesSorting::LastPkAsc : ESourcesSorting::FirstPkAsc;
         }
+        AFL_VERIFY(false)("sorting", (ui64)Sorting);
+        return ESourcesSorting::SourceIdAsc;
     }
 
     bool NeedDuplicateFiltering() const {

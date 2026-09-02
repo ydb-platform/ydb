@@ -143,6 +143,8 @@ public:
                 case ESourcesSorting::LastPkAsc:
                     return TLessByFinish()(l, r);
             }
+            AFL_VERIFY(false)("sources_sorting", (ui64)SourcesSorting);
+            return false;
         }
 
     public:

@@ -25,6 +25,7 @@ struct TRequestMonItem {
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
     NMonitoring::THistogramPtr ResponseTime;
     TMaxTracker ResponseTimeMax;
+    TMaxTracker InFlightResponseTimeMax;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseTimeUsCompletedSum;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseTimeCompletedCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlightResponseTimeUsSum;
@@ -42,6 +43,7 @@ struct TRequestMonItem {
         ResponseTime = counters->GetHistogram("responseTimeMs",
             NMonitoring::ExplicitHistogram(std::move(bounds)));
         ResponseTimeMax.Init(counters->GetCounter("responseTimeMsMax", false));
+        InFlightResponseTimeMax.Init(counters->GetCounter("inFlightResponseTimeMsMax", false));
         ResponseTimeUsCompletedSum = counters->GetCounter("responseTimeUsCompletedSum", true);
         ResponseTimeCompletedCount = counters->GetCounter("responseTimeCompletedCount", true);
         InFlightResponseTimeUsSum = counters->GetCounter("inFlightResponseTimeUsSum", false);
@@ -94,7 +96,8 @@ struct TRequestMonItem {
 
         InFlightResponseTimeUsSum->Set(latencyUsSum);
         InFlightCount->Set(inFlightCount);
-        ResponseTimeMax.Collect(latencyMsMax);
+        InFlightResponseTimeMax.Collect(latencyMsMax);
+        InFlightResponseTimeMax.Update();
         ResponseTimeMax.Update();
     }
 };

@@ -48,24 +48,28 @@ Y_UNIT_TEST(RequestLatencyCountersIncludeCompletedAndInFlight) {
     auto inFlightSum = counters->FindCounter("inFlightResponseTimeUsSum");
     auto inFlightCount = counters->FindCounter("inFlightCount");
     auto maxLatency = counters->FindCounter("responseTimeMsMax");
+    auto inFlightMaxLatency = counters->FindCounter("inFlightResponseTimeMsMax");
 
     UNIT_ASSERT(completedSum);
     UNIT_ASSERT(completedCount);
     UNIT_ASSERT(inFlightSum);
     UNIT_ASSERT(inFlightCount);
     UNIT_ASSERT(maxLatency);
+    UNIT_ASSERT(inFlightMaxLatency);
 
     UNIT_ASSERT(completedSum->ForDerivative());
     UNIT_ASSERT(completedCount->ForDerivative());
     UNIT_ASSERT(!inFlightSum->ForDerivative());
     UNIT_ASSERT(!inFlightCount->ForDerivative());
     UNIT_ASSERT(!maxLatency->ForDerivative());
+    UNIT_ASSERT(!inFlightMaxLatency->ForDerivative());
 
     UNIT_ASSERT_VALUES_EQUAL(completedSum->Val(), 123'000);
     UNIT_ASSERT_VALUES_EQUAL(completedCount->Val(), 1);
     UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 2'500'000);
     UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(maxLatency->Val(), 1'500);
+    UNIT_ASSERT_VALUES_EQUAL(maxLatency->Val(), 123);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightMaxLatency->Val(), 1'500);
 
     requestMonItem.RemoveInFlightRequest(1);
     requestMonItem.Update(TMonotonic::MilliSeconds(3'000));
@@ -74,6 +78,8 @@ Y_UNIT_TEST(RequestLatencyCountersIncludeCompletedAndInFlight) {
     UNIT_ASSERT_VALUES_EQUAL(completedCount->Val(), 1);
     UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), 1'500'000);
     UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(maxLatency->Val(), 123);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightMaxLatency->Val(), 1'500);
 }
 
 } // Y_UNIT_TEST_SUITE TBlobStorageStoragePoolMonTest

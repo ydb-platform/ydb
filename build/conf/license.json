@@ -170,6 +170,7 @@
         "default": [
             "0BSD",
             "AML",
+            "AOMPL-1.0",
             "Apache-1.0",
             "Apache-1.1",
             "Apache-2.0",

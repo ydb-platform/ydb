@@ -1345,6 +1345,7 @@ private:
             ReleaseLockQuota(failedLock.Id);
             StreamLockWorker->ResetLockRowsProcessing(failedLock.Id);
             Reads.eraseLock(failedLock);
+            LockSendTime.erase(failedLock.Id);
             return ResolveTableShards();
         }
 

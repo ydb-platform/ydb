@@ -132,7 +132,7 @@ void TTokenManager::Handle(NTokenManager::TEvPrivate::TEvUpdateToken::TPtr& ev) 
 
 void TTokenManager::Handle(TEvTokenManager::TEvSubscribeUpdateToken::TPtr& ev) {
     TString id = ev->Get()->Id;
-    YDB_LOG_DEBUG("Handle TEvTokenManager::TEvSubscribeUpdateToken to token provider",
+    YDB_LOG_DEBUG("Handle TEvTokenManager::TEvSubscribeUpdateToken",
         {"provider", id}
     );
     auto it = TokenProviders.find(id);

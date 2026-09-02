@@ -208,10 +208,10 @@ reader threads. The CLI receives `--seconds` equal to warmup plus measurement
 duration, one-second reporting windows with UTC timestamps, and a fixed p99
 percentile. Metrics aggregate every numbered measurement window after warmup:
 rates use the mean while percentiles, lag, and inflight values use the maximum.
-CPU aggregation starts at the timestamp boundary immediately before the first
-measurement window and ends at the last measurement-window timestamp, so it
-covers the same interval; with zero warmup the first timestamp minus one second
-is used as that boundary.
+The CLI timestamps each row with its nominal window boundary, so delayed
+printing cannot create gaps or duplicates in the timeline. CPU aggregation
+ends at the last measurement-window timestamp and starts exactly the requested
+measurement duration earlier.
 
 Canonical Topic throughput is the smaller of the write rate and the aggregate
 read rate divided by `consumers`. The raw aggregate read rate and normalized

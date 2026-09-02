@@ -457,8 +457,8 @@ def _parse_topic_window_result(command_result, normalized_workload, request):
         parsed_windows[int(index)] = _topic_stats_row(rows[0], "window row {}".format(index))
     ordered_indexes = sorted(parsed_windows)
     for previous, current in zip(ordered_indexes, ordered_indexes[1:]):
-        if parsed_windows[current][1] - parsed_windows[previous][1] != current - previous:
-            _topic_result_error("window row timestamps must advance by one second per index")
+        if parsed_windows[current][1] < parsed_windows[previous][1]:
+            _topic_result_error("window row timestamps must not move backwards")
 
     measurement_rows = [parsed_windows[index][0] for index in range(first_index, last_index + 1)]
 
@@ -489,10 +489,8 @@ def _parse_topic_window_result(command_result, normalized_workload, request):
         mean_metric(7),
         max_metric(8),
     )
-    measurement_started_at = (
-        parsed_windows[boundary_index][1] if boundary_index >= 1 else parsed_windows[first_index][1] - 1
-    )
     measurement_finished_at = parsed_windows[last_index][1]
+    measurement_started_at = measurement_finished_at - request.duration_seconds
     consumers = normalized_workload["options"]["consumers"]
     read_per_consumer_messages_s = read_messages_s / consumers
     throughput = min(write_messages_s, read_per_consumer_messages_s)

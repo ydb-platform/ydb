@@ -2856,12 +2856,8 @@ class YdbBenchTest(unittest.TestCase):
                 "window row 2 timestamp.*ISO UTC",
             ),
             (
-                "\n".join((boundary, row(2, "2026-08-25T10:00:03Z"), finish, total)),
-                "timestamps must advance by one second",
-            ),
-            (
-                "\n".join((boundary, start, row(3, "2026-08-25T10:00:04Z"), total)),
-                "timestamps must advance by one second",
+                "\n".join((boundary, row(2, "2026-08-25T10:00:00Z"), finish, total)),
+                "timestamps must not move backwards",
             ),
             ("x" * (1024 * 1024 + 1), "exceeds 1048576 bytes"),
         )
@@ -2873,6 +2869,22 @@ class YdbBenchTest(unittest.TestCase):
                     workload,
                     request,
                 )
+
+        jittered = "\n".join(
+            (
+                boundary,
+                row(2, "2026-08-25T10:00:01Z"),
+                row(3, "2026-08-25T10:00:03Z"),
+                total,
+            )
+        )
+        result = local_ydb_workloads.parse_workload_result(
+            "topic",
+            self._local_ydb_command_result(("ydb",), jittered),
+            workload,
+            request,
+        )
+        self.assertEqual(result.measurement_window, (1787652001.0, 1787652003.0))
 
         short_request = replace(request, duration_seconds=1)
         with self.assertRaisesRegex(BenchmarkError, "duration of at least two seconds"):

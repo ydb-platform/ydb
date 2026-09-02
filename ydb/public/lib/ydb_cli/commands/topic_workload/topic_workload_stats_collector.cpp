@@ -114,7 +114,8 @@ void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
         };
         if (Now() > windowTime(windowIt) && !*ErrorFlag) {
             CollectThreadEvents();
-            PrintWindowStats(windowIt++);
+            PrintWindowStats(windowIt, windowTime(windowIt));
+            ++windowIt;
         }
         Sleep(std::max(TDuration::Zero(), windowTime(windowIt) - Now()));
     }
@@ -122,17 +123,17 @@ void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
     CollectThreadEvents();
 }
 
-void TTopicWorkloadStatsCollector::PrintWindowStats(ui32 windowIt) {
-    PrintStats(windowIt);
+void TTopicWorkloadStatsCollector::PrintWindowStats(ui32 windowIt, TInstant windowTime) {
+    PrintStats(windowIt, windowTime);
 
     WindowStats = MakeHolder<TTopicWorkloadStats>();
 }
 void TTopicWorkloadStatsCollector::PrintTotalStats() const {
     PrintHeader(true);
-    PrintStats({});
+    PrintStats({}, Now());
 }
 
-void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
+void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt, TInstant windowTime) const {
     if (Quiet && windowIt.Defined()) {
         return;
     }
@@ -163,7 +164,7 @@ void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
         Cout << "\t" << stats.CommitTxTimeHist.GetValueAtPercentile(Percentile) << "\t";
     }
     if (PrintTimestamp) {
-        Cout << "\t" << Now().ToStringUpToSeconds();
+        Cout << "\t" << windowTime.ToStringUpToSeconds();
     }
     Cout << Endl;
 }

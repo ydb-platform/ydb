@@ -206,11 +206,13 @@ bool TWorkersPool::DrainTasks() {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
         TTaskCompletionContexts completionContexts;
+        TConveyorWorkUnits workUnits;
         THashSet<TString> scopes;
         while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                procLocal.front().GetCategory()->HasTasks()) {
             std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
-            auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(procLocal.back().GetCounters(), scopes);
+            auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
+                procLocal.back().GetCounters(), scopes, workUnits);
             if (!task) {
                 procLocal.pop_back();
                 continue;
@@ -223,7 +225,7 @@ bool TWorkersPool::DrainTasks() {
         }
         newTask = true;
         if (tasks.size()) {
-            RunTask(std::move(tasks), std::move(completionContexts));
+            RunTask(std::move(tasks), std::move(completionContexts), std::move(workUnits));
         }
     }
     for (auto&& i : Processes) {
@@ -237,8 +239,9 @@ bool TWorkersPool::DrainTasks() {
 void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId, const ui64 workerIdx) {
     Y_ENSURE(workerIdx < Workers.size(),
         "task result worker index is out of range: pool=" << workersPoolId << ", worker=" << workerIdx);
-    const auto& worker = Workers[workerIdx];
+    auto& worker = Workers[workerIdx];
     Y_ENSURE(worker.GetRunningTask(), "task result received from an idle worker: " << workerIdx);
+    worker.FinishWorkUnits(result);
 
     THashSet<TString> scopeIds;
     for (auto&& t : result) {

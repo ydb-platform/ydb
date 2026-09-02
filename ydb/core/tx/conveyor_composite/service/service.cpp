@@ -185,7 +185,7 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     LWPROBE(RegisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetScopeId(), event.GetInternalProcessId());
     auto& cat = Manager->MutableCategoryVerified(event.GetCategory());
     std::shared_ptr<TProcessScope> scope = cat.UpsertScope(event.GetScopeId(), event.GetCPULimits());
-    cat.RegisterProcess(event.GetInternalProcessId(), std::move(scope));
+    cat.RegisterProcess(event.GetInternalProcessId(), std::move(scope), event.GetWorkloadContext());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
@@ -202,9 +202,15 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
     Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask(), ev->Get()->GetWorkloadContext());
+    auto workloadContext = ev->Get()->GetWorkloadContext();
+    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask(), workloadContext);
     DrainTasks();
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
+}
+
+void TDistributor::HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev) {
+    Manager->OnWorkloadQueryResponse(ev->Cookie, std::move(ev->Get()->Query));
+    DrainTasks();
 }
 
 void TDistributor::DrainTasks() {
@@ -222,33 +228,33 @@ void TDistributor::DrainTasks() {
                 retriedExpiredDeadline = true;
                 continue;
             }
-            ScheduleWorkloadQuotaWakeup(TMonotonic::Now() + kWakeupEventDeliveryLag);
+            ScheduleWorkloadSchedulerWakeup(TMonotonic::Now() + kWakeupEventDeliveryLag);
             return;
         }
-        ScheduleWorkloadQuotaWakeup(*deadline);
+        ScheduleWorkloadSchedulerWakeup(*deadline);
         return;
     }
 }
 
-void TDistributor::ScheduleWorkloadQuotaWakeup(TMonotonic deadline) {
+void TDistributor::ScheduleWorkloadSchedulerWakeup(TMonotonic deadline) {
     const auto now = TMonotonic::Now();
     AFL_VERIFY(now < deadline);
-    if (ScheduledWorkloadQuotaWakeupAt && *ScheduledWorkloadQuotaWakeupAt <= now) {
-        ScheduledWorkloadQuotaWakeupAt.reset();
+    if (ScheduledWorkloadSchedulerWakeupAt && *ScheduledWorkloadSchedulerWakeupAt <= now) {
+        ScheduledWorkloadSchedulerWakeupAt.reset();
     }
-    if (ScheduledWorkloadQuotaWakeupAt && *ScheduledWorkloadQuotaWakeupAt <= deadline) {
+    if (ScheduledWorkloadSchedulerWakeupAt && *ScheduledWorkloadSchedulerWakeupAt <= deadline) {
         return;
     }
 
-    ScheduledWorkloadQuotaWakeupAt = deadline;
-    Schedule(deadline - now, new TEvInternal::TEvWorkloadQuotaWakeup(deadline));
+    ScheduledWorkloadSchedulerWakeupAt = deadline;
+    Schedule(deadline - now, new TEvInternal::TEvWorkloadSchedulerWakeup(deadline));
 }
 
-void TDistributor::HandleMain(TEvInternal::TEvWorkloadQuotaWakeup::TPtr& ev) {
-    if (!ScheduledWorkloadQuotaWakeupAt || ev->Get()->Deadline != *ScheduledWorkloadQuotaWakeupAt) {
+void TDistributor::HandleMain(TEvInternal::TEvWorkloadSchedulerWakeup::TPtr& ev) {
+    if (!ScheduledWorkloadSchedulerWakeupAt || ev->Get()->Deadline != *ScheduledWorkloadSchedulerWakeupAt) {
         return;
     }
-    ScheduledWorkloadQuotaWakeupAt.reset();
+    ScheduledWorkloadSchedulerWakeupAt.reset();
     DrainTasks();
 }
 

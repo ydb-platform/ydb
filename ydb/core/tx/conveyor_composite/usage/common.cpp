@@ -37,7 +37,8 @@ TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString&
     , ServiceActorId(actorId) {
     if (ServiceActorId) {
         NActors::TActorContext::AsActorContext().Send(
-            *ServiceActorId, new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId));
+            *ServiceActorId, new NConveyorComposite::TEvExecution::TEvRegisterProcess(
+                cpuLimits, category, scopeId, InternalProcessId, WorkloadContext));
     }
 }
 

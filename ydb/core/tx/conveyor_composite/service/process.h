@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "scope.h"
+#include "workload.h"
 #include "worker.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
@@ -66,6 +67,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
+    YDB_READONLY_DEF(TWorkloadContext, WorkloadContext);
 
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TPositiveControlInteger InProgressTasksCount;
@@ -97,14 +99,9 @@ public:
     }
 
     std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& signals,
-        TWorkloadQuotaController& workloadQuota) {
+        TWorkloadScheduler& workloadScheduler, TConveyorWorkUnits& workUnits) {
         auto result = Tasks.pop([&](TWorkerTaskPrepare& task) {
-            auto reservation = workloadQuota.TryReserve(task.GetWorkloadContext(), task.GetPredictedDuration());
-            if (!reservation.Allowed) {
-                return false;
-            }
-            task.SetWorkloadReservation(std::move(reservation.Reservation));
-            return true;
+            return workloadScheduler.TryAddToBatch(task.GetWorkloadContext(), workUnits);
         });
         if (!result) {
             return std::nullopt;
@@ -127,15 +124,18 @@ public:
     }
 
     TProcess(
-        const ui64 processId, const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount)
+        const ui64 processId, const std::shared_ptr<TProcessScope>& scope,
+        const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount, TWorkloadContext workloadContext = {})
         : ProcessId(processId)
         , Scope(scope)
+        , WorkloadContext(std::move(workloadContext))
         , WaitingTasksCount(waitingTasksCount) {
         AFL_VERIFY(WaitingTasksCount);
         CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
     }
 
     void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category, TWorkloadContext workloadContext) {
+        AFL_VERIFY(!WorkloadContext.IsDefined() || WorkloadContext == workloadContext);
         TWorkerTaskPrepare wTask(
             std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId, std::move(workloadContext));
         Tasks.push(std::move(wTask));

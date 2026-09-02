@@ -59,8 +59,15 @@ public:
 class TCPULimits {
     YDB_OPT(double, CPUGroupThreadsLimit);
     YDB_READONLY_DEF(TString, CPUGroupName);
+    YDB_READONLY_DEF(TString, DatabaseId);
+    YDB_READONLY_DEF(TString, ResourcePoolId);
 public:
     TConclusionStatus DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config);
+
+    void SetWorkloadContext(const TString& databaseId, const TString& resourcePoolId) {
+        DatabaseId = databaseId;
+        ResourcePoolId = resourcePoolId;
+    }
 };
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,

@@ -8,7 +8,8 @@ bool TProcessCategory::HasTasks() const {
     return WeightedProcesses.size();
 }
 
-std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
+std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters,
+    THashSet<TString>& scopeIds, TConveyorWorkUnits& workUnits) {
     std::vector<std::shared_ptr<TProcess>> candidates;
     for (const auto& [_, processes] : WeightedProcesses) {
         for (const auto& process :
@@ -19,7 +20,7 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
 
     for (const auto& process : candidates) {
         Y_UNUSED(RemoveWeightedProcess(process));
-        auto result = process->ExtractTaskWithPrediction(counters, *WorkloadQuota);
+        auto result = process->ExtractTaskWithPrediction(counters, *WorkloadScheduler, workUnits);
         if (process->GetTasksCount()) {
             WeightedProcesses[process->GetWeightedUsage()].emplace_back(process);
         }
@@ -84,7 +85,6 @@ void TProcessCategory::UnregisterScope(const TString& name) {
 }
 
 void TProcessCategory::PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds) {
-    WorkloadQuota->Finish(result.DetachWorkloadReservation(), result.GetDuration());
     const ui64 internalProcessId = result.GetProcessId();
     auto it = Processes.find(internalProcessId);
     if (scopeIds.emplace(result.GetScope()->GetScopeId()).second) {

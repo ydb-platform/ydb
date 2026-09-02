@@ -16,9 +16,10 @@ enum class ESpecialTaskCategory {
 struct TWorkloadContext {
     TString DatabaseId;
     TString PoolId;
+    ui64 QueryId = 0;
 
     bool IsDefined() const {
-        return DatabaseId && PoolId;
+        return DatabaseId && PoolId && QueryId;
     }
 
     bool operator==(const TWorkloadContext&) const = default;

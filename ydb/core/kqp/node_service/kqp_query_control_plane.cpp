@@ -433,6 +433,7 @@ public:
         }
 
         TCPULimits cpuLimits;
+        cpuLimits.SetWorkloadContext(msg.GetDatabaseId(), poolId);
         if (msg.GetPoolMaxCpuShare() > 0) {
             // Share <= 0 means disabled limit
             cpuLimits.DeserializeFromProto(msg).Validate();

@@ -132,7 +132,11 @@ public:
             {"poolId", poolId},
             {"attrs", attrs});
 
-        if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
+        if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {
+                .IsFirstRemoval = false,
+                .ExternalWeight = resourceWeight,
+                .QueryCpuLimitPercentPerNode = ev->Get()->Params.QueryCpuLimitPercentPerNode,
+            }}).second) {
             PoolExternalWeightSum += resourceWeight;
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
             Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
@@ -162,6 +166,9 @@ public:
             poolIt->second.ExternalWeight = ev->Get()->Config->ResourceWeight;
             PoolExternalWeightSum += poolIt->second.ExternalWeight;
             UpdatePoolsGuarantee();
+
+            poolIt->second.QueryCpuLimitPercentPerNode = ev->Get()->Config->QueryCpuLimitPercentPerNode;
+            UpdatePoolQueriesCpuLimit(databaseId, poolId);
 
             // Update limit
             if (const auto& cpuLimitPercent = ev->Get()->Config->TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
@@ -201,16 +208,19 @@ public:
 
     void Handle(TEvAddQuery::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
-        const auto& poolId = ev->Get()->PoolId;
+        const auto& poolId = ev->Get()->PoolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : ev->Get()->PoolId;
         const auto& queryId = ev->Get()->QueryId;
-        NHdrf::TStaticAttributes const attrs {
+
+        auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
+        NHdrf::TStaticAttributes attrs {
             .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
+            .CpuLimit = CpuLimitFromPercent(poolIt == PoolSubscribtions.end() ? -1 : poolIt->second.QueryCpuLimitPercentPerNode),
         };
 
         auto response = MakeHolder<TEvQueryResponse>();
         if (Scheduler->IsEnabled()) {
-            auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
-            response->Query = query;
+            auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId, queryId, attrs);
+            response->Query = std::move(query);
             YDB_LOG_DEBUG("Add",
                 {"query", databaseId},
                 {"poolId", poolId},
@@ -257,6 +267,23 @@ private:
         }
     }
 
+    ui64 CpuLimitFromPercent(double percent) const {
+        if (percent < 0) {
+            return NHdrf::Infinity();
+        } else if (percent > 0) {
+            return std::max<ui64>(1, percent * Scheduler->GetTotalCpuLimit() / 100);
+        }
+
+        return 0;
+    }
+
+    void UpdatePoolQueriesCpuLimit(const TString& databaseId, const TString& poolId) {
+        const auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
+        const auto cpuLimit = CpuLimitFromPercent(
+            poolIt == PoolSubscribtions.end() ? -1 : poolIt->second.QueryCpuLimitPercentPerNode);
+        Scheduler->UpdateQueriesInPool(databaseId, poolId, {.CpuLimit = cpuLimit});
+    }
+
 private:
     TComputeSchedulerPtr Scheduler;
     const TDuration UpdateFairSharePeriod;
@@ -264,6 +291,7 @@ private:
     struct TPoolParams {
         bool IsFirstRemoval = false;
         double ExternalWeight = 0.0;
+        double QueryCpuLimitPercentPerNode = -1;
     };
     THashMap<std::pair<TString /* databaseId */, TString /* poolId */>, TPoolParams> PoolSubscribtions;
     double PoolExternalWeightSum = 0.0;
@@ -357,6 +385,40 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     }
 
     return query;
+}
+
+void TComputeScheduler::UpdateQueriesInPool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId,
+    const NHdrf::TStaticAttributes& attrs) {
+    TWriteGuard lock(Mutex);
+
+    auto database = Root->GetDatabase(databaseId);
+    Y_ENSURE(database, "Database not found: " << databaseId);
+    auto pool = database->GetPool(poolId);
+    Y_ENSURE(pool, "Pool not found: " << poolId);
+
+    for (auto& [_, query] : Queries) {
+        if (query->GetParent() == pool.get()) {
+            query->Update(attrs);
+        }
+    }
+}
+
+TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId,
+    const NHdrf::TQueryId& queryId) const {
+    if (!IsEnabled()) {
+        return {};
+    }
+
+    TReadGuard lock(Mutex);
+    auto database = Root->GetDatabase(databaseId);
+    if (!database) {
+        return {};
+    }
+    auto pool = database->GetPool(poolId);
+    if (!pool) {
+        return {};
+    }
+    return std::static_pointer_cast<TQuery>(pool->GetQuery(queryId));
 }
 
 NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {

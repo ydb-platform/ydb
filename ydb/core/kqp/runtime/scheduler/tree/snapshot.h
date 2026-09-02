@@ -32,6 +32,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
     public:
         TQuery(const TQueryId& queryId, const NDynamic::TQueryPtr& query);
 
+        ui64 ParentFairShare = 0;
         std::weak_ptr<NDynamic::TQuery> Origin; // TODO: why public?
     };
 

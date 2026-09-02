@@ -574,6 +574,12 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         ev->Record.SetCpuGroupThreadsLimit(*cpuGroupThreadsLimit);
         ev->Record.SetCpuGroupName(CPULimits.GetCPUGroupName());
     }
+    if (CPULimits.GetDatabaseId()) {
+        ev->Record.SetDatabaseId(CPULimits.GetDatabaseId());
+    }
+    if (CPULimits.GetResourcePoolId()) {
+        ev->Record.SetResourcePoolId(CPULimits.GetResourcePoolId());
+    }
 
     if (UseBatchPool) {
         ev->Record.SetUseBatchPool(true);

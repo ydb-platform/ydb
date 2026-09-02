@@ -41,14 +41,17 @@ struct TEvExecution {
         YDB_READONLY_DEF(TString, ScopeId);
         YDB_READONLY(ui64, InternalProcessId, 0);
         YDB_READONLY_DEF(TCPULimitsConfig, CPULimits);
+        YDB_READONLY_DEF(TWorkloadContext, WorkloadContext);
 
     public:
         explicit TEvRegisterProcess(
-            const TCPULimitsConfig& cpuLimits, const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId)
+            const TCPULimitsConfig& cpuLimits, const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId,
+            TWorkloadContext workloadContext = {})
             : Category(category)
             , ScopeId(scopeId)
             , InternalProcessId(internalProcessId)
-            , CPULimits(cpuLimits) {
+            , CPULimits(cpuLimits)
+            , WorkloadContext(std::move(workloadContext)) {
         }
     };
 

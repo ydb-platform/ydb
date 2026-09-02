@@ -1,7 +1,6 @@
 #pragma once
 #include "counters.h"
 #include "scope.h"
-#include "workload.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
 
@@ -20,7 +19,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY_DEF(TWorkloadContext, WorkloadContext);
-    TWorkloadQuotaController::TReservationPtr WorkloadReservation;
 
 public:
     TWorkerTaskContext(
@@ -31,14 +29,6 @@ public:
         , Scope(scope)
         , ProcessId(processId)
         , WorkloadContext(std::move(workloadContext)) {
-    }
-
-    void SetWorkloadReservation(TWorkloadQuotaController::TReservationPtr reservation) {
-        WorkloadReservation = std::move(reservation);
-    }
-
-    TWorkloadQuotaController::TReservationPtr DetachWorkloadReservation() {
-        return std::exchange(WorkloadReservation, {});
     }
 };
 
@@ -114,7 +104,7 @@ struct TEvInternal {
         EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
         EvRetryConfigSubscription,
-        EvWorkloadQuotaWakeup,
+        EvWorkloadSchedulerWakeup,
         EvEnd
     };
 
@@ -162,9 +152,9 @@ struct TEvInternal {
 
     class TEvRetryConfigSubscription: public NActors::TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 
-    class TEvWorkloadQuotaWakeup: public NActors::TEventLocal<TEvWorkloadQuotaWakeup, EvWorkloadQuotaWakeup> {
+    class TEvWorkloadSchedulerWakeup: public NActors::TEventLocal<TEvWorkloadSchedulerWakeup, EvWorkloadSchedulerWakeup> {
     public:
-        explicit TEvWorkloadQuotaWakeup(TMonotonic deadline)
+        explicit TEvWorkloadSchedulerWakeup(TMonotonic deadline)
             : Deadline(deadline)
         {}
 

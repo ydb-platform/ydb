@@ -60,6 +60,26 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         TSampleQueries::TSelect42::CheckResult(result);
     }
 
+    Y_UNIT_TEST(QueryCpuLimitIsApplied) {
+        auto ydb = TYdbSetupSettings()
+            .EnableResourcePools(true)
+            .EnableResourcePoolsScheduler(true)
+            .Create();
+
+        const TString& poolId = "zero_query_pool";
+        NResourcePool::TPoolSettings poolSettings;
+        poolSettings.TotalCpuLimitPercentPerNode = 100;
+        poolSettings.QueryCpuLimitPercentPerNode = 0;
+        poolSettings.QueryCancelAfter = TDuration::Seconds(10);
+        ydb->CreateResourcePool(poolId, poolSettings);
+
+        auto request = ydb->ExecuteQueryAsync(
+            TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(poolId));
+        const auto& result = request.GetResult();
+        UNIT_ASSERT_EQUAL(result.Response.GetResponse().GetEffectivePoolId(), poolId);
+        TSampleQueries::CheckCancelled(result);
+    }
+
 }
 
 } // namespace NKikimr::NKqp

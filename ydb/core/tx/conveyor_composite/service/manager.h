@@ -16,7 +16,7 @@ private:
     THashMap<TString, ui64> WorkerPoolNameToIndex;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
     NConfig::TConfig Config;
-    std::shared_ptr<TWorkloadQuotaController> WorkloadQuota;
+    std::shared_ptr<TWorkloadScheduler> WorkloadScheduler;
 
     auto BuildWorkerPools() const {
         return WorkerPools | std::views::filter([](const auto& value) {
@@ -65,10 +65,10 @@ public:
     TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId,
         TCounters& counters, NKqp::NScheduler::TComputeSchedulerPtr scheduler)
         : Config(config)
-        , WorkloadQuota(std::make_shared<TWorkloadQuotaController>(std::move(scheduler)))
+        , WorkloadScheduler(std::make_shared<TWorkloadScheduler>(std::move(scheduler)))
     {
         for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
-            Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), counters, WorkloadQuota));
+            Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), counters, WorkloadScheduler));
         }
         for (const auto& poolConfig : Config.GetWorkerPools()) {
             AddWorkerPool(poolConfig, distributorActorId, counters);
@@ -76,7 +76,11 @@ public:
     }
 
     std::optional<TMonotonic> ExtractNextWorkloadWakeup() {
-        return WorkloadQuota->ExtractNextWakeup();
+        return WorkloadScheduler->ExtractNextWakeup();
+    }
+
+    void OnWorkloadQueryResponse(ui64 queryId, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query) {
+        WorkloadScheduler->OnQueryResponse(queryId, std::move(query));
     }
 
     TWorkersPool& MutableWorkersPool(const ui64 workersPoolId) {

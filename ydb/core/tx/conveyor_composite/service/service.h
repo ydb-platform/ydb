@@ -7,7 +7,7 @@
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
-#include <ydb/core/kqp/runtime/scheduler/fwd.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -32,7 +32,7 @@ private:
     NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr PendingConfigNotification;
     NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr QueuedConfigNotification;
     NKqp::NScheduler::TComputeSchedulerPtr Scheduler;
-    std::optional<TMonotonic> ScheduledWorkloadQuotaWakeupAt;
+    std::optional<TMonotonic> ScheduledWorkloadSchedulerWakeupAt;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
@@ -42,14 +42,15 @@ private:
     void HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& ev);
-    void HandleMain(TEvInternal::TEvWorkloadQuotaWakeup::TPtr& ev);
+    void HandleMain(TEvInternal::TEvWorkloadSchedulerWakeup::TPtr& ev);
+    void HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev);
 
     void SubscribeToCompositeConveyorConfig();
     void ScheduleConfigSubscriptionRetry();
     void ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void CompleteConfigUpdate();
     void DrainTasks();
-    void ScheduleWorkloadQuotaWakeup(TMonotonic deadline);
+    void ScheduleWorkloadSchedulerWakeup(TMonotonic deadline);
 
 public:
     STATEFN(StateMain) {
@@ -64,7 +65,8 @@ public:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleMain);
             hFunc(NActors::TEvents::TEvUndelivered, HandleMain);
             hFunc(TEvInternal::TEvRetryConfigSubscription, HandleMain);
-            hFunc(TEvInternal::TEvWorkloadQuotaWakeup, HandleMain);
+            hFunc(TEvInternal::TEvWorkloadSchedulerWakeup, HandleMain);
+            hFunc(NKqp::NScheduler::TEvQueryResponse, HandleMain);
             default:
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "",
                     {"problem", "unexpected event for task executor"},

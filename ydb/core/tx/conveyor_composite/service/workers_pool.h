@@ -59,6 +59,7 @@ private:
         YDB_READONLY(double, CPULimit, 1);
         YDB_READONLY(bool, StopRequested, false);
         TTaskCompletionContexts CompletionContexts;
+        TConveyorWorkUnits WorkUnits;
 
     public:
         TWorkerInfo(std::unique_ptr<TWorker>&& worker, const double cpuLimit)
@@ -79,12 +80,32 @@ private:
             Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
             RunningTask = true;
             CompletionContexts = std::move(completionContexts);
+            WorkUnits = std::move(workUnits);
         }
 
         void OnStopTask() {
             Y_ENSURE(RunningTask, "worker has no running task to stop");
             RunningTask = false;
             CompletionContexts.clear();
+        }
+
+        void FinishWorkUnits(const std::vector<TWorkerTaskResult>& results) {
+            THashMap<ui64, TDuration> durations;
+            for (const auto& result : results) {
+                const auto& workloadContext = result.GetWorkloadContext();
+                auto unitIt = WorkUnits.find(workloadContext.QueryId);
+                if (unitIt == WorkUnits.end()) {
+                    continue;
+                }
+                AFL_VERIFY(unitIt->second->GetContext() == workloadContext);
+                durations[workloadContext.QueryId] += result.GetDuration();
+            }
+            for (auto& [queryId, workUnit] : WorkUnits) {
+                auto durationIt = durations.find(queryId);
+                AFL_VERIFY(durationIt != durations.end());
+                workUnit->Finish(durationIt->second);
+            }
+            WorkUnits.clear();
         }
 
         const TTaskCompletionContext& GetCompletionContext(const ESpecialTaskCategory category) const {
@@ -121,7 +142,8 @@ private:
     void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
     void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
     bool TryFinishWorkersUpdate();
-    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts);
+    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts,
+        TConveyorWorkUnits&& workUnits);
 
 public:
     static constexpr double Eps = 1e-6;

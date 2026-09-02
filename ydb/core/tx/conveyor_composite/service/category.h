@@ -18,7 +18,7 @@ private:
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
-    const std::shared_ptr<TWorkloadQuotaController> WorkloadQuota;
+    const std::shared_ptr<TWorkloadScheduler> WorkloadScheduler;
 
     [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
 
@@ -28,12 +28,12 @@ public:
     }
 
     TProcessCategory(const NConfig::TCategory& config, TCounters& counters,
-        std::shared_ptr<TWorkloadQuotaController> workloadQuota)
+        std::shared_ptr<TWorkloadScheduler> workloadScheduler)
         : Category(config.GetCategory())
-        , WorkloadQuota(std::move(workloadQuota)) {
-        AFL_VERIFY(WorkloadQuota);
+        , WorkloadScheduler(std::move(workloadScheduler)) {
+        AFL_VERIFY(WorkloadScheduler);
         Counters = counters.GetCategorySignals(Category);
-        RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)));
+        RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)), {});
     }
 
     ~TProcessCategory() {
@@ -54,14 +54,17 @@ public:
 
     void PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds);
 
-    void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope) {
+    void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope, TWorkloadContext workloadContext) {
         scope->IncProcesses();
-        AFL_VERIFY(Processes.emplace(internalProcessId, std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount)).second);
+        WorkloadScheduler->RegisterProcess(workloadContext);
+        AFL_VERIFY(Processes.emplace(internalProcessId,
+            std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount, std::move(workloadContext))).second);
     }
 
     void UnregisterProcess(const ui64 processId) {
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
+        WorkloadScheduler->UnregisterProcess(it->second->GetWorkloadContext());
         Y_UNUSED(RemoveWeightedProcess(it->second));
         if (it->second->GetScope()->DecProcesses()) {
             AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
@@ -74,7 +77,8 @@ public:
     }
 
     bool HasTasks() const;
-    std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds);
+    std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters,
+        THashSet<TString>& scopeIds, TConveyorWorkUnits& workUnits);
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);
     std::shared_ptr<TProcessScope> GetProcessScopePtrVerified(const TString& scopeName) const;

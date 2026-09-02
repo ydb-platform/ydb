@@ -1,48 +1,70 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_task.h>
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
 
 namespace NKikimr::NConveyorComposite {
 
-    class TWorkloadQuotaController {
+    class TConveyorWorkUnit: public TNonCopyable {
     public:
-        class TReservation {
-            friend class TWorkloadQuotaController;
+        TConveyorWorkUnit(TWorkloadContext context, const NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr& query);
+        ~TConveyorWorkUnit();
 
-        private:
-            TReservation(NKqp::NScheduler::TSchedulableReadPtr read,
-                         NKqp::NScheduler::TSchedulableRead::TQuotaReservation quota)
-                : Read(std::move(read))
-                , Quota(std::move(quota))
-            {
-            }
+        [[nodiscard]] bool TryStart();
+        void Finish(TDuration actual);
 
-            NKqp::NScheduler::TSchedulableReadPtr Read;
-            std::optional<NKqp::NScheduler::TSchedulableRead::TQuotaReservation> Quota;
-        };
+        TDuration CalculateDelay() const;
 
-        using TReservationPtr = std::shared_ptr<TReservation>;
+        const TWorkloadContext& GetContext() const {
+            return Context;
+        }
 
-        struct TReserveResult {
-            bool Allowed = false;
-            TReservationPtr Reservation;
-        };
+    private:
+        void LeaveThrottle(TMonotonic now);
 
-        explicit TWorkloadQuotaController(NKqp::NScheduler::TComputeSchedulerPtr scheduler);
+        const TWorkloadContext Context;
+        std::shared_ptr<NKqp::NScheduler::TSchedulableTask> SchedulableTask;
+        bool Running = false;
+        bool Throttled = false;
+        TMonotonic ThrottleStart;
+    };
 
-        TReserveResult TryReserve(const TWorkloadContext& context, TDuration predicted);
-        void Finish(TReservationPtr reservation, TDuration actual);
+    using TConveyorWorkUnitPtr = std::unique_ptr<TConveyorWorkUnit>;
+    using TConveyorWorkUnits = THashMap<ui64, TConveyorWorkUnitPtr>;
+
+    class TWorkloadScheduler {
+    public:
+        explicit TWorkloadScheduler(NKqp::NScheduler::TComputeSchedulerPtr scheduler);
+
+        bool IsEnabled() const {
+            return Scheduler && Scheduler->IsEnabled();
+        }
+
+        void RegisterProcess(const TWorkloadContext& context);
+        void UnregisterProcess(const TWorkloadContext& context);
+        void OnQueryResponse(ui64 queryId, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query);
+
+        [[nodiscard]] bool TryAddToBatch(const TWorkloadContext& context, TConveyorWorkUnits& workUnits);
 
         std::optional<TMonotonic> ExtractNextWakeup();
 
     private:
+        struct TQueryEntry {
+            TWorkloadContext Context;
+            NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+            TConveyorWorkUnitPtr PendingWorkUnit;
+            ui64 ProcessRefCount = 0;
+            bool RegistrationPending = false;
+            bool OwnsRegistration = false;
+        };
+
+        void EnsureQueryRegistration(TQueryEntry& entry);
+        void RemoveQuery(ui64 queryId);
         void RegisterRetry(TDuration delay);
 
         NKqp::NScheduler::TComputeSchedulerPtr Scheduler;
-        NKqp::NScheduler::TSchedulableReadFactoryPtr Factory;
-        THashMap<std::pair<TString, TString>, NKqp::NScheduler::TSchedulableReadPtr> Reads;
-        THashSet<std::pair<TString, TString>> PendingRegistrations;
+        THashMap<ui64, TQueryEntry> Queries;
         std::optional<TMonotonic> NextWakeup;
     };
 

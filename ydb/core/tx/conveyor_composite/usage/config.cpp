@@ -266,6 +266,7 @@ TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShar
         WorkloadContext = {
             .DatabaseId = config.GetDatabaseId(),
             .PoolId = config.GetResourcePoolId(),
+            .QueryId = config.GetTxId(),
         };
     }
     return TConclusionStatus::Success();
@@ -281,6 +282,7 @@ TString TCPULimitsConfig::DebugString() const {
     if (WorkloadContext.IsDefined()) {
         sb << "DatabaseId=" << WorkloadContext.DatabaseId << ";";
         sb << "PoolId=" << WorkloadContext.PoolId << ";";
+        sb << "QueryId=" << WorkloadContext.QueryId << ";";
     }
     return sb;
 }

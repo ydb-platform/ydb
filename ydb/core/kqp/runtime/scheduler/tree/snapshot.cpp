@@ -82,6 +82,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
     // TODO: it's workaround mode - should not be used in the future.
     else if (fairShareMode == ELeafFairShare::EQUAL_TO_PARENT) {
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
+            query->ParentFairShare = FairShare;
             if (query->CpuDemand > 0) {
                 query->FairShare = FairShare;
             }
@@ -114,6 +115,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
             return false;
         });
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
+            query->ParentFairShare = FairShare;
             auto demand = query->CpuDemand > 0 ? query->CpuDemand - 1 : 0;
             query->FairShare += Min(leftFairShare, demand);
             leftFairShare = leftFairShare <= demand ? 0 : leftFairShare - demand;

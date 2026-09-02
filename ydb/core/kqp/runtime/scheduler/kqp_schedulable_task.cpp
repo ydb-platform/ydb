@@ -28,40 +28,47 @@ void TSchedulableTask::Resume() {
 }
 
 bool TSchedulableTask::TryIncreaseUsage() {
-    bool increased = false;
-    ui64 fairShare = 0;
-    NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
+    ui64 queryFairShare = 0;
+    ui64 poolFairShare = 0;
+    NHdrf::NDynamic::TTreeElement* query = Query.get();
+    NHdrf::NDynamic::TTreeElement* pool = Query->GetParent();
 
     if (const auto snapshot = Query->GetSnapshot()) {
-        fairShare = snapshot->FairShare;
-        poolOrQuery = Query->GetParent();
+        queryFairShare = Min(snapshot->FairShare, Query->GetCpuLimit());
+        poolFairShare = snapshot->ParentFairShare;
 
         // Special case for zero demand and zero fair-share - there are pending tasks but snapshot is not updated yet.
-        if (fairShare == 0 && snapshot->CpuDemand == 0) {
+        if (queryFairShare == 0 && snapshot->CpuDemand == 0 && Query->GetCpuLimit() > 0) {
             auto prevDemand = snapshot->CpuDemand.fetch_add(1);
             if (prevDemand == 0) {
-                fairShare = Query->AllowMinFairShare;
+                queryFairShare = Query->AllowMinFairShare;
+                poolFairShare = Max(poolFairShare, queryFairShare);
             }
         }
     } else { // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
-        fairShare = Query->AllowMinFairShare;
-        poolOrQuery = Query.get();
+        queryFairShare = Query->GetCpuLimit() > 0 ? Query->AllowMinFairShare : 0;
+        poolFairShare = queryFairShare;
     }
 
-    ui64 newUsage = poolOrQuery->CpuUsage.load();
+    const auto tryIncrease = [](TTreeElement* element, ui64 fairShare) {
+        ui64 newUsage = element->CpuUsage.load();
+        while (newUsage < fairShare) {
+            if (element->CpuUsage.compare_exchange_weak(newUsage, newUsage + 1)) {
+                return true;
+            }
+        }
+        return false;
+    };
 
-    while (!increased && newUsage < fairShare) {
-        increased = poolOrQuery->CpuUsage.compare_exchange_weak(newUsage, newUsage + 1);
-    }
-
-    if (!increased) {
+    if (!tryIncrease(query, queryFairShare)) {
         return false;
     }
-
-    for (TTreeElement* parent = poolOrQuery; parent; parent = parent->GetParent()) {
-        if (parent != poolOrQuery) {
-            ++parent->CpuUsage;
-        }
+    if (!tryIncrease(pool, poolFairShare)) {
+        --query->CpuUsage;
+        return false;
+    }
+    for (TTreeElement* parent = pool->GetParent(); parent; parent = parent->GetParent()) {
+        ++parent->CpuUsage;
     }
 
     Query->UpdateActualDemand();
@@ -94,9 +101,13 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usa
 
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
-        auto usage = Query->GetParent()->CpuUsage.load(std::memory_order_relaxed);
-        auto fairShare = snapshot->FairShare;
-        return fairShare >= usage ? (fairShare - usage) : 0;
+        const auto queryUsage = Query->CpuUsage.load(std::memory_order_relaxed);
+        const auto queryFairShare = Min(snapshot->FairShare, Query->GetCpuLimit());
+        const auto querySpare = queryFairShare >= queryUsage ? queryFairShare - queryUsage : 0;
+        const auto poolUsage = Query->GetParent()->CpuUsage.load(std::memory_order_relaxed);
+        const auto poolFairShare = snapshot->ParentFairShare;
+        const auto poolSpare = poolFairShare >= poolUsage ? poolFairShare - poolUsage : 0;
+        return Min(querySpare, poolSpare);
     }
 
     return 0;

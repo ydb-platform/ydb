@@ -45,6 +45,11 @@ public:
     TString PrintSvg();
     TString PrintSvgSafe();
 
+    // The message of the failure recorded by the latest LoadPlansSafe, empty
+    // when it succeeded. For callers that report the failure through their own
+    // channel - an issue, a log line - instead of, or besides, the picture.
+    const TString& GetLoadError() const;
+
 private:
     std::unique_ptr<TVisualizer> Impl;
 };

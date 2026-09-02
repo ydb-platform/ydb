@@ -35,4 +35,8 @@ TString TPlanVisualizer::PrintSvgSafe() {
     return Impl->PrintSvgSafe();
 }
 
+const TString& TPlanVisualizer::GetLoadError() const {
+    return Impl->LoadError;
+}
+
 } // namespace NPlan2Svg

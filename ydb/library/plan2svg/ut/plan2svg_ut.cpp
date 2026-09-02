@@ -227,7 +227,16 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
     Y_UNIT_TEST(LoadPlansSafeRendersAGoodPlanNormally) {
         TPlanVisualizer safe;
         safe.LoadPlansSafe(ReadPlan("cte_subplan"));
+        UNIT_ASSERT_C(!safe.GetLoadError(), safe.GetLoadError());
         UNIT_ASSERT_VALUES_EQUAL(safe.PrintSvgSafe(), RenderPlan("cte_subplan", false));
+    }
+
+    // The facade exposes the recorded failure for callers that report it through
+    // their own channel (an issue, a log line) rather than as a picture.
+    Y_UNIT_TEST(GetLoadErrorCarriesTheFailure) {
+        TPlanVisualizer viz;
+        viz.LoadPlansSafe(UnsupportedPlan());
+        UNIT_ASSERT(viz.GetLoadError().Contains("Unexpected plan node type"));
     }
 
     Y_UNIT_TEST(PrintSvgSafeOnEmptyPlan) {

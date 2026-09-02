@@ -10,11 +10,9 @@ namespace NKqp {
 // FIXME: Need to do correct general case decorellation in the future
 
 bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    auto subplanIUs = input->GetSubplanIUs(props);
     TVector<TInfoUnit> scalarIUs;
-    for (const auto& iu : subplanIUs) {
-        auto subplanEntry = props.Subplans.PlanMap.at(iu);
-        if (subplanEntry.Type == ESubplanType::EXPR) {
+    for (const auto& iu : input->GetSubplanIUs(props.Subplans)) {
+        if (props.Subplans.At(iu).Type == ESubplanType::EXPR) {
             scalarIUs.push_back(iu);
             break;
         }
@@ -25,7 +23,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     }
 
     auto scalarIU = scalarIUs[0];
-    auto subplanEntry = props.Subplans.PlanMap.at(scalarIU);
+    const auto& subplanEntry = props.Subplans.At(scalarIU);
     auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
     auto subplanResIU = GetSubplanResultIUs(subplan)[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
@@ -58,7 +56,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             }
         }
 
-        auto conjuncts = subplanFilter->FilterExpr.SplitConjunct();
+        auto conjuncts = subplanFilter->GetFilterExpression().SplitConjunct();
 
         for (const auto & conj : conjuncts) {
             if (!conj.MaybeEquiJoinCondition()) {
@@ -100,7 +98,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         if (input->Kind == EOperator::Filter) {
             auto outerFilter = CastOperator<TOpFilter>(input);
-            outerFilter->FilterExpr = outerFilter->FilterExpr.ApplyRenames({{scalarIU, joinedSubplanResIU}});
+            outerFilter->SetFilterExpression(outerFilter->GetFilterExpression().ApplyRenames({{scalarIU, joinedSubplanResIU}}));
             outerFilter->SetInput(leftJoin);
         } else {
             TVector<TMapElement> renameElements;

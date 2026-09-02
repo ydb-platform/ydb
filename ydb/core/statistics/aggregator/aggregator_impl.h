@@ -124,6 +124,9 @@ private:
 
     void Handle(TEvStatistics::TEvAnalyze::TPtr& ev);
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
+    void ResolveStatisticsTablePathId();
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    bool IsStatisticsTable(const TPathId& pathId) const;
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& ev);
@@ -215,6 +218,7 @@ private:
 
             hFunc(TEvStatistics::TEvAnalyze, Handle);
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvAnalyzeActorResult, Handle);
@@ -297,6 +301,7 @@ private:
     bool ProcessUrgentInFlight = false;
 
     bool IsStatisticsTableCreated = false;
+    TPathId StatisticsTablePathId;
     bool PendingSaveStatistics = false;
     std::deque<TStatisticsItem> StatisticsToSave;
     bool PendingDeleteStatistics = false;

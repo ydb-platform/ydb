@@ -211,7 +211,8 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
+    void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
+            bool isTabletStorageInfoVersionObsolete) {
         YDB_LOG_INFO("Query ends with error",
             {"marker", "BDA14"},
             {"agentId", Agent.LogId},
@@ -241,6 +242,10 @@ namespace NKikimr::NBlobDepot {
 #undef XX
         }
         Y_ABORT_UNLESS(response);
+        if (isTabletStorageInfoVersionObsolete) {
+            Y_ABORT_UNLESS(Event->GetTypeRewrite() == TEvBlobStorage::EvBlock);
+            static_cast<TEvBlobStorage::TEvBlockResult&>(*response).IsTabletStorageInfoVersionObsolete = true;
+        }
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         OnDestroy(false);
         DoDestroy();

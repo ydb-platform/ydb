@@ -1,5 +1,4 @@
 /* custom error:DEFINE expression must be a predicate*/
-PRAGMA FeatureR010 = 'prototype';
 PRAGMA config.flags('MatchRecognizeStream', 'disable');
 
 $data = [<||>];

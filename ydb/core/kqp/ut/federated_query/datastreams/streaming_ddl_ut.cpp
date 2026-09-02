@@ -2334,7 +2334,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
 
-        constexpr char consumerName[] = "unknownConsumer";
+        constexpr char consumerName[] = "test_consumer";
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
@@ -2350,10 +2350,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "consumer_name"_a = consumerName
         ));
 
+        WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            std::string status;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
+            });
+
+            error = TStringBuilder() << "Query status: " << status;
+            return status == "RUNNING";
+        });
+
+        AlterTopic(inputTopicName, NYdb::NTopic::TAlterTopicSettings{}.AppendDropConsumers(consumerName));
+
         WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
             const auto& issues = GetStreamingQueryIssues(queryName);
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("no read rule provided for consumer 'unknownConsumer' in topic");
+            return issues.contains("no read rule provided for consumer 'test_consumer'");
         });
 
         ExecExternalQuery(fmt::format(R"(
@@ -3851,12 +3866,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSource[] = "pqSource";
         CreateTopic(topic);
         CreatePqSource(pqSource);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         const auto queryName = "streamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA pq.Consumer = "test-consumer";
                 INSERT INTO `{pq_source}`.`{topic}`
                 SELECT * FROM `{pq_source}`.`{topic}`;
             END DO;)",
@@ -3865,7 +3880,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "topic"_a = topic
         ));
 
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString status;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
+            });
+
+            error = TStringBuilder() << "Query status: " << status;
+            return status == "RUNNING";
+        });
+
+        DropTopic(topic);
 
         Sleep(TDuration::Seconds(3));
 

@@ -9,12 +9,14 @@ SIZE(MEDIUM)
 FORK_SUBTESTS()
 
 SRCS(
+    balancing_app_ut.cpp
     balancing_ut.cpp
     describes_ut.cpp
     graph_cmp_ut.cpp
     metrics_ut.cpp
     mlp_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
+    partition_scale_manager_ut.cpp
     partitions_location_queue_ut.cpp
     scale_and_mirror_ut.cpp
     sdk_balancing_ut.cpp

@@ -21179,9 +21179,9 @@
     ],
     "test_sql_negative.test[match_recognize-measures_aggr_factory-]": [
         {
-            "checksum": "e66a11807db413ca11443f09d81f13f7",
-            "size": 209,
-            "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql_negative.test_match_recognize-measures_aggr_factory-_/err_file.out"
+            "checksum": "163e665fbdb25b542218d2e25c344810",
+            "size": 208,
+            "uri": "https://{canondata_backend}/1881367/44715029aa85b945ed91b0ab7e780a04aefc370a/resource.tar.gz#test_sql_negative.test_match_recognize-measures_aggr_factory-_/err_file.out"
         }
     ],
     "test_sql_negative.test[pg-fail_collate_mixed-]": [

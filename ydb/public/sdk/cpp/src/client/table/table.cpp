@@ -3093,6 +3093,9 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
     if (proto.has_use_filter_snowball()) {
         result.UseFilterSnowball = proto.use_filter_snowball();
     }
+    if (proto.has_use_filter_superlemmer()) {
+        result.UseFilterSuperLemmer = proto.use_filter_superlemmer();
+    }
 
     return result;
 }
@@ -3153,6 +3156,9 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
     if (analyzers.UseFilterSnowball.has_value()) {
         proto.set_use_filter_snowball(*analyzers.UseFilterSnowball);
     }
+    if (analyzers.UseFilterSuperLemmer.has_value()) {
+        proto.set_use_filter_superlemmer(*analyzers.UseFilterSuperLemmer);
+    }
 
     return proto;
 }
@@ -3169,6 +3175,13 @@ TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Snowball(
     TAnalyzers result = Standard();
     result.Language = std::move(language);
     result.UseFilterSnowball = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::SuperLemmer(std::string language) {
+    TAnalyzers result = Standard();
+    result.Language = std::move(language);
+    result.UseFilterSuperLemmer = true;
     return result;
 }
 

@@ -178,7 +178,10 @@ struct IDqComputeActorAsyncOutput {
     // Apply side effects related to this checkpoint. Should call ICallbacks::OnAsyncOutputStateCommitted() when state was committed.
     // Function CommitState() must be idempotent, and may be called multiple times, in case of checkpoint restoration, for same sink.
     virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
-    virtual void LoadState(const TSinkState& state) = 0;
+
+    // Load state from specific checkpoint.
+    // If checkpoint used for restoration was in pending commit state, next will be called CommitState() on the same checkpoint.
+    virtual void LoadState(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) = 0;
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 

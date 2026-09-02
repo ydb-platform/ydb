@@ -2986,7 +2986,7 @@ private:
         Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
     }
 
-    void LoadState(const NYql::NDq::TSinkState&) final {}
+    void LoadState(const NYql::NDq::TSinkState&, const NYql::NDqProto::TCheckpoint&) final {}
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;
@@ -6615,7 +6615,7 @@ private:
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
-    void LoadState(const NYql::NDq::TSinkState&) final {};
+    void LoadState(const NYql::NDq::TSinkState&, const NYql::NDqProto::TCheckpoint&) final {};
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;

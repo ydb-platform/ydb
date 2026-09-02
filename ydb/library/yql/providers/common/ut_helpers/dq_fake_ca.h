@@ -261,7 +261,7 @@ struct TFakeCASetup {
     void SaveSourceState(NDqProto::TCheckpoint checkpoint, TSourceState& state);
 
     void LoadSource(const TSourceState& state);
-    void LoadSink(const TSinkState& state);
+    void LoadSink(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint);
 
     void Execute(TCallback callback);
 

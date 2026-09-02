@@ -938,7 +938,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 protected:
     virtual void DoLoadRunnerState(TString&& blob) = 0;
 
-    void LoadState(TComputeActorState&& state) override final {
+    void LoadState(TComputeActorState&& state, const NDqProto::TCheckpoint& checkpoint) override final {
         CA_LOG_D("Load state");
         TMaybe<TString> error = Nothing();
         const TMiniKqlProgramState& mkqlProgramState = *state.MiniKqlProgram;
@@ -959,7 +959,7 @@ protected:
                 TAsyncOutputInfoBase* sink = SinksMap.FindPtr(sinkState.OutputIndex);
                 YQL_ENSURE(sink, "Failed to load state. Sink with output index " << sinkState.OutputIndex << " was not found");
                 YQL_ENSURE(sink->AsyncOutput, "Sink[" << sinkState.OutputIndex << "] is not created");
-                sink->AsyncOutput->LoadState(sinkState);
+                sink->AsyncOutput->LoadState(sinkState, checkpoint);
             }
         } catch (const std::exception& e) {
             error = e.what();

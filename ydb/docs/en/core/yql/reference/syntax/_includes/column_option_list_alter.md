@@ -21,15 +21,6 @@ The `DEFAULT` option is supported:
 
 Sets a default value for the column. If no value is specified for this column when inserting a row, the specified default value is used. The default value must match the column's data type.
 
-### NOT NULL
-
-There are two operations:
-
-* `SET NOT NULL` — sets the `NOT NULL` constraint for the column.
-* `DROP NOT NULL` — removes the `NOT NULL` constraint from the column, again allowing `NULL` values.
-
-For more information about how these operations work, see [here](../alter_table/not_null.md).
-
 ### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 
 {% if oss == true and backend_name == "YDB" %}

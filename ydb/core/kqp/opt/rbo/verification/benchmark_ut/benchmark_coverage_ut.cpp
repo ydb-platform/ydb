@@ -1642,7 +1642,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({
                 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24,
                 25, 26, 28, 29, 31,
-                33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48, 50, 52, 54, 55, 56,
+                33, 34, 35, 37, 38, 40, 41, 42, 43, 45, 46, 48, 50, 52, 54, 55,
+                56,
                 58, 59,
                 60, 61, 62, 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78,
                 79, 80, 82, 83, 84, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
@@ -1656,8 +1657,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({
                 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21,
-                22, 24, 25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 42, 43, 45,
-                46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62, 63,
+                22, 24, 25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 41, 42, 43,
+                45, 46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62,
+                63,
                 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82,
                 83, 84,
                 85, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 98, 99,
@@ -1670,10 +1672,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             }));
         UNIT_ASSERT_VALUES_EQUAL(
             SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name)).size(),
-            81);
+            82);
         UNIT_ASSERT_VALUES_EQUAL(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries.size(),
-            81);
+            82);
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2244,8 +2246,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(baseline.Violations.empty());
         UNIT_ASSERT(baseline.RequiredSnapshotPairQueries.empty());
         UNIT_ASSERT(baseline.RequiredFormulaQueries.contains(51));
-        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), 81);
-        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), 81);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), 82);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), 82);
 
         const auto zeroCapture = OptimizerFailure(
             51, 17, 0, "window metadata references a missing member");
@@ -2279,13 +2281,13 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             report["required_snapshot_pair_queries"].GetArraySafe().empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            report["snapshot_pair_floor_queries"].GetArraySafe().size(), 81);
+            report["snapshot_pair_floor_queries"].GetArraySafe().size(), 82);
         UNIT_ASSERT_VALUES_EQUAL(
-            report["snapshot_pair_queries"].GetArraySafe().size(), 80);
+            report["snapshot_pair_queries"].GetArraySafe().size(), 81);
         UNIT_ASSERT_VALUES_EQUAL(
-            report["required_formula_queries"].GetArraySafe().size(), 81);
+            report["required_formula_queries"].GetArraySafe().size(), 82);
         UNIT_ASSERT_VALUES_EQUAL(
-            report["formula_emitted_queries"].GetArraySafe().size(), 80);
+            report["formula_emitted_queries"].GetArraySafe().size(), 81);
     }
 
     Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {

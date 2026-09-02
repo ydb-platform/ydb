@@ -250,7 +250,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         for (const auto& item : TTraits::GetItems(settings)) {
             TString userSpecifiedPath = CanonizePath(item.source_path());
             TString fullPath;
-            if (TStringBuf(item.source_path()).StartsWith('/')
+            if ((!this->Request->UseStrictDatabaseRelativePaths()
+                    || TStringBuf(item.source_path()).StartsWith('/'))
                 && (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath)) {
                 fullPath = userSpecifiedPath; // Full path
             } else {

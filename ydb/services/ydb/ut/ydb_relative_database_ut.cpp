@@ -2,6 +2,7 @@
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -217,6 +218,18 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     auto coordinationSession = startSessionResult.ExtractResult();
     AssertSuccess(coordinationSession.Close().GetValueSync());
     AssertSuccess(coordinationClient.DropNode("relative_dir/coordination").GetValueSync());
+
+    NExport::TExportClient exportClient(driver);
+    NExport::TExportToS3Settings exportSettings;
+    exportSettings
+        .Endpoint("localhost:1")
+        .Bucket("bucket")
+        .AccessKey("access-key")
+        .SecretKey("secret-key")
+        .AppendItem({.Src = "Root/mydb/missing", .Dst = "one"})
+        .AppendItem({.Src = "/Root/mydb/missing", .Dst = "two"});
+    const auto exportResult = exportClient.ExportToS3(exportSettings).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(exportResult.GetStatus(), EStatus::SCHEME_ERROR);
 
     AssertSuccess(schemeClient.MakeDirectory("Root").GetValueSync());
     NYdb::NTopic::TTopicClient topicClient(driver);

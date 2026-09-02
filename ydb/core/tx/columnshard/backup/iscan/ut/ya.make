@@ -11,9 +11,10 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/library/aclib/protos
+    ydb/library/testlib/parquet_helpers
+    ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
     ydb/services/metadata
-    ydb/library/testlib/s3_recipe_helper
 )
 
 YQL_LAST_ABI_VERSION()

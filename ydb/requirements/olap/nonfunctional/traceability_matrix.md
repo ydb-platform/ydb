@@ -70,6 +70,6 @@ Issues:
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
-| REQ-COMP-001-5.1 | Upgrade 24-3 to 24-4 | Test upgrade compatibility from version 24-3 to 24-4. |  | Pending |
-| REQ-COMP-001-5.2 | Upgrade 24-4 to 25-1 | Test upgrade compatibility from version 24-4 to 25-1. |  | Pending |
+| REQ-COMP-001-5.1 | Upgrade 24-3 to 24-4 | Test upgrade compatibility from version 24\-3 to 24\-4. |  | Pending |
+| REQ-COMP-001-5.2 | Upgrade 24-4 to 25-1 | Test upgrade compatibility from version 24\-4 to 25\-1. |  | Pending |
 

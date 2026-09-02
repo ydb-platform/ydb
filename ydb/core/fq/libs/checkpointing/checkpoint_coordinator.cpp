@@ -225,7 +225,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
 
     const bool needCheckpointMetadata = StateLoadMode == FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT || StreamingDisposition.has_from_last_checkpoint();
     if (needCheckpointMetadata) {
-        const bool loadGraphDescription = StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
+        const bool loadGraphDescription = RestoreOffsetsFromForeignCheckpoint;//StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
         YDB_LOG_INFO("Send TEvGetCheckpointsMetadataRequest",
             {"coordinatorId", CoordinatorId},
             {"stateLoadMode", FederatedQuery::StateLoadMode_Name(StateLoadMode)},

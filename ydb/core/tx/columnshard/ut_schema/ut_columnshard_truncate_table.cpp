@@ -279,12 +279,15 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         const ui64 pathId = 1;
         TestTableDescription testTable{};
 
-        // Create a standalone table WITH TTL enabled on the default ttl column.
+        Y_UNUSED(PrepareTablet(runtime, pathId, testTable.Schema));
+
         auto specials = TTestSchema::TTableSpecials().SetTtl(TDuration::Seconds(3600));
         specials.SetTtlColumn(TTestSchema::DefaultTtlColumn);
-        const auto initBody = TTestSchema::CreateStandaloneTableTxBody(pathId, testTable.Schema, testTable.Pk, specials);
-        auto planStep = PrepareTablet(runtime, initBody);
-        Y_UNUSED(planStep);
+        const auto alterBody = TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/1,
+            testTable.Schema, testTable.Pk, specials);
+        ui64 txId = 10;
+        auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
 
         auto& csController = *csControllerGuard.operator->();
         const auto* shard = csController.GetTheOnlyShard();
@@ -296,7 +299,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(shard->GetTablesManager().GetTableTtl(*internalPathId).has_value());
         }
 
-        ui64 txId = 100;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
 

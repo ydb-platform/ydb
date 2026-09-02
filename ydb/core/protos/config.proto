@@ -795,7 +795,7 @@ message TConveyorConfig {
 message TCompositeConveyorConfig {
     message TCategory {
         optional string Name = 1;
-        optional uint64 QueueSizeLimit = 2; // Unused by conveyor_composite.
+        optional uint64 QueueSizeLimit = 2; // Currently unused.
     }
 
     message TWorkerPoolCategoryLink {

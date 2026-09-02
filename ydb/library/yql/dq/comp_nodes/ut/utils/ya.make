@@ -7,6 +7,7 @@ SRCS(
 )
 PEERDIR(
     ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/actors/compute
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 

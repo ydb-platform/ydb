@@ -23,6 +23,7 @@ PEERDIR(
 
     ydb/core/kqp/runtime
 
+    ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/comp_nodes/ut/utils
 

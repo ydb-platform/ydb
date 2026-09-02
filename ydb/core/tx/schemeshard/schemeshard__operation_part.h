@@ -406,6 +406,10 @@ ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState 
 
 ISubOperation::TPtr CreateReject(TOperationId id, THolder<TProposeResponse> response);
 ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status, const TString& message);
+ISubOperation::TPtr CreateReject(TOperationId id, const TRejectedOperation& rejected);
+
+// Writes what the planner refused into the response the client gets.
+void ApplyRejection(TProposeResponse& response, const TRejectedOperation& rejected);
 
 ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state);
@@ -449,7 +453,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId id, const TTxTransacti
 TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath);
+ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath, TOperationContext& context);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state);
 
@@ -767,7 +771,13 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state, TOperationContext& context);
 
 // returns Reject in case of error, nullptr otherwise
-ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
+ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table, TOperationContext& context);
+
+// Builds and binds the parts of a plan for an operation that is not planned as a whole, with
+// ids counted from nextId. The plan must hold no generated directories: the request was split
+// by SplitIntoTransactions already.
+TVector<ISubOperation::TPtr> ConstructPartsFromPlan(TOperationId nextId, std::shared_ptr<const TSealedOperationPlan> plan,
+    TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);

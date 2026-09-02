@@ -117,9 +117,11 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
-        const auto streamPath = op.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(op.GetId()), context.SS)
-            : TPath::Resolve(workingDir, context.SS).Dive(streamName);
+        const auto streamPath = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Target, context)
+            : op.HasId()
+                ? TPath::Init(context.SS->MakeLocalId(op.GetId()), context.SS)
+                : TPath::Resolve(workingDir, context.SS).Dive(streamName);
         {
             const auto checks = streamPath.Check();
             checks
@@ -161,7 +163,9 @@ public:
             }
         }
 
-        const auto tablePath = streamPath.Parent();
+        const auto tablePath = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Container, context)
+            : streamPath.Parent();
         {
             const auto checks = tablePath.Check();
             checks

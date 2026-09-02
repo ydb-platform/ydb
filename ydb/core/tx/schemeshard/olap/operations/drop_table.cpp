@@ -401,9 +401,11 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(opTxId), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Target, context)
+            : drop.HasId()
+                ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
@@ -427,7 +429,9 @@ public:
             }
         }
 
-        TPath parent = path.Parent();
+        TPath parent = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Container, context)
+            : path.Parent();
         {
             TPath::TChecker checks = parent.Check();
             checks

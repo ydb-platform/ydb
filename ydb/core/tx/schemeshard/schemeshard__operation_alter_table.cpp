@@ -969,7 +969,7 @@ static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilter
     TVector<ISubOperation::TPtr> result;
     result.push_back(CreateAlterTable(NextPartId(id, result), tx));
     for (const auto& indexName : bloomIndexNames) {
-        AddDropIndex(result, id, path.Child(indexName));
+        AddDropIndex(result, id, path.Child(indexName), context);
     }
     AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
     return result;

@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_planner.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_element.h>
 
@@ -298,9 +299,11 @@ public:
             return result;
         }
 
-        TPath index = Transaction.GetDrop().HasId()
-            ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath index = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Target, context)
+            : Transaction.GetDrop().HasId()
+                ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
+                : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = index.Check();
@@ -320,7 +323,9 @@ public:
             }
         }
 
-        TPath parentTable = index.Parent();
+        TPath parentTable = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Container, context)
+            : index.Parent();
         {
             TPath::TChecker checks = parentTable.Check();
             checks
@@ -390,66 +395,17 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
     return MakeSubOperation<TDropTableIndex>(id, state);
 }
 
+// The decomposition of a drop lives in the planner (schemeshard_operation_planner_drop_table.cpp).
+// This overload exists for an operation that is not planned as a whole -- a batch mixing
+// DropTable with other types -- and builds the same parts from the same blueprints.
 TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
 
-    auto dropOperation = tx.GetDrop();
-
-    const TString parentPathStr = tx.GetWorkingDir();
-
-    TPath table = dropOperation.HasId()
-        ? TPath::Init(TPathId(context.SS->TabletID(), dropOperation.GetId()), context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(dropOperation.GetName());
-
-    {
-        TPath::TChecker checks = table.Check();
-        checks
-            .NotEmpty()
-            .IsResolved()
-            .NotDeleted();
-
-        if (checks) {
-            if (table.Base()->IsColumnTable()) {
-                checks
-                    .IsColumnTable()
-                    .NotUnderDeleting()
-                    .NotUnderOperation()
-                    .IsCommonSensePath();
-
-                if (checks) {
-                    // DROP TABLE statement has no info is it a drop of row or column table
-                    return {CreateDropColumnTable(nextId, tx)};
-                }
-            } else {
-                checks
-                    .IsTable()
-                    .NotUnderDeleting()
-                    .NotUnderOperation();
-                if ((!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) && !tx.GetInternal()) {
-                    checks.IsCommonSensePath();
-                }
-            }
-        }
-
-        if (!checks) {
-            auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, 0, 0);
-            result->SetError(checks.GetStatus(), checks.GetError());
-            if (table.IsResolved() && table.Base()->IsTable() && (table.Base()->PlannedToDrop() || table.Base()->Dropped())) {
-                result->SetPathDropTxId(ui64(table.Base()->DropTxId));
-                result->SetPathId(table.Base()->PathId.LocalPathId);
-            }
-
-            return {CreateReject(nextId, std::move(result))};
-        }
+    auto planResult = PlanOperation({tx}, context);
+    if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
+        return {CreateReject(nextId, *rejected)};
     }
-
-    TVector<ISubOperation::TPtr> result;
-    result.push_back(CreateDropTable(NextPartId(nextId, result), tx));
-    if (auto reject = CascadeDropTableChildren(result, nextId, table)) {
-        return {reject};
-    }
-
-    return result;
+    return ConstructPartsFromPlan(nextId, std::get<std::shared_ptr<const TSealedOperationPlan>>(planResult), context);
 }
 
 }

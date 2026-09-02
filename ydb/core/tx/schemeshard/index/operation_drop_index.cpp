@@ -542,12 +542,12 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateDropTableIndexAtMainTable(NextPartId(nextId, result), mainTableIndexDropping));
     }
 
-    AddDropIndex(result, nextId, indexPath);
+    AddDropIndex(result, nextId, indexPath, context);
 
     return result;
 }
 
-ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath) {
+ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath, TOperationContext& context) {
     auto indexDropping = TransactionTemplate(indexPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
     auto operation = indexDropping.MutableDrop();
     operation->SetName(ToString(indexPath.Base()->Name));
@@ -567,7 +567,7 @@ ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOp
         operation->SetName(child.LeafName());
 
         result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
-        if (auto reject = CascadeDropTableChildren(result, nextId, child)) {
+        if (auto reject = CascadeDropTableChildren(result, nextId, child, context)) {
             return reject;
         }
     }

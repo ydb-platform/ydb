@@ -1,8 +1,11 @@
 #include "schemeshard__operation_part.h"
 
 #include "schemeshard_impl.h"
+#include "schemeshard_operation_factory.h"
+#include "schemeshard_operation_planner.h"
 #include "schemeshard_path.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -114,113 +117,32 @@ void TSubOperationState::IgnoreMessages(TString debugHint, TSet<ui32> mgsIds) {
     MsgToIgnore.swap(mgsIds);
 }
 
-ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table) {
-    for (const auto& [childName, childPathId] : table.Base()->GetChildren()) {
-        TPath child = table.Child(childName);
-        {
-            TPath::TChecker checks = child.Check();
-            checks
-                .NotEmpty()
-                .IsResolved();
-
-            if (checks) {
-                if (child.IsDeleted()) {
-                    continue;
-                }
-            }
-
-            if (child.IsTableIndex()) {
-                checks.IsTableIndex();
-            } else if (child.IsCdcStream()) {
-                checks.IsCdcStream();
-            } else if (child.IsSequence()) {
-                checks.IsSequence();
-            }
-
-            checks.NotDeleted()
-                .NotUnderDeleting()
-                .NotUnderOperation();
-
-            if (!checks) {
-                return CreateReject(id, checks.GetStatus(), checks.GetError());
-            }
-        }
-        Y_ABORT_UNLESS(child.Base()->PathId == childPathId);
-
-        if (child.IsSequence()) {
-            auto dropSequence = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
-            dropSequence.MutableDrop()->SetName(ToString(child->Name));
-
-            result.push_back(CreateDropSequence(NextPartId(id, result), dropSequence));
-            continue;
-        } else if (child.IsTableIndex()) {
-            auto dropIndex = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
-            dropIndex.MutableDrop()->SetName(ToString(child.Base()->Name));
-
-            result.push_back(CreateDropTableIndex(NextPartId(id, result), dropIndex));
-        } else if (child.IsCdcStream()) {
-            auto dropStream = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
-            dropStream.MutableDrop()->SetName(ToString(child.Base()->Name));
-
-            result.push_back(CreateDropCdcStreamImpl(NextPartId(id, result), dropStream));
-        }
-
-        for (auto& [implName, implPathId] : child.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(NTableIndex::IsImplTable(implName)
-                        || implName == "streamImpl"
-                , "unexpected name %s", implName.c_str());
-
-            TPath implPath = child.Child(implName);
-            if (implPath.IsDeleted()) {
-                continue;
-            }
-
-            {
-                TPath::TChecker checks = implPath.Check();
-                checks
-                    .NotEmpty()
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .NotUnderOperation();
-
-                if (checks) {
-                    if (implPath.Base()->IsTable()) {
-                        checks
-                            .IsTable()
-                            .IsInsideTableIndexPath();
-                    } else if (implPath.Base()->IsPQGroup()) {
-                        checks
-                            .IsPQGroup()
-                            .IsInsideCdcStreamPath();
-                    }
-                }
-
-                if (!checks) {
-                    return CreateReject(id, checks.GetStatus(), checks.GetError());
-                }
-            }
-            Y_ABORT_UNLESS(implPath.Base()->PathId == implPathId);
-
-            if (implPath.Base()->IsTable()) {
-                auto dropIndexTable = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-                dropIndexTable.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-
-                result.push_back(CreateDropTable(NextPartId(id, result), dropIndexTable));
-                if (auto reject = CascadeDropTableChildren(result, id, implPath)) {
-                    return reject;
-                }
-            } else if (implPath.Base()->IsPQGroup()) {
-                auto dropPQGroup = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-                dropPQGroup.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-
-                result.push_back(CreateDropPQ(NextPartId(id, result), dropPQGroup));
-            }
-        }
+TVector<ISubOperation::TPtr> ConstructPartsFromPlan(TOperationId nextId, std::shared_ptr<const TSealedOperationPlan> plan,
+        TOperationContext& context)
+{
+    TVector<ISubOperation::TPtr> result;
+    for (const auto& blueprint : plan->GetParts()) {
+        Y_ABORT_UNLESS(!std::holds_alternative<TMkDirPartBindings>(blueprint.Bindings));
+        const TOperationId id(nextId.GetTxId(), nextId.GetSubTxId() + result.size());
+        ISubOperation::TPtr part = AppData()->SchemeOperationFactory->MakePlannedPart(id, *plan, blueprint, context);
+        part->BindToPlan(plan, blueprint);
+        result.push_back(std::move(part));
     }
-
-    return nullptr;
+    return result;
 }
 
+// The cascade beneath a table lives in the planner (schemeshard_operation_planner_drop_table.cpp).
+// This helper serves the operations that decompose by hand -- drop index, drop backup
+// collection -- and appends the same parts the planner would.
+ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table, TOperationContext& context) {
+    auto planResult = PlanDropTableChildren(table, context);
+    if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
+        return CreateReject(id, *rejected);
+    }
+    auto parts = ConstructPartsFromPlan(NextPartId(id, result), std::get<std::shared_ptr<const TSealedOperationPlan>>(planResult), context);
+    std::move(parts.begin(), parts.end(), std::back_inserter(result));
+    return nullptr;
+}
 
 static TPath ResolvePlanned(const TSealedOperationPlan& plan, const TPlannedPathView& view, TOperationContext& context) {
     if (view.PathId) {

@@ -254,10 +254,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // mixes planned and unplanned types takes the legacy path below.
 
     if (AllOf(rewrittenTransactions, [](const auto& tx) { return IsPlannedOperationType(tx.GetOperationType()); })) {
-        auto planResult = PlanCreateTableOperation(rewrittenTransactions, context);
+        auto planResult = PlanOperation(rewrittenTransactions, context);
         if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
             response.Reset(new TProposeResponse(rejected->Status, ui64(txId), ui64(selfId)));
-            response->SetError(rejected->Status, rejected->Reason);
+            ApplyRejection(*response, *rejected);
             return response;
         }
 
@@ -1847,6 +1847,25 @@ ISubOperation::TPtr TDefaultOperationFactory::MakePlannedPart(
     }
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return CreateCopySequence(id, tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable: {
+        // DROP TABLE has no say in whether it drops a row or a column table; the object decides.
+        const auto& bindings = std::get<TDropPartBindings>(blueprint.Bindings);
+        if (const auto& target = plan.Effect(bindings.Target); target.PathId) {
+            const TPath table = TPath::Init(*target.PathId, context.SS);
+            if (table.IsResolved() && table.Base()->IsColumnTable()) {
+                return CreateDropColumnTable(id, tx);
+            }
+        }
+        return CreateDropTable(id, tx);
+    }
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex:
+        return CreateDropTableIndex(id, tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
+        return CreateDropCdcStreamImpl(id, tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
+        return CreateDropSequence(id, tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+        return CreateDropPQ(id, tx);
     default:
         Y_ABORT("blueprint of an unplanned operation type %d", static_cast<int>(tx.GetOperationType()));
     }

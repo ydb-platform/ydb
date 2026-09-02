@@ -998,23 +998,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
     Y_ABORT_UNLESS(tx.GetCreateTable().HasCopyFromTable());
 
-    auto planResult = PlanCreateTableOperation({tx}, context);
+    auto planResult = PlanOperation({tx}, context);
     if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
-        return {CreateReject(nextId, rejected->Status, rejected->Reason)};
+        return {CreateReject(nextId, *rejected)};
     }
-    auto plan = std::get<std::shared_ptr<const TSealedOperationPlan>>(planResult);
-
-    TVector<ISubOperation::TPtr> result;
-    for (const auto& blueprint : plan->GetParts()) {
-        // The request was already split by SplitIntoTransactions; the planner finds nothing
-        // left to generate.
-        Y_ABORT_UNLESS(!std::holds_alternative<TMkDirPartBindings>(blueprint.Bindings));
-        const TOperationId id(nextId.GetTxId(), nextId.GetSubTxId() + result.size());
-        ISubOperation::TPtr part = AppData()->SchemeOperationFactory->MakePlannedPart(id, *plan, blueprint, context);
-        part->BindToPlan(plan, blueprint);
-        result.push_back(std::move(part));
-    }
-    return result;
+    return ConstructPartsFromPlan(nextId, std::get<std::shared_ptr<const TSealedOperationPlan>>(planResult), context);
 }
 
 }

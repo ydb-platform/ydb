@@ -277,6 +277,9 @@ SRCS(
     schemeshard_operation_plan.h
     schemeshard_operation_planner.cpp
     schemeshard_operation_planner.h
+    schemeshard_operation_planner_create_table.cpp
+    schemeshard_operation_planner_drop_table.cpp
+    schemeshard_operation_planner_impl.h
     schemeshard_domain_links.cpp
     schemeshard_domain_links.h
     schemeshard_effective_acl.cpp

@@ -495,9 +495,14 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        // A planned part takes the table and its parent from the plan it is bound to; a part of
+        // an unplanned operation -- one built by drop index or a backup collection -- resolves
+        // them from its transaction as it always did.
+        TPath path = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Target, context)
+            : drop.HasId()
+                ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
@@ -521,7 +526,9 @@ public:
             }
         }
 
-        TPath parent = path.Parent();
+        TPath parent = IsPlanned()
+            ? PlannedPath(BindingsAs<TDropPartBindings>().Container, context)
+            : path.Parent();
         {
             TPath::TChecker checks = parent.Check();
             checks

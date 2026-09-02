@@ -4,6 +4,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <util/generic/string.h>
@@ -28,8 +29,8 @@ namespace NKikimr::NSchemeShard {
 //     bookkeeping a record never shows -- generated directories, a copy source whose state is
 //     flipped and restored -- and is what a write cross-check is measured against.
 //
-// Pilot scope: ESchemeOpCreateTable, bare and CopyFromTable. Every other operation still
-// derives its paths inside Propose.
+// Planned so far: ESchemeOpCreateTable (bare and CopyFromTable) and ESchemeOpDropTable. Every
+// other operation still derives its paths inside Propose.
 
 using TPlanEffectId = ui32;
 using TPhysicalWriteId = ui32;
@@ -146,12 +147,21 @@ struct TCopySequencePartBindings {
     TPlanEffectId Source;
 };
 
+// Every drop part -- table, column table, index, impl table, cdc stream, its topic, sequence
+// -- has the same shape: the object it removes and the parent that loses it. One binding type
+// serves them all; the part kind is the blueprint's operation type.
+struct TDropPartBindings {
+    TPlanEffectId Target;
+    TPlanEffectId Container;
+};
+
 using TPartBindings = std::variant<
     TCreateTablePartBindings,
     TCopyTablePartBindings,
     TMkDirPartBindings,
     TCreateIndexPartBindings,
-    TCopySequencePartBindings
+    TCopySequencePartBindings,
+    TDropPartBindings
 >;
 
 struct TPartBlueprint {
@@ -278,9 +288,15 @@ private:
     TSealedOperationPlan Plan;
 };
 
+// A request the planner refuses. Carries what SchemeShard's reject response carries: the
+// status, the reason, and for a target that already exists or is already going away, the
+// path and the transaction that created or dropped it.
 struct TRejectedOperation {
     NKikimrScheme::EStatus Status;
     TString Reason;
+    std::optional<TPathId> PathId;
+    std::optional<TTxId> PathCreateTxId;
+    std::optional<TTxId> PathDropTxId;
 };
 
 using TOperationPlanResult = std::variant<TRejectedOperation, std::shared_ptr<const TSealedOperationPlan>>;

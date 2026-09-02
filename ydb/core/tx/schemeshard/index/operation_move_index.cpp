@@ -567,7 +567,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
                     << "exists, but overwrite flag has not been set";
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
             }
-            AddDropIndex(result, nextId, dstIndexPath);
+            AddDropIndex(result, nextId, dstIndexPath, context);
         }
     }
 

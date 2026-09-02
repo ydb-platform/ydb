@@ -80,4 +80,24 @@ ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status,
     return new TReject(id, status, message);
 }
 
+
+void ApplyRejection(TProposeResponse& response, const TRejectedOperation& rejected) {
+    response.SetError(rejected.Status, rejected.Reason);
+    if (rejected.PathId) {
+        response.SetPathId(rejected.PathId->LocalPathId);
+    }
+    if (rejected.PathCreateTxId) {
+        response.SetPathCreateTxId(ui64(*rejected.PathCreateTxId));
+    }
+    if (rejected.PathDropTxId) {
+        response.SetPathDropTxId(ui64(*rejected.PathDropTxId));
+    }
+}
+
+ISubOperation::TPtr CreateReject(TOperationId id, const TRejectedOperation& rejected) {
+    auto response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, 0, 0);
+    ApplyRejection(*response, rejected);
+    return CreateReject(id, std::move(response));
+}
+
 }

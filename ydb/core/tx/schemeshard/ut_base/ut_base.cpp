@@ -267,6 +267,153 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestLs(runtime, "/MyRoot/Src/Stream1", false, NLs::PathNotExist);
     }
 
+    Y_UNIT_TEST(PlannedDropIndexedTableEnumeratesEveryPath) {
+        // The second planned operation. A drop cascades into everything beneath the table:
+        // the index and its impl table, the changefeed and its topic, the sequence. Each is
+        // one Drop effect, and every part is bound to its target and to the parent it leaves.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Src"
+                Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Src"
+            StreamDescription {
+              Name: "Stream1"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TOperationPlanCapture capture(runtime);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Src");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& plan = capture.LastSealed().Plan;
+
+        auto find = [&](const TString& path) -> const TLogicalPathEffect& {
+            const TLogicalPathEffect* found = nullptr;
+            for (const auto& effect : plan.GetLogicalEffects()) {
+                if (TString(effect.Path.Value()) == path) {
+                    UNIT_ASSERT_C(!found, "path planned twice: " << path);
+                    found = &effect;
+                }
+            }
+            UNIT_ASSERT_C(found, "path is not in the plan: " << path);
+            return *found;
+        };
+        auto isDrop = [](const TLogicalPathEffect& e) {
+            return e.AsSchemaEffect() && e.AsSchemaEffect()->Effect == EPlanEffect::Drop;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetLogicalEffects().size(), 7u);
+
+        const auto& table = find("/Src");
+        UNIT_ASSERT(isDrop(table) && table.Role == EPlanRole::Target && table.Origin == EPlanOrigin::RequestNamed);
+        UNIT_ASSERT(table.PathId.has_value());
+        const auto& root = find("/");
+        UNIT_ASSERT(root.AsSchemaEffect()->Effect == EPlanEffect::ChildrenChanged && root.Role == EPlanRole::Container);
+
+        const auto& index = find("/Src/ValueIndex");
+        UNIT_ASSERT(isDrop(index) && index.Origin == EPlanOrigin::RequestImplied);
+        const auto& impl = find("/Src/ValueIndex/indexImplTable");
+        UNIT_ASSERT(isDrop(impl) && impl.Origin == EPlanOrigin::PartDerived);
+        const auto& stream = find("/Src/Stream1");
+        UNIT_ASSERT(isDrop(stream) && stream.Origin == EPlanOrigin::RequestImplied);
+        const auto& topic = find("/Src/Stream1/streamImpl");
+        UNIT_ASSERT(isDrop(topic) && topic.Origin == EPlanOrigin::PartDerived);
+        const auto& seq = find("/Src/myseq");
+        UNIT_ASSERT(isDrop(seq) && seq.Origin == EPlanOrigin::RequestImplied);
+
+        // Every effect is written; nothing here is a reference.
+        UNIT_ASSERT_VALUES_EQUAL(plan.PathWriteAllowance().size(), 7u);
+        for (const auto& write : plan.PathWriteAllowance()) {
+            UNIT_ASSERT(write.Reason == EPhysicalWriteReason::LogicalEffect);
+        }
+
+        // The record projection drops the decomposition artefacts.
+        TVector<TString> record;
+        for (const auto* effect : plan.SchemaEffectsForRecord()) {
+            record.push_back(TString(effect->Path.Value()));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(record.size(), 5u);
+        UNIT_ASSERT(Find(record, "/Src/ValueIndex/indexImplTable") == record.end());
+        UNIT_ASSERT(Find(record, "/Src/Stream1/streamImpl") == record.end());
+
+        // One part per dropped object, each bound to its target and the parent it leaves.
+        const auto& parts = plan.GetParts();
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 6u);
+        UNIT_ASSERT(plan.GetRequests()[0].GeneratedDirParts.empty());
+        UNIT_ASSERT(parts[0].Tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+
+        THashMap<TPlanEffectId, TPlanEffectId> containerOf;
+        for (const auto& part : parts) {
+            const auto& bindings = std::get<TDropPartBindings>(part.Bindings);
+            UNIT_ASSERT(!containerOf.contains(bindings.Target));
+            containerOf[bindings.Target] = bindings.Container;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(containerOf.at(table.Id), root.Id);
+        UNIT_ASSERT_VALUES_EQUAL(containerOf.at(index.Id), table.Id);
+        UNIT_ASSERT_VALUES_EQUAL(containerOf.at(impl.Id), index.Id);
+        UNIT_ASSERT_VALUES_EQUAL(containerOf.at(stream.Id), table.Id);
+        UNIT_ASSERT_VALUES_EQUAL(containerOf.at(topic.Id), stream.Id);
+        UNIT_ASSERT_VALUES_EQUAL(containerOf.at(seq.Id), table.Id);
+
+        TestLs(runtime, "/MyRoot/Src", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(PlannedDropRejectsWhatIsNotThere) {
+        // A drop of a missing table is refused by the planner with the status Propose gave,
+        // and a repeated drop still reports the transaction that already took the table.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TOperationPlanCapture capture(runtime);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Nothing", {NKikimrScheme::StatusPathDoesNotExist});
+        UNIT_ASSERT(capture.Sealed.empty());
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        const ui64 dropTxId = txId;
+        AsyncDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        TestModificationResult(runtime, dropTxId, NKikimrScheme::StatusAccepted);
+        {
+            auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+            UNIT_ASSERT(ev);
+            const auto& record = ev->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusMultipleModifications);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPathDropTxId(), dropTxId);
+        }
+        env.TestWaitNotification(runtime, dropTxId);
+    }
+
     Y_UNIT_TEST(PlannedCreateRejectsPathsOutsideTheDatabase) {
         // A request the plan cannot express is rejected with the status Propose used to give,
         // and no plan is sealed for it. Includes an empty WorkingDir, which used to be a

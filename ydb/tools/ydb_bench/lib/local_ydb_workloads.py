@@ -383,6 +383,7 @@ TPCC_JSON_RESULT = WorkloadResultAdapter(
 _TOPIC_CONSUMER_PREFIX = "ydb-bench-consumer"
 _TOPIC_PERCENTILE = 99
 _TOPIC_OUTPUT_MAX_BYTES = 1024 * 1024
+_TOPIC_MAX_TOTAL_SECONDS = 3600
 _TOPIC_METRIC_MAX = (1 << 64) - 1
 _TOPIC_TIMESTAMP_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 
@@ -1181,7 +1182,7 @@ def _validate_tpcc_profile(workload, load, measurement, location):
 
 
 def _validate_topic_profile(workload, load, measurement, location):
-    del workload, measurement
+    del workload
     if load["allow_errors"]:
         _config_error(location + ".load.allow-errors", "must be false because Topic does not report errors")
     objective = load.get("objective")
@@ -1189,6 +1190,12 @@ def _validate_topic_profile(workload, load, measurement, location):
         _config_error(
             location + ".load.objective.max-errors",
             "must be zero because Topic does not report errors",
+        )
+    total_seconds = measurement["warmup"] + measurement["duration"]
+    if total_seconds > _TOPIC_MAX_TOTAL_SECONDS:
+        _config_error(
+            location + ".measurement",
+            "warmup plus duration must not exceed {} seconds for bounded Topic output".format(_TOPIC_MAX_TOTAL_SECONDS),
         )
 
 

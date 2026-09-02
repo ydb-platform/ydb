@@ -765,6 +765,19 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(default_warmup.runs[0].parameters["local_ydb"]["measurement"]["warmup"], 10)
         definition = local_ydb_workloads.workload_definition("topic")
         self.assertEqual((definition.dataset_scope, definition.warmup_mode), ("sample", "inline"))
+        bounded = load_config(
+            self._config(
+                """
+                local-ydb:
+                  topic-bounded-output:
+                    workload: {type: topic, operation: full}
+                    load: {parameter: rate, values: [100]}
+                    measurement: {warmup: 1, duration: 3599, repetitions: 1}
+                """,
+                "topic-bounded-output.yaml",
+            )
+        )
+        self.assertEqual(bounded.runs[0].parameters["local_ydb"]["measurement"]["duration"], 3599)
 
         latency = (
             load_config(
@@ -853,6 +866,16 @@ class YdbBenchTest(unittest.TestCase):
                     measurement: {duration: 2}
                 """,
                 "percentile.*must be one of p99",
+            ),
+            (
+                """
+                local-ydb:
+                  invalid-topic:
+                    workload: {type: topic, operation: full}
+                    load: {parameter: rate, values: [10]}
+                    measurement: {warmup: 1, duration: 3600}
+                """,
+                "measurement.*warmup plus duration must not exceed 3600 seconds",
             ),
         )
         for index, (body, message) in enumerate(invalid_profiles):

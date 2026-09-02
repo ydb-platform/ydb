@@ -211,7 +211,8 @@ rates use the mean while percentiles, lag, and inflight values use the maximum.
 The CLI timestamps each row with its nominal window boundary, so delayed
 printing cannot create gaps or duplicates in the timeline. CPU aggregation
 ends at the last measurement-window timestamp and starts exactly the requested
-measurement duration earlier.
+measurement duration earlier. Warmup plus measurement duration is limited to
+one hour so the per-second CLI output and parser state remain bounded.
 
 Canonical Topic throughput is the smaller of the write rate and the aggregate
 read rate divided by `consumers`. The raw aggregate read rate and normalized

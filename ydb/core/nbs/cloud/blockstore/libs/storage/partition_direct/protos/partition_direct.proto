@@ -3,6 +3,7 @@ syntax = "proto3";
 import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blockstore_config.proto";
 import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
+import "ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/host.proto";
 
 package NYdb.NBS.PartitionDirect.NProto;
 option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
@@ -11,6 +12,8 @@ message TDirectBlockGroupConnections {
     message TConnection {
         NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
+        EHostState State = 3;
+        bool IsBroken = 4; // Meaningful iff State == EHostState::Offline
     }
     repeated TConnection Connections = 1;
 }

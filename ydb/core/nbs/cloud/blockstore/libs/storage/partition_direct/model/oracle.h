@@ -83,9 +83,12 @@ public:
 class TOracle: public IOracle
 {
 public:
+    /// @param initialStates <EHostState, isBroken> for each host. isBroken is
+    /// meaningful iff EHostState == Offline
     TOracle(
         TStorageConfigPtr storageConfig,
-        IHostStateController* hostStateController);
+        IHostStateController* hostStateController,
+        const TVector<std::pair<EHostState, bool>>& initialStates);
     ~TOracle() override;
 
     void Think(TInstant now);

@@ -1474,7 +1474,7 @@ private:
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 
-    Actors::TActorId StreamingQueryNodesManagerId;
+    NActors::TActorId StreamingQueryNodesManagerId;
 };
 
 } // namespace

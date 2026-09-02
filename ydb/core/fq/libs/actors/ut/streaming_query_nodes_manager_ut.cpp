@@ -1,5 +1,7 @@
 #include <ydb/core/fq/libs/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/events.h>
@@ -11,16 +13,6 @@ namespace NFq {
 using namespace NActors;
 
 namespace {
-
-// ---------------------------------------------------------------------------
-// Helper: create a bare-bones single-node test runtime.
-// ---------------------------------------------------------------------------
-TTestActorRuntime MakeRuntime() {
-    TTestActorRuntime runtime(1, /* useRealInterconnect */ false);
-    runtime.SetLogPriority(NKikimrServices::FQ_RUN_ACTOR, NLog::PRI_DEBUG);
-    runtime.Initialize(TAppPrepare().Unwrap());
-    return runtime;
-}
 
 // Helper: inject a successful TEvLookupResult with the given node ids.
 void InjectLookupResult(
@@ -43,19 +35,6 @@ void InjectLookupFailure(TTestActorRuntime& runtime, TActorId target) {
                 "/Root/test", /* success */ false)));
 }
 
-// Helper: wait for TEvAbortQuery sent from managerActorId to the edge actor.
-// Returns nullptr if no such event arrives within the given timeout.
-const TEvStreamingQueryNodesManager::TEvAbortQuery* WaitForAbort(
-    TTestActorRuntime& runtime,
-    TActorId edgeActor,
-    TDuration timeout = TDuration::Seconds(5))
-{
-    TAutoPtr<IEventHandle> handle;
-    auto* ev = runtime.GrabEdgeEventRethrow<TEvStreamingQueryNodesManager::TEvAbortQuery>(
-        handle, timeout);
-    return ev;
-}
-
 } // anonymous namespace
 
 // ============================================================================
@@ -66,7 +45,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryNodesManagerTest) {
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(NoAbortWhenRatioSufficient) {
     TTestActorRuntime runtime(1, false);
-    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
@@ -81,6 +60,7 @@ Y_UNIT_TEST(NoAbortWhenRatioSufficient) {
         ));
 
     runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     // Manually simulate a Wakeup then immediately inject a good lookup result.
     runtime.Send(new IEventHandle(manager, edgeActor,
@@ -106,7 +86,7 @@ Y_UNIT_TEST(NoAbortWhenRatioSufficient) {
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
     TTestActorRuntime runtime(1, false);
-    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
@@ -121,6 +101,7 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
             TDuration::Hours(1)));
 
     runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     // Trigger check cycle.
     runtime.Send(new IEventHandle(manager, edgeActor,
@@ -143,7 +124,7 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(ExplicitNodeSetOverridesEstimation) {
     TTestActorRuntime runtime(1, false);
-    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
@@ -159,6 +140,7 @@ Y_UNIT_TEST(ExplicitNodeSetOverridesEstimation) {
             TDuration::Hours(1)));
 
     runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     // Set explicit node info: tasks are on nodes 1 and 2 only.
     runtime.Send(new IEventHandle(manager, edgeActor,
@@ -185,7 +167,7 @@ Y_UNIT_TEST(ExplicitNodeSetOverridesEstimation) {
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(AbortSentOnlyOnce) {
     TTestActorRuntime runtime(1, false);
-    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
@@ -198,6 +180,7 @@ Y_UNIT_TEST(AbortSentOnlyOnce) {
             TDuration::Hours(1)));
 
     runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     auto triggerBadCheck = [&]() {
         runtime.Send(new IEventHandle(manager, edgeActor,
@@ -230,7 +213,7 @@ Y_UNIT_TEST(AbortSentOnlyOnce) {
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(FailedLookupDoesNotAbort) {
     TTestActorRuntime runtime(1, false);
-    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
@@ -243,6 +226,7 @@ Y_UNIT_TEST(FailedLookupDoesNotAbort) {
             TDuration::Hours(1)));
 
     runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     runtime.Send(new IEventHandle(manager, edgeActor,
         new TEvents::TEvWakeup(/* tag */ 1)));
@@ -262,7 +246,7 @@ Y_UNIT_TEST(FailedLookupDoesNotAbort) {
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(NoAbortAtExactlyHalf) {
     TTestActorRuntime runtime(1, false);
-    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
@@ -277,6 +261,7 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
             TDuration::Hours(1)));
 
     runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     runtime.Send(new IEventHandle(manager, edgeActor,
         new TEvents::TEvWakeup(/* tag */ 1)));
@@ -296,7 +281,7 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
     TTestActorRuntime runtime(1, false);
-    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
@@ -312,6 +297,7 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
             TDuration::Hours(1)));
 
     runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     runtime.Send(new IEventHandle(manager, edgeActor,
         new TEvents::TEvWakeup(/* tag */ 1)));

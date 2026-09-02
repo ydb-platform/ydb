@@ -858,10 +858,10 @@ private:
 
         auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
             /* minDelay           */ TDuration::MilliSeconds(500),
-            /* minLongRetryDelay  */ TDuration::Seconds(30),
-            /* maxDelay           */ TDuration::Seconds(30),
-            /* maxRetries         */ std::numeric_limits<size_t>::max(),
-            /* maxTime            */ TDuration::Seconds(30),
+            /* minLongRetryDelay  */ TDuration::Seconds(5),
+            /* maxDelay           */ TDuration::Seconds(20),
+            /* maxRetries         */ 100,
+            /* maxTime            */ TDuration::Seconds(60),
             /* scaleFactor        */ 2.0,
             /* customRetryClass   */ [](NYdb::EStatus status) {
                 if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {

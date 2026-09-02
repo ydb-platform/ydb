@@ -105,7 +105,7 @@ private:
 
     ui64 WorkersCount = 0;
     YDB_READONLY(double, MaxWorkerThreads, 0);
-    std::vector<TWeightedCategory> Processes;
+    std::vector<TWeightedCategory> CategoryLinks;
     std::vector<TWorkerInfo> Workers;
     std::vector<ui64> ActiveWorkersIdx;
     std::shared_ptr<TWorkersPoolCounters> Counters;

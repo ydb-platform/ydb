@@ -84,7 +84,7 @@ public:
         return std::make_pair(Database, PoolId);
     }
 
-    bool IsReasonableToStartSpilling() {
+    bool IsReasonableToStartSpilling() const {
         return (PoolMemoryCookie && PoolMemoryCookie->SpillingPercentReached.load())
             || (TotalMemoryCookie && TotalMemoryCookie->SpillingPercentReached.load());
     }
@@ -293,6 +293,10 @@ public:
     virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
 
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
+
+    // min(node, pool) budget in bytes, or 0 in the yellow zone; never negative.
+    // An optional grant may push the tx into yellow; the change is visible on the next call.
+    virtual i64 GetTxMemoryAvailability(const TTxState& tx) const = 0;
 
     virtual ui32 GetNodeId() {
         return 0;

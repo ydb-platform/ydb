@@ -10,17 +10,13 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
+// Re-export from the WLM-owned module so existing callers need no include change.
+#include <ydb/core/kqp/workload_service/memory_quota/kqp_memory_quota.h>
+
 namespace NKikimr::NKqp {
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
     std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
     bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking);
-
-NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
-    TIntrusivePtr<NRm::TTxState> tx, ui64 taskId, ui64 initialMemoryLimit);
-
-NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
-    TIntrusivePtr<NRm::TTxState> tx, ui64 initialMemoryLimit, ui64 allocationStep = 1_MB);
-
 
 } // namespace NKikimr::NKqp

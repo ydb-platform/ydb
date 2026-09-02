@@ -133,7 +133,7 @@ inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
 }
 
 struct TDqChannelLimits {
-    // Node level memory back pressure: report IMemoryQuotaManager::IsReasonableToUseSpilling of the
+    // Node level memory back pressure: report IMemoryQuotaManager::GetMemoryAvailability <= 0 of the
     // receiver side to the sender and keep the channel at the cold inflight window while it is set.
     // Off by default, the cold window is then used only until the 1st peer pop, as before.
     bool EnableSpillingChannelBackpressure = false;

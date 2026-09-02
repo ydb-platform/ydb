@@ -231,6 +231,10 @@ public:
         return nullptr;
     }
 
+    i64 GetTxMemoryAvailability(const NRm::TTxState&) const override {
+        return 0;
+    }
+
 private:
     TIntrusivePtr<TKqpCounters> Counters_;
 };

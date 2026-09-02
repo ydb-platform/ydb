@@ -482,6 +482,23 @@ public:
         }
     }
 
+    i64 GetTxMemoryAvailability(const TTxState& tx) const override {
+        with_lock (Lock) {
+            if (tx.IsReasonableToStartSpilling()) {
+                return 0;
+            }
+            ui64 available = TotalMemoryResource->Available();
+            if (!tx.PoolId.empty() && tx.MemoryPoolPercent > 0) {
+                auto it = MemoryNamedPools.find(tx.MakePoolId());
+                if (it != MemoryNamedPools.end()) {
+                    available = Min(available, it->second->Available());
+                }
+            }
+            // TODO(hor911@/ilezhankin@): return negative when a reclaim signal is available
+            return static_cast<i64>(Min<ui64>(available, static_cast<ui64>(Max<i64>())));
+        }
+    }
+
     TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) override
     {
         TTaskResourceEstimation ret = BuildInitialTaskResources(task);

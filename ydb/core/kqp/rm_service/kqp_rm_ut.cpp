@@ -279,6 +279,9 @@ public:
         UNIT_TEST(Reduce);
         UNIT_TEST(ConcurrentTasks);
         UNIT_TEST(ConcurrentChannels);
+        UNIT_TEST(OptionalQuotaDeniedAtYellowZone);
+        UNIT_TEST(OptionalQuotaDeniedWhenExceedsPool);
+        UNIT_TEST(FreeQuotaSymmetryAfterOptionalGrant);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
@@ -294,6 +297,9 @@ public:
     void Reduce();
     void ConcurrentTasks();
     void ConcurrentChannels();
+    void OptionalQuotaDeniedAtYellowZone();
+    void OptionalQuotaDeniedWhenExceedsPool();
+    void FreeQuotaSymmetryAfterOptionalGrant();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
     void NodesMembership();
@@ -547,7 +553,7 @@ void KqpRm::ConcurrentChannels() {
                 auto count = 0u;
                 for (auto n = 0u; n < 20u; n++) {
                     for (auto j = 0u; j < 20u; j++) {
-                        if (!qm->AllocateQuota(j * 10u)) {
+                        if (!qm->AllocateQuota(j * 10u, false)) {
                             failedAllocations++;
                             Sleep(TDuration::MilliSeconds(j * 10));
                             break;
@@ -573,9 +579,9 @@ void KqpRm::ConcurrentChannels() {
             UNIT_ASSERT(tx->TotalMemoryCookie);
             const bool reached = tx->TotalMemoryCookie->SpillingPercentReached.load();
             tx->TotalMemoryCookie->SpillingPercentReached.store(true);
-            UNIT_ASSERT(qm->IsReasonableToUseSpilling());
+            UNIT_ASSERT(qm->GetMemoryAvailability() <= 0);
             tx->TotalMemoryCookie->SpillingPercentReached.store(false);
-            UNIT_ASSERT_VALUES_EQUAL(qm->IsReasonableToUseSpilling(), tx->IsReasonableToStartSpilling());
+            UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability() <= 0, tx->IsReasonableToStartSpilling());
             tx->TotalMemoryCookie->SpillingPercentReached.store(reached);
         }
 
@@ -584,6 +590,118 @@ void KqpRm::ConcurrentChannels() {
     }
 
     AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
+}
+
+void KqpRm::OptionalQuotaDeniedAtYellowZone() {
+    // Drive yellow zone with real AllocateResources calls; verify:
+    //   - exact idle availability equals the node budget (green-phase precondition)
+    //   - after crossing the spilling threshold, availability drops to 0
+    //   - optional allocation is denied with counter deltas
+    //   - mandatory allocation still succeeds
+    auto config = MakeKqpResourceManagerConfig();
+    ui64 nodeLimit = config.GetQueryMemoryLimit();
+    double spillPct = config.GetSpillingPercent();
+    ui64 overLimit = static_cast<ui64>(static_cast<double>(nodeLimit) / 100.0 * (100.0 - spillPct) + 1e-9);
+    ui64 allocBytes = nodeLimit - overLimit + 1;
+
+    StartRms({config, config});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    // step=16 so the 10-byte mandatory request is rounded to 16, which fits in the remaining budget
+    auto qm = CreateChannelQuotaManager(rm, tx, 0, 16);
+    // Green-phase precondition: no allocations yet → full node budget available
+    UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), static_cast<i64>(nodeLimit));
+
+    // Cross spilling threshold; RM's UpdateCookie sets SpillingPercentReached
+    NRm::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = allocBytes};
+    bool allocated = rm->AllocateResources(*tx, 1, request);
+    UNIT_ASSERT(allocated);
+    UNIT_ASSERT(tx->TotalMemoryCookie);
+    UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 0);
+
+    // Optional denied; counters increment by exactly 1 request and 10 bytes
+    auto counters = rm->GetCounters();
+    i64 deniedBefore = counters->RmOptionalQuotaDenied->Val();
+    i64 bytesBefore = counters->RmOptionalQuotaDeniedBytes->Val();
+
+    bool optResult = qm->AllocateQuota(10, /* isOptional */ true);
+    UNIT_ASSERT(!optResult);
+    UNIT_ASSERT_VALUES_EQUAL(counters->RmOptionalQuotaDenied->Val(), deniedBefore + 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters->RmOptionalQuotaDeniedBytes->Val(), bytesBefore + 10);
+
+    // Mandatory ignores yellow zone; RM gets a 16-byte request which fits in overLimit remaining
+    bool mandResult = qm->AllocateQuota(10, /* isOptional */ false);
+    UNIT_ASSERT(mandResult);
+    qm->FreeQuota(10);
+
+    rm->FreeResources(*tx, 1, request);
+}
+
+void KqpRm::OptionalQuotaDeniedWhenExceedsPool() {
+    // Use a config where pool is smaller than node budget
+    auto config = MakeKqpResourceManagerConfig();
+    // 1000 bytes node, tx will be in a named pool with 10% = 100 bytes
+    StartRms({config, config});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // Create a tx with a named pool at 10%
+    TIntrusivePtr<NRm::TTxState> tx = MakeIntrusive<NRm::TTxState>(
+        rm, /*txId=*/42u, TInstant::Now(), /*poolId=*/"testpool", /*memoryPoolPercent=*/10.0, /*database=*/"testdb", false);
+
+    // Allocate pool memory to 60% (pool limit = 10% of 1000 = 100, OverLimit = 20).
+    // 60 used → 40 available, which is above OverLimit so SpillingPercentReached stays false.
+    NRm::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = 60};
+    bool allocated = rm->AllocateResources(*tx, 1, request);
+    UNIT_ASSERT(allocated);
+
+    // Pool has ~40 bytes left; optional request for 50 should be denied (headroom, not yellow zone)
+    auto qm = CreateChannelQuotaManager(rm, tx, 0, 16);
+    i64 available = qm->GetMemoryAvailability();
+    UNIT_ASSERT_GT(available, 0);  // not in yellow zone (40 >= OverLimit=20)
+    UNIT_ASSERT_LT(available, 50); // pool headroom (40) < 50
+
+    auto counters = rm->GetCounters();
+    i64 deniedBefore = counters->RmOptionalQuotaDenied->Val();
+    i64 bytesBefore = counters->RmOptionalQuotaDeniedBytes->Val();
+
+    bool optResult = qm->AllocateQuota(50, /* isOptional */ true);
+    UNIT_ASSERT(!optResult);
+    UNIT_ASSERT_VALUES_EQUAL(counters->RmOptionalQuotaDenied->Val(), deniedBefore + 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters->RmOptionalQuotaDeniedBytes->Val(), bytesBefore + 50);
+
+    rm->FreeResources(*tx, 1, request);
+}
+
+void KqpRm::FreeQuotaSymmetryAfterOptionalGrant() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    // step=256: optional grant of 100 triggers a 256-byte RM allocation; AllocatedQuota = 100
+    auto qm = CreateChannelQuotaManager(rm, tx, 0, 256);
+    UNIT_ASSERT_GT(qm->GetMemoryAvailability(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(qm->GetCurrentQuota(), 0u);
+
+    // Counters must not move on a granted optional request
+    auto counters = rm->GetCounters();
+    i64 deniedBefore = counters->RmOptionalQuotaDenied->Val();
+    i64 bytesBefore = counters->RmOptionalQuotaDeniedBytes->Val();
+
+    bool optResult = qm->AllocateQuota(100, /* isOptional */ true);
+    UNIT_ASSERT(optResult);
+    UNIT_ASSERT_VALUES_EQUAL(counters->RmOptionalQuotaDenied->Val(), deniedBefore);
+    UNIT_ASSERT_VALUES_EQUAL(counters->RmOptionalQuotaDeniedBytes->Val(), bytesBefore);
+    UNIT_ASSERT_VALUES_EQUAL(qm->GetCurrentQuota(), 100u);
+
+    qm->FreeQuota(100);
+    UNIT_ASSERT_VALUES_EQUAL(qm->GetCurrentQuota(), 0u);
 }
 
 void KqpRm::SnapshotSharing() {

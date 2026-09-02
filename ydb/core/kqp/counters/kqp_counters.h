@@ -420,6 +420,8 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOptionalQuotaDenied;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOptionalQuotaDeniedBytes;
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
     NMonitoring::THistogramPtr NodeServiceProcessTime;

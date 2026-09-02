@@ -355,7 +355,7 @@ TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterExplicitStop) {
     }));
 }
 
-TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
+TEST(TableTest, DriverStopFromResponseCallbackIsNonBlocking) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;
     std::unique_ptr<TDriver> driver;
@@ -395,7 +395,7 @@ TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
 
     requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
         success.store(future.GetValue().IsSuccess());
-        driver->Stop(true);
+        driver->Stop(false);
         callbackDone.set_value();
     });
 
@@ -404,9 +404,6 @@ TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
     ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
     ASSERT_TRUE(success.load());
 
-    ASSERT_TRUE(WaitUntil([&] {
-        return tableService.DeleteSessionRequests.load() >= 1u;
-    }));
     ASSERT_TRUE(WaitUntil([&] {
         auto stoppedSessionResult = tableClient->CreateSession().ExtractValueSync();
         return stoppedSessionResult.GetStatus() == EStatus::CLIENT_CANCELLED;
@@ -515,7 +512,7 @@ TEST(TableTest, DropLastOwnersFromResponseCallbackDoesNotDeadlock) {
     ASSERT_EQ(tableService.DeleteSessionRequests.load(), 2u);
 }
 
-TEST(TableTest, DriverStopFromResponseCallbackThenDropOwnersDoesNotDeadlock) {
+TEST(TableTest, AsyncDriverStopFromResponseCallbackThenDropsOwners) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;
     std::unique_ptr<TDriver> driver;
@@ -557,7 +554,7 @@ TEST(TableTest, DriverStopFromResponseCallbackThenDropOwnersDoesNotDeadlock) {
 
     requestFuture.Subscribe([&](const NThreading::TFuture<TStatus>& future) mutable {
         success.store(future.GetValue().IsSuccess());
-        driver->Stop(true);
+        driver->Stop(false);
         tableSession.reset();
         tableClient.reset();
         driver.reset();

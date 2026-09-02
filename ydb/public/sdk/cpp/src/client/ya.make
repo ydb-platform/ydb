@@ -23,7 +23,6 @@ RECURSE(
     impl/internal/logger
     impl/internal/make_request
     impl/internal/plain_status
-    impl/internal/sdk_runtime
     impl/internal/scheme_helpers
     impl/internal/thread_pool
     impl/internal/value_helpers
@@ -43,6 +42,7 @@ RECURSE(
     resources
     result
     row_ranges
+    runtime
     scheme
     secret
     table

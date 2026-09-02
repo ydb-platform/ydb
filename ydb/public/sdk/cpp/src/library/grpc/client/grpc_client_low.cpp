@@ -584,11 +584,14 @@ void TGRpcClientLow::WaitInternal() {
 }
 
 void TGRpcClientLow::WaitIdle() {
-    std::unique_lock<std::mutex> guard(Mtx_);
+    {
+        std::unique_lock<std::mutex> guard(Mtx_);
 
-    while (!Contexts_.empty()) {
-        ContextsEmpty_.wait(guard);
+        while (!Contexts_.empty()) {
+            ContextsEmpty_.wait(guard);
+        }
     }
+    WaitInternal();
 }
 
 std::shared_ptr<IQueueClientContext> TGRpcClientLow::CreateContext() {

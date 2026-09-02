@@ -4,7 +4,7 @@
 
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
 
-* Added the initial process-wide SDK runtime infrastructure. Driver cancellation and callback accounting are now isolated per driver, without changing public APIs or resource-sharing behavior.
+* SDK response handling, including streaming callbacks, now runs through one process-wide runtime executor. `GetSdkRuntime().Post()` is available as a public future-returning API. The first runtime use permanently selects the executor; stopping one driver completes its queued client callbacks with `CLIENT_CANCELLED`, and destroying the last driver owner starts shutdown asynchronously.
 
 ## v3.21.1
 

@@ -10,15 +10,6 @@ namespace NYdb::inline Dev {
 
 constexpr TDeadline::Duration MAX_DEFERRED_CALL_DELAY = 10s; // The max delay between GetOperation calls for one operation
 
-TSimpleCbResult::TSimpleCbResult(TSimpleCb&& cb)
-    : UserResponseCb_(std::move(cb))
-{ }
-
-void TSimpleCbResult::Process(void*) {
-    UserResponseCb_();
-    delete this;
-}
-
 TDeferredAction::TDeferredAction(const std::string& operationId,
         TDeferredOperationCb&& userCb,
         TGRpcConnectionsImpl* connection,
@@ -39,23 +30,40 @@ TDeferredAction::TDeferredAction(const std::string& operationId,
 
 void TDeferredAction::OnAlarm() {
     Y_ABORT_UNLESS(Connection_);
+    auto self = TPtr(this);
+    Connection_->PostCallback(
+        [self](bool stopped) mutable {
+            if (stopped) {
+                self->UserResponseCb_(nullptr, MakeClientStoppedStatus());
+                self->Context_.reset();
+                return;
+            }
+            if (self->Context_->IsCancelled()) {
+                self->UserResponseCb_(nullptr, MakeClientStoppedStatus());
+                self->Context_.reset();
+                return;
+            }
 
-    Ydb::Operations::GetOperationRequest getOperationRequest;
-    getOperationRequest.set_id(TStringType{OperationId_});
+            Ydb::Operations::GetOperationRequest getOperationRequest;
+            getOperationRequest.set_id(TStringType{self->OperationId_});
 
-    TRpcRequestSettings settings;
-    settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);
-    settings.Deadline = GlobalDeadline_;
+            TRpcRequestSettings settings;
+            settings.PreferredEndpoint = TEndpointKey(self->Endpoint_, 0);
+            settings.Deadline = self->GlobalDeadline_;
 
-    Connection_->RunDeferred<Ydb::Operation::V1::OperationService, Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
-        std::move(getOperationRequest),
-        std::move(UserResponseCb_),
-        &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation,
-        DbDriverState_,
-        NextDelay_,
-        settings,
-        true,
-        std::move(Context_));
+            self->Connection_->RunDeferred<
+                Ydb::Operation::V1::OperationService,
+                Ydb::Operations::GetOperationRequest,
+                Ydb::Operations::GetOperationResponse>(
+                std::move(getOperationRequest),
+                std::move(self->UserResponseCb_),
+                &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation,
+                self->DbDriverState_,
+                self->NextDelay_,
+                settings,
+                true,
+                std::move(self->Context_));
+        });
 }
 
 void TDeferredAction::OnError() {
@@ -63,13 +71,13 @@ void TDeferredAction::OnError() {
     NYdbGrpc::TGrpcStatus status = {"Deferred timer interrupted", -1, true};
     DbDriverState_->StatCollector.IncDiscoveryFailDueTransportError();
 
-    auto resp = new TGRpcErrorResponse<Ydb::Operations::Operation>(
-        std::move(status),
-        std::move(UserResponseCb_),
-        Connection_,
-        std::move(Context_),
-        Endpoint_);
-    Connection_->EnqueueResponse(resp);
+    TPlainStatus plainStatus(status, Endpoint_, {});
+    if (!Endpoint_.empty()) {
+        plainStatus.Issues.AddIssue(NYdb::NIssue::TIssue(
+            "Grpc error response on endpoint " + Endpoint_));
+    }
+    Connection_->RunResponseCallback<Ydb::Operations::Operation>(
+        std::move(UserResponseCb_), nullptr, std::move(plainStatus));
 }
 
 TPeriodicAction::TPeriodicAction(
@@ -84,28 +92,59 @@ TPeriodicAction::TPeriodicAction(
 }
 
 void TPeriodicAction::OnAlarm() {
-    NYdb::NIssue::TIssues issues;
-    if (!UserResponseCb_(std::move(issues), EStatus::SUCCESS)) {
-        return;
-    }
+    auto self = TIntrusivePtr<TPeriodicAction>(this);
+    Connection_->PostCallback(
+        [self](bool stopped) mutable {
+            if (stopped) {
+                self->OnStopped();
+                return;
+            }
+            NYdb::NIssue::TIssues issues;
+            const auto status = self->Context_->IsCancelled()
+                                    ? EStatus::CLIENT_CANCELLED
+                                    : EStatus::SUCCESS;
+            if (!self->UserResponseCb_(std::move(issues), status) || status != EStatus::SUCCESS) {
+                self->Context_.reset();
+                return;
+            }
 
-    auto ctx = Connection_->CreateContext();
-    if (!ctx)
-        return;
-    Context_ = ctx;
+            auto context = self->Connection_->CreateContext();
+            if (!context) {
+                return;
+            }
 
-    auto action = MakeIntrusive<TPeriodicAction>(
-        std::move(UserResponseCb_),
-        Connection_,
-        Context_,
-        Period_);
-    action->Start();
+            auto action = MakeIntrusive<TPeriodicAction>(
+                std::move(self->UserResponseCb_),
+                self->Connection_,
+                std::move(context),
+                self->Period_);
+            action->Start();
+        });
 }
 
 void TPeriodicAction::OnError() {
-    NYdb::NIssue::TIssues issues;
-    issues.AddIssue(NYdb::NIssue::TIssue("Deferred timer interrupted"));
-    UserResponseCb_(std::move(issues), EStatus::CLIENT_INTERNAL_ERROR);
+    auto self = TIntrusivePtr<TPeriodicAction>(this);
+    Connection_->PostCallback(
+        [self](bool stopped) mutable {
+            if (stopped) {
+                self->OnStopped();
+                return;
+            }
+            NYdb::NIssue::TIssues issues;
+            const auto status = self->Context_->IsCancelled()
+                                    ? EStatus::CLIENT_CANCELLED
+                                    : EStatus::CLIENT_INTERNAL_ERROR;
+            if (status == EStatus::CLIENT_INTERNAL_ERROR) {
+                issues.AddIssue(NYdb::NIssue::TIssue("Deferred timer interrupted"));
+            }
+            self->UserResponseCb_(std::move(issues), status);
+            self->Context_.reset();
+        });
+}
+
+void TPeriodicAction::OnStopped() {
+    UserResponseCb_(NYdb::NIssue::TIssues{}, EStatus::CLIENT_CANCELLED);
+    Context_.reset();
 }
 
 TDelayedAction::TDelayedAction(
@@ -126,4 +165,4 @@ void TDelayedAction::OnError() {
     UserResponseCb_(false);
 }
 
-} // namespace NYdb
+} // namespace NYdb::inline Dev

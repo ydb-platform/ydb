@@ -81,6 +81,7 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
+        // Waiting on the sole callback worker would prevent Drain() completions from running.
         const bool waitForDrain = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
         auto drainFuture = Drain();
         if (waitForDrain) {

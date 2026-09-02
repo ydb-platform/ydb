@@ -212,7 +212,7 @@ public:
             ConnectionState = EConnectionState::CONNECTING;
         }
         DoConnectRequest(context);
-        context->SubscribeStop([self = TPtr(this)] {
+        context->SubscribeCancel([self = TPtr(this)] {
             self->Stop();
         });
     }
@@ -334,16 +334,13 @@ private:
     struct TDescribeSemaphoreOp : public TSimpleOp {
         const std::string Name;
         TDescribeSemaphoreSettings Settings;
-        NYdbGrpc::TQueueClientCallbackGuardFactory CallbackGuardFactory;
         TPromise<TDescribeSemaphoreResult> Promise = NewPromise<TDescribeSemaphoreResult>();
 
         TDescribeSemaphoreOp(
                 const std::string& name,
-                const TDescribeSemaphoreSettings& settings,
-                NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory)
+                const TDescribeSemaphoreSettings& settings)
             : Name(name)
             , Settings(settings)
-            , CallbackGuardFactory(std::move(callbackGuardFactory))
         {}
 
         void FillRequest(TRequest& req, uint64_t reqId) const override {
@@ -362,9 +359,7 @@ private:
             } else if (Settings.OnChanged_) {
                 std::function<void(bool)> callback;
                 callback.swap(Settings.OnChanged_);
-                NYdbGrpc::RunQueueClientCallback(CallbackGuardFactory, [&] {
-                    callback(false);
-                });
+                callback(false);
             }
         }
     };
@@ -535,10 +530,7 @@ private:
         if (IsClosed()) {
             return MakeClosedResult<TSemaphoreDescription>();
         }
-        auto op = std::make_unique<TDescribeSemaphoreOp>(
-            name,
-            settings,
-            Connections_->GetCallbackGuardFactory());
+        auto op = std::make_unique<TDescribeSemaphoreOp>(name, settings);
         auto future = op->Promise.GetFuture();
         if (IsWriteAllowed()) {
             DoSendSimpleOp(std::move(op));
@@ -915,9 +907,7 @@ private:
 private:
     template<class TCallback>
     void RunUserCallback(TCallback&& callback) {
-        NYdbGrpc::RunQueueClientCallback(
-            Connections_->GetCallbackGuardFactory(),
-            std::forward<TCallback>(callback));
+        std::forward<TCallback>(callback)();
     }
 
     void OnProcessorStatus(TStatus status) {

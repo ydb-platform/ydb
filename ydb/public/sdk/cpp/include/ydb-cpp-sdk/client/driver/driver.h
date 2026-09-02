@@ -40,20 +40,21 @@ public:
     //! Set number of network threads, default: 2
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
 
-    //! Set number of client pool threads, if 0 adaptive thread pool will be used.
-    //! NOTE: in case of no zero value it is possible to get deadlock if all threads
-    //! of this pool is blocked somewhere in user code.
+    //! Set the process-wide SDK executor thread count if this driver initializes the runtime.
+    //! If 0, an adaptive thread pool is used.
+    //! NOTE: a non-zero limit may cause a deadlock if all threads block in user code.
     //! default: 0
     TDriverConfig& SetClientThreadsNum(size_t sz);
 
     //! Warning: not recommended to change
     //! Set max number of queued responses. 0 - no limit
-    //! There is a queue to perform async calls to user code,
+    //! There is a process-wide queue to perform async calls to user code,
     //! if this queue is full, attempts to enqueue responses inside sdk will be blocked
     //! Size of this queue must be greater than max size of all requests inflight
     //! Note: if this limit is reached network threads will be blocked.
     //! Note: set of this limit can cause deadlock in some case of using async interface
-    //! This value doesn't make sense if SetClientThreadsNum is 0
+    //! This value doesn't make sense if SetClientThreadsNum is 0.
+    //! Only the settings that initialize the process-wide runtime take effect.
     //! default: 0
     TDriverConfig& SetMaxClientQueueSize(size_t sz);
 
@@ -177,8 +178,10 @@ public:
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);
 
-    //! Set executor for async responses.
-    //! If not set, default executor will be used.
+    //! Set the process-wide executor for asynchronous SDK responses.
+    //! The first runtime use selects the executor (or the default when it is not set).
+    //! Reusing the same executor instance is allowed; selecting another instance throws
+    //! TContractViolation. The SDK starts the selected executor once and never stops it.
     TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
 
     //! Set external metrics registry implementation.
@@ -201,11 +204,12 @@ class TDriver {
 public:
     TDriver(const TDriverConfig& config);
 
-    //! Cancel all currently running and future requests
-    //! This method is useful to make sure there are no new asynchronous
-    //! callbacks and it is safe to destroy the driver
-    //! When wait is true this method will not return until the underlying
-    //! client thread pool is stopped completely
+    //! Cancel all currently running and future requests.
+    //! Queued client completions for this driver receive CLIENT_CANCELLED after stop.
+    //! When wait is true, this method waits for callbacks already executing and queued
+    //! cancellation completions, and for the underlying network client to stop.
+    //! Do not use wait=true from an SDK callback.
+    //! Destroying the last driver owner starts the same shutdown asynchronously.
     void Stop(bool wait = false);
 
     template<typename TExtension>

@@ -34,11 +34,6 @@ inline TPlainStatus MakeClientStoppedStatus() {
     return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
 }
 
-class TQueueResponse : public IObjectInQueue {
-public:
-    virtual void Cancel() = 0;
-};
-
 template<typename TCb>
 class TGenericCbHolder {
 protected:
@@ -77,7 +72,7 @@ public:
             LocalContext_ = context;
             Alarm_.Set(this->Context_->CompletionQueue(), Deadline_, PrepareTag());
         }
-        context->SubscribeStop([self = TPtr(this)] {
+        context->SubscribeCancel([self = TPtr(this)] {
             self->Stop();
         });
     }
@@ -98,16 +93,11 @@ private:
             LocalContext_.reset();
         }
 
-        auto guardFactory = this->Context_
-            ? this->Context_->GetCallbackGuardFactory()
-            : NYdbGrpc::TQueueClientCallbackGuardFactory();
-        NYdbGrpc::RunQueueClientCallback(guardFactory, [&] {
-            if (ok) {
-                OnAlarm();
-            } else {
-                OnError();
-            }
-        });
+        if (ok) {
+            OnAlarm();
+        } else {
+            OnError();
+        }
 
         return false;
     }
@@ -124,99 +114,6 @@ private:
     grpc::Alarm Alarm_;
     std::shared_ptr<IQueueClientContext> LocalContext_;
 };
-
-template<typename TResponse>
-class TGRpcErrorResponse
-    : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public TQueueResponse
-{
-public:
-    TGRpcErrorResponse(
-            NYdbGrpc::TGrpcStatus&& status,
-            TResponseCb<TResponse>&& userCb,
-            TGRpcConnectionsImpl* connections,
-            std::shared_ptr<IQueueClientContext> context,
-            const std::string& endpoint)
-        : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
-        , GRpcStatus_(std::move(status))
-        , Endpoint_(endpoint)
-    { }
-
-    void Process(void*) override {
-        TPlainStatus status(GRpcStatus_, Endpoint_, {});
-
-        if (!Endpoint_.empty()) {
-            std::string msg = "Grpc error response on endpoint ";
-            msg += Endpoint_;
-            status.Issues.AddIssue(NYdb::NIssue::TIssue(msg));
-        }
-
-        this->Context_.reset();
-        this->UserResponseCb_(nullptr, status);
-        delete this;
-    }
-
-    void Cancel() override {
-        this->Context_.reset();
-        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
-        delete this;
-    }
-
-private:
-    NYdbGrpc::TGrpcStatus GRpcStatus_;
-    std::string Endpoint_;
-};
-
-template<typename TResponse>
-class TResult
-    : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public TQueueResponse
-{
-public:
-    TResult(
-            TResponse&& response,
-            NYdbGrpc::TGrpcStatus&& status,
-            TResponseCb<TResponse>&& userCb,
-            TGRpcConnectionsImpl* connections,
-            std::shared_ptr<IQueueClientContext> context,
-            const std::string& endpoint,
-            std::multimap<std::string, std::string>&& metadata)
-        : TGenericCbHolder<TResponseCb<TResponse>>(std::move(userCb), connections, std::move(context))
-        , Response_(std::move(response))
-        , GRpcStatus_(std::move(status))
-        , Endpoint_(endpoint)
-        , Metadata_(std::move(metadata)) {}
-
-    void Process(void*) override {
-        this->Context_.reset();
-        this->UserResponseCb_(&Response_, TPlainStatus{GRpcStatus_, Endpoint_, std::move(Metadata_)});
-        delete this;
-    }
-
-    void Cancel() override {
-        this->Context_.reset();
-        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
-        delete this;
-    }
-
-private:
-    TResponse Response_;
-    NYdbGrpc::TGrpcStatus GRpcStatus_;
-    const std::string Endpoint_;
-    std::multimap<std::string, std::string> Metadata_;
-};
-
-class TSimpleCbResult : public IObjectInQueue
-{
-public:
-    TSimpleCbResult(TSimpleCb&& cb);
-    void Process(void*) override;
-
-private:
-    TSimpleCb UserResponseCb_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
 
 class TDeferredAction
     : public TAlarmActionBase<TDeferredOperationCb>
@@ -259,6 +156,7 @@ public:
     void OnAlarm() override;
     void OnError() override;
 private:
+    void OnStopped();
     TDeadline::Duration Period_;
 };
 

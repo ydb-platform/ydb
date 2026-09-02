@@ -1,6 +1,4 @@
 items:
-- name: Expanding a cluster
-  href: cluster_expansion.md
 - name: Adding storage groups
   href: adding_storage_groups.md
 - name: Safe restart and shutdown of nodes

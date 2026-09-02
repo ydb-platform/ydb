@@ -21,6 +21,8 @@ The `DEFAULT` option is supported:
 
 Sets a default value for the column. If no value is specified for this column when inserting a row, the specified default value is used. The default value must match the column's data type.
 
+{% if feature_alter_column_not_null == true %}
+
 ### NOT NULL
 
 There are two operations:
@@ -29,6 +31,8 @@ There are two operations:
 * `DROP NOT NULL` — removes the `NOT NULL` constraint from the column, again allowing `NULL` values.
 
 For more information about how these operations work, see [here](../alter_table/not_null.md).
+
+{% endif %}
 
 ### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 

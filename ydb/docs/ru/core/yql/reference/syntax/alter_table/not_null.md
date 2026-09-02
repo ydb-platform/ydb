@@ -1,3 +1,5 @@
+{% if feature_alter_column_not_null == true %}
+
 # Выставление и сброс ограничения `NOT NULL`
 
 Ограничение целостности данных на уровне колонки, которое запрещает запись `NULL` в качестве значений. Это ограничение гарантирует, что колонка всегда содержит действительное значение.
@@ -47,3 +49,4 @@ ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
 
 * [ALTER COLUMN](columns.md)
 
+{% endif %}

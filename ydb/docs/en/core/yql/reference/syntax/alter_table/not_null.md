@@ -1,3 +1,5 @@
+{% if feature_alter_column_not_null == true %}
+
 # Setting and dropping the `NOT NULL` constraint
 
 A column-level data integrity constraint that prohibits writing `NULL` as values. This constraint ensures that the column always contains a valid value.
@@ -50,3 +52,5 @@ Note:
 ## See also
 
 * [ALTER COLUMN](columns.md)
+
+{% endif %}

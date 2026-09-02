@@ -296,7 +296,6 @@ public:
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
         UNIT_TEST(P09PoolLimitAndAllocated);
-        UNIT_TEST(P10PoolPeak);
         UNIT_TEST(P11PoolDenied);
         UNIT_TEST(P12PoolWouldBeDeniedBytes);
         UNIT_TEST(P13PoolSpillingFlag);
@@ -318,7 +317,6 @@ public:
     void NodesMembershipByExchanger();
     void DisonnectNodes();
     void P09PoolLimitAndAllocated();
-    void P10PoolPeak();
     void P11PoolDenied();
     void P12PoolWouldBeDeniedBytes();
     void P13PoolSpillingFlag();
@@ -768,30 +766,6 @@ void KqpRm::P09PoolLimitAndAllocated() {
 
     rm->FreeResources(*tx, 2, request);
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), 0);
-}
-
-// P-10: Peak keeps the running maximum; releasing does not decrease it.
-void KqpRm::P10PoolPeak() {
-    StartRms();
-    NKikimr::TActorSystemStub stub;
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
-
-    auto tx = MakePoolTx(1, rm, "pool_b", 50);
-    auto sensorGroup = GetPoolSensorGroup("db1", "pool_b");
-
-    NRm::TKqpResourcesRequest r100{.Memory = 100};
-    NRm::TKqpResourcesRequest r200{.Memory = 200};
-    NRm::TKqpResourcesRequest r50{.Memory = 50};
-
-    UNIT_ASSERT(rm->AllocateResources(*tx, 1, r100)); // allocated = 100
-    UNIT_ASSERT(rm->AllocateResources(*tx, 2, r200)); // allocated = 300  <- peak
-    UNIT_ASSERT(rm->AllocateResources(*tx, 3, r50));  // allocated = 350  <- peak
-    i64 peakAfterThree = sensorGroup->GetCounter("Peak", false)->Val();
-
-    rm->FreeResources(*tx, 2, r200); // allocated drops to 150
-    // Peak must not decrease after release
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Peak", false)->Val(), peakAfterThree);
-    UNIT_ASSERT_VALUES_EQUAL(peakAfterThree, (i64)350);
 }
 
 // P-11: DeniedRequests and DeniedBytes grow when the pool limit denies an allocation.

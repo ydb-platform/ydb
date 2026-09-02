@@ -65,7 +65,6 @@ ui64 Percentage(ui64 limit, double percent) {
 struct TPoolSensors {
     NMonitoring::TDynamicCounters::TCounterPtr Limit;
     NMonitoring::TDynamicCounters::TCounterPtr Allocated;
-    NMonitoring::TDynamicCounters::TCounterPtr Peak;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedBytes;
     NMonitoring::TDynamicCounters::TCounterPtr SpillingFlag;
@@ -78,7 +77,6 @@ public:
                              const NMonitoring::TDynamicCounterPtr& sensorGroup = nullptr)
         : BaseLimit(baseLimit)
         , Used(0)
-        , Peak(0)
         , MemoryPoolPercent(memoryPoolPercent)
         , OverPercent(overPercent)
         , SpillingCookie(MakeIntrusive<TMemoryResourceCookie>())
@@ -88,7 +86,6 @@ public:
             Sensors = std::make_unique<TPoolSensors>();
             Sensors->Limit           = sensorGroup->GetCounter("Limit",              false);
             Sensors->Allocated       = sensorGroup->GetCounter("Allocated",          false);
-            Sensors->Peak            = sensorGroup->GetCounter("Peak",               false);
             Sensors->DeniedRequests  = sensorGroup->GetCounter("DeniedRequests",     true);
             Sensors->DeniedBytes     = sensorGroup->GetCounter("DeniedBytes",        true);
             Sensors->SpillingFlag    = sensorGroup->GetCounter("SpillingFlag",       false);
@@ -102,7 +99,6 @@ public:
         if (Sensors) {
             Sensors->Limit->Set(0);
             Sensors->Allocated->Set(0);
-            Sensors->Peak->Set(0);
             Sensors->SpillingFlag->Set(0);
         }
     }
@@ -118,12 +114,6 @@ public:
     bool AcquireIfAvailable(ui64 value) {
         if (Available() >= value) {
             Used += value;
-            if (Used > Peak) {
-                Peak = Used;
-                if (Sensors) {
-                    Sensors->Peak->Set(Peak);
-                }
-            }
             UpdateCookie();
             if (Sensors) {
                 Sensors->Allocated->Set(Used);
@@ -147,10 +137,6 @@ public:
 
     ui64 GetUsed() const {
         return Used;
-    }
-
-    ui64 GetPeak() const {
-        return Peak;
     }
 
     void Release(ui64 value) {
@@ -225,7 +211,6 @@ private:
     ui64 OverLimit;
     ui64 Limit;
     ui64 Used;
-    ui64 Peak;
     double MemoryPoolPercent;
     double OverPercent;
 
@@ -1033,7 +1018,7 @@ private:
                     str << "<table border='1' cellpadding='4'>";
                     str << "<tr>"
                         << "<th>Database</th><th>Pool</th>"
-                        << "<th>Limit</th><th>Allocated</th><th>Peak</th>"
+                        << "<th>Limit</th><th>Allocated</th>"
                         << "<th>DeniedRequests</th><th>DeniedBytes</th>"
                         << "<th>SpillingFlag</th><th>WouldBeDeniedBytes</th>"
                         << "</tr>";
@@ -1043,7 +1028,6 @@ private:
                             << "<td>" << EncodeHtmlPcdata(key.second) << "</td>"
                             << "<td>" << pool->GetLimit() << "</td>"
                             << "<td>" << pool->GetUsed() << "</td>"
-                            << "<td>" << pool->GetPeak() << "</td>"
                             << "<td>" << pool->GetDeniedRequests() << "</td>"
                             << "<td>" << pool->GetDeniedBytes() << "</td>"
                             << "<td>" << (pool->IsSpillingReached() ? "1" : "0") << "</td>"

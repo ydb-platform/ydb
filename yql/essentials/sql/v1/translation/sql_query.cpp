@@ -2962,6 +2962,20 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
             Ctx_.Error() << to_upper(settingName.Name) << " value should be a string literal";
             return false;
         }
+    } else if (to_lower(settingName.Name) == "external_threshold") {
+        if (name.Name != "default") {
+            Ctx_.Error() << "EXTERNAL_THRESHOLD is supported only for column family 'default'";
+            return false;
+        }
+        if (entry->ExternalThreshold) {
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for column family '"
+                         << name.Name << "' in one alter";
+            return false;
+        }
+        if (!StoreInt(value, entry->ExternalThreshold, Ctx_)) {
+            Ctx_.Error() << to_upper(settingName.Name) << " value should be an integer";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << settingName.Name;
         return false;

@@ -562,7 +562,6 @@ message TTableServiceConfig {
     optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableVectorSearchActor = 141 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapPushdownRegexp = 142 [default = false, (InvalidateCompileCache) = true];
-
     optional bool EnableSmallComputeMemoryAllocations = 143 [default = true];
 
     // Prune key columns
@@ -574,4 +573,9 @@ message TTableServiceConfig {
     // (NRm::TTxState::IsReasonableToStartSpilling), shrink the sender inflight window down to
     // the cold inflight value instead of letting channels soak the full per channel limit.
     optional bool EnableSpillingChannelBackpressure = 146 [default = false];
+
+    // Selects physical-stage post-processing after new RBO conversion. True rebuilds wide inputs and runs
+    // the full YQL peephole; false uses focused KQP compatibility lowering and prunes unused aggregation
+    // outputs. Can be overridden per query with PRAGMA ydb.EnableNewRBOPhysicalStagePeephole.
+    optional bool EnableNewRBOPhysicalStagePeephole = 147 [default = true, (InvalidateCompileCache) = true];
 };

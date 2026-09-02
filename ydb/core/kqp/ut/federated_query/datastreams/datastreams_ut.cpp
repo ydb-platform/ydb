@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const std::string sourceName = "sourceName";
         const std::string inputTopicName = "inputTopicName";
-        const std::string outputTopicName = "outputTopicName";
+        const TString outputTopicName = "outputTopicName";
         const std::string tableName = "tableName";
 
         CreateTopic(outputTopicName);

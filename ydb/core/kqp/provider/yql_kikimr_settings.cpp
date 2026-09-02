@@ -107,6 +107,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, UseBlockHashJoinForCross);
+    REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
@@ -391,6 +392,11 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
 
 bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
     return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
+}
+
+bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
+    return EnableNewRBOPhysicalStagePeephole.Get().GetOrElse(
+        TTableServiceConfig::GetEnableNewRBOPhysicalStagePeephole());
 }
 
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {

@@ -2461,10 +2461,14 @@ void SetNonZero(NJson::TJsonValue& node, const TStringBuf& name, T value) {
     }
 }
 
-void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& planIndex, THashMap<TString, NJson::TJsonValue>& precomputes) {
+void BuildPlanIndex(
+    const NJson::TJsonValue& plan,
+    THashMap<int, const NJson::TJsonValue*>& planIndex,
+    THashMap<TString, const NJson::TJsonValue*>& precomputes
+) {
     if (plan.GetMapSafe().contains("PlanNodeId")){
         auto id = plan.GetMapSafe().at("PlanNodeId").GetIntegerSafe();
-        planIndex[id] = plan;
+        planIndex[id] = &plan;
     }
 
     if (plan.GetMapSafe().contains("Subplan Name")) {
@@ -2472,14 +2476,14 @@ void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& p
 
         auto pos = precomputeName.find("precompute");
         if (pos != TString::npos) {
-            precomputes[precomputeName.substr(pos)] = plan;
+            precomputes[precomputeName.substr(pos)] = &plan;
         } else if (precomputeName.size()>=4 && precomputeName.find("CTE ") != TString::npos) {
-            precomputes[precomputeName.substr(4)] = plan;
+            precomputes[precomputeName.substr(4)] = &plan;
         }
     }
 
     if (plan.GetMapSafe().contains("Plans")) {
-        for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+        for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
             BuildPlanIndex(p, planIndex, precomputes);
         }
     }
@@ -2536,8 +2540,8 @@ void CopySimplifiedConnectionFields(const NJson::TJsonValue& from, NJson::TJsonV
 class TQueryPlanReconstructor {
 public:
     TQueryPlanReconstructor(
-        const THashMap<int, NJson::TJsonValue>& planIndex,
-        const THashMap<TString, NJson::TJsonValue>& precomputes
+        const THashMap<int, const NJson::TJsonValue*>& planIndex,
+        const THashMap<TString, const NJson::TJsonValue*>& precomputes
     )
         : PlanIndex(planIndex)
         , Precomputes(precomputes)
@@ -2548,22 +2552,29 @@ public:
     NJson::TJsonValue Reconstruct(
         const NJson::TJsonValue& plan
     ) {
-        auto reconstructed = ReconstructImpl(plan, 0, 0, false, nullptr);
-        return reconstructed;
+        return ReconstructImpl(plan, 0, 0, false, nullptr, Nothing());
     }
 
 private:
+    static void ApplyCpuTime(NJson::TJsonValue& op, const TMaybe<double>& cpuTimeMs) {
+        if (cpuTimeMs) {
+            op["A-SelfCpu"] = *cpuTimeMs;
+        }
+    }
+
     NJson::TJsonValue ReconstructImpl(
         const NJson::TJsonValue& plan,
         int operatorIndex,
         int parentTaskCount,
         bool fromBroadcast,
-        const NJson::TJsonValue* inheritedTableStats
+        const NJson::TJsonValue* inheritedTableStats,
+        TMaybe<double> inheritedCpuTimeMs
     ) {
         int currentNodeId = NodeIDCounter++;
 
         int taskCount = parentTaskCount;
         const NJson::TJsonValue* ownTableStats = nullptr;
+        TMaybe<double> ownCpuTimeMs;
         if (plan.GetMapSafe().contains("Stats")) {
             const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
             if (stats.contains("Tasks")) {
@@ -2572,7 +2583,15 @@ private:
             if (stats.contains("Table")) {
                 ownTableStats = &stats.at("Table");
             }
+            if (operatorIndex == 0 && stats.contains("CpuTimeUs")) {
+                const auto& cpuTime = stats.at("CpuTimeUs");
+                const double cpuTimeUs = cpuTime.IsMap()
+                    ? cpuTime.GetMapSafe().at("Max").GetDoubleSafe()
+                    : cpuTime.GetDoubleSafe();
+                ownCpuTimeMs = cpuTimeUs / 1000.0;
+            }
         }
+        const auto effectiveCpuTimeMs = ownCpuTimeMs ? ownCpuTimeMs : inheritedCpuTimeMs;
 
         NJson::TJsonValue result;
         result["PlanNodeId"] = currentNodeId;
@@ -2593,6 +2612,7 @@ private:
 
             op["Name"] = "Lookup";
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+            ApplyCpuTime(op, effectiveCpuTimeMs);
 
             newOps.AppendValue(std::move(op));
             result["Operators"] = std::move(newOps);
@@ -2625,7 +2645,7 @@ private:
             lookupPlan["Operators"] = std::move(lookupOps);
 
 	        if (plan.GetMapSafe().contains("Plans")) {
-                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0, taskCount, false, inheritedTableStats));
+                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0, taskCount, false, inheritedTableStats, Nothing()));
             }
 
             newPlans.AppendValue(std::move(lookupPlan));
@@ -2648,7 +2668,7 @@ private:
             if (plan.GetMapSafe().contains("CTE Name")) {
                 auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
                 if (Precomputes.contains(precompute)) {
-                    planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr));
+                    planInputs.AppendValue(ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
                 }
             }
 
@@ -2675,6 +2695,7 @@ private:
                 if (plan.GetMapSafe().contains("E-Size")) {
                     op["E-Size"] = plan.GetMapSafe().at("E-Size");
                 }
+                ApplyCpuTime(op, effectiveCpuTimeMs);
 
                 newOps.AppendValue(std::move(op));
 
@@ -2683,14 +2704,31 @@ private:
             }
 
             const auto effectiveTableStats = ownTableStats ? ownTableStats : inheritedTableStats;
-            for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            const auto isRegularPlan = [](const NJson::TJsonValue& child) {
+                const auto& childMap = child.GetMapSafe();
+                const bool isCte = !childMap.contains("Operators") && childMap.contains("CTE Name");
+                return !isCte && childMap.at("Node Type").GetStringSafe().find("Precompute") == TString::npos;
+            };
+            TMaybe<double> childCpuTimeMs;
+            if (effectiveCpuTimeMs) {
+                size_t regularPlansCount = 0;
+                for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+                    if (isRegularPlan(p)) {
+                        ++regularPlansCount;
+                    }
+                }
+                if (regularPlansCount == 1) {
+                    childCpuTimeMs = effectiveCpuTimeMs;
+                }
+            }
+            for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
                 if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                     auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
                     if (Precomputes.contains(precompute)) {
-                        planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr));
+                        planInputs.AppendValue(ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
                     }
-                } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, effectiveTableStats));
+                } else if (isRegularPlan(p)) {
+                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, effectiveTableStats, childCpuTimeMs));
                 }
             }
             result["Plans"] = planInputs;
@@ -2704,7 +2742,7 @@ private:
                 return result;
             }
 
-            return ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr);
+            return ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing());
         }
 
         auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
@@ -2726,8 +2764,8 @@ private:
                 }
                 processedExternalOperators.insert(inputPlanKey);
 
-                auto inputPlan = PlanIndex.at(inputPlanKey);
-                planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast", ownTableStats) );
+                const auto& inputPlan = *PlanIndex.at(inputPlanKey);
+                planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast", ownTableStats, Nothing()) );
             } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
                 auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
 
@@ -2736,7 +2774,7 @@ private:
                 }
                 processedInternalOperators.insert(inputPlanId);
 
-                planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false, inheritedTableStats) );
+                planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false, inheritedTableStats, Nothing()) );
             }
         }
 
@@ -2769,7 +2807,7 @@ private:
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
-                planInputs.push_back(ReconstructImpl(Precomputes.at(maybePrecompute), 0, taskCount, false, nullptr));
+                planInputs.push_back(ReconstructImpl(*Precomputes.at(maybePrecompute), 0, taskCount, false, nullptr, Nothing()));
             }
         }
 
@@ -2881,7 +2919,6 @@ private:
             }
 
             if (operatorIndex == 0 && !op.GetMapSafe().contains("A-Rows")) {
-
                 // top level rows/size have to match stage output
                 if (!operatorRows && stats.contains("OutputRows")) {
                     auto outputRows = stats.at("OutputRows");
@@ -2899,21 +2936,11 @@ private:
                     }
                     op["A-Size"] = aSize;
                 }
-
-                // cpu usage available for stage only, so assign it to top level operator
-                if (stats.contains("CpuTimeUs")) {
-                    double opCpuTime;
-
-                    auto& cpuTime = stats.at("CpuTimeUs");
-                    if (cpuTime.IsMap()) {
-                        opCpuTime = cpuTime.GetMapSafe().at("Max").GetDoubleSafe();
-                    } else {
-                        opCpuTime = cpuTime.GetDoubleSafe();
-                    }
-
-                    op["A-SelfCpu"] = opCpuTime / 1000.0;
-                }
             }
+        }
+
+        if (operatorIndex == 0) {
+            ApplyCpuTime(op, effectiveCpuTimeMs);
         }
 
         if (opName == "TableFullScan" && !ownTableStats && inheritedTableStats) {
@@ -2955,8 +2982,8 @@ private:
     }
 
 private:
-    const THashMap<int, NJson::TJsonValue>& PlanIndex;
-    const THashMap<TString, NJson::TJsonValue>& Precomputes;
+    const THashMap<int, const NJson::TJsonValue*>& PlanIndex;
+    const THashMap<TString, const NJson::TJsonValue*>& Precomputes;
     ui32 NodeIDCounter;
     i32 Budget; // Prevent bugs with inf recursion
 };
@@ -2998,15 +3025,17 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "CombineByKey"
     };
 
-    THashMap<int, NJson::TJsonValue> planIndex;
-    THashMap<TString, NJson::TJsonValue> precomputes;
+    NJson::TJsonValue reconstructedPlan;
+    {
+        THashMap<int, const NJson::TJsonValue*> planIndex;
+        THashMap<TString, const NJson::TJsonValue*> precomputes;
 
+        BuildPlanIndex(plan, planIndex, precomputes);
 
-    BuildPlanIndex(plan, planIndex, precomputes);
-
-    plan =
-        TQueryPlanReconstructor(planIndex, precomputes)
-            .Reconstruct(plan);
+        TQueryPlanReconstructor reconstructor(planIndex, precomputes);
+        reconstructedPlan = reconstructor.Reconstruct(plan);
+    }
+    plan = std::move(reconstructedPlan);
 
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);

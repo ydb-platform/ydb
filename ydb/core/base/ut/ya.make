@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/testlib
     ydb/core/testlib/basics
+    ydb/library/superlemmer_stub
     yql/essentials/sql/pg_dummy
 )
 

@@ -14,10 +14,12 @@ namespace NKikimr {
 class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 Generation;
+    const ui32 Version;
     const TInstant Deadline;
     const ui64 IssuerGuid;
     const TWriteSource WriteSource;
     bool SeenAlready = false;
+    bool SeenObsoleteVersion = false;
 
     TGroupQuorumTracker QuorumTracker;
 
@@ -29,6 +31,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(ev->Cookie);
+        SeenObsoleteVersion |= record.GetIsTabletStorageInfoVersionObsolete();
 
         Y_ABORT_UNLESS(shortId.FailRealm == vdisk.FailRealm &&
                 shortId.FailDomain == vdisk.FailDomain &&
@@ -74,7 +77,8 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
 
             case NKikimrProto::ERROR: {
                 TStringStream err;
-                newStatus = SeenAlready ? NKikimrProto::ALREADY : NKikimrProto::ERROR;
+                newStatus = SeenObsoleteVersion ? NKikimrProto::ERROR
+                    : SeenAlready ? NKikimrProto::ALREADY : NKikimrProto::ERROR;
                 err << "Status# " << NKikimrProto::EReplyStatus_Name(newStatus)
                     << " From# " << vdisk.ToString()
                     << " NodeId# " << Info->GetActorId(vdisk).NodeId()
@@ -98,6 +102,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
         std::unique_ptr<TEvBlobStorage::TEvBlockResult> result(new TEvBlobStorage::TEvBlockResult(status));
         result->ErrorReason = ErrorReason;
+        result->IsTabletStorageInfoVersionObsolete = status != NKikimrProto::OK && SeenObsoleteVersion;
         DSP_LOG_LOG_S(PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
         Mon->CountBlockResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         return SendResponseAndDie(std::move(result));
@@ -112,13 +117,14 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
             << " node# " << Info->GetActorId(vdiskId).NodeId());
 
         auto msg = std::make_unique<TEvBlobStorage::TEvVBlock>(TabletId, Generation, vdiskId, Deadline, WriteSource,
-            IssuerGuid);
+            IssuerGuid, Version);
         SendToQueue(std::move(msg), cookie);
     }
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartBlock;
-        auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, Deadline, IssuerGuid, WriteSource);
+        auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, Deadline, IssuerGuid, WriteSource,
+            Version);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -137,6 +143,7 @@ public:
         : TBlobStorageGroupRequestActor(params)
         , TabletId(params.Common.Event->TabletId)
         , Generation(params.Common.Event->Generation)
+        , Version(params.Common.Event->Version)
         , Deadline(params.Common.Event->Deadline)
         , IssuerGuid(params.Common.Event->IssuerGuid)
         , WriteSource(params.Common.Event->WriteSource)

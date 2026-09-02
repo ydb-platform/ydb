@@ -1,4 +1,5 @@
 #include "flat_executor_gclogic.h"
+#include "flat_sausage_grind.h"
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -10,6 +11,25 @@ constexpr ui32 HistoryCutterUtBlobSize = 42;
 
 TLogoBlobID HistoryCutterUtBlob(ui64 tabletId, ui32 generation, ui32 channel) {
     return TLogoBlobID(tabletId, generation, 0, channel, HistoryCutterUtBlobSize, 0);
+}
+
+// The allocator is only exercised on the WriteToLog/SendCollectGarbage paths;
+// ApplyLogEntry touches only ChannelInfo and HistoryCutter.
+TAutoPtr<NPageCollection::TSteppedCookieAllocator> MakeGCCookies(
+        const TTabletStorageInfo& info, ui32 generation = 1) {
+    // Every channel needs a slot or the allocator asserts; the group is a placeholder.
+    TVector<NPageCollection::TSlot> slots;
+    for (ui32 ch = 0; ch < (ui32)info.Channels.size(); ++ch) {
+        const ui32 group = info.Channels[ch].History.empty()
+            ? 1u : info.Channels[ch].History.front().GroupID;
+        slots.emplace_back(static_cast<ui8>(ch), group);
+    }
+    return new NPageCollection::TSteppedCookieAllocator(
+        info.TabletID,
+        ui64(generation) << 32,
+        NPageCollection::TCookieRange{0, 999},
+        TArrayRef<const NPageCollection::TSlot>(slots)
+    );
 }
 
 } // namespace
@@ -263,6 +283,36 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         cutter.SeenBlob(b);
         cutter.SeenBlob(b);
         UNIT_ASSERT(cutter.GetHistoryToCut(0).empty());
+    }
+
+    // A pending DoNotKeep mark must pin the history entry that resolves its
+    // blob's generation to a group, or the entry is cut before GC delivers the
+    // flag and the group becomes irresolvable. Ablation: drop the SeenBlob call
+    // in ApplyDelta's delta.Deleted loop and GetHistoryToCut returns [10, 100).
+    Y_UNIT_TEST(DeletedBlobInApplyDeltaPinsHistoryEntry) {
+        const ui64 tabletId = 30;
+
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(tabletId, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        // Two history entries: [10, 100) -> group 1, [100, inf) -> group 2.
+        info->Channels[0].History.emplace_back(10u, 1u);
+        info->Channels[0].History.emplace_back(100u, 2u);
+
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info));
+
+        // Put a DoNotKeep blob at generation 50 (inside [10, 100)) into Deleted.
+        TGCBlobDelta delta;
+        delta.Deleted.push_back(HistoryCutterUtBlob(tabletId, 50, 0));
+
+        // ApplyLogEntry is the public entry point; it calls ApplyDelta internally.
+        TGCLogEntry entry(TGCTime(1, 1), delta);
+        gcLogic.ApplyLogEntry(entry);
+
+        // The history entry covering [10, 100) must be blocked: generation 50
+        // was seen there, so the entry must not appear in the cut list.
+        auto toCut = gcLogic.HistoryCutter.GetHistoryToCut(0);
+        UNIT_ASSERT_C(toCut.empty(),
+            "history entry [10, 100) must not be cuttable while gen-50 blob has a pending DoNotKeep mark");
     }
 }
 

@@ -230,6 +230,62 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(error, "columns should have a single value");
     }
 
+    Y_UNIT_TEST(ValidateSuperLemmerSettings) {
+        const auto makeSettings = [] {
+            Ydb::Table::FulltextIndexSettings settings;
+            auto* column = settings.add_columns();
+            column->set_column("text");
+            auto* analyzers = column->mutable_analyzers();
+            analyzers->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            analyzers->set_use_filter_superlemmer(true);
+            return settings;
+        };
+
+        TString error;
+
+        {
+            auto settings = makeSettings();
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "language required when use_filter_superlemmer is set");
+        }
+
+        {
+            auto settings = makeSettings();
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("klingon");
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by superlemmer");
+        }
+
+        {
+            auto settings = makeSettings();
+            auto* analyzers = settings.mutable_columns()->at(0).mutable_analyzers();
+            analyzers->set_language("russian");
+            analyzers->set_use_filter_snowball(true);
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball and use_filter_superlemmer at the same time");
+        }
+
+        for (bool edge : {false, true}) {
+            auto settings = makeSettings();
+            auto* analyzers = settings.mutable_columns()->at(0).mutable_analyzers();
+            analyzers->set_language("russian");
+            if (edge) {
+                analyzers->set_use_filter_edge_ngram(true);
+            } else {
+                analyzers->set_use_filter_ngram(true);
+            }
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_superlemmer with use_filter_ngram or use_filter_edge_ngram at the same time");
+        }
+
+        {
+            auto settings = makeSettings();
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("russian");
+            UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+        }
+    }
+
     Y_UNIT_TEST(FillSetting) {
         TString error;
         Ydb::Table::FulltextIndexSettings settings;

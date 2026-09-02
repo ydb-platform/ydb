@@ -373,4 +373,6 @@ message TFeatureFlags {
     // SchemeShard's single-threaded load.
     optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
     optional bool EnableTruncateColumnTable = 318 [default = false];
+    optional bool EnableSuperLemmer = 319 [default = false];
+    optional bool EnableImportInParquet = 320 [default = false];
 }

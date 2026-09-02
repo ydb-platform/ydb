@@ -187,6 +187,7 @@ TString TCategory::DebugString() const {
     TStringBuilder sb;
     sb << "{";
     sb << "category=" << Category << ";";
+    sb << "queue_limit=" << QueueSizeLimit << ";";
     sb << "pools=" << JoinSeq(",", WorkerPools) << ";";
     sb << "}";
     return sb;

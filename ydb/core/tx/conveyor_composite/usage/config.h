@@ -100,6 +100,7 @@ public:
 class TCategory {
 private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
+    YDB_READONLY(ui32, QueueSizeLimit, 256 * 1024);
     YDB_READONLY_DEF(std::vector<ui64>, WorkerPools);
 
 public:
@@ -118,6 +119,9 @@ public:
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TCategory& proto) {
         if (!TryFromString<ESpecialTaskCategory>(proto.GetName(), Category)) {
             return TConclusionStatus::Fail("cannot parse category: " + proto.GetName());
+        }
+        if (proto.HasQueueSizeLimit()) {
+            QueueSizeLimit = proto.GetQueueSizeLimit();
         }
         return TConclusionStatus::Success();
     }

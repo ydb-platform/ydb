@@ -1313,9 +1313,11 @@ bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32
 
 bool MakeTzDate(ui32 year, ui32 month, ui32 day, ui16& value, ui16 tzId) {
     ui32 datetime;
-    auto result = MakeTzDatetime(year, month, day, 0U, 0U, 0U, datetime, tzId);
+    if (!MakeTzDatetime(year, month, day, 0U, 0U, 0U, datetime, tzId)) {
+        return false;
+    }
     value = datetime / 86400U;
-    return result;
+    return true;
 }
 
 bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui32& value, ui16 tzId) {

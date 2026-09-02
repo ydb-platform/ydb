@@ -1632,7 +1632,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifiedQueries ==
             std::set<ui32>({
-                3, 4, 6, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22,
+                3, 4, 6, 7, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22,
             }));
         UNIT_ASSERT_VALUES_EQUAL(
             SnapshotPairFloorQueries(policy.Suites.at(Tpch.Name)).size(),

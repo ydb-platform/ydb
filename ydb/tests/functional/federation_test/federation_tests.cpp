@@ -20,29 +20,29 @@ const TString consumerName  = "consumer";
 
 Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
 
-    // Y_UNIT_TEST(WriteAndReadOnClusterA) {
-    //     TClusterEndpoints env;
-    //     TString writtenMessage = "hello from cluster_a";
-    //     WriteMessages(env.EndpointA, prodDatabasePath, prodTopicPath,
-    //                   "ut-producer-a", {writtenMessage});
+    Y_UNIT_TEST(WriteAndReadOnClusterA) {
+        TClusterEndpoints env;
+        TString writtenMessage = "hello from cluster_a";
+        WriteMessages(env.EndpointA, fullProdDatabasePath, prodTopicPath,
+                      "ut-producer-a", {writtenMessage});
 
-    //     TDriver driver = MakeDriver(env.EndpointA, prodDatabasePath);
-    //     TTopicClient client(driver);
+        TDriver driver = MakeDriver(env.EndpointA, fullProdDatabasePath);
+        TTopicClient client(driver);
 
-    //     std::map<ui64, TString> messages;
-    //     {
-    //         TTopicClient client(driver);
-    //         auto session = client.CreateReadSession(
-    //             TReadSessionSettings()
-    //                 .ConsumerName(consumerName)
-    //                 .AppendTopics(TTopicReadSettings(prodTopicPath))
-    //         );
-    //         messages = ReadMessages(session, 1);
-    //         session->Close(TDuration::Seconds(5));
-    //     }
-    //     driver.Stop(true);
-    //     UNIT_ASSERT_EQUAL(writtenMessage, messages[0]);
-    // }
+        std::map<ui64, TString> messages;
+        {
+            TTopicClient client(driver);
+            auto session = client.CreateReadSession(
+                TReadSessionSettings()
+                    .ConsumerName(consumerName)
+                    .AppendTopics(TTopicReadSettings(prodTopicPath))
+            );
+            messages = ReadMessages(session, 1);
+            session->Close(TDuration::Seconds(5));
+        }
+        driver.Stop(true);
+        UNIT_ASSERT_EQUAL(writtenMessage, messages[0]);
+    }
 
     Y_UNIT_TEST(SimpleRemoteMirrorRuleWorks) {
         NFederationTests::TClusterEndpoints env;

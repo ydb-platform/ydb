@@ -2,8 +2,13 @@ import logging
 import os
 import signal
 import time
+import grpc
 
 import ydb
+import ydb.coordination
+
+from ydb.public.api.grpc import ydb_rate_limiter_v1_pb2_grpc
+from ydb.public.api.protos import ydb_rate_limiter_pb2
 import yatest.common
 from yatest.common import process
 from library.python import port_manager
@@ -72,6 +77,7 @@ class FederationRecipe(object):
         self.__port_manager = port_manager.PortManager()
         self.__cm_pid = None
         self.__cm_stderr_file = None
+        self.__cm_endpoint = None
 
         for name in ydb_cluster_names:
             self.__clusters[name] = None
@@ -127,6 +133,9 @@ class FederationRecipe(object):
             database="/Root",
         )
         with ydb.Driver(driver_config) as ydb_driver:
+            ydb_driver.wait(timeout=5)
+            with ydb.QuerySessionPool(ydb_driver, size=1) as pool:
+                _exec_queries(pool, _PQ_TABLES_DDL)
             session = ydb.retry_operation_sync(lambda: ydb_driver.table_client.session().create())
             session.create_table(
                 '/Root/PQ/SourceIdMeta2',
@@ -155,6 +164,96 @@ class FederationRecipe(object):
             'upsert into Version (Key, Version) values ("main", 0);',
             commit_tx=True,
         )
+
+    def _setup_pqdiscovery(self, cluster_port, cluster_name):
+        endpoint = "localhost:{}".format(cluster_port)
+        driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                for cname in self.__cluster_ports:
+                    pool.execute_with_retries("""
+                        --!syntax_v1
+                        UPSERT INTO `/Root/PQ/Config/V2/Cluster`
+                            (name, enabled, local, balancer, weight)
+                        VALUES
+                            ('{name}', true, {local}, 'localhost', 1000);
+                    """.format(name=cname, local="true" if cname == cluster_name else "false"))
+                pool.execute_with_retries("""
+                    --!syntax_v1
+                    UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version)
+                    VALUES ('Cluster', 1);
+                """)
+        logger.info("pqdiscovery tables set up on cluster={}".format(cluster_name))
+
+    def _create_kesus_nodes(self, cluster_port):
+        """
+        Create coordination (Kesus) nodes for each pre-installed account on a cluster,
+        then create the root rate limiter resources write-quota and read-quota inside each node.
+        CM generates child CreateRateLimiterResource commands when a new topic is created via
+        admin API — parent resources must exist before those commands run.
+        """
+        endpoint = "localhost:{}".format(cluster_port)
+        driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            scheme_client = ydb.SchemeClient(driver)
+            for part in ("/Root/PersQueue", "/Root/PersQueue/System", "/Root/PersQueue/System/Quoters"):
+                try:
+                    scheme_client.make_directory(part)
+                except ydb.SchemeError:
+                    pass  # already exists
+            for account in ('admin',) + PRE_INSTALLED_ACCOUNTS:
+                kesus_path = "/Root/PersQueue/System/Quoters/{}".format(account)
+                try:
+                    driver.coordination_client.create_node(
+                        kesus_path,
+                        config=ydb.coordination.NodeConfig(
+                            attach_consistency_mode=ydb.coordination.ConsistencyMode.UNSET,
+                            rate_limiter_counters_mode=ydb.coordination.RateLimiterCountersMode.DETAILED,
+                            read_consistency_mode=ydb.coordination.ConsistencyMode.UNSET,
+                            self_check_period_millis=0,
+                            session_grace_period_millis=0,
+                        ),
+                    )
+                    logger.info("Created Kesus node {} on {}".format(kesus_path, endpoint))
+                except ydb.SchemeError:
+                    pass  # already exists
+
+        channel = grpc.insecure_channel(endpoint)
+        try:
+            stub = ydb_rate_limiter_v1_pb2_grpc.RateLimiterServiceStub(channel)
+            _large_quota = 1_000_000_000_000.0  # matches WriteQuota/ReadQuota in Quotas table UPSERT
+            _resources = [
+                ("write-quota", ydb_rate_limiter_pb2.HierarchicalDrrSettings(
+                    max_units_per_second=_large_quota,
+                )),
+                # read-quota: disable prefetch (prefetch_coefficient=-1) as CM does
+                ("read-quota", ydb_rate_limiter_pb2.HierarchicalDrrSettings(
+                    max_units_per_second=_large_quota,
+                    prefetch_coefficient=-1.0,
+                )),
+            ]
+            for account in ('admin',) + PRE_INSTALLED_ACCOUNTS:
+                kesus_path = "/Root/PersQueue/System/Quoters/{}".format(account)
+                account_resources = list(_resources)
+                for resource_path, drr in account_resources:
+                    req = ydb_rate_limiter_pb2.CreateResourceRequest(
+                        coordination_node_path=kesus_path,
+                        resource=ydb_rate_limiter_pb2.Resource(
+                            resource_path=resource_path,
+                            hierarchical_drr=drr,
+                        ),
+                    )
+                    try:
+                        resp = stub.CreateResource(req)
+                        logger.info("Rate limiter resource {}/{} created, status={}".format(
+                            kesus_path, resource_path, resp.operation.status))
+                    except grpc.RpcError as e:
+                        logger.warning("CreateResource {}/{} failed (may already exist): {}".format(
+                            kesus_path, resource_path, e))
+        finally:
+            channel.close()
 
     def _pre_init_cm(self, meta_port):
         """
@@ -192,14 +291,14 @@ class FederationRecipe(object):
                         (Name, PartitionsCount, RetentionTimeSec, FormatVersion, Codecs,
                          MaxMessageSize, MaxDiskSize, PartitionsPerTablet,
                          AllowUnauthorizedRead, AllowUnauthorizedWrite,
-                         MaxPartitionWriteSpeed, MaxPartitionsCount,
+                         MaxPartitionWriteSpeed,
                          ScaleThresholdTime, ScaleUpThresholdPercent, ScaleDownThresholdPercent,
                          ScaleStrategy, PartitionMetricsEnabled, ContentBasedDeduplication,
                          CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
                     VALUES
                         ('default', 1, 129600, 0, 'raw, gzip, lzop',
                          12582912, 9223372036854775807, 2,
-                         true, true, 2097152, 0,
+                         true, true, 2097152,
                          0, 0, 0, 'disabled', false, false,
                          {now_ms}, {now_ms}, 'admin', 'admin');
                 """.format(now_ms=now_ms))
@@ -208,7 +307,7 @@ class FederationRecipe(object):
                     --!syntax_v1
                     UPSERT INTO `/Root/ConsumerTemplates`
                         (Name, Important, FormatVersion, Codecs,
-                         MaxDelayThreshold, MaxMessageLags, LimitsMode, AllowedDatacenter,
+                         MaxDelayThreshold, MaxMessageLags, LimitsMode,
                          MaxReadRules, MaxPartitions, AvailabilityPeriod,
                          PartitionMetricsEnabled, ConsumerType, KeepMessagesOrder,
                          DeadLetterPolicyEnabled, DeadLetterPolicy, MaxProcessingAttempts,
@@ -217,7 +316,7 @@ class FederationRecipe(object):
                          CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
                     VALUES
                         ('default', false, 0, 'raw, gzip, lzop',
-                         86400000000000, 100000000000000, 'wait', '',
+                         86400000000000, 100000000000000, 'wait',
                          2000, 20000, 0,
                          false, 0, false,
                          false, 0, 0, 0, '',
@@ -240,7 +339,7 @@ class FederationRecipe(object):
                         VALUES
                             ('{name}', 'admin', 'default',
                              10, 100, 10, 1, 20, 10, 3, 100, 1, 10, 10,
-                             0, false, '', false, '', '',
+                             0, false, '', true, '', '',
                              'abc_service', 1, '{name}', '',
                              {now_ms}, {now_ms}, 'admin', 'admin');
                     """.format(name=account_name, now_ms=now_ms))
@@ -279,6 +378,21 @@ class FederationRecipe(object):
                         balancer='localhost',
                     ))
 
+                all_quota_clusters = list(self.__cluster_ports.keys())
+                for account_name in ('admin',) + PRE_INSTALLED_ACCOUNTS:
+                    for quota_cluster in all_quota_clusters:
+                        pool.execute_with_retries("""
+                            --!syntax_v1
+                            UPSERT INTO `/Root/Quotas`
+                                (Path, Cluster,
+                                 WriteQuota, WriteQuotaStatic, WriteQuotaRolling, ReadQuota,
+                                 CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
+                            VALUES
+                                ('{path}', '{cluster}',
+                                 20971520, 0, 10485760, 1099511627776,
+                                 {now_ms}, {now_ms}, 'admin', 'admin');
+                        """.format(path=account_name, cluster=quota_cluster, now_ms=now_ms))
+
                 pool.execute_with_retries("""
                     --!syntax_v1
                     UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version)
@@ -287,126 +401,56 @@ class FederationRecipe(object):
 
         logger.info("CM tables pre-initialized")
 
-    def _setup_pqdiscovery(self, cluster_port, local_cluster_name):
-        """
-        Create and populate pqdiscovery tables on a single cluster.
-        Marks local_cluster_name as local=true so ClusterTracker knows the local DC.
-        """
-        endpoint = "localhost:{}".format(cluster_port)
-        driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
-        with ydb.Driver(driver_config) as driver:
-            driver.wait(timeout=10)
-            with ydb.QuerySessionPool(driver, size=1) as pool:
-                _exec_queries(pool, _PQ_TABLES_DDL)
-                for cname in self.__cluster_ports:
-                    pool.execute_with_retries("""
-                        --!syntax_v1
-                        UPSERT INTO `/Root/PQ/Config/V2/Cluster`
-                            (name, enabled, local, balancer, weight)
-                        VALUES
-                            ('{name}', true, {local}, 'localhost', 1000);
-                    """.format(
-                        name=cname,
-                        local='true' if cname == local_cluster_name else 'false',
-                    ))
-                pool.execute_with_retries("""
-                    --!syntax_v1
-                    UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version)
-                    VALUES ('Cluster', 1);
-                """)
-        logger.info("pqdiscovery tables set up on cluster={} (local={})".format(
-            local_cluster_name, local_cluster_name))
-
     def _setup_cm_topics_consumers(self, cluster_ports):
-        """
-        Create YDB topics and consumers on all clusters, and record them in CM's tables.
-        """
         logger.info("Setting up topics and consumers")
-        now_ms = int(time.time() * 1000)
 
-        # Set up pqdiscovery on each cluster (ClusterTracker needs local=true for topic creation)
+        for cluster_name, cluster_port in cluster_ports.items():
+            self._create_kesus_nodes(cluster_port)
+            logger.info("Kesus nodes created on cluster={}".format(cluster_name))
+
+        cm_endpoint = self.__cm_endpoint
+        assert cm_endpoint, "CM endpoint not set; _start_cm must run first"
+        logger.info("Waiting for CM at {}".format(cm_endpoint))
+        driver_config = ydb.DriverConfig(
+            endpoint=cm_endpoint,
+            database="/Root/logbroker-federation/{}".format(PRE_INSTALLED_ACCOUNTS[0]),
+        )
+
         for cluster_name, cluster_port in cluster_ports.items():
             self._setup_pqdiscovery(cluster_port, cluster_name)
+        for attempt in range(30):
+            try:
+                with ydb.Driver(driver_config) as d:
+                    d.wait(timeout=5)
+                logger.info("CM is ready (attempt {})".format(attempt))
+                break
+            except Exception as e:
+                logger.info("CM not ready yet (attempt {}): {}".format(attempt, e))
+                time.sleep(2)
+        else:
+            raise RuntimeError("CM did not become ready within 60s")
 
-        # Wait for ClusterTracker to poll the freshly written tables (polls every 1s in tests)
+        for account in PRE_INSTALLED_ACCOUNTS:
+            database = "/logbroker-federation/{}".format(account)
+            driver_config = ydb.DriverConfig(endpoint=cm_endpoint, database=database)
+            with ydb.Driver(driver_config) as driver:
+                driver.wait(timeout=10)
+                tc = ydb.TopicClient(driver, ydb.TopicClientSettings())
+                for attempt in range(5):
+                    try:
+                        consumerName = f"/logbroker-federation/{account}/consumer"
+                        tc.create_topic("topic", consumers=[consumerName], min_active_partitions=1)
+                        logger.info("Created topic for account={} via CM".format(account))
+                        break
+                    except Exception as e:
+                        logger.info("CreateTopic attempt {} for account={} failed: {}".format(
+                            attempt, account, e))
+                        time.sleep(2)
+                else:
+                    raise RuntimeError("Failed to create topic for account={}".format(account))
+
         time.sleep(3)
-
-        for cluster_name, cluster_port in cluster_ports.items():
-            endpoint = "localhost:{}".format(cluster_port)
-            for account in PRE_INSTALLED_ACCOUNTS:
-                database = "/Root/logbroker-federation/{}".format(account)
-                driver_config = ydb.DriverConfig(endpoint=endpoint, database=database)
-                with ydb.Driver(driver_config) as driver:
-                    driver.wait(timeout=10)
-                    tc = ydb.TopicClient(driver, ydb.TopicClientSettings())
-                    tc.create_topic(
-                        "topic",
-                        consumers=["consumer"],
-                        attributes={"_federation_account": account},
-                    )
-                logger.info("Created topic/consumer on cluster={} account={}".format(
-                    cluster_name, account))
-
-        meta_port = list(cluster_ports.values())[0]
-        endpoint = "localhost:{}".format(meta_port)
-        driver_config = ydb.DriverConfig(endpoint=endpoint, database="/Root")
-        with ydb.Driver(driver_config) as driver:
-            driver.wait(timeout=10)
-            with ydb.QuerySessionPool(driver, size=1) as pool:
-                for account in PRE_INSTALLED_ACCOUNTS:
-                    topic_path = "{}/topic".format(account)
-                    consumer_path = "{}/consumer".format(account)
-
-                    pool.execute_with_retries("""
-                        --!syntax_v1
-                        UPSERT INTO `/Root/Topics`
-                            (Path, Owner, Parent,
-                             PartitionsCount, RetentionTimeSec, FormatVersion, Codecs,
-                             MaxMessageSize, MaxDiskSize, PartitionsPerTablet,
-                             AllowUnauthorizedRead, AllowUnauthorizedWrite,
-                             MaxPartitionWriteSpeed, MaxPartitionsCount,
-                             ScaleThresholdTime, ScaleUpThresholdPercent,
-                             ScaleDownThresholdPercent, ScaleStrategy,
-                             PartitionMetricsEnabled, ContentBasedDeduplication,
-                             AbcService, AbcId, Responsible, MailingList,
-                             CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
-                        VALUES
-                            ('{path}', 'admin', 'default',
-                             1, 129600, 0, 'raw, gzip, lzop',
-                             12582912, 9223372036854775807, 2,
-                             true, true, 2097152, 0,
-                             0, 0, 0, 'disabled',
-                             false, false,
-                             '', 0, '', '',
-                             {now_ms}, {now_ms}, 'admin', 'admin');
-                    """.format(path=topic_path, now_ms=now_ms))
-
-                    pool.execute_with_retries("""
-                        --!syntax_v1
-                        UPSERT INTO `/Root/Consumers`
-                            (Path, Owner, Parent,
-                             Important, FormatVersion, Codecs,
-                             MaxDelayThreshold, MaxMessageLags, LimitsMode, AllowedDatacenter,
-                             MaxReadRules, MaxPartitions, AvailabilityPeriod,
-                             PartitionMetricsEnabled, ConsumerType, KeepMessagesOrder,
-                             DeadLetterPolicyEnabled, DeadLetterPolicy, MaxProcessingAttempts,
-                             DefaultProcessingTimeoutSeconds, DeadLetterQueue,
-                             DefaultDelayMessageTimeMs, DefaultReceiveMessageWaitTimeMs,
-                             AbcService, AbcId, Responsible, MailingList,
-                             CreationTimeMs, ModificationTimeMs, CreatedBy, ModifiedBy)
-                        VALUES
-                            ('{path}', 'admin', 'default',
-                             false, 0, 'raw, gzip, lzop',
-                             86400000000000, 100000000000000, 'wait', '',
-                             2000, 20000, 0,
-                             false, 0, false,
-                             false, 0, 0, 0, '',
-                             0, 0,
-                             '', 0, '', '',
-                             {now_ms}, {now_ms}, 'admin', 'admin');
-                    """.format(path=consumer_path, now_ms=now_ms))
-
-        logger.info("Topics and consumers registered")
+        logger.info("Topics and consumers created, pqdiscovery populated")
 
     def _start_cm(self):
         assert self.__clusters
@@ -511,6 +555,8 @@ class FederationRecipe(object):
         assert retries_count, "Failed to start CM"
         assert self.__cm_pid is not None
 
+        self.__cm_endpoint = cm_endpoint
+
         _setenv("CM_PORT", str(grpc_port))
         logger.info("CM started on port {}".format(grpc_port))
 
@@ -520,7 +566,7 @@ class FederationRecipe(object):
             self._setup_ydb_cluster(name, cluster, port)
         self._start_cm()
         self._setup_cm_topics_consumers(self.__cluster_ports)
-        time.sleep(100)
+        time.sleep(20)
 
     def stop(self, args):
         if self.__cm_pid is not None:

@@ -3266,6 +3266,81 @@ Total 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:14Z
         self.assertEqual(result["legacy_identity"], result["explicit_legacy_identity"])
         self.assertFalse(result["empty_number"])
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB attempts UI test")
+    def test_local_ydb_web_attempts_use_objective_latency_percentile(self):
+        schema_start = web._JS.index("function localLegacyResultSchema")
+        schema_finish = web._JS.index("function localChart", schema_start)
+        render_start = web._JS.index("function renderLocalYdbProfile")
+        render_finish = web._JS.index("async function mountLocalYdbProfile", render_start)
+        script = (
+            """
+            const esc=value=>String(value??'');
+            const metricLabel=value=>String(value??'—');
+            const elapsedLabel=value=>String(value??0);
+            const localElapsed=()=>0;
+            const localPhaseLabel=value=>value||'';
+            const localActivityLog=()=>'';
+            const localRestoreActivityScroll=()=>{};
+            const localProfileDetails=()=>'';
+            const localVerificationSummary=()=>'';
+            const localKpi=()=>'';
+            const localOutcomeLabel=value=>value||'';
+            const localSearchAxisLabel=value=>value||'load';
+            const localBestRows=(attempts,objective,xField)=>new Map(
+              attempts.map(item=>[String(item[xField]),item])
+            );
+            const chartColors=[];
+            const localChart=()=>'';
+            const localCommandDetails=()=>'';
+            const bindChartTooltips=()=>{};
+            """
+            + web._JS[schema_start:schema_finish]
+            + web._JS[render_start:render_finish]
+            + """
+            const schema={
+              schema_id:'generic-total-v1',throughput_unit:'requests/s',reports_errors:true,
+              metrics:[
+                {name:'throughput',unit:'requests/s',repetition_aggregation:'median'},
+                {name:'errors',unit:'errors',repetition_aggregation:'sum'},
+                {name:'p95_ms',unit:'ms',repetition_aggregation:'median'},
+                {name:'p99_ms',unit:'ms',repetition_aggregation:'median'}
+              ],
+              slo_metrics:{p95:'p95_ms',p99:'p99_ms'}
+            };
+            const container={
+              dataset:{},innerHTML:'',querySelector:()=>null,querySelectorAll:()=>[]
+            };
+            renderLocalYdbProfile(container,{
+              state:'passed',started_at:'2025-01-01T00:00:00Z',progress:{search_stage:1},searches:[],
+              parameters:{
+                workload:{type:'kv'},
+                load:{parameter:'rate',objective:{type:'latency-slo',percentile:'p95',max_ms:10}}
+              },
+              workload_result_schema:schema,
+              attempts:[{
+                attempt:1,search_stage:1,dynamic_nodes:1,load:90,throughput:80,
+                p95_ms:5.95,p99_ms:99.99,errors:0,empty_repetitions:0,
+                static_cpu_mean:10,dynamic_cpu_mean:20,cli_cpu_mean:30,
+                passed:true,decision:'within SLO',duration_seconds:1
+              }]
+            });
+            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class=local-attempts>'));
+            process.stdout.write(JSON.stringify({table}));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        table = json.loads(completed.stdout)["table"]
+        self.assertIn(">p95 (ms)</th>", table)
+        self.assertNotIn(">p99 (ms)</th>", table)
+        self.assertIn(">5.95</td>", table)
+        self.assertNotIn(">99.99</td>", table)
+
     @unittest.skipUnless(shutil.which("node"), "node is required for the schema-aware Builder test")
     def test_local_ydb_web_builder_omits_unsupported_error_controls(self):
         start = web._JS.index("function localField")

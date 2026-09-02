@@ -1847,7 +1847,7 @@ function renderLocalYdbProfile(container,data){
       )).join('')+
       localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
       (errorSeries.length?localChart('Errors and retries','errors',xName,xValues,errorSeries):'')+'</div>';
-    const displayedMetrics=localDisplayedMetrics(resultSchema);
+    const displayedMetrics=localDisplayedMetrics(resultSchema,objective);
     const workloadHeaders=displayedMetrics.map(metric=>'<th title="'+
       esc(metric.description||'')+'">'+esc(localMetricLabel(resultSchema,metric.name))+
       (metric.unit?' ('+esc(metric.unit)+')':'')+'</th>').join('');

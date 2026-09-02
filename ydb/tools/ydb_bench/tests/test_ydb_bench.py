@@ -544,6 +544,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[4]["default_client_threads"], 1)
         self.assertEqual([item["default_warmup_seconds"] for item in catalog[:3] + catalog[4:]], [10] * 4)
         self.assertEqual(catalog[4]["minimum_duration_seconds"], 2)
+        self.assertEqual([item["maximum_total_seconds"] for item in catalog], [None, None, None, None, 3600])
         self.assertEqual(
             {option["name"]: option["default"] for option in catalog[4]["options"]},
             {"partitions": 128, "consumers": 1, "message-size": 10240, "codec": "raw"},
@@ -778,6 +779,19 @@ class YdbBenchTest(unittest.TestCase):
             )
         )
         self.assertEqual(bounded.runs[0].parameters["local_ydb"]["measurement"]["duration"], 3599)
+        zero_warmup_boundary = load_config(
+            self._config(
+                """
+                local-ydb:
+                  topic-zero-warmup-boundary:
+                    workload: {type: topic, operation: full}
+                    load: {parameter: rate, values: [100]}
+                    measurement: {warmup: 0, duration: 3600, repetitions: 1}
+                """,
+                "topic-zero-warmup-boundary.yaml",
+            )
+        )
+        self.assertEqual(zero_warmup_boundary.runs[0].parameters["local_ydb"]["measurement"]["duration"], 3600)
 
         latency = (
             load_config(
@@ -1437,6 +1451,15 @@ class YdbBenchTest(unittest.TestCase):
             local_ydb_workloads._validate_catalog((replace(definition, run_plan_builder=None),))
         with self.assertRaisesRegex(ValueError, "default client threads"):
             local_ydb_workloads._validate_catalog((replace(definition, default_client_threads=0),))
+        for invalid_maximum in (0, True, "10"):
+            with self.subTest(maximum_total_seconds=invalid_maximum), self.assertRaisesRegex(
+                ValueError, "maximum total duration"
+            ):
+                local_ydb_workloads._validate_catalog(
+                    (replace(definition, maximum_total_seconds=invalid_maximum),)
+                )
+        with self.assertRaisesRegex(ValueError, "cannot fit"):
+            local_ydb_workloads._validate_catalog((replace(definition, maximum_total_seconds=10),))
         for invalid_warmup in (-1, True, "10"):
             with self.subTest(default_warmup_seconds=invalid_warmup), self.assertRaisesRegex(
                 ValueError, "default warmup"
@@ -3534,7 +3557,8 @@ class YdbBenchTest(unittest.TestCase):
               load_limits:{'max-sessions':{option:'warehouses',multiplier:10}}
             };
             const topicDefinition={
-              load_parameters:['rate'],default_client_threads:1,default_warmup_seconds:10,load_limits:{}
+              load_parameters:['rate'],default_client_threads:1,default_warmup_seconds:10,
+              minimum_duration_seconds:2,maximum_total_seconds:3600,load_limits:{}
             };
             const tpccWorkload={options:{warehouses:10}};
             const switchedToTpcc=localYdbLoadForWorkload(
@@ -3551,9 +3575,24 @@ class YdbBenchTest(unittest.TestCase):
             const switchedBack=localYdbLoadForWorkload(
               switchedToTpcc,['rate','threads'],{load_limits:{}},{options:{}}
             );
+            const topicMeasurement=localYdbMeasurementForWorkload(
+              {warmup:1,duration:5000,repetitions:3,verification_repetitions:2},topicDefinition
+            );
+            const validTopic=localYdbValidateMeasurement(
+              {warmup:1,duration:3599},topicDefinition
+            );
+            const zeroWarmupTopic=localYdbValidateMeasurement(
+              {warmup:0,duration:3600},topicDefinition
+            );
+            const warmupRerenders=localYdbNeedsRerender('local-measurement-warmup');
+            const durationRerenders=localYdbNeedsRerender('local-measurement-duration');
+            let invalidTopic='';
+            try{localYdbValidateMeasurement({warmup:1,duration:3600},topicDefinition)}
+            catch(error){invalidTopic=error.message}
             process.stdout.write(JSON.stringify({
               points,automatic,compatible,same_reference:compatible===custom,
               switchedToTpcc,warehouseOnePoints,warehouseOneSearch,switchedBack,
+              topicMeasurement,validTopic,zeroWarmupTopic,warmupRerenders,durationRerenders,invalidTopic,
               tpccThreads:localYdbDefaultClientThreads(tpccDefinition),
               topicThreads:localYdbDefaultClientThreads(topicDefinition),
               fallbackThreads:localYdbDefaultClientThreads({}),
@@ -3612,6 +3651,15 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["switchedBack"]["parameter"], "rate")
         self.assertEqual(result["switchedBack"]["search"]["start"], 1000)
         self.assertEqual(result["switchedBack"]["search"]["maximum"], 100000)
+        self.assertEqual(
+            result["topicMeasurement"],
+            {"warmup": 10, "duration": 3590, "repetitions": 3, "verification_repetitions": 2},
+        )
+        self.assertEqual(result["validTopic"], {"warmup": 1, "duration": 3599})
+        self.assertEqual(result["zeroWarmupTopic"], {"warmup": 0, "duration": 3600})
+        self.assertTrue(result["warmupRerenders"])
+        self.assertFalse(result["durationRerenders"])
+        self.assertIn("must not exceed 3600 seconds", result["invalidTopic"])
         self.assertEqual(result["tpccThreads"], 2)
         self.assertEqual(result["topicThreads"], 1)
         self.assertEqual(result["fallbackThreads"], 64)
@@ -3674,7 +3722,10 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["blankKv"], 10)
         self.assertEqual(result["comparisonAutomatic"], "automatic")
         self.assertEqual(result["comparisonMissing"], "—")
-        self.assertIn("config.measurement.warmup=localYdbDefaultWarmupSeconds(nextDefinition)", web._JS)
+        self.assertIn(
+            "config.measurement=localYdbMeasurementForWorkload(config.measurement,nextDefinition)", web._JS
+        )
+        self.assertIn("config.measurement=localYdbValidateMeasurement({", web._JS)
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the verification provenance UI test")
     def test_local_ydb_web_shows_verification_cluster_provenance(self):
@@ -3939,10 +3990,15 @@ class YdbBenchTest(unittest.TestCase):
             const esc=value=>String(value??'');
             const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};
             const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};
-            const definition={type:'fake',operations:['run'],load_parameters:['rate'],options:[],slo_metrics:{p90:'latency_ms'},reports_errors:false};
+            const definition={type:'fake',operations:['run'],load_parameters:['rate'],options:[],
+              slo_metrics:{p90:'latency_ms'},reports_errors:false,minimum_duration_seconds:1,
+              maximum_total_seconds:3600};
             const editor={model:{local_ydb_workloads:[definition],affinity_modes:['none'],benchmarks:[{name:'local-ydb'}]}};
             function localYdbWorkloadDefinition(){return definition}
             function localYdbDefaultWarmupSeconds(){return 10}
+            function localYdbMeasurementMaximumDuration(definition,warmup){
+              return definition.maximum_total_seconds-warmup
+            }
         """
             + web._JS[start:finish]
             + """
@@ -3957,6 +4013,7 @@ class YdbBenchTest(unittest.TestCase):
             const html=localYdbProfileEditor(profile);
             process.stdout.write(JSON.stringify({
               error_toggle:html.includes('local-load-allow-errors'),error_limit:html.includes('local-slo-max-errors'),
+              duration_limit:html.includes('Warmup plus duration must not exceed 3600 seconds.'),
               p90:html.includes('value="p90"'),p99_default:localYdbSloPercentile({slo_metrics:{p50:'x',p99:'y'}},'missing'),
               first_default:localYdbSloPercentile({slo_metrics:{p90:'x'}},'missing')
             }));
@@ -3972,6 +4029,7 @@ class YdbBenchTest(unittest.TestCase):
         result = json.loads(completed.stdout)
         self.assertFalse(result["error_toggle"])
         self.assertFalse(result["error_limit"])
+        self.assertTrue(result["duration_limit"])
         self.assertTrue(result["p90"])
         self.assertEqual(result["p99_default"], "p99")
         self.assertEqual(result["first_default"], "p90")

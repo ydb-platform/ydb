@@ -263,9 +263,34 @@ function localYdbDefaultWarmupSeconds(definition){
   const value=Number(definition?.default_warmup_seconds);
   return Number.isSafeInteger(value)&&value>=0?value:10
 }
+function localYdbMeasurementMaximumDuration(definition,warmup){
+  const total=Number(definition?.maximum_total_seconds),warmupSeconds=Number(warmup);
+  if(!Number.isSafeInteger(total)||total<=0||warmup===null||
+      !Number.isSafeInteger(warmupSeconds)||warmupSeconds<0)return null;
+  return total-warmupSeconds
+}
+function localYdbMeasurementForWorkload(measurement,definition){
+  const warmup=localYdbDefaultWarmupSeconds(definition),minimum=definition.minimum_duration_seconds||1;
+  let duration=Number(measurement.duration);
+  if(!Number.isSafeInteger(duration)||duration<minimum)duration=minimum;
+  const maximum=localYdbMeasurementMaximumDuration(definition,warmup);
+  if(maximum!==null)duration=Math.min(duration,maximum);
+  return {...measurement,warmup,duration}
+}
+function localYdbValidateMeasurement(measurement,definition){
+  const maximum=localYdbMeasurementMaximumDuration(definition,measurement.warmup);
+  if(maximum!==null&&measurement.duration>maximum){
+    throw Error('Warmup plus duration must not exceed '+definition.maximum_total_seconds+' seconds.')
+  }
+  return measurement
+}
 function localYdbWarmupInput(id,definition){
   const raw=document.querySelector('#'+id).value.trim();
   return raw===''?localYdbDefaultWarmupSeconds(definition):localInteger(id,0)
+}
+function localYdbNeedsRerender(id,loadLimitInputs=[]){
+  return ['profile-name','local-geometry-preset','local-load-allow-errors',
+    'local-measurement-warmup'].includes(id)||loadLimitInputs.includes(id)
 }
 function localYdbParameterDefaults(parameter,definition=null,workload=null){
   const source=localYdbLoadDefaults[parameter]||localYdbLoadDefaults.threads;
@@ -443,6 +468,9 @@ function localYdbProfileEditor(profile){
     'Empty uses the workload default ('+localYdbDefaultWarmupSeconds(definition)+' seconds).';
   const clientThreadsHelp=workload.type==='topic'?
     'Applied to both producer and consumer thread counts; every consumer gets this many reader threads.':'';
+  const durationMaximum=localYdbMeasurementMaximumDuration(definition,measurement.warmup);
+  const durationHelp=definition.maximum_total_seconds?
+    'Warmup plus duration must not exceed '+definition.maximum_total_seconds+' seconds.':'';
   const loadMode=load.values?'points':load.objective.type;
   const sloPercentiles=Object.keys(definition.slo_metrics||{});
   const objectiveChoices=['points','maximize-throughput',...(sloPercentiles.length?['latency-slo']:[])];
@@ -517,8 +545,9 @@ function localYdbProfileEditor(profile){
     loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
     localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,warmupHelp,'type=number min=0')+
     localField(
-      'local-measurement-duration','Duration (seconds)',measurement.duration,'',
-      'type=number min='+(definition.minimum_duration_seconds||1)
+      'local-measurement-duration','Duration (seconds)',measurement.duration,durationHelp,
+      'type=number min='+(definition.minimum_duration_seconds||1)+
+        (durationMaximum===null?'':' max='+durationMaximum)
     )+
     localField('local-measurement-repetitions','Repetitions',measurement.repetitions,'','type=number min=1')+
     localField(
@@ -576,11 +605,8 @@ function bindLocalYdbEditor(profile){
       const nextDefinition=localYdbWorkloadDefinition(event.target.value);
       const parameters=nextDefinition.load_parameters;
       config.client.threads=localYdbDefaultClientThreads(nextDefinition);
-      config.measurement.warmup=localYdbDefaultWarmupSeconds(nextDefinition);
+      config.measurement=localYdbMeasurementForWorkload(config.measurement,nextDefinition);
       config.load=localYdbLoadForWorkload(config.load,parameters,nextDefinition,config.workload);
-      config.measurement.duration=Math.max(
-        config.measurement.duration,nextDefinition.minimum_duration_seconds||1
-      );
       if(!nextDefinition.reports_errors){
         config.load.allow_errors=false;
         if(config.load.objective?.type==='latency-slo')config.load.objective.max_errors=0
@@ -692,12 +718,12 @@ function bindLocalYdbEditor(profile){
       })
     }
     config.load=localYdbClampLoad(config.load,workloadDefinition,config.workload);
-    config.measurement={
+    config.measurement=localYdbValidateMeasurement({
       warmup:localYdbWarmupInput('local-measurement-warmup',workloadDefinition),
       duration:localInteger('local-measurement-duration',workloadDefinition.minimum_duration_seconds||1),
       repetitions:localInteger('local-measurement-repetitions'),
       verification_repetitions:localInteger('local-measurement-verification-repetitions',0,20)
-    };
+    },workloadDefinition);
     for(const key of Object.keys(localYdbAffinityKeys)){
       const mode=document.querySelector('#local-affinity-'+key+'-mode').value;
       config.affinity[key]={mode,cpus:localCpu('local-affinity-'+key+'-cpus',mode)}
@@ -710,8 +736,7 @@ function bindLocalYdbEditor(profile){
     const loadLimitInputs=Object.values(workloadDefinition.load_limits||{}).map(
       constraint=>'local-option-'+constraint.option
     );
-    if(['profile-name','local-geometry-preset','local-load-allow-errors'].includes(event.target.id)||
-      loadLimitInputs.includes(event.target.id))renderNew()
+    if(localYdbNeedsRerender(event.target.id,loadLimitInputs))renderNew()
   }catch(error){message().innerHTML=displayError(error)}};
   for(const input of document.querySelectorAll('#local-editor input,#local-editor select'))input.onchange=update;
   document.querySelector('#delete-profile').onclick=()=>{

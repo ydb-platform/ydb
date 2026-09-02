@@ -714,6 +714,7 @@ class WorkloadDefinition:
     profile_validator: object = None
     effective_warmup_builder: object = None
     minimum_duration_seconds: int = 1
+    maximum_total_seconds: int | None = None
     load_limits: tuple = ()
     default_client_threads: int = 64
     default_warmup_seconds: int | None = 10
@@ -1355,6 +1356,24 @@ def _validate_catalog(definitions):
             or definition.minimum_duration_seconds <= 0
         ):
             raise ValueError("minimum duration must be a positive integer for {}".format(definition.name))
+        if definition.maximum_total_seconds is not None and (
+            isinstance(definition.maximum_total_seconds, bool)
+            or not isinstance(definition.maximum_total_seconds, int)
+            or definition.maximum_total_seconds <= 0
+        ):
+            raise ValueError(
+                "maximum total duration must be a positive integer or None for {}".format(definition.name)
+            )
+        minimum_total_seconds = definition.minimum_duration_seconds + (definition.default_warmup_seconds or 0)
+        if (
+            definition.maximum_total_seconds is not None
+            and definition.maximum_total_seconds < minimum_total_seconds
+        ):
+            raise ValueError(
+                "maximum total duration cannot fit the default warmup and minimum duration for {}".format(
+                    definition.name
+                )
+            )
         if (
             isinstance(definition.default_client_threads, bool)
             or not isinstance(definition.default_client_threads, int)
@@ -1581,6 +1600,7 @@ _DEFINITIONS = (
         throughput_unit="messages/s",
         profile_validator=_validate_topic_profile,
         minimum_duration_seconds=2,
+        maximum_total_seconds=_TOPIC_MAX_TOTAL_SECONDS,
         default_client_threads=1,
     ),
 )
@@ -1684,6 +1704,7 @@ def web_workload_catalog():
             "reports_errors": any(metric.name == "errors" for metric in definition.result_adapter.metrics),
             "result_schema_id": definition.result_adapter.schema_id,
             "minimum_duration_seconds": definition.minimum_duration_seconds,
+            "maximum_total_seconds": definition.maximum_total_seconds,
             "default_client_threads": definition.default_client_threads,
             "default_warmup_seconds": definition.default_warmup_seconds,
             "load_limits": {

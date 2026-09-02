@@ -179,7 +179,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
 
     {% cut "More details" %}
 
-    After loading the configuration, the {{ ydb-short-name }} cluster will be switched to automatic configuration management mode for [State Storage](../../../reference/configuration/index.md#domains-state) and [static group](../../../reference/configuration/index.md#blob_storage_config) using the distributed configuration mechanism.
+    After loading the configuration, the {{ ydb-short-name }} cluster will be switched to automatic configuration management mode for [State Storage](../../../reference/configuration/domains_config.md#domains-state) and [static group](../../../reference/configuration/blob_storage_config.md#blob_storage_config) using the distributed configuration mechanism.
 
     {% endcut %}
 

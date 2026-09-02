@@ -2218,6 +2218,64 @@ class CorrelatedScalarSubplanEvaluationTest(unittest.TestCase):
                 )
                 self.assertEqual(self._results(family, constants), expected)
 
+    def test_common_correlation_across_or_branches_keeps_original_predicate(self):
+        raw = _correlated_scalar_snapshot()
+        correlation_filter = next(
+            node
+            for node in raw["plan"]["nodes"]
+            if node["id"] == "correlation_filter"
+        )
+        common = _equality("outer.k", "inner.k")
+        correlation_filter["predicate"] = {
+            "kind": "or",
+            "args": [
+                {
+                    "kind": "and",
+                    "args": [
+                        copy.deepcopy(common),
+                        {
+                            "kind": "eq",
+                            "left": {
+                                "kind": "column",
+                                "column": "inner.v",
+                            },
+                            "right": _literal("Int64", 7),
+                        },
+                    ],
+                },
+                {
+                    "kind": "and",
+                    "args": [
+                        copy.deepcopy(common),
+                        {
+                            "kind": "eq",
+                            "left": {
+                                "kind": "column",
+                                "column": "inner.v",
+                            },
+                            "right": _literal("Int64", 8),
+                        },
+                    ],
+                },
+            ],
+        }
+
+        snapshot = parse_snapshot(raw)
+        parsed_filter = snapshot.plan.node_map()["correlation_filter"]
+        self.assertEqual(parsed_filter.predicate.kind, "or")
+        self.assertEqual(len(parsed_filter.predicate.args), 2)
+
+        _, database, family = self._evaluate(raw)
+        for outer, inner, expected in (
+            ((1, 2), ((1, 7), (1, 8)), [(False, 2), (False, 0)]),
+            ((1, 2), ((1, 9), (2, 8)), [(False, 0), (False, 1)]),
+            ((1, 2), ((1, None), (2, 8)), [(False, 0), (False, 1)]),
+            ((None, 1), ((None, 7), (1, 8)), [(False, 0), (False, 1)]),
+        ):
+            with self.subTest(outer=outer, inner=inner):
+                constants = _correlated_constants(database, outer, inner)
+                self.assertEqual(self._results(family, constants), expected)
+
     def test_decimal_avg_is_evaluated_per_outer_row(self):
         _, database, family = self._evaluate(
             _correlated_scalar_snapshot("avg")
@@ -2749,6 +2807,81 @@ class CorrelatedScalarSubplanValidationTest(unittest.TestCase):
                 raw = _correlated_scalar_snapshot()
                 correlation_filter = next(
                     node for node in raw["plan"]["nodes"]
+                    if node["id"] == "correlation_filter"
+                )
+                correlation_filter["predicate"] = predicate
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+    def test_disjunctive_correlation_requires_one_identical_equality_per_branch(self):
+        common = _equality("outer.k", "inner.k")
+        residual = _equality("inner.v", "inner.k")
+        cases = (
+            (
+                {
+                    "kind": "or",
+                    "args": [
+                        {
+                            "kind": "and",
+                            "args": [copy.deepcopy(common), residual],
+                        }
+                    ],
+                },
+                "requires at least two branches",
+            ),
+            (
+                {
+                    "kind": "or",
+                    "args": [
+                        copy.deepcopy(common),
+                        copy.deepcopy(residual),
+                    ],
+                },
+                "branch 1 requires exactly one dependency-bearing conjunct",
+            ),
+            (
+                {
+                    "kind": "or",
+                    "args": [
+                        copy.deepcopy(common),
+                        _equality("outer.k", "inner.v"),
+                    ],
+                },
+                "must share the same dependency-bearing conjunct",
+            ),
+            (
+                {
+                    "kind": "or",
+                    "args": [
+                        {
+                            "kind": "and",
+                            "args": [
+                                copy.deepcopy(common),
+                                _equality("outer.k", "inner.v"),
+                            ],
+                        },
+                        copy.deepcopy(common),
+                    ],
+                },
+                "branch 0 requires exactly one dependency-bearing conjunct",
+            ),
+            (
+                {
+                    "kind": "or",
+                    "args": [
+                        _equality("outer.k", "inner.k", null_safe=True),
+                        _equality("outer.k", "inner.k", null_safe=True),
+                    ],
+                },
+                "non-null-safe column equality",
+            ),
+        )
+        for predicate, message in cases:
+            with self.subTest(message=message):
+                raw = _correlated_scalar_snapshot()
+                correlation_filter = next(
+                    node
+                    for node in raw["plan"]["nodes"]
                     if node["id"] == "correlation_filter"
                 )
                 correlation_filter["predicate"] = predicate

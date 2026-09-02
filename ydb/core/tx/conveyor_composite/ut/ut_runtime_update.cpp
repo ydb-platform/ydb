@@ -230,6 +230,13 @@ ui64 GetWeightCounter(const TRuntimeFixture& fixture, const TString& poolName, c
         ->Val();
 }
 
+ui64 GetQueueSizeLimitCounter(const TRuntimeFixture& fixture, const ESpecialTaskCategory category) {
+    return fixture.Counters->GetSubgroup("module_id", "COMPOSITE_CONVEYOR")
+        ->GetSubgroup("category", ::ToString(category))
+        ->GetCounter("Value/WaitingQueueSizeLimit")
+        ->Val();
+}
+
 std::pair<ui32, ui32> RunWeightedPhase(TRuntimeFixture& fixture, const ESpecialTaskCategory blockerCategory) {
     TAtomicCounter counter;
     TAutoPtr<NActors::IEventHandle> heldTask;
@@ -415,6 +422,28 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 1);
         const auto [scanAfter, insertAfter] = RunWeightedPhase(fixture, ESpecialTaskCategory::Insert);
         UNIT_ASSERT(insertAfter > scanAfter);
+    }
+
+    Y_UNIT_TEST(QueueSizeLimitUpdatesMonitoringOnly) {
+        auto initial = BuildSinglePoolConfig(1);
+        auto* category = initial.AddCategories();
+        category->SetName(::ToString(ESpecialTaskCategory::Scan));
+        category->SetQueueSizeLimit(10);
+        TRuntimeFixture fixture(initial);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Scan), 10);
+
+        auto candidate = initial;
+        candidate.MutableCategories(0)->SetQueueSizeLimit(1);
+        fixture.Update(candidate);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Scan), 1);
+
+        for (ui32 i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
+        }
+
+        candidate.ClearCategories();
+        fixture.Update(candidate);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Scan), 256 * 1024);
     }
 
     Y_UNIT_TEST(RemovedLinkResetsWeightCounter) {

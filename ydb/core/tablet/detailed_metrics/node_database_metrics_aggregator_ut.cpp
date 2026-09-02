@@ -24,9 +24,6 @@ namespace {
 
 const TString DATABASE_PATH = "/Root/db";
 
-const TString TABLE_PATH = "/Root/db/dir/table";
-const TString RELATIVE_TABLE_PATH = "dir/table";
-
 // Another table of the very same database
 const TString OTHER_TABLE_PATH = "/Root/db/dir/other_table";
 const TString OTHER_RELATIVE_TABLE_PATH = "dir/other_table";
@@ -38,151 +35,12 @@ const TString OTHER_RELATIVE_TABLE_PATH = "dir/other_table";
 const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
 const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
 
-constexpr TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
-
 ////////////////////////////////////////////////////////////////////////////////
-// A small stand-in for the low level counters of Data Shard. The real counter set
-// has hundreds of counters, which would make the assertions unreadable without
-// covering anything, which is not covered by these few counters.
-
-constexpr const char* EXECUTOR_SIMPLE_COUNTER_NAMES[] = {
-    "DbUniqueRowsTotal",
-    "DbUniqueDataBytes",
-    // Absent from the DataShard allow-list (ydb/core/protos/counters_detailed_datashard.proto),
-    // used to verify Initialize()'s nameFilter is honored (see NameFilterDropsUnlistedCounters)
-    "NotInTheAllowList",
-};
-
-constexpr const char* EXECUTOR_CUMULATIVE_COUNTER_NAMES[] = {
-    "ConsumedCPU",
-};
-
-constexpr const char* EXECUTOR_PERCENTILE_COUNTER_NAMES[] = {
-    // A histogram aggregate: it is NOT filled by the tablet, it collects
-    // one observation per tablet from the "ConsumedCPU" cumulative counter.
-    // It is DataShard's only percentile: there is no ordinary one in the allow-list.
-    "HIST(ConsumedCPU)",
-};
-
-constexpr const char* APP_CUMULATIVE_COUNTER_NAMES[] = {
-    "DataShard/EngineHostRowUpdates",
-    "DataShard/EngineHostRowUpdateBytes",
-};
-
-constexpr TTabletPercentileCounter::TRangeDef PERCENTILE_RANGES[] = {
-    {  0,   "0"},
-    { 10,  "10"},
-    {100, "100"},
-};
-
-enum ESimpleCounter : ui32 {
-    DB_UNIQUE_ROWS_TOTAL = 0,
-    DB_UNIQUE_DATA_BYTES = 1,
-    NOT_IN_ALLOW_LIST = 2,
-};
-
-enum ECumulativeCounter : ui32 {
-    CONSUMED_CPU = 0,
-};
-
-enum EAppCumulativeCounter : ui32 {
-    ENGINE_HOST_ROW_UPDATES = 0,
-    ENGINE_HOST_ROW_UPDATE_BYTES = 1,
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-/**
- * A single tablet, which reports the low level counters above.
- *
- * @note Reporting goes through MakeDiffForAggr()/RememberCurrentStateAsBaseline(),
- *       exactly like the Executor does it, so what the aggregator sees is what it
- *       sees in production: the simple counters are absolute, the cumulative ones
- *       are the delta since the previous report of THIS tablet, and the integral
- *       percentile counters are absolute.
- */
-struct TFakeTablet {
-    TFakeTablet(ui64 tabletId, ui32 followerId)
-        : TabletId(tabletId)
-        , FollowerId(followerId)
-        , ExecutorCounters(
-            Y_ARRAY_SIZE(EXECUTOR_SIMPLE_COUNTER_NAMES),
-            Y_ARRAY_SIZE(EXECUTOR_CUMULATIVE_COUNTER_NAMES),
-            Y_ARRAY_SIZE(EXECUTOR_PERCENTILE_COUNTER_NAMES),
-            EXECUTOR_SIMPLE_COUNTER_NAMES,
-            EXECUTOR_CUMULATIVE_COUNTER_NAMES,
-            EXECUTOR_PERCENTILE_COUNTER_NAMES
-        )
-        , AppCounters(
-            0,
-            Y_ARRAY_SIZE(APP_CUMULATIVE_COUNTER_NAMES),
-            0,
-            nullptr,
-            APP_CUMULATIVE_COUNTER_NAMES,
-            nullptr
-        )
-    {
-        for (ui32 i = 0; i < Y_ARRAY_SIZE(EXECUTOR_PERCENTILE_COUNTER_NAMES); ++i) {
-            ExecutorCounters.Percentile()[i].Initialize(PERCENTILE_RANGES, true /* integral */);
-        }
-    }
-
-    TFakeTablet& SetSimple(ESimpleCounter counter, ui64 value) {
-        ExecutorCounters.Simple()[counter].Set(value);
-        return *this;
-    }
-
-    TFakeTablet& AddCumulative(ECumulativeCounter counter, ui64 delta) {
-        ExecutorCounters.Cumulative()[counter] += delta;
-        return *this;
-    }
-
-    TFakeTablet& AddAppCumulative(EAppCumulativeCounter counter, ui64 delta) {
-        AppCounters.Cumulative()[counter] += delta;
-        return *this;
-    }
-
-    /**
-     * Send everything accumulated since the previous report, the way the Executor does.
-     */
-    void Report(
-        const TNodeDatabaseMetricsAggregatorPtr& aggregator,
-        EDetailedMetricsLevel level,
-        TInstant now,
-        const TString& tablePath = TABLE_PATH,
-        TTabletTypes::EType tabletType = TABLET_TYPE
-    ) {
-        // An empty baseline (the very first report) makes the diff a plain copy
-        auto appDiff = AppCounters.MakeDiffForAggr(AppBaseline);
-        auto executorDiff = ExecutorCounters.MakeDiffForAggr(ExecutorBaseline);
-
-        aggregator->AddCounters(
-            tablePath,
-            level,
-            TabletId,
-            FollowerId,
-            tabletType,
-            *executorDiff,
-            *appDiff,
-            now
-        );
-
-        AppCounters.RememberCurrentStateAsBaseline(AppBaseline);
-        ExecutorCounters.RememberCurrentStateAsBaseline(ExecutorBaseline);
-    }
-
-    const ui64 TabletId;
-    const ui32 FollowerId;
-
-    TTabletCountersBase ExecutorCounters;
-    TTabletCountersBase AppCounters;
-
-    // The state as of the previous report, subtracted from the cumulative counters
-    TTabletCountersBase ExecutorBaseline;
-    TTabletCountersBase AppBaseline;
-};
-
-////////////////////////////////////////////////////////////////////////////////
+// TABLE_PATH, RELATIVE_TABLE_PATH, TABLET_TYPE, ESimpleCounter,
+// ECumulativeCounter, EAppCumulativeCounter and TFakeTablet itself live in
+// ut_helpers.h now (NDetailedMetricsTests, brought in by the using-directive
+// above): they are shared with processor_database_metrics_aggregator_ut.cpp,
+// which drives the very same fixture through Pack() into the processor side.
 
 /**
  * @return The counter group of the table (or nullptr if there is none)
@@ -404,6 +262,74 @@ TString GetHistogramBuckets(NMonitoring::TDynamicCounterPtr countersGroup, const
 void DumpCounters(const TString& title, NMonitoring::TDynamicCounterPtr rootGroup) {
     Cerr << "TEST " << title << ":" << Endl
          << NormalizeJson(NMonitoring::ToJson(*rootGroup)) << Endl;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Pack() helpers (step 08). PackOnce/FindPackedTable/FindPackedLeaf live in
+// ut_helpers.h now (shared with processor_database_metrics_aggregator_ut.cpp);
+// the byte-level diff readers below are only ever asserted on here.
+
+/**
+ * @return The Simple value at the given low level counter index (Simple/GAUGE
+ *         counters are always packed absolute, see S2)
+ */
+ui64 GetPackedSimple(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    UNIT_ASSERT_C(index < counters.SimpleSize(), "no Simple[" << index << "]");
+    return counters.GetSimple(index);
+}
+
+/**
+ * @return Whether the diff carries an index/value pair for the given Cumulative
+ *         counter index (CalculateCountersDiff omits unchanged, i.e. zero delta,
+ *         indices)
+ */
+bool HasPackedCumulativeIndex(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    const auto& cumulative = counters.GetCumulative();
+    for (int i = 0; i + 1 < cumulative.size(); i += 2) {
+        if (static_cast<ui32>(cumulative.Get(i)) == index) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @return The delta value packed for the given Cumulative counter index, or 0
+ *         if the index carries no pair (an unchanged counter since the last
+ *         confirmed generation)
+ */
+ui64 GetPackedCumulativeDelta(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    const auto& cumulative = counters.GetCumulative();
+    for (int i = 0; i + 1 < cumulative.size(); i += 2) {
+        if (static_cast<ui32>(cumulative.Get(i)) == index) {
+            return cumulative.Get(i + 1);
+        }
+    }
+    return 0;
+}
+
+/**
+ * @return The largest VALUE half of every (index, value) pair packed for the given
+ *         histogram, or 0 if the diff carries none at all (every bucket unchanged, or
+ *         clamped to 0 and therefore omitted, since the sparse encoding skips zero
+ *         deltas — see HasPackedCumulativeIndex/GetPackedCumulativeDelta above)
+ *
+ * @note Deliberately histogram-wide rather than per-bucket: it pins the CLASS of the
+ *       underflow bug (an implausibly large delta somewhere in the histogram) rather
+ *       than one magic bucket index of the fixture's ranges.
+ */
+ui64 GetPackedHistogramMaxBucketValue(const NKikimrSysView::TDbCounters& counters, ui32 histogramIndex) {
+    UNIT_ASSERT_C(histogramIndex < counters.HistogramSize(), "no Histogram[" << histogramIndex << "]");
+
+    const auto& buckets = counters.GetHistogram(histogramIndex).GetBuckets();
+    ui64 maxValue = 0;
+    for (int i = 0; i + 1 < buckets.size(); i += 2) {
+        const ui64 value = static_cast<ui64>(buckets.Get(i + 1));
+        if (value > maxValue) {
+            maxValue = value;
+        }
+    }
+    return maxValue;
 }
 
 /**
@@ -842,7 +768,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // The very first report of a tablet contributes a 0 observation (there is no
         // previous report of it to derive a per second rate from), so both partitions'
         // observations land in the <=0 bucket of the ranges {0, 10, 100}
-        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "2,0,0,0");
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "2,0,0,0,0,0,0,0,0,0,0,0");
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leaderCounters, "HIST(ConsumedCPU)"), 2);
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "ConsumedCPU"), 100 + 200);
 
@@ -853,7 +779,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         DumpCounters("Table level counters after forgetting the second partition", rootGroup);
 
         // The histogram aggregate is rebuilt from the surviving partitions only
-        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "1,0,0,0");
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "1,0,0,0,0,0,0,0,0,0,0,0");
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leaderCounters, "HIST(ConsumedCPU)"), 1);
 
         // The accumulated cumulative counter is NOT reduced: the CPU the forgotten
@@ -2506,5 +2432,314 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         }
 
         UNIT_ASSERT(reader.Join() > 0);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // Pack() (step 08)
+
+    /**
+     * Verify Pack()'s encoding at the TABLE level: Simple is absolute stateful
+     * (restated in full on every pack, including a drop to 0 — the gauge->zero
+     * staleness bug S2 rules out by construction), Cumulative is the delta since
+     * the previous PACKED generation (not since the previous report).
+     */
+    Y_UNIT_TEST(PackTableLevelCarriesAbsoluteSimpleAndDeltaCumulative) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 100);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packed1 = PackOnce(aggregator, 1);
+        auto* table1 = FindPackedTable(packed1);
+        UNIT_ASSERT(table1);
+        UNIT_ASSERT(table1->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(table1->LeavesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table1->GetTablePath(), TABLE_PATH);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDetailedMetricsSettings::EMetricsLevel_Name(table1->GetLevel()),
+            TDetailedMetricsSettings::EMetricsLevel_Name(TDetailedMetricsSettings::MetricsLevelTable)
+        );
+
+        const auto& executor1 = table1->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executor1, DB_UNIQUE_ROWS_TOTAL), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(executor1, CONSUMED_CPU), 100);
+
+        // The gauge changes and the cumulative counter grows further
+        now += TDuration::Seconds(5);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 25).AddCumulative(CONSUMED_CPU, 40);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packed2 = PackOnce(aggregator, 2);
+        auto* table2 = FindPackedTable(packed2);
+        UNIT_ASSERT(table2);
+
+        const auto& executor2 = table2->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executor2, DB_UNIQUE_ROWS_TOTAL), 25);
+        // Only the increment since the previous PACKED generation, not the running total
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(executor2, CONSUMED_CPU), 40);
+
+        // The gauge drops to 0: it must still be restated, not omitted
+        now += TDuration::Seconds(5);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 0);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packed3 = PackOnce(aggregator, 3);
+        auto* table3 = FindPackedTable(packed3);
+        UNIT_ASSERT(table3);
+
+        const auto& executor3 = table3->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executor3, DB_UNIQUE_ROWS_TOTAL), 0);
+        // No cumulative activity since the previous pack: no index/value pair at all
+        UNIT_ASSERT(!HasPackedCumulativeIndex(executor3, CONSUMED_CPU));
+    }
+
+    /**
+     * Verify Pack()'s encoding at the PARTITION level: one TLeaf per
+     * (tablet_id, follower_id), Simple absolute per leaf, Cumulative delta per
+     * leaf; a pack with no tablet activity since the previous one emits no
+     * Cumulative delta pairs but still restates Simple. Also pins that a
+     * PARTITION entry never carries TableCounters and a TABLE entry never
+     * carries Leaves.
+     */
+    Y_UNIT_TEST(PackPartitionLevelEmitsOneLeafPerTabletFollower) {
+        TRoleTrees trees;
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        TFakeTablet follower1(1000, 1);
+        TFakeTablet follower2(2000, 1);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 3).AddCumulative(CONSUMED_CPU, 30);
+        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 9).AddCumulative(CONSUMED_CPU, 90);
+        follower2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5).AddCumulative(CONSUMED_CPU, 50);
+
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        follower1.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        follower2.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        auto leaderPacked = PackOnce(trees.Leaders, 1);
+        auto* leaderTable = FindPackedTable(leaderPacked);
+        UNIT_ASSERT(leaderTable);
+        UNIT_ASSERT(!leaderTable->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->LeavesSize(), 1);
+
+        auto* leaderLeaf = FindPackedLeaf(*leaderTable, 1000, 0);
+        UNIT_ASSERT(leaderLeaf);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaderLeaf->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedCumulativeDelta(leaderLeaf->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 30);
+
+        auto followerPacked = PackOnce(trees.Followers, 1);
+        auto* followerTable = FindPackedTable(followerPacked);
+        UNIT_ASSERT(followerTable);
+        UNIT_ASSERT(!followerTable->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(followerTable->LeavesSize(), 2);
+
+        auto* leaf1 = FindPackedLeaf(*followerTable, 1000, 1);
+        UNIT_ASSERT(leaf1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaf1->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 9);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedCumulativeDelta(leaf1->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 90);
+
+        auto* leaf2 = FindPackedLeaf(*followerTable, 2000, 1);
+        UNIT_ASSERT(leaf2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaf2->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 5);
+
+        // A second pack, no tablet activity in between: the delta is empty, but the
+        // absolute Simple value is restated
+        auto followerPacked2 = PackOnce(trees.Followers, 2);
+        auto* followerTable2 = FindPackedTable(followerPacked2);
+        UNIT_ASSERT(followerTable2);
+
+        auto* leaf1Again = FindPackedLeaf(*followerTable2, 1000, 1);
+        UNIT_ASSERT(leaf1Again);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaf1Again->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 9);
+        UNIT_ASSERT(!HasPackedCumulativeIndex(leaf1Again->GetCounters().GetExecutorCounters(), CONSUMED_CPU));
+    }
+
+    /**
+     * Verify that a standalone follower-role instance packs exactly the same
+     * TDetailedTableCounters shape a standalone leader-role instance does for
+     * an equivalent PARTITION level report: nothing in the payload carries the
+     * role, because Pack() does not name it (the caller — step 12 — is the one
+     * who knows which role's aggregator it packed).
+     */
+    Y_UNIT_TEST(PackFollowerInstanceProducesTheSameShapeAsLeader) {
+        const TInstant now = TInstant::Seconds(100);
+
+        NMonitoring::TDynamicCounterPtr leaderRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto leaderAggregator = CreateNodeDatabaseMetricsAggregator(
+            leaderRoot,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 11);
+        leader.Report(leaderAggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        auto leaderPacked = PackOnce(leaderAggregator, 1);
+        auto* leaderTable = FindPackedTable(leaderPacked);
+        UNIT_ASSERT(leaderTable);
+
+        NMonitoring::TDynamicCounterPtr followerRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto followerAggregator = CreateNodeDatabaseMetricsAggregator(
+            followerRoot,
+            DATABASE_PATH,
+            true /* isFollowerRole */
+        );
+
+        TFakeTablet follower(2000, 3);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 11);
+        follower.Report(followerAggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        auto followerPacked = PackOnce(followerAggregator, 1);
+        auto* followerTable = FindPackedTable(followerPacked);
+        UNIT_ASSERT(followerTable);
+
+        // The very same shape: no TableCounters, exactly one leaf, the very same level
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->HasTableCounters(), followerTable->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->LeavesSize(), followerTable->LeavesSize());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDetailedMetricsSettings::EMetricsLevel_Name(leaderTable->GetLevel()),
+            TDetailedMetricsSettings::EMetricsLevel_Name(followerTable->GetLevel())
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaderTable->GetLeaves(0).GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL),
+            GetPackedSimple(followerTable->GetLeaves(0).GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL)
+        );
+    }
+
+    /**
+     * Verify the retry contract: two Pack() calls for the SAME generation produce
+     * a byte-identical payload and do not move the delta baseline, even if new
+     * reports arrived between the two calls (the SysView Service only advances
+     * the generation once the processor confirms the previous one, so a retry
+     * before confirmation must not leak the in-between state). The NEXT
+     * generation's delta is then measured from what generation 1 confirmed, not
+     * from what arrived during the retry window.
+     */
+    Y_UNIT_TEST(PackRetryOfTheSameGenerationIsByteIdenticalAndDoesNotAdvanceTheBaseline) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 100);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packedA = PackOnce(aggregator, 1);
+
+        // A new report queues up in between, but a retry of generation 1 must not see it
+        now += TDuration::Seconds(5);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999).AddCumulative(CONSUMED_CPU, 999);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packedB = PackOnce(aggregator, 1);
+
+        TString serializedA;
+        TString serializedB;
+        UNIT_ASSERT(FindPackedTable(packedA)->SerializeToString(&serializedA));
+        UNIT_ASSERT(FindPackedTable(packedB)->SerializeToString(&serializedB));
+        UNIT_ASSERT_VALUES_EQUAL(serializedA, serializedB);
+
+        // Generation 2 finally observes the in-between state, and its delta is measured
+        // from what generation 1 confirmed (10 / +100), not from the retry's payload
+        auto packedC = PackOnce(aggregator, 2);
+        auto* tableC = FindPackedTable(packedC);
+        UNIT_ASSERT(tableC);
+
+        const auto& executorC = tableC->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executorC, DB_UNIQUE_ROWS_TOTAL), 999);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(executorC, CONSUMED_CPU), 999);
+    }
+
+    /**
+     * Regression test for CalculateCountersDiff()'s histogram bucket underflow: a
+     * per-bucket (current - prev) subtraction of the HIST(x) percentile aggregate
+     * wrapped to ~2^64 whenever the current absolute bucket value came in SMALLER than
+     * the one confirmed by the previous packed generation. It is now clamped to 0, the
+     * very same fix as the Cumulative delta above.
+     *
+     * @note The fixture's only percentile counter, HIST(ConsumedCPU), is declared
+     *       integral = true (ut_helpers.cpp): it sums a value into its buckets per
+     *       contributing tablet rather than replacing them, which is exactly what lets
+     *       a TABLE-level collapse bucket's aggregate SHRINK when one of its tablets is
+     *       forgotten between two packed generations — the underflow this guards
+     *       against. ForgetTabletDropsPercentileObservations pins the very same shrink
+     *       (2 observations -> 1) on the live counter tree; this test pins it across
+     *       two Pack() calls instead, where the old code actually wrapped.
+     */
+    Y_UNIT_TEST(PackHistogramBucketDeltaNeverUnderflowsWhenTheAggregateShrinks) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        // Two leader partitions of one TABLE-level table, collapsed into the very same
+        // bucket, both landing an observation in the very same HIST(ConsumedCPU) range
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+
+        leader1.AddCumulative(CONSUMED_CPU, 100);
+        leader2.AddCumulative(CONSUMED_CPU, 200);
+
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        }
+
+        // Generation 1: Confirmed is still empty, so nothing can underflow yet
+        auto packed1 = PackOnce(aggregator, 1);
+        UNIT_ASSERT(FindPackedTable(packed1));
+
+        // The second partition is forgotten between the two packed generations, so the
+        // aggregate shrinks
+        aggregator->ForgetTablet(leader2.TabletId, leader2.FollowerId);
+
+        // Generation 2: Pack() diffs the shrunk Current against the Confirmed generation
+        // 1 snapshot. Before the fix this produced a ~2^64 "delta" for the emptied
+        // observation; the fix clamps it to 0.
+        auto packed2 = PackOnce(aggregator, 2);
+        auto* table2 = FindPackedTable(packed2);
+        UNIT_ASSERT(table2);
+
+        const auto& executor2 = table2->GetTableCounters().GetExecutorCounters();
+
+        // Every emitted bucket delta is bounded by the total number of observations
+        // ever recorded (2, one per partition): anything above that is the underflow
+        // wrap, not a plausible histogram value
+        constexpr ui64 TOTAL_OBSERVATIONS_EVER_RECORDED = 2;
+        UNIT_ASSERT_C(
+            GetPackedHistogramMaxBucketValue(executor2, 0 /* HIST(ConsumedCPU), the only percentile counter */)
+                <= TOTAL_OBSERVATIONS_EVER_RECORDED,
+            "a bucket delta above " << TOTAL_OBSERVATIONS_EVER_RECORDED
+                << " observations: the histogram underflow wrapped to ~2^64 again"
+        );
     }
 }

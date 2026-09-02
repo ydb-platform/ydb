@@ -5,6 +5,10 @@ namespace NKikimr {
 void THistogramMetricAggregator::AggregateValue(NMonitoring::THistogramPtr sourceCounter) {
     Y_ABORT_UNLESS(TargetCounter, "The aggregation process has not started yet");
 
+    if (!sourceCounter) {
+        return;
+    }
+
     // NOTE: There is no good way to combine two histograms, if they use different
     //       buckets. If the two histograms happen to use different buckets,
     //       the metric values will be distorted. This should never happen,

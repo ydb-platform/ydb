@@ -1,8 +1,7 @@
 #include "node_database_metrics_aggregator.h"
 
 #include "detailed_metrics_counter_set.h"
-
-#include <ydb/core/tablet/private/aggregated_tablet_counters.h>
+#include "detailed_metrics_tree.h"
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
@@ -21,152 +20,9 @@ TMutex& DetailedMetricsLock() {
 
 namespace {
 
-// Labels of the detailed metrics counter tree
-const TString DATABASE_LABEL = "database";
-const TString TABLE_LABEL = "table";
-const TString DETAILED_METRICS_LABEL = "detailed_metrics";
-const TString TABLET_ID_LABEL = "tablet_id";
-const TString FOLLOWER_ID_LABEL = "follower_id";
-
-const TString PER_PARTITION_VALUE = "per_partition";
-
-// Labels of the low level tablet counters (the same as in the "tablets" group)
-const TString TYPE_LABEL = "type";
-const TString CATEGORY_LABEL = "category";
-
-const TString EXECUTOR_CATEGORY = "executor";
-const TString APP_CATEGORY = "app";
-
-/**
- * A single tablet (a leader or a follower) within a table.
- */
-using TTabletKey = std::pair<ui64, ui32>;
-
 struct TTabletInfo {
     TString RelativePath;
     EDetailedMetricsLevel Level;
-};
-
-/**
- * @return path with any trailing "/" chopped, as a view into path.
- */
-TStringBuf ChopTrailingSlash(const TStringBuf path) {
-    TStringBuf chopped(path);
-    chopped.ChopSuffix("/");
-    return chopped;
-}
-
-/**
- * Strip the database path prefix from the full path of the table.
- *
- * @param[in] databasePrefix The database path with the trailing "/" already chopped
- *                            (see TNodeDatabaseMetricsAggregatorImpl::DatabasePrefix)
- * @param[in] tablePath The full path of the table, which outlives the returned view
- *
- * @return A view into tablePath: either the stripped suffix, or tablePath itself
- *         when it does not start with the database. No allocation either way.
- */
-TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString& tablePath) {
-    TStringBuf relativePath(tablePath);
-
-    // The "/" is required, so that /Root/db10/table is NOT stripped down to "0/table"
-    // within the database /Root/db1
-    if (relativePath.SkipPrefix(databasePrefix) && relativePath.SkipPrefix("/") && !relativePath.empty()) {
-        return relativePath;
-    }
-
-    return TStringBuf(tablePath);
-}
-
-/**
- * A single bucket of the detailed metrics counter tree: the low level counters
- * of one or more tablets of the same type.
- *
- * @note The bucket of a table level table holds many tablets, while a leaf group
- *       of a partition level table holds exactly one. Both cases are handled by
- *       the very same code: aggregating a single tablet is a passthrough
- *       (SUM(x) == MAX(x) == x).
- */
-class TCountersBucket {
-public:
-    TCountersBucket(
-        NMonitoring::TDynamicCounterPtr bucketGroup,
-        TTabletTypes::EType tabletType,
-        const TDetailedMetricsCounterNames& counterNames,
-        NMonitoring::TCountableBase::EVisibility visibility
-    )
-        : TabletType(tabletType)
-        , TypeGroup(bucketGroup->GetSubgroup(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType)))
-        , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
-        , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
-        , CounterNames(&counterNames)
-    {}
-
-    void Apply(
-        const TTabletKey& tablet,
-        const TTabletCountersBase& executorCounters,
-        const TTabletCountersBase& appCounters,
-        TInstant now
-    ) {
-        // The aggregates identify their sources by a single ui64, while a bucket may hold
-        // several followers of the same tablet, hence the synthetic source IDs
-        auto [it, inserted] = SourceIds.try_emplace(tablet, NextSourceId);
-        if (inserted) {
-            ++NextSourceId;
-        }
-
-        if (!ExecutorCounters.IsInitialized) {
-            ExecutorCounters.Initialize(&executorCounters, &CounterNames->ExecutorNames);
-        }
-        if (!AppCounters.IsInitialized) {
-            AppCounters.Initialize(&appCounters, &CounterNames->AppNames);
-        }
-
-        ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
-        AppCounters.Apply(it->second, &appCounters, TabletType, now);
-    }
-
-    void Forget(const TTabletKey& tablet) {
-        auto it = SourceIds.find(tablet);
-        if (it == SourceIds.end()) {
-            return;
-        }
-
-        if (ExecutorCounters.IsInitialized) {
-            ExecutorCounters.Forget(it->second);
-        }
-        if (AppCounters.IsInitialized) {
-            AppCounters.Forget(it->second);
-        }
-
-        SourceIds.erase(it);
-    }
-
-    bool IsEmpty() const {
-        return SourceIds.empty();
-    }
-
-    void RecalcAll() {
-        if (ExecutorCounters.IsInitialized) {
-            ExecutorCounters.RecalcAll();
-        }
-        if (AppCounters.IsInitialized) {
-            AppCounters.RecalcAll();
-        }
-    }
-
-private:
-    TTabletTypes::EType TabletType;
-
-    NMonitoring::TDynamicCounterPtr TypeGroup;
-
-    NPrivate::TAggregatedTabletCounters ExecutorCounters;
-    NPrivate::TAggregatedTabletCounters AppCounters;
-
-    const TDetailedMetricsCounterNames* CounterNames;
-
-    THashMap<TTabletKey, ui64> SourceIds;
-    ui64 NextSourceId = 0;
 };
 
 /**
@@ -177,6 +33,21 @@ private:
  */
 struct TTableEntry {
     NMonitoring::TDynamicCounterPtr TableGroup;
+
+    /**
+     * The identity Pack() reports this table under: the FULL path, the way the
+     * tablets report it, not the relative path the entry is keyed by (the
+     * processor strips the database prefix itself, off its own database path).
+     */
+    TString TablePath;
+
+    /**
+     * The level of the last tablet to report this table. Last writer wins: an
+     * entry outlives a level change only while another tablet still holds it
+     * (the changing tablet is moved out of the old shape by AddCounters), so
+     * the freshest report is the one to publish.
+     */
+    EDetailedMetricsLevel MetricsLevel = TDetailedMetricsSettings::MetricsLevelUnspecified;
 
     /**
      * The tablet type of the first tablet of this table that was registered.
@@ -253,7 +124,7 @@ public:
             return;
         }
 
-        auto* entry = GetOrCreateTable(metricsLevel, relativePath);
+        auto* entry = GetOrCreateTable(tablePath, metricsLevel, relativePath);
         if (!entry) {
             return;
         }
@@ -350,6 +221,31 @@ public:
         }
     }
 
+    void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out, ui64 generation) override {
+        // Same lock as AddCounters/ForgetTablet: this is the writer<->reader axis
+        // A2's note says step 07 must reuse (SharedTreeLock()/DetailedMetricsLock()),
+        // guarding both the walk over Tables/Leaves below and every bucket's own
+        // RecalcAll()/ToProto() republish window.
+        TGuard<TMutex> guard(DetailedMetricsLock());
+
+        for (auto& [relativePath, entry] : Tables) {
+            auto* tableCounters = out.Add();
+            tableCounters->SetTablePath(entry.TablePath);
+            tableCounters->SetLevel(entry.MetricsLevel);
+
+            if (entry.TableBucket) {
+                entry.TableBucket->Pack(*tableCounters->MutableTableCounters(), generation);
+            }
+
+            for (auto& [tablet, leaf] : entry.Leaves) {
+                auto* leafOut = tableCounters->AddLeaves();
+                leafOut->SetTabletId(tablet.first);
+                leafOut->SetFollowerId(tablet.second);
+                leaf->Pack(*leafOut->MutableCounters(), generation);
+            }
+        }
+    }
+
 private:
     /**
      * Assert that this instance is only ever handed the tablets of its own role.
@@ -400,7 +296,11 @@ private:
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
-    TTableEntry* GetOrCreateTable(EDetailedMetricsLevel metricsLevel, const TStringBuf relativePath) {
+    TTableEntry* GetOrCreateTable(
+        const TString& tablePath,
+        EDetailedMetricsLevel metricsLevel,
+        const TStringBuf relativePath
+    ) {
         if (!IsTableLevel(metricsLevel) && !IsPartitionLevel(metricsLevel)) {
             return nullptr;
         }
@@ -415,6 +315,8 @@ private:
         if (it != Tables.end()) {
             Y_DEBUG_ABORT_UNLESS(!it->second.IsEmpty());
 
+            it->second.MetricsLevel = metricsLevel;
+
             return &it->second;
         }
 
@@ -423,6 +325,8 @@ private:
         const TString newKey(relativePath);
         auto& entry = Tables[newKey];
         entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, newKey);
+        entry.TablePath = tablePath;
+        entry.MetricsLevel = metricsLevel;
 
         return &entry;
     }

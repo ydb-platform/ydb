@@ -32,7 +32,7 @@ public:
             return TConclusionStatus::Fail("cannot parse category link: " + proto.GetCategory());
         }
         if (proto.HasWeight()) {
-            if (proto.GetWeight() <= 0) {
+            if (!std::isfinite(proto.GetWeight()) || proto.GetWeight() <= 0) {
                 return TConclusionStatus::Fail("incorrect category link weight: " + ::ToString(proto.GetWeight()));
             }
             Weight = proto.GetWeight();

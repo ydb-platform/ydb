@@ -18,7 +18,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, co
     , WorkersPoolId(workersPoolId) {
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
-        AFL_VERIFY((ui64)i.GetCategory() < categories.size());
+        Y_ENSURE((ui64)i.GetCategory() < categories.size(), "worker pool category index is out of range: " << (ui64)i.GetCategory());
         Processes.emplace_back(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory()));
     }
     for (ui64 i = 0; i < WorkersCount; ++i) {
@@ -27,38 +27,33 @@ TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, co
             std::make_unique<TWorker>(poolName, cpuLimit, distributorId, i, workersPoolId), cpuLimit);
         ActiveWorkersIdx.emplace_back(i);
     }
-    AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
-        "count", WorkersCount);
+    Y_ENSURE(WorkersCount, "worker pool has no workers: " << poolName);
     Counters->AmountCPULimit->Set(0);
     Counters->AvailableWorkersCount->Set(0);
     Counters->WorkersCountLimit->Set(WorkersCount);
 }
 
 void TWorkersPool::RemoveFreeWorker(const ui64 workerIdx) {
-    ActiveWorkersIdx.erase(std::find(ActiveWorkersIdx.begin(), ActiveWorkersIdx.end(), workerIdx));
+    const auto it = std::find(ActiveWorkersIdx.begin(), ActiveWorkersIdx.end(), workerIdx);
+    Y_ENSURE(it != ActiveWorkersIdx.end(), "free worker is missing: " << workerIdx);
+    ActiveWorkersIdx.erase(it);
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 }
 
 void TWorkersPool::UpdateWorkerCPULimit(const ui64 workerIdx, const double newLimit) {
-    AFL_VERIFY(WorkersUpdate);
-
+    Y_ENSURE(workerIdx < Workers.size(), "worker CPU limit update index is out of range: " << workerIdx);
     auto& worker = Workers[workerIdx];
     if (std::abs(worker.GetCPULimit() - newLimit) < Eps) {
         return;
     }
-    if (!worker.GetRunningTask()) {
-        RemoveFreeWorker(workerIdx);
-    }
     worker.SetCPULimit(newLimit);
-    WorkersUpdate->WorkersWaitingForLimitUpdate.emplace(workerIdx);
-    TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvUpdateWorkerCPULimit>(newLimit));
 }
 
 void TWorkersPool::IncreaseWorkers(const std::vector<double>& desiredCPULimits) {
-    AFL_VERIFY(WorkersUpdate);
+    Y_ENSURE(WorkersUpdate, "workers increase outside of config update");
 
     const ui64 oldWorkersCount = Workers.size();
-    AFL_VERIFY(oldWorkersCount < desiredCPULimits.size());
+    Y_ENSURE(oldWorkersCount < desiredCPULimits.size(), "workers increase has no additional workers");
 
     UpdateWorkerCPULimit(oldWorkersCount - 1, desiredCPULimits[oldWorkersCount - 1]);
     for (ui64 workerIdx = oldWorkersCount; workerIdx < desiredCPULimits.size(); ++workerIdx) {
@@ -71,26 +66,31 @@ void TWorkersPool::IncreaseWorkers(const std::vector<double>& desiredCPULimits) 
 
 void TWorkersPool::DecreaseWorkers(const std::vector<double>& desiredCPULimits) {
     // first decrease worker phase
-    AFL_VERIFY(WorkersUpdate);
+    Y_ENSURE(WorkersUpdate, "workers decrease outside of config update");
 
     const ui64 oldWorkersCount = Workers.size();
-    AFL_VERIFY(desiredCPULimits.size() < oldWorkersCount);
+    Y_ENSURE(desiredCPULimits.size() < oldWorkersCount, "workers decrease has no removed workers");
 
     UpdateWorkerCPULimit(desiredCPULimits.size() - 1, desiredCPULimits[desiredCPULimits.size() - 1]);
     for (ui64 workerIdx = desiredCPULimits.size(); workerIdx < oldWorkersCount; ++workerIdx) {
         auto& worker = Workers[workerIdx];
+        worker.RequestStop();
+        Y_ENSURE(WorkersUpdate->WorkersWaitingForRelease.emplace(workerIdx).second,
+            "worker is already waiting for release: " << workerIdx);
+    }
+    for (ui64 workerIdx = desiredCPULimits.size(); workerIdx < oldWorkersCount; ++workerIdx) {
+        auto& worker = Workers[workerIdx];
         if (!worker.GetRunningTask()) {
             RemoveFreeWorker(workerIdx);
+            Y_UNUSED(ReleaseWorker(workerIdx));
         }
-        WorkersUpdate->WorkersWaitingForStop.emplace(workerIdx);
-        TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvRetireWorker>());
     }
 }
 
 bool TWorkersPool::StartWorkersUpdate(const std::vector<double>& desiredCPULimits) {
-    AFL_VERIFY(desiredCPULimits.size());
+    Y_ENSURE(desiredCPULimits.size(), "workers update requires at least one worker");
 
-    AFL_VERIFY(!WorkersUpdate);  // Update entrypoint (another states is process continuation)
+    Y_ENSURE(!WorkersUpdate, "another workers update is already in progress");
     WorkersUpdate.emplace();
     WorkersUpdate->DesiredWorkersCount = desiredCPULimits.size();
 
@@ -101,22 +101,27 @@ bool TWorkersPool::StartWorkersUpdate(const std::vector<double>& desiredCPULimit
     } else {
         UpdateWorkerCPULimit(Workers.size() - 1, desiredCPULimits.back());
     }
-    return TryFinishWorkersUpdate();
+    return !WorkersUpdate || TryFinishWorkersUpdate();
 }
 
 bool TWorkersPool::StartWorkersRetirement() {
-    AFL_VERIFY(!WorkersUpdate);
+    Y_ENSURE(!WorkersUpdate, "workers retirement during another workers update");
     WorkersUpdate.emplace();
     WorkersUpdate->DesiredWorkersCount = 0;
     for (ui64 workerIdx = 0; workerIdx < Workers.size(); ++workerIdx) {
         auto& worker = Workers[workerIdx];
+        worker.RequestStop();
+        Y_ENSURE(WorkersUpdate->WorkersWaitingForRelease.emplace(workerIdx).second,
+            "worker is already waiting for release: " << workerIdx);
+    }
+    for (ui64 workerIdx = 0; workerIdx < Workers.size(); ++workerIdx) {
+        auto& worker = Workers[workerIdx];
         if (!worker.GetRunningTask()) {
             RemoveFreeWorker(workerIdx);
+            Y_UNUSED(ReleaseWorker(workerIdx));
         }
-        WorkersUpdate->WorkersWaitingForStop.emplace(workerIdx);
-        TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvRetireWorker>());
     }
-    return TryFinishWorkersUpdate();
+    return !WorkersUpdate || TryFinishWorkersUpdate();
 }
 
 bool TWorkersPool::TryFinishWorkersUpdate() {
@@ -143,49 +148,39 @@ bool TWorkersPool::TryFinishWorkersUpdate() {
     return true;
 }
 
-bool TWorkersPool::OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev) {
-    AFL_VERIFY(WorkersUpdate);
-    auto& worker = Workers[ev.WorkerIdx];
-    WorkersUpdate->WorkersWaitingForLimitUpdate.erase(ev.WorkerIdx);
-    if (!worker.GetRunningTask()) {
-        ActiveWorkersIdx.emplace_back(ev.WorkerIdx);
-        Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
-    }
-    return TryFinishWorkersUpdate();
-}
-
-bool TWorkersPool::OnWorkerStopped(const TEvInternal::TEvWorkerStopped& ev) {
-    AFL_VERIFY(WorkersUpdate);
-    WorkersUpdate->WorkersWaitingForStop.erase(ev.WorkerIdx);
-    return TryFinishWorkersUpdate();
-}
-
 bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
 void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts) {
-    AFL_VERIFY(HasFreeWorker());
-    AFL_VERIFY(tasksBatch.size());
+    Y_ENSURE(HasFreeWorker(), "cannot run a task without a free worker");
+    Y_ENSURE(tasksBatch.size(), "cannot run an empty task batch");
     const auto workerIdx = ActiveWorkersIdx.back();
     ActiveWorkersIdx.pop_back();
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
     auto& worker = Workers[workerIdx];
     worker.OnStartTask(std::move(completionContexts));
-    TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch)));
+    TActivationContext::Send(
+        worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit()));
 }
 
-void TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
-    AFL_VERIFY(workerIdx < Workers.size());
+bool TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
+    Y_ENSURE(workerIdx < Workers.size(), "released worker index is out of range: " << workerIdx);
     auto& worker = Workers[workerIdx];
-    worker.OnStopTask();
-    const bool waitingForLimitUpdate = WorkersUpdate && WorkersUpdate->WorkersWaitingForLimitUpdate.contains(workerIdx);
-    const bool waitingForStop = WorkersUpdate && WorkersUpdate->WorkersWaitingForStop.contains(workerIdx);
-    if (!waitingForLimitUpdate && !waitingForStop) {
-        ActiveWorkersIdx.emplace_back(workerIdx);
-        Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    if (worker.GetRunningTask()) {
+        worker.OnStopTask();
     }
+    if (worker.GetStopRequested()) {
+        Y_ENSURE(WorkersUpdate, "worker stop completion outside of config update");
+        Y_ENSURE(WorkersUpdate->WorkersWaitingForRelease.erase(workerIdx),
+            "worker is not waiting for release: " << workerIdx);
+        TActivationContext::Send(worker.GetWorkerId(), std::make_unique<NActors::TEvents::TEvPoisonPill>());
+        return TryFinishWorkersUpdate();
+    }
+    ActiveWorkersIdx.emplace_back(workerIdx);
+    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    return false;
 }
 
 bool TWorkersPool::DrainTasks() {
@@ -240,9 +235,10 @@ bool TWorkersPool::DrainTasks() {
 }
 
 void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId, const ui64 workerIdx) {
-    AFL_VERIFY(workerIdx < Workers.size())("workers_pool_id", workersPoolId)("worker_idx", workerIdx)("workers_count", Workers.size());
+    Y_ENSURE(workerIdx < Workers.size(),
+        "task result worker index is out of range: pool=" << workersPoolId << ", worker=" << workerIdx);
     const auto& worker = Workers[workerIdx];
-    AFL_VERIFY(worker.GetRunningTask())("workers_pool_id", workersPoolId)("worker_idx", workerIdx);
+    Y_ENSURE(worker.GetRunningTask(), "task result received from an idle worker: " << workerIdx);
 
     THashSet<TString> scopeIds;
     for (auto&& t : result) {
@@ -271,7 +267,7 @@ void TWorkersPool::ApplyTopologyUpdate(
             newProcesses.emplace_back(std::move(*oldIt));
             oldProcesses.erase(oldIt);
         } else {
-            AFL_VERIFY((ui64)category < categories.size());
+            Y_ENSURE((ui64)category < categories.size(), "worker pool category index is out of range: " << (ui64)category);
             newProcesses.emplace_back(
                 linkConfig.GetWeight(), categories[(ui64)category], Counters->GetCategorySignals(category));
         }
@@ -286,7 +282,6 @@ void TWorkersPool::ClearTopology() {
     for (auto& process : Processes) {
         process.GetCounters()->ValueWeight->Set(0);
     }
-    Processes.clear();
 }
 
 }   // namespace NKikimr::NConveyorComposite

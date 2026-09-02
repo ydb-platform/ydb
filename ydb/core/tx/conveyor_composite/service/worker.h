@@ -12,6 +12,8 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <cmath>
+
 namespace NKikimr::NConveyorComposite {
 
 class TWorker: public NActors::TActorBootstrapped<TWorker> {
@@ -19,7 +21,6 @@ private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
     YDB_READONLY(double, CPULimit, 1);
     bool WaitWakeUp = false;
-    bool StopRequested = false;
     std::optional<TDuration> ForwardDuration;
     const NActors::TActorId DistributorId;
     const ui64 WorkerIdx;
@@ -29,19 +30,16 @@ private:
     TDuration GetWakeupDuration() const;
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
-    void HandleMain(TEvInternal::TEvUpdateWorkerCPULimit::TPtr& ev);
-    void HandleMain(TEvInternal::TEvRetireWorker::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void HandleMain(NActors::TEvents::TEvPoisonPill::TPtr& ev);
     void OnWakeup();
-    void Stop();
 
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInternal::TEvNewTask, HandleMain);
-            hFunc(TEvInternal::TEvUpdateWorkerCPULimit, HandleMain);
-            hFunc(TEvInternal::TEvRetireWorker, HandleMain);
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
+            hFunc(NActors::TEvents::TEvPoisonPill, HandleMain);
             default:
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "Unexpected event for task executor",
                 {"evType", ev->GetTypeRewrite()});
@@ -60,7 +58,7 @@ public:
         , DistributorId(distributorId)
         , WorkerIdx(workerIdx)
         , WorkersPoolId(workersPoolId) {
-        AFL_VERIFY(0 < CPULimit && CPULimit <= 1);
+        AFL_VERIFY(std::isfinite(CPULimit) && 0 < CPULimit && CPULimit <= 1);
     }
 };
 

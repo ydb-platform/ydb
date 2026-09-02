@@ -58,45 +58,21 @@ void TWorker::OnWakeup() {
     ExecutionDuration.reset();
 
     WaitWakeUp = false;
-    if (StopRequested) {
-        Stop();
-    }
 }
 
 void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     AFL_VERIFY(!WaitWakeUp);
-    AFL_VERIFY(!StopRequested);
+    const double newLimit = ev->Get()->GetCPULimit();
+    Y_ENSURE(std::isfinite(newLimit) && 0 < newLimit && newLimit <= 1, "invalid worker CPU limit: " << newLimit);
+    CPULimit = newLimit;
     const TMonotonic now = TMonotonic::Now();
     ForwardDuration = now - ev->Get()->GetConstructInstant();
     ExecuteTask(ev->Get()->ExtractTasks());
 }
 
-void TWorker::HandleMain(TEvInternal::TEvUpdateWorkerCPULimit::TPtr& ev) {
-    const double newLimit = ev->Get()->NewLimit;
-    AFL_VERIFY(0 < newLimit && newLimit <= 1)("new_limit", newLimit);
-    CPULimit = newLimit;
-    Send(DistributorId, new TEvInternal::TEvWorkerCPULimitUpdated(WorkersPoolId, WorkerIdx));
-}
-
-void TWorker::HandleMain(TEvInternal::TEvRetireWorker::TPtr& /*ev*/) {
-    if (StopRequested) {
-        return;
-    }
-
-    StopRequested = true;
-    if (!WaitWakeUp) {
-        Stop();
-    }
-}
-
-void TWorker::Stop() {
-    AFL_VERIFY(StopRequested);
-    AFL_VERIFY(!WaitWakeUp);
-    AFL_VERIFY(!ExecutionDuration);
-    AFL_VERIFY(Results.empty());
-    AFL_VERIFY(!ForwardDuration);
-
-    Send(DistributorId, new TEvInternal::TEvWorkerStopped(WorkersPoolId, WorkerIdx));
+void TWorker::HandleMain(NActors::TEvents::TEvPoisonPill::TPtr& /*ev*/) {
+    Y_ENSURE(!WaitWakeUp, "worker received poison while throttled");
+    Y_ENSURE(Results.empty(), "worker received poison with pending results");
     PassAway();
 }
 

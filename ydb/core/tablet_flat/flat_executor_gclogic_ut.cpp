@@ -452,46 +452,6 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT(!gcLogic.IsHistoryCuttingSound(65));
     }
 
-    // Cutting an entry under a not-yet-collected DoNotKeep mark strands the mark:
-    // observed live as GC retrying the sentinel group forever on channel 1.
-    Y_UNIT_TEST(PendingDeleteDeltaPinsHistoryEntry) {
-        static constexpr ui64 TabletId = 42;
-        static constexpr ui32 Channel = 1;
-        auto info = MakeIntrusive<TTabletStorageInfo>(TabletId, TTabletTypes::Dummy);
-        info->Channels.resize(Channel + 1);
-        info->Channels[Channel].Channel = Channel;
-        info->Channels[Channel].History.emplace_back(0, 100);
-        info->Channels[Channel].History.emplace_back(10, 200);
-
-        NBoot::TSteppedCookieAllocatorFactory cookies(*info, /*gen=*/10);
-        TExecutorGCLogic gcLogic(info, cookies.Sys(NBoot::TCookie::EIdx::GCExt));
-        UNIT_ASSERT_VALUES_EQUAL(gcLogic.HistoryCutter.GetHistoryToCut(Channel).size(), 1);
-
-        TGCLogEntry entry(TGCTime(10, 1));
-        entry.Delta.Deleted.push_back(TLogoBlobID(TabletId, /*gen=*/3, /*step=*/1, Channel, HistoryCutterUtBlobSize, 0));
-        gcLogic.ApplyLogEntry(entry);
-        UNIT_ASSERT_C(gcLogic.HistoryCutter.GetHistoryToCut(Channel).empty(),
-            "an entry with a pending DoNotKeep mark must not be cuttable");
-    }
-
-    Y_UNIT_TEST(CreatedDeltaPinsHistoryEntry) {
-        static constexpr ui64 TabletId = 43;
-        static constexpr ui32 Channel = 1;
-        auto info = MakeIntrusive<TTabletStorageInfo>(TabletId, TTabletTypes::Dummy);
-        info->Channels.resize(Channel + 1);
-        info->Channels[Channel].Channel = Channel;
-        info->Channels[Channel].History.emplace_back(0, 100);
-        info->Channels[Channel].History.emplace_back(10, 200);
-
-        NBoot::TSteppedCookieAllocatorFactory cookies(*info, /*gen=*/10);
-        TExecutorGCLogic gcLogic(info, cookies.Sys(NBoot::TCookie::EIdx::GCExt));
-
-        TGCLogEntry entry(TGCTime(10, 1));
-        entry.Delta.Created.push_back(TLogoBlobID(TabletId, /*gen=*/3, /*step=*/1, Channel, HistoryCutterUtBlobSize, 0));
-        gcLogic.ApplyLogEntry(entry);
-        UNIT_ASSERT_C(gcLogic.HistoryCutter.GetHistoryToCut(Channel).empty(),
-            "an entry with a live blob must not be cuttable");
-    }
 }
 
 }

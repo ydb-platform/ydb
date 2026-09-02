@@ -1555,7 +1555,6 @@ public:
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
             hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, ErrorHandle);
-            hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
             hFunc(NPDisk::TEvReadFormatResult, ErrorHandle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);
@@ -1567,12 +1566,8 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
-<<<<<<< HEAD
-=======
-            hFunc(NPDisk::TEvYardResize, ErrorHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
             hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
->>>>>>> 75a75329c8a (NBYDB-1681: pdisk: reply to TEvSchedulerConfigure and test (#34058))
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

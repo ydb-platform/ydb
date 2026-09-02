@@ -1,6 +1,7 @@
 #include "tuple.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 #include <queue>
 
@@ -8,6 +9,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/utils/prefetch.h>
 
 #include <util/generic/bitops.h>
 #include <util/generic/buffer.h>
@@ -17,6 +19,7 @@
 #include "layout_converter_common.h"
 #include "hashes_calc.h"
 #include "packing.h"
+#include "better_mkql_ensure.h"
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -90,6 +93,18 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
         *dst[ind] = x;
         x >>= 8;
     }
+}
+
+ui32 Crc32Packed(const ui8 *data, ui32 size, ui32 hash = 0) {
+#ifdef USE_X86_SIMD
+    if (NX86::HaveAVX2()) {
+        return CalculateCRC32<NSimd::TSimdAVX2Traits>(data, size, hash);
+    }
+    if (NX86::HaveSSE42()) {
+        return CalculateCRC32<NSimd::TSimdSSE42Traits>(data, size, hash);
+    }
+#endif
+    return CalculateCRC32<NSimd::TSimdFallbackTraits>(data, size, hash);
 }
 
 } // namespace
@@ -1724,6 +1739,230 @@ void TTupleLayout::Concat(
             }
         }
 
+    }
+}
+
+ui32 TTupleLayout::HashFixedRow(const ui8 **columns, ui32 row) const {
+    MKQL_ENSURE(VariableColumns.empty(), "HashFixedRow is fixed-width only");
+    const ui32 keyBytes = KeyColumnsFixedEnd - KeyColumnsOffset;
+    ui8 stack[512];
+    std::vector<ui8> heap;
+    ui8 *buf = stack;
+    if (keyBytes > sizeof(stack)) {
+        heap.resize(keyBytes);
+        buf = heap.data();
+    }
+    for (ui32 i = 0; i < KeyColumnsFixedNum; ++i) {
+        const auto &col = KeyColumns[i];
+        if (col.DataSize == 0) {
+            continue;
+        }
+        std::memcpy(buf + col.Offset - KeyColumnsOffset,
+                    columns[col.OriginalIndex] + static_cast<size_t>(row) * col.DataSize,
+                    col.DataSize);
+    }
+    return Crc32Packed(buf, keyBytes);
+}
+
+void TTupleLayout::PackSelected(const ui8 **columns, const ui8 **isValidBitmask,
+                                TArrayRef<const ui32> rowIndexes, TPackResult &dst) const {
+    MKQL_ENSURE(VariableColumns.empty(), "PackSelected is fixed-width only");
+    const ui32 n = rowIndexes.size();
+    if (n == 0) {
+        return;
+    }
+
+    const size_t oldSize = dst.PackedTuples.size();
+    dst.PackedTuples.resize(oldSize + static_cast<size_t>(n) * TotalRowSize, 0);
+    ui8 *res = dst.PackedTuples.data() + oldSize;
+
+    for (ui32 i = 0; i < n; ++i, res += TotalRowSize) {
+        const ui32 row = rowIndexes[i];
+
+        for (const auto &col : Columns) {
+            if (col.DataSize == 0) {
+                continue;
+            }
+            std::memcpy(res + col.Offset,
+                        columns[col.OriginalIndex] + static_cast<size_t>(row) * col.DataSize,
+                        col.DataSize);
+        }
+
+        std::memset(res + BitmaskOffset, 0xFF, BitmaskSize);
+        for (ui32 j = 0; j < Columns.size(); ++j) {
+            const ui8 *bm = isValidBitmask[Columns[j].OriginalIndex];
+            const bool valid = !bm || ((bm[row / 8] >> (row % 8)) & 1u);
+            const ui32 byte = j / 8;
+            const ui8 bit = ui8(1u << (j % 8));
+            if (valid) {
+                res[BitmaskOffset + byte] |= bit;
+            } else {
+                res[BitmaskOffset + byte] &= ~bit;
+            }
+        }
+
+        const ui32 hash = Crc32Packed(res + KeyColumnsOffset,
+                                      KeyColumnsFixedEnd - KeyColumnsOffset);
+        WriteUnaligned<ui32>(res, hash);
+    }
+
+    dst.NTuples += n;
+}
+
+void TTupleLayout::PackIntoBucketPages(const ui8 **columns, const ui8 **isValidBitmask,
+                                       ui32 start, ui32 count, TPaddedPtr<TPackResult> pages,
+                                       ui32 nBuckets, ui32 pageSizeBytes,
+                                       const std::function<void(ui32)> &onPageFull) const {
+    MKQL_ENSURE(VariableColumns.empty(), "PackIntoBucketPages is fixed-width only");
+    MKQL_ENSURE(nBuckets > 0 && (nBuckets & (nBuckets - 1)) == 0, "nBuckets must be a power of two");
+    if (count == 0) {
+        return;
+    }
+
+    const ui32 mask = nBuckets - 1;
+    const ui32 rowSize = TotalRowSize;
+
+    const auto flushIfFull = [&](ui32 bucket) {
+        if (pages[bucket].AllocatedBytes() > pageSizeBytes) {
+            onPageFull(bucket);
+        }
+    };
+
+    const auto maxRowsThisPage = [&](const TPackResult &page, ui32 remaining) -> ui32 {
+        if (remaining == 0) {
+            return 0;
+        }
+        const ui64 allocated = page.AllocatedBytes();
+        if (allocated > pageSizeBytes) {
+            return 0;
+        }
+        const ui64 room = (pageSizeBytes - allocated) / rowSize + 1;
+        return std::min<ui32>(remaining, room);
+    };
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+
+    if (nBuckets == 1) {
+        ui32 packed = 0;
+        while (packed < count) {
+            if (pages[0].AllocatedBytes() > pageSizeBytes) {
+                onPageFull(0);
+            }
+            const ui32 toCopy = maxRowsThisPage(pages[0], count - packed);
+            if (toCopy == 0) {
+                onPageFull(0);
+                continue;
+            }
+            const size_t old = pages[0].PackedTuples.size();
+            pages[0].PackedTuples.resize(old + static_cast<size_t>(toCopy) * rowSize, 0);
+            Pack(columns, isValidBitmask, pages[0].PackedTuples.data() + old, overflow,
+                 start + packed, toCopy);
+            pages[0].NTuples += toCopy;
+            packed += toCopy;
+            flushIfFull(0);
+        }
+        MKQL_ENSURE(overflow.empty(), "fixed-width pack must not write overflow");
+        return;
+    }
+
+    const auto appendFromTile = [&](TPackResult &page, const ui8 *tile, const ui32 *idx, ui32 n) {
+        const size_t old = page.PackedTuples.size();
+        page.PackedTuples.resize_uninitialized(old + static_cast<size_t>(n) * rowSize);
+        ui8 *dst = page.PackedTuples.data() + old;
+        for (ui32 i = 0; i < n; ++i) {
+            if (i + 8 < n) {
+                NYql::PrefetchForRead(tile + static_cast<size_t>(idx[i + 8]) * rowSize);
+            }
+            std::memcpy(dst + static_cast<size_t>(i) * rowSize,
+                        tile + static_cast<size_t>(idx[i]) * rowSize, rowSize);
+        }
+        page.NTuples += n;
+    };
+
+    const ui32 tileCap = rowSize <= 64 ? DirectPackTile : DirectPackTile / 2;
+    std::vector<ui8, TMKQLAllocator<ui8>> tileBuf(static_cast<size_t>(tileCap) * rowSize);
+    ui32 buckets[DirectPackTile];
+    ui32 selected[DirectPackTile];
+    std::vector<ui32> counts(nBuckets);
+    std::vector<ui8 *> dstPtr(nBuckets);
+
+    for (ui32 tileStart = start; tileStart < start + count;) {
+        const ui32 tile = std::min<ui32>(tileCap, start + count - tileStart);
+        std::memset(tileBuf.data(), 0, static_cast<size_t>(tile) * rowSize);
+        Pack(columns, isValidBitmask, tileBuf.data(), overflow, tileStart, tile);
+        MKQL_ENSURE(overflow.empty(), "fixed-width pack must not write overflow");
+
+        std::fill(counts.begin(), counts.end(), 0);
+        const ui8 *row = tileBuf.data();
+        for (ui32 i = 0; i < tile; ++i, row += rowSize) {
+            buckets[i] = ReadUnaligned<ui32>(row) & mask;
+            ++counts[buckets[i]];
+        }
+
+        bool allFit = true;
+        for (ui32 b = 0; b < nBuckets; ++b) {
+            if (counts[b] != 0 && maxRowsThisPage(pages[b], counts[b]) < counts[b]) {
+                allFit = false;
+                break;
+            }
+        }
+
+        if (allFit) {
+            for (ui32 b = 0; b < nBuckets; ++b) {
+                const ui32 n = counts[b];
+                if (n == 0) {
+                    dstPtr[b] = nullptr;
+                    continue;
+                }
+                auto &page = pages[b];
+                const size_t old = page.PackedTuples.size();
+                page.PackedTuples.resize_uninitialized(old + static_cast<size_t>(n) * rowSize);
+                dstPtr[b] = page.PackedTuples.data() + old;
+                page.NTuples += n;
+            }
+            row = tileBuf.data();
+            for (ui32 i = 0; i < tile; ++i, row += rowSize) {
+                ui8 *dst = dstPtr[buckets[i]];
+                std::memcpy(dst, row, rowSize);
+                dstPtr[buckets[i]] = dst + rowSize;
+            }
+            for (ui32 b = 0; b < nBuckets; ++b) {
+                if (counts[b] != 0) {
+                    flushIfFull(b);
+                }
+            }
+        } else {
+            std::vector<ui32> offsets(nBuckets);
+            ui32 acc = 0;
+            for (ui32 b = 0; b < nBuckets; ++b) {
+                offsets[b] = acc;
+                acc += counts[b];
+            }
+            for (ui32 i = 0; i < tile; ++i) {
+                selected[offsets[buckets[i]]++] = i;
+            }
+            ui32 begin = 0;
+            for (ui32 b = 0; b < nBuckets; ++b) {
+                const ui32 n = counts[b];
+                ui32 packed = 0;
+                while (packed < n) {
+                    if (pages[b].AllocatedBytes() > pageSizeBytes) {
+                        onPageFull(b);
+                    }
+                    const ui32 toCopy = maxRowsThisPage(pages[b], n - packed);
+                    if (toCopy == 0) {
+                        onPageFull(b);
+                        continue;
+                    }
+                    appendFromTile(pages[b], tileBuf.data(), selected + begin + packed, toCopy);
+                    packed += toCopy;
+                    flushIfFull(b);
+                }
+                begin += n;
+            }
+        }
+
+        tileStart += tile;
     }
 }
 

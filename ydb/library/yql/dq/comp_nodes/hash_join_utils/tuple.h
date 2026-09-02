@@ -4,10 +4,12 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_types.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
+#include <functional>
 #include <string>
 
 namespace NKikimr {
@@ -195,6 +197,23 @@ struct TTupleLayout {
                  TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
                  TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
                  ui32 start, ui32 count, ui32 bucketsLogNum) const = 0;
+
+    bool SupportsDirectBucketPack() const {
+        return VariableColumns.empty();
+    }
+
+    ui32 HashFixedRow(const ui8 **columns, ui32 row) const;
+
+    void PackSelected(const ui8 **columns, const ui8 **isValidBitmask,
+                      TArrayRef<const ui32> rowIndexes, TPackResult &dst) const;
+
+    static constexpr ui32 DirectPackTile = 2048;
+
+    void PackIntoBucketPages(const ui8 **columns, const ui8 **isValidBitmask,
+                             ui32 start, ui32 count,
+                             TPaddedPtr<TPackResult> pages, ui32 nBuckets,
+                             ui32 pageSizeBytes,
+                             const std::function<void(ui32)> &onPageFull) const;
 
     // Takes packed rows,
     // outputs vector of column sizes in bytes

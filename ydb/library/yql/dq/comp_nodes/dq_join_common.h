@@ -641,6 +641,30 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             State_ = FetchingBuild{*this};
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
             FetchingBuild& state = *s;
+            if constexpr (requires { typename Source::DirectBucketPack; }) {
+                if (!IsGrid && Layouts_.Build->SupportsDirectBucketPack()) {
+                    ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
+                    switch (res) {
+                    case Spilling:
+                        return WaitWhileSpilling();
+                    case FinishedSpilling:
+                        break;
+                    case DontHavePages:
+                        break;
+                    }
+                    NYql::NUdf::EFetchStatus status = state.Build.TryDirectPackInto(state.Spiller);
+                    if (status == NYql::NUdf::EFetchStatus::Yield) {
+                        return EFetchResult::Yield;
+                    }
+                    if (status == NYql::NUdf::EFetchStatus::Finish) {
+                        MKQL_ENSURE(state.Build.Finished(), "sanity check");
+                        State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
+                    } else {
+                        MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Ok, "unhandled status");
+                    }
+                    return EFetchResult::One;
+                }
+            }
             if (!state.Pack.has_value()) {
                 FetchResult<TPackResult> var = state.Build.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);

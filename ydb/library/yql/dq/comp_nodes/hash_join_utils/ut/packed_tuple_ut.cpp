@@ -1,6 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
+#include <cstring>
+#include <numeric>
 #include <string>
 #include <vector>
 #include <random>
@@ -11,6 +13,7 @@
 #include <util/system/mem_info.h>
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/hashes_calc.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/tuple.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
@@ -99,6 +102,52 @@ Y_UNIT_TEST(CreateLayout) {
 
     auto tl = TTupleLayout::Create(columns);
     UNIT_ASSERT(tl->TotalRowSize == 45);
+}
+
+Y_UNIT_TEST(PackSelectedMatchesPack) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc key;
+    key.Role = EColumnRole::Key;
+    key.DataSize = 4;
+    auto tl = TTupleLayout::Create({key});
+    UNIT_ASSERT(tl->SupportsDirectBucketPack());
+
+    constexpr ui32 n = 300;
+    std::vector<ui32> values(n);
+    std::vector<ui8> valid((n + 7) / 8, 0xFF);
+    for (ui32 i = 0; i < n; ++i) {
+        values[i] = i * 17 + 3;
+        if (i % 11 == 0) {
+            valid[i / 8] &= ~ui8(1u << (i % 8));
+        }
+    }
+    const ui8* cols[] = {reinterpret_cast<const ui8*>(values.data())};
+    const ui8* bits[] = {valid.data()};
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl->TotalRowSize * n, 0);
+    tl->Pack(cols, bits, packed.data(), overflow, 0, n);
+
+    TPackResult selected;
+    std::vector<ui32> indexes(n);
+    std::iota(indexes.begin(), indexes.end(), 0);
+    tl->PackSelected(cols, bits, indexes, selected);
+    UNIT_ASSERT_VALUES_EQUAL(selected.NTuples, n);
+    UNIT_ASSERT_EQUAL(std::vector<ui8>(selected.PackedTuples.begin(), selected.PackedTuples.end()), packed);
+
+    TPackResult evenRows;
+    std::vector<ui32> evens;
+    for (ui32 i = 0; i < n; i += 2) {
+        evens.push_back(i);
+    }
+    tl->PackSelected(cols, bits, evens, evenRows);
+    UNIT_ASSERT_VALUES_EQUAL(evenRows.NTuples, evens.size());
+    for (ui32 i = 0; i < evens.size(); ++i) {
+        const ui8* expected = packed.data() + evens[i] * tl->TotalRowSize;
+        const ui8* got = evenRows.PackedTuples.data() + i * tl->TotalRowSize;
+        UNIT_ASSERT(std::memcmp(expected, got, tl->TotalRowSize) == 0);
+    }
 }
 
 // A row of 4-byte and 1-byte columns that is short enough for the small-tuple

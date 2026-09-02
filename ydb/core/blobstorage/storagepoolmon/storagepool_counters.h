@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/mon/mon.h>
 
+#include <atomic>
+
 #include <util/generic/bitops.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -30,6 +32,8 @@ struct TRequestMonItem {
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseTimeCompletedCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlightResponseTimeUsSum;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlightCount;
+    std::atomic<ui64> InFlightRequestCount = 0;
+    std::atomic<ui64> InFlightRequestStartTimeUsSum = 0;
     TMutex InFlightRequestsMutex;
     THashMap<ui64, TMonotonic> InFlightRequests;
 
@@ -65,12 +69,22 @@ struct TRequestMonItem {
 
     void AddInFlightRequest(ui64 requestId, TMonotonic receivedTime) {
         TGuard<TMutex> guard(InFlightRequestsMutex);
-        InFlightRequests.emplace(requestId, receivedTime);
+        const auto [it, inserted] = InFlightRequests.emplace(requestId, receivedTime);
+        Y_UNUSED(it);
+        if (inserted) {
+            InFlightRequestCount.fetch_add(1, std::memory_order_relaxed);
+            InFlightRequestStartTimeUsSum.fetch_add(receivedTime.MicroSeconds(), std::memory_order_relaxed);
+        }
     }
 
     void RemoveInFlightRequest(ui64 requestId) {
         TGuard<TMutex> guard(InFlightRequestsMutex);
-        InFlightRequests.erase(requestId);
+        auto it = InFlightRequests.find(requestId);
+        if (it != InFlightRequests.end()) {
+            InFlightRequestCount.fetch_sub(1, std::memory_order_relaxed);
+            InFlightRequestStartTimeUsSum.fetch_sub(it->second.MicroSeconds(), std::memory_order_relaxed);
+            InFlightRequests.erase(it);
+        }
     }
 
     void Update() {
@@ -78,17 +92,21 @@ struct TRequestMonItem {
     }
 
     void Update(TMonotonic now) {
-        ui64 latencyUsSum = 0;
+        const ui64 inFlightCount = InFlightRequestCount.load(std::memory_order_relaxed);
+        const ui64 startTimeUsSum = InFlightRequestStartTimeUsSum.load(std::memory_order_relaxed);
+        const ui64 nowUs = now.MicroSeconds();
+        const ui64 nowUsSum = inFlightCount * nowUs;
+        const ui64 latencyUsSum = nowUsSum >= startTimeUsSum
+            ? nowUsSum - startTimeUsSum
+            : 0;
+
         ui64 latencyMsMax = 0;
-        ui64 inFlightCount = 0;
         {
             TGuard<TMutex> guard(InFlightRequestsMutex);
-            inFlightCount = InFlightRequests.size();
             for (const auto& [requestId, receivedTime] : InFlightRequests) {
                 Y_UNUSED(requestId);
                 if (now > receivedTime) {
                     const TDuration latency = now - receivedTime;
-                    latencyUsSum += latency.MicroSeconds();
                     latencyMsMax = Max<ui64>(latencyMsMax, latency.MilliSeconds());
                 }
             }

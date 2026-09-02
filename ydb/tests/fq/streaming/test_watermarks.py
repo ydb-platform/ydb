@@ -128,7 +128,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                     pass > 0
             );
         '''
-        kikimr.ydb_client.query(f'''
+        self.create_streaming_query(kikimr, query_name, f'''
             CREATE STREAMING QUERY `{query_name}` {settings_str} AS DO BEGIN
             PRAGMA ydb.MaxTasksPerStage = '{tasks}';
 
@@ -744,7 +744,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             FROM $output;
             END DO;
         '''
-        kikimr.ydb_client.query(sql)
+        self.create_streaming_query(kikimr, query_name, sql)
 
         query_path = f"/Root/{query_name}"
         try:

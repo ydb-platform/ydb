@@ -2096,8 +2096,24 @@ protected:
         return TasksGraph.GetMeta().UserRequestContext;
     }
 
-    bool RestoreTasksGraph() {
+    bool PatchAndRestoreTasksGraph(bool& rescalingChangedTaskCount) {
         if (Request.QueryPhysicalGraph) {
+            bool hasPqSources = false;
+            for (const auto& transaction : Request.Transactions) {
+                if (transaction.Body->GetHasPqSources()) {
+                    hasPqSources = true;
+                    break;
+                }
+            }
+
+            if (hasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+                auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
+                    Request.QueryPhysicalGraph);
+                const auto taskCount = mutableGraph->TasksSize();
+                PatchQueryPhysicalGraphForRescaling(*mutableGraph, ResourcesSnapshot);
+                rescalingChangedTaskCount = mutableGraph->TasksSize() != taskCount;
+            }
+
             TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
         }
 

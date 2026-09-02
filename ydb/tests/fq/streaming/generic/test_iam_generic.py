@@ -197,7 +197,7 @@ class TestIamAuthGeneric(StreamingTestBase):
                 return
             assert False, "Unexpected success"
 
-        kikimr.ydb_client.query(Rf"""
+        self.create_streaming_query(kikimr, query_name, Rf"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO {out} SELECT UNWRAP(Yson2::SerializeJson(Yson2::From(TableRow())))

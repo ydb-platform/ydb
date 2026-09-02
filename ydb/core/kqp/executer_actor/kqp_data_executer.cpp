@@ -647,23 +647,7 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
-        bool hasPqSources = false;
-        for (const auto& transaction : Request.Transactions) {
-            if (transaction.Body->GetHasPqSources()) {
-                hasPqSources = true;
-                break;
-            }
-        }
-
-        // TODO: move graph restoration outside of executer
-        if (hasPqSources && Request.QueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
-            auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
-                Request.QueryPhysicalGraph);
-            const auto taskCount = mutableGraph->TasksSize();
-            PatchQueryPhysicalGraphForRescaling(*mutableGraph, ResourcesSnapshot);
-            RescalingChangedTaskCount = mutableGraph->TasksSize() != taskCount;
-        }
-        const bool graphRestored = RestoreTasksGraph();
+        const bool graphRestored = PatchAndRestoreTasksGraph(RescalingChangedTaskCount);
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {

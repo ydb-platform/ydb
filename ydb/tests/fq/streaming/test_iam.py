@@ -96,7 +96,7 @@ class TestIamAuth(StreamingTestBase):
                 );
             END DO;'''
 
-        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.create_streaming_query(kikimr, query_name, sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 

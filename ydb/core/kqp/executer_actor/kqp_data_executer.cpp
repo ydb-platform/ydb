@@ -647,8 +647,16 @@ private:
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
+        bool hasPqSources = false;
+        for (const auto& transaction : Request.Transactions) {
+            if (transaction.Body->GetHasPqSources()) {
+                hasPqSources = true;
+                break;
+            }
+        }
+
         // TODO: move graph restoration outside of executer
-        if (Request.QueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+        if (hasPqSources && Request.QueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
             auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
                 Request.QueryPhysicalGraph);
             const auto taskCount = mutableGraph->TasksSize();
@@ -719,6 +727,27 @@ private:
         if (!graphRestored) {
             const bool mayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
+
+            // TODO test only
+
+            // if (hasPqSources && Request.SaveQueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+            //     const auto preparedQuery = Request.Transactions[0].Body->GetPreparedQuery();
+            //     YQL_ENSURE(preparedQuery);
+
+            //     NKikimrKqp::TQueryPhysicalGraph physicalGraph;
+            //     *physicalGraph.MutablePreparedQuery() = *preparedQuery;
+            //     TasksGraph.PersistTasksGraphInfo(physicalGraph);
+
+            //     const auto taskCount = physicalGraph.TasksSize();
+            //     PatchQueryPhysicalGraphForRescaling(physicalGraph, ResourcesSnapshot);
+            //     RescalingChangedTaskCount = physicalGraph.TasksSize() != taskCount;
+
+            //     Request.QueryPhysicalGraph = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(std::move(physicalGraph));
+            //     if (RescalingChangedTaskCount) {
+            //         TasksGraph.ClearRuntimeTasks();
+            //         TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
+            //     }
+            // }
         }
 
         TIssue validateIssue;

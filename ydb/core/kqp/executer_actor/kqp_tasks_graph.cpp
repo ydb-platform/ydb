@@ -2046,8 +2046,14 @@ void PatchQueryPhysicalGraphForRescaling(
     //   GetPartitionsToRead(ExtractReadTaskParams({}, readRanges), {})
     THashMap<TStageKey, ui32> stagePartitionCounts;
     for (size_t i = 0; i < graph.TasksSize(); ++i) {
+        Cerr << "[Rescaling] Phase 2: task " << i << Endl;
+
         const auto& task = graph.GetTasks(i);
         TStageKey sk{task.GetTxId(), task.GetDqTask().GetStageId()};
+        if (!pqSourceStages.contains(sk)) {
+            continue;
+        }
+
         const auto& dqTask = task.GetDqTask();
 
         TVector<TString> readRanges(dqTask.GetReadRanges().begin(), dqTask.GetReadRanges().end());
@@ -2072,10 +2078,15 @@ void PatchQueryPhysicalGraphForRescaling(
         stagePartitionCounts[sk] += taskPartitions;
     }
 
+    Cerr << "[Rescaling] Phase 2.1 "  << Endl;
+
     // Compute new task count per PQ source stage:
     // same formula as CountReadTasksFromSource with scheduledTaskCount == 0.
     THashMap<TStageKey, ui32> newTaskCounts;
     for (const auto& sk : pqSourceStages) {
+
+        Cerr << "[Rescaling] Phase 2.2 "  << Endl;
+
         ui32 partitions = stagePartitionCounts.Value(sk, 0);
         if (partitions == 0) 
         {
@@ -2523,6 +2534,14 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
         taskInfo->ClearProgram();
         taskInfo->ClearSecureParams();
         taskInfo->ClearParameters();    // clear parameters to avoid bloating the saved cell
+    }
+}
+
+void TKqpTasksGraph::ClearRuntimeTasks() {
+    GetTasks().clear();
+    GetChannels().clear();
+    for (auto& [_, stageInfo] : GetStagesInfo()) {
+        stageInfo.Tasks.clear();
     }
 }
 

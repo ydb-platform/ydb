@@ -2414,7 +2414,7 @@ FROM `{table_name}`"""
                 partition_key=''.join(random.choices(string.digits, k=8)),
                 endpoint=endpoint,
             )
- 
+
         count_after_alter = total_pq_read_actor_count()
         assert count_after_alter > 1, (
             f"Expected more than 1 DQ_PQ_READ_ACTOR after ALTER, got {count_after_alter}"

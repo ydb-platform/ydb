@@ -206,8 +206,7 @@ private:
                 ModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig(),
                 oldConfig,
                 TCheckDlqTopicsSettings{
-                    .UserToken = Settings.UserToken,
-                    .TopicsAreFirstClassCitizen = AppData()->PQConfig.GetTopicsAreFirstClassCitizen(),
+                    .UserToken = Settings.UserToken
                 }))
         {
             Become(&TAlterTopicOperationActor::CheckDlqState);

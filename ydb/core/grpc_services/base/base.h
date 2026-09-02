@@ -76,10 +76,6 @@ inline void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::S
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
 
-inline TString ResolvePathToDatabase(const TMaybe<TString>& database, TStringBuf path) {
-    return NKikimr::ResolvePathToDatabase(database.GetOrElse(TString()), path);
-}
-
 TString DatabaseFromDomain(const TAppData* appdata);
 
 inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedResult) {
@@ -349,9 +345,18 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+    virtual bool UseStrictDatabaseRelativePaths() const {
+        return false;
+    }
 
     TString GetDatabaseRelativePath(TStringBuf path) const {
-        return ResolvePathToDatabase(GetDatabaseName(), path);
+        const auto database = GetDatabaseName();
+        if (!UseStrictDatabaseRelativePaths() && !path.empty() && !path.StartsWith('/')) {
+            return NKikimr::NormalizePath(
+                NKikimr::CanonizePath(database.GetOrElse(TString())),
+                NKikimr::CanonizePath(TString{path}));
+        }
+        return NKikimr::ResolvePathToDatabase(database.GetOrElse(TString()), path);
     }
 };
 
@@ -528,6 +533,14 @@ public:
 
     const TMaybe<TString> GetDatabaseName() const final {
         return ResolvedDatabaseName ? ResolvedDatabaseName : GetDatabaseNameFromRequest();
+    }
+
+    bool UseStrictDatabaseRelativePaths() const final {
+        const auto providedDatabase = GetDatabaseNameFromRequest();
+        // Use strict relative paths only when the database itself is relative to the cluster root.
+        return providedDatabase && !providedDatabase->empty()
+            && !IsStartWithSlash(*providedDatabase)
+            && CanonizePath(*providedDatabase) != GetDatabaseName().GetOrElse(TString());
     }
 
     // Store the resolved database for request processing without updating counters.

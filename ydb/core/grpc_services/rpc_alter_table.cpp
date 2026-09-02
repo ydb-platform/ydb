@@ -493,7 +493,7 @@ private:
         Ydb::Table::AlterTableRequest requestWithResolvedPaths;
         if (req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl()) {
             requestWithResolvedPaths.CopyFrom(*req);
-            ResolveTtlStoragePaths(*requestWithResolvedPaths.mutable_set_ttl_settings(), Request_->GetDatabaseName());
+            ResolveTtlStoragePaths(*requestWithResolvedPaths.mutable_set_ttl_settings(), *Request_);
             req = &requestWithResolvedPaths;
         }
 

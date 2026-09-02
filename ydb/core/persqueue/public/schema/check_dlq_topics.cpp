@@ -44,12 +44,7 @@ TString GetSchemeDlqTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consum
     return dlq;
 }
 
-TString NormalizeDlqTopicPath(const TString& dlq, const TString& database, bool topicsAreFirstClassCitizen) {
-    if (topicsAreFirstClassCitizen) {
-        return dlq.StartsWith('/')
-            ? CanonizePath(dlq)
-            : ResolvePathToDatabase(CanonizePath(database), dlq);
-    }
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database) {
     return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }
 
@@ -201,14 +196,13 @@ private:
 
 absl::flat_hash_set<TString> CollectDlqTopicPaths(
     const NKikimrPQ::TPQTabletConfig& config,
-    const TString& database,
-    bool topicsAreFirstClassCitizen
+    const TString& database
 ) {
     absl::flat_hash_set<TString> result;
     for (const auto& consumer : config.GetConsumers()) {
         const auto dlq = GetSchemeDlqTopicPath(consumer);
         if (!dlq.empty()) {
-            result.insert(NormalizeDlqTopicPath(dlq, database, topicsAreFirstClassCitizen));
+            result.insert(NormalizeDlqTopicPath(dlq, database));
         }
     }
     return result;
@@ -217,11 +211,10 @@ absl::flat_hash_set<TString> CollectDlqTopicPaths(
 absl::flat_hash_set<TString> CollectNewDlqTopicPaths(
     const NKikimrPQ::TPQTabletConfig& newConfig,
     const NKikimrPQ::TPQTabletConfig& oldConfig,
-    const TString& database,
-    bool topicsAreFirstClassCitizen
+    const TString& database
 ) {
-    auto result = CollectDlqTopicPaths(newConfig, database, topicsAreFirstClassCitizen);
-    for (const auto& path : CollectDlqTopicPaths(oldConfig, database, topicsAreFirstClassCitizen)) {
+    auto result = CollectDlqTopicPaths(newConfig, database);
+    for (const auto& path : CollectDlqTopicPaths(oldConfig, database)) {
         result.erase(path);
     }
     return result;
@@ -234,8 +227,7 @@ IActor* CreateCheckDlqTopicsActorIfNeeded(
     const NKikimrPQ::TPQTabletConfig& oldConfig,
     const TCheckDlqTopicsSettings& settings
 ) {
-    auto dlqPaths = CollectNewDlqTopicPaths(
-        newConfig, oldConfig, databasePath, settings.TopicsAreFirstClassCitizen);
+    auto dlqPaths = CollectNewDlqTopicPaths(newConfig, oldConfig, databasePath);
     if (dlqPaths.empty()) {
         return nullptr;
     }

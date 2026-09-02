@@ -1164,11 +1164,6 @@ void TConsumerActor::MoveToDLQIfPossible() {
         if (dlq.empty() || dlq.StartsWith("sqs://")) {
             return dlq;
         }
-        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            return dlq.StartsWith('/')
-                ? CanonizePath(dlq)
-                : ResolvePathToDatabase(CanonizePath(Database), dlq);
-        }
         return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
     };
 

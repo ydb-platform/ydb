@@ -351,13 +351,13 @@ private:
         Ydb::Table::CreateTableRequest requestWithResolvedPaths;
         if (req->has_ttl_settings() && req->ttl_settings().has_tiered_ttl()) {
             requestWithResolvedPaths.CopyFrom(*req);
-            ResolveTtlStoragePaths(*requestWithResolvedPaths.mutable_ttl_settings(), Request_->GetDatabaseName());
+            ResolveTtlStoragePaths(*requestWithResolvedPaths.mutable_ttl_settings(), *Request_);
             req = &requestWithResolvedPaths;
         }
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);

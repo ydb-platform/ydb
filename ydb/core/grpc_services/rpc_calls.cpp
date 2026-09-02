@@ -59,9 +59,8 @@ void FillYdbStatus(Ydb::Coordination::SessionResponse& resp, const NYql::TIssues
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path) {
     std::pair<TString, TString> pathPair;
     TString error;
-    const TString resolvedPath = ResolvePathToDatabase(database, path);
 
-    if (!TrySplitPathByDb(resolvedPath, database.GetOrElse(TString()), pathPair, error)) {
+    if (!TrySplitPathByDb(path, database.GetOrElse(TString()), pathPair, error)) {
         ythrow yexception() << error;
     }
 

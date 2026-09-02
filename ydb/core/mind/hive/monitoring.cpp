@@ -1231,15 +1231,17 @@ public:
         auto currentValue = makeListString(Self->CurrentConfig);
 
         bool localOverrided = (currentValue != clusterDefault);
+        const auto* field = Self->DatabaseConfig.GetDescriptor()->FindFieldByName(param);
+        TString descriptionIcon = field ? BuildDescriptionIcon(field) : TString();
 
         out << "<div class='row'>";
         {
             // mark if value is changed locally
-            out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'>"
-                << "<label for='" << param << "'"
-                << (localOverrided ? "" : "' style='font-weight:normal'")
-                << ">" << param << ":</label>"
-                << "</div>";
+            if (localOverrided) {
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "'>" << param << "</label>" << descriptionIcon << ":</div>";
+            } else {
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "' style='font-weight:normal'>" << param << "</label>" << descriptionIcon << ":</div>";
+            }
             // editable current value
             out << "<div class='col-sm-2' style='padding-top:5px'>"
                 << "<input id='" << param << "' style='max-width:170px;margin-top:7px' onkeydown='edit(this);' onchange='edit(this);'"

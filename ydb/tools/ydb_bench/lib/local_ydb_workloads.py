@@ -394,7 +394,7 @@ def _topic_stats_row(values, location):
     return metric_values, timestamp
 
 
-def _parse_topic_total_result(command_result, normalized_workload, request):
+def _parse_topic_window_result(command_result, normalized_workload, request):
     stdout = command_result.stdout
     if not isinstance(stdout, str):
         _topic_result_error("is not text or exceeds {} bytes".format(_TOPIC_OUTPUT_MAX_BYTES))
@@ -405,11 +405,13 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
     if output_size > _TOPIC_OUTPUT_MAX_BYTES:
         _topic_result_error("is not text or exceeds {} bytes".format(_TOPIC_OUTPUT_MAX_BYTES))
 
-    start_index = request.warmup_seconds + 1
-    finish_index = request.warmup_seconds + request.duration_seconds
-    if start_index >= finish_index:
+    first_index = request.warmup_seconds + 1
+    last_index = request.warmup_seconds + request.duration_seconds
+    if request.duration_seconds < 2:
         _topic_result_error("requires a measurement duration of at least two seconds")
-    boundary_rows = {str(start_index): [], str(finish_index): []}
+    boundary_index = first_index - 1
+    required_indexes = range(max(1, boundary_index), last_index + 1)
+    window_rows = {str(index): [] for index in required_indexes}
     total_rows = []
     for line in stdout.splitlines():
         values = line.split()
@@ -417,24 +419,29 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
             continue
         if values[0] == "Total":
             total_rows.append(values)
-        elif values[0] in boundary_rows:
-            boundary_rows[values[0]].append(values)
+        elif values[0] in window_rows:
+            window_rows[values[0]].append(values)
     if len(total_rows) != 1:
         _topic_result_error("must contain exactly one Total row")
-    for index, rows in boundary_rows.items():
+    _topic_stats_row(total_rows[0], "Total row")
+
+    parsed_windows = {}
+    for index, rows in window_rows.items():
         if len(rows) != 1:
             _topic_result_error("must contain exactly one window row for index {}".format(index))
-    metric_values, _total_timestamp = _topic_stats_row(total_rows[0], "Total row")
-    _start_metrics, measurement_started_at = _topic_stats_row(
-        boundary_rows[str(start_index)][0],
-        "window row {}".format(start_index),
-    )
-    _finish_metrics, measurement_finished_at = _topic_stats_row(
-        boundary_rows[str(finish_index)][0],
-        "window row {}".format(finish_index),
-    )
-    if measurement_started_at >= measurement_finished_at:
-        _topic_result_error("measurement window timestamps must be increasing")
+        parsed_windows[int(index)] = _topic_stats_row(rows[0], "window row {}".format(index))
+    ordered_indexes = sorted(parsed_windows)
+    for previous, current in zip(ordered_indexes, ordered_indexes[1:]):
+        if parsed_windows[current][1] - parsed_windows[previous][1] != current - previous:
+            _topic_result_error("window row timestamps must advance by one second per index")
+
+    measurement_rows = [parsed_windows[index][0] for index in range(first_index, last_index + 1)]
+
+    def mean_metric(index):
+        return sum(row[index] for row in measurement_rows) / len(measurement_rows)
+
+    def max_metric(index):
+        return max(row[index] for row in measurement_rows)
 
     (
         write_messages_s,
@@ -446,7 +453,21 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
         read_messages_s,
         read_mib_s,
         full_p99_ms,
-    ) = metric_values
+    ) = (
+        mean_metric(0),
+        mean_metric(1),
+        max_metric(2),
+        max_metric(3),
+        max_metric(4),
+        max_metric(5),
+        mean_metric(6),
+        mean_metric(7),
+        max_metric(8),
+    )
+    measurement_started_at = (
+        parsed_windows[boundary_index][1] if boundary_index >= 1 else parsed_windows[first_index][1] - 1
+    )
+    measurement_finished_at = parsed_windows[last_index][1]
     consumers = normalized_workload["options"]["consumers"]
     read_per_consumer_messages_s = read_messages_s / consumers
     throughput = min(write_messages_s, read_per_consumer_messages_s)
@@ -466,7 +487,13 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
     }
     return WorkloadResult(
         metrics,
-        details={"percentile": _TOPIC_PERCENTILE, "total": metrics},
+        details={
+            "percentile": _TOPIC_PERCENTILE,
+            "window_seconds": 1,
+            "measurement_windows": len(measurement_rows),
+            "rate_aggregation": "mean",
+            "percentile_aggregation": "maximum",
+        },
         measurement_window=(
             measurement_started_at,
             measurement_finished_at,
@@ -474,83 +501,84 @@ def _parse_topic_total_result(command_result, normalized_workload, request):
     )
 
 
-TOPIC_TOTAL_RESULT = WorkloadResultAdapter(
-    schema_id="topic-total-v1",
-    parse=_parse_topic_total_result,
+TOPIC_WINDOW_RESULT = WorkloadResultAdapter(
+    schema_id="topic-window-v1",
+    parse=_parse_topic_window_result,
     metrics=(
         WorkloadMetric(
             "transactions",
             "estimated messages",
             required=True,
             description=(
-                "Conservative completed-message estimate derived from truncated CLI rates; used to reject empty samples"
+                "Conservative completed-message estimate derived from mean per-window CLI rates; used to reject "
+                "empty samples"
             ),
         ),
         WorkloadMetric(
             "throughput",
             "messages/s",
             required=True,
-            description="Minimum of write rate and aggregate read rate divided by the number of consumers",
+            description=("Minimum of mean write rate and mean aggregate read rate divided by the number of consumers"),
         ),
         WorkloadMetric(
             "write_messages_s",
             "messages/s",
             required=True,
-            description="CLI-reported successful write rate",
+            description="Mean successful write rate across one-second measurement windows",
         ),
         WorkloadMetric(
             "read_messages_s",
             "deliveries/s",
             required=True,
-            description="CLI-reported aggregate delivery rate across all consumers",
+            description="Mean aggregate delivery rate across all consumers and one-second measurement windows",
         ),
         WorkloadMetric(
             "read_per_consumer_messages_s",
             "messages/s",
             required=True,
-            description="Aggregate delivery rate divided by the configured number of consumers",
+            description="Mean aggregate delivery rate divided by the configured number of consumers",
         ),
         WorkloadMetric(
             "write_mib_s",
             "logical MiB/s",
             required=True,
-            description="CLI-reported uncompressed logical write bandwidth",
+            description="Mean uncompressed logical write bandwidth across one-second measurement windows",
         ),
         WorkloadMetric(
             "read_mib_s",
             "logical MiB/s",
             required=True,
-            description="CLI-reported aggregate uncompressed logical read bandwidth",
+            description="Mean aggregate uncompressed logical read bandwidth across one-second measurement windows",
         ),
         WorkloadMetric(
             "write_p99_ms",
             "ms",
             required=True,
-            description="p99 time from scheduled message creation to write acknowledgement",
+            description="Worst per-window p99 time from scheduled message creation to write acknowledgement",
         ),
         WorkloadMetric(
             "inflight_p99_messages",
             "messages",
             required=True,
-            description="p99 number of messages awaiting write acknowledgement",
+            description="Worst per-window p99 number of messages awaiting write acknowledgement",
         ),
         WorkloadMetric(
             "lag_p99_messages",
             "messages",
             required=True,
-            description="p99 unread-message lag across consumers",
+            description="Worst per-window p99 unread-message lag across consumers",
         ),
         WorkloadMetric(
             "lag_p99_ms",
             "ms",
             required=True,
-            description="p99 consumer lag time",
+            description="Worst per-window p99 consumer lag time",
         ),
         WorkloadMetric(
             "full_p99_ms",
             "ms",
             required=True,
-            description="p99 end-to-end time from scheduled message creation to delivery",
+            description="Worst per-window p99 end-to-end time from scheduled message creation to delivery",
         ),
     ),
     slo_metrics=(("p99", "full_p99_ms"),),
@@ -1505,7 +1533,7 @@ _DEFINITIONS = (
         prepare_plan_builder=_topic_prepare_plan_builder,
         run_plan_builder=_topic_run_plan_builder,
         cleanup_plan_builder=_topic_cleanup_plan_builder,
-        result_adapter=TOPIC_TOTAL_RESULT,
+        result_adapter=TOPIC_WINDOW_RESULT,
         throughput_unit="messages/s",
         profile_validator=_validate_topic_profile,
         minimum_duration_seconds=2,

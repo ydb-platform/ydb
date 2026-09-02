@@ -487,7 +487,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[2]["options"][4]["choices"], ["row", "column"])
         self.assertEqual(
             [item["result_schema_id"] for item in catalog],
-            ["generic-total-v1"] * 3 + ["tpcc-json-v2", "topic-total-v1"],
+            ["generic-total-v1"] * 3 + ["tpcc-json-v2", "topic-window-v1"],
         )
         self.assertEqual(
             [item["throughput_unit"] for item in catalog],
@@ -2339,19 +2339,37 @@ class YdbBenchTest(unittest.TestCase):
                     request,
                 )
 
-    def test_local_ydb_topic_total_result_normalizes_aggregate_consumer_rate(self):
+    def test_local_ydb_topic_window_result_aggregates_exact_measurement_windows(self):
         workload = local_ydb_workloads.normalize_workload(
             {"type": "topic", "operation": "full", "options": {"consumers": 2}},
             "workload",
         )
         request = local_ydb_workloads.WorkloadRunRequest("rate", 150, 10, 3, 4, None)
-        stdout = """
-Window\tWrite speed\tWrite time\tInflight\tLag\t\tLag time\tRead speed\tFull time\tTimestamp
-#\tmsg/s\tMB/s\tpercentile,ms\tpercentile,msg\tpercentile,msg\tpercentile,ms\tmsg/s\tMB/s\tpercentile,ms
-4\t0\t0\t0\t\t0\t\t0\t\t0\t\t0\t0\t0\t2026-08-25T10:00:04Z
-13\t0\t0\t0\t\t0\t\t0\t\t0\t\t0\t0\t0\t2026-08-25T10:00:13Z
-Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
-"""
+
+        def row(index, metrics, second):
+            return "{} {} 2026-08-25T10:00:{:02d}Z".format(index, " ".join(map(str, metrics)), second)
+
+        rows = [row(3, [0] * 9, 3)]
+        for offset, index in enumerate(range(4, 14)):
+            rows.append(
+                row(
+                    index,
+                    [
+                        100 + offset,
+                        10 + offset,
+                        1 + offset,
+                        20 + offset,
+                        30 + offset,
+                        40 + offset,
+                        200 + 2 * offset,
+                        50 + offset,
+                        60 + offset,
+                    ],
+                    index,
+                )
+            )
+        rows.append(row("Total", [999] * 9, 14))
+        stdout = "\n".join(rows)
         result = local_ydb_workloads.parse_workload_result(
             "topic",
             self._local_ydb_command_result(("ydb", "workload", "topic", "run", "full"), stdout),
@@ -2361,22 +2379,31 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
         self.assertEqual(
             result.metrics,
             {
-                "transactions": 900,
-                "throughput": 90,
-                "write_messages_s": 120,
-                "write_mib_s": 1,
-                "write_p99_ms": 4,
-                "inflight_p99_messages": 7,
-                "lag_p99_messages": 8,
-                "lag_p99_ms": 9,
-                "read_messages_s": 180,
-                "read_per_consumer_messages_s": 90,
-                "read_mib_s": 2,
-                "full_p99_ms": 12,
+                "transactions": 1045,
+                "throughput": 104.5,
+                "write_messages_s": 104.5,
+                "write_mib_s": 14.5,
+                "write_p99_ms": 10,
+                "inflight_p99_messages": 29,
+                "lag_p99_messages": 39,
+                "lag_p99_ms": 49,
+                "read_messages_s": 209,
+                "read_per_consumer_messages_s": 104.5,
+                "read_mib_s": 54.5,
+                "full_p99_ms": 69,
             },
         )
-        self.assertEqual(result.details, {"percentile": 99, "total": result.metrics})
-        self.assertEqual(result.measurement_window, (1787652004.0, 1787652013.0))
+        self.assertEqual(
+            result.details,
+            {
+                "percentile": 99,
+                "window_seconds": 1,
+                "measurement_windows": 10,
+                "rate_aggregation": "mean",
+                "percentile_aggregation": "maximum",
+            },
+        )
+        self.assertEqual(result.measurement_window, (1787652003.0, 1787652013.0))
         passed, reason = load_control.evaluate_load(
             {
                 "parameter": "rate",
@@ -2386,7 +2413,7 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
                     "type": "latency-slo",
                     "percentile": "p99",
                     "latency_metric": "full_p99_ms",
-                    "max_ms": 20,
+                    "max_ms": 100,
                     "max_errors": 0,
                     "min_achieved_rate_ratio": 0.98,
                 },
@@ -2395,10 +2422,10 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
             result.metrics,
         )
         self.assertFalse(passed)
-        self.assertIn("achieved rate ratio 0.6000", reason)
+        self.assertIn("achieved rate ratio 0.6967", reason)
 
         schema = local_ydb_workloads.workload_result_schema("topic")
-        self.assertEqual(schema["schema_id"], "topic-total-v1")
+        self.assertEqual(schema["schema_id"], "topic-window-v1")
         self.assertEqual(schema["throughput_unit"], "messages/s")
         self.assertEqual(schema["slo_metrics"], {"p99": "full_p99_ms"})
         self.assertFalse(schema["reports_errors"])
@@ -2407,16 +2434,10 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
             "deliveries/s",
         )
 
+        zero_stdout = "\n".join([row(index, [0] * 9, index) for index in range(3, 14)] + [row("Total", [999] * 9, 14)])
         zero_result = local_ydb_workloads.parse_workload_result(
             "topic",
-            self._local_ydb_command_result(
-                ("ydb",),
-                """
-4 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:04Z
-13 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:13Z
-Total 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:14Z
-""",
-            ),
+            self._local_ydb_command_result(("ydb",), zero_stdout),
             workload,
             request,
         )
@@ -2434,7 +2455,32 @@ Total 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:14Z
         self.assertFalse(passed)
         self.assertIn("zero successful operations", reason)
 
-    def test_local_ydb_topic_total_result_rejects_ambiguous_or_unsafe_output(self):
+    def test_local_ydb_topic_window_result_supports_zero_warmup(self):
+        workload = local_ydb_workloads.normalize_workload(
+            {"type": "topic", "operation": "full"},
+            "workload",
+        )
+        request = local_ydb_workloads.WorkloadRunRequest("rate", 100, 2, 0, 1, None)
+        stdout = "\n".join(
+            (
+                "1 10 20 3 4 5 6 30 40 7 2026-08-25T10:00:01Z",
+                "2 20 30 8 9 10 11 40 50 12 2026-08-25T10:00:02Z",
+                "Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:03Z",
+            )
+        )
+        result = local_ydb_workloads.parse_workload_result(
+            "topic",
+            self._local_ydb_command_result(("ydb",), stdout),
+            workload,
+            request,
+        )
+        self.assertEqual(result.metrics["write_messages_s"], 15)
+        self.assertEqual(result.metrics["write_p99_ms"], 8)
+        self.assertEqual(result.metrics["read_messages_s"], 35)
+        self.assertEqual(result.metrics["full_p99_ms"], 12)
+        self.assertEqual(result.measurement_window, (1787652000.0, 1787652002.0))
+
+    def test_local_ydb_topic_window_result_rejects_ambiguous_or_unsafe_output(self):
         workload = local_ydb_workloads.normalize_workload(
             {"type": "topic", "operation": "full"},
             "workload",
@@ -2444,53 +2490,94 @@ Total 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:14Z
         def row(index, timestamp, metrics="1 2 3 4 5 6 7 8 9"):
             return "{} {} {}".format(index, metrics, timestamp)
 
+        boundary = row(1, "2026-08-25T10:00:01Z")
         start = row(2, "2026-08-25T10:00:02Z")
         finish = row(3, "2026-08-25T10:00:03Z")
         total = row("Total", "2026-08-25T10:00:04Z")
-        valid = "\n".join((start, finish, total))
+        valid = "\n".join((boundary, start, finish, total))
         invalid = (
             (None, "is not text"),
             ("\ud800", "not valid UTF-8 text"),
-            ("\n".join((start, finish)), "exactly one Total row"),
+            ("\n".join((boundary, start, finish)), "exactly one Total row"),
             (valid + "\n" + total, "exactly one Total row"),
-            ("\n".join((start, finish, "Total 1 2 3 4 5 6 7 8 9")), "Total row.*11 columns"),
+            ("\n".join((boundary, start, finish, "Total 1 2 3 4 5 6 7 8 9")), "Total row.*11 columns"),
             (valid + " extra", "Total row.*11 columns"),
             (
-                "\n".join((start, finish, row("Total", "2026-08-25T10:00:04Z", "-1 2 3 4 5 6 7 8 9"))),
-                "Total row metrics.*unsigned 64-bit",
-            ),
-            (
-                "\n".join((start, finish, row("Total", "2026-08-25T10:00:04Z", "1.0 2 3 4 5 6 7 8 9"))),
-                "Total row metrics.*unsigned 64-bit",
-            ),
-            (
-                "\n".join((start, finish, row("Total", "2026-08-25T10:00:04Z", "١ 2 3 4 5 6 7 8 9"))),
+                "\n".join((boundary, start, finish, row("Total", "2026-08-25T10:00:04Z", "-1 2 3 4 5 6 7 8 9"))),
                 "Total row metrics.*unsigned 64-bit",
             ),
             (
                 "\n".join(
-                    (start, finish, row("Total", "2026-08-25T10:00:04Z", "000000000000000000001 2 3 4 5 6 7 8 9"))
+                    (
+                        boundary,
+                        start,
+                        finish,
+                        row("Total", "2026-08-25T10:00:04Z", "1.0 2 3 4 5 6 7 8 9"),
+                    )
+                ),
+                "Total row metrics.*unsigned 64-bit",
+            ),
+            (
+                "\n".join((boundary, start, finish, row("Total", "2026-08-25T10:00:04Z", "١ 2 3 4 5 6 7 8 9"))),
+                "Total row metrics.*unsigned 64-bit",
+            ),
+            (
+                "\n".join(
+                    (
+                        boundary,
+                        start,
+                        finish,
+                        row("Total", "2026-08-25T10:00:04Z", "000000000000000000001 2 3 4 5 6 7 8 9"),
+                    )
                 ),
                 "Total row metrics.*unsigned 64-bit",
             ),
             (
                 "\n".join(
-                    (start, finish, row("Total", "2026-08-25T10:00:04Z", "18446744073709551616 2 3 4 5 6 7 8 9"))
+                    (
+                        boundary,
+                        start,
+                        finish,
+                        row("Total", "2026-08-25T10:00:04Z", "18446744073709551616 2 3 4 5 6 7 8 9"),
+                    )
                 ),
                 "Total row metrics.*unsigned 64-bit",
             ),
-            ("\n".join((finish, total)), "window row for index 2"),
-            ("\n".join((start, start, finish, total)), "window row for index 2"),
-            ("\n".join((row("٢", "2026-08-25T10:00:02Z"), finish, total)), "window row for index 2"),
-            ("\n".join(("2 1 2 3 4 5 6 7 8 9", finish, total)), "window row 2.*11 columns"),
+            ("\n".join((start, finish, total)), "window row for index 1"),
+            ("\n".join((boundary, finish, total)), "window row for index 2"),
+            ("\n".join((boundary, start, start, finish, total)), "window row for index 2"),
             (
-                "\n".join((row(2, "2026-08-25T10:00:02Z", "-1 2 3 4 5 6 7 8 9"), finish, total)),
+                "\n".join((boundary, row("٢", "2026-08-25T10:00:02Z"), finish, total)),
+                "window row for index 2",
+            ),
+            (
+                "\n".join((boundary, "2 1 2 3 4 5 6 7 8 9", finish, total)),
+                "window row 2.*11 columns",
+            ),
+            (
+                "\n".join((boundary, row(2, "2026-08-25T10:00:02Z", "-1 2 3 4 5 6 7 8 9"), finish, total)),
                 "window row 2 metrics.*unsigned 64-bit",
             ),
-            ("\n".join((start, finish, row("Total", "2026-08-25T10:00:04"))), "Total row timestamp.*ISO UTC"),
-            ("\n".join((row(2, "2026-08-25T10:00:02+00:00"), finish, total)), "window row 2 timestamp.*ISO UTC"),
-            ("\n".join((row(2, "2026-02-30T10:00:02Z"), finish, total)), "window row 2 timestamp.*ISO UTC"),
-            ("\n".join((row(2, "2026-08-25T10:00:03Z"), finish, total)), "timestamps must be increasing"),
+            (
+                "\n".join((boundary, start, finish, row("Total", "2026-08-25T10:00:04"))),
+                "Total row timestamp.*ISO UTC",
+            ),
+            (
+                "\n".join((boundary, row(2, "2026-08-25T10:00:02+00:00"), finish, total)),
+                "window row 2 timestamp.*ISO UTC",
+            ),
+            (
+                "\n".join((boundary, row(2, "2026-02-30T10:00:02Z"), finish, total)),
+                "window row 2 timestamp.*ISO UTC",
+            ),
+            (
+                "\n".join((boundary, row(2, "2026-08-25T10:00:03Z"), finish, total)),
+                "timestamps must advance by one second",
+            ),
+            (
+                "\n".join((boundary, start, row(3, "2026-08-25T10:00:04Z"), total)),
+                "timestamps must advance by one second",
+            ),
             ("x" * (1024 * 1024 + 1), "exceeds 1048576 bytes"),
         )
         for stdout, message in invalid:
@@ -3660,9 +3747,10 @@ Total 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:14Z
             "workload",
         )
         output = """
-2 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:12Z
-3 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:13Z
-Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
+1 0 0 0 0 0 0 0 0 0 2026-08-25T10:00:11Z
+2 120 1 4 7 8 9 180 2 12 2026-08-25T10:00:12Z
+3 120 1 4 7 8 9 180 2 12 2026-08-25T10:00:13Z
+Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
 """
         cluster = mock.Mock(
             ydb_cli=Path("/tmp/ydb"),
@@ -3760,8 +3848,8 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
         self.assertEqual(
             monitor.summary.call_args_list,
             [
-                mock.call(started_at_unix=1787652012.0, finished_at_unix=1787652013.0),
-                mock.call(started_at_unix=1787652012.0, finished_at_unix=1787652013.0),
+                mock.call(started_at_unix=1787652011.0, finished_at_unix=1787652013.0),
+                mock.call(started_at_unix=1787652011.0, finished_at_unix=1787652013.0),
             ],
         )
         self.assertEqual(

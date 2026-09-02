@@ -1038,7 +1038,9 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     Y_UNIT_TEST_QUAD(TestBlockModeAggregationPrefetchAcrossBlocks, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
         RunDqAggregateBlockTest(setup, UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
-            return new TBlockKVStream(ctx, 17, 2, 7, columnTypes, keyWidth, refMap);
+            return new TBlockKVStream(
+                ctx, DqAggregationPrefetchBatchSize + 2, 2, DqAggregationPrefetchBatchSize / 2 + 2, columnTypes, keyWidth, refMap
+            );
         });
     }
 

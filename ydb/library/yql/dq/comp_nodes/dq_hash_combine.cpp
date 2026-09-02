@@ -1246,7 +1246,7 @@ protected:
         ++InputRows;
         if (CanPrefetch()) {
             CollectPrefetchRow(input);
-            return PrefetchCount == PrefetchBatchSize ? ProcessPrefetchBatch() : EFillState::ContinueFilling;
+            return PrefetchCount == DqAggregationPrefetchBatchSize ? ProcessPrefetchBatch() : EFillState::ContinueFilling;
         }
         return ProcessFetchedRow(input);
     }
@@ -1356,9 +1356,9 @@ public:
         }
 
         if (PassthroughKeys) {
-            PrefetchRows.resize(PrefetchBatchSize * InputUnpackedWidth);
-            PrefetchKeys.resize(PrefetchBatchSize * KeyTypes.size());
-            PrefetchHashes.resize(PrefetchBatchSize);
+            PrefetchRows.resize(DqAggregationPrefetchBatchSize * InputUnpackedWidth);
+            PrefetchKeys.resize(DqAggregationPrefetchBatchSize * KeyTypes.size());
+            PrefetchHashes.resize(DqAggregationPrefetchBatchSize);
             PrefetchRowPtrs.resize(InputUnpackedWidth);
         }
     }
@@ -1646,14 +1646,12 @@ protected:
     const bool CanBypass;
     const TDqHashCombineTestParams TestParams;
 
-    static constexpr size_t PrefetchBatchSize = 16;
-
     size_t PrefetchCount = 0;
     size_t PrefetchPos = 0; // Nonzero between calls only if batch processing was interrupted.
     bool PrefetchSourceEmptyPending = false;
 
     TUnboxedValueVector PrefetchRows;
-    std::vector<TUnboxedValuePod> PrefetchKeys;
+    std::vector<TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> PrefetchKeys;
     std::vector<ui64> PrefetchHashes;
     std::vector<TUnboxedValue*> PrefetchRowPtrs;
 };

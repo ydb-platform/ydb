@@ -40,7 +40,7 @@ General format of the command:
 * `--skip-rows NUM`: A number of rows from the beginning of the file that will be skipped at import. The default value is `0`.
 * `--header`: Use this option if the first row (excluding the rows skipped by `--skip-rows`) includes names of data columns to be mapped to table columns. If the header row is missing, the data is mapped according to the order in the table schema.
 * `--delimiter STRING`: The data column delimiter character. You can't use the tabulation character as a delimiter in this option. For tab-delimited import, use the `import file tsv` subcommand. Default value: `,`.
-* `--null-value STRING`: The value to be imported as `NULL`. Default value: `""`.
+* `--null-value STRING`: The value to be imported as `NULL`. By default, no value is interpreted as `NULL`. To interpret an empty field as `NULL`, specify `--null-value ""`.
 * `--batch-bytes VAL`: Split the imported file into batches of specified sizes. If a row fails to fit into a batch completely, it's discarded and added to the next batch. Whatever the batch size is, the batch must include at least one row. Default value: `1 MiB`.
 * `--max-in-flight VAL`: The number of data batches imported in parallel. You can increase this option value to import large files faster. The default value is `100`.
 * `--threads VAL`: Maximum number of threads used to import data. Default value: Number of logical processors.

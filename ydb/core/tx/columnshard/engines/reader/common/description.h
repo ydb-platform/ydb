@@ -80,10 +80,6 @@ public:
         return DeduplicationEnabled && TableMetadataAccessor->NeedDuplicateFiltering();
     }
 
-    bool IsReverseSort() const {
-        return Sorting == ERequestSorting::DESC;
-    }
-
     TString GetLockName() const {
         if (TxId != 0 && ScanId != 0) {
             // proper kqp scan

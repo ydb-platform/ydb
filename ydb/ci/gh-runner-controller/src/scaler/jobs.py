@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class JobQueue:
+    labels: str
     preset: str
     in_queue: int
     in_progress: int
@@ -56,6 +57,7 @@ def get_jobs_summary(ch: Clickhouse):
         result.append(
             #
             JobQueue(
+                labels=r['labels'],
                 preset=preset_name,
                 in_queue=r["count_queued"],
                 in_progress=r["count_in_progress"]

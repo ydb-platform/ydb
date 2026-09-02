@@ -97,8 +97,8 @@ class ScaleController:
         for queue in queues:
             wait_for_runners = self.wait_for_runners[queue.preset]
             fresh_runners = self.fresh_runners[queue.preset]
-            self.logger.info("preset %s: jobs %s/%s, wait_runners: %s, fresh_runners: %s",
-                             queue.preset, queue.in_queue, queue.in_progress, len(wait_for_runners), len(fresh_runners))
+            self.logger.info("preset %s (%s): jobs %s/%s, wait_runners: %s, fresh_runners: %s",
+                             queue.preset, ','.join(queue.labels), queue.in_queue, queue.in_progress, len(wait_for_runners), len(fresh_runners))
             cnt = queue.in_queue - len(wait_for_runners) - len(fresh_runners)
 
             if queue.in_queue != 0:

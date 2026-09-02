@@ -50,6 +50,10 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         LockMode = TDataShardUserDb::ELockMode(record.GetLockMode());
     }
 
+    if (record.HasCollectAffectedRows()) {
+        CollectAffectedRows = record.GetCollectAffectedRows();
+    }
+
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;

@@ -125,6 +125,8 @@ class YdbBenchTest(unittest.TestCase):
         cleanup_action=None,
         cpu_metrics=None,
         lifecycle_actions=None,
+        extra_cluster_dynamic_nodes=(),
+        extra_cluster_start_error=None,
     ):
         def record(action, command=None):
             if lifecycle_actions is None:
@@ -189,6 +191,26 @@ class YdbBenchTest(unittest.TestCase):
             return command_result(command)
 
         cluster._run.side_effect = run_cluster_command
+        clusters = [cluster]
+        for dynamic_node_count in extra_cluster_dynamic_nodes:
+            extra_cluster = mock.Mock(
+                ydb_cli=Path("/tmp/ydb"),
+                client_endpoint="grpc://benchmark-host:2135",
+                database="/Root/bench",
+                dynamic_nodes=[{} for _index in range(dynamic_node_count)],
+                static_pids=(10,),
+                dynamic_pids=(20,),
+            )
+            extra_cluster.init_workload.side_effect = init_workload
+
+            def add_extra_dynamic_nodes(count, target=extra_cluster):
+                record("scale")
+                target.dynamic_nodes.extend({} for _index in range(count))
+
+            extra_cluster.add_dynamic_nodes.side_effect = add_extra_dynamic_nodes
+            extra_cluster._run.side_effect = run_cluster_command
+            extra_cluster.start.side_effect = extra_cluster_start_error
+            clusters.append(extra_cluster)
         monitor = mock.Mock(records=[])
         monitor.start.return_value = monitor
         monitor.stop.return_value = {
@@ -236,7 +258,10 @@ class YdbBenchTest(unittest.TestCase):
         events = []
         self.last_local_ydb_cluster = cluster
         self.last_local_ydb_monitor = monitor
-        with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
+        self.local_ydb_clusters = clusters
+        with mock.patch.object(
+            local_ydb, "LocalYdbCluster", side_effect=clusters
+        ) as cluster_constructor, mock.patch.object(
             local_ydb, "LinuxCpuMonitor", return_value=monitor
         ), mock.patch.object(
             local_ydb,
@@ -254,6 +279,7 @@ class YdbBenchTest(unittest.TestCase):
             "run_command",
             side_effect=lambda command, *_args, **_kwargs: next_measurement(command),
         ):
+            self.last_local_ydb_cluster_constructor = cluster_constructor
             manifest = local_ydb.run_local_ydb(
                 binaries,
                 configuration,
@@ -1803,6 +1829,129 @@ class YdbBenchTest(unittest.TestCase):
             ],
         )
 
+    def test_local_ydb_keeps_best_scaled_geometry_and_verifies_it_on_a_fresh_cluster(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              geometry-best:
+                workload: {type: kv, operation: upsert}
+                geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        definition = replace(local_ydb_workloads.workload_definition("kv"), dataset_scope="geometry")
+        actions = []
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            manifest, _output, events = self._run_mock_local_ydb(
+                configuration,
+                "geometry-best",
+                [
+                    {"throughput": 30},
+                    {"throughput": 20},
+                    {"throughput": 31},
+                    {"throughput": 33},
+                ],
+                cpu_metrics={"dynamic_cpu_mean": 100, "static_cpu_mean": 1},
+                lifecycle_actions=actions,
+                extra_cluster_dynamic_nodes=(1,),
+            )
+
+        self.assertEqual(len(manifest["searches"]), 2)
+        self.assertEqual(manifest["result"]["search_stage"], 1)
+        self.assertEqual(manifest["result"]["dynamic_nodes"], 1)
+        self.assertEqual(manifest["result"]["selected_metrics"]["throughput"], 30)
+        self.assertEqual(manifest["result"]["verified_metrics"]["throughput"], 32)
+        self.assertEqual(manifest["verification"]["cluster"], "fresh")
+        self.assertEqual(manifest["verification"]["dynamic_nodes"], 1)
+        self.assertEqual(self.last_local_ydb_cluster_constructor.call_count, 2)
+        verification_cluster = self.last_local_ydb_cluster_constructor.call_args_list[1]
+        self.assertEqual(verification_cluster.args[3], self.root / "geometry-best" / "verification-cluster")
+        self.assertEqual(verification_cluster.args[4]["dynamic_nodes"], 1)
+        self.assertEqual(verification_cluster.args[4]["max_dynamic_nodes"], 1)
+        self.assertEqual([len(cluster.dynamic_nodes) for cluster in self.local_ydb_clusters], [2, 1])
+        self.assertEqual([cluster.start.call_count for cluster in self.local_ydb_clusters], [1, 1])
+        self.assertEqual([cluster.stop.call_count for cluster in self.local_ydb_clusters], [1, 1])
+        self.assertEqual(
+            actions,
+            [
+                ("init", "ydb_bench_geometry_01"),
+                ("measure", "ydb_bench_geometry_01"),
+                ("clean", "ydb_bench_geometry_01"),
+                ("scale", None),
+                ("init", "ydb_bench_geometry_02"),
+                ("measure", "ydb_bench_geometry_02"),
+                ("clean", "ydb_bench_geometry_02"),
+                ("init", "ydb_bench_verify_geometry_01"),
+                ("measure", "ydb_bench_verify_geometry_01"),
+                ("measure", "ydb_bench_verify_geometry_01"),
+                ("clean", "ydb_bench_verify_geometry_01"),
+            ],
+        )
+        artifacts = next(event["artifacts"] for event in events if event["type"] == "step-artifacts")
+        self.assertIn("verification-cluster/cluster.yaml", artifacts)
+
+    def test_local_ydb_stops_both_clusters_when_fresh_geometry_start_fails(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              geometry-restart-failure:
+                workload: {type: kv, operation: upsert}
+                geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
+                load: {parameter: threads, values: [1]}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        definition = replace(local_ydb_workloads.workload_definition("kv"), dataset_scope="geometry")
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            with self.assertRaisesRegex(BenchmarkError, "verification cluster failed"):
+                self._run_mock_local_ydb(
+                    configuration,
+                    "geometry-restart-failure",
+                    [{"throughput": 30}, {"throughput": 20}],
+                    cpu_metrics={"dynamic_cpu_mean": 100, "static_cpu_mean": 1},
+                    extra_cluster_dynamic_nodes=(1,),
+                    extra_cluster_start_error=BenchmarkError("verification cluster failed"),
+                )
+
+        manifest = json.loads((self.root / "geometry-restart-failure" / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(manifest["verification"]["status"], "failed")
+        self.assertIn("verification cluster failed", manifest["verification"]["error"])
+        self.assertEqual([cluster.start.call_count for cluster in self.local_ydb_clusters], [1, 1])
+        self.assertEqual([cluster.stop.call_count for cluster in self.local_ydb_clusters], [1, 1])
+
+    def test_local_ydb_stage_score_uses_load_for_latency_and_throughput_otherwise(self):
+        one_node = {"dynamic_nodes": 1, "selected_load": 10, "selected_metrics": {"throughput": 100}}
+        two_nodes = {"dynamic_nodes": 2, "selected_load": 20, "selected_metrics": {"throughput": 90}}
+        tied_load = {"dynamic_nodes": 2, "selected_load": 10, "selected_metrics": {"throughput": 200}}
+        latency = {"objective": {"type": "latency-slo"}}
+        throughput = {"objective": {"type": "maximize-throughput"}}
+        points = {}
+
+        self.assertGreater(
+            local_ydb._search_stage_score(latency, two_nodes),
+            local_ydb._search_stage_score(latency, one_node),
+        )
+        self.assertGreater(
+            local_ydb._search_stage_score(latency, one_node),
+            local_ydb._search_stage_score(latency, tied_load),
+        )
+        self.assertGreater(
+            local_ydb._search_stage_score(throughput, one_node),
+            local_ydb._search_stage_score(throughput, two_nodes),
+        )
+        tied_throughput = {"dynamic_nodes": 2, "selected_load": 5, "selected_metrics": {"throughput": 100}}
+        self.assertGreater(
+            local_ydb._search_stage_score(points, one_node),
+            local_ydb._search_stage_score(points, tied_throughput),
+        )
+        self.assertIsNone(local_ydb._search_stage_score(throughput, {"selected_metrics": None}))
+
     def test_local_ydb_geometry_cleanup_cancellation_prevents_scaling(self):
         configuration = load_config(self._config("""
             local-ydb:
@@ -1869,6 +2018,10 @@ class YdbBenchTest(unittest.TestCase):
             )
 
         self.assertEqual(manifest["verification"]["status"], "completed")
+        self.assertEqual(manifest["verification"]["cluster"], "search")
+        self.assertEqual(self.last_local_ydb_cluster_constructor.call_count, 1)
+        self.last_local_ydb_cluster.start.assert_called_once_with()
+        self.last_local_ydb_cluster.stop.assert_called_once_with()
         self.assertEqual(
             actions,
             [
@@ -8376,6 +8529,7 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"metrics_source==='verification'", script)
                 self.assertIn(b"verification-measuring", script)
                 self.assertIn(b"'verification-evaluating':'Evaluating verification'", script)
+                self.assertIn(b"'restarting-verification-cluster':'Restarting verification cluster'", script)
                 self.assertIn(b"Reported metrics come from the independent holdout", script)
                 self.assertIn(b"Incompatible metric source", script)
                 self.assertIn(b"function localElapsed(started,finished=null)", script)

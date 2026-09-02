@@ -119,6 +119,9 @@ Config V2 cluster backed by in-memory SectorMap PDisks, and stops it after the
 profile. `single` always uses one dynamic node. `storage` may grow the
 dynamic-node count up to `max-dynamic-nodes` when dynamic CPU is saturated but
 static/storage CPU is not; `custom` keeps the explicitly requested geometry.
+Across scaled stages, latency search selects the highest feasible load, while
+manual points and throughput search select the highest observed throughput;
+ties prefer fewer dynamic nodes.
 Each static node gets its own `NONE`-profile SectorMap with the virtual size
 specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
@@ -254,9 +257,11 @@ throughput drift, and CPU saturation do not claim statistical reproducibility.
 
 Workloads with geometry-scoped datasets initialize and import once for each
 dynamic-node count, reuse that dataset across every search attempt at the same
-geometry, and clean it before adding nodes. The final geometry remains open for
-verification and is cleaned only after the holdout finishes. Shared setup and
-cleanup commands are stored under that geometry's `workload/commands.json`.
+geometry, and clean it before adding nodes. When the winning stage is the last
+one, its geometry remains open until verification finishes. If an earlier stage
+wins, verification recreates its geometry on a fresh cluster; that cluster's
+configuration is stored in `verification-cluster/cluster.yaml`. Shared setup
+and cleanup commands are stored under the corresponding `workload/commands.json`.
 
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.

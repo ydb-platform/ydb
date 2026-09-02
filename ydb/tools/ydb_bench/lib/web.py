@@ -1420,7 +1420,8 @@ const localPhaseLabels={
   'verification-initializing':'Preparing verification workload','verification-warmup':'Warming up verification',
   'verification-measuring':'Measuring verification','verification-cleanup':'Cleaning verification workload',
   'verification-evaluating':'Evaluating verification','verification-completed':'Verification completed',
-  'scaling-dynamic-nodes':'Scaling dynamic nodes','stopping-cluster':'Stopping cluster','finishing':'Writing results',
+  'scaling-dynamic-nodes':'Scaling dynamic nodes','restarting-verification-cluster':'Restarting verification cluster',
+  'stopping-cluster':'Stopping cluster','finishing':'Writing results',
   completed:'Completed',failed:'Failed',cancelled:'Cancelled'
 };
 function localPhaseLabel(phase){return localPhaseLabels[phase]||String(phase||'Preparing').replaceAll('-',' ')}

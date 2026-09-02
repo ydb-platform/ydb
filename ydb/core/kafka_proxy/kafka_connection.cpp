@@ -9,7 +9,9 @@
 
 
 #include "actors/actors.h"
+#include "actors/kafka_api_versions_actor.h"
 #include "kafka_connection.h"
+#include "kafka_error_response.h"
 #include "kafka_events.h"
 
 
@@ -54,6 +56,7 @@ public:
     };
 
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
+    static constexpr TDuration TokenRecheckRequestTimeout = TDuration::Seconds(30);
     TEvPollerReady* InactivityEvent = nullptr;
 
     const TActorId ListenerActorId;
@@ -98,6 +101,8 @@ public:
     enum SslHandshakeErrors {ERROR_NONE = 0, ERROR_WANT_READ = 1, ERROR_WANT_WRITE = 2};
 
     TContext::TPtr Context;
+    bool TokenRecheckInFlight = false;
+    ui64 TokenRecheckCookie = 0;
 
     TKafkaConnection(const TActorId& listenerActorId,
                      TIntrusivePtr<TSocketDescriptor> socket,
@@ -125,6 +130,7 @@ public:
         if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
+            Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
         }
 
         MtlsAuthStage = NO_CERT_YET;
@@ -267,7 +273,7 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TApiVersionsRequestData>& message) {
-        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message, header->RequestApiVersion));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TProduceRequestData>& message, const TActorContext& ctx) {
@@ -378,7 +384,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -388,7 +395,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -398,7 +406,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -408,7 +417,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -441,6 +451,30 @@ protected:
         SendRequestMetrics(ctx);
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
             Context->KafkaClient = Request->Header.ClientId.value();
+        }
+
+        if (auto error = Context->Token.UnusableError()) {
+            switch (Request->Header.RequestApiKey) {
+                case API_VERSIONS:
+                case SASL_HANDSHAKE:
+                case SASL_AUTHENTICATE:
+                    break;
+                default: {
+                    auto response = BuildErrorResponse(*Request->Message, *error);
+                    if (!response) {
+                        YDB_LOG_ERROR("Unsupported message",
+                            {LogPrefix()},
+                            {"apiKey", Request->Header.RequestApiKey});
+                        PassAway();
+                        return false;
+                    }
+                    Reply(Request->Header.CorrelationId, response, *error, ctx);
+                    Request->Message.reset();
+                    Request->Buffer.reset();
+                    Request.reset();
+                    return true;
+                }
+            }
         }
 
         if (IsTransactionalApiKey(Request->Header.RequestApiKey) && !TransactionsEnabled()) {
@@ -569,6 +603,12 @@ protected:
 
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
+        if ((r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE || r->ErrorCode == EKafkaErrors::INVALID_TXN_STATE)
+                && Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.",
+                {LogPrefix()});
+            CloseConnection = true;
+        }
         Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
     }
 
@@ -613,7 +653,12 @@ protected:
         }
 
         Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
-        Context->UserToken = event->UserToken;
+        Context->Token.UserToken = event->UserToken;
+        Context->Token.Ticket = event->Ticket;
+        Context->Token.TicketParserEntries = event->TicketParserEntries;
+        Context->Token.AuthDatabasePath = event->AuthDatabasePath;
+        Context->Token.PeerName = event->PeerName;
+        Context->Token.Status = ETokenCheckStatus::Ok;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
         Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath, event->UserToken->GetSerializedToken()};
@@ -622,16 +667,109 @@ protected:
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
+        Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},
-            {"SID", Context->UserToken->GetUserSID()});
+            {"SID", Context->Token.UserToken->GetUserSID()});
+        ScheduleTokenRecheck(ctx);
         if (Context->SaslMechanism != "MTLS") {
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {
             MtlsAuthStage = AUTH_SUCCESSFUL;
             HandleConnected(PollerEventSaved, ctx);
         }
+    }
+
+    void ScheduleTokenRecheck(const TActorContext& ctx) {
+        if (!Context->TokenRecheckEnabled() || Context->AuthenticationStep != EAuthSteps::SUCCESS) {
+            return;
+        }
+        ctx.Schedule(Context->TokenRecheckInterval(), new TEvKafka::TEvTokenRecheck(TEvKafka::TEvTokenRecheck::EKind::Periodic));
+    }
+
+    void Handle(TEvKafka::TEvTokenRecheck::TPtr ev, const TActorContext& ctx) {
+        if (!Context->TokenRecheckEnabled() || Context->AuthenticationStep != EAuthSteps::SUCCESS) {
+            return;
+        }
+        if (ev->Get()->Kind == TEvKafka::TEvTokenRecheck::EKind::Timeout) {
+            HandleTokenRecheckTimeout(ev->Get()->Cookie, ctx);
+            return;
+        }
+        if (TokenRecheckInFlight) {
+            return;
+        }
+        StartTokenRecheck(ctx);
+    }
+
+    void HandleTokenRecheckTimeout(ui64 cookie, const TActorContext& ctx) {
+        if (!TokenRecheckInFlight || cookie != TokenRecheckCookie) {
+            return;
+        }
+        TokenRecheckInFlight = false;
+        Context->Token.Status = ETokenCheckStatus::Unavailable;
+        YDB_LOG_WARN("Token recheck timed out",
+            {LogPrefix()},
+            {"cookie", cookie});
+        ScheduleTokenRecheck(ctx);
+    }
+
+    void StartTokenRecheck(const TActorContext& ctx) {
+        TokenRecheckInFlight = true;
+        ++TokenRecheckCookie;
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = Context->Token.Ticket,
+            .Database = Context->Token.AuthDatabasePath ? Context->Token.AuthDatabasePath : Context->DatabasePath,
+            .PeerName = Context->Token.PeerName,
+            .Entries = Context->Token.TicketParserEntries,
+        }), 0, TokenRecheckCookie);
+        ctx.Schedule(TokenRecheckRequestTimeout, new TEvKafka::TEvTokenRecheck(
+            TEvKafka::TEvTokenRecheck::EKind::Timeout, TokenRecheckCookie));
+    }
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr ev, const TActorContext& ctx) {
+        // Accept a matching cookie even after timeout cleared InFlight, so a late
+        // success can recover Token.Status from Unavailable. Ignore cookie 0 (no recheck
+        // has been issued yet) and cookies from a newer in-flight request.
+        if (TokenRecheckCookie == 0 || ev->Cookie != TokenRecheckCookie) {
+            YDB_LOG_DEBUG("Ignoring stale token recheck result",
+                {LogPrefix()},
+                {"cookie", ev->Cookie},
+                {"expectedCookie", TokenRecheckCookie});
+            return;
+        }
+        TokenRecheckInFlight = false;
+        auto* result = ev->Get();
+        if (result->HasError()) {
+            if (result->Error.Retryable) {
+                Context->Token.Status = ETokenCheckStatus::Unavailable;
+                YDB_LOG_WARN("Token recheck unavailable",
+                    {LogPrefix()},
+                    {"error", result->Error.ToString()});
+            } else {
+                Context->Token.Status = ETokenCheckStatus::Invalid;
+                YDB_LOG_ERROR("Token recheck failed",
+                    {LogPrefix()},
+                    {"error", result->Error.ToString()});
+            }
+        } else if (result->Token && !result->Token->GetSerializedToken().empty()) {
+            Context->Token.Status = ETokenCheckStatus::Ok;
+            Context->Token.UserToken = result->Token;
+            const auto& path = Context->RlContext.GetPath();
+            Context->RlContext = NKikimr::NPQ::TRlContext(
+                path.CoordinationNode,
+                path.ResourcePath,
+                Context->DatabasePath,
+                result->Token->GetSerializedToken());
+            YDB_LOG_DEBUG("Token recheck successful",
+                {LogPrefix()},
+                {"SID", Context->Token.UserToken->GetUserSID()});
+        } else {
+            Context->Token.Status = ETokenCheckStatus::Invalid;
+            YDB_LOG_ERROR("Token recheck returned empty token",
+                {LogPrefix()});
+        }
+        ScheduleTokenRecheck(ctx);
     }
 
     void Handle(TEvKafka::TEvHandshakeResult::TPtr ev, const TActorContext& ctx) {
@@ -735,6 +873,9 @@ protected:
             {"code", errorCode});
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
+        if (header->RequestApiKey == API_VERSIONS) {
+            version = ApiVersionsResponseWriteVersion(version);
+        }
 
         TResponseHeaderData responseHeader;
         responseHeader.CorrelationId = header->CorrelationId;
@@ -788,7 +929,7 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
+            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds ? std::make_optional(ServerCreds) : std::nullopt);
             if (res < 0) {
                 YDB_LOG_ERROR("Connection closed - error in UpgradeToSecure",
                     {LogPrefix()},
@@ -959,12 +1100,17 @@ protected:
 
                         TKafkaReadable readable(*Request->Buffer);
                         readable.SetAllowCompressed(AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
+                        readable.SetMaxArrayBytes(static_cast<size_t>(Context->Config.GetMaxMessageSize()));
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
                             Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
-                            Request->Message->Read(readable, Request->ApiVersion);
+                            // KIP-511: an ApiVersions version the parser does not know is not a fatal error.
+                            // Skip the body (Kafka treats it as v0) and let the actor return UNSUPPORTED_VERSION.
+                            if (!(Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion))) {
+                                Request->Message->Read(readable, Request->ApiVersion);
+                            }
                         } catch(const yexception& e) {
                             YDB_LOG_ERROR("Error on processing message",
                                 {LogPrefix()},
@@ -1112,6 +1258,8 @@ protected:
             hFunc(TEvPollerRegisterResult, HandleConnected);
             HFunc(TEvKafka::TEvResponse, Handle);
             HFunc(TEvKafka::TEvAuthResult, Handle);
+            HFunc(TEvKafka::TEvTokenRecheck, Handle);
+            HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);

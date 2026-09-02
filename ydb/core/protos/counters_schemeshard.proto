@@ -306,6 +306,8 @@ enum ESimpleCounters {
     COUNTER_TEST_SHARD_COUNT = 236                         [(CounterOpts) = {Name: "TestShardCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 237      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
     COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
+
+    COUNTER_RUNNING_STREAMING_QUERY_COUNT = 239           [(CounterOpts) = {Name: "RunningStreamingQueryCount"}];
 }
 
 enum ECumulativeCounters {
@@ -507,6 +509,9 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateTestShardSet = 149      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
     COUNTER_FINISHED_OPS_TxDropTestShardSet = 150        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
+
+    // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
+    COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
 }
 
 enum EPercentileCounters {
@@ -633,6 +638,39 @@ enum EPercentileCounters {
         Ranges: { Value: 200000      Name: "200 ms"       }
         Ranges: { Value: 500000      Name: "500 ms"       }
         Ranges: { Value: 1000000     Name: "1000 ms"      }
+    }];
+
+    // google::protobuf::Arena::SpaceUsed() of the arena-backed event record, bytes.
+    // Used to check the InitialBlockSize/MaxBlockSize choice on the event's TEventPBWithArena.
+    COUNTER_PERIODIC_TABLE_STATS_ARENA_SPACE_USED = 7 [(CounterOpts) = {
+        Name: "PeriodicTableStatsArenaSpaceUsed",
+        Integral: true,
+        Ranges: { Value: 256      Name: "256"   }
+        Ranges: { Value: 512      Name: "512"   }
+        Ranges: { Value: 1024     Name: "1024"  }
+        Ranges: { Value: 2048     Name: "2048"  }  // used as initial arena size
+        Ranges: { Value: 3072     Name: "3072"  }  // middle step to be more accurate in the area of interest
+        Ranges: { Value: 4096     Name: "4096"  }
+        Ranges: { Value: 8192     Name: "8192"  }
+        Ranges: { Value: 16384    Name: "16384" }
+        Ranges: { Value: 32768    Name: "32768" }
+    }];
+
+    COUNTER_GET_TABLE_STATS_RESULT_ARENA_SPACE_USED = 8 [(CounterOpts) = {
+        Name: "GetTableStatsResultArenaSpaceUsed",
+        Integral: true,
+        Ranges: { Value: 512      Name: "512"    }
+        Ranges: { Value: 1024     Name: "1024"   }
+        Ranges: { Value: 2048     Name: "2048"   }
+        Ranges: { Value: 4096     Name: "4096"   }  // used as initial arena size
+        Ranges: { Value: 5120     Name: "5120"   }  // several middle steps to be more accurate in the area of interest
+        Ranges: { Value: 6144     Name: "6144"   }
+        Ranges: { Value: 7168     Name: "7168"   }
+        Ranges: { Value: 8192     Name: "8192"   }
+        Ranges: { Value: 16384    Name: "16384"  }
+        Ranges: { Value: 32768    Name: "32768"  }
+        Ranges: { Value: 65536    Name: "65536"  }
+        Ranges: { Value: 131072   Name: "131072" }
     }];
 }
 

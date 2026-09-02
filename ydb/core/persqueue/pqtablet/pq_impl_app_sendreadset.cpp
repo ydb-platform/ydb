@@ -1,10 +1,23 @@
 #include "pq_impl.h"
 
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/persqueue/common/common_app.h>
 #include <ydb/library/actors/core/log.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <fmt/format.h>
 
 namespace NKikimr::NPQ {
+
+namespace {
+
+TString BuildSendReadSetFormAction(const TStringBuf pathInfo, ui64 tabletId, bool enableSecurePath) {
+    if (!enableSecurePath || IsTabletDevUiSecurePath(pathInfo)) {
+        return "?";
+    }
+    return TStringBuilder() << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << tabletId;
+}
+
+} // namespace
 
 static TString MakeReadSetData(bool commit)
 {
@@ -38,8 +51,15 @@ static TVector<T> GetParameters(const TCgiParameters& cgi, const TStringBuf name
 }
 
 
-TString TPersQueue::RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const
+TString TPersQueue::RenderSendReadSetHtmlForms(
+    const TDistributedTransaction& tx,
+    const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
+    const TStringBuf pathInfo) const
 {
+    const TString formAction = BuildSendReadSetFormAction(
+        pathInfo,
+        TabletID(),
+        HasTabletDevUiSecureSubtree(AppData(), TTabletTypes::PersQueue));
     struct TOption {
         const char* Decision;
         const char* Text;
@@ -55,7 +75,11 @@ TString TPersQueue::RenderSendReadSetHtmlForms(const TDistributedTransaction& tx
         LAYOUT_ROW() {
             for (const TOption& option : options) {
                 LAYOUT_COLUMN() {
-                    FORM_CLASS("form-horizontal") {
+                    // Explicit action: without EnableTabletDevUiSecurePath everything stays on
+                    // /app, with it read-only pages stay on /app and SendReadSet moves to
+                    // /app/secure.
+                    str << "<form class=\"form-horizontal\" action=\"" << formAction << "\" method=\"get\">";
+                    {
                         DIV_CLASS("control-group") {
                             DIV_CLASS("controls") {
                                 if (tabletSourcesFilter.Defined()) {
@@ -73,6 +97,7 @@ TString TPersQueue::RenderSendReadSetHtmlForms(const TDistributedTransaction& tx
                             }
                         }
                     }
+                    str << "</form>";
                 }
             }
         }

@@ -306,9 +306,8 @@ struct TInterconnectServer : public TPerfTest {
     ui32 ServerNodeId;
     ui32 ClientNodeId;
     ui16 Port;
-    bool UseUring;
 
-    TInterconnectServer(const TPerfTestConfig& cfg, ui32 serverNodeId, ui32 clientNodeId, ui16 port, bool useUring = false)
+    TInterconnectServer(const TPerfTestConfig& cfg, ui32 serverNodeId, ui32 clientNodeId, ui16 port)
         : TPerfTest(cfg)
         , Setup(new TActorSystemSetup())
         , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(serverNodeId, "logger"),
@@ -320,7 +319,6 @@ struct TInterconnectServer : public TPerfTest {
         , ServerNodeId(serverNodeId)
         , ClientNodeId(clientNodeId)
         , Port(port)
-        , UseUring(useUring)
     {
     }
 
@@ -348,7 +346,7 @@ struct TInterconnectServer : public TPerfTest {
             // still resolves the peer NodeId via the local nameserver, so register the
             // client with a placeholder address (port 0; server never initiates a
             // connection to the client).
-            auto common = MakeInterconnectCommon(Counters, ServerNodeId, UseUring);
+            auto common = MakeInterconnectCommon(Counters, ServerNodeId);
             TVector<TInterconnectPeer> peers = {{ClientNodeId, "::", 0}};
             SetupInterconnectServices(Setup.Get(), common, ServerNodeId, "::", Port, peers, /*listen=*/true);
 
@@ -423,10 +421,9 @@ struct TInterconnectClient : public TPerfTest {
     NDevicePerfTest::TInterconnectTest TestProto;
     ui32 ClientNodeId;
     TVector<TInterconnectPeer> ServerPeers;
-    bool UseUring;
 
     TInterconnectClient(const TPerfTestConfig& cfg, const NDevicePerfTest::TInterconnectTest& testProto,
-                 ui32 clientNodeId, const TVector<TInterconnectPeer>& serverPeers, bool useUring = false)
+                 ui32 clientNodeId, const TVector<TInterconnectPeer>& serverPeers)
         : TPerfTest(cfg)
         , Setup(new TActorSystemSetup())
         , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(clientNodeId, "logger"),
@@ -438,7 +435,6 @@ struct TInterconnectClient : public TPerfTest {
         , TestProto(testProto)
         , ClientNodeId(clientNodeId)
         , ServerPeers(serverPeers)
-        , UseUring(useUring)
     {
     }
 
@@ -456,7 +452,7 @@ struct TInterconnectClient : public TPerfTest {
             Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(64, 20)));
 
             // Set up interconnect with all server peers
-            auto common = MakeInterconnectCommon(Counters, ClientNodeId, UseUring);
+            auto common = MakeInterconnectCommon(Counters, ClientNodeId);
             SetupInterconnectServices(Setup.Get(), common, ClientNodeId, "::", 0, ServerPeers, /*listen=*/false);
 
             // The load actor queries a local load responder for a shared traffic

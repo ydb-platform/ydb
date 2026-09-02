@@ -40,7 +40,7 @@ TUrlRef ParseUrl(TStringBuf url)
     http_parser_url parsed;
     if (0 != http_parser_parse_url(url.data(), url.size(), false, &parsed)) {
         THROW_ERROR_EXCEPTION("Invalid URL")
-            << TErrorAttribute("url", url);
+            .With("url", url);
     }
 
     auto convertField = [&] (int flag) -> TStringBuf {
@@ -206,8 +206,8 @@ void ValidateHeaderValue(TStringBuf header, TStringBuf value)
 {
     if (value.find('\n') != std::string::npos) {
         THROW_ERROR_EXCEPTION("Header value should not contain newline symbol")
-            << TErrorAttribute("header", header)
-            << TErrorAttribute("value", value);
+            .With("header", header)
+            .With("value", value);
     }
 }
 

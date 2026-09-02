@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet_schema.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -12,13 +13,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TPartitionSchema: public NKikimr::NIceDb::Schema
 {
-    enum EChannels
-    {
-        SystemChannel,
-        LogChannel,
-        IndexChannel,
-    };
-
     struct TabletInfo: public TTableSchema<1>
     {
         struct Id: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
@@ -60,8 +54,6 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
             VolumeConfig,
             DirectBlockGroupsConnections,
             AddHostInProgress>;
-
-        using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
     // Persisted vchunk config overrides, keyed by vchunk index. Only vchunks
@@ -79,11 +71,26 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
 
         using TKey = TableKey<VChunkIndex>;
         using TColumns = TableColumns<VChunkIndex, Config>;
-
-        using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
-    using TTables = SchemaTables<TabletInfo, VChunkConfigs>;
+    // Persisted dirty map state, keyed by vchunk index. Only vchunks whose
+    // dirty map was explicitly updated have a row here.
+    struct DirtyMapStates: public TTableSchema<3>
+    {
+        struct VChunkIndex: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct State: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type = ::NYdb::NBS::PartitionDirect::NProto::TDirtyMapState;
+        };
+
+        using TKey = TableKey<VChunkIndex>;
+        using TColumns = TableColumns<VChunkIndex, State>;
+    };
+
+    using TTables = SchemaTables<TabletInfo, VChunkConfigs, DirtyMapStates>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

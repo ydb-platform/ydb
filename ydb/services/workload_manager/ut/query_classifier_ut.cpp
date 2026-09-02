@@ -20,7 +20,7 @@ public:
     
     virtual ~TestQueryClassifier() = default;
 
-    TPreCompileClassifyResult PreCompileClassify() override {
+    TPreCompileClassifyResult PreCompileClassify(const NKqp::TUserRequestContext&) override {
         return PreClassifyResult;
     }
 

@@ -24,6 +24,9 @@ TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& c
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false);
 TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members);
 TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx);
+TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TInfoUnit>& inputs,
+                                        const TVector<bool>& unwrapOptionalInputs, TExprContext& ctx);
+TExprNode::TPtr BuildVoidLambda(TExprContext& ctx, TPositionHandle pos);
 
 template <typename T>
 THashSet<TString> BuildNameSet(const TVector<T>& columns) {

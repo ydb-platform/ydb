@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import uuid
+from urllib.parse import urlsplit
 
 import botocore
 
-from hamcrest import assert_that, equal_to, raises
+from hamcrest import assert_that, equal_to, is_not, raises
 
 from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
@@ -134,3 +135,18 @@ class TestSqsTopicGetQueueUrl(KikimrSqsTopicTestBase):
                 pattern='InvalidParameterValue',
             ),
         )
+
+    def test_get_queue_url_uses_request_endpoint(self):
+        queue_name = self._make_queue_name('get_queue_url_uses_request_endpoint')
+        created_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+        self._queue_url = created_url
+
+        created_path = urlsplit(created_url).path
+        request_host = 'sqs-get-queue-url.test'
+
+        with self._boto_client_with_request_host(request_host) as (origin, client):
+            get_response = client.get_queue_url(QueueName=queue_name)
+            expected_queue_url = origin + created_path
+
+        assert_that(expected_queue_url, is_not(equal_to(created_url)))
+        assert_that(get_response['QueueUrl'], equal_to(expected_queue_url))

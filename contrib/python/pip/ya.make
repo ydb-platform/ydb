@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(26.1.2)
+VERSION(26.2.1)
 
 LICENSE(MIT)
 
@@ -21,7 +21,12 @@ PY_SRCS(
     pip/__main__.py
     pip/__pip-runner__.py
     pip/_internal/__init__.py
-    pip/_internal/build_env.py
+    pip/_internal/build_env/__init__.py
+    pip/_internal/build_env/base.py
+    pip/_internal/build_env/installer.py
+    pip/_internal/build_env/noop.py
+    pip/_internal/build_env/venv.py
+    pip/_internal/build_env/virtual.py
     pip/_internal/cache.py
     pip/_internal/cli/__init__.py
     pip/_internal/cli/autocompletion.py
@@ -193,6 +198,8 @@ PY_SRCS(
     pip/_vendor/distro/__main__.py
     pip/_vendor/distro/distro.py
     pip/_vendor/idna/__init__.py
+    pip/_vendor/idna/__main__.py
+    pip/_vendor/idna/cli.py
     pip/_vendor/idna/codec.py
     pip/_vendor/idna/compat.py
     pip/_vendor/idna/core.py
@@ -227,6 +234,7 @@ PY_SRCS(
     pip/_vendor/pkg_resources/__init__.py
     pip/_vendor/platformdirs/__init__.py
     pip/_vendor/platformdirs/__main__.py
+    pip/_vendor/platformdirs/_xdg.py
     pip/_vendor/platformdirs/android.py
     pip/_vendor/platformdirs/api.py
     pip/_vendor/platformdirs/macos.py
@@ -263,6 +271,7 @@ PY_SRCS(
     pip/_vendor/requests/__init__.py
     pip/_vendor/requests/__version__.py
     pip/_vendor/requests/_internal_utils.py
+    pip/_vendor/requests/_types.py
     pip/_vendor/requests/adapters.py
     pip/_vendor/requests/api.py
     pip/_vendor/requests/auth.py
@@ -420,6 +429,7 @@ RESOURCE_FILES(
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
     pip/_vendor/README.rst
+    pip/_vendor/bom.cdx.json
     pip/_vendor/cachecontrol/LICENSE.txt
     pip/_vendor/cachecontrol/py.typed
     pip/_vendor/certifi/LICENSE
@@ -442,6 +452,7 @@ RESOURCE_FILES(
     pip/_vendor/pyproject_hooks/LICENSE
     pip/_vendor/pyproject_hooks/py.typed
     pip/_vendor/requests/LICENSE
+    pip/_vendor/requests/py.typed
     pip/_vendor/resolvelib/LICENSE
     pip/_vendor/resolvelib/py.typed
     pip/_vendor/rich/LICENSE

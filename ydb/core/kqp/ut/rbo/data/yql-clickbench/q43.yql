@@ -1,0 +1,6 @@
+SELECT Minute, COUNT(*) AS PageViews
+FROM `/Root/hits`
+WHERE
+    CounterID = 62 AND CAST(EventDate AS Date) >= Date('2013-07-14') AND CAST(EventDate AS Date) <= Date('2013-07-15') AND IsRefresh == 0
+    AND DontCountHits = 0
+GROUP BY DateTime::ToSeconds(CAST(EventTime AS Timestamp))/60 As Minute ORDER BY Minute LIMIT 10;

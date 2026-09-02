@@ -13,6 +13,9 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <compare>
+#include <concepts>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -165,7 +168,7 @@ public:
 // comparison at the lowest level. Most often, this means that the hierarchy matches. This can happen,
 // for example, on requests from a single consumer. Then the requests will be processed in fifo order.
 template <typename TTag>
-bool CompareByEnqueueTime(const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs, const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs);
+std::partial_ordering CompareByEnqueueTime(const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs, const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -220,9 +223,9 @@ bool CompareByEnqueueTime(const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lh
 //
 // The main task of the planner is to weigh two elements, to determine which of them is more important. To do this,
 // you need to go down the tree using the element tags. Each element on each level finds a bucket that corresponds to it.
-// At each level of the tree, a comparison is performed based on bandwidth 2 * weight 1 < bandwidth 1 * weight 2.
-//
-// That is, the higher the bandwidth consumed, the smaller the item, and the higher the weight of the item, the larger the item.
+// At each level of the tree, a comparison is performed based on bandwidth 1 * weight 2 < bandwidth 2 * weight 1.
+// Lower weighted consumption has higher priority and is ordered as |less|; higher weighted consumption has lower
+// priority and is ordered as |greater|.
 // The log elements themselves are stored in two sorted sets. For slots and queries, respectively. They are sorted in the order
 // in which the log is received. This is necessary to quickly clear the log of outdated elements.
 //
@@ -334,11 +337,18 @@ public:
     TFairShareHierarchicalSlotQueueBucketNodePtr GetBucket(const std::vector<TTag>& tags) const;
 
     // The main method of the class. It performs a comparison of two
-    // elements based on the constructed tree.
-    bool CompareSlots(
+    // elements based on the constructed tree. Returns |less| when |lhs| has
+    // higher priority than |rhs|, |greater| in the opposite case.
+    std::partial_ordering CompareConsumptions(
         const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs,
         const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs,
         bool isSlot) const;
+
+    std::partial_ordering CompareSlots(
+        const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs,
+        const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs,
+        bool isSlot,
+        std::regular_invocable<TFairShareHierarchicalSlotQueueSlotPtr<TTag>, TFairShareHierarchicalSlotQueueSlotPtr<TTag>> auto comparator) const;
 
     // Methods for building a tree in an orchid.
     NYTree::IYPathServicePtr GetOrchidService();
@@ -408,6 +418,12 @@ public:
         TFairShareHierarchicalSchedulerPtr<TTag> hierarchicalScheduler,
         NProfiling::TProfiler profiler);
 
+    // Creates a slot without adding it to the queue.
+    TFairShareHierarchicalSlotQueueSlotPtr<TTag> CreateSlot(
+        i64 size,
+        std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
+        std::vector<TFairShareHierarchyLevel<TTag>> levels);
+
     // The slot is added in several main stages. The first stage is the allocation of resources
     // for the slot, the set of resources is arbitrary. If the resources have been allocated,
     // then the insertion takes place without displacement. If it failed, then the minimum item
@@ -421,6 +437,7 @@ public:
         i64 size,
         std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
         std::vector<TFairShareHierarchyLevel<TTag>> levels);
+    TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> EnqueueSlot(TFairShareHierarchicalSlotQueueSlotPtr<TTag> slot);
 
     // The slot is deleted at the user's request. This should usually mean that the
     // request has completed and stopped using resources.
@@ -429,6 +446,10 @@ public:
     // This method returns the slot that has the highest priority and needs to be processed first.
     // In this case, the slots are compared according to the amount consumed by the requests.
     TFairShareHierarchicalSlotQueueSlotPtr<TTag> PeekSlot(const THashSet<TFairShareSlotId>& slotFilter);
+
+    TFairShareHierarchicalSlotQueueSlotPtr<TTag> PeekSlot(
+        const THashSet<TFairShareSlotId>& slotFilter,
+        std::regular_invocable<TFairShareHierarchicalSlotQueueSlotPtr<TTag>, TFairShareHierarchicalSlotQueueSlotPtr<TTag>> auto comparator);
 
     // This method allows the user of the class to mark the consumption of requests in the slot.
     void AccountSlot(TFairShareHierarchicalSlotQueueSlotPtr<TTag> slot, i64 requestSize);

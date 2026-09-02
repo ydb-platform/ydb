@@ -534,6 +534,7 @@ namespace NYql::NDqs {
         if (auto maybeFullscanLimit = streamLookup.FullscanLimit().Maybe<TCoAtom>()) {
             settings.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
         }
+        /* ShuffleMode intentionally omitted */
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());

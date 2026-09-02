@@ -10,7 +10,7 @@ namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, HttpLogger, "Http");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, HttpLogger, "Http");
 inline const NProfiling::TProfiler HttpProfiler = NProfiling::TProfiler{"/http"}.WithHot();
 
 ////////////////////////////////////////////////////////////////////////////////

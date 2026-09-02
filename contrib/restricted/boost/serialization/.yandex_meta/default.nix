@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_serialization = stdenv.mkDerivation rec {
     pname = "boost_serialization";
-    version = "1.91.0";
+    version = "1.92.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "serialization";
       rev = "boost-${version}";
-      hash = "sha256-JaYkZ4ACmmaiUkNzdPSZWzWRzb9KCZYgZtgLjpiektM=";
+      hash = "sha256-QwlufSNd+FWkzKUXMfCTEEpxvByjUjARycojkitH1Mc=";
     };
   };
 }

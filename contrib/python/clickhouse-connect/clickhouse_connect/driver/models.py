@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import NamedTuple
 
 from clickhouse_connect.datatypes.registry import get_from_name
@@ -42,3 +43,10 @@ class SettingStatus(NamedTuple):
 
     is_set: bool
     is_writable: bool
+
+
+def setting_status(server_settings: Mapping[str, SettingDef], key: str) -> SettingStatus:
+    setting = server_settings.get(key)
+    if not setting:
+        return SettingStatus(False, False)
+    return SettingStatus(setting.value != "0", setting.readonly != 1)

@@ -18,7 +18,7 @@ void TCancelableContext::PropagateTo(const TFuture<T>& future)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(NConcurrency::TFlsSlot<TCancelableContextPtr>, CurrentCancelableContextSlot);
+YT_DEFINE_LEAKY_GLOBAL(NConcurrency::TFlsSlot<TCancelableContextPtr>, CurrentCancelableContextSlot);
 
 inline TCancelableContext* TryGetCurrentCancelableContext()
 {

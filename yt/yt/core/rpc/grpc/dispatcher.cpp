@@ -36,14 +36,14 @@ void* TCompletionQueueTag::GetTag(int cookie)
 
 TGrpcLibraryLock::TGrpcLibraryLock()
 {
-    YT_LOG_INFO("Initializing GRPC library");
+    YT_TLOG_INFO("Initializing GRPC library");
     grpc_init_openssl();
     grpc_init();
 }
 
 TGrpcLibraryLock::~TGrpcLibraryLock()
 {
-    YT_LOG_INFO("Shutting down GRPC library");
+    YT_TLOG_INFO("Shutting down GRPC library");
     grpc_shutdown();
 }
 
@@ -81,9 +81,9 @@ public:
         }
 
         InternalMinLogLevel_.store(newMinLogLevel);
-        YT_LOG_INFO("GRPC dispatcher reconfigured (NewMinLogLevel: %v, OldMinLogLevel: %v)",
-            newMinLogLevel,
-            oldMinLogLevel);
+        YT_TLOG_INFO("GRPC dispatcher reconfigured")
+            .With("NewMinLogLevel", newMinLogLevel)
+            .With("OldMinLogLevel", oldMinLogLevel);
     }
 
     TGrpcLibraryLockPtr GetLibraryLock()
@@ -135,7 +135,7 @@ private:
 
         void ThreadMain() override
         {
-            YT_LOG_DEBUG("Dispatcher thread started");
+            YT_TLOG_DEBUG("Dispatcher thread started");
 
             // Take raw completion queue for fetching tasks,
             // because `grpc_completion_queue_next` can be concurrent with other operations.
@@ -165,7 +165,7 @@ private:
                 }
             }
 
-            YT_LOG_DEBUG("Dispatcher thread stopped");
+            YT_TLOG_DEBUG("Dispatcher thread stopped");
         }
     };
 
@@ -233,13 +233,9 @@ private:
             return;
         }
 
-        YT_LOG_EVENT(
-            GrpcInternalLogger,
-            level,
-            "%v (File: %v, Line: %v)",
-            args->message,
-            args->file,
-            args->line);
+        YT_TLOG_EVENT(GrpcInternalLogger, level, args->message)
+            .With("File", args->file)
+            .With("Line", args->line);
     }
 
     std::atomic<bool> Initialized_ = false;

@@ -4,34 +4,35 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
 class TBaseWideFilterWrapper {
 protected:
     TBaseWideFilterWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : Flow(flow)
-        , Items(std::move(items))
-        , Predicate(predicate)
-        , FilterByField(GetPasstroughtMap(TComputationNodePtrVector{Predicate}, Items).front())
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
+        : Flow_(flow)
+        , Items_(std::move(items))
+        , Predicate_(predicate)
+        , FilterByField_(GetPasstroughtMap(TComputationNodePtrVector{Predicate_}, Items_).front())
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Items_.size()))
     {
     }
 
     NYql::NUdf::TUnboxedValue** GetFields(TComputationContext& ctx) const {
-        return ctx.WideFields.data() + WideFieldsIndex;
+        return ctx.WideFields.data() + WideFieldsIndex_;
     }
 
     void PrepareArguments(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = GetFields(ctx);
 
-        for (auto i = 0U; i < Items.size(); ++i) {
-            if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
-                fields[i] = &Items[i]->RefValue(ctx);
+        for (auto i = 0U; i < Items_.size(); ++i) {
+            if (Predicate_ == Items_[i] || Items_[i]->GetDependentsCount() > 0U) {
+                fields[i] = &Items_[i]->RefValue(ctx);
             } else {
                 fields[i] = output[i];
             }
@@ -41,9 +42,9 @@ protected:
     void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = GetFields(ctx);
 
-        for (auto i = 0U; i < Items.size(); ++i) {
+        for (auto i = 0U; i < Items_.size(); ++i) {
             if (const auto out = output[i]) {
-                if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
+                if (Predicate_ == Items_[i] || Items_[i]->GetDependentsCount() > 0U) {
                     *out = *fields[i];
                 }
             }
@@ -54,30 +55,30 @@ protected:
     Value* GenGetPredicate(const TCodegenContext& ctx,
                            std::conditional_t<ReplaceOriginalGetter, ICodegeneratorInlineWideNode::TGettersList, const ICodegeneratorInlineWideNode::TGettersList>& getters,
                            BasicBlock*& block) const {
-        if (FilterByField) {
-            return CastInst::Create(Instruction::Trunc, getters[*FilterByField](ctx, block), Type::getInt1Ty(ctx.Codegen.GetContext()), "predicate", block);
+        if (FilterByField_) {
+            return CastInst::Create(Instruction::Trunc, getters[*FilterByField_](ctx, block), Type::getInt1Ty(ctx.Codegen.GetContext()), "predicate", block);
         }
 
-        for (auto i = 0U; i < Items.size(); ++i) {
-            if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getters[i](ctx, block));
+        for (auto i = 0U; i < Items_.size(); ++i) {
+            if (Predicate_ == Items_[i] || Items_[i]->GetDependentsCount() > 0U) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items_[i])->CreateSetValue(ctx, block, getters[i](ctx, block));
                 if constexpr (ReplaceOriginalGetter) {
-                    getters[i] = [node = Items[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
+                    getters[i] = [node = Items_[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
                 }
             }
         }
 
-        const auto pred = GetNodeValue(Predicate, ctx, block);
+        const auto pred = GetNodeValue(Predicate_, ctx, block);
         return CastInst::Create(Instruction::Trunc, pred, Type::getInt1Ty(ctx.Codegen.GetContext()), "predicate", block);
     }
 #endif
-    IComputationWideFlowNode* const Flow;
-    const TComputationExternalNodePtrVector Items;
-    IComputationNode* const Predicate;
+    IComputationWideFlowNode* const Flow_;
+    const TComputationExternalNodePtrVector Items_;
+    IComputationNode* const Predicate_;
 
-    std::optional<size_t> FilterByField;
+    std::optional<size_t> FilterByField_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
 };
 
 class TWideFilterWrapper: public TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>, public TBaseWideFilterWrapper {
@@ -96,18 +97,18 @@ public:
         while (true) {
             PrepareArguments(ctx, output);
 
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+            if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
             }
 
-            if (Predicate->GetValue(ctx).Get<bool>()) {
+            if (Predicate_->GetValue(ctx).Get<bool>()) {
                 FillOutputs(ctx, output);
                 return EFetchResult::One;
             }
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -116,7 +117,7 @@ public:
 
         block = loop;
 
-        auto status = GetNodeValues(Flow, ctx, block);
+        auto status = GetNodeValues(Flow_, ctx, block);
 
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, status.first, ConstantInt::get(status.first->getType(), 0), "good", block);
 
@@ -137,9 +138,9 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TWideFilterWrapper::Own, flow, std::placeholders::_1));
-            DependsOn(flow, Predicate);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TWideFilterWrapper::Own, flow, std::placeholders::_1));
+            DependsOn(flow, Predicate_);
         }
     }
 };
@@ -152,13 +153,13 @@ public:
                                 TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
-        , Limit(limit)
+        , Limit_(limit)
     {
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            state = Limit->GetValue(ctx);
+            state = Limit_->GetValue(ctx);
         } else if (!state.Get<ui64>()) {
             return EFetchResult::Finish;
         }
@@ -167,11 +168,11 @@ public:
         while (true) {
             PrepareArguments(ctx, output);
 
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+            if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
             }
 
-            if (Predicate->GetValue(ctx).Get<bool>()) {
+            if (Predicate_->GetValue(ctx).Get<bool>()) {
                 FillOutputs(ctx, output);
 
                 auto todo = state.Get<ui64>();
@@ -181,7 +182,7 @@ public:
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -199,7 +200,7 @@ public:
 
         block = init;
 
-        GetNodeValue(statePtr, Limit, ctx, block);
+        GetNodeValue(statePtr, Limit_, ctx, block);
         BranchInst::Create(test, block);
 
         block = test;
@@ -212,7 +213,7 @@ public:
 
         block = loop;
 
-        auto status = GetNodeValues(Flow, ctx, block);
+        auto status = GetNodeValues(Flow_, ctx, block);
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, status.first, ConstantInt::get(status.first->getType(), 0), "good", block);
 
         result->addIncoming(status.first, block);
@@ -240,14 +241,14 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            DependsOn(flow, Limit);
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TWideFilterWithLimitWrapper::Own, flow, std::placeholders::_1));
-            DependsOn(flow, Predicate);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            DependsOn(flow, Limit_);
+            std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TWideFilterWithLimitWrapper::Own, flow, std::placeholders::_1));
+            DependsOn(flow, Predicate_);
         }
     }
 
-    IComputationNode* const Limit;
+    IComputationNode* const Limit_;
 };
 
 template <bool Inclusive>
@@ -271,11 +272,11 @@ public:
 
         auto** fields = GetFields(ctx);
 
-        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+        if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
             return result;
         }
 
-        const bool predicate = Predicate->GetValue(ctx).Get<bool>();
+        const bool predicate = Predicate_->GetValue(ctx).Get<bool>();
         if (!predicate) {
             state = NUdf::TUnboxedValuePod();
         }
@@ -288,7 +289,7 @@ public:
         return EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto resultType = Type::getInt32Ty(context);
@@ -304,7 +305,7 @@ public:
         BranchInst::Create(done, work, IsValid(statePtr, block, context), block);
 
         block = work;
-        auto status = GetNodeValues(Flow, ctx, block);
+        auto status = GetNodeValues(Flow_, ctx, block);
         const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, status.first, ConstantInt::get(resultType, 0), "special", block);
         result->addIncoming(status.first, block);
         BranchInst::Create(done, test, special, block);
@@ -328,9 +329,9 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TWideTakeWhileWrapper::Own, flow, std::placeholders::_1));
-            TWideTakeWhileWrapper::DependsOn(flow, Predicate);
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TWideTakeWhileWrapper::Own, flow, std::placeholders::_1));
+            TWideTakeWhileWrapper::DependsOn(flow, Predicate_);
         }
     }
 };
@@ -348,29 +349,29 @@ public:
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (!state.IsInvalid()) {
-            return Flow->FetchValues(ctx, output);
+            return Flow_->FetchValues(ctx, output);
         }
 
         auto** fields = GetFields(ctx);
 
         do {
             PrepareArguments(ctx, output);
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+            if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
             }
-        } while (Predicate->GetValue(ctx).Get<bool>());
+        } while (Predicate_->GetValue(ctx).Get<bool>());
 
         state = NUdf::TUnboxedValuePod();
 
         if constexpr (Inclusive) {
-            return Flow->FetchValues(ctx, output);
+            return Flow_->FetchValues(ctx, output);
         } else {
             FillOutputs(ctx, output);
             return EFetchResult::One;
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto resultType = Type::getInt32Ty(context);
@@ -384,7 +385,7 @@ public:
 
         block = work;
 
-        const auto status = GetNodeValues(Flow, ctx, block);
+        const auto status = GetNodeValues(Flow_, ctx, block);
 
         const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, status.first, ConstantInt::get(resultType, 0), "special", block);
         const auto passtrought = BinaryOperator::CreateOr(special, IsValid(statePtr, block, context), "passtrought", block);
@@ -407,9 +408,9 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TWideSkipWhileWrapper::Own, flow, std::placeholders::_1));
-            TWideSkipWhileWrapper::DependsOn(flow, Predicate);
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TWideSkipWhileWrapper::Own, flow, std::placeholders::_1));
+            TWideSkipWhileWrapper::DependsOn(flow, Predicate_);
         }
     }
 };
@@ -479,5 +480,4 @@ IComputationNode* WrapWideSkipWhileInclusive(TCallable& callable, const TComputa
     return WrapWideWhile<false, true>(callable, ctx);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

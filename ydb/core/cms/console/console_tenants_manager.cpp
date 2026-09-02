@@ -4136,7 +4136,7 @@ void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const 
         return;
     }
     auto pool = poolIt->second;
-    if (pool->State != TStoragePool::EState::SHRINKING) {
+    if (pool->State != TStoragePool::EState::SHRINKING && pool->State != TStoragePool::EState::NOT_UPDATED) {
         return;
     }
 

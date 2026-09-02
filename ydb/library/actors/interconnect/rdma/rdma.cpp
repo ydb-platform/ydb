@@ -348,54 +348,78 @@ THandshakeData TQueuePair::GetHandshakeData() const noexcept {
 void TIbVerbsBuilderImpl::AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
     std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
 {
-    WorkBuf.emplace_back(
-        TWrVerbData {
-            .Sg = {
-                .addr = (ui64)mrAddr,
-                .length = dstSize,
-                .lkey = mrlKey,
+    auto& item = WorkBuf.emplace_back();
+    item.SgList.emplace_back(ibv_sge {
+        .addr = reinterpret_cast<ui64>(mrAddr),
+        .length = dstSize,
+        .lkey = mrlKey,
+    });
+    item.Wr = ibv_send_wr {
+       .wr_id = 0/*wrId*/,
+       .sg_list = nullptr,
+       .num_sge = 1,
+       .opcode = IBV_WR_RDMA_READ,
+       .send_flags = IBV_SEND_SIGNALED,
+       .wr = {
+           .rdma = {
+               .remote_addr = reinterpret_cast<ui64>(dstAddr),
+               .rkey = dstRkey,
             },
-            .Wr = {
-               .wr_id = 0/*wrId*/,
-               .sg_list = nullptr,
-               .num_sge = 1,
-               .opcode = IBV_WR_RDMA_READ,
-               .send_flags = IBV_SEND_SIGNALED,
-               .wr = {
-                   .rdma = {
-                       .remote_addr = (ui64)dstAddr,
-                       .rkey = dstRkey,
-                    },
-                },
-            },
-            .IoCb = std::move(ioCb)
-        }
-    );
+        },
+    };
+    item.IoCb = std::move(ioCb);
 }
 
-void TIbVerbsBuilderImpl::AddSendVerb(TRcBuf packet,
+bool TIbVerbsBuilderImpl::AddSendVerb(const TRcBuf& packet,
     std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
 {
     Y_ABORT_UNLESS(packet);
-    Y_ABORT_UNLESS(packet.GetSize() <= Max<ui32>());
+    auto memReg = TryExtractFromRcBuf(packet);
+    if (Y_UNLIKELY(memReg.Empty())) {
+        return false;
+    }
 
-    WorkBuf.emplace_back(
-        TWrVerbData {
-            .Sg = {
-                .addr = reinterpret_cast<ui64>(packet.GetData()),
-                .length = static_cast<ui32>(packet.GetSize()),
-            },
-            .Wr = {
-               .wr_id = 0/*wrId*/,
-               .sg_list = nullptr,
-               .num_sge = 1,
-               .opcode = IBV_WR_SEND,
-               .send_flags = IBV_SEND_SIGNALED,
-            },
-            .SendBuf = std::move(packet),
-            .IoCb = std::move(ioCb)
-        }
-    );
+    const TContiguousSpan span = packet.GetContiguousSpan();
+
+    const TSendSge sg {
+        .Data = span.Data(),
+        .Size = span.Size(),
+        .MemRegion = memReg.GetMemRegion(),
+    };
+
+    AddSendVerb(std::span<const TSendSge>(&sg, 1), std::move(ioCb));
+
+    return true;
+}
+
+void TIbVerbsBuilderImpl::AddSendVerb(std::span<const TSendSge> sgList,
+    std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+{
+    Y_ABORT_UNLESS(!sgList.empty());
+    Y_ABORT_UNLESS(sgList.size() <= static_cast<size_t>(Max<int>()));
+
+    auto& item = WorkBuf.emplace_back();
+    item.SgList.reserve(sgList.size());
+    item.SendMemRegions.reserve(sgList.size());
+    for (const auto& sg : sgList) {
+        Y_ABORT_UNLESS(sg.Data);
+        Y_ABORT_UNLESS(sg.Size <= Max<ui32>());
+        Y_ABORT_UNLESS(sg.MemRegion);
+        item.SgList.emplace_back(ibv_sge {
+            .addr = reinterpret_cast<ui64>(sg.Data),
+            .length = static_cast<ui32>(sg.Size),
+        });
+        item.SendMemRegions.emplace_back(sg.MemRegion);
+    }
+
+    item.Wr = ibv_send_wr {
+       .wr_id = 0/*wrId*/,
+       .sg_list = nullptr,
+       .num_sge = static_cast<int>(item.SgList.size()),
+       .opcode = IBV_WR_SEND,
+       .send_flags = IBV_SEND_SIGNALED,
+    };
+    item.IoCb = std::move(ioCb);
 }
 
 ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t deviceIndex) noexcept {
@@ -403,14 +427,21 @@ ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t
     Y_ABORT_UNLESS(wr.size());
 
     auto attach = [&](size_t i) {
-        WorkBuf[i].Wr.sg_list = &WorkBuf[i].Sg;
+        Y_ABORT_UNLESS(!WorkBuf[i].SgList.empty());
+        Y_ABORT_UNLESS(WorkBuf[i].Wr.num_sge == static_cast<int>(WorkBuf[i].SgList.size()));
+
+        WorkBuf[i].Wr.sg_list = WorkBuf[i].SgList.data();
         WorkBuf[i].Wr.wr_id = wr[i]->GetId();
-        if (WorkBuf[i].SendBuf) {
-            auto memReg = TryExtractFromRcBuf(WorkBuf[i].SendBuf);
-            Y_ABORT_UNLESS(!memReg.Empty());
-            WorkBuf[i].Sg.lkey = memReg.GetLKey(deviceIndex);
+
+        if (!WorkBuf[i].SendMemRegions.empty()) {
+            Y_ABORT_UNLESS(WorkBuf[i].SendMemRegions.size() == WorkBuf[i].SgList.size());
+            for (size_t sgIndex = 0; sgIndex != WorkBuf[i].SgList.size(); ++sgIndex) {
+                WorkBuf[i].SgList[sgIndex].lkey = WorkBuf[i].SendMemRegions[sgIndex]->GetLKey(deviceIndex);
+            }
         }
+
         wr[i]->AttachCb(std::move(WorkBuf[i].IoCb));
+        wr[i]->ResetTimer();
     };
 
     attach(0);
@@ -418,7 +449,6 @@ ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t
     for (size_t i = 1; i < WorkBuf.size(); i++) {
         WorkBuf[i - 1].Wr.next = &WorkBuf[i].Wr;
         attach(i);
-        wr[i]->ResetTimer();
     }
 
     return &WorkBuf[0].Wr;

@@ -9,20 +9,12 @@ namespace NActors::NFeatures {
 
     enum class EActorSystemOptimizationType {
         Common,
-        LocalQueues,
     };
 
     struct TCommonFeatureFlags {
         static constexpr EActorSystemOptimizationType OptimizationType = EActorSystemOptimizationType::Common;
 
         static constexpr bool ProbeSpinCycles = false;
-    };
-
-    struct TLocalQueuesFeatureFlags {
-        static constexpr EActorSystemOptimizationType OptimizationType = EActorSystemOptimizationType::LocalQueues;
-
-        static constexpr bool UseIfAllOtherThreadsAreSleeping = false;
-        static constexpr bool UseOnMicroburst = false;
     };
 
     struct TSpinFeatureFlags {

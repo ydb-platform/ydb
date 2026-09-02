@@ -57,16 +57,16 @@ const IServicePtr& TTestChannel::GetServiceOrThrow(const TServiceId& serviceId) 
     if (serviceMapIt == services.end()) {
         if (realmId) {
             auto innerError = TError(NRpc::EErrorCode::NoSuchRealm, "Request realm is unknown")
-                << TErrorAttribute("service", serviceName)
-                << TErrorAttribute("realm_id", realmId);
+                .With("service", serviceName)
+                .With("realm_id", realmId);
             THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
-                << innerError;
+                .With(innerError);
         } else {
             THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
                 "Service is not registered")
-                << TErrorAttribute("service", serviceName)
-                << TErrorAttribute("realm_id", realmId);
+                .With("service", serviceName)
+                .With("realm_id", realmId);
         }
     }
     auto& serviceMap = serviceMapIt->second;
@@ -74,8 +74,8 @@ const IServicePtr& TTestChannel::GetServiceOrThrow(const TServiceId& serviceId) 
     if (serviceIt == serviceMap.end()) {
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
             "Service is not registered")
-            << TErrorAttribute("service", serviceName)
-            << TErrorAttribute("realm_id", realmId);
+            .With("service", serviceName)
+            .With("realm_id", realmId);
     }
 
     return serviceIt->second;
@@ -103,12 +103,13 @@ void TTestChannel::HandleRequestResult(
     } else if (error.IsOK()) {
         NProto::TResponseHeader header;
         YT_VERIFY(TryParseResponseHeader(bus->GetMessage(), &header));
+        auto headerError = FromProto<TError>(header.error());
         auto wrappedError = TError("Test proxy service error")
-            << FromProto<TError>(header.error());
+            .WithIf(!headerError.IsOK(), headerError);
         response->HandleError(std::move(wrappedError));
     } else {
         auto wrappedError = TError("Test proxy service error")
-            << error;
+            .With(error);
         response->HandleError(std::move(wrappedError));
     }
 }

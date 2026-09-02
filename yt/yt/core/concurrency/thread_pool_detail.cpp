@@ -113,10 +113,9 @@ void TThreadPoolBase::Resize()
         }
     }
 
-    YT_LOG_DEBUG("Thread pool reconfigured (ThreadNamePrefix: %v, ThreadPoolSize: %v -> %v)",
-        ThreadNamePrefix_,
-        oldThreadCount,
-        threadCount);
+    YT_TLOG_DEBUG("Thread pool reconfigured")
+        .With("ThreadNamePrefix", ThreadNamePrefix_)
+        .WithFormat("ThreadPoolSize", "%v -> %v", oldThreadCount, threadCount);
 
     for (const auto& thread : threadsToStop) {
         thread->Stop();

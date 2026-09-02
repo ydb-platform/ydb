@@ -141,16 +141,17 @@ namespace NKikimr::NDDisk {
         NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForInternal(
             inflight.TabletId,
             inflight.TabletGeneration,
-            std::nullopt);
+            std::nullopt,
+            inflight.DirectBlockGroupIndex);
         const NDDisk::TBlockSelector selector{record.GetVChunkIndex(), record.GetOffsetInBytes(), record.GetSizeInBytes()};
 
         auto msg = std::make_unique<TEvWritePersistentBuffers>(creds, selector, inflight.Lsn, NDDisk::TWriteInstruction(0),
             inflight.PersistentBufferIds, inflight.Timeout);
         msg->AddPayload(TRope(payload));
-        // Forward the checksums persisted on the source record, if any (TEvReadPersistentBufferResult
-        // carries them opt-in, see TPersistentBuffer::TRecord::PayloadChecksums). Without this, records
-        // re-replicated via TEvReadThenWritePersistentBuffers would silently lose their checksums on
-        // every target PB, exactly the recovery scenario where corruption detection matters most.
+        // Forward the checksums persisted on the source record. Successful writes always store them,
+        // so a successful source read returns exactly one checksum per aligned block. Without this,
+        // TEvReadThenWritePersistentBuffers would re-replicate a record that the destination would
+        // then reject as a checksum-less write.
         msg->Record.MutableChecksums()->CopyFrom(record.GetChecksums());
         auto h = std::make_unique<IEventHandle>(SelfId(), inflight.Sender, msg.release(), 0, inflight.Cookie);
         TActivationContext::Send(h.release());
@@ -161,11 +162,12 @@ namespace NKikimr::NDDisk {
     void TWritePersistentBuffersRequestActor::Handle(TEvReadThenWritePersistentBuffers::TPtr ev) {
         auto cookie = NextCookie++;
         const auto& record = ev->Get()->Record;
-        auto recordCreds = record.GetCredentials();
+        TQueryCredentials recordCreds(record.GetCredentials());
         TQueryCredentials creds = TQueryCredentials::ForInternal(
-            recordCreds.GetTabletId(),
-            recordCreds.GetGeneration(),
-            std::nullopt);
+            recordCreds.TabletId,
+            recordCreds.Generation,
+            std::nullopt,
+            recordCreds.DirectBlockGroupIndex);
         auto requestGeneration = record.GetGeneration();
         auto lsn = record.GetLsn();
         auto timeout = record.GetReplyTimeoutMicroseconds();
@@ -175,6 +177,7 @@ namespace NKikimr::NDDisk {
             .Cookie = ev->Cookie,
             .TabletId = creds.TabletId,
             .TabletGeneration = creds.Generation,
+            .DirectBlockGroupIndex = creds.DirectBlockGroupIndex,
             .RequestGeneration = requestGeneration,
             .Lsn = lsn,
             .Timeout = timeout,
@@ -185,7 +188,7 @@ namespace NKikimr::NDDisk {
         }
 
         auto msg = std::make_unique<TEvReadPersistentBuffer>();
-        creds.Serialize(msg->Record.MutableCredentials());
+        creds.SerializeForRequest(msg->Record.MutableCredentials());
         msg->Record.SetLsn(lsn);
         msg->Record.SetGeneration(requestGeneration);
         NDDisk::TReadInstruction(true).Serialize(msg->Record.MutableInstruction());
@@ -207,11 +210,12 @@ namespace NKikimr::NDDisk {
 
         Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
-        auto recordCreds = record.GetCredentials();
+        TQueryCredentials recordCreds(record.GetCredentials());
         TQueryCredentials creds = TQueryCredentials::ForInternal(
-            recordCreds.GetTabletId(),
-            recordCreds.GetGeneration(),
-            std::nullopt);
+            recordCreds.TabletId,
+            recordCreds.Generation,
+            std::nullopt,
+            recordCreds.DirectBlockGroupIndex);
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         const TWriteInstruction instr(record.GetInstruction());

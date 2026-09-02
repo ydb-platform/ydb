@@ -77,7 +77,7 @@ TTableSchemaPtr MergeTableSchemas(
                 THROW_ERROR_EXCEPTION(
                     "Column %v first schema type is incompatible with second schema type",
                     firstSchemaColumn->GetDiagnosticNameString())
-                    << ex;
+                    .With(ex);
             }
 
         } else if (!firstSchema->IsStrict()) {

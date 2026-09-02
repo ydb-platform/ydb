@@ -42,6 +42,8 @@ bool ContainsSystemColumn(const auto& columns) {
 
 const TString ImplTables[] = {
     ImplTable,
+    TString{ImplTable} + NFulltext::RowIdSrcBuildSuffix,
+    TString{ImplTable} + NKMeans::BuildSuffix0,
     NKMeans::LevelTable,
     NKMeans::PostingTable,
     NKMeans::PrefixTable,
@@ -79,6 +81,13 @@ constexpr std::string_view GlobalFulltextWithRelevanceImplTables[] = {
     ImplTable,
 };
 static_assert(std::is_sorted(std::begin(GlobalFulltextWithRelevanceImplTables), std::end(GlobalFulltextWithRelevanceImplTables)));
+
+constexpr std::string_view GlobalFulltextCompactRelevanceImplTables[] = {
+    NFulltext::DocsTable,
+    NFulltext::StatsTable,
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalFulltextCompactRelevanceImplTables), std::end(GlobalFulltextCompactRelevanceImplTables)));
 
 bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
@@ -154,7 +163,7 @@ TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
     return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
 }
 
-std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type) {
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact) {
     switch (type) {
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
         case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
@@ -166,18 +175,24 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+            return enableFulltextCompact
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+            return enableFulltextCompact
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
         case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalJson;
+            return enableFulltextCompact
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson;
         default:
             return std::nullopt;
     }
 }
 
-NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type) {
-    const auto result = TryConvertIndexType(type);
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact) {
+    const auto result = TryConvertIndexType(type, enableFulltextCompact);
     Y_ENSURE(result);
     return *result;
 }
@@ -328,8 +343,9 @@ std::span<const std::string_view> GetImplTables(
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             return GlobalFulltextPlainImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             return GlobalFulltextWithRelevanceImplTables;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            return GlobalFulltextCompactRelevanceImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             return GlobalFulltextPlainImplTables;

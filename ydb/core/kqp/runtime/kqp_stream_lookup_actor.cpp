@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
@@ -85,6 +86,7 @@ public:
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
         , QuerySpanId(settings.HasQuerySpanId() ? settings.GetQuerySpanId() : 0)
+        , WatermarksTracker(args.WatermarksTracker)
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , IsolationLevel(settings.GetIsolationLevel())
@@ -117,6 +119,9 @@ public:
         if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
         }
@@ -461,6 +466,9 @@ private:
         {
             auto alloc = BindAllocator();
             Input.Clear();
+            if (StreamLookupWorker) {
+                StreamLookupWorker->ClearResults(Alloc->Ref());
+            }
             StreamLookupWorker.reset();
             StreamLockWorker.reset();
             for (auto& [id, state] : Reads) {
@@ -477,7 +485,7 @@ private:
         LookupActorSpan.End();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& maybeWatermark, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
         SentResultsAvailable = false;
 
@@ -517,13 +525,31 @@ private:
         const bool allReadsFinished = AllReadsFinished();
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed() && (!StreamLockWorker || StreamLockWorker->AllRowsProcessed()) && UnmodifiedOutputRows.empty();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
+        bool inputUnpaused = false;
+
+        if (allReadsFinished && allRowsProcessed && !hasPendingResults) {
+            if (LastFetchStatus == NUdf::EFetchStatus::Yield) {
+                if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                    // No unprocessed data: pop and send watermark
+                    maybeWatermark = WatermarksTracker->GetPendingWatermark();
+                    WatermarksTracker->PopPendingWatermark();
+                    inputUnpaused = true; // we unpaused input, so we should try fetching more data
+                }
+            }
+        } else {
+            if (batch.empty()) {
+                // Checkpointing special case: nothing to return yet, but in-flight requests exists
+                // Return 1 to indicate this condition (it will propagate by TComputeActorAsyncInputHelper::PollAsyncInput -> TComputeActorAsyncInputHelperSync::AsyncDataPush -> TDqAsyncInputBuffer::Push -> TDqAsyncInputBuffer::IsPending -> TDqSyncComputeActorBase::ReadyToCheckpoint)
+                replyResultStats.ResultBytesCount++;
+            }
+        }
 
         // If we have no new reads, no pending results and lock worker is not overloaded,
         // we can fetch input rows again.
         bool noNewReads = (
             Partitioning && Reads.InFlightReads() + StreamLookupWorker->ScheduledRequestsCount() == 0
             && LastFetchStatus == NUdf::EFetchStatus::Ok);
-        if (hasPendingResults || (noNewReads && !IsLockWorkerOverloaded())) {
+        if (hasPendingResults || (noNewReads && !IsLockWorkerOverloaded()) || inputUnpaused) {
             // has more results
             if (!SentResultsAvailable) {
                 Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -1100,6 +1126,13 @@ private:
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_WRONG_SHARD_STATE: {
+                YDB_LOG_DEBUG("Lock request returned STATUS_WRONG_SHARD_STATE",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
+                auto lockIt = Reads.findLock(record.GetRequestId());
+                if (lockIt != Reads.endLocks()) {
+                    return RetryLock(lockIt->second, false);
+                }
                 return RuntimeError(
                     TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Wrong shard state.",
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
@@ -1221,7 +1254,8 @@ private:
             {"snapshotTxId", record.GetSnapshot().GetTxId()},
             {"step", record.GetSnapshot().GetStep()},
             {"lockTxId", record.GetLockTxId()},
-            {"lockNodeId", record.GetLockNodeId()});
+            {"lockNodeId", record.GetLockNodeId()},
+            {"lockMode", record.GetLockMode()});
 
         const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 
@@ -1421,6 +1455,7 @@ private:
     bool SentResultsAvailable = false;
     THashMap<ui64, TString> CacheKeys;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
+    NYql::NDq::TDqComputeActorWatermarks* WatermarksTracker;
     TPartitioning::TCPtr Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;

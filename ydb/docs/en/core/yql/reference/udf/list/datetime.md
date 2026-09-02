@@ -41,8 +41,19 @@ Conversion from a {{ ydb-short-name }} primitive type to the [internal represent
 
 ### List of functions
 
-* `DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`
-* `DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`
+* Signature:
+
+  ```text
+  DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap})
+  -> Resource<TM>
+  ```
+
+* Signature:
+
+  ```text
+  DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap})
+  -> Resource<TM64>
+  ```
 
 Functions that accept `Resource<TM>` or `Resource<TM64>` as input can be called directly from the primitive date/time type. In this case, an implicit conversion will be made by calling the corresponding `Split` function.
 
@@ -162,11 +173,43 @@ Getting a number of seconds/milliseconds/microseconds since the UTC Epoch from a
 ### List of functions
 
 * `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`
-* `DateTime::ToSeconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
-* `DateTime::ToMilliseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
-* `DateTime::ToMicroseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
+* Signature:
+
+  ```text
+  DateTime::ToSeconds(
+  Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
+  -> Int64
+  ```
+
+* Signature:
+
+  ```text
+  DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap})
+  -> Uint64
+  ```
+
+* Signature:
+
+  ```text
+  DateTime::ToMilliseconds(
+  Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
+  -> Int64
+  ```
+
+* Signature:
+
+  ```text
+  DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap})
+  -> Uint64
+  ```
+
+* Signature:
+
+  ```text
+  DateTime::ToMicroseconds(
+  Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
+  -> Int64
+  ```
 
 ### Examples
 
@@ -331,7 +374,12 @@ Get a string representation of a time using an arbitrary formatting string.
 
 ### List of functions
 
-* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
+* Signature:
+
+  ```text
+  DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?)
+  -> (Resource<TM64>{Flags:AutoMap}) -> String
+  ```
 
 A set of specifiers is implemented for the formatting string:
 

@@ -3,6 +3,7 @@
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 
@@ -672,6 +673,78 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompactionScan) {
     }
 }
 
+// MakeTabletCountersAggregatorID(...) is a named-service ActorId: sends to it go through the real
+// ActorSystem, bypassing TTestActorRuntime's mailbox-dispatch loop (so AddObserver never sees them).
+// Register a catcher in its place that forwards the raw message to an edge actor instead.
+class TCountersCatcher : public TActor<TCountersCatcher> {
+public:
+    explicit TCountersCatcher(TActorId forwardTo)
+        : TActor(&TThis::StateWork)
+        , ForwardTo(forwardTo)
+    {}
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTabletCounters::TEvTabletAddCounters, Handle);
+            hFunc(TEvents::TEvPoison, HandlePoison);
+        default:
+            break;
+        }
+    }
+
+    void Handle(TEvTabletCounters::TEvTabletAddCounters::TPtr &ev) {
+        Send(ForwardTo, ev->Release().Release());
+    }
+
+    void HandlePoison(TEvents::TEvPoison::TPtr &ev) {
+        Send(ev->Sender, new TEvents::TEvGone);
+        PassAway();
+    }
+
+private:
+    TActorId ForwardTo;
+};
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_DetailedMetricsCounters) {
+    Y_UNIT_TEST(TestAddCountersStampsLeaderFollowerId) {
+        TMyEnvBase env;
+        env.RunOn(2, MakeTabletCountersAggregatorID(env.NodeId, false), new TCountersCatcher(env.Edge), NFake::EMail::Simple);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // DetachTablet() (reached via TEvPoison) unconditionally calls ForceSendCounters().
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        auto ev = env.GrabEdgeEvent<TEvTabletCounters::TEvTabletAddCounters>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->FollowerId, 0u);
+    }
+
+    Y_UNIT_TEST(TestAddCountersStampsFollowerId) {
+        TMyEnvBase env;
+        // Followers report to the *follower* aggregator, so only the follower's messages
+        // land in this catcher and the leader's cannot be mistaken for them.
+        env.RunOn(2, MakeTabletCountersAggregatorID(env.NodeId, true), new TCountersCatcher(env.Edge), NFake::EMail::Simple);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, /* followerId */ 1);
+        env.WaitForWakeUp();
+
+        // Exercises the periodic path: TExecutor::UpdateCounters() is driven by a 15s timer.
+        env->SimulateSleep(TDuration::Seconds(16));
+
+        auto ev = env.GrabEdgeEvent<TEvTabletCounters::TEvTabletAddCounters>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->FollowerId, 1u);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_ExecutorTxLimit) {
 

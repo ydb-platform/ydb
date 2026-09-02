@@ -8,14 +8,6 @@
 
 
 namespace NYql::NTypeAnnImpl {
-    bool CheckLinearLangver(TPositionHandle pos, TLangVersion langver, TExprContext& ctx) {
-        if (!IsAvailableLangVersion(NFeature::LinearTypes.MinLangVer, langver)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), "Linear types are not available before version 2025.04"));
-            return false;
-        }
-
-        return true;
-    }
 
     const TTypeAnnotationNode* MakeItemDescriptorType(TExprContext& ctx) {
         TVector<const TItemExprType*> items = {
@@ -423,7 +415,7 @@ namespace NYql::NTypeAnnImpl {
     template <>
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Linear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -453,7 +445,7 @@ namespace NYql::NTypeAnnImpl {
     template <>
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::DynamicLinear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1174,14 +1166,18 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (type->GetKind() != ETypeAnnotationKind::Callable) {
+        switch (type->GetKind()) {
+        case ETypeAnnotationKind::Universal:
+            input->SetTypeAnn(type);
+            return IGraphTransformer::TStatus::Ok;
+        case ETypeAnnotationKind::Callable:
+            output = ExpandType(input->Pos(), *type->Cast<TCallableExprType>()->GetReturnType(), ctx.Expr);
+            return IGraphTransformer::TStatus::Repeat;
+        default:
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Expected callable type, but got: "
                 << *type));
             return IGraphTransformer::TStatus::Error;
         }
-
-        output = ExpandType(input->Pos(), *type->Cast<TCallableExprType>()->GetReturnType(), ctx.Expr);
-        return IGraphTransformer::TStatus::Repeat;
     }
 
     template <>
@@ -1285,7 +1281,7 @@ namespace NYql::NTypeAnnImpl {
 
     template <>
     IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::LinearItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1795,7 +1791,7 @@ namespace NYql::NTypeAnnImpl {
     template <>
     IGraphTransformer::TStatus MakeTypeHandleWrapper<ETypeAnnotationKind::Linear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1819,7 +1815,7 @@ namespace NYql::NTypeAnnImpl {
     template <>
     IGraphTransformer::TStatus MakeTypeHandleWrapper<ETypeAnnotationKind::DynamicLinear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 

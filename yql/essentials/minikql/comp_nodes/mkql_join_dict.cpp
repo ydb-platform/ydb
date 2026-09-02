@@ -6,8 +6,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -19,35 +18,35 @@ struct TWrapTraits {
 
 template <bool KeyTuple>
 class TJoinDictWrapper: public TMutableCodegeneratorPtrNode<TJoinDictWrapper<KeyTuple>> {
-    typedef TMutableCodegeneratorPtrNode<TJoinDictWrapper<KeyTuple>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TJoinDictWrapper<KeyTuple>>;
 
 public:
     TJoinDictWrapper(TComputationMutables& mutables, IComputationNode* dict1, IComputationNode* dict2,
                      bool isMulti1, bool isMulti2, EJoinKind joinKind, std::vector<ui32>&& indexes = std::vector<ui32>())
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Dict1(dict1)
-        , Dict2(dict2)
-        , IsMulti1(isMulti1)
-        , IsMulti2(isMulti2)
-        , JoinKind(joinKind)
-        , OptIndicies(std::move(indexes))
+        , Dict1_(dict1)
+        , Dict2_(dict2)
+        , IsMulti1_(isMulti1)
+        , IsMulti2_(isMulti2)
+        , JoinKind_(joinKind)
+        , OptIndicies_(std::move(indexes))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& dict1 = Dict1->GetValue(ctx);
-        const auto& dict2 = Dict2->GetValue(ctx);
+        const auto& dict1 = Dict1_->GetValue(ctx);
+        const auto& dict2 = Dict2_->GetValue(ctx);
         return JoinDicts(ctx, dict1, dict2);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto joinFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
 
-        const auto one = GetNodeValue(Dict1, ctx, block);
-        const auto two = GetNodeValue(Dict2, ctx, block);
+        const auto one = GetNodeValue(Dict1_, ctx, block);
+        const auto two = GetNodeValue(Dict2_, ctx, block);
 
         const auto join = EmitFunctionCall<&TJoinDictWrapper::JoinDicts>(Type::getInt128Ty(context), {joinFuncArg, ctx.Ctx, one, two}, ctx, block);
         AddRefBoxed(join, ctx, block);
@@ -56,8 +55,8 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Dict1);
-        this->DependsOn(Dict2);
+        this->DependsOn(Dict1_);
+        this->DependsOn(Dict2_);
     }
 
     bool HasNullInKey(const NUdf::TUnboxedValue& key) const {
@@ -66,7 +65,7 @@ private:
         }
 
         if constexpr (KeyTuple) {
-            for (ui32 index : OptIndicies) {
+            for (ui32 index : OptIndicies_) {
                 if (!key.GetElement(index)) {
                     return true;
                 }
@@ -85,8 +84,8 @@ private:
     template <bool WrapAsOptional1, bool WrapAsOptional2>
     void WriteValues(const NUdf::TUnboxedValuePod& payload1, const NUdf::TUnboxedValuePod& payload2,
                      TDefaultListRepresentation& resList, TComputationContext& ctx) const {
-        const bool isMulti1 = IsMulti1 && bool(payload1);
-        const bool isMulti2 = IsMulti2 && bool(payload2);
+        const bool isMulti1 = IsMulti1_ && bool(payload1);
+        const bool isMulti2 = IsMulti2_ && bool(payload2);
         if (!isMulti1 && !isMulti2) {
             WriteTuple<WrapAsOptional1, WrapAsOptional2>(payload1, payload2, resList, ctx);
         } else if (isMulti1 && !isMulti2) {
@@ -122,7 +121,7 @@ private:
 
     NUdf::TUnboxedValuePod JoinDicts(TComputationContext& ctx, const NUdf::TUnboxedValuePod dict1, const NUdf::TUnboxedValuePod dict2) const {
         TDefaultListRepresentation resList;
-        switch (JoinKind) {
+        switch (JoinKind_) {
             case EJoinKind::Inner:
                 if (dict1.GetDictLength() < dict2.GetDictLength()) {
                     // traverse dict1, lookup dict2
@@ -189,7 +188,7 @@ private:
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
                     if (HasNullInKey(key1) || !dict2.Contains(key1)) {
-                        if (IsMulti1) {
+                        if (IsMulti1_) {
                             TThresher<false>::DoForEachItem(payload1,
                                                             [&resList](NUdf::TUnboxedValue&& item) {
                                                                 resList = resList.Append(std::move(item));
@@ -205,7 +204,7 @@ private:
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
                     if (HasNullInKey(key2) || !dict1.Contains(key2)) {
-                        if (IsMulti2) {
+                        if (IsMulti2_) {
                             TThresher<false>::DoForEachItem(payload2,
                                                             [&resList](NUdf::TUnboxedValue&& item) {
                                                                 resList = resList.Append(std::move(item));
@@ -242,7 +241,7 @@ private:
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
                     Y_DEBUG_ABORT_UNLESS(!HasNullInKey(key1));
                     if (dict2.Contains(key1)) {
-                        if (IsMulti1) {
+                        if (IsMulti1_) {
                             TThresher<false>::DoForEachItem(payload1,
                                                             [&resList](NUdf::TUnboxedValue&& item) {
                                                                 resList = resList.Append(std::move(item));
@@ -259,7 +258,7 @@ private:
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
                     Y_DEBUG_ABORT_UNLESS(!HasNullInKey(key2));
                     if (dict1.Contains(key2)) {
-                        if (IsMulti2) {
+                        if (IsMulti2_) {
                             TThresher<false>::DoForEachItem(payload2,
                                                             [&resList](NUdf::TUnboxedValue&& item) {
                                                                 resList = resList.Append(std::move(item));
@@ -278,12 +277,12 @@ private:
         return ctx.HolderFactory.CreateDirectListHolder(std::move(resList));
     }
 
-    IComputationNode* const Dict1;
-    IComputationNode* const Dict2;
-    const bool IsMulti1;
-    const bool IsMulti2;
-    const EJoinKind JoinKind;
-    const std::vector<ui32> OptIndicies;
+    IComputationNode* const Dict1_;
+    IComputationNode* const Dict2_;
+    const bool IsMulti1_;
+    const bool IsMulti2_;
+    const EJoinKind JoinKind_;
+    const std::vector<ui32> OptIndicies_;
 };
 
 } // namespace
@@ -325,5 +324,4 @@ IComputationNode* WrapJoinDict(TCallable& callable, const TComputationNodeFactor
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

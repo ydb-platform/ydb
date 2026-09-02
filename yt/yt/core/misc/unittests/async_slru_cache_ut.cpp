@@ -8,9 +8,10 @@
 #include <yt/yt/core/actions/new_with_offloaded_dtor.h>
 
 #include <yt/yt/core/misc/async_slru_cache.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/library/profiling/testing.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <util/generic/strbuf.h>
 
@@ -69,6 +70,8 @@ public:
         i64 Missed;
         i64 RejectedOversized;
         i64 RejectedOversizedWeight;
+        i64 Evicted;
+        i64 EvictedWeight;
 
         TCountersState operator-(const TCountersState& other) const
         {
@@ -80,7 +83,9 @@ public:
                 .AsyncHit = AsyncHit - other.AsyncHit,
                 .Missed = Missed - other.Missed,
                 .RejectedOversized = RejectedOversized - other.RejectedOversized,
-                .RejectedOversizedWeight = RejectedOversizedWeight - other.RejectedOversizedWeight
+                .RejectedOversizedWeight = RejectedOversizedWeight - other.RejectedOversizedWeight,
+                .Evicted = Evicted - other.Evicted,
+                .EvictedWeight = EvictedWeight - other.EvictedWeight,
             };
         }
     };
@@ -116,7 +121,9 @@ protected:
             .AsyncHit = TTesting::ReadCounter(counters.AsyncHitCounter),
             .Missed = TTesting::ReadCounter(counters.MissedCounter),
             .RejectedOversized = TTesting::ReadCounter(counters.RejectedOversizedCounter),
-            .RejectedOversizedWeight = TTesting::ReadCounter(counters.RejectedOversizedWeightCounter)
+            .RejectedOversizedWeight = TTesting::ReadCounter(counters.RejectedOversizedWeightCounter),
+            .Evicted = TTesting::ReadCounter(counters.EvictedCounter),
+            .EvictedWeight = TTesting::ReadCounter(counters.EvictedWeightCounter),
         };
     }
 };
@@ -161,11 +168,13 @@ protected:
 
     void OnAdded(const TSimpleCachedValuePtr& value) override
     {
-        YT_LOG_DEBUG("Item add (Item: %v)", value->GetKey());
+        YT_TLOG_DEBUG("Item add")
+            .With("Item", value->GetKey());
         auto guard = Guard(Lock_);
 
         if (!Keys_.find(value->GetKey()).IsEnd()) {
-            YT_LOG_ALERT("Item already exist (Item: %v)", value->GetKey());
+            YT_TLOG_ALERT("Item already exist")
+                .With("Item", value->GetKey());
         }
 
         EmplaceOrCrash(Keys_, value->GetKey());
@@ -174,11 +183,13 @@ protected:
 
     void OnRemoved(const TSimpleCachedValuePtr& value) override
     {
-        YT_LOG_DEBUG("Item remove (Item: %v)", value->GetKey());
+        YT_TLOG_DEBUG("Item remove")
+            .With("Item", value->GetKey());
         auto guard = Guard(Lock_);
 
         if (Keys_.find(value->GetKey()).IsEnd()) {
-            YT_LOG_ALERT("Item not found (Item: %v)", value->GetKey());
+            YT_TLOG_ALERT("Item not found")
+                .With("Item", value->GetKey());
         }
 
         EraseOrCrash(Keys_, value->GetKey());
@@ -1056,6 +1067,38 @@ TEST(TAsyncSlruGhostCacheTest, InsertLarge)
     EXPECT_EQ(largeCount.Missed, 2 * cacheSize);
 }
 
+TEST(TAsyncSlruGhostCacheTest, TracksEvictedValues)
+{
+    constexpr int cacheSize = 3;
+    auto config = CreateCacheConfig(cacheSize);
+    auto cache = New<TSimpleSlruCache>(std::move(config), TProfiler{"/cache"});
+
+    auto oldMainCounters = cache->ReadMainCounters();
+    auto oldSmallCounters = cache->ReadSmallGhostCounters();
+    auto oldLargeCounters = cache->ReadLargeGhostCounters();
+
+    for (int index = 0; index < 3; ++index) {
+        int weight = index == 2 ? 2 : 1;
+        auto cookie = cache->BeginInsert(index);
+        ASSERT_TRUE(cookie.IsActive());
+        cookie.EndInsert(New<TSimpleCachedValue>(
+            /*key*/ index,
+            /*value*/ 42,
+            /*weight*/ weight));
+    }
+
+    auto mainCount = cache->ReadMainCounters() - oldMainCounters;
+    auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
+    auto largeCount = cache->ReadLargeGhostCounters() - oldLargeCounters;
+
+    EXPECT_EQ(mainCount.Evicted, 1);
+    EXPECT_EQ(mainCount.EvictedWeight, 1);
+    EXPECT_EQ(smallCount.Evicted, 3);
+    EXPECT_EQ(smallCount.EvictedWeight, 4);
+    EXPECT_EQ(largeCount.Evicted, 0);
+    EXPECT_EQ(largeCount.EvictedWeight, 0);
+}
+
 TEST(TAsyncSlruGhostCacheTest, Weights)
 {
     constexpr int cacheSize = 100;
@@ -1364,23 +1407,41 @@ TEST(TAsyncSlruGhostCacheTest, OversizedValueIsRejectedOnResurrection)
     auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
     auto largeCount = cache->ReadLargeGhostCounters() - oldLargeCounters;
 
+    EXPECT_EQ(mainCount.SyncHit, 1);
     EXPECT_EQ(mainCount.RejectedOversized, 1);
     EXPECT_EQ(mainCount.RejectedOversizedWeight, oversizedValueWeight);
+    EXPECT_EQ(smallCount.Missed, 0);
+    EXPECT_EQ(smallCount.SyncHit, 1);
     EXPECT_EQ(smallCount.RejectedOversized, 1);
     EXPECT_EQ(smallCount.RejectedOversizedWeight, oversizedValueWeight);
+    EXPECT_EQ(largeCount.Missed, 0);
+    EXPECT_EQ(largeCount.SyncHit, 1);
     EXPECT_EQ(largeCount.RejectedOversized, 0);
     EXPECT_EQ(largeCount.RejectedOversizedWeight, 0);
 
+    oldMainCounters = cache->ReadMainCounters();
     oldSmallCounters = cache->ReadSmallGhostCounters();
     oldLargeCounters = cache->ReadLargeGhostCounters();
 
-    YT_UNUSED_FUTURE(cache->Lookup(oversizedValue->GetKey()));
+    auto resurrectionCookie = cache->BeginInsert(oversizedValue->GetKey());
+    ASSERT_FALSE(resurrectionCookie.IsActive());
+    EXPECT_EQ(WaitForFast(resurrectionCookie.GetValue()).ValueOrThrow(), oversizedValue);
 
+    mainCount = cache->ReadMainCounters() - oldMainCounters;
     smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
     largeCount = cache->ReadLargeGhostCounters() - oldLargeCounters;
 
-    EXPECT_EQ(smallCount.Missed, 1);
+    EXPECT_EQ(mainCount.SyncHit, 1);
+    EXPECT_EQ(mainCount.RejectedOversized, 1);
+    EXPECT_EQ(mainCount.RejectedOversizedWeight, oversizedValueWeight);
+    EXPECT_EQ(smallCount.Missed, 0);
+    EXPECT_EQ(smallCount.SyncHit, 1);
+    EXPECT_EQ(smallCount.RejectedOversized, 1);
+    EXPECT_EQ(smallCount.RejectedOversizedWeight, oversizedValueWeight);
+    EXPECT_EQ(largeCount.Missed, 0);
     EXPECT_EQ(largeCount.SyncHit, 1);
+    EXPECT_EQ(largeCount.RejectedOversized, 0);
+    EXPECT_EQ(largeCount.RejectedOversizedWeight, 0);
 }
 
 TEST(TAsyncSlruGhostCacheTest, DisableOversizedItemRejectionDynamically)
@@ -1425,7 +1486,8 @@ TEST(TAsyncSlruGhostCacheTest, DisableOversizedItemRejectionDynamically)
     smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
     largeCount = cache->ReadLargeGhostCounters() - oldLargeCounters;
 
-    EXPECT_EQ(smallCount.Missed, 1);
+    EXPECT_EQ(smallCount.Missed, 0);
+    EXPECT_EQ(smallCount.SyncHit, 1);
     EXPECT_EQ(largeCount.SyncHit, 1);
 }
 

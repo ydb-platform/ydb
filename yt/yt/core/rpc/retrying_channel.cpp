@@ -198,23 +198,26 @@ private:
 
         std::optional<TError> FirstError_;
         std::optional<TError> LastError_;
+        std::string LastAddress_;
         int OmittedInnerErrorCount_ = 0;
 
         // IClientResponseHandler implementation.
 
         void HandleAcknowledgement() override
         {
-            YT_LOG_DEBUG("Request attempt acknowledged (RequestId: %v)",
-                Request_->GetRequestId());
+            YT_TLOG_DEBUG("Request attempt acknowledged")
+                .With("RequestId", Request_->GetRequestId());
 
             // NB: The underlying handler is not notified.
         }
 
-        void HandleError(TError error) override
+        void HandleError(TError error, const std::string& address) override
         {
-            YT_LOG_DEBUG(error, "Request attempt failed (RequestId: %v, Attempt: %v)",
-                Request_->GetRequestId(),
-                MakeFormatterWrapper([&] (auto* builder) {
+            LastAddress_ = address;
+
+            YT_TLOG_DEBUG("Request attempt failed")
+                .With("RequestId", Request_->GetRequestId())
+                .With("Attempt", MakeFormatterWrapper([&] (auto* builder) {
                     if (Config_->EnableExponentialRetryBackoffs) {
                         builder->AppendFormat("%v of %v",
                             BackoffStrategy_.GetInvocationIndex() + 1,
@@ -224,7 +227,8 @@ private:
                             CurrentAttempt_,
                             Config_->RetryAttempts);
                     }
-                }));
+                }))
+                .With(error);
 
             if (!RetryChecker_.Run(error)) {
                 ReportError(error);
@@ -248,8 +252,8 @@ private:
             const std::string& address,
             NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override
         {
-            YT_LOG_DEBUG("Request attempt succeeded (RequestId: %v)",
-                Request_->GetRequestId());
+            YT_TLOG_DEBUG("Request attempt succeeded")
+                .With("RequestId", Request_->GetRequestId());
 
             ResponseHandler_->HandleResponse(
                 std::move(message),
@@ -280,15 +284,15 @@ private:
         void ReportError(const TError& error)
         {
             auto detailedError = error
-                << UnderlyingChannel_->GetEndpointAttributes()
-                << TErrorAttribute("omitted_inner_error_count", OmittedInnerErrorCount_);
+                .With(UnderlyingChannel_->GetEndpointAttributes())
+                .With("omitted_inner_error_count", OmittedInnerErrorCount_);
             if (FirstError_) {
-                detailedError = detailedError << *FirstError_;
+                detailedError = detailedError.With(*FirstError_);
             }
             if (LastError_) {
-                detailedError = detailedError << *LastError_;
+                detailedError = detailedError.With(*LastError_);
             }
-            ResponseHandler_->HandleError(std::move(detailedError));
+            ResponseHandler_->HandleError(std::move(detailedError), LastAddress_);
         }
 
         void Retry()
@@ -323,7 +327,9 @@ private:
             }
 
             if (RequestControlThunk_->IsCanceled()) {
-                ResponseHandler_->HandleError(TError(NYT::EErrorCode::Canceled, "Request canceled"));
+                ResponseHandler_->HandleError(
+                    TError(NYT::EErrorCode::Canceled, "Request canceled"),
+                    LastAddress_);
                 return;
             }
 
@@ -332,21 +338,15 @@ private:
 
         void DoSend()
         {
-            YT_LOG_DEBUG("Request attempt started (RequestId: %v, Method: %v.%v, %v%vAttempt: %v, RequestTimeout: %v, RetryTimeout: %v)",
-                Request_->GetRequestId(),
-                Request_->GetService(),
-                Request_->GetMethod(),
-                MakeFormatterWrapper([&] (auto* builder) {
-                    if (!Request_->GetUser().empty()) {
-                        builder->AppendFormat("User: %v, ", Request_->GetUser());
-                    }
-                }),
-                MakeFormatterWrapper([&] (auto* builder) {
-                    if (!Request_->GetUserTag().empty() && Request_->GetUserTag() != Request_->GetUser()) {
-                        builder->AppendFormat("UserTag: %v, ", Request_->GetUserTag());
-                    }
-                }),
-                MakeFormatterWrapper([&] (auto* builder) {
+            YT_TLOG_DEBUG("Request attempt started")
+                .With("RequestId", Request_->GetRequestId())
+                .WithFormat("Method", "%v.%v", Request_->GetService(), Request_->GetMethod())
+                .With("User", Request_->GetUser())
+                .WithIf(
+                    !Request_->GetUserTag().empty() && Request_->GetUserTag() != Request_->GetUser(),
+                    "UserTag",
+                    Request_->GetUserTag())
+                .With("Attempt", MakeFormatterWrapper([&] (auto* builder) {
                     if (Config_->EnableExponentialRetryBackoffs) {
                         builder->AppendFormat("%v of %v",
                             BackoffStrategy_.GetInvocationIndex() + 1,
@@ -356,9 +356,9 @@ private:
                             CurrentAttempt_,
                             Config_->RetryAttempts);
                     }
-                }),
-                Options_.Timeout,
-                Config_->RetryTimeout);
+                }))
+                .With("RequestTimeout", Options_.Timeout)
+                .With("RetryTimeout", Config_->RetryTimeout);
 
             auto now = TInstant::Now();
             if (now > Deadline_) {

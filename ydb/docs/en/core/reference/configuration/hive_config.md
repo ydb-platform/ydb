@@ -1,6 +1,6 @@
 # hive_config
 
-[Hive](../../concepts/glossary.md#hive) is a YDB component responsible for launching [tablets](../../concepts/glossary.md#tablet). In various situations and under different load patterns, you might need to configure its behavior. Hive behavior is configured in the `hive_config` section of the {{ ydb-short-name }} cluster configuration. Some configuration options are also available for editing through the [Hive web-viewer](../embedded-ui/hive.md#settings) interface. Settings configured through the interface take priority over those specified in the configuration. Below are all available options, with the corresponding option name in the interface indicated if the option can be edited through the interface.
+[Hive](../../concepts/glossary.md#hive) is a YDB component responsible for launching [tablets](../../concepts/glossary.md#tablet). In various situations and under different load patterns, you might need to configure its behavior. Hive behavior is configured in the `hive_config` section of the {{ ydb-short-name }} cluster configuration. Some configuration options are also available for editing through the [Hive web-viewer](../ydb-ui/hive.md#settings) interface. Settings configured through the interface take priority over those specified in the configuration. Below are all available options, with the corresponding option name in the interface indicated if the option can be edited through the interface.
 
 ## Tablet Boot Options {#boot}
 
@@ -29,6 +29,7 @@ If one node starts tablets slightly slower than others when starting a large num
 || `default_tablet_limit` | — | Nested section | Limits on starting tablets of various types on a single node. Specified as a list format where each element has `type` and `max_count` fields. | Empty section ||
 || `default_tablet_preference` | — | Nested section | Priorities for selecting data centers for starting tablets of various types. For each tablet type, you can specify multiple data center groups. Data centers within the same group will have equal priority, with earlier groups having priority over subsequent ones. Example format:
 
+
 ```yaml
 default_tablet_preference:
   - type: Coordinator
@@ -39,6 +40,7 @@ default_tablet_preference:
       - data_centers_group:
         - "dc-3"
 ```
+
 
 | Empty section ||
 || `system_category_id` | — | Integer | When specifying any number other than 0, all coordinators and mediators are launched in the same data center whenever possible. | 1 ||
@@ -51,6 +53,7 @@ default_tablet_preference:
 In the `default_tablet_limit` and `default_tablet_preference` subsections, you need to specify tablet types. Exact tablet type names are specified in the [glossary](../../concepts/glossary.md#tablet-types).
 
 {% endnote %}
+
 
 ```yaml
 hive_config:
@@ -71,6 +74,7 @@ hive_config:
         - data_centers_group:
           - "dc-3"
 ```
+
 
 ## Auto-Balancing Options {#autobalancing}
 
@@ -103,12 +107,12 @@ These options control the [auto-balancing](../../contributor/hive.md#autobalanci
 - `HIVE_TABLET_BALANCE_STRATEGY_RANDOM` — select random tablet.
 
 | `HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM` ||
-|| `min_period_between_balance` | MinPeriodBetweenBalance | Real number seconds | Minimum time period between two auto-balancing iterations. Does not apply to emergency balancing. | 0.2 ||
+|| `min_period_between_balance` | MinPeriodBetweenBalance | Real number of seconds | Minimum time period between two auto-balancing iterations. Does not apply to emergency balancing. | 0.2 ||
 || `balancer_inflight` | BalancerInflight | Integer | Number of tablets simultaneously restarting during auto-balancing process. Does not apply to emergency balancing. | 1 ||
 || `max_movements_on_auto_balancer` | MaxMovementsOnAutoBalancer | Integer | Number of tablet movements per auto-balancing iteration. Does not apply to emergency balancing. | 1 ||
 || `continue_auto_balancer` | ContinueAutoBalancer | true/false | When enabled, the next balancing iteration starts without waiting for the end of `resource_change_reaction_period`. | true ||
-|| `min_period_between_emergency_balance` | MinPeriodBetweenEmergencyBalance | Real number seconds | Similar to `min_period_between_balance`, but for emergency balancing. | 0.1 ||
-|| `emergency_balancer_inflight` | EmergencyBalancerInfligh | Integer | Similar to `balancer_inflight`, but for emergency balancing. | 1 ||
+|| `min_period_between_emergency_balance` | MinPeriodBetweenEmergencyBalance | Real number of seconds | Similar to `min_period_between_balance`, but for emergency balancing. | 0.1 ||
+|| `emergency_balancer_inflight` | EmergencyBalancerInflight | Integer | Similar to `balancer_inflight`, but for emergency balancing. | 1 ||
 || `max_movements_on_emergency_balancer` | MaxMovementsOnEmergencyBalancer | Integer | Similar to `max_movements_on_auto_balancer`, but for emergency balancing. | 2 ||
 || `continue_emergency_balancer` | ContinueEmergencyBalancer | true/false | Similar to `continue_auto_balancer`, but for emergency balancing. | true ||
 || `check_move_expediency` | CheckMoveExpediency | true/false | Check the expediency of tablet movements. If auto-balancing leads to increased Hive CPU resource consumption, you can disable this option. | true ||
@@ -121,6 +125,7 @@ These options control the [auto-balancing](../../contributor/hive.md#autobalanci
 
 With this configuration file, you can completely disable all types of tablet auto-balancing between nodes.
 
+
 ```yaml
 hive_config:
   min_cpuscatter_to_balance: 1.0
@@ -131,7 +136,9 @@ hive_config:
   object_imbalance_to_balance: 1.0
 ```
 
+
 With this configuration file, you can disable all types of auto-balancing between nodes for tablets participating in transaction distribution, i.e., [coordinators](../../concepts/glossary.md#coordinator) and [mediators](../../concepts/glossary.md#mediator). Exact tablet type names are specified in the [glossary](../../concepts/glossary.md#tablet-types).
+
 
 ```yaml
 hive_config:
@@ -139,6 +146,7 @@ hive_config:
     - Coordinator
     - Mediator
 ```
+
 
 When using Hive UI for the same effect, you need to enter `Coordinator;Mediator` in the input field for the BalancerIgnoreTabletTypes setting.
 
@@ -189,13 +197,12 @@ This table contains advanced settings that in most cases do not require modifica
 - `HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P` — select random group among 7% of groups with lowest consumption;
 - `HIVE_STORAGE_SELECT_STRATEGY_RANDOM` — select random group;
 - `HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN` — select group within storage pool using [Round-robin](https://en.wikipedia.org/wiki/Round-robin_scheduling) principle.
-| `HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM` ||
-|| `min_period_between_reassign` | MinPeriodBetweenReassign | Integer seconds | Minimum time period between storage group reassignments for channels of one tablet. | 300 ||
-|| `storage_pool_fresh_period` | StoragePoolFreshPeriod | Integer milliseconds | Frequency of updating storage pool information. | 60000 ||
-|| `space_usage_penalty_threshold` | SpaceUsagePenaltyThreshold | Real number | Minimum ratio of free space in target group to free space in source group, at which the target group will be penalized by applying a multiplicative penalty to the weight when moving a channel. | 1.1 ||
-|| `space_usage_penalty` | SpaceUsagePenalty | Real number | Penalty factor for the penalization described above. | 0.2 ||
-|| `channel_balance_strategy` | ChannelBalanceStrategy | Enumeration | Strategy for selecting channel for reassignment during channel balancing. Possible values:
-
+  | `HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM` ||
+  || `min_period_between_reassign` | MinPeriodBetweenReassign | Integer seconds | Minimum time period between storage group reassignments for channels of one tablet. | 300 ||
+  || `storage_pool_fresh_period` | StoragePoolFreshPeriod | Integer milliseconds | Frequency of updating storage pool information. | 60000 ||
+  || `space_usage_penalty_threshold` | SpaceUsagePenaltyThreshold | Real number | Minimum ratio of free space in target group to free space in source group, at which the target group will be penalized by applying a multiplicative penalty to the weight when moving a channel. | 1.1 ||
+  || `space_usage_penalty` | SpaceUsagePenalty | Real number | Penalty factor for the penalization described above. | 0.2 ||
+  || `channel_balance_strategy` | ChannelBalanceStrategy | Enumeration | Strategy for selecting channel for reassignment during channel balancing. Possible values:
 - `HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM` — weighted random selection based on consumption;
 - `HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST` — select channel with maximum consumption;
 - `HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM` — select random channel.

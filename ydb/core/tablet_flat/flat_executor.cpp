@@ -31,6 +31,7 @@
 #include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -40,6 +41,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -133,6 +135,13 @@ private:
     bool Active = false;
 };
 
+static TActorActivityType DetectOwnerActivityType(NFlatExecutorSetup::ITablet* owner) {
+    if (auto* actor = dynamic_cast<IActor*>(owner)) {
+        return actor->GetActivityType();
+    }
+    return TActorActivityType();
+}
+
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -140,6 +149,7 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
+    , OwnerActivityType(DetectOwnerActivityType(owner))
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
@@ -251,7 +261,7 @@ void TExecutor::Broken(EBrokenReason reason) {
     if (Owner) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
         Owner->Detach(OwnerCtx());
     }
 
@@ -866,7 +876,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     }
 
     if (!Counters) {
@@ -957,7 +967,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 void TExecutor::DetachTablet() {
     ForceSendCounters();
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     return PassAway();
 }
 
@@ -2025,6 +2035,11 @@ bool TExecutor::CancelTransaction(ui64 id) {
 
 void TExecutor::ExecuteTransaction(TSeat* seat) {
     TActiveTransactionZone activeTransaction(this);
+    // Attribute allocations to the owner tablet's activity type when known.
+    std::optional<NProfiling::TMemoryTagScope> ownerScope;
+    if (OwnerActivityType != TActorActivityType()) {
+        ownerScope.emplace(OwnerActivityType.GetIndex());
+    }
     ++seat->Retries;
 
     THPTimer cpuTimer;
@@ -4144,7 +4159,8 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4173,7 +4189,8 @@ void TExecutor::ForceSendCounters() {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId));
     }
 }
 
@@ -5067,6 +5084,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     }
 
+    cfg.DataKind = DataKindByTabletType(Owner->TabletType());
+
     TLogoBlobID mask(Owner->TabletID(), Generation(), step, Max<ui8>(), 0, 0);
 
     if (auto logl = Logger->Log(ELnLev::Info)) {
@@ -5236,6 +5255,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();
     }
+
+    comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);
@@ -5568,7 +5589,9 @@ void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext
     }
     MoveDataVacuumInProgress = false;
     for (const auto& actor : MoveDataSubscribers) {
-        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(
+            TabletId(),
+            NKikimrTabletBase::TEvMoveDataResponse::Success));
     }
     MoveDataSubscribers.clear();
 }

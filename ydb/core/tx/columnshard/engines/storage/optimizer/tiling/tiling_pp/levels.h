@@ -45,6 +45,25 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
             AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
             Candidates.insert(p);
         }
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(CandidateIds.size());
+    }
+
+    void AddCandidatePortion(typename TPortion::TPtr p) {
+        if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
+            this->Counters.Portions->AddPortion(p);
+        }
+        const ui64 portionId = p->GetPortionId();
+        const ui64 measure = Measure(p);
+        this->Counters.Portions->AddWidth(measure);
+        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
+        if (!Portions.size()) {
+            AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
+            Portions.insert(p);
+        } else {
+            AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
+            Candidates.insert(p);
+        }
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
@@ -62,11 +81,46 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         } else {
             AFL_VERIFY(false)("portion_id", portionId);
         }
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
     TOptimizationPriority BuildPriority(ui64 locked) const {
         return TOptimizationPriority::Normalize(1, Settings.CandidatePortionsOverload, CandidateIds.size() - locked);
+    }
+
+    std::optional<typename TPortion::TConstPtr> NearestNeighbour(
+        typename TPortion::TConstPtr candidate, TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+        const auto cmp = TPortionByIndexKeyEndComparator<TKey, TPortion>();
+
+        typename TPortion::TConstPtr succ = nullptr;
+        if (auto sIt = Portions.upper_bound(candidate); sIt != Portions.end()) {
+            succ = *sIt;
+        }
+        auto selfCand = Candidates.find(candidate);
+        if (selfCand != Candidates.end()) {
+            if (auto nxt = std::next(selfCand); nxt != Candidates.end() && (!succ || cmp(*nxt, succ))) {
+                succ = *nxt;
+            }
+        }
+
+        typename TPortion::TConstPtr pred = nullptr;
+        if (auto sIt = Portions.lower_bound(candidate); sIt != Portions.begin()) {
+            pred = *std::prev(sIt);
+        }
+        if (selfCand != Candidates.end() && selfCand != Candidates.begin()) {
+            if (auto prv = std::prev(selfCand); !pred || cmp(pred, *prv)) {
+                pred = *prv;
+            }
+        }
+
+        if (succ && !isLocked(succ)) {
+            return succ;
+        }
+        if (pred && !isLocked(pred)) {
+            return pred;
+        }
+        return std::nullopt;
     }
 
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
@@ -94,9 +148,18 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
                     break;
                 }
             }
-            if (success) {
-                return CompactionTask<TKey, TPortion>{ result, 1, BuildPriority(locked) };
+            if (!success) {
+                continue;
             }
+            if (result.size() == 1) {
+                if (std::optional<typename TPortion::TConstPtr> neighbour = NearestNeighbour(candidate, isLocked);
+                    neighbour && !isLocked(*neighbour)) {
+                    result.push_back(*neighbour);
+                } else {
+                    continue;
+                }
+            }
+            return CompactionTask<TKey, TPortion>{ result, 1, BuildPriority(locked) };
         }
         return std::nullopt;
     }
@@ -142,16 +205,22 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
     void DoAddPortion(typename TPortion::TPtr p) override {
         AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         AFL_VERIFY(Portions.erase(p))("portion_id", p->GetPortionId());
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
     TOptimizationPriority BuildPriority(ui64 locked) const {
         return TOptimizationPriority::Normalize(Settings.Trigger.Portions, Settings.OverloadPortions, Portions.size() - locked);
+    }
+
+    bool IsBelowThreshold() const {
+        return Portions.size() < Settings.Trigger.Portions;
     }
 
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
@@ -174,7 +243,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
         if (result.Portions.size() > 1) {
             result.Priority = BuildPriority(locked);
-            return { result };
+            return result;
         }
         return {};
     }
@@ -226,16 +295,16 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         const ui64 id = p->GetPortionId();
         PortionById.emplace(id, p);
         Intersections.Add(id, p->IndexKeyStart(), p->IndexKeyEnd());
-        const ui64 maxCount = Intersections.GetMaxCount();
-        this->Counters.Portions->SetHeight(maxCount);
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         const ui64 id = p->GetPortionId();
         Intersections.Remove(id);
         AFL_VERIFY(PortionById.erase(id))("portion_id", id);
-        const ui64 maxCount = Intersections.GetMaxCount();
-        this->Counters.Portions->SetHeight(maxCount);
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
     }
 
     TOptimizationPriority BuildPriority() const {
@@ -257,12 +326,13 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
             }
             return true;
         });
-        if (result.Portions.size() < 2) {
-            return std::nullopt;
+        if (result.Portions.size() > 1) {
+            result.TargetLevel = LevelIdx;
+            result.Priority = BuildPriority();
+            return result;
         }
-        result.TargetLevel = LevelIdx;
-        result.Priority = BuildPriority();
-        return result;
+
+        return {};
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

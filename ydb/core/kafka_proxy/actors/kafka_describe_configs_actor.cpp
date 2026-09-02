@@ -4,6 +4,7 @@
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -75,7 +76,7 @@ void TKafkaDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx) {
 };
 
 void TKafkaDescribeTopicActor::HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1)("result_set_size", ev->Get()->Request.Get()->ResultSet.size())("database", Database)("path", TopicPath); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
@@ -130,7 +131,7 @@ void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         ctx.Register(new TKafkaDescribeTopicActor(
             SelfId(),
-            Context->UserToken,
+            Context->Token.UserToken,
             resource.ResourceName.value(),
             Context->DatabasePath
         ));
@@ -182,7 +183,7 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
         response->Results.emplace_back(std::move(singleConfig));
         return;
     }
-    Y_ENSURE(ev != nullptr);
+    AFL_ENSURE(ev != nullptr)("database", Context->DatabasePath);
     AddConfigEntry(singleConfig, "compression.type", "producer", EKafkaConfigType::STRING);
 
     // these are default

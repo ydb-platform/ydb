@@ -447,8 +447,10 @@ struct TActorBenchmark {
         ui64 MaxPairSentEvents;
     };
 
-    static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType, TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1) {
+    static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType,
+            TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1, bool enableWaker = false) {
         THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, false);
+        setup->CpuManager.Basic.back().EnableWaker = enableWaker;
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -720,14 +722,14 @@ struct TActorBenchmark {
         }
     }
 
-    static void RunSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &inFlights, TDuration subtestDuration) {
+    static void RunSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &inFlights, TDuration subtestDuration, ui32 attempts = 3) {
         Cout << "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;
         for (ui32 threads : threadsList) {
             for (ui32 actorPairs : actorPairsList) {
                 for (ui32 inFlight : inFlights) {
                     auto stats = CountStats([threads, actorPairs, inFlight, subtestDuration] {
                         return BenchContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, subtestDuration, inFlight);
-                    }, 3);
+                    }, attempts);
                     double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
                     ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
                     Cout << threads << "," << actorPairs << "," << inFlight << "," << eventsPerSecond << "," << elapsedSeconds << "," << stats.MinPairSentEvents.Min << "," << stats.MaxPairSentEvents.Max << Endl;
@@ -737,14 +739,14 @@ struct TActorBenchmark {
     }
 
 
-    static void RunStarSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &starsList, TDuration duration = TDuration::Seconds(1)) {
+    static void RunStarSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &starsList, TDuration duration = TDuration::Seconds(1), ui32 attempts = 3) {
         Cout << "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;
         for (ui32 threads : threadsList) {
             for (ui32 actorPairs : actorPairsList) {
                 for (ui32 stars : starsList) {
                     auto stats = CountStats([threads, actorPairs, stars, duration] {
                         return BenchStarContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, duration, stars);
-                    }, 3);
+                    }, attempts);
                     double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
                     ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
                     Cout << threads << "," << actorPairs << "," << stars << "," << eventsPerSecond << "," << elapsedSeconds << "," << stats.MinPairSentEvents.Min << "," << stats.MaxPairSentEvents.Max << Endl;

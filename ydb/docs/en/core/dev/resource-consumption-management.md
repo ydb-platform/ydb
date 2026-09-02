@@ -232,17 +232,13 @@ A weight of 80 for `the_ceo` effectively means that when competing for resources
 
 If necessary, the user can explicitly specify in which pool a given query should be executed. Currently, this can be done as follows:
 
-- **Embedded UI** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
+- **{{ ydb-ui-name }}** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
 - **YDB CLI** — in the [`ydb sql`](../reference/ydb-cli/sql.md) command with the `--resource-pool` parameter, for example, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — using the [command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
 - **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
 - **YDB GO SDK** — in the query launch settings `ExecuteOption` via the [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool) call.
-
-{% note warning %}
-
-The current version of **YDB Python SDK** does not allow specifying the resource pool in which the query should be executed.
-
-{% endnote %}
+- **YDB Java SDK** — in the query launch settings `ExecuteQuerySettings` via the [withResourcePool](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.3.12/query/src/main/java/tech/ydb/query/settings/ExecuteQuerySettings.java#L65) call, available since version 2.3.12.
+- **YDB Python SDK** — via the [pool_id](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.2/ydb/query/session.py#L478) parameter of the `QuerySession.execute()`, `QueryTxContext.execute()` and `QuerySessionPool.execute_with_retries()` methods, available since version 3.31.2.
 
 ## Diagnostics
 
@@ -303,11 +299,11 @@ The following query outputs information about all active queries in the system:
 
 ```yql
 select
-    Query,          -- Запрос
-    WmPoolId,       -- Идентификатор пула
-    WmState,        -- Статус запроса в WM
-    WmEnterTime,    -- Время, когда запрос перешел в статус PENDING или DELAYED
-    WmExitTime      -- Время, когда запрос передан на выполнение
+    Query,          -- Query
+    WmPoolId,       -- Pool ID
+    WmState,        -- Query status in WM
+    WmEnterTime,    -- Time when the query transitioned to PENDING or DELAYED status
+    WmExitTime      -- Time when the query was submitted for execution
 from `.sys/query_sessions`
 where State = 'EXECUTING'
 ```
@@ -319,7 +315,7 @@ Information about resource pool metrics can be found in the [metrics reference](
 
 ### System views
 
-Information about system views related to resource pools and resource pool classifiers can be found on the [{#T}](system-views.md#resource_pools) page.
+Information about system views related to resource pools and resource pool classifiers can be found on the [Resource pool information](system-views.md#resource_pools) page.
 
 ## See also
 

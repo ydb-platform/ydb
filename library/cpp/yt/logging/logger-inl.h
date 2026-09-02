@@ -23,10 +23,18 @@ inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& anchor) const
         anchor.CurrentVersion == Category_->ActualVersion->load(std::memory_order::relaxed);
 }
 
-template <class... TArgs>
-void TLogger::AddTag(TFormatString<TArgs...> format, TArgs&&... args)
+template <class TValue>
+TLogger& TLogger::AddTag(TLoggingTagKey key, const TValue& value)
 {
-    AddRawTag(Format(format, std::forward<TArgs>(args)...));
+    GetMutableCoWState()->Tags.Add(key, value);
+    return *this;
+}
+
+template <class... TArgs>
+TLogger& TLogger::AddTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
+{
+    GetMutableCoWState()->Tags.AddFormat(key, format, std::forward<TArgs>(args)...);
+    return *this;
 }
 
 template <class TType>
@@ -36,18 +44,33 @@ void TLogger::AddStructuredTag(TStringBuf key, TType value)
     state->StructuredTags.emplace_back(key, NYson::ConvertToYsonString(value));
 }
 
-template <class... TArgs>
-TLogger TLogger::WithTag(TFormatString<TArgs...> format, TArgs&&... args) const &
+template <class TValue>
+TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value) const &
 {
     auto result = *this;
-    result.AddTag(format, std::forward<TArgs>(args)...);
+    result.AddTag(key, value);
+    return result;
+}
+
+template <class TValue>
+TLogger TLogger::WithTag(TLoggingTagKey key, const TValue& value) &&
+{
+    AddTag(key, value);
+    return std::move(*this);
+}
+
+template <class... TArgs>
+TLogger TLogger::WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &
+{
+    auto result = *this;
+    result.AddTagFormat(key, format, std::forward<TArgs>(args)...);
     return result;
 }
 
 template <class... TArgs>
-TLogger TLogger::WithTag(TFormatString<TArgs...> format, TArgs&&... args) &&
+TLogger TLogger::WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) &&
 {
-    AddTag(format, std::forward<TArgs>(args)...);
+    AddTagFormat(key, format, std::forward<TArgs>(args)...);
     return std::move(*this);
 }
 
@@ -114,16 +137,28 @@ inline bool HasMessageTags(
     const TLoggingContext& loggingContext,
     const TLogger& logger)
 {
-    if (!logger.GetTag().empty()) {
+    if (!logger.GetTags().IsEmpty()) {
         return true;
     }
-    if (!loggingContext.TraceLoggingTag.empty()) {
+    if (!loggingContext.TraceLoggingTags.Underlying().empty()) {
         return true;
     }
-    if (!GetThreadMessageTag().empty()) {
+    if (!GetThreadMessageTags().IsEmpty()) {
         return true;
     }
     return false;
+}
+
+//! Splices the contextual tag sections into #writer, in the order they are rendered by
+//! #AppendMessageTags. Must precede any well-known tag.
+inline void AppendContextualTags(
+    TTaggedPayloadWriter* writer,
+    const TLoggingContext& loggingContext,
+    const TLogger& logger)
+{
+    writer->AppendTags(AsView(logger.GetTags().GetPayload()));
+    writer->AppendTags(loggingContext.TraceLoggingTags);
+    writer->AppendTags(AsView(GetThreadMessageTags().GetPayload()));
 }
 
 inline void AppendMessageTags(
@@ -132,24 +167,19 @@ inline void AppendMessageTags(
     const TLogger& logger)
 {
     bool printComma = false;
-    if (const auto& loggerTag = logger.GetTag(); !loggerTag.empty()) {
-        builder->AppendString(loggerTag);
-        printComma = true;
-    }
-    if (const auto& traceLoggingTag = loggingContext.TraceLoggingTag; !traceLoggingTag.empty()) {
+    auto append = [&] (TLoggingTagListPayloadView tags) {
+        if (tags.Underlying().empty()) {
+            return;
+        }
         if (printComma) {
             builder->AppendString(", "_sb);
         }
-        builder->AppendString(traceLoggingTag);
+        FormatValue(builder, tags, "v"_sb);
         printComma = true;
-    }
-    if (const auto& threadMessageTag = GetThreadMessageTag(); !threadMessageTag.empty()) {
-        if (printComma) {
-            builder->AppendString(", "_sb);
-        }
-        builder->AppendString(threadMessageTag);
-        printComma = true;
-    }
+    };
+    append(AsView(logger.GetTags().GetPayload()));
+    append(loggingContext.TraceLoggingTags);
+    append(AsView(GetThreadMessageTags().GetPayload()));
 }
 
 inline void AppendLogMessage(
@@ -336,12 +366,17 @@ inline void LogEventImpl(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! References the per-call-site static anchor and its one-shot registration flag.
-//! Produced by the lambda embedded in the fluent |YT_TLOG_*| macros.
+//! Identifies a call site.
 struct TStaticAnchorRef
 {
     TLoggingAnchor* Anchor;
     std::atomic<bool>* Registered;
+    ::TSourceLocation SourceLocation;
+};
+
+struct TDynamicAnchorRef
+{
+    TLoggingAnchor* Anchor;
 };
 
 class TWellKnownTaggedLoggingGuard;
@@ -360,17 +395,32 @@ public:
     TTaggedLoggingGuard(
         const TLogger& logger,
         ELogLevel level,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message)
         : TTaggedLoggingGuard(
             logger,
             level,
-            sourceLocation,
             anchorRef,
             message,
             /*alwaysBuildMessage*/ false)
     { }
+
+    TTaggedLoggingGuard(
+        const TLogger& logger,
+        ELogLevel level,
+        ::TSourceLocation sourceLocation,
+        TDynamicAnchorRef anchorRef,
+        TStringBuf message)
+        : Logger_(logger)
+        , SourceLocation_(sourceLocation)
+        , Anchor_(anchorRef.Anchor)
+    {
+        if (!Logger_.IsAnchorUpToDate(*Anchor_)) [[unlikely]] {
+            Logger_.UpdateDynamicAnchor(Anchor_);
+        }
+
+        Initialize(level, message, /*alwaysBuildMessage*/ false);
+    }
 
     TTaggedLoggingGuard(const TTaggedLoggingGuard&) = delete;
     TTaggedLoggingGuard& operator=(const TTaggedLoggingGuard&) = delete;
@@ -390,36 +440,46 @@ public:
     }
 
     template <class TValue>
-    TTaggedLoggingGuard& With(TStringBuf tag, const TValue& value) &
+    TTaggedLoggingGuard& With(TLoggingTagKey tag, const TValue& value) &
     {
         return DoWith(tag, value, "v"_sb);
     }
 
+    //! Attaches the tag only when #condition holds, for fields a message omits rather
+    //! than renders empty. NB: #value is evaluated either way.
     template <class TValue>
-    TTaggedLoggingGuard& With(TStringBuf tag, const TValue& value, TLoggingTagSpec spec) &
+    TTaggedLoggingGuard& WithIf(bool condition, TLoggingTagKey tag, const TValue& value) &
     {
-        return DoWith(tag, value, spec.Get());
+        return condition ? DoWith(tag, value, "v"_sb) : *this;
     }
 
     //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
     template <class... TArgs>
-    TTaggedLoggingGuard& WithFormat(TStringBuf tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    TTaggedLoggingGuard& WithFormat(TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
     {
-        Format(Writer_.BeginTag(tag), format, std::forward<TArgs>(args)...);
+        Format(Writer_.BeginTag(tag.Get()), format, std::forward<TArgs>(args)...);
         Writer_.EndTag();
         return *this;
+    }
+
+    //! Attaches a composed tag only when #condition holds. NB: #args are evaluated either way.
+    template <class... TArgs>
+    TTaggedLoggingGuard& WithFormatIf(bool condition, TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    {
+        return condition
+            ? WithFormat(tag, format, std::forward<TArgs>(args)...)
+            : *this;
     }
 
     //! Splices a pre-built list of keyed tags, preserving them as individual tags. Chosen
     //! over the well-known single-argument |With| below by exact match.
     TTaggedLoggingGuard& With(const TLoggingTagList& tags) &
     {
-        Writer_.AppendTags(tags.GetPayload());
+        Writer_.AppendTags(AsView(tags.GetPayload()));
         return *this;
     }
 
-    //! Attaches a well-known tag whose key is resolved from #value's type via the
-    //! |GetWellKnownLoggingTag| ADL point (the type must opt in, e.g. errors).
+    //! Attaches a well-known tag whose key comes from #TWellKnownLoggingTagTraits.
     //!
     //! Returns a #TWellKnownTaggedLoggingGuard, which exposes only further well-known
     //! tags: the payload contract requires well-known tags to come last (so
@@ -430,16 +490,9 @@ public:
 
     ~TTaggedLoggingGuard()
     {
-        if (!Enabled_) {
-            return;
+        if (Enabled_) {
+            Emit(EffectiveLevel_, Writer_.Finish());
         }
-        LogEventImpl(
-            LoggingContext_,
-            Logger_,
-            EffectiveLevel_,
-            SourceLocation_,
-            Anchor_,
-            Writer_.Finish());
     }
 
 protected:
@@ -452,24 +505,36 @@ protected:
     TLoggingContext LoggingContext_;
     TTaggedPayloadWriter Writer_;
 
+    //! Emits #payload, disarming the destructor so the event is logged exactly once.
+    void Emit(ELogLevel level, TTaggedLogEventPayload&& payload)
+    {
+        Enabled_ = false;
+        LogEventImpl(LoggingContext_, Logger_, level, SourceLocation_, Anchor_, std::move(payload));
+    }
+
     //! Shared constructor. When #alwaysBuildMessage is set the payload message is built
     //! even if the level is disabled (so a terminal guard can still recover it); #Enabled_
     //! continues to gate whether the destructor emits the event.
     TTaggedLoggingGuard(
         const TLogger& logger,
         ELogLevel level,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message,
         bool alwaysBuildMessage)
         : Logger_(logger)
-        , SourceLocation_(sourceLocation)
+        , SourceLocation_(anchorRef.SourceLocation)
         , Anchor_(anchorRef.Anchor)
     {
         if (!Logger_.IsAnchorUpToDate(*Anchor_)) [[unlikely]] {
-            Logger_.UpdateStaticAnchor(Anchor_, anchorRef.Registered, sourceLocation, message);
+            Logger_.UpdateStaticAnchor(Anchor_, anchorRef.Registered, SourceLocation_, message);
         }
 
+        Initialize(level, message, alwaysBuildMessage);
+    }
+
+private:
+    void Initialize(ELogLevel level, TStringBuf message, bool alwaysBuildMessage)
+    {
         EffectiveLevel_ = TLogger::GetEffectiveLoggingLevel(level, *Anchor_);
         Enabled_ = Logger_.IsLevelEnabled(EffectiveLevel_);
         if (!Enabled_ && !alwaysBuildMessage) {
@@ -478,22 +543,18 @@ protected:
 
         LoggingContext_ = GetLoggingContext();
 
-        auto* builder = Writer_.BeginMessage();
-        builder->AppendString(message);
-        if (HasMessageTags(LoggingContext_, Logger_)) {
-            builder->AppendString(" ("_sb);
-            AppendMessageTags(builder, LoggingContext_, Logger_);
-            builder->AppendChar(')');
-        }
+        Writer_.BeginMessage()->AppendString(message);
         Writer_.EndMessage();
+        // Contextual tags stay structured here, rather than being folded into the message
+        // text as the legacy YT_LOG_* path has to do.
+        AppendContextualTags(&Writer_, LoggingContext_, Logger_);
     }
 
-private:
     template <class TValue>
-    TTaggedLoggingGuard& DoWith(TStringBuf tag, const TValue& value, TStringBuf spec) &
+    TTaggedLoggingGuard& DoWith(TLoggingTagKey tag, const TValue& value, TStringBuf spec) &
     {
         // Format the value straight into the payload buffer; no temporary.
-        FormatValue(Writer_.BeginTag(tag), value, spec);
+        FormatValue(Writer_.BeginTag(tag.Get()), value, spec);
         Writer_.EndTag();
         return *this;
     }
@@ -523,62 +584,48 @@ private:
 template <class TValue>
 TWellKnownTaggedLoggingGuard TTaggedLoggingGuard::With(const TValue& value) &
 {
-    FormatValue(Writer_.BeginWellKnownTag(GetWellKnownLoggingTag(value)), value, "v"_sb);
+    FormatValue(Writer_.BeginWellKnownTag(TWellKnownLoggingTagTraits<TValue>::Key), value, "v"_sb);
     Writer_.EndTag();
     return TWellKnownTaggedLoggingGuard(*this);
 }
 
 //! Terminal guard for the fluent |YT_TLOG_FATAL| macros. Builds the message
 //! unconditionally and, once the |.With| chain completes, emits the event at |Fatal|
-//! level -- which aborts the process. The enclosing |for| invokes #Commit in its step.
+//! level -- which aborts the process. The enclosing |for| invokes #Commit in its step;
+//! since #Commit is |[[noreturn]]|, the body runs a single time.
 class TTaggedFatalLoggingGuard
     : public TTaggedLoggingGuard
 {
 public:
     TTaggedFatalLoggingGuard(
         const TLogger& logger,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message)
-        : TTaggedLoggingGuard(logger, ELogLevel::Fatal, sourceLocation, anchorRef, message, /*alwaysBuildMessage*/ true)
+        : TTaggedLoggingGuard(logger, ELogLevel::Fatal, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
-
-    //! Returns true exactly once, so the enclosing |for| runs the |.With| chain a single
-    //! time before its step expression commits the event.
-    bool TryEnter()
-    {
-        bool pending = Pending_;
-        Pending_ = false;
-        return pending;
-    }
 
     //! Emits the event at |Fatal| level; the log manager aborts the process.
     [[noreturn]] void Commit() &
     {
-        Enabled_ = false; // The event is emitted here, not from the base destructor.
-        LogEventImpl(LoggingContext_, Logger_, ELogLevel::Fatal, SourceLocation_, Anchor_, Writer_.Finish());
+        Emit(ELogLevel::Fatal, Writer_.Finish());
         Y_UNREACHABLE();
     }
-
-private:
-    bool Pending_ = true;
 };
 
 //! Terminal guard for the fluent |YT_TLOG_ALERT_AND_THROW| macros. Builds the message
 //! unconditionally; once the |.With| chain completes, #Commit emits the event at |Alert|
-//! level (when enabled) and returns the message so the macro can attach it to the thrown
-//! error. The throw lives in the macro -- the logging library must not depend on the
-//! error library, and a destructor must not throw.
+//! level (when enabled) and returns it rendered -- tags included -- for the macro to
+//! attach to the thrown error. The throw lives in the macro -- the logging library must
+//! not depend on the error library, and a destructor must not throw.
 class TTaggedThrowingLoggingGuard
     : public TTaggedLoggingGuard
 {
 public:
     TTaggedThrowingLoggingGuard(
         const TLogger& logger,
-        ::TSourceLocation sourceLocation,
         TStaticAnchorRef anchorRef,
         TStringBuf message)
-        : TTaggedLoggingGuard(logger, ELogLevel::Alert, sourceLocation, anchorRef, message, /*alwaysBuildMessage*/ true)
+        : TTaggedLoggingGuard(logger, ELogLevel::Alert, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
     //! Returns true exactly once, so the enclosing |for| runs the |.With| chain a single
@@ -590,14 +637,13 @@ public:
         return pending;
     }
 
-    //! Emits the alert event (when enabled) and returns its message for the error payload.
+    //! Emits the alert event (when enabled) and returns it rendered, tags included.
     std::string Commit() &
     {
         auto payload = Writer_.Finish();
-        std::string message(GetMessageFromTaggedPayload(payload));
+        auto message = FormatTaggedPayload(payload);
         if (Enabled_) {
-            Enabled_ = false; // The event is emitted here, not from the base destructor.
-            LogEventImpl(LoggingContext_, Logger_, EffectiveLevel_, SourceLocation_, Anchor_, std::move(payload));
+            Emit(EffectiveLevel_, std::move(payload));
         }
         return message;
     }
@@ -618,7 +664,19 @@ public:
     }
 
     template <class... TArgs>
+    TNullTaggedLoggingGuard& WithIf(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
     TNullTaggedLoggingGuard& WithFormat(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
+    TNullTaggedLoggingGuard& WithFormatIf(TArgs&&...)
     {
         return *this;
     }

@@ -1135,11 +1135,14 @@ TNodePtr BuildIntoTableOptions(TPosition pos, const TVector<TString>& eraseColum
 
 class TInputTablesNode final: public TAstListNode {
 public:
-    TInputTablesNode(TPosition pos, TTableList tables, bool inSubquery, TScopedStatePtr scoped)
+    TInputTablesNode(
+        TPosition pos, TTableList tables, bool inSubquery, TScopedStatePtr scoped,
+        bool emitToCurrentBlock)
         : TAstListNode(pos)
         , Tables_(std::move(tables))
         , InSubquery_(inSubquery)
         , Scoped_(std::move(scoped))
+        , EmitToCurrentBlock_(emitToCurrentBlock)
     {
     }
 
@@ -1156,6 +1159,7 @@ public:
             if (!keys || !keys->Init(ctx, src)) {
                 return false;
             }
+
             auto fields = Y("Void");
             auto source = Y("DataSource", BuildQuotedAtom(Pos_, tr.Service), Scoped_->WrapCluster(tr.Cluster, ctx));
             auto options = tr.Options ? Q(tr.Options) : Q(Y());
@@ -1172,7 +1176,19 @@ public:
 
             Add(Y("let", tr.RefName, Y(TString(RightName), "x")));
         }
-        return TAstListNode::DoInit(ctx, src);
+
+        if (!TAstListNode::DoInit(ctx, src)) {
+            return false;
+        }
+
+        if (EmitToCurrentBlock_) {
+            TBlocks& blocks = ctx.GetCurrentBlocks();
+            for (const auto& node : Nodes_) {
+                blocks.emplace_back(node);
+            }
+        }
+
+        return true;
     }
 
     TPtr DoClone() const final {
@@ -1183,10 +1199,14 @@ private:
     TTableList Tables_;
     const bool InSubquery_;
     TScopedStatePtr Scoped_;
+    const bool EmitToCurrentBlock_;
 };
 
-TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped) {
-    return new TInputTablesNode(pos, tables, inSubquery, scoped);
+TNodePtr BuildInputTables(
+    TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped,
+    bool emitToCurrentBlock)
+{
+    return new TInputTablesNode(pos, tables, inSubquery, scoped, emitToCurrentBlock);
 }
 
 class TCreateTableNode final: public TAstListNode {
@@ -1985,6 +2005,11 @@ public:
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
+        for (const auto& index : Params_.RebuildIndexes) {
+            const auto& desc = CreateAlterIndex(index, *this);
+            actions = L(actions, Q(Y(Q("rebuildIndex"), Q(desc))));
+        }
+
         if (Params_.Compact) {
             auto settings = Y();
             if (Params_.Compact->Cascade) {
@@ -2212,6 +2237,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
             INSERT_TOPIC_SETTING(MetricsLevel)
+            INSERT_TOPIC_SETTING(ContentBasedDeduplication)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -2340,6 +2366,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
             INSERT_TOPIC_SETTING(MetricsLevel)
+            INSERT_TOPIC_SETTING(ContentBasedDeduplication)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -3684,6 +3711,11 @@ public:
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos_, pragmaName))));
                 }
 
+                if (ctx.EvaluateExprCache) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                                           BuildQuotedAtom(Pos_, "EnableEvaluateExprCache"))));
+                }
+
                 if (ctx.OrderedColumns) {
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                                            BuildQuotedAtom(Pos_, "OrderedColumns"))));
@@ -4650,7 +4682,7 @@ public:
         TScopedStatePtr scoped,
         bool replaceIfExists,
         bool existingOk)
-        : TBase(pos, objectId, params, context, scoped, replaceIfExists, existingOk, false)
+        : TBase(pos, objectId, params, context, scoped, replaceIfExists, existingOk, /*missingOk=*/false)
     {
     }
 
@@ -4686,7 +4718,7 @@ public:
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
         bool missingOk)
-        : TBase(pos, objectId, params, context, scoped, false, false, missingOk)
+        : TBase(pos, objectId, params, context, scoped, /*replaceIfExists=*/false, /*existingOk=*/false, missingOk)
     {
     }
 
@@ -4720,7 +4752,7 @@ public:
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
         bool missingOk)
-        : TBase(pos, objectId, TSecretParameters{}, context, scoped, false, false, missingOk)
+        : TBase(pos, objectId, TSecretParameters{}, context, scoped, /*replaceIfExists=*/false, /*existingOk=*/false, missingOk)
     {
     }
 

@@ -4,6 +4,7 @@
 #include <library/cpp/testing/common/network.h>
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
@@ -203,6 +204,30 @@ namespace {
 
 } // namespace <anonymous>
 
+TEST(TableTest, FulltextSuperLemmerAnalyzerRoundTrip) {
+    NTable::TFulltextIndexSettings settings;
+    NTable::TFulltextIndexSettings::TColumnAnalyzers column;
+    column.Column = "Text";
+    column.Analyzers = NTable::TFulltextIndexSettings::TAnalyzers::SuperLemmer("russian");
+    settings.Columns.push_back(column);
+
+    Ydb::Table::FulltextIndexSettings proto;
+    settings.SerializeTo(proto);
+    ASSERT_EQ(proto.columns_size(), 1);
+    ASSERT_TRUE(proto.columns(0).has_analyzers());
+    ASSERT_TRUE(proto.columns(0).analyzers().use_filter_superlemmer());
+
+    const auto restored = NTable::TFulltextIndexSettings::FromProto(proto);
+    ASSERT_EQ(restored.Columns.size(), 1);
+    ASSERT_TRUE(restored.Columns[0].Analyzers.has_value());
+    const auto& analyzers = *restored.Columns[0].Analyzers;
+    ASSERT_EQ(analyzers.Language.value_or(""), "russian");
+    ASSERT_TRUE(analyzers.UseFilterLowercase.value_or(false));
+    ASSERT_TRUE(analyzers.UseFilterStopwords.value_or(false));
+    ASSERT_TRUE(analyzers.UseFilterSuperLemmer.value_or(false));
+    ASSERT_NE(ToString(restored).find("use_filter_superlemmer: true"), TString::npos);
+}
+
 TEST(TableTest, SessionHandleDestructionSendsDeleteSession) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;
@@ -386,6 +411,50 @@ TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
         auto stoppedSessionResult = tableClient->CreateSession().ExtractValueSync();
         return stoppedSessionResult.GetStatus() == EStatus::CLIENT_CANCELLED;
     }));
+}
+
+TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
+    TMockTableService tableService;
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driverB;
+    std::unique_ptr<NTable::TTableClient> tableClientB;
+    std::unique_ptr<NTable::TSession> tableSessionB;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driverB,
+        tableClientB,
+        tableSessionB
+    );
+
+    TDriver driverA(driverB->GetConfig());
+    NTable::TTableClient tableClientA(driverA);
+
+    std::promise<void> createTableStarted;
+    auto createTableStartedFuture = createTableStarted.get_future();
+    std::promise<void> continueCreateTable;
+    tableService.CreateTableStarted = &createTableStarted;
+    tableService.ContinueCreateTable = continueCreateTable.get_future().share();
+
+    auto requestB = tableSessionB->CreateTable(
+        "/Root/My/DB/driver_scope_isolation",
+        NTable::TTableBuilder().Build()
+    );
+    ASSERT_EQ(createTableStartedFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+
+    driverA.Stop(true);
+
+    auto stoppedResult = tableClientA.CreateSession().ExtractValueSync();
+    ASSERT_EQ(stoppedResult.GetStatus(), EStatus::CLIENT_CANCELLED);
+    ASSERT_FALSE(requestB.Wait(TDuration::MilliSeconds(100)));
+
+    continueCreateTable.set_value();
+    ASSERT_TRUE(requestB.Wait(TDuration::Seconds(10)));
+    ASSERT_TRUE(requestB.ExtractValueSync().IsSuccess());
+
+    auto secondResultB = tableClientB->CreateSession().ExtractValueSync();
+    ASSERT_TRUE(secondResultB.IsSuccess());
 }
 
 TEST(TableTest, DropLastOwnersFromResponseCallbackDoesNotDeadlock) {

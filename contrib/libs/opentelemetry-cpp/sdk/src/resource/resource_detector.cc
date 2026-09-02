@@ -11,7 +11,6 @@
 #include <stddef.h>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk

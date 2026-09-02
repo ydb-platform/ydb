@@ -7,8 +7,12 @@ EXCLUDE_TAGS(
 
 SRCS(
     dbs_controller.proto
+    dbs_controller_db.proto
 )
 
-#CPP_PROTO_PLUGIN0(validation ydb/public/lib/validation)
+PEERDIR(
+    ydb/core/nbs/cloud/storage/core/protos
+    ydb/core/protos
+)
 
 END()

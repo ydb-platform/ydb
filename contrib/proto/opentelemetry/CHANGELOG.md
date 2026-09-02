@@ -12,6 +12,37 @@ The full list of changes can be found in the compare view for the respective rel
 
 ### Removed
 
+## 1.11.0 - 2026-07-21
+
+### Added
+
+- docs: add request size limitation for HTTP body and gRPC messages. [#782](https://github.com/open-telemetry/opentelemetry-proto/pull/782)
+- docs: add response size limitation for HTTP body and gRPC messages. [#781](https://github.com/open-telemetry/opentelemetry-proto/pull/781), [#800](https://github.com/open-telemetry/opentelemetry-proto/pull/800), [#801](https://github.com/open-telemetry/opentelemetry-proto/pull/801), [#802](https://github.com/open-telemetry/opentelemetry-proto/pull/802)
+- processcontext: add `ProcessContext` message described in [OTEP 4719](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4719-process-ctx.md). [#783](https://github.com/open-telemetry/opentelemetry-proto/pull/783)
+
+### Fixed
+
+- docs: clarify that `Retry-After` header value can be an HTTP-date. [#806](https://github.com/open-telemetry/opentelemetry-proto/pull/806)
+
+## 1.10.0 - 2026-03-09
+
+### Added
+
+- profiles: introduce reference based attributes [#733](https://github.com/open-telemetry/opentelemetry-proto/pull/733)
+
+### Changed
+
+- docs: Add more clarity to experiments. [#771](https://github.com/open-telemetry/opentelemetry-proto/pull/771)
+- profiles: clarify Sample message usage guidance docs. [#742](https://github.com/open-telemetry/opentelemetry-proto/pull/742)
+- profiles: improve Sample message clarity and usage documentation. [#724](https://github.com/open-telemetry/opentelemetry-proto/pull/724)
+- profiles: clarify the profile and sample timestamps relationship. [#744](https://github.com/open-telemetry/opentelemetry-proto/pull/744)
+- common: rename ref suffix to strindex [#768](https://github.com/open-telemetry/opentelemetry-proto/pull/768)
+
+### Fixed
+
+- examples: Represent uint64 and fixed64 fields as strings in metrics.json. [#748](https://github.com/open-telemetry/opentelemetry-proto/pull/748)
+- logs: `SEVERITY_NUMBER_UNSPECIFIED` can be used as the `severity_number` field is optional. [#736](https://github.com/open-telemetry/opentelemetry-proto/pull/736)
+
 ## 1.9.0 - 2025-10-31
 
 ### Added

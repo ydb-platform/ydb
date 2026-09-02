@@ -37,7 +37,6 @@ public:
     {
     }
 
-public:
     void OnObject(NPureCalcProto::TStringMessage* t) override {
         Buf_->push_back(t->GetX());
     }

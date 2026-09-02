@@ -9,7 +9,8 @@
 #include <yt/yt/core/concurrency/system_invokers.h>
 
 #include <yt/yt/core/misc/lazy_ptr.h>
-#include <yt/yt/core/misc/ring_queue.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 

@@ -172,6 +172,9 @@ class TableClient(BaseTableClient["AsyncDriver"]):
     async def bulk_upsert(self, *args, **kwargs):  # pylint: disable=W0236
         return await super().bulk_upsert(*args, **kwargs)
 
+    async def describe_system_view(self, path, settings=None):  # pylint: disable=W0236
+        return await super().describe_system_view(path, settings)
+
     async def scan_query(self, query, parameters=None, settings=None):  # pylint: disable=W0236
         request = _scan_query_request_factory(query, parameters, settings)
         response = await self._driver(
@@ -204,7 +207,7 @@ class TableClient(BaseTableClient["AsyncDriver"]):
         Create a YDB table.
 
         :param path: A table path
-        :param table_description: TableDescription instanse.
+        :param table_description: TableDescription instance.
         :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
 
         :return: Operation or YDB error otherwise.
@@ -456,7 +459,7 @@ async def retry_operation(callee, retry_settings=None, *args, **kwargs):  # pyli
     :param args: A tuple with positional arguments to be passed into the coroutine.
     :param kwargs: A dictionary with keyword arguments to be passed into the coroutine.
 
-    Returns awaitable result of coroutine. If retries are not succussful exception is raised.
+    Returns awaitable result of coroutine. If retries are not successful exception is raised.
     """
 
     opt_generator = ydb.retry_operation_impl(callee, retry_settings, *args, **kwargs)

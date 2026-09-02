@@ -133,6 +133,9 @@ TResult ProcessConsumerType(
         }
 
         if (deadLetterPolicy.has_move_action()) {
+            if (deadLetterPolicy.move_action().dead_letter_queue().empty()) {
+                return {Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty"};
+            }
             consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
             consumer->SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
         } else if (deadLetterPolicy.has_delete_action()) {

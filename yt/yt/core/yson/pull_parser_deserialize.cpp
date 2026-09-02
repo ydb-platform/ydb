@@ -119,7 +119,7 @@ void Deserialize(bool& value, TYsonPullParserCursor* cursor)
             auto intValue = (*cursor)->UncheckedAsInt64();
             if (intValue != 0 && intValue != 1) {
                 THROW_ERROR_EXCEPTION("Bool cannot be parsed from integer other than 0 or 1")
-                    << TErrorAttribute("integer_value", intValue);
+                    .With("integer_value", intValue);
             }
             value = static_cast<bool>(intValue);
             cursor->Next();
@@ -129,7 +129,7 @@ void Deserialize(bool& value, TYsonPullParserCursor* cursor)
             auto uintValue = (*cursor)->UncheckedAsUint64();
             if (uintValue != 0 && uintValue != 1) {
                 THROW_ERROR_EXCEPTION("Bool cannot be parsed from integer other than 0 or 1")
-                    << TErrorAttribute("integer_value", uintValue);
+                    .With("integer_value", uintValue);
             }
             value = static_cast<bool>(uintValue);
             cursor->Next();
@@ -155,7 +155,7 @@ void Deserialize(char& value, TYsonPullParserCursor* cursor)
     auto stringValue = (*cursor)->UncheckedAsString();
     if (stringValue.size() != 1) {
         THROW_ERROR_EXCEPTION("Char cannot be parsed from string whose length is not equal to 1")
-            << TErrorAttribute("string_length", stringValue.size());
+            .With("string_length", stringValue.size());
     }
     value = stringValue[0];
     cursor->Next();
@@ -169,7 +169,7 @@ void Deserialize(TDuration& value, TYsonPullParserCursor* cursor)
             auto ms = (*cursor)->UncheckedAsInt64();
             if (ms < 0) {
                 THROW_ERROR_EXCEPTION("Duration value cannot be negative")
-                    << TErrorAttribute("duration_value", ms);
+                    .With("duration_value", ms);
             }
             value = TDuration::MilliSeconds(static_cast<ui64>(ms));
             cursor->Next();
@@ -187,7 +187,7 @@ void Deserialize(TDuration& value, TYsonPullParserCursor* cursor)
             THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Duration must be finite");
             if (ms < 0) {
                 THROW_ERROR_EXCEPTION("Duration value cannot be negative")
-                    << TErrorAttribute("duration_value", ms);
+                    .With("duration_value", ms);
             }
             value = TDuration::MilliSeconds(ms);
             cursor->Next();
@@ -221,7 +221,7 @@ void Deserialize(TInstant& value, TYsonPullParserCursor* cursor)
             auto ms = (*cursor)->UncheckedAsInt64();
             if (ms < 0) {
                 THROW_ERROR_EXCEPTION("Instant value cannot be negative")
-                    << TErrorAttribute("instant_value", ms);
+                    .With("instant_value", ms);
             }
             value = TInstant::MilliSeconds(ms);
             cursor->Next();
@@ -243,7 +243,7 @@ void Deserialize(TInstant& value, TYsonPullParserCursor* cursor)
             THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Instant must be finite");
             if (ms < 0) {
                 THROW_ERROR_EXCEPTION("Instant value cannot be negative")
-                    << TErrorAttribute("instant_value", ms);
+                    .With("instant_value", ms);
             }
             value = TInstant::MicroSeconds(static_cast<ui64>(ms * 1000.0));
             cursor->Next();
@@ -286,7 +286,7 @@ void DeserializeProtobufMessage(
 
     if (!message.ParseFromArray(wireBytes.data(), wireBytes.size())) {
         THROW_ERROR_EXCEPTION("Error parsing protobuf message from wire bytes")
-            << TErrorAttribute("protobuf_type", message.GetTypeName());
+            .With("protobuf_type", message.GetTypeName());
     }
 }
 

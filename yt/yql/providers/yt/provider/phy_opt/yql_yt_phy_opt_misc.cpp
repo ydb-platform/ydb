@@ -142,32 +142,20 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
     bool hasTables = false;
     bool allAreTableContents = true;
     bool hasContents = false;
-    TString resultCluster;
+    TString usedCluster;
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
-    TMaybeNode<TYtDSource> dataSource;
     for (auto child: mux.Input().Cast<TExprList>()) {
         bool isTable = IsYtProviderInput(child);
         bool isContent = child.Maybe<TYtTableContent>().IsValid();
-        if (!isTable && !isContent) {
-            // Don't match foreign provider input
-            if (child.Maybe<TCoRight>()) {
+        TSyncMap syncList;
+        if (isTable) {
+            auto cluster = DeriveClusterFromInput(child, selectionMode);
+            if (!cluster || !UpdateUsedCluster(usedCluster, *cluster, selectionMode)) {
                 return node;
             }
-        } else {
-            if (!dataSource) {
-                dataSource = GetDataSource(child, ctx);
-            }
-
-            if (!resultCluster) {
-                resultCluster = TString{dataSource.Cast().Cluster().Value()};
-            }
-            else if (resultCluster != dataSource.Cast().Cluster().Value()) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                    << "Different source clusters in Mux: " << resultCluster
-                    << " and " << dataSource.Cast().Cluster().Value()));
-                return {};
-            }
+        } else if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, usedCluster, false, selectionMode)) {
+            return node;
         }
         allAreTables = allAreTables && isTable;
         hasTables = hasTables || isTable;
@@ -179,7 +167,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
         return node;
     }
 
-    auto dataSink = TYtDSink(ctx.RenameNode(dataSource.Ref(), "DataSink"));
+    YQL_ENSURE(usedCluster);
     if (allAreTables || allAreTableContents) {
         TVector<TExprBase> worlds;
         TVector<TYtSection> sections;
@@ -223,7 +211,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
 
         auto resRead = Build<TYtReadTable>(ctx, mux.Pos())
             .World(world)
-            .DataSource(dataSource.Cast())
+            .DataSource(MakeDataSource(mux.Pos(), usedCluster, ctx))
             .Input()
                 .Add(sections)
             .Build()
@@ -250,8 +238,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 return node;
             }
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, false, selectionMode)) {
+            TString childCluster;
+            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, childCluster, false, selectionMode)) {
                 return node;
+            }
+
+            if (!childCluster) {
+                childCluster = usedCluster;
             }
 
             const TStructExprType* outItemType = nullptr;
@@ -267,7 +260,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 return {};
             }
 
-            TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *State_->Configuration));
+            TYtOutTableInfo outTable(outItemType, GetNativeYtTypeCompatibility(childCluster, *State_->Configuration));
             auto content = child;
             if (auto sorted = child.Ref().GetConstraint<TSortedConstraintNode>()) {
                 TKeySelectorBuilder builder(child.Pos(), ctx, useNativeDescSort, outItemType);
@@ -296,7 +289,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 Build<TYtOutput>(ctx, child.Pos())
                     .Operation<TYtFill>()
                         .World(ApplySyncListToWorld(ctx.NewWorld(child.Pos()), syncList, ctx))
-                        .DataSink(dataSink)
+                        .DataSink(MakeDataSink(child.Pos(), childCluster, ctx))
                         .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
                         .Output()
                             .Add(outTable.ToExprNode(ctx, child.Pos()).Cast<TYtOutTable>())

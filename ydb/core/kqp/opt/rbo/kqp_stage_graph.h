@@ -107,6 +107,29 @@ struct TSourceConnection: public TConnection {
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
 };
 
+struct TStreamLookupConnection: public TConnection {
+    TStreamLookupConnection(ui32 outputIndex, NYql::TExprNode::TPtr table, NYql::TExprNode::TPtr columns,
+                            NYql::TExprNode::TPtr inputType, NYql::TExprNode::TPtr settings)
+        : TConnection("StreamLookup", outputIndex)
+        , Table(table)
+        , Columns(columns)
+        , InputType(inputType)
+        , Settings(settings) {
+    }
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+
+    // In join mode the input type describes the tuples that the physical conversion builds at the
+    // end of the input stage, so it can only be filled in once that expression exists.
+    void SetInputType(NYql::TExprNode::TPtr inputType) {
+        InputType = std::move(inputType);
+    }
+
+    NYql::TExprNode::TPtr Table;
+    NYql::TExprNode::TPtr Columns;
+    NYql::TExprNode::TPtr InputType;
+    NYql::TExprNode::TPtr Settings;
+};
+
 template <typename T>
 bool IsConnection(TIntrusivePtr<TConnection> connection) {
     return dynamic_cast<T*>(connection.get());

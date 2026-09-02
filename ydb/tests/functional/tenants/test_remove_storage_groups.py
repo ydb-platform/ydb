@@ -7,9 +7,12 @@ import pytest
 from hamcrest import assert_that, equal_to
 
 import ydb.public.api.protos.ydb_cms_pb2 as cms_pb
-from ydb.tests.library.common.wait_for import wait_for_and_assert
+from ydb.tests.library.common.wait_for import wait_for_and_assert, retry_assertions
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
+
+from ydb.tests.stress.remove_storage_groups.workload import AlterStorageUnitsWorkload
+from ydb.tests.stress.tpcc.workload import YdbTpccWorkload
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +81,6 @@ def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_cli
         storage_units_to_remove={'hdd': 2},
     )
 
-    ydb_cluster.restart_slots()
-
     def get_storage_units():
         status = ydb_cluster.get_database_status(database)
         units = sum([unit.count for unit in status.allocated_resources.storage_units])
@@ -95,5 +96,52 @@ def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_cli
     status = ydb_cluster.get_database_status(database)
     assert_that(status.state, equal_to(cms_pb.GetDatabaseStatusResult.RUNNING))
 
-    ydb_cluster.unregister_and_stop_slots(database_nodes)
+    # Check data integrity
+    with ydb.QuerySessionPool(driver, size=1) as pool:
+        result_sets = pool.execute_with_retries("SELECT * FROM " + table_name)
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+        assert result_sets[0].rows[0].key == 1
+        assert result_sets[0].rows[0].value == b"value1"
+
     ydb_cluster.remove_database(database)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
+def test_workload(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_client):
+    database = os.path.join(ydb_root, ydb_safe_test_name)
+
+    ydb_cluster.create_database(
+        database,
+        storage_pool_units_count={'hdd': 1},
+    )
+    database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
+    ydb_cluster.wait_tenant_up(database)
+    endpoint = 'grpc://' + database_nodes[0].endpoint
+
+    ydb_cluster.alter_database(
+        database,
+        storage_units_to_add={'hdd': 7},
+    )
+
+    alter_workload = AlterStorageUnitsWorkload(endpoint, database, 120)
+    data_workload = YdbTpccWorkload(endpoint, database, duration=150, warehouses=10, tables_prefix='tpcc')
+
+    data_workload.import_data()
+    data_workload.start()
+    alter_workload.start()
+
+    assert alter_workload.wait_stop()
+
+    def check_converged():
+        status = ydb_cluster.get_database_status(database)
+        allocated_units = sum([unit.count for unit in status.allocated_resources.storage_units])
+        required_units = sum([unit.count for unit in status.required_resources.storage_units])
+        logger.info(f'storage units: {allocated_units} / {required_units}')
+        assert allocated_units == required_units
+
+    retry_assertions(check_converged)
+
+    data_workload.join()
+    ydb_cluster.remove_database(database)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)

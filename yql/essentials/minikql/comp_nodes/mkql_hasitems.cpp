@@ -4,24 +4,23 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsDict, bool IsOptional>
 class THasItemsWrapper: public TMutableCodegeneratorNode<THasItemsWrapper<IsDict, IsOptional>> {
-    typedef TMutableCodegeneratorNode<THasItemsWrapper<IsDict, IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<THasItemsWrapper<IsDict, IsOptional>>;
 
 public:
     THasItemsWrapper(TComputationMutables& mutables, IComputationNode* collection)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Collection(collection)
+        , Collection_(collection)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& collection = Collection->GetValue(compCtx);
+        const auto& collection = Collection_->GetValue(compCtx);
         if (IsOptional && !collection) {
             return NUdf::TUnboxedValuePod();
         }
@@ -31,9 +30,9 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
-        const auto collection = GetNodeValue(Collection, ctx, block);
+        const auto collection = GetNodeValue(Collection_, ctx, block);
 
         if constexpr (IsOptional) {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -46,7 +45,7 @@ public:
             block = good;
 
             const auto has = CallBoxedValueVirtualMethod < IsDict ? NUdf::TBoxedValueAccessor::EMethod::HasDictItems : NUdf::TBoxedValueAccessor::EMethod::HasListItems > (Type::getInt1Ty(context), collection, ctx.Codegen, block);
-            if (Collection->IsTemporaryValue()) {
+            if (Collection_->IsTemporaryValue()) {
                 CleanupBoxed(collection, ctx, block);
             }
             result->addIncoming(MakeBoolean(has, context, block), block);
@@ -56,7 +55,7 @@ public:
             return result;
         } else {
             const auto has = CallBoxedValueVirtualMethod < IsDict ? NUdf::TBoxedValueAccessor::EMethod::HasDictItems : NUdf::TBoxedValueAccessor::EMethod::HasListItems > (Type::getInt1Ty(context), collection, ctx.Codegen, block);
-            if (Collection->IsTemporaryValue()) {
+            if (Collection_->IsTemporaryValue()) {
                 CleanupBoxed(collection, ctx, block);
             }
             return MakeBoolean(has, context, block);
@@ -65,10 +64,10 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Collection);
+        this->DependsOn(Collection_);
     }
 
-    IComputationNode* const Collection;
+    IComputationNode* const Collection_;
 };
 
 } // namespace
@@ -80,5 +79,4 @@ IComputationNode* WrapHasItems(TCallable& callable, const TComputationNodeFactor
     return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, THasItemsWrapper, 2, type->IsDict(), isOptional, ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

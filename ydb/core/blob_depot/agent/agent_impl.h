@@ -207,8 +207,6 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeServerId;
         bool IsConnected = false;
         ui64 ConnectionInstance = 0;
-        bool Recommissioning;
-        ui32 GroupGeneration;
 
         NMonitoring::TDynamicCounterPtr AgentCounters;
 
@@ -227,6 +225,7 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetThrottleActivations;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
@@ -353,9 +352,6 @@ namespace NKikimr::NBlobDepot {
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
                     ProxyId = {};
                 }
-                Y_ABORT_UNLESS(info->Group);
-                Recommissioning = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
-                GroupGeneration = info->GroupGeneration;
             }
             if (ProxyId) {
                 TActivationContext::Send(ev->Forward(ProxyId));
@@ -463,7 +459,8 @@ namespace NKikimr::NBlobDepot {
 
             void CheckQueryExecutionTime(TMonotonic now);
 
-            void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason);
+            void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
+                bool isTabletStorageInfoVersionObsolete = false);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;
             TString GetQueryId() const;
@@ -496,6 +493,7 @@ namespace NKikimr::NBlobDepot {
                 ui64 Tag = 0;
                 std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
                 TString Key; // the key we are reading -- this is used for retries when we are getting NODATA
+                NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             };
             struct TCheckContext;
 

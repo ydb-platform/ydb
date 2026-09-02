@@ -11,6 +11,7 @@ struct TFeature {
     const TStringBuf Description;
     const TLangVersion MinLangVer = UnknownLangVersion;
     const TLangVersion MaxLangVer = UnknownLangVersion;
+    const bool IsBackportAllowed = false;
 
     static consteval TFeature Checked(TFeature f) {
         if (f.MinLangVer != UnknownLangVersion && !IsValidLangVersion(f.MinLangVer)) {

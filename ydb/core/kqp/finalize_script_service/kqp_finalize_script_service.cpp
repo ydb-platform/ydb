@@ -120,7 +120,7 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         YDB_LOG_WARN("Failed to check script execution tables existence, got undelivered to scheme",
             {"logPrefix", LogPrefix()},
-            {"cache", ev->Get()->Reason});
+            {"reason", ev->Get()->Reason});
         Retry();
     }
 
@@ -132,7 +132,7 @@ private:
 
         for (const auto& result : request.ResultSet) {
             if (result.Status != EStatus::Ok) {
-                YDB_LOG_WARN("Failed to check script execution tables existence, scheme",
+                YDB_LOG_WARN("Failed to check script execution tables existence",
                     {"logPrefix", LogPrefix()},
                     {"status", result.Status},
                     {"path", JoinPath(result.Path)});

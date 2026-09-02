@@ -238,10 +238,6 @@ Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvAnalyzeStatusResponse_EStatus, stream, valu
     stream << NKikimrStat::TEvAnalyzeStatusResponse_EStatus_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvStatisticsResponse::EStatus, stream, value) {
-    stream << NKikimrStat::TEvStatisticsResponse::EStatus_Name(value);
-}
-
 Y_DECLARE_OUT_SPEC(, NKikimrIndexBuilder::EBuildStatus, stream, value) {
     stream << NKikimrIndexBuilder::EBuildStatus_Name(value);
 }

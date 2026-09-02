@@ -11,7 +11,7 @@ class IDbWrapper;
 class TWrittenPortionInfo: public TPortionInfo {
 private:
     using TBase = TPortionInfo;
-    std::optional<TSnapshot> CommitSnapshot;
+    TThreadSafeOptional<TSnapshot> CommitSnapshot;
     std::optional<TInsertWriteId> InsertWriteId;
     friend class TWrittenPortionInfoConstructor;
 
@@ -29,8 +29,8 @@ private:
 
     virtual TString DoDebugString(const bool /*withDetails*/) const override {
         TStringBuilder sb;
-        if (CommitSnapshot) {
-            sb << "cs:" << CommitSnapshot->DebugString() << ";";
+        if (CommitSnapshot.Has()) {
+            sb << "cs:" << CommitSnapshot.Get().DebugString() << ";";
         }
         if (InsertWriteId) {
             sb << "wi:" << (ui64)*InsertWriteId << ";";
@@ -86,20 +86,20 @@ public:
     }
 
     bool HasCommitSnapshot() const {
-        return !!CommitSnapshot;
+        return CommitSnapshot.Has();
     }
 
     virtual bool IsCommitted() const override {
-        return !!CommitSnapshot;
+        return CommitSnapshot.Has();
     }
 
     const TSnapshot& GetCommitSnapshotVerified() const {
-        AFL_VERIFY(!!CommitSnapshot);
-        return *CommitSnapshot;
+        AFL_VERIFY(HasCommitSnapshot());
+        return CommitSnapshot.Get();
     }
 
-    const std::optional<TSnapshot>& GetCommitSnapshotOptional() const {
-        return CommitSnapshot;
+    std::optional<TSnapshot> GetCommitSnapshotOptional() const {
+        return CommitSnapshot.GetOptional();
     }
 
     TInsertWriteId GetInsertWriteId() const {
@@ -109,14 +109,14 @@ public:
 
     void SetCommitSnapshot(const TSnapshot& value) {
         AFL_VERIFY(!!InsertWriteId);
-        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(!HasCommitSnapshot());
         AFL_VERIFY(value.Valid());
-        CommitSnapshot = value;
+        CommitSnapshot.Set(value);
     }
 
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const override {
-        if (CommitSnapshot) {
-            return *CommitSnapshot;
+        if (CommitSnapshot.Has()) {
+            return CommitSnapshot.Get();
         } else {
             AFL_VERIFY(snapshotDefault);
             return *snapshotDefault;
@@ -124,8 +124,8 @@ public:
     }
 
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const override {
-        if (CommitSnapshot) {
-            return *CommitSnapshot;
+        if (CommitSnapshot.Has()) {
+            return CommitSnapshot.Get();
         } else {
             AFL_VERIFY(snapshotDefault);
             return *snapshotDefault;

@@ -307,8 +307,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 16);
     }
 
-    Y_UNIT_TEST(VectorIndexLookup) {
-        TKikimrRunner kikimr(GetAppConfig(true, false));
+    Y_UNIT_TEST_TWIN(VectorIndexLookup, EnableVectorSearchActor) {
+        auto appConfig = GetAppConfig(true, false);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -525,8 +527,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-    Y_UNIT_TEST(VectorIndexAutoSearchTopSize) {
-        TKikimrRunner kikimr(GetAppConfig(true, false));
+    Y_UNIT_TEST_TWIN(VectorIndexAutoSearchTopSize, EnableVectorSearchActor) {
+        auto appConfig = GetAppConfig(true, false);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

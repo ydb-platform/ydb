@@ -933,6 +933,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i
 
     TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
+    if (Aborting) {
+        // Session is being torn down: memory budget is no longer used to gate reading,
+        // and cleanup paths may release the same data more than once.
+        return;
+    }
     UpdateMemoryUsageStatisticsImpl();
 
     Y_ABORT_UNLESS(decompressedSize <= DecompressedDataSize);

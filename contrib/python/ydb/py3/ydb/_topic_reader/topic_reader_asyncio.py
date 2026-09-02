@@ -54,9 +54,20 @@ class PublicTopicReaderUnexpectedCodecError(YdbError):
 
 class PublicTopicReaderPartitionExpiredError(TopicReaderError):
     """
-    Commit message when partition read session are dropped.
-    It is ok - the message/batch will not commit to server and will receive in other read session
-    (with this or other reader).
+    This error is raised when trying to commit a message/batch that belongs to
+    a partition read session that has already ended (expired).
+
+    A partition read session can end for several reasons, e.g.:
+      - the reader reconnected to the server (connection was lost and restored);
+      - the partition was rebalanced to another reader in the same consumer group.
+
+    This is an expected situation, not a bug. The message/batch simply will not be
+    committed to the server, and will be delivered again in a new read session
+    (either by this reader or by another reader in the same consumer group).
+
+    You do not need to recreate the reader when this error occurs - it can be
+    safely ignored. Just be prepared that the same message may be received more
+    than once (at-least-once delivery semantics).
     """
 
     def __init__(self, message: str = "Topic reader partition session is closed"):
@@ -117,35 +128,47 @@ class PublicAsyncIOReader:
     async def receive_batch(
         self,
         max_messages: typing.Union[int, None] = None,
+        max_bytes: typing.Union[int, None] = None,
     ) -> typing.Union[datatypes.PublicBatch, None]:
         """
         Get one messages batch from reader.
         All messages in a batch from same partition.
 
+        The batch is capped by max_messages and/or max_bytes when set; at least
+        one message is always returned. max_bytes uses the batch's server-reported
+        size, so the cut is approximate.
+
         use asyncio.wait_for for wait with timeout.
         """
-        logger.debug("receive_batch max_messages=%s", max_messages)
+        logger.debug("receive_batch max_messages=%s max_bytes=%s", max_messages, max_bytes)
         await self._reconnector.wait_message()
         return self._reconnector.receive_batch_nowait(
             max_messages=max_messages,
+            max_bytes=max_bytes,
         )
 
     async def receive_batch_with_tx(
         self,
         tx: "BaseQueryTxContext",
         max_messages: typing.Union[int, None] = None,
+        max_bytes: typing.Union[int, None] = None,
     ) -> typing.Union[datatypes.PublicBatch, None]:
         """
         Get one messages batch with tx from reader.
         All messages in a batch from same partition.
 
+        The batch is capped by max_messages and/or max_bytes when set; at least
+        one message is always returned. max_bytes uses the batch's server-reported
+        size, so the cut is approximate.
+
         use asyncio.wait_for for wait with timeout.
         """
-        logger.debug("receive_batch_with_tx tx=%s max_messages=%s", tx, max_messages)
+        logger.debug("receive_batch_with_tx tx=%s max_messages=%s max_bytes=%s", tx, max_messages, max_bytes)
         await self._reconnector.wait_message()
         return self._reconnector.receive_batch_with_tx_nowait(
             tx=tx,
             max_messages=max_messages,
+            max_bytes=max_bytes,
         )
 
     async def receive_message(self) -> typing.Optional[datatypes.PublicMessage]:
@@ -293,18 +316,22 @@ class ReaderReconnector:
             await self._state_changed.wait()
             self._state_changed.clear()
 
-    def receive_batch_nowait(self, max_messages: Optional[int] = None):
+    def receive_batch_nowait(self, max_messages: Optional[int] = None, max_bytes: Optional[int] = None):
         if self._stream_reader is None:
             return None
         return self._stream_reader.receive_batch_nowait(
             max_messages=max_messages,
+            max_bytes=max_bytes,
         )
 
-    def receive_batch_with_tx_nowait(self, tx: "BaseQueryTxContext", max_messages: Optional[int] = None):
+    def receive_batch_with_tx_nowait(
+        self, tx: "BaseQueryTxContext", max_messages: Optional[int] = None, max_bytes: Optional[int] = None
+    ):
         if self._stream_reader is None:
             return None
         batch = self._stream_reader.receive_batch_nowait(
             max_messages=max_messages,
+            max_bytes=max_bytes,
         )
 
         self._init_tx(tx)
@@ -651,7 +678,7 @@ class ReaderStream:
         if part_sess_id in self._partition_sessions and self._partition_sessions[part_sess_id].ended:
             self._message_batches.move_to_end(part_sess_id, last=False)
 
-    def receive_batch_nowait(self, max_messages: Optional[int] = None):
+    def receive_batch_nowait(self, max_messages: Optional[int] = None, max_bytes: Optional[int] = None):
         first_error = self._get_first_error()
         if first_error is not None:
             raise first_error
@@ -661,13 +688,10 @@ class ReaderStream:
 
         part_sess_id, batch = self._get_first_batch()
 
-        if max_messages is None or len(batch.messages) <= max_messages:
-            self._buffer_release_bytes(batch._bytes_size)
-            return batch
+        cutted_batch = batch._pop_batch(max_messages=max_messages, max_bytes=max_bytes)
 
-        cutted_batch = batch._pop_batch(message_count=max_messages)
-
-        self._return_batch_to_queue(part_sess_id, batch)
+        if not batch.empty():
+            self._return_batch_to_queue(part_sess_id, batch)
 
         self._buffer_release_bytes(cutted_batch._bytes_size)
 

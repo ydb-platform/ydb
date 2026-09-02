@@ -45,7 +45,7 @@ template <class TEnum, TEnum Default, TEnum... TArgs>
 constexpr bool CIsThereDefaultInMapping = ((Default == TArgs) || ...);
 
 template <class TEnum, std::same_as<TEnum>... TArgs>
-consteval bool AllDifferentValues(TArgs... args);
+consteval bool AreAllValuesDifferent(TArgs... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -96,7 +96,7 @@ struct TPolymorphicMapping<TypeFieldNameValue, TEnum, TOptionalValue<TEnum, Defa
     : public TMappingLeaf<TEnum, Values, TBase, TDerived>...
 {
     // NB(apachee): Chose to do as static_assert rather than template requirement as it provided better error message.
-    static_assert(AllDifferentValues<TEnum>(Values...), "All values in the mapping must be different");
+    static_assert(AreAllValuesDifferent<TEnum>(Values...), "All values in the mapping must be different");
 
     static constexpr std::string_view TypeFieldName = TypeFieldNameValue;
 

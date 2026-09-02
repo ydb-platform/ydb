@@ -39,38 +39,44 @@ bool TNodeProgressBase::MergeWith(const TOperationProgress& p) {
         dirty = true;
     }
 
-    // (2) state
+    // (2) waiting remote id
+    if (!p.WaitingRemoteId.empty() && p.WaitingRemoteId != Progress_.WaitingRemoteId) {
+        Progress_.WaitingRemoteId = p.WaitingRemoteId;
+        dirty = true;
+    }
+
+    // (3) state
     if (p.State != Progress_.State) {
         Progress_.State = p.State;
         dirty = true;
     }
 
-    // (3) counters
+    // (4) counters
     if (p.Counters && (!Progress_.Counters || *p.Counters != *Progress_.Counters)) {
         Progress_.Counters = p.Counters;
         dirty = true;
     }
 
-    // (4) finished time
+    // (5) finished time
     if (Progress_.State == EState::Finished) {
         FinishedAt_ = TInstant::Now();
         dirty = true;
     }
 
-    // (5) stage
+    // (6) stage
     if (!p.Stage.first.empty() && Progress_.Stage != p.Stage) {
         Progress_.Stage = p.Stage;
         Stages_.push_back(p.Stage);
         dirty = true;
     }
 
-    // (6) remote data
+    // (7) remote data
     if (!p.RemoteData.empty() && p.RemoteData != Progress_.RemoteData) {
         Progress_.RemoteData = p.RemoteData;
         dirty = true;
     }
 
-    // (7) alerts
+    // (8) alerts
     if (p.Alerts != Progress_.Alerts) {
         Progress_.Alerts = p.Alerts;
         dirty = true;

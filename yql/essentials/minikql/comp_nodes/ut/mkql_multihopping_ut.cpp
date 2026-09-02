@@ -62,7 +62,7 @@ using TFetchFactory = std::function<TFetchCallback(TUnboxedValueVector&&)>;
 
 TFetchFactory DefaultFetchFactory = [](TUnboxedValueVector&& input) -> TFetchCallback {
     return [input = std::move(input),
-            inputIndex = 0ull](NUdf::TUnboxedValue& result) mutable -> NUdf::EFetchStatus {
+            inputIndex = 0ULL](NUdf::TUnboxedValue& result) mutable -> NUdf::EFetchStatus {
         if (inputIndex >= input.size()) {
             return NUdf::EFetchStatus::Finish;
         }
@@ -101,7 +101,6 @@ private:
     TCheckCallback CheckCallback_;
     TFetchCallback FetchCallback_;
 
-private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
         CheckCallback_();
         return FetchCallback_(result);
@@ -137,9 +136,9 @@ std::tuple<TType*, TEncoder, TDecoder> BuildInputType(TSetup<false>& setup) {
 
     auto decode = [keyIndex, timeIndex, strIndex](const NUdf::TUnboxedValue& result) -> TOutputItem {
         return {
-            result.GetElement(keyIndex).Get<ui32>(),
-            TString(result.GetElements()[strIndex].AsStringRef()),
-            result.GetElement(timeIndex).Get<ui64>(),
+            .Key = result.GetElement(keyIndex).Get<ui32>(),
+            .Val = TString(result.GetElements()[strIndex].AsStringRef()),
+            .Time = result.GetElement(timeIndex).Get<ui64>(),
         };
     };
 
@@ -174,7 +173,7 @@ THolder<IComputationGraph> BuildGraph(
     auto streamNode = inStream.Build();
 
     auto pgmReturn = pgmBuilder.MultiHoppingCore(
-        TRuntimeNode(streamNode, false),
+        TRuntimeNode(streamNode, /*isImmediate=*/false),
         [&](TRuntimeNode item) { // keyExtractor
             return pgmBuilder.Member(item, "key");
         },
@@ -284,13 +283,13 @@ void TestImpl(
     };
 
     TUnboxedValueVector boxedInput;
-    for (size_t i = 0; i < input.size(); ++i) {
-        boxedInput.push_back(encode(input[i], graph->GetHolderFactory()));
+    for (const auto& i : input) {
+        boxedInput.push_back(encode(i, graph->GetHolderFactory()));
     }
     auto fetchCallback = fetchFactory(std::move(boxedInput));
 
     auto streamValue = NUdf::TUnboxedValuePod(new TStream(checkCallback, std::move(fetchCallback)));
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), std::move(streamValue));
 
     auto root = graph->GetValue();
 
@@ -331,9 +330,9 @@ void TestWatermarksImpl(
     TWatermark watermark;
     auto fetchFactory = [watermarks = watermarks, &watermark](TUnboxedValueVector input) -> TFetchCallback {
         return [input = input,
-                inputIndex = 0ull,
+                inputIndex = 0ULL,
                 watermarks = watermarks,
-                watermarkIndex = 0ull,
+                watermarkIndex = 0ULL,
                 &watermark](NUdf::TUnboxedValue& result) mutable -> NUdf::EFetchStatus {
             if (watermarkIndex < watermarks.size() && watermarks[watermarkIndex].first == inputIndex) {
                 watermark.WatermarkIn = watermarks[watermarkIndex].second;
@@ -357,8 +356,8 @@ void TestWatermarksImpl(
         hop,
         interval,
         delay,
-        false,
-        true,
+        /*dataWatermarks=*/false,
+        /*watermarkMode=*/true,
         farFutureSizeLimit,
         farFutureTimeLimitUs,
         earlyPolicy,
@@ -371,11 +370,11 @@ void TestWatermarksImpl(
 Y_UNIT_TEST(TestThrowWatermarkFromPast) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -386,21 +385,21 @@ Y_UNIT_TEST(TestThrowWatermarkFromPast) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
-            {1, "5", 310},
-            {1, "5", 320},
-            {1, "5", 330},
-            {1, "6", 410},
-            {1, "6", 420},
-            {1, "6", 430},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
+            {.Key = 1, .Val = "5", .Time = 310},
+            {.Key = 1, .Val = "5", .Time = 320},
+            {.Key = 1, .Val = "5", .Time = 330},
+            {.Key = 1, .Val = "6", .Time = 410},
+            {.Key = 1, .Val = "6", .Time = 420},
+            {.Key = 1, .Val = "6", .Time = 430},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -417,11 +416,11 @@ Y_UNIT_TEST(TestThrowWatermarkFromPast) {
 Y_UNIT_TEST(TestAdjustWatermarkFromPastTime0) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -432,18 +431,18 @@ Y_UNIT_TEST(TestAdjustWatermarkFromPastTime0) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "5 6 Add", 70},
-            {1, "5 6 Add", 80},
-            {1, "5 6 Add", 90},
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
+            {.Key = 1, .Val = "5 6 Add", .Time = 70},
+            {.Key = 1, .Val = "5 6 Add", .Time = 80},
+            {.Key = 1, .Val = "5 6 Add", .Time = 90},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -467,11 +466,11 @@ Y_UNIT_TEST(TestAdjustWatermarkFromPastTime0) {
 Y_UNIT_TEST(TestAdjustWatermarkFromPastTime100) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -482,15 +481,15 @@ Y_UNIT_TEST(TestAdjustWatermarkFromPastTime100) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "5 6 Add 2 Merge", 120},
-            {1, "5 6 Add 2 Merge", 130},
-            {1, "3 5 6 Add Merge", 140},
-            {1, "3", 150},
-            {1, "3", 160},
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "5 6 Add 2 Merge", .Time = 120},
+            {.Key = 1, .Val = "5 6 Add 2 Merge", .Time = 130},
+            {.Key = 1, .Val = "3 5 6 Add Merge", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -515,22 +514,22 @@ Y_UNIT_TEST(TestAdjustWatermarkFromPastTime100) {
 Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
@@ -553,31 +552,31 @@ Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
 Y_UNIT_TEST(TestAdjustWatermarkFromFuture) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "4", 1010},
+            {.Key = 1, .Val = "4", .Time = 1010},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "5 6 Add", 2010},
+            {.Key = 1, .Val = "5 6 Add", .Time = 2010},
         })};
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
         {2, TInstant::MicroSeconds(1000)},
@@ -601,11 +600,11 @@ Y_UNIT_TEST(TestAdjustWatermarkFromFuture) {
 Y_UNIT_TEST(TestWatermarkFlow1) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -613,25 +612,25 @@ Y_UNIT_TEST(TestWatermarkFlow1) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
-            {1, "5", 310},
-            {1, "5", 320},
-            {1, "5", 330},
-            {1, "6", 410},
-            {1, "6", 420},
-            {1, "6", 430},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
+            {.Key = 1, .Val = "5", .Time = 310},
+            {.Key = 1, .Val = "5", .Time = 320},
+            {.Key = 1, .Val = "5", .Time = 330},
+            {.Key = 1, .Val = "6", .Time = 410},
+            {.Key = 1, .Val = "6", .Time = 420},
+            {.Key = 1, .Val = "6", .Time = 430},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -648,40 +647,40 @@ Y_UNIT_TEST(TestWatermarkFlow1) {
 Y_UNIT_TEST(TestWatermarkFlow1CloseTime0) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
+            {.Key = 1, .Val = "2", .Time = 110},
         }),
         TOutputGroup({
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
         }),
         TOutputGroup({
-            {1, "5", 310},
-            {1, "5", 320},
-            {1, "5", 330},
+            {.Key = 1, .Val = "5", .Time = 310},
+            {.Key = 1, .Val = "5", .Time = 320},
+            {.Key = 1, .Val = "5", .Time = 330},
         }),
         TOutputGroup({
-            {1, "6", 410},
-            {1, "6", 420},
-            {1, "6", 430},
+            {.Key = 1, .Val = "6", .Time = 410},
+            {.Key = 1, .Val = "6", .Time = 420},
+            {.Key = 1, .Val = "6", .Time = 430},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -705,40 +704,40 @@ Y_UNIT_TEST(TestWatermarkFlow1CloseTime0) {
 Y_UNIT_TEST(TestWatermarkFlow1CloseTime100) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
         }),
         TOutputGroup({
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
         }),
         TOutputGroup({
-            {1, "5", 310},
-            {1, "5", 320},
-            {1, "5", 330},
+            {.Key = 1, .Val = "5", .Time = 310},
+            {.Key = 1, .Val = "5", .Time = 320},
+            {.Key = 1, .Val = "5", .Time = 330},
         }),
         TOutputGroup({
-            {1, "6", 410},
-            {1, "6", 420},
-            {1, "6", 430},
+            {.Key = 1, .Val = "6", .Time = 410},
+            {.Key = 1, .Val = "6", .Time = 420},
+            {.Key = 1, .Val = "6", .Time = 430},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -761,40 +760,40 @@ Y_UNIT_TEST(TestWatermarkFlow1CloseTime100) {
 Y_UNIT_TEST(TestWatermarkFlow1CloseCount0) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
+            {.Key = 1, .Val = "2", .Time = 110},
         }),
         TOutputGroup({
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
         }),
         TOutputGroup({
-            {1, "5", 310},
-            {1, "5", 320},
-            {1, "5", 330},
+            {.Key = 1, .Val = "5", .Time = 310},
+            {.Key = 1, .Val = "5", .Time = 320},
+            {.Key = 1, .Val = "5", .Time = 330},
         }),
         TOutputGroup({
-            {1, "6", 410},
-            {1, "6", 420},
-            {1, "6", 430},
+            {.Key = 1, .Val = "6", .Time = 410},
+            {.Key = 1, .Val = "6", .Time = 420},
+            {.Key = 1, .Val = "6", .Time = 430},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -817,39 +816,39 @@ Y_UNIT_TEST(TestWatermarkFlow1CloseCount0) {
 Y_UNIT_TEST(TestWatermarkFlow1CloseCount1) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
+            {.Key = 1, .Val = "2", .Time = 110},
         }),
         TOutputGroup({
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "4", 210},
-            {1, "4", 220},
-            {1, "4", 230},
+            {.Key = 1, .Val = "4", .Time = 210},
+            {.Key = 1, .Val = "4", .Time = 220},
+            {.Key = 1, .Val = "4", .Time = 230},
         }),
         TOutputGroup({
-            {1, "5", 310},
-            {1, "5", 320},
-            {1, "5", 330},
-            {1, "6", 410},
-            {1, "6", 420},
-            {1, "6", 430},
+            {.Key = 1, .Val = "5", .Time = 310},
+            {.Key = 1, .Val = "5", .Time = 320},
+            {.Key = 1, .Val = "5", .Time = 330},
+            {.Key = 1, .Val = "6", .Time = 410},
+            {.Key = 1, .Val = "6", .Time = 420},
+            {.Key = 1, .Val = "6", .Time = 430},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -872,11 +871,11 @@ Y_UNIT_TEST(TestWatermarkFlow1CloseCount1) {
 Y_UNIT_TEST(TestWatermarkFlow1DropTime0) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -884,9 +883,9 @@ Y_UNIT_TEST(TestWatermarkFlow1DropTime0) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
@@ -912,11 +911,11 @@ Y_UNIT_TEST(TestWatermarkFlow1DropTime0) {
 Y_UNIT_TEST(TestWatermarkFlow1DropTime100) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -925,12 +924,12 @@ Y_UNIT_TEST(TestWatermarkFlow1DropTime100) {
         TOutputGroup({}),
         TOutputGroup({
             // no watermark -> time limit unused
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
@@ -956,11 +955,11 @@ Y_UNIT_TEST(TestWatermarkFlow1DropTime100) {
 Y_UNIT_TEST(TestWatermarkFlow1DropCount0) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -968,9 +967,9 @@ Y_UNIT_TEST(TestWatermarkFlow1DropCount0) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
@@ -996,11 +995,11 @@ Y_UNIT_TEST(TestWatermarkFlow1DropCount0) {
 Y_UNIT_TEST(TestWatermarkFlow1DropCount1) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 131, 3},
-        {1, 200, 4},
-        {1, 300, 5},
-        {1, 400, 6}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 131, .Val = 3},
+        {.Key = 1, .Time = 200, .Val = 4},
+        {.Key = 1, .Time = 300, .Val = 5},
+        {.Key = 1, .Time = 400, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -1008,19 +1007,19 @@ Y_UNIT_TEST(TestWatermarkFlow1DropCount1) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "2", 120},
-            {1, "2", 130},
-            {1, "3", 140},
-            {1, "3", 150},
-            {1, "3", 160},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "2", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 1, .Val = "3", .Time = 150},
+            {.Key = 1, .Val = "3", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "5", 310},
-            {1, "5", 320},
-            {1, "5", 330},
+            {.Key = 1, .Val = "5", .Time = 310},
+            {.Key = 1, .Val = "5", .Time = 320},
+            {.Key = 1, .Val = "5", .Time = 330},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -1043,11 +1042,11 @@ Y_UNIT_TEST(TestWatermarkFlow1DropCount1) {
 Y_UNIT_TEST(TestWatermarkFlow2) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 100, 2},
-        {1, 105, 3},
-        {1, 80, 4},
-        {1, 107, 5},
-        {1, 106, 6}};
+        {.Key = 1, .Time = 100, .Val = 2},
+        {.Key = 1, .Time = 105, .Val = 3},
+        {.Key = 1, .Time = 80, .Val = 4},
+        {.Key = 1, .Time = 107, .Val = 5},
+        {.Key = 1, .Time = 106, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -1057,11 +1056,11 @@ Y_UNIT_TEST(TestWatermarkFlow2) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "4", 90},
-            {1, "4", 100},
-            {1, "2 3 Add 5 Add 6 Add 4 Merge", 110},
-            {1, "2 3 Add 5 Add 6 Add", 120},
-            {1, "2 3 Add 5 Add 6 Add", 130},
+            {.Key = 1, .Val = "4", .Time = 90},
+            {.Key = 1, .Val = "4", .Time = 100},
+            {.Key = 1, .Val = "2 3 Add 5 Add 6 Add 4 Merge", .Time = 110},
+            {.Key = 1, .Val = "2 3 Add 5 Add 6 Add", .Time = 120},
+            {.Key = 1, .Val = "2 3 Add 5 Add 6 Add", .Time = 130},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -1078,11 +1077,11 @@ Y_UNIT_TEST(TestWatermarkFlow2) {
 Y_UNIT_TEST(TestWatermarkFlow3) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 90, 2},
-        {1, 99, 3},
-        {1, 80, 4},
-        {1, 107, 5},
-        {1, 106, 6}};
+        {.Key = 1, .Time = 90, .Val = 2},
+        {.Key = 1, .Time = 99, .Val = 3},
+        {.Key = 1, .Time = 80, .Val = 4},
+        {.Key = 1, .Time = 107, .Val = 5},
+        {.Key = 1, .Time = 106, .Val = 6}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -1092,11 +1091,11 @@ Y_UNIT_TEST(TestWatermarkFlow3) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "4", 90},
-            {1, "2 3 Add 4 Merge", 100},
-            {1, "5 6 Add 2 3 Add 4 Merge Merge", 110},
-            {1, "5 6 Add 2 3 Add Merge", 120},
-            {1, "5 6 Add", 130},
+            {.Key = 1, .Val = "4", .Time = 90},
+            {.Key = 1, .Val = "2 3 Add 4 Merge", .Time = 100},
+            {.Key = 1, .Val = "5 6 Add 2 3 Add 4 Merge Merge", .Time = 110},
+            {.Key = 1, .Val = "5 6 Add 2 3 Add Merge", .Time = 120},
+            {.Key = 1, .Val = "5 6 Add", .Time = 130},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -1115,22 +1114,22 @@ Y_UNIT_TEST(TestWatermarkFlowOverflow) {
     // exact expected bug scenario (hop stuck forever in the future)
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 1, 2},
-        {1, 2, 3},
-        {1, 5, 4},
-        {1, 6, 5},
-        {1, 7, 6},
-        {1, 8, 7},
-        {1, 9, 8},
-        {1, 10, 9},
-        {1, 11, 10},
-        {1, 22, 11},
-        {1, 23, 12},
-        {1, 24, 13},
-        {1, 100, 14},
-        {1, 117, 15},
-        {1, 121, 16},
-        {1, 126, 17},
+        {.Key = 1, .Time = 1, .Val = 2},
+        {.Key = 1, .Time = 2, .Val = 3},
+        {.Key = 1, .Time = 5, .Val = 4},
+        {.Key = 1, .Time = 6, .Val = 5},
+        {.Key = 1, .Time = 7, .Val = 6},
+        {.Key = 1, .Time = 8, .Val = 7},
+        {.Key = 1, .Time = 9, .Val = 8},
+        {.Key = 1, .Time = 10, .Val = 9},
+        {.Key = 1, .Time = 11, .Val = 10},
+        {.Key = 1, .Time = 22, .Val = 11},
+        {.Key = 1, .Time = 23, .Val = 12},
+        {.Key = 1, .Time = 24, .Val = 13},
+        {.Key = 1, .Time = 100, .Val = 14},
+        {.Key = 1, .Time = 117, .Val = 15},
+        {.Key = 1, .Time = 121, .Val = 16},
+        {.Key = 1, .Time = 126, .Val = 17},
     };
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
@@ -1153,24 +1152,24 @@ Y_UNIT_TEST(TestWatermarkFlowOverflow) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "11 12 Add 13 Add 9 10 Add 2 3 Add 4 Add 5 Add 6 Add 7 Add 8 Add Merge Merge", 100},
-            {1, "14 11 12 Add 13 Add 9 10 Add Merge Merge", 110},
+            {.Key = 1, .Val = "11 12 Add 13 Add 9 10 Add 2 3 Add 4 Add 5 Add 6 Add 7 Add 8 Add Merge Merge", .Time = 100},
+            {.Key = 1, .Val = "14 11 12 Add 13 Add 9 10 Add Merge Merge", .Time = 110},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "15 14 11 12 Add 13 Add Merge Merge", 120},
+            {.Key = 1, .Val = "15 14 11 12 Add 13 Add Merge Merge", .Time = 120},
         }),
         TOutputGroup({
-            {1, "16 17 Add 15 14 Merge Merge", 130},
-            {1, "16 17 Add 15 14 Merge Merge", 140},
-            {1, "16 17 Add 15 14 Merge Merge", 150},
-            {1, "16 17 Add 15 14 Merge Merge", 160},
-            {1, "16 17 Add 15 14 Merge Merge", 170},
-            {1, "16 17 Add 15 14 Merge Merge", 180},
-            {1, "16 17 Add 15 14 Merge Merge", 190},
-            {1, "16 17 Add 15 14 Merge Merge", 200},
-            {1, "16 17 Add 15 Merge", 210},
-            {1, "16 17 Add", 220},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 130},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 140},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 150},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 160},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 170},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 180},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 190},
+            {.Key = 1, .Val = "16 17 Add 15 14 Merge Merge", .Time = 200},
+            {.Key = 1, .Val = "16 17 Add 15 Merge", .Time = 210},
+            {.Key = 1, .Val = "16 17 Add", .Time = 220},
         }),
     };
     const std::vector<std::pair<ui64, TInstant>> watermarks = {
@@ -1190,73 +1189,73 @@ Y_UNIT_TEST(TestWatermarkFlowOverflow) {
 Y_UNIT_TEST(TestDataWatermarks) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {2, 101, 2},
-        {1, 111, 3},
-        {2, 140, 5},
-        {2, 160, 1}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 2, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 111, .Val = 3},
+        {.Key = 2, .Time = 140, .Val = 5},
+        {.Key = 2, .Time = 160, .Val = 1}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, "2", 110}, {1, "3 2 Merge", 120}, {2, "2", 110}, {2, "2", 120}}),
-        TOutputGroup({{2, "2", 130}, {1, "3 2 Merge", 130}, {1, "3", 140}}),
-        TOutputGroup({{2, "5", 150}, {2, "5", 160}, {2, "1 5 Merge", 170}, {2, "1", 180}, {2, "1", 190}}),
+        TOutputGroup({{.Key = 1, .Val = "2", .Time = 110}, {.Key = 1, .Val = "3 2 Merge", .Time = 120}, {.Key = 2, .Val = "2", .Time = 110}, {.Key = 2, .Val = "2", .Time = 120}}),
+        TOutputGroup({{.Key = 2, .Val = "2", .Time = 130}, {.Key = 1, .Val = "3 2 Merge", .Time = 130}, {.Key = 1, .Val = "3", .Time = 140}}),
+        TOutputGroup({{.Key = 2, .Val = "5", .Time = 150}, {.Key = 2, .Val = "5", .Time = 160}, {.Key = 2, .Val = "1 5 Merge", .Time = 170}, {.Key = 2, .Val = "1", .Time = 180}, {.Key = 2, .Val = "1", .Time = 190}}),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 12;
 
-    TestImpl(input, expected, expectedStatsMap, 10, 30, 20, true);
+    TestImpl(input, expected, expectedStatsMap, 10, 30, 20, /*dataWatermarks=*/true);
 }
 
 Y_UNIT_TEST(TestDataWatermarksNoGarbage) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 100, 2},
-        {2, 150, 1}};
+        {.Key = 1, .Time = 100, .Val = 2},
+        {.Key = 2, .Time = 150, .Val = 1}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, "2", 110}, {1, "2", 120}, {1, "2", 130}}),
-        TOutputGroup({{2, "1", 160}, {2, "1", 170}, {2, "1", 180}}),
+        TOutputGroup({{.Key = 1, .Val = "2", .Time = 110}, {.Key = 1, .Val = "2", .Time = 120}, {.Key = 1, .Val = "2", .Time = 130}}),
+        TOutputGroup({{.Key = 2, .Val = "1", .Time = 160}, {.Key = 2, .Val = "1", .Time = 170}, {.Key = 2, .Val = "1", .Time = 180}}),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 6;
 
-    TestImpl(input, expected, expectedStatsMap, 10, 30, 20, true, false);
+    TestImpl(input, expected, expectedStatsMap, 10, 30, 20, /*dataWatermarks=*/true, /*watermarkMode=*/false);
 }
 
 Y_UNIT_TEST(TestValidness1) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {2, 101, 2},
-        {1, 111, 3},
-        {2, 140, 5},
-        {2, 160, 1}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 2, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 111, .Val = 3},
+        {.Key = 2, .Time = 140, .Val = 5},
+        {.Key = 2, .Time = 160, .Val = 1}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {2, "2", 110},
-            {2, "2", 120},
+            {.Key = 2, .Val = "2", .Time = 110},
+            {.Key = 2, .Val = "2", .Time = 120},
         }),
         TOutputGroup({
-            {2, "2", 130},
+            {.Key = 2, .Val = "2", .Time = 130},
         }),
         TOutputGroup({
-            {1, "2", 110},
-            {1, "3 2 Merge", 120},
-            {1, "3 2 Merge", 130},
-            {1, "3", 140},
-            {2, "5", 150},
-            {2, "5", 160},
-            {2, "1 5 Merge", 170},
-            {2, "1", 190},
-            {2, "1", 180},
+            {.Key = 1, .Val = "2", .Time = 110},
+            {.Key = 1, .Val = "3 2 Merge", .Time = 120},
+            {.Key = 1, .Val = "3 2 Merge", .Time = 130},
+            {.Key = 1, .Val = "3", .Time = 140},
+            {.Key = 2, .Val = "5", .Time = 150},
+            {.Key = 2, .Val = "5", .Time = 160},
+            {.Key = 2, .Val = "1 5 Merge", .Time = 170},
+            {.Key = 2, .Val = "1", .Time = 190},
+            {.Key = 2, .Val = "1", .Time = 180},
         }),
     };
     auto expectedStatsMap = DefaultStatsMap;
@@ -1269,28 +1268,28 @@ Y_UNIT_TEST(TestValidness1) {
 Y_UNIT_TEST(TestValidness2) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {2, 101, 2},
-        {1, 101, 2},
-        {2, 102, 3},
-        {1, 102, 3},
-        {2, 115, 4},
-        {1, 115, 4},
-        {2, 123, 6},
-        {1, 123, 6},
-        {2, 124, 5},
-        {1, 124, 5},
-        {2, 125, 7},
-        {1, 125, 7},
-        {2, 140, 2},
-        {1, 140, 2},
-        {2, 147, 1},
-        {1, 147, 1},
-        {2, 151, 6},
-        {1, 151, 6},
-        {2, 159, 2},
-        {1, 159, 2},
-        {2, 185, 8},
-        {1, 185, 8}};
+        {.Key = 2, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 2, .Time = 102, .Val = 3},
+        {.Key = 1, .Time = 102, .Val = 3},
+        {.Key = 2, .Time = 115, .Val = 4},
+        {.Key = 1, .Time = 115, .Val = 4},
+        {.Key = 2, .Time = 123, .Val = 6},
+        {.Key = 1, .Time = 123, .Val = 6},
+        {.Key = 2, .Time = 124, .Val = 5},
+        {.Key = 1, .Time = 124, .Val = 5},
+        {.Key = 2, .Time = 125, .Val = 7},
+        {.Key = 1, .Time = 125, .Val = 7},
+        {.Key = 2, .Time = 140, .Val = 2},
+        {.Key = 1, .Time = 140, .Val = 2},
+        {.Key = 2, .Time = 147, .Val = 1},
+        {.Key = 1, .Time = 147, .Val = 1},
+        {.Key = 2, .Time = 151, .Val = 6},
+        {.Key = 1, .Time = 151, .Val = 6},
+        {.Key = 2, .Time = 159, .Val = 2},
+        {.Key = 1, .Time = 159, .Val = 2},
+        {.Key = 2, .Time = 185, .Val = 8},
+        {.Key = 1, .Time = 185, .Val = 8}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -1306,103 +1305,103 @@ Y_UNIT_TEST(TestValidness2) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "2 3 Add", 110},
-            {1, "4 2 3 Add Merge", 120},
-            {2, "2 3 Add", 110},
-            {2, "4 2 3 Add Merge", 120},
+            {.Key = 1, .Val = "2 3 Add", .Time = 110},
+            {.Key = 1, .Val = "4 2 3 Add Merge", .Time = 120},
+            {.Key = 2, .Val = "2 3 Add", .Time = 110},
+            {.Key = 2, .Val = "4 2 3 Add Merge", .Time = 120},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {2, "6 5 Add 7 Add 4 2 3 Add Merge Merge", 130},
-            {1, "6 5 Add 7 Add 4 2 3 Add Merge Merge", 130},
+            {.Key = 2, .Val = "6 5 Add 7 Add 4 2 3 Add Merge Merge", .Time = 130},
+            {.Key = 1, .Val = "6 5 Add 7 Add 4 2 3 Add Merge Merge", .Time = 130},
         }),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {2, "6 5 Add 7 Add 4 Merge", 140},
-            {2, "2 1 Add 6 5 Add 7 Add Merge", 150},
-            {2, "6 2 Add 2 1 Add Merge", 160},
-            {1, "6 5 Add 7 Add 4 Merge", 140},
-            {1, "2 1 Add 6 5 Add 7 Add Merge", 150},
-            {1, "6 2 Add 2 1 Add Merge", 160},
+            {.Key = 2, .Val = "6 5 Add 7 Add 4 Merge", .Time = 140},
+            {.Key = 2, .Val = "2 1 Add 6 5 Add 7 Add Merge", .Time = 150},
+            {.Key = 2, .Val = "6 2 Add 2 1 Add Merge", .Time = 160},
+            {.Key = 1, .Val = "6 5 Add 7 Add 4 Merge", .Time = 140},
+            {.Key = 1, .Val = "2 1 Add 6 5 Add 7 Add Merge", .Time = 150},
+            {.Key = 1, .Val = "6 2 Add 2 1 Add Merge", .Time = 160},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "6 2 Add 2 1 Add Merge", 170},
-            {1, "6 2 Add", 180},
-            {1, "8", 190},
-            {1, "8", 200},
-            {1, "8", 210},
-            {2, "6 2 Add 2 1 Add Merge", 170},
-            {2, "6 2 Add", 180},
-            {2, "8", 190},
-            {2, "8", 200},
-            {2, "8", 210},
+            {.Key = 1, .Val = "6 2 Add 2 1 Add Merge", .Time = 170},
+            {.Key = 1, .Val = "6 2 Add", .Time = 180},
+            {.Key = 1, .Val = "8", .Time = 190},
+            {.Key = 1, .Val = "8", .Time = 200},
+            {.Key = 1, .Val = "8", .Time = 210},
+            {.Key = 2, .Val = "6 2 Add 2 1 Add Merge", .Time = 170},
+            {.Key = 2, .Val = "6 2 Add", .Time = 180},
+            {.Key = 2, .Val = "8", .Time = 190},
+            {.Key = 2, .Val = "8", .Time = 200},
+            {.Key = 2, .Val = "8", .Time = 210},
         }),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 22;
     expectedStatsMap["MultiHop_KeysCount"] = 2;
 
-    TestImpl(input, expected, expectedStatsMap, 10, 30, 20, true);
+    TestImpl(input, expected, expectedStatsMap, 10, 30, 20, /*dataWatermarks=*/true);
 }
 
 Y_UNIT_TEST(TestValidness3) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 105, 1},
-        {1, 107, 4},
-        {2, 106, 3},
-        {1, 111, 7},
-        {1, 117, 3},
-        {2, 110, 2},
-        {1, 108, 9},
-        {1, 121, 4},
-        {2, 107, 2},
-        {2, 141, 5},
-        {1, 141, 10}};
+        {.Key = 1, .Time = 105, .Val = 1},
+        {.Key = 1, .Time = 107, .Val = 4},
+        {.Key = 2, .Time = 106, .Val = 3},
+        {.Key = 1, .Time = 111, .Val = 7},
+        {.Key = 1, .Time = 117, .Val = 3},
+        {.Key = 2, .Time = 110, .Val = 2},
+        {.Key = 1, .Time = 108, .Val = 9},
+        {.Key = 1, .Time = 121, .Val = 4},
+        {.Key = 2, .Time = 107, .Val = 2},
+        {.Key = 2, .Time = 141, .Val = 5},
+        {.Key = 1, .Time = 141, .Val = 10}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}), TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
         TOutputGroup({}), TOutputGroup({}), TOutputGroup({}),
         TOutputGroup({
-            {1, "1 4 Add 9 Add", 110},
-            {2, "3", 110},
+            {.Key = 1, .Val = "1 4 Add 9 Add", .Time = 110},
+            {.Key = 2, .Val = "3", .Time = 110},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {2, "2 3 2 Add Merge", 115},
-            {2, "2", 120},
-            {1, "7 1 4 Add 9 Add Merge", 115},
-            {1, "3 7 Merge", 120},
-            {1, "4 3 Merge", 125},
-            {1, "4", 130},
+            {.Key = 2, .Val = "2 3 2 Add Merge", .Time = 115},
+            {.Key = 2, .Val = "2", .Time = 120},
+            {.Key = 1, .Val = "7 1 4 Add 9 Add Merge", .Time = 115},
+            {.Key = 1, .Val = "3 7 Merge", .Time = 120},
+            {.Key = 1, .Val = "4 3 Merge", .Time = 125},
+            {.Key = 1, .Val = "4", .Time = 130},
         }),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "10", 145},
-            {1, "10", 150},
-            {2, "5", 145},
-            {2, "5", 150},
+            {.Key = 1, .Val = "10", .Time = 145},
+            {.Key = 1, .Val = "10", .Time = 150},
+            {.Key = 2, .Val = "5", .Time = 145},
+            {.Key = 2, .Val = "5", .Time = 150},
         })};
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 12;
     expectedStatsMap["MultiHop_KeysCount"] = 2;
 
-    TestImpl(input, expected, expectedStatsMap, 5, 10, 10, true);
+    TestImpl(input, expected, expectedStatsMap, 5, 10, 10, /*dataWatermarks=*/true);
 }
 
 Y_UNIT_TEST(TestDelay) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 3},
-        {1, 111, 5},
-        {1, 120, 7},
-        {1, 80, 9},
-        {1, 79, 11}};
+        {.Key = 1, .Time = 101, .Val = 3},
+        {.Key = 1, .Time = 111, .Val = 5},
+        {.Key = 1, .Time = 120, .Val = 7},
+        {.Key = 1, .Time = 80, .Val = 9},
+        {.Key = 1, .Time = 79, .Val = 11}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
@@ -1411,11 +1410,11 @@ Y_UNIT_TEST(TestDelay) {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({
-            {1, "3 9 Merge", 110},
-            {1, "5 3 Merge", 120},
-            {1, "7 5 3 Merge Merge", 130},
-            {1, "7 5 Merge", 140},
-            {1, "7", 150},
+            {.Key = 1, .Val = "3 9 Merge", .Time = 110},
+            {.Key = 1, .Val = "5 3 Merge", .Time = 120},
+            {.Key = 1, .Val = "7 5 3 Merge Merge", .Time = 130},
+            {.Key = 1, .Val = "7 5 Merge", .Time = 140},
+            {.Key = 1, .Val = "7", .Time = 150},
         }),
     };
     auto expectedStatsMap = DefaultStatsMap;
@@ -1428,13 +1427,13 @@ Y_UNIT_TEST(TestDelay) {
 Y_UNIT_TEST(TestWindowsBeforeFirstElement) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 101, 2},
-        {1, 111, 3}};
+        {.Key = 1, .Time = 101, .Val = 2},
+        {.Key = 1, .Time = 111, .Val = 3}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, "2", 110}, {1, "3 2 Merge", 120}, {1, "3 2 Merge", 130}, {1, "3", 140}}),
+        TOutputGroup({{.Key = 1, .Val = "2", .Time = 110}, {.Key = 1, .Val = "3 2 Merge", .Time = 120}, {.Key = 1, .Val = "3 2 Merge", .Time = 130}, {.Key = 1, .Val = "3", .Time = 140}}),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 4;
@@ -1445,11 +1444,11 @@ Y_UNIT_TEST(TestWindowsBeforeFirstElement) {
 Y_UNIT_TEST(TestSubzeroValues) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
-        {1, 1, 2}};
+        {.Key = 1, .Time = 1, .Val = 2}};
     const std::vector<TOutputGroup> expected = {
         TOutputGroup({}),
         TOutputGroup({}),
-        TOutputGroup({{1, "2", 30}}),
+        TOutputGroup({{.Key = 1, .Val = "2", .Time = 30}}),
     };
     auto expectedStatsMap = DefaultStatsMap;
     expectedStatsMap["MultiHop_NewHopsCount"] = 1;

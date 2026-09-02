@@ -18,6 +18,8 @@ SRCS(
     has_path_ddl_ut.cpp
     has_path_matcher_ut.cpp
     has_path_ut.cpp
+    has_shared_reading_matcher_ut.cpp
+    has_shared_reading_ut.cpp
     stream_query_classification_ut.cpp
     has_stream_matcher_ut.cpp
     has_stream_ut.cpp
@@ -31,7 +33,12 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/services/workload_manager/ut/common
+    ydb/public/lib/ut_helpers
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/types/operation
 
     yql/essentials/sql/pg_dummy
 )

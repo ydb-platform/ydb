@@ -29,16 +29,18 @@ else:  # pragma: no cover
     from importlib.abc import Traversable
 
 if TYPE_CHECKING:
+    from typing import TypeAlias, TypeGuard
+
     from _typeshed import (
         FileDescriptorOrPath,
         SupportsIter,
         SupportsNext,
     )
-    from typing_extensions import Self, TypeAlias, TypeGuard, Unpack
+    from typing_extensions import Self, Unpack
 
     Openable: TypeAlias = FileDescriptorOrPath
 else:
-    Openable = Union[str, bytes, os.PathLike, int]
+    Openable = str | bytes | os.PathLike | int
 
 _T = TypeVar("_T")
 
@@ -210,7 +212,7 @@ class FoldedCase(str):
         return pattern.split(self, int(maxsplit))
 
 
-@ExceptionTrap(UnicodeDecodeError).passes  # type: ignore[no-untyped-call, untyped-decorator, unused-ignore, misc] # jaraco/jaraco.context#15
+@ExceptionTrap(UnicodeDecodeError).passes  # type: ignore[no-untyped-call, untyped-decorator, unused-ignore, misc, arg-type] # jaraco/jaraco.context#15
 def is_decodable(value: _SupportsDecode) -> None:
     r"""
     Return True if the supplied value is decodable (using the default
@@ -488,6 +490,25 @@ def simple_html_strip(s: str) -> str:
     return ''.join(texts)
 
 
+# ECMA-48 escape sequences: a Fe escape (except CSI) or a CSI sequence.
+_ansi_pattern = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+
+def strip_ansi(text: str) -> str:
+    r"""
+    Remove ANSI escape sequences (such as SGR color codes) from `text`.
+
+    >>> strip_ansi('\x1b[1;32m3.24 nsec\x1b[0m \x1b[32mper loop\x1b[0m')
+    '3.24 nsec per loop'
+
+    Text without escape sequences passes through unchanged.
+
+    >>> strip_ansi('plain text')
+    'plain text'
+    """
+    return _ansi_pattern.sub('', text)
+
+
 class SeparatedValues(str):
     """
     A string separated by a separator. Overrides __iter__ for getting
@@ -697,7 +718,7 @@ def join_continuation(lines: SupportsIter[SupportsNext[str]]) -> Generator[str]:
 
 
 # https://docs.python.org/3/library/io.html#io.TextIOBase.newlines
-NewlineSpec: TypeAlias = Union[str, tuple[str, ...], None]
+NewlineSpec: TypeAlias = str | tuple[str, ...] | None
 
 
 @functools.singledispatch

@@ -1,7 +1,14 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
+
+#include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 namespace NKikimr::NWorkloadManager {
 
@@ -624,7 +631,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             ALTER RESOURCE POOL )" << poolId << R"( SET (
                 CONCURRENT_QUERY_LIMIT=0
             );
-        )", EStatus::PRECONDITION_FAILED, "Can not change property concurrent_query_limit for default pool");
+        )", EStatus::PRECONDITION_FAILED, "Cannot change property concurrent_query_limit for default pool");
     }
 
     Y_UNIT_TEST(TestAlterResourcePool) {
@@ -823,6 +830,217 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         ydb->ContinueQueryExecution(hangingRequest);
         TSampleQueries::TSelect42::CheckResult(hangingRequest.GetResult());
     }
+
+    Y_UNIT_TEST(TestDisableResourcePools) {
+        auto ydb = TYdbSetupSettings()
+            .EnableResourcePools(false)
+            .Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUEUE_SIZE=1000
+            );)", EStatus::UNSUPPORTED, "Resource pools are disabled");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
+                RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
+            )", EStatus::UNSUPPORTED, "Resource pools are disabled");
+
+        ydb->ExecuteSchemeQuery("DROP RESOURCE POOL MyResourcePool;",
+            EStatus::SCHEME_ERROR,
+            "Path `/Root/.metadata/workload_manager/pools/MyResourcePool` does not exist");
+    }
+
+    Y_UNIT_TEST(TestDisableResourcePoolsOnServerless) {
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(false)
+            .Create();
+
+        auto settings = TQueryRunnerSettings().PoolId("");
+
+        const auto& createSql = R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUEUE_SIZE=1000
+            );)";
+
+        const auto& alterSql = R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
+                RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
+            )";
+
+        const auto& dropSql = "DROP RESOURCE POOL MyResourcePool;";
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
+        {
+            auto result = ydb->ExecuteQuery(createSql, settings);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pools are disabled for serverless domains", result.GetIssues().ToString());
+        }
+        {
+            auto result = ydb->ExecuteQuery(alterSql, settings);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "does not exist", result.GetIssues().ToString());
+        }
+        {
+            auto result = ydb->ExecuteQuery(dropSql, settings);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "does not exist", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TestResourcePoolsValidation) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL `MyFolder/MyResourcePool` WITH (
+                CONCURRENT_QUERY_LIMIT=20
+            );)", EStatus::PRECONDITION_FAILED, "Resource pool name should not contain '/' symbol");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                ANOTHER_LIMIT=20
+            );)", EStatus::BAD_REQUEST, "Unknown property: another_limit");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (ANOTHER_LIMIT = 5),
+                RESET (SOME_LIMIT);
+            )", EStatus::BAD_REQUEST, "Unknown property: another_limit, some_limit");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT="StringValue"
+            );)", EStatus::BAD_REQUEST, "Failed to parse property concurrent_query_limit:");
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=)" << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT + 1 << R"(
+            );)", EStatus::SCHEME_ERROR,
+            TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << NResourcePool::POOL_MAX_CONCURRENT_QUERY_LIMIT + 1);
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                QUEUE_SIZE=1
+            );)", EStatus::SCHEME_ERROR, "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
+    }
+
+    Y_UNIT_TEST(TestDoubleCreateResourcePool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20
+            );)");
+
+        auto resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
+        UNIT_ASSERT_VALUES_EQUAL(resourcePoolDesc->ResultSet.at(0).Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=50
+            );)", EStatus::GENERIC_ERROR, "path exist");
+    }
+
+    Y_UNIT_TEST(TestAlterNonExistingResourcePool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
+                RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
+            )", EStatus::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(TestDropNonExistingResourcePool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery("DROP RESOURCE POOL MyResourcePool", EStatus::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(TestCreateResourcePoolProperties) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                QUEUE_SIZE=1000,
+                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=80
+            );)");
+
+        auto resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
+        const auto& resourcePool = resourcePoolDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
+        UNIT_ASSERT(resourcePool.ResourcePoolInfo);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePool.ResourcePoolInfo->Description.GetName(), "MyResourcePool");
+        const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
+        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "1000");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "80");
+    }
+
+    Y_UNIT_TEST(TestAlterResourcePoolProperties) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20,
+                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=70
+            );)");
+
+        auto resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
+        const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
+        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "70");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
+                RESET (TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE);
+            )");
+
+        resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
+        const auto& propertiesAfter = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
+        UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.at("concurrent_query_limit"), "30");
+        UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.at("queue_size"), "100");
+        UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.at("total_memory_limit_percent_per_node"), "-1");
+    }
+
+    Y_UNIT_TEST(TestDropResourcePoolScheme) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                CONCURRENT_QUERY_LIMIT=20
+            );)");
+
+        ydb->ExecuteSchemeQuery("DROP RESOURCE POOL MyResourcePool");
+
+        auto resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
+        const auto& resourcePool = resourcePoolDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePoolDesc->ErrorCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resourcePool.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+    }
 }
 
 Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
@@ -962,9 +1180,19 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         auto settings = TQueryRunnerSettings().PoolId("").UserSID("test@user");
         const TString& poolId = "my_pool";
-        CreateSampleResourcePoolClassifier(ydb, settings, poolId);
+        const TString& classifierId = CreateSampleResourcePoolClassifier(ydb, settings, poolId);
 
         WaitForFail(ydb, settings, poolId);
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            DROP RESOURCE POOL )" << poolId << R"(;
+        )", NYdb::EStatus::PRECONDITION_FAILED, TStringBuilder() << "referenced by resource pool classifiers: " << classifierId);
+
+        WaitForFail(ydb, settings, poolId);
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            DROP RESOURCE POOL CLASSIFIER )" << classifierId << R"(;
+        )");
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             DROP RESOURCE POOL )" << poolId << R"(;
@@ -1066,6 +1294,29 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         return count;
     }
 
+    // Drops through tx proxy directly, bypassing the DDL check that forbids dropping a referenced
+    // pool — reproduces the dangling state left by clusters from before YQ-5514.
+    void DropResourcePoolBypassingClassifierCheck(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId) {
+        auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+        request->Record.SetDatabaseName(CanonizePath(ydb->GetSettings().DomainName_));
+        auto& schemeTx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        schemeTx.SetWorkingDir(JoinPath({CanonizePath(ydb->GetSettings().DomainName_), ".metadata/workload_manager/pools/"}));
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropResourcePool);
+        schemeTx.MutableDrop()->SetName(poolId);
+
+        auto* runtime = ydb->GetRuntime();
+        const auto edgeActor = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.release()));
+        runtime->GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransactionStatus>(edgeActor, FUTURE_WAIT_TIMEOUT);
+
+        IYdbSetup::WaitFor(FUTURE_WAIT_TIMEOUT, "pool drop", [ydb, poolId](TString& errorString) {
+            auto kind = ydb->Navigate(TStringBuilder() << ".metadata/workload_manager/pools/" << poolId)->ResultSet.at(0).Kind;
+
+            errorString = TStringBuilder() << "kind = " << kind;
+            return kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown;
+        });
+    }
+
     Y_UNIT_TEST(TestClassifierPointingToNonExistentPool) {
         auto ydb = TYdbSetupSettings().Create();
 
@@ -1134,8 +1385,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         UNIT_ASSERT_VALUES_EQUAL(CountClassifiers(ydb, classifierId), 1u);
 
-        // Drop the pool the classifier references
-        ydb->ExecuteSchemeQuery(TStringBuilder() << "DROP RESOURCE POOL " << poolId << ";");
+        DropResourcePoolBypassingClassifierCheck(ydb, poolId);
 
         // DROP of the classifier must succeed even though the pool is gone:
         // pool existence validation is skipped for Drop operations
@@ -1181,8 +1431,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         UNIT_ASSERT_VALUES_EQUAL(CountClassifiers(ydb, classifierId), 1u);
 
-        // Drop the pool that the classifier references
-        ydb->ExecuteSchemeQuery(TStringBuilder() << "DROP RESOURCE POOL " << poolId << ";");
+        DropResourcePoolBypassingClassifierCheck(ydb, poolId);
 
         // Altering a non-pool attribute (RANK) must still fail because the
         // preparation actor validates all referenced pools for any ALTER operation.
@@ -1256,6 +1505,222 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         // The invalid classifier must not appear
         UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, "classifier_invalid"), 0u,
             "classifier_invalid must not be created when the resource pool does not exist");
+    }
+
+    Y_UNIT_TEST(TestDisableResourcePoolClassifiers) {
+        auto ydb = TYdbSetupSettings()
+            .EnableResourcePools(false)
+            .Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK=20,
+                RESOURCE_POOL="test_pool"
+            );)", EStatus::GENERIC_ERROR, "Resource pool classifiers are disabled");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                SET (RANK = 1, RESOURCE_POOL = "test"),
+                RESET (MEMBER_NAME);
+            )", EStatus::GENERIC_ERROR, "Resource pool classifiers are disabled");
+
+        ydb->ExecuteSchemeQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
+            EStatus::GENERIC_ERROR,
+            "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
+    }
+
+    Y_UNIT_TEST(TestDisableResourcePoolClassifiersOnServerless) {
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(false)
+            .Create();
+
+        auto settings = TQueryRunnerSettings().PoolId("");
+
+        const auto& createSql = R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK=20,
+                RESOURCE_POOL="test_pool"
+            );)";
+
+        const auto& alterSql = R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                SET (RANK = 1, RESOURCE_POOL = "test"),
+                RESET (MEMBER_NAME);
+            )";
+
+        const auto& dropSql = "DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;";
+
+        // Dedicated, enabled
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Shared, enabled
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
+        TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
+
+        // Serverless, disabled
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
+        {
+            auto result = ydb->ExecuteQuery(createSql, settings);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool classifiers are disabled for serverless domains", result.GetIssues().ToString());
+        }
+        {
+            auto result = ydb->ExecuteQuery(alterSql, settings);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pool classifiers are disabled for serverless domains", result.GetIssues().ToString());
+        }
+        {
+            auto result = ydb->ExecuteQuery(dropSql, settings);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Classifier with name MyResourcePoolClassifier not found in database", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TestResourcePoolClassifiersValidation) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test",
+                ANOTHER_PROPERTY=20
+            );)", EStatus::GENERIC_ERROR, "Unknown property: another_property");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                SET (ANOTHER_PROPERTY = 5),
+                RESET (SOME_PROPERTY);
+            )", EStatus::GENERIC_ERROR, "Unknown property: another_property, some_property");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test",
+                RANK="StringValue"
+            );)", EStatus::GENERIC_ERROR, "Failed to parse property rank:");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL=""
+            );)", EStatus::GENERIC_ERROR, "resource pool name must not be empty");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier SET (
+                RESOURCE_POOL=""
+            );)", EStatus::GENERIC_ERROR, "resource pool name must not be empty");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RANK="0"
+            );)", EStatus::GENERIC_ERROR, "Missing required property resource_pool");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                RESET (RESOURCE_POOL);
+            )", EStatus::GENERIC_ERROR, "Cannot reset required property resource_pool");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER `MyResource/PoolClassifier` WITH (
+                RESOURCE_POOL="test"
+            );)", EStatus::GENERIC_ERROR, "Symbol '/' is not allowed in the resource pool classifier name 'MyResource/PoolClassifier'");
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test",
+                MEMBER_NAME=")" << BUILTIN_ACL_METADATA << R"("
+            );)", EStatus::GENERIC_ERROR,
+            TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << BUILTIN_ACL_METADATA);
+    }
+
+    Y_UNIT_TEST(TestResourcePoolClassifiersRankValidation) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);");
+
+        // Create with sample rank
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER ClassifierRank42 WITH (
+                RESOURCE_POOL="test_pool",
+                RANK=42
+            );)");
+
+        // Try to create with same rank
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER AnotherClassifierRank42 WITH (
+                RESOURCE_POOL="test_pool",
+                RANK=42
+            );)", EStatus::GENERIC_ERROR, "Classifier with rank 42 already exists, its name ClassifierRank42");
+
+        // Create with high rank
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER `ClassifierRank2^63` WITH (
+                RESOURCE_POOL="test_pool",
+                RANK=9223372036854775807
+            );)");
+
+        // Try to create with auto rank
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER ClassifierRankAuto WITH (
+                RESOURCE_POOL="test_pool",
+                MEMBER_NAME="test@user"
+            );)", EStatus::GENERIC_ERROR, "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807");
+
+        // Try to alter to exist rank
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER `ClassifierRank2^63` SET (
+                RANK=42
+            );)", EStatus::GENERIC_ERROR, "Classifier with rank 42 already exists, its name ClassifierRank42");
+
+        // Try to reset classifier rank
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER ClassifierRank42 RESET (
+                RANK
+            );)", EStatus::GENERIC_ERROR, "Cannot reset property rank");
+    }
+
+    Y_UNIT_TEST(TestDoubleCreateResourcePoolClassifier) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test_pool",
+                RANK=20
+            );)");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL="test_pool",
+                RANK=1
+            );)", EStatus::GENERIC_ERROR, "Conflict with existing key");
+    }
+
+    Y_UNIT_TEST(TestAlterNonExistingResourcePoolClassifier) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
+                SET (RESOURCE_POOL = "test", RANK = 100),
+                RESET (MEMBER_NAME);
+            )", EStatus::GENERIC_ERROR, "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
+    }
+
+    Y_UNIT_TEST(TestDropNonExistingResourcePoolClassifier) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier;",
+            EStatus::GENERIC_ERROR, "Classifier with name MyResourcePoolClassifier not found in database with id /Root");
     }
 
 }
@@ -2222,6 +2687,158 @@ Y_UNIT_TEST_SUITE(RejectActionFeatureFlagEnabled) {
                 RANK=200
             );
         )");
+    }
+}
+
+namespace {
+
+using namespace NYdb::NQuery;
+
+void CheckQueryResult(TExecuteQueryResult result) {
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+    NKqp::CompareYson(R"([
+        [[3u];[1]];
+        [[4000000003u];[1]]
+    ])", FormatResultSetYson(result.GetResultSet(0)));
+}
+
+NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, i32 tries = -1) {
+    NYdb::NOperation::TOperationClient client(ydbDriver);
+    while(1) {
+        auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
+        if (op.Ready() || tries == 0) {
+            return op;
+        }
+        UNIT_ASSERT_C(op.Status().IsSuccess(), op.Status().GetStatus() << ":" << op.Status().GetIssues().ToString());
+        if (tries > 0) {
+            --tries;
+        }
+        Sleep(TDuration::MilliSeconds(10));
+    }
+}
+
+void CheckScriptResults(TScriptExecutionOperation scriptExecutionOperation, TScriptExecutionOperation readyOp, TQueryClient& db) {
+    UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+    UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
+    UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
+    UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
+    UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().Columns.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().Columns[0].Name, "column0");
+    UNIT_ASSERT_EQUAL(readyOp.Metadata().ResultSetsMeta.front().Columns[0].Type.GetProto().type_id(), Ydb::Type::PrimitiveTypeId::Type_PrimitiveTypeId_INT32);
+
+    TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+    UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+    TResultSetParser resultSet(results.ExtractResultSet());
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+    UNIT_ASSERT(resultSet.TryNextRow());
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
+}
+
+}  // anonymous namespace
+
+Y_UNIT_TEST_SUITE(WorkloadManagerResourcePool) {
+    Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
+        NKqp::TKikimrSettings serverSettings = NKqp::TKikimrSettings().SetEnableResourcePools(true);
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
+        auto kikimr = NKqp::TKikimrRunner(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteQuerySettings settings;
+
+        {  // Existing pool
+            settings.ResourcePool("default");
+
+            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            CheckQueryResult(result);
+        }
+
+        {  // Not existing pool (check workload manager enabled)
+            settings.ResourcePool("another_pool_id");
+
+            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to resolve pool id another_pool");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
+        }
+    }
+
+    Y_UNIT_TEST(ExecuteQueryWithResourcePoolClassifier) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        auto kikimr = NKqp::TKikimrRunner(NKqp::TKikimrSettings(config).SetEnableResourcePools(true));
+        auto db = kikimr.GetQueryClient();
+
+        const TString userSID = TStringBuilder() << "test@" << BUILTIN_ACL_DOMAIN;
+        const TString schemeSql = TStringBuilder() << R"(
+            CREATE RESOURCE POOL MyPool WITH (
+                CONCURRENT_QUERY_LIMIT=0
+            );
+            CREATE RESOURCE POOL CLASSIFIER MyPoolClassifier WITH (
+                RESOURCE_POOL="MyPool",
+                MEMBER_NAME=")" << userSID << R"("
+            );
+            GRANT ALL ON `/Root` TO `)" << userSID << R"(`;
+        )";
+        auto schemeResult = db.ExecuteQuery(schemeSql, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+
+        auto testUserClient = kikimr.GetQueryClient(TClientSettings().AuthToken(userSID));
+        const TDuration timeout = TDuration::Seconds(5);
+        const TInstant start = TInstant::Now();
+        while (TInstant::Now() - start <= timeout) {
+            const TString query = "SELECT 42;";
+            auto result = testUserClient.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            if (!result.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool MyPool was disabled due to zero concurrent query limit");
+                return;
+            }
+
+            Cerr << "Wait resource pool classifier " << TInstant::Now() - start << ": status = " << result.GetStatus() << ", issues = " << result.GetIssues().ToOneLineString() << "\n";
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(false, "Waiting resource pool classifier timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithWorkloadManager) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        auto kikimr = NKqp::TKikimrRunner(NKqp::TKikimrSettings(config)
+            .SetEnableResourcePools(true)
+            .SetEnableScriptExecutionOperations(true));
+        auto db = kikimr.GetQueryClient();
+
+        TExecuteScriptSettings settings;
+
+        {  // Existing pool
+            settings.ResourcePool("default");
+
+            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
+            CheckScriptResults(scripOp, WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver()), db);
+        }
+
+        {  // Not existing pool (check workload manager enabled)
+            settings.ResourcePool("another_pool_id");
+
+            auto scripOp = db.ExecuteScript("SELECT 42", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scripOp.Status().GetStatus(), EStatus::SUCCESS, scripOp.Status().GetIssues().ToString());
+
+            auto readyOp = WaitScriptExecutionOperation(scripOp.Id(), kikimr.GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_EQUAL_C(readyOp.Status().GetStatus(), EStatus::NOT_FOUND, readyOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Resource pool another_pool_id not found");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Failed to resolve pool id another_pool");
+            UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
+        }
     }
 }
 

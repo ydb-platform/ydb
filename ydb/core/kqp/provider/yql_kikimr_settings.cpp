@@ -90,6 +90,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinct);
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
+    REGISTER_SETTING(*this, OptEnableOlapPushdownRegexp);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
@@ -100,10 +101,13 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OptValidateStreamingConstraints);
+    REGISTER_SETTING(*this, OptValidateStreamingCheckpoints);
     REGISTER_SETTING(*this, OptFallbackToLegacyOptimizer);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
+    REGISTER_SETTING(*this, UseBlockHashJoinForCross);
+    REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
@@ -204,7 +208,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSidePow);
     REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputMult);
     REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputPow);
-    
+
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 }
@@ -317,6 +321,11 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
         TTableServiceConfig::GetEnableOlapPushdownAggregate());
 }
 
+bool TKikimrConfiguration::GetEnableOlapPushdownRegexp() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownRegexp.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownRegexp());
+}
+
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashCombineByDefault());
 }
@@ -379,6 +388,15 @@ bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
 
 bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
+}
+
+bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
+    return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
+}
+
+bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
+    return EnableNewRBOPhysicalStagePeephole.Get().GetOrElse(
+        TTableServiceConfig::GetEnableNewRBOPhysicalStagePeephole());
 }
 
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {

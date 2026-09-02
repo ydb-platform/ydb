@@ -817,6 +817,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Y_ASSERT(readyToAcceptEvent);
         WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello"));
 
+        auto firstFlush = WriteSession->Flush();
+        auto secondFlush = WriteSession->Flush();
+        auto reentrantFlushPromise = NThreading::NewPromise<bool>();
+        auto reentrantFlush = reentrantFlushPromise.GetFuture();
+        firstFlush.Subscribe([WriteSession, reentrantFlushPromise](const NThreading::TFuture<bool>& result) mutable {
+            reentrantFlushPromise.TrySetValue(result.GetValue() && WriteSession->Flush().GetValueSync());
+        });
+
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
@@ -842,6 +850,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event);
         Y_ASSERT(acksEvent);
+
+        UNIT_ASSERT_C(firstFlush.Wait(TDuration::Seconds(30)), "first flush timed out");
+        UNIT_ASSERT_C(secondFlush.Wait(TDuration::Seconds(30)), "second flush timed out");
+        UNIT_ASSERT_C(reentrantFlush.Wait(TDuration::Seconds(30)), "reentrant flush timed out");
+        UNIT_ASSERT(firstFlush.GetValue());
+        UNIT_ASSERT(secondFlush.GetValue());
+        UNIT_ASSERT(reentrantFlush.GetValue());
 
         WriteSession->Close(TDuration::MilliSeconds(10));
     }
@@ -927,7 +942,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
             WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
         }
-
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
@@ -981,6 +995,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
             WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
         }
+        auto flush = WriteSession->Flush();
 
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeUnavailableResult());
@@ -988,7 +1003,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // At this point the observer that federated write session works with should become stale, and the session closes.
         // No messages we have written and no federation discovery requests should be sent.
 
-        Sleep(TDuration::Seconds(3));
+        UNIT_ASSERT_C(flush.Wait(TDuration::Seconds(30)), "flush timed out");
+        UNIT_ASSERT(!flush.GetValue());
         UNIT_ASSERT(!fdsMock.GetNextPendingRequest().has_value());
         WriteSession->Close();
         UNIT_ASSERT_VALUES_EQUAL(acks, 0);

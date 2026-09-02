@@ -4,13 +4,16 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/dbg_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
@@ -19,7 +22,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
-#include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -47,21 +49,22 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
-        const TString& diskId,
-        ui64 tabletId,
-        ui32 generation,
+        const TDiskDescription& diskDescription,
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
-        std::unique_ptr<NTransport::IStorageTransport> storageTransport);
+        NTransport::TStorageTransportPtr storageTransport,
+        NMonitoring::TDynamicCounterPtr counters);
 
-    ~TDirectBlockGroup() override = default;
+    ~TDirectBlockGroup() override;
 
     // IDirectBlockGroup implementation
 
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+
+    ui32 GetTabletGeneration() const override;
 
     IOraclePtr GetOracle() override;
 
@@ -85,7 +88,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -100,7 +103,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
@@ -109,7 +112,7 @@ public:
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
-        ui64 lsn,
+        TPBufferKey pBufferKey,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
@@ -130,7 +133,7 @@ public:
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
 
-    NThreading::TFuture<std::optional<ui64>>
+    NThreading::TFuture<std::optional<TPBufferKey>>
     GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
@@ -139,22 +142,29 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
-    NThreading::TFuture<TDBGDumpResponse> Dump() override;
-
     void OnAddHostResult(
         const NProto::TError& error,
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+
+    NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const override;
 
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
         EHostState oldState,
         EHostState newState) override;
-    ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+    TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const override;
     void QueryAddHost(THostIndex newHostIndex) override;
 
 private:
@@ -191,7 +201,7 @@ private:
     void DoEstablishConnection(
         THostIndex hostIndex,
         EConnectionType connectionType);
-    void OnConnectionEstablished(
+    void OnConnectResponse(
         EConnectionType connectionType,
         THostIndex hostIndex,
         ui64 seqNo,
@@ -258,8 +268,13 @@ private:
 
     [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
 
+    [[nodiscard]] TVChunkStatsGatherResult DoGatherVChunkStats(
+        EVChunkStatsDetail detail) const;
+
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;
+
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
@@ -268,16 +283,18 @@ private:
     const ui64 TabletId;
     const ui32 TabletGeneration;
     const size_t DirectBlockGroupIndex;
-    const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
+    const NTransport::TStorageTransportPtr StorageTransport;
 
     TLogTitle LogTitle;
     ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
+    // DDiskConnections and PBufferConnections always have the same size.
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
+    TDirectBlockGroupCounters Counters;
 
     bool BlockedGenerationDetected = false;
 

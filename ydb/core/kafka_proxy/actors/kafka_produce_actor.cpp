@@ -1,5 +1,6 @@
 #include "kafka_produce_actor.h"
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
@@ -12,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <limits>
 #include <util/string/join.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -20,11 +22,25 @@ namespace NKafka {
 namespace {
 
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
-static constexpr TDuration TOPIC_OK_EXPIRATION_INTERVAL = TDuration::Minutes(15);
 static constexpr TDuration TOPIC_NOT_FOUND_EXPIRATION_INTERVAL = TDuration::Seconds(15);
 static constexpr TDuration TOPIC_UNATHORIZED_EXPIRATION_INTERVAL = TDuration::Minutes(1);
 static constexpr TDuration REQUEST_EXPIRATION_INTERVAL = TDuration::Seconds(30);
 static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
+
+TDuration TopicOkExpirationInterval() {
+    return TDuration::Seconds(Max<ui32>(1, NKikimr::AppData()->PQConfig.GetACLRetryTimeoutSec()));
+}
+
+TIntrusivePtr<TSecurityObject> TryMakeSecurityObject(const TString& owner, const TString& acl) {
+    if (acl.empty()) {
+        return nullptr;
+    }
+    NACLibProto::TACL parsed;
+    if (!parsed.ParseFromString(acl)) {
+        return nullptr;
+    }
+    return MakeIntrusive<TSecurityObject>(owner, acl, false);
+}
 
 NPersQueueCommon::ECodec KafkaBatchCodec() {
     return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
@@ -259,11 +275,13 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             auto& topic = Topics[topicPath];
 
             topic.MeteringMode = info.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode();
+            topic.SecurityObject = info.SecurityObject;
 
-            if (!Context->RequireAuthentication || info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
+            if (Context->HasTopicAccess(info.SecurityObject.Get(), NACLib::EAccessRights::UpdateRow)) {
                 topic.Status = OK;
-                topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
+                topic.ExpirationTime = now + TopicOkExpirationInterval();
                 topic.PartitionChooser = CreatePartitionChooser(info.PQGroupInfo->Description);
+                Context->RememberTopicAclOk(topicPath);
             } else {
                 YDB_LOG_WARN("Produce actor: Unauthorized PRODUCE to topic",
                     {LogPrefix()},
@@ -297,47 +315,120 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     ProcessRequests(ctx);
 }
 
+void TKafkaProduceActor::FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage) {
+    for (auto it = Cookies.begin(); it != Cookies.end();) {
+        const ui64 cookie = it->first;
+        auto& info = it->second;
+        if (info.TopicPath != path) {
+            ++it;
+            continue;
+        }
+
+        auto& result = info.Request->Results[info.Position];
+        result.ErrorCode = errorCode;
+        result.ErrorMessage = TString{errorMessage};
+        info.Request->WaitAcceptingCookies.erase(cookie);
+        info.Request->WaitResultCookies.erase(cookie);
+        it = Cookies.erase(it);
+    }
+}
+
+void TKafkaProduceActor::InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx) {
+    const auto error = deleted
+        ? EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION
+        : EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+    const TStringBuf errorMessage = deleted
+        ? "topic was deleted"
+        : "topic ACL changed, access denied";
+
+    // Close cookies before dropping writers. Poisoning first makes WriterDied miss the maps,
+    // leaving WaitResultCookies stuck until the 30s produce timeout (HOL).
+    FailPendingWritesForTopic(path, error, errorMessage);
+
+    if (deleted) {
+        auto it = NonTransactionalWriters.find(path);
+        if (it != NonTransactionalWriters.end()) {
+            for (auto& [_, writer] : it->second) {
+                Send(writer.ActorId, new TEvents::TEvPoison());
+            }
+            NonTransactionalWriters.erase(it);
+        }
+        for (auto twIt = TransactionalWriters.begin(); twIt != TransactionalWriters.end(); ) {
+            if (twIt->first.TopicPath == path) {
+                Send(twIt->second.ActorId, new TEvents::TEvPoison());
+                twIt = TransactionalWriters.erase(twIt);
+            } else {
+                ++twIt;
+            }
+        }
+
+        auto& topicInfo = Topics[path];
+        topicInfo.Status = NOT_FOUND;
+        topicInfo.ExpirationTime = ctx.Now() + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
+        topicInfo.PartitionChooser.reset();
+        topicInfo.SecurityObject = nullptr;
+    } else {
+        // Keep in-flight partition writers alive so a late TEvWriteResponse/TEvDisconnected
+        // does not race with cookie completion. New produces are rejected via HasTopicAccess
+        // after the topic is re-described. Idle writers are collected by CleanWriters.
+        Topics.erase(path);
+    }
+
+    SendResults(ctx);
+    ProcessRequests(ctx);
+}
+
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx) {
     auto& path = ev->Get()->Path;
     YDB_LOG_INFO("Produce actor: Topic was deleted",
         {LogPrefix()},
         {"path", path});
-
-    auto it = NonTransactionalWriters.find(path);
-    if (it != NonTransactionalWriters.end()) {
-        auto itCopy = it++;
-        for(auto& [_, writer] : itCopy->second) {
-            Send(writer.ActorId, new TEvents::TEvPoison());
-        }
-        NonTransactionalWriters.erase(itCopy);
-    }
-    for (auto& [topicPartition, writer] : TransactionalWriters) {
-        if (topicPartition.TopicPath == path) {
-            Send(writer.ActorId, new TEvents::TEvPoison());
-        }
-        TransactionalWriters.erase(topicPartition);
-    }
-
-    auto& topicInfo = Topics[path];
-    topicInfo.Status = NOT_FOUND;
-    topicInfo.ExpirationTime = ctx.Now() + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
-    topicInfo.PartitionChooser.reset();
+    InvalidateTopic(path, true, ctx);
 }
 
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
-    auto* e = ev->Get();
-    auto& path = e->Path;
-    YDB_LOG_INFO("Produce actor: Topic was updated",
-        {LogPrefix()},
-        {"path", path});
-
-    auto& topic = Topics[path];
-    if (topic.Status == UNAUTHORIZED) {
+    const auto& path = ev->Get()->Path;
+    auto it = Topics.find(path);
+    if (it == Topics.end()) {
         return;
     }
-    topic.Status = OK;
-    topic.ExpirationTime = ctx.Now() + TOPIC_OK_EXPIRATION_INTERVAL;
-    topic.PartitionChooser = CreatePartitionChooser(e->Result->GetPathDescription().GetPersQueueGroup());
+
+    // Scheme cache sends an initial WatchNotifyUpdated with the current version right after
+    // TEvWatchPathId. Do not treat a missing/empty Self as ACL deny: that poisons in-flight produces.
+    if (const auto& result = ev->Get()->Result) {
+        const auto& pathDescription = result->GetPathDescription();
+        if (pathDescription.HasPersQueueGroup()) {
+            const auto& pqGroup = pathDescription.GetPersQueueGroup();
+            it->second.PartitionChooser = CreatePartitionChooser(pqGroup);
+            it->second.MeteringMode = pqGroup.GetPQTabletConfig().GetMeteringMode();
+        }
+        if (pathDescription.HasSelf()) {
+            const auto& self = pathDescription.GetSelf();
+            if (auto securityObject = TryMakeSecurityObject(self.GetOwner(), self.GetEffectiveACL())) {
+                it->second.SecurityObject = std::move(securityObject);
+            } else if (!self.GetEffectiveACL().empty()) {
+                YDB_LOG_WARN("Produce actor: Ignoring unparseable topic ACL",
+                    {LogPrefix()},
+                    {"path", path});
+            }
+        }
+    }
+
+    if (!Context->HasTopicAccess(it->second.SecurityObject.Get(), NACLib::EAccessRights::UpdateRow)) {
+        YDB_LOG_INFO("Produce actor: Topic ACL changed, access denied",
+            {LogPrefix()},
+            {"path", path});
+        InvalidateTopic(path, false, ctx);
+        return;
+    }
+
+    it->second.Status = OK;
+    it->second.ExpirationTime = ctx.Now() + TopicOkExpirationInterval();
+    Context->RememberTopicAclOk(path);
+
+    YDB_LOG_DEBUG("Produce actor: Topic was updated",
+        {LogPrefix()},
+        {"path", path});
 }
 
 void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx) {
@@ -530,7 +621,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
             TString str;
             bool res = proto.SerializeToString(&str);
-            Y_ABORT_UNLESS(res);
+            AFL_ENSURE(res)("reason", "failed to serialize TDataChunk");
 
             auto w = partitionRequest->AddCmdWrite();
             w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
@@ -1079,8 +1170,16 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
     }
 
     auto& topicInfo = it->second;
+    // Status first: a missing topic has no SecurityObject, and HasTopicAccess would
+    // otherwise map that to AUTH for any SASL session (UserToken set).
     if (topicInfo.Status != OK) {
         return { topicInfo.Status, TActorId{} };
+    }
+    if (!Context->HasTopicAccess(topicInfo.SecurityObject.Get(), NACLib::EAccessRights::UpdateRow)) {
+        return { UNAUTHORIZED, TActorId{} };
+    }
+    if (!topicInfo.PartitionChooser) {
+        return { NOT_FOUND, TActorId{} };
     }
 
     if (transactionalId) {

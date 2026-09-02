@@ -8,8 +8,7 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -130,5 +129,4 @@ IComputationNode* WrapBlockGuess(TCallable& callable, const TComputationNodeFact
                               callable.GetType()->GetName(), std::move(argsNodes), argsTypes, resultType, *kernel, kernel);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

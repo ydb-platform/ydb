@@ -15,7 +15,7 @@ private:
     bool IsValidFlag = false;
     bool HasValueFlag = false;
     bool IsColumnKeyFlag = false;
-    std::shared_ptr<const IValueArrowCodec> Codec;
+    EValueType ValueType = EValueType::BinaryJson;
     // Current physical position as (array, local index)
     const arrow::Array* CurrentArray = nullptr;
     ui32 LocalIndex = 0;
@@ -72,14 +72,14 @@ public:
     TGeneralIterator(TColumnsData::TIterator&& iterator, const EValueType valueType, const std::optional<ui32> remappedKey = {})
         : Iterator(iterator)
         , RemappedKey(remappedKey)
-        , Codec(GetCodecForValueType(valueType)) {
+        , ValueType(valueType) {
         Initialize();
     }
 
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
         : Iterator(iterator)
         , RemapKeys(remapKeys)
-        , Codec(GetCodecForValueType(EValueType::BinaryJson)) {
+        , ValueType(EValueType::BinaryJson) {
         Initialize();
     }
     bool IsColumnKey() const {
@@ -161,11 +161,11 @@ public:
     // Re-encode the current value to BinaryJson.
     NBinaryJson::TBinaryJson GetValueAsBinaryJson() const {
         AFL_VERIFY(IsValidFlag);
-        return Codec->ReadValueView(*CurrentArray, LocalIndex).ToBinaryJson();
+        return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
     }
 
     EValueType GetValueType() const {
-        return Codec->GetValueType();
+        return ValueType;
     }
     const arrow::Array& GetArray() const {
         AFL_VERIFY(IsValidFlag);
@@ -177,7 +177,7 @@ public:
     }
     ui32 GetValueSize() const {
         AFL_VERIFY(IsValidFlag);
-        return Codec->GetElementSize(*CurrentArray, LocalIndex);
+        return ArrayElementSize(*CurrentArray, LocalIndex, ValueType);
     }
 
     NJson::TJsonValue GetValue() const;

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: kubernetes
-Version: 36.0.2
+Version: 36.0.3
 Summary: Kubernetes python client
 Home-page: https://github.com/kubernetes-client/python
 Author: Kubernetes

@@ -100,22 +100,25 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& response = ev->Get()->Record;
-    if (!response.GetPartitionResponse().HasCmdReadResult()) {
+    size_t& entryIndex = NextEntryIdx;
+
+    // Empty / missing read result: advance past the current requested offset and continue.
+    // Do not re-issue the same fetch — that would loop forever.
+    if (!response.GetPartitionResponse().HasCmdReadResult()
+            || response.GetPartitionResponse().GetCmdReadResult().GetResult().empty()) {
+        if (entryIndex < SortedEntries.size()) {
+            ++entryIndex;
+        }
+        if (RepliesSent == PendingResponses.size()) {
+            return PassAway();
+        }
         ProcessQueue();
         return;
     }
 
     auto& results = response.GetPartitionResponse().GetCmdReadResult().GetResult();
-    size_t& entryIndex = NextEntryIdx;
     int resultIndex = 0;
     const int resultsSize = results.size();
-
-    if (resultsSize <= 0) {
-        ++entryIndex;
-        ProcessQueue();
-        return;
-    }
-
     const ui64 maxReturnedOffset = results[resultsSize - 1].GetOffset();
 
     // Two-pointer: both SortedEntries and results are sorted by offset

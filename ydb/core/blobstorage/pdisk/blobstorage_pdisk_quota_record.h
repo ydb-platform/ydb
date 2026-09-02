@@ -113,6 +113,11 @@ public:
         return AtomicSub(Free, count) > AtomicGet(Black);
     }
 
+    // The largest count TryAllocate can satisfy right now
+    i64 GetAllocatableFree() const {
+        return Max<i64>(0, AtomicGet(Free) - AtomicGet(Black) - 1);
+    }
+
     // Called only from the main thread
     bool TryAllocate(i64 count, TString &outErrorReason) {
         Y_VERIFY(count > 0);

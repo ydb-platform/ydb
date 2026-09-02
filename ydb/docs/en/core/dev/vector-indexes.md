@@ -77,7 +77,7 @@ ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```
 
-Indexing and search parameters work the same as for a global index.
+Indexing and search parameters work the same as for a global index. Because different filtering-column values often hold very different numbers of vectors, a filtered index can additionally use [adaptive clusters](vector-indexes-kmeans-tree-type.md#adaptive-clusters) to pick the number of clusters for each value automatically.
 
 ### Covering Vector Index {#covering}
 

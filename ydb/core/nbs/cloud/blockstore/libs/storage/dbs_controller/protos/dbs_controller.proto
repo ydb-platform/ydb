@@ -1,10 +1,122 @@
 syntax = "proto3";
 
-package NYdb.NBS.DbsController.NProto;
+import "ydb/core/protos/blobstorage_ddisk.proto";
+import "ydb/core/protos/blobstorage_disk.proto";
+
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NYdb.NBS.NBlockStore.NStorage.NDbsController.NProto;
 option java_package = "ru.yandex.ydb.core.nbs.dbs_controller.proto";
 
-// Persisted controller state. Placeholder for now - fill with real fields as
-// the tablet gains functionality.
-message TDbsControllerState {
-  uint64 Version = 1;
+
+// =============================================================================
+// API DDiskMap
+// =============================================================================
+
+//
+// Структура с описанием зависимостей Partition от DDisk-ов (включая PBuffer-ы)
+// Уважает DirectBlockGroup-ы
+//
+message TDirectBlockGroupDDisks {
+  message TDDiskIds {
+    NKikimrBlobStorage.NDDisk.TDDiskId DDisk = 1;
+    NKikimrBlobStorage.NDDisk.TDDiskId PersistentBuffer = 2;
+  }
+  repeated TDDiskIds DDiskIds = 1;
+}
+
+message TPartitionDDisks {
+  repeated TDirectBlockGroupDDisks DirectBlockGroupsDDisks = 1;
+}
+
+//
+// Запрос на обновление отношений в Rel(DDiskId, TabletId)
+// для данной таблетки.
+// Все тройки (TabletId, DirectBlockGroupId, DDiskId), содержащиеся в PartitionDDisks запроса,
+// добавляются в отношение с сохранением информации о типе DDisk (обычный или PBuffer).
+// Все тройки (TabletId, DirectBlockGroupId, DDiskId) с TabletId запроса,
+// не содержащиеся в PartitionDDisks запроса, удаляются из отношения.
+//
+message TUpdateDDiskMapRequest {
+  uint64 TabletId = 1;                  // Id таблетки partition
+  TPartitionDDisks PartitionDDisks = 2; // Список DDisk-ов, от которых зависит partition
+}
+
+message TUpdateDDiskMapResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+}
+
+//
+// Запрос на удаление всех отношений таблетки в Rel(DDiskId, TabletId).
+//
+message TRemoveTabletDDiskMapRequest {
+  uint64 TabletId = 1;                  // Id таблетки partition
+}
+
+message TRemoveTabletDDiskMapResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+}
+
+//
+// GetPartitionsForNode
+//
+message TGetPartitionsForNodeRequest
+{
+  uint32 NodeId = 1;
+}
+
+message TGetPartitionsForNodeResponse
+{
+  NYdb.NBS.NProto.TError Error = 1;
+
+  repeated uint64 Partitions = 2;
+}
+
+// =============================================================================
+// API для Maintenance permission
+// =============================================================================
+
+enum EDecision {
+  ALLOW = 0;
+  DENY = 1;
+}
+
+
+// Запрос на разрешение Maintenance хостов.
+// Принимает список ID storage нод.
+// Возвращает EDecision::ALLOW,
+// если все DBG, зависящие от NodeIds,
+// имеют на момент вызова полный набор нод
+// (при отказе node окажутся в состоянии не хуже -1),
+// и EDecision::DENY в остальных случаях.
+// Дополнительно возвращает список Partition-ов,
+// которые блокируют разрешение (пустой при EDecision::ALLOW).
+message TNodeMaintenancePermissionRequest {
+  repeated uint32 NodeIds = 1;
+}
+
+message TNodeMaintenancePermissionResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+  EDecision Decision = 2;
+  repeated uint64 BlockingPartitionIds = 3;
+}
+
+
+// Запрос на разрешение Maintenance дисков.
+// Принимает список PDisk-ов.
+// Возвращает EDecision::ALLOW,
+// если все DBG, зависящие от node,
+// имеют на момент вызова полный набор нод
+// (при отказе node окажутся в состоянии не хуже -1),
+// и EDecision::DENY в остальных случаях.
+// Дополнительно возвращает список Partition-ов,
+// которые блокируют разрешение (пустой при EDecision::ALLOW).
+message TDiskMaintenancePermissionRequest {
+  repeated NKikimrBlobStorage.TPDiskId PDisks = 1;
+}
+
+message TDiskMaintenancePermissionResponse {
+  NYdb.NBS.NProto.TError Error = 1;
+  EDecision Decision = 2;
+  repeated uint64 BlockingPartitionIds = 3;
 }

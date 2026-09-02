@@ -21,8 +21,8 @@ public:
     struct TResponse
     {
         THostRoute Route;
-        TVector<ui64> FlushOk;
-        TVector<ui64> FlushFailed;
+        TVector<TPBufferKey> FlushOk;
+        TVector<TPBufferKey> FlushFailed;
     };
 
     TFlushRequestExecutor(
@@ -46,7 +46,7 @@ private:
     void DoRun();
     void SendFlushRequest(THostIndex host);
     void OnFlushResponse(const TDBGFlushResponse& response);
-    void Reply(TVector<ui64> flushOk, TVector<ui64> flushFailed);
+    void Reply(TVector<TPBufferKey> flushOk, TVector<TPBufferKey> flushFailed);
 
     void ScheduleRequestTimeout();
     void OnRequestTimeout();

@@ -3,10 +3,11 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
+from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import Client
 from clickhouse_connect.driver.common import unescape_identifier
-from clickhouse_connect.driver.exceptions import ProgrammingError
+from clickhouse_connect.driver.exceptions import DatabaseError, ProgrammingError
 from clickhouse_connect.driver.parser import parse_callable
 from clickhouse_connect.driver.query import remove_sql_comments
 
@@ -15,6 +16,56 @@ logger = logging.getLogger(__name__)
 insert_re = re.compile(r"^\s*INSERT\s+INTO\s+(.*$)", re.IGNORECASE)
 str_type = get_from_name("String")
 int_type = get_from_name("Int32")
+_IMPLICIT_NULLABLE_BASE_TYPES = frozenset(("Dynamic", "Variant"))
+
+
+def _cursor_null_ok(ch_type: Any) -> bool | None:
+    if isinstance(ch_type, str):
+        try:
+            ch_type = get_from_name(ch_type)
+        except (DatabaseError, ValueError, TypeError, IndexError):
+            return None
+    if not isinstance(ch_type, ClickHouseType):
+        return None
+    if ch_type.nullable or ch_type.base_type in _IMPLICIT_NULLABLE_BASE_TYPES:
+        return True
+    if ch_type.base_type == "SimpleAggregateFunction":
+        return _cursor_null_ok(getattr(ch_type, "element_type", None))
+    return False
+
+
+def _leading_keyword(sql: str) -> str:
+    pos = 0
+    length = len(sql)
+    while pos < length:
+        char = sql[pos]
+        if char.isspace():
+            pos += 1
+            continue
+        if sql.startswith("--", pos) or sql.startswith("//", pos) or sql.startswith("#!", pos) or sql.startswith("# ", pos):
+            next_line = sql.find("\n", pos + 1)
+            if next_line == -1:
+                return ""
+            pos = next_line + 1
+            continue
+        if sql.startswith("/*", pos):
+            pos += 2
+            depth = 1
+            while pos < length and depth:
+                if sql.startswith("/*", pos):
+                    depth += 1
+                    pos += 2
+                elif sql.startswith("*/", pos):
+                    depth -= 1
+                    pos += 2
+                else:
+                    pos += 1
+            if depth:
+                return ""
+            continue
+        break
+    match = re.match(r"[A-Za-z_]+", sql[pos:])
+    return "" if match is None else match.group(0).upper()
 
 
 class Cursor:
@@ -37,8 +88,8 @@ class Cursor:
             raise ProgrammingError("Cursor is not valid")
 
     @property
-    def description(self) -> list[tuple[str, Any, None, None, None, None, bool]]:
-        return [(n, t, None, None, None, None, True) for n, t in zip(self.names, self.types)]
+    def description(self) -> list[tuple[str, Any, None, None, None, None, bool | None]]:
+        return [(n, t, None, None, None, None, _cursor_null_ok(t)) for n, t in zip(self.names, self.types)]
 
     @property
     def rowcount(self) -> int:
@@ -51,7 +102,13 @@ class Cursor:
     def close(self) -> None:
         self.data = None
 
-    def execute(self, operation: str, parameters: Any = None) -> None:
+    def execute(
+        self,
+        operation: str,
+        parameters: Any = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+    ) -> None:
         if not parameters and isinstance(operation, str):
             # Per PEP 249 pyformat paramstyle, callers (e.g. SQLAlchemy) escape
             # literal percent signs as %% in operation strings.  When there are
@@ -59,13 +116,15 @@ class Cursor:
             # unescaping automatically.  When there are no parameters,
             # finalize_query short-circuits, so we must unescape here.
             operation = operation.replace("%%", "%")
-        query_result = self.client.query(operation, parameters)
+        query_result = self.client.query(operation, parameters, settings=settings, query_formats=query_formats)
         self.data = query_result.result_set
         self._rowcount = len(self.data)
         self._summary.append(query_result.summary)
 
         # Need to reset cursor _ix after performing an execute
         self._ix = 0
+        self.names = []
+        self.types = []
 
         if query_result.column_names:
             self.names = query_result.column_names
@@ -75,13 +134,23 @@ class Cursor:
             self.types = [x.__class__ for x in self.data[0]]
         else:
             stripped = operation.strip().rstrip(";").strip()
-            if stripped.upper().startswith(("SELECT", "WITH")):
-                meta_result = self.client.query(f"SELECT * FROM ({stripped}) LIMIT 0", parameters)
+            if _leading_keyword(stripped) in ("SELECT", "WITH"):
+                # Introspection re-query carries the same settings/formats so the derived column shape matches.
+                try:
+                    meta_result = self.client.query(
+                        f"SELECT * FROM ({stripped}) LIMIT 0",
+                        parameters,
+                        settings=settings,
+                        query_formats=query_formats,
+                    )
+                except DatabaseError:
+                    logger.debug("DB-API cursor metadata probe failed; leaving description empty", exc_info=True)
+                    return
                 if meta_result.column_names:
                     self.names = meta_result.column_names
                     self.types = [x.name for x in meta_result.column_types]
 
-    def _try_bulk_insert(self, operation: str, data: Any) -> bool:
+    def _try_bulk_insert(self, operation: str, data: Any, settings: dict[str, Any] | None = None) -> bool:
         match = insert_re.match(remove_sql_comments(operation))
         if not match:
             return False
@@ -97,6 +166,12 @@ class Cursor:
             return False
         if not isinstance(data, Sequence) or len(data) == 0:
             return False
+        if "%s" in temp or "%(" in temp:
+            # Pyformat placeholders mean identifiers carry %% for literal percent
+            # signs. Server-side {name:Type} statements keep raw percents.
+            table = table.replace("%%", "%")
+            if op_columns:
+                op_columns = tuple(str(x).replace("%%", "%") for x in op_columns)
         first_row = data[0]
         col_names: list[str] | str
         data_values: Sequence[Sequence[Any]]
@@ -112,20 +187,28 @@ class Cursor:
             data_values = data
         else:
             return False
-        insert_summary = self.client.insert(table, data_values, col_names)
+        insert_summary = self.client.insert(table, data_values, col_names, settings=settings)
         self.data = []
         self._rowcount = insert_summary.written_rows
         self._ix = 0
         self._summary.append(insert_summary.summary)
         return True
 
-    def executemany(self, operation: str, parameters: Any) -> None:
-        if not parameters or self._try_bulk_insert(operation, parameters):
+    def executemany(
+        self,
+        operation: str,
+        parameters: Any,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+    ) -> None:
+        self.names = []
+        self.types = []
+        if not parameters or self._try_bulk_insert(operation, parameters, settings):
             return
         self.data = []
         try:
             for param_row in parameters:
-                query_result = self.client.query(operation, param_row)
+                query_result = self.client.query(operation, param_row, settings=settings, query_formats=query_formats)
                 self.data.extend(query_result.result_set)
                 if self.names or self.types:
                     if query_result.column_names != self.names:

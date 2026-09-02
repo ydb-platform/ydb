@@ -101,7 +101,7 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
     } else {
         WaitingBlobsCount.Dec();
         RetryState.ClearRetryState(event.BlobRange);
-        Task->AddData(event.DataSourceId, event.BlobRange, event.Data);
+        Task->AddData(event.DataSourceId, event.BlobRange, event.Data, event.FromCache);
     }
     if (aborted || Task->IsFinished()) {
         Task = nullptr;

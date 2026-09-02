@@ -11,7 +11,6 @@
 #include <yt/yt/core/compression/codec.h>
 
 #include <yt/yt/core/misc/memory_usage_tracker.h>
-#include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/rpc/helpers.h>
@@ -19,6 +18,8 @@
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -279,7 +280,7 @@ private:
     TAttachmentsOutputStreamPtr RequestAttachmentsStream_;
     TAttachmentsInputStreamPtr ResponseAttachmentsStream_;
 
-    std::string User_;
+    std::string User_ = RootUserName;
     std::string UserTag_;
     std::string RequestInfo_;
 
@@ -353,8 +354,10 @@ struct IClientResponseHandler
     //! Called if the request fails.
     /*!
      *  \param error An error that has occurred.
+     *  \param address Address of the peer that reported the error. Empty if it is not supported by the underlying
+     *  RPC stack or the request failed before a peer was selected.
      */
-    virtual void HandleError(TError error) = 0;
+    virtual void HandleError(TError error, const std::string& address = {}) = 0;
 
     //! Enables passing streaming data from the service to clients.
     virtual void HandleStreamingPayload(const TStreamingPayload& payload) = 0;
@@ -417,7 +420,7 @@ protected:
     virtual bool TryDeserializeBody(TRef data, std::optional<NCompression::ECodec> codecId = {}) = 0;
 
     // IClientResponseHandler implementation.
-    void HandleError(TError error) override;
+    void HandleError(TError error, const std::string& address) override;
     void HandleAcknowledgement() override;
     void HandleResponse(
         TSharedRefArray message,
@@ -447,7 +450,7 @@ private:
     IDirectPlacementTransferPtr ResponseAttachmentsTransfer_;
 
     void TraceResponse();
-    void DoHandleError(TError error);
+    void DoHandleError(TError error, const std::string& address);
 
     void DoHandleResponse(
         TSharedRefArray message,

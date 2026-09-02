@@ -35,8 +35,7 @@ NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
-    return logger.WithTag("Command: %v",
-        context->Request().CommandName);
+    return logger.WithTag("Command", context->Request().CommandName);
 }
 
 } // namespace
@@ -167,10 +166,10 @@ bool TPullQueueCommand::HasResponseParameters() const
 
 void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 {
-    YT_LOG_DEBUG("Executing \"pull_queue\" command (QueuePath: %v, Offset: %v, PartitionIndex: %v)",
-        QueuePath,
-        Offset,
-        PartitionIndex);
+    YT_TLOG_DEBUG("Executing \"pull_queue\" command")
+        .With("QueuePath", QueuePath)
+        .With("Offset", Offset)
+        .With("PartitionIndex", PartitionIndex);
 
     auto client = context->GetClient();
 
@@ -246,11 +245,11 @@ bool TPullQueueConsumerCommand::HasResponseParameters() const
 
 void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
-    YT_LOG_DEBUG("Executing \"pull_queue_consumer\" command (ConsumerPath: %v, QueuePath: %v, Offset: %v, PartitionIndex: %v)",
-        ConsumerPath,
-        QueuePath,
-        Offset,
-        PartitionIndex);
+    YT_TLOG_DEBUG("Executing \"pull_queue_consumer\" command")
+        .With("ConsumerPath", ConsumerPath)
+        .With("QueuePath", QueuePath)
+        .With("Offset", Offset)
+        .With("PartitionIndex", PartitionIndex);
 
     auto client = context->GetClient();
 
@@ -294,12 +293,12 @@ void TAdvanceQueueConsumerCommand::Register(TRegistrar registrar)
 
 void TAdvanceQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 {
-    YT_LOG_DEBUG("Executing \"advance_queue_consumer\" command (ConsumerPath: %v, QueuePath: %v, PartitionIndex: %v, OldOffset: %v, NewOffset: %v)",
-        ConsumerPath,
-        QueuePath,
-        PartitionIndex,
-        OldOffset,
-        NewOffset);
+    YT_TLOG_DEBUG("Executing \"advance_queue_consumer\" command")
+        .With("ConsumerPath", ConsumerPath)
+        .With("QueuePath", QueuePath)
+        .With("PartitionIndex", PartitionIndex)
+        .With("OldOffset", OldOffset)
+        .With("NewOffset", NewOffset);
 
     auto transaction = GetTransaction(context);
 
@@ -335,10 +334,10 @@ void TCreateQueueProducerSessionCommand::Register(TRegistrar registrar)
 
 void TCreateQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 {
-    YT_LOG_DEBUG("Executing \"create_queue_producer_session\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v)",
-        ProducerPath,
-        QueuePath,
-        SessionId);
+    YT_TLOG_DEBUG("Executing \"create_queue_producer_session\" command")
+        .With("ProducerPath", ProducerPath)
+        .With("QueuePath", QueuePath)
+        .With("SessionId", SessionId);
 
     auto client = context->GetClient();
 
@@ -370,10 +369,10 @@ void TRemoveQueueProducerSessionCommand::Register(TRegistrar registrar)
 
 void TRemoveQueueProducerSessionCommand::DoExecute(ICommandContextPtr context)
 {
-    YT_LOG_DEBUG("Executing \"remove_queue_producer_session\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v)",
-        ProducerPath,
-        QueuePath,
-        SessionId);
+    YT_TLOG_DEBUG("Executing \"remove_queue_producer_session\" command")
+        .With("ProducerPath", ProducerPath)
+        .With("QueuePath", QueuePath)
+        .With("SessionId", SessionId);
 
     auto client = context->GetClient();
 
@@ -419,11 +418,11 @@ void TPushQueueProducerCommand::Register(TRegistrar registrar)
 
 void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
 {
-    YT_LOG_DEBUG("Executing \"push_queue_producer\" command (ProducerPath: %v, QueuePath: %v, SessionId: %v, Epoch: %v)",
-        ProducerPath,
-        QueuePath,
-        SessionId,
-        Epoch);
+    YT_TLOG_DEBUG("Executing \"push_queue_producer\" command")
+        .With("ProducerPath", ProducerPath)
+        .With("QueuePath", QueuePath)
+        .With("SessionId", SessionId)
+        .With("Epoch", Epoch);
 
     auto tableMountCache = context->GetClient()->GetTableMountCache();
 
@@ -441,13 +440,13 @@ void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
     struct TPushQueueProducerBufferTag
     { };
 
-    auto insertRowsFormatConfig = ConvertTo<TInsertRowsFormatConfigPtr>(context->GetInputFormat().Attributes());
+    auto formatConfig = ConvertTo<TPushQueueProducerFormatConfigPtr>(context->GetInputFormat().Attributes());
     auto typeConversionConfig = ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes());
     // Parse input data.
     TBuildingValueConsumer valueConsumer(
         queueTableInfo->Schemas[ETableSchemaKind::WriteViaQueueProducer],
         WithCommandTag(Logger, context),
-        insertRowsFormatConfig->EnableNullToYsonEntityConversion,
+        formatConfig->EnableNullToYsonEntityConversion,
         typeConversionConfig);
     valueConsumer.SetTreatMissingAsNull(true);
 

@@ -113,6 +113,8 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/general_cache
     ydb/core/tx/columnshard/data_accessor/cache_policy
     ydb/core/tx/columnshard/column_fetching
@@ -155,6 +157,7 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/providers/pq/cm_client
     ydb/library/slide_limiter/service
+    ydb/library/slide_limiter/usage
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
@@ -181,6 +184,7 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/distributed_storage
     ydb/services/tablet
     ydb/services/test_shard
     ydb/services/view

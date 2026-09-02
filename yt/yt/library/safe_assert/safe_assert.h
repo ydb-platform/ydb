@@ -3,9 +3,10 @@
 #include <yt/yt/core/concurrency/public.h>
 
 #include <yt/yt/core/misc/common.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/library/coredumper/public.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <any>
 
@@ -33,7 +34,7 @@ public:
 std::any CreateSafeAssertionGuard(
     NCoreDump::ICoreDumperPtr coreDumper,
     NConcurrency::TAsyncSemaphorePtr coreSemaphore,
-    std::vector<TString> coreNotes = {});
+    std::vector<std::string> coreNotes = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

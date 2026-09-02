@@ -11,7 +11,6 @@
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 
 #include <util/system/event.h>
 
@@ -28,7 +27,7 @@ struct TInterconnectPeer {
 };
 
 static TInterconnectProxyCommon::TPtr MakeInterconnectCommon(
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 selfNodeId, bool useUring = false) {
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 selfNodeId) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->NameserviceId = GetNameserviceActorId();
     common->MonCounters = counters->GetSubgroup("nodeId", ToString(selfNodeId));
@@ -42,7 +41,6 @@ static TInterconnectProxyCommon::TPtr MakeInterconnectCommon(
     common->Settings.TotalInflightAmountOfData = 256ull * 1024 * 1024;
     common->Settings.TCPSocketBufferSize = 8 * 1024 * 1024;
     common->Settings.EnableExternalDataChannel = true;
-    common->Settings.UseUring = useUring;
     common->OutgoingHandshakeInflightLimit = 3;
     return common;
 }
@@ -74,12 +72,6 @@ static void SetupInterconnectServices(TActorSystemSetup* setup,
     setup->LocalServices.emplace_back(
         MakePollerActorId(),
         TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, InterconnectPoolId));
-
-    if (common->Settings.UseUring && TUringContext::IsSupported()) {
-        setup->LocalServices.emplace_back(
-            MakeUringPollerActorId(),
-            TActorSetupCmd(CreateUringPollerActor(common->Settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, InterconnectPoolId));
-    }
 
     setup->LocalServices.emplace_back(
         MakeHandshakeBrokerOutId(),
@@ -115,17 +107,15 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
     ui32 ServerNodeId;
     ui32 ClientNodeId;
     ui16 Port;
-    bool UseUring;
     static constexpr ui32 DDiskSlotId = 1;
 
     TDDiskServer(const TPerfTestConfig& cfg, const NDevicePerfTest::TDDiskTest& testProto,
-                 ui32 serverNodeId, ui32 clientNodeId, ui16 port, bool useUring = false)
+                 ui32 serverNodeId, ui32 clientNodeId, ui16 port)
         : TBase(cfg, DefaultPDiskTestProto())
         , DDiskTestProto(testProto)
         , ServerNodeId(serverNodeId)
         , ClientNodeId(clientNodeId)
         , Port(port)
-        , UseUring(useUring)
     {
         // Re-key PDisk actor IDs and the logger to ServerNodeId before Init() runs;
         // otherwise local sends from DDisk -> PDisk/logger get routed through
@@ -136,31 +126,6 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
     static const NDevicePerfTest::TPDiskTest& DefaultPDiskTestProto() {
         static const NDevicePerfTest::TPDiskTest proto;
         return proto;
-    }
-
-    NDDisk::TDDiskConfig ExtractDDiskConfig() const {
-        NDDisk::TDDiskConfig config;
-        bool initialized = false;
-        for (ui32 i = 0; i < DDiskTestProto.DDiskTestListSize(); ++i) {
-            const auto& record = DDiskTestProto.GetDDiskTestList(i);
-            if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
-                continue;
-            }
-            const auto& load = record.GetDDiskLoad();
-            const bool useSQPoll = load.GetSQPoll();
-            const bool useIOPoll = load.GetIOPoll();
-            if (!initialized) {
-                config.UseSQPoll = useSQPoll;
-                config.UseIOPoll = useIOPoll;
-                initialized = true;
-                continue;
-            }
-            if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
-                ythrow TWithBackTrace<yexception>()
-                    << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
-            }
-        }
-        return config;
     }
 
     void Init() override {
@@ -177,7 +142,9 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
                 services.end());
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
-            const NDDisk::TDDiskConfig ddiskConfig = ExtractDDiskConfig();
+            const NDDisk::TDDiskConfig ddiskConfig =
+                MakeDDiskConfig(DDiskTestProto, !TBase::Cfg.DisableDDiskChecksums,
+                    TBase::Cfg.ForcePDiskFallback);
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(ServerNodeId, i + 1, DDiskSlotId);
@@ -192,7 +159,10 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
                     NKikimrBlobStorage::TVDiskKind::Default,
                     1000,
                     "ddisk_pool");
-                NDDisk::TPersistentBufferFormat pbFormat{512, 512, 128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
+                NDDisk::TPersistentBufferFormat pbFormat{
+                    TBase::Cfg.PersistentBufferChunks,
+                    TBase::Cfg.PersistentBufferChunks,
+                    128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
                 TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat),
                     NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),
                     TMailboxType::Revolving, 1);
@@ -203,7 +173,7 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
             // Server only accepts incoming connections, but the interconnect handshake still
             // resolves the peer NodeId via the local nameserver, so we must register the
             // client with a placeholder address (port 0; server never initiates connection).
-            auto common = MakeInterconnectCommon(TBase::Counters, ServerNodeId, UseUring);
+            auto common = MakeInterconnectCommon(TBase::Counters, ServerNodeId);
 
             TVector<TInterconnectPeer> peers = {{ClientNodeId, "::", 0}};
             SetupInterconnectServices(TBase::Setup.Get(), common, ServerNodeId,
@@ -255,11 +225,10 @@ struct TDDiskClient : public TPerfTest {
     ui32 ClientNodeId;
     TVector<TInterconnectPeer> ServerPeers;
     ui32 NumDevicesPerServer;
-    bool UseUring;
 
     TDDiskClient(const TPerfTestConfig& cfg, const NDevicePerfTest::TDDiskTest& testProto,
                  ui32 clientNodeId, const TVector<TInterconnectPeer>& serverPeers,
-                 ui32 numDevicesPerServer, bool useUring = false)
+                 ui32 numDevicesPerServer)
         : TPerfTest(cfg)
         , Setup(new TActorSystemSetup())
         , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(clientNodeId, "logger"),
@@ -272,13 +241,13 @@ struct TDDiskClient : public TPerfTest {
         , ClientNodeId(clientNodeId)
         , ServerPeers(serverPeers)
         , NumDevicesPerServer(numDevicesPerServer)
-        , UseUring(useUring)
     {
     }
 
     void Init() override {
         try {
             Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            Printer->AddGlobalParam("DDiskChecksums", Cfg.DisableDDiskChecksums ? "off" : "on");
 
             const ui32 totalDevices = ServerPeers.size() * NumDevicesPerServer;
             Setup->NodeId = ClientNodeId;
@@ -291,7 +260,7 @@ struct TDDiskClient : public TPerfTest {
             Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(64, 20)));
 
             // Set up interconnect with all server peers
-            auto common = MakeInterconnectCommon(Counters, ClientNodeId, UseUring);
+            auto common = MakeInterconnectCommon(Counters, ClientNodeId);
 
             SetupInterconnectServices(Setup.Get(), common, ClientNodeId,
                 "::", 0, ServerPeers, /*listen=*/false);

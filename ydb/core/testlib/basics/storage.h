@@ -92,10 +92,10 @@ namespace NKikimr {
             {
                 auto text = MakeTextConf(domains);
 
-                google::protobuf::TextFormat::ParseFromString(text, conf->BlobStorageConfig.MutableServiceSet());
+                google::protobuf::TextFormat::ParseFromString(text, conf->BlobStorageConfig->MutableServiceSet());
             }
 
-            conf->BlobStorageConfig.MutableServiceSet()->SetEnableProxyMock(Mock);
+            conf->BlobStorageConfig->MutableServiceSet()->SetEnableProxyMock(Mock);
             conf->PDiskConfigOverlay.SetGetDriveDataSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
             conf->PDiskConfigOverlay.SetWriteCacheSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
 

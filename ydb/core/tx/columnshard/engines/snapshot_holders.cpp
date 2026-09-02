@@ -49,4 +49,8 @@ bool TRegistrySnapshotHolders::CouldUsePortion(const TPortionInfo::TConstPtr& po
     return GetHoldersByPathId(portion->GetPathId()).CouldUsePortion(portion);
 }
 
+bool TRegistrySnapshotHolders::CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const {
+    return GetHoldersByPathId(pathId).CouldUseTable(dropSnapshot);
+}
+
 }   // namespace NKikimr::NOlap

@@ -1,0 +1,23 @@
+{
+    "_yql_row_spec" = {
+        "Type" = ["StructType"; [
+            ["key"; ["DataType"; "String"]];
+            ["ys_list"; ["OptionalType"; ["ListType"; ["DataType"; "Yson"]]]];
+        ]];
+    };
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "key";
+            "type" = "string";
+            "required" = %true;
+        };
+        {
+            "name" = "ys_list";
+            "type" = "any";
+            "required" = %false;
+        };
+    ];
+}

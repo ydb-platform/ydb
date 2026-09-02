@@ -12,7 +12,6 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
@@ -44,7 +43,8 @@ public:
           NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT,
           bool withRdma = true,
           std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {},
-          TLogBackendFactory logBackendFactory = {}) {
+          TLogBackendFactory logBackendFactory = {},
+          TVector<ui32> interconnectSessionPoolIds = {0}) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -53,6 +53,8 @@ public:
         setup.Executors[1].Reset(new TIOExecutorPool(1, 1));
         setup.Scheduler.Reset(new TBasicSchedulerThread());
         const ui32 interconnectPoolId = 0;
+        const TInterconnectSessionPoolMapping interconnectSessionPoolMapping(
+            std::move(interconnectSessionPoolIds));
 
         Common = MakeIntrusive<TInterconnectProxyCommon>();
         auto& common = Common;
@@ -79,20 +81,13 @@ public:
             // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
             // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
             // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
-            ui32 uringShards = common->Settings.V2.UringEngineThreads;
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
-                uringShards = FromString<ui32>(s);
+                common->Settings.V2.Threads = FromString<ui32>(s);
             }
-            ui32 ringsPerShard = common->Settings.V2.UringEngineRingsPerShard;
             if (const TString s = GetEnv("YDB_IC_V2_RINGS_PER_SHARD"); !s.empty()) {
-                ringsPerShard = FromString<ui32>(s);
+                common->Settings.V2.RingsPerShard = FromString<ui32>(s);
             }
-            common->UringEngineV2 = CreateUringEngine(uringShards,
-                common->MonCounters->GetSubgroup("subsystem", "uring"),
-                common->Settings.V2.EnableSQPOLL,
-                ringsPerShard,
-                common->Settings.V2.UringEngineSqThreadIdleMs,
-                common->Settings.V2.ShareRingsAmongThreads);
+            common->UringEngineV2 = CreateUringEngine(common);
             setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
                 if (engine) {
                     engine->SetActorSystem(actorSystem);
@@ -103,6 +98,7 @@ public:
         #if !defined(_msan_enabled_)
         if (withRdma) {
             common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+            setup.RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(common->RdmaMemPool);
         }
         #else
             Y_UNUSED(withRdma);
@@ -123,7 +119,7 @@ public:
         }
 
         setup.Interconnect.ProxyActors.resize(numNodes + 1 - numDynamicNodes);
-        setup.Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, interconnectPoolId);
+        setup.Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, interconnectSessionPoolMapping);
 
         for (ui32 i = 1; i <= numNodes; ++i) {
             if (i == nodeId) {
@@ -133,18 +129,15 @@ public:
             } else if (i <= numNodes - numDynamicNodes) {
                 // create proxy actor to reach node "i"
                 setup.Interconnect.ProxyActors[i] = {new TInterconnectProxyTCP(i, common),
-                    TMailboxType::ReadAsFilled, interconnectPoolId};
+                    TMailboxType::ReadAsFilled, interconnectSessionPoolMapping.GetPoolId(i)};
             }
         }
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(counters),
             TMailboxType::ReadAsFilled, 0));
-        if (common->Settings.UseUring && TUringContext::IsSupported()) {
-            setup.LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(CreateUringPollerActor(common->Settings.EnableUringSQPOLL),
-                TMailboxType::ReadAsFilled, 0));
-        }
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
-            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(NInterconnect::NRdma::TRdmaRuntimeParams{-1, 1024, 0, 0}, rdmaCqMode, nullptr),
+            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
+                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive), rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

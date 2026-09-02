@@ -826,6 +826,7 @@ alter_table_action:
   | alter_table_alter_column_set_encoding
   | alter_table_add_statistics
   | alter_table_drop_statistics
+  | alter_table_rebuild_index
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -865,6 +866,9 @@ alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
+alter_table_rebuild_index: REBUILD INDEX an_id
+    with_index_settings?
+;
 alter_table_compact: COMPACT with_compact_settings?;
 alter_table_alter_column_set_encoding: ALTER COLUMN an_id SET encoding;
 
@@ -1118,7 +1122,7 @@ table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
-    | WATERMARK AS LPAREN expr RPAREN // TODO: remove deprecated
+    | WATERMARK AS LPAREN expr RPAREN // TODO(vitya-smirnov)
     | WATERMARK EQUALS expr
 ;
 
@@ -1260,7 +1264,7 @@ alter_sequence_action:
   | INCREMENT BY? integer
 ;
 
-show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE) simple_table_ref;
+show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE | EXTERNAL TABLE) simple_table_ref;
 
 create_secret_stmt: CREATE (OR REPLACE)? SECRET (IF NOT EXISTS)? object_ref
     with_secret_settings
@@ -1641,6 +1645,7 @@ keyword_as_compat:
 //  | READ
   | RECURSIVE
   | REFERENCES
+  | REBUILD
   | REGEXP
   | REINDEX
   | RELEASE
@@ -1885,6 +1890,7 @@ keyword_compat: (
 //  | READ
   | RECURSIVE
   | REFERENCES
+  | REBUILD
   | REGEXP
   | REINDEX
   | RELEASE
@@ -2271,6 +2277,7 @@ RECURSIVE: R E C U R S I V E;
 REDUCE: R E D U C E;
 REFERENCES: R E F E R E N C E S;
 REGEXP: R E G E X P;
+REBUILD: R E B U I L D;
 REINDEX: R E I N D E X;
 RELEASE: R E L E A S E;
 REMOVE: R E M O V E;

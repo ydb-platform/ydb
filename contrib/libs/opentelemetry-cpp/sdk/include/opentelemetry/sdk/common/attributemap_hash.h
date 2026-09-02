@@ -5,7 +5,6 @@
 
 #include <stddef.h>
 #include <functional>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>

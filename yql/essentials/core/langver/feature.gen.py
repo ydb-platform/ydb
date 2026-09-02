@@ -7,7 +7,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-KNOWN_ATTRS = frozenset({"description", "min_langver", "max_langver"})
+KNOWN_ATTRS = frozenset({"description", "min_langver", "max_langver", "is_backport_allowed"})
 
 
 def parse_feature_name(name: str) -> str:
@@ -42,6 +42,12 @@ def parse_langver(v: Any) -> str:
     return f'MakeLangVersion({year}, {minor})'
 
 
+def parse_is_backport_allowed(v: Any) -> str:
+    if not isinstance(v, bool):
+        raise ValueError(f"is_backport_allowed must be a bool: {v!r}")
+    return "true" if v else "false"
+
+
 def load(path: Path) -> dict[str, dict[str, Any]]:
     with path.open(encoding="utf-8") as f:
         return json.load(f)
@@ -53,12 +59,14 @@ def emit_feature(name: str, attrs: dict[str, Any]) -> Generator[str]:
     description = attrs.get("description", name)
     min_langver = parse_langver(attrs.get("min_langver", "unknown"))
     max_langver = parse_langver(attrs.get("max_langver", "unknown"))
+    is_backport_allowed = parse_is_backport_allowed(attrs.get("is_backport_allowed", False))
 
     yield f'inline constexpr TFeature {name} = TFeature::Checked({{'
     yield f'    .Name = "{name}",'
     yield f'    .Description = "{description}",'
     yield f'    .MinLangVer = {min_langver},'
     yield f'    .MaxLangVer = {max_langver},'
+    yield f'    .IsBackportAllowed = {is_backport_allowed},'
     yield f'}});'
     yield ""
 

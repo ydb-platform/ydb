@@ -169,21 +169,17 @@ void TFairShareHierarchicalSlotQueueSlot<TTag>::ReleaseResources()
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename TTag>
-bool CompareByEnqueueTime(const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs, const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs)
+std::partial_ordering CompareByEnqueueTime(const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs, const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs)
 {
     auto lhsTime = lhs->GetEnqueueTime();
     auto rhsTime = rhs->GetEnqueueTime();
 
-    // If the times are equal, compare by request ID.
-    if (lhsTime == rhsTime) {
-        return lhs->GetSlotId() < rhs->GetSlotId();
-    } else if (lhsTime < rhsTime) {
-        // If lhs was enqueued earlier, it has higher priority.
-        return false;
-    } else {
-        // If rhs was enqueued earlier, it has higher priority.
-        return true;
+    if (lhsTime != rhsTime) {
+        // The slot enqueued earlier has higher priority.
+        return lhsTime.GetValue() <=> rhsTime.GetValue();
     }
+
+    return lhs->GetSlotId() <=> rhs->GetSlotId();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -320,7 +316,7 @@ TFairShareHierarchicalScheduler<TTag>::GetOrCreateChild(
 }
 
 template <typename TTag>
-bool TFairShareHierarchicalScheduler<TTag>::CompareSlots(
+std::partial_ordering TFairShareHierarchicalScheduler<TTag>::CompareConsumptions(
     const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs,
     const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs,
     bool isSlot) const
@@ -346,9 +342,7 @@ bool TFairShareHierarchicalScheduler<TTag>::CompareSlots(
     // we perform a consumption comparison.
     while (true) {
         if (lhsLevelIt == lhsLevels.end() || rhsLevelIt == rhsLevels.end()) {
-            // If the tags are over, then we have reached the end,
-            // in which case we can compare the elements only in the order of insertion.
-            return CompareByEnqueueTime(lhs, rhs);
+            return std::partial_ordering::equivalent;
         } else {
             auto& lhsLevel = *lhsLevelIt;
             auto& rhsLevel = *rhsLevelIt;
@@ -376,18 +370,17 @@ bool TFairShareHierarchicalScheduler<TTag>::CompareSlots(
             }
 
             if (lhsStream == 0 && rhsStream == 0) {
-                // If both streams are zero, compare by enqueue time.
-                return CompareByEnqueueTime(lhs, rhs);
+                return std::partial_ordering::equivalent;
             }
 
             // Calculate the weighted consumed resources for comparison.
-            auto left = rhsStream * lhsLevel.GetWeight();
-            auto right = lhsStream * rhsLevel.GetWeight();
+            auto left = lhsStream * rhsLevel.GetWeight();
+            auto right = rhsStream * lhsLevel.GetWeight();
 
             if (left < right) {
-                return true;
+                return std::partial_ordering::less;
             } else if (right < left) {
-                return false;
+                return std::partial_ordering::greater;
             } else {
                 lhsBucket = newLhsBucket;
                 rhsBucket = newRhsBucket;
@@ -398,6 +391,21 @@ bool TFairShareHierarchicalScheduler<TTag>::CompareSlots(
             }
         }
     }
+}
+
+template <typename TTag>
+std::partial_ordering TFairShareHierarchicalScheduler<TTag>::CompareSlots(
+    const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& lhs,
+    const TFairShareHierarchicalSlotQueueSlotPtr<TTag>& rhs,
+    bool isSlot,
+    std::regular_invocable<TFairShareHierarchicalSlotQueueSlotPtr<TTag>, TFairShareHierarchicalSlotQueueSlotPtr<TTag>> auto comparator) const
+{
+    auto comparisonResult = CompareConsumptions(lhs, rhs, isSlot);
+    if (std::is_eq(comparisonResult)) {
+        return comparator(lhs, rhs);
+    }
+
+    return comparisonResult;
 }
 
 template <typename TTag>
@@ -721,18 +729,22 @@ bool TFairShareHierarchicalSlotQueue<TTag>::IsEmpty() const
 }
 
 template <typename TTag>
-TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlotQueue<TTag>::EnqueueSlot(
+TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTag>::CreateSlot(
     i64 size,
     std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
     std::vector<TFairShareHierarchyLevel<TTag>> levels)
 {
-    NProfiling::TEventTimerGuard timer(EnqueueSlotWallTimer_);
-
-    // Create a new queue slot.
-    auto slot = New<TFairShareHierarchicalSlotQueueSlot<TTag>>(
+    return New<TFairShareHierarchicalSlotQueueSlot<TTag>>(
         size,
         std::move(resources),
         std::move(levels));
+}
+
+template <typename TTag>
+TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlotQueue<TTag>::EnqueueSlot(
+    TFairShareHierarchicalSlotQueueSlotPtr<TTag> slot)
+{
+    NProfiling::TEventTimerGuard timer(EnqueueSlotWallTimer_);
 
     // Check if the slot exceeds resource limits.
     if (slot->NeedExceedsLimit()) {
@@ -786,35 +798,40 @@ TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlo
             }
 
             // Find the slot with the lowest priority.
-            auto minSlot = slot;
+            auto maxSlot = slot;
             for (const auto& [_, currentSlot] : Queue_) {
-                if (HierarchicalScheduler_->CompareSlots(currentSlot, minSlot, /*isSlot*/ true)) {
-                    minSlot = currentSlot;
+                if (std::is_gt(HierarchicalScheduler_->CompareSlots(
+                    currentSlot,
+                    maxSlot,
+                    /*isSlot*/ true,
+                    CompareByEnqueueTime<TTag>)))
+                {
+                    maxSlot = currentSlot;
                 }
             }
 
             // If the new slot has higher priority, preempt the lowest priority slot.
-            if (minSlot->GetSlotId() != slot->GetSlotId()) {
+            if (maxSlot->GetSlotId() != slot->GetSlotId()) {
                 EraseOrCrash(
                     Queue_,
                     TFairShareLogKey{
-                        .RequestId = minSlot->GetSlotId(),
-                        .CreatedAt = minSlot->GetEnqueueTime(),
+                        .RequestId = maxSlot->GetSlotId(),
+                        .CreatedAt = maxSlot->GetEnqueueTime(),
                     });
                 guard.Release();
 
                 SlotCount_ -= 1;
-                SlotSize_ -= minSlot->GetSize();
+                SlotSize_ -= maxSlot->GetSize();
 
                 HierarchicalScheduler_->DequeueLog(
                     TFairShareLogKey{
-                        .RequestId = minSlot->GetSlotId(),
-                        .CreatedAt = minSlot->GetEnqueueTime(),
+                        .RequestId = maxSlot->GetSlotId(),
+                        .CreatedAt = maxSlot->GetEnqueueTime(),
                     });
-                minSlot->ReleaseResources();
+                maxSlot->ReleaseResources();
 
                 // Cancel the preempted slot.
-                minSlot->Cancel(preempt(minSlot->GetSize(), std::move(result)));
+                maxSlot->Cancel(preempt(maxSlot->GetSize(), std::move(result)));
             } else {
                 guard.Release();
                 // If the new slot does not have higher priority, return an error.
@@ -822,6 +839,15 @@ TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlo
             }
         }
     }
+}
+
+template <typename TTag>
+TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlotQueue<TTag>::EnqueueSlot(
+    i64 size,
+    std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
+    std::vector<TFairShareHierarchyLevel<TTag>> levels)
+{
+    return EnqueueSlot(CreateSlot(size, std::move(resources), std::move(levels)));
 }
 
 template <typename TTag>
@@ -853,7 +879,9 @@ void TFairShareHierarchicalSlotQueue<TTag>::DequeueSlot(const TFairShareHierarch
 }
 
 template <typename TTag>
-TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTag>::PeekSlot(const THashSet<TFairShareSlotId>& slotFilter)
+TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTag>::PeekSlot(
+    const THashSet<TFairShareSlotId>& slotFilter,
+    std::regular_invocable<TFairShareHierarchicalSlotQueueSlotPtr<TTag>, TFairShareHierarchicalSlotQueueSlotPtr<TTag>> auto comparator)
 {
     NProfiling::TEventTimerGuard timer(PeekSlotWallTimer_);
 
@@ -865,23 +893,29 @@ TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTa
         return nullptr;
     }
 
-    TFairShareHierarchicalSlotQueueSlotPtr<TTag> maxSlot = nullptr;
+    TFairShareHierarchicalSlotQueueSlotPtr<TTag> minSlot = nullptr;
     for (const auto& [_, slot] : Queue_) {
         if (!slotFilter.contains(slot->GetSlotId())) {
             continue;
         }
 
-        if (!maxSlot) {
-            maxSlot = slot;
+        if (!minSlot) {
+            minSlot = slot;
             continue;
         }
 
-        if (HierarchicalScheduler_->CompareSlots(maxSlot, slot, /*isSlot*/ false)) {
-            maxSlot = slot;
+        if (std::is_lt(HierarchicalScheduler_->CompareSlots(slot, minSlot, /*isSlot*/ false, comparator))) {
+            minSlot = slot;
         }
     }
 
-    return maxSlot;
+    return minSlot;
+}
+
+template <typename TTag>
+TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTag>::PeekSlot(const THashSet<TFairShareSlotId>& slotFilter)
+{
+    return PeekSlot(slotFilter, CompareByEnqueueTime<TTag>);
 }
 
 template <typename TTag>

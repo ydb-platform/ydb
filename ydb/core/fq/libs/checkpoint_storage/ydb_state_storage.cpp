@@ -118,21 +118,28 @@ public:
         return state;
     }
 
-    static EStateType GetStateType(const NYql::NDq::TComputeActorState& state) {
+    static EStateType GetStateType(const ui64 taskId, const NYql::NDq::TComputeActorState& state) {
         if (!state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
+
         const TString& blob = state.MiniKqlProgram->Data.Blob;
         TStringBuf buf(blob);
         while (!buf.empty()) {
-            auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            if (nodeStateSize == std::numeric_limits<ui64>::max()) {
+                throw yexception() << "Task " << taskId << " has incomplete program state: some stateful operators are still not initialized.";
+            }
+
             Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
             TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
             if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }
+
             buf.Skip(nodeStateSize);
         }
+
         Y_ENSURE(buf.empty(), "State/buf is corrupted");
         return EStateType::Snapshot;
     }
@@ -156,6 +163,7 @@ struct TContext : public TThrRefBase {
     struct TStateInfo {
         TCheckpointId CheckpointId;
         ui64 StateRowsCount = 0;
+        TMaybe<EStateType> Type;
     };
 
     struct TaskInfo {
@@ -333,6 +341,9 @@ private:
     TFuture<TStatus> SelectRowState(
         const TContextPtr& context);
 
+    TFuture<TStatus> ListStatesForGeneration(
+        const TContextPtr& context);
+
     TFuture<TStatus> ListStates(
         const TContextPtr& context);
 
@@ -377,6 +388,10 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
         .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
         .AddNullableColumn("type", EPrimitiveType::Uint8)
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
+        .BeginPartitioningSettings()
+            .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
+        .EndPartitioningSettings()
         .Build();
 
     auto promise = NThreading::NewPromise<TIssues>();
@@ -409,7 +424,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState, task id, blob size",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -417,7 +432,7 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
 
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
-    return TIncrementLogic::GetStateType(state);
+    return TIncrementLogic::GetStateType(taskInfo.TaskId, state);
 }
 
 size_t TStateStorage::SerializeState(
@@ -454,7 +469,7 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
     size_t size = 0;
 
     try {
-        type = TIncrementLogic::GetStateType(state);
+        type = TIncrementLogic::GetStateType(taskId, state);
         size = SerializeState(state, serializedState);
         if (!size || serializedState.empty()) {
             return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));
@@ -527,12 +542,44 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         {"checkpointId", context->CheckpointId},
         {"tasks", JoinSeq(", ", taskIds)});
 
-    return ListStates(context)
-        .Apply([context, thisPtr = TIntrusivePtr(this)] (const TFuture<TStatus>& result) mutable {
+    // First, query only the exact target checkpoint by coordinator_generation + seq_no to check
+    // whether it is a snapshot. If so, we can skip loading the full cross-generation history.
+    return ListStatesForGeneration(context)
+        .Apply([context, thisPtr = TIntrusivePtr(this)](const TFuture<TStatus>& result) mutable -> TFuture<TStatus> {
             if (!result.GetValue().IsSuccess()) {
                 return result;
             }
-            return thisPtr->SkipStatesInFuture(context);
+            // Check whether every task has a snapshot at the exact target checkpoint.
+            bool allSnapshots = true;
+            for (const auto& task : context->Tasks) {
+                if (task.ListOfStatesForReading.empty() ||
+                    !task.ListOfStatesForReading.front().Type ||
+                    *task.ListOfStatesForReading.front().Type != EStateType::Snapshot) {
+                    allSnapshots = false;
+                    break;
+                }
+            }
+            if (allSnapshots) {
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem,
+                    "GetState: target checkpoint is a snapshot, skipping full history read",
+                    {"graphId", context->GraphId},
+                    {"checkpointId", context->CheckpointId});
+                // ListOfStatesForReading is already set with the single target checkpoint.
+                // Proceed directly to ReadRows.
+                return MakeFuture(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
+            }
+            // Target checkpoint is an increment (or type unknown). Fall back to reading
+            // the full cross-generation history to locate the underlying snapshot.
+            for (auto& task : context->Tasks) {
+                task.ListOfStatesForReading.clear();
+            }
+            return thisPtr->ListStates(context)
+                .Apply([context, thisPtr](const TFuture<TStatus>& innerResult) mutable -> TFuture<TStatus> {
+                    if (!innerResult.GetValue().IsSuccess()) {
+                        return innerResult;
+                    }
+                    return thisPtr->SkipStatesInFuture(context);
+                });
         })
         .Apply([context, thisPtr = TIntrusivePtr(this)](const TFuture<TStatus>& result) mutable {
             if (!result.GetValue().IsSuccess()) {
@@ -610,6 +657,98 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
         });
 }
 
+TFuture<TStatus> TStateStorage::ListStatesForGeneration(const TContextPtr& context) {
+    return YdbConnection->GetTableClient()->RetryOperation(
+        [prefix = YdbConnection->GetTablePathPrefix(), context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+
+            paramsBuilder->AddParam("$graph_id").String(context->GraphId).Build();
+            paramsBuilder->AddParam("$coordinator_generation").Uint64(context->CheckpointId.CoordinatorGeneration).Build();
+            paramsBuilder->AddParam("$seq_no").Uint64(context->CheckpointId.SeqNo).Build();
+
+            if (context->Tasks.size() == 1) {
+                paramsBuilder->AddParam("$task_id").Uint64(context->Tasks[0].TaskId).Build();
+            } else {
+                auto& taskIdsParam = paramsBuilder->AddParam("$task_ids").BeginList();
+                for (const auto& taskInfo : context->Tasks) {
+                    taskIdsParam.AddListItem().Uint64(taskInfo.TaskId);
+                }
+                taskIdsParam.EndList().Build();
+            }
+
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+                PRAGMA TablePathPrefix("%s");
+
+                declare $graph_id as string;
+                declare $coordinator_generation as Uint64;
+                declare $seq_no as Uint64;
+                %s;
+
+                SELECT task_id, CAST(COUNT(*) as UINT64) as cnt, CAST(MAX(type) as UINT8) as type
+                FROM %s
+                WHERE graph_id = $graph_id AND coordinator_generation = $coordinator_generation AND seq_no = $seq_no AND %s
+                GROUP BY task_id;
+            )", prefix.c_str(),
+                context->Tasks.size() == 1 ? "DECLARE $task_id AS Uint64" : "DECLARE $task_ids AS List<Uint64>",
+                StatesTable,
+                context->Tasks.size() == 1 ? "task_id = $task_id" : "task_id IN $task_ids");
+
+            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration",
+                {"graphId", context->GraphId},
+                {"checkpointId", context->CheckpointId});
+
+            auto future = session->ExecuteDataQuery(
+                query,
+                TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
+                thisPtr->GetExecDataQuerySettings());
+
+            return future.Apply(
+                [context] (const TFuture<TDataQueryResult>& future) {
+                    TStatus status = future.GetValue();
+                    if (!status.IsSuccess()) {
+                        return status;
+                    }
+                    try {
+                        const auto& selectResult = future.GetValue();
+                        TResultSetParser parser(selectResult.GetResultSet(0));
+                        while (parser.TryNextRow()) {
+                            auto taskId = parser.ColumnParser("task_id").GetOptionalUint64();
+                            auto cnt = parser.ColumnParser("cnt").GetUint64();
+                            auto typeVal = parser.ColumnParser("type").GetOptionalUint8();
+
+                            if (!taskId) {
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Unexpected empty task_id"}});
+                            }
+                            const auto taskIt = std::find_if(context->Tasks.begin(), context->Tasks.end(),
+                                [&] (const auto& item) { return item.TaskId == *taskId; });
+                            if (taskIt == context->Tasks.end()) {
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Got unexpected task id"}});
+                            }
+
+                            TContext::TStateInfo stateInfo{context->CheckpointId, cnt, {}};
+                            if (typeVal) {
+                                stateInfo.Type = static_cast<EStateType>(*typeVal);
+                            }
+                            taskIt->ListOfStatesForReading.push_back(stateInfo);
+
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration result row",
+                                {"graphId", context->GraphId},
+                                {"checkpointId", context->CheckpointId},
+                                {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
+                                {"count", cnt},
+                                {"typeVal", (typeVal ? ToString(static_cast<ui32>(*typeVal)) : "(null)")});
+                        }
+                    } catch (const std::exception& e) {
+                        return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{e.what()}});
+                    }
+                    return status;
+            });
+        }, GetRetryOperationSettings());
+}
+
 TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
     return YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
@@ -682,12 +821,12 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
 
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
-                            taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "TaskId checkpoint, rows",
+                            taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt, {}});
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListOfStates result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
-                                {"id", checkpointId},
+                                {"listedCheckpointId", checkpointId},
                                 {"count", cnt});
                         }
                     }
@@ -814,7 +953,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState: task_id, seq_no, blob_seq_num",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -988,7 +1127,8 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     NYql::TIssues& issues) {
     YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ApplyIncrements",
         {"graphId", context->GraphId},
-        {"checkpointId", context->CheckpointId});
+        {"checkpointId", context->CheckpointId},
+        {"taskCount", context->Tasks.size()});
 
     std::vector<NYql::NDq::TComputeActorState> states;
     try {

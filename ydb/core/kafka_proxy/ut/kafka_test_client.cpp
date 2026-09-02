@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/kafka_proxy/actors/kafka_api_versions_actor.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/login/sasl/scram.h>
 
@@ -23,11 +24,15 @@ TKafkaTestClient::TKafkaTestClient(ui16 port, const TString clientName)
 }
 
 TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent) {
+    return ApiVersionsAtVersion(2, silent);
+}
+
+TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersionsAtVersion(TKafkaVersion version, bool silent) {
     if (!silent) {
-        Cerr << ">>>>> ApiVersionsRequest\n";
+        Cerr << ">>>>> ApiVersionsRequest version=" << version << "\n";
     }
 
-    TRequestHeaderData header = Header(NKafka::EApiKey::API_VERSIONS, 2);
+    TRequestHeaderData header = Header(NKafka::EApiKey::API_VERSIONS, version);
 
     TApiVersionsRequestData request;
     request.ClientSoftwareName = "SuperTest";
@@ -574,6 +579,15 @@ TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(const 
     return WriteAndRead<TDescribeGroupsResponseData>(header, request);
 }
 
+TMessagePtr<TFindCoordinatorResponseData> TKafkaTestClient::FindCoordinator(const TString& key, i8 keyType) {
+    Cerr << ">>>>> TFindCoordinatorRequestData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::FIND_COORDINATOR, 3);
+    TFindCoordinatorRequestData request;
+    request.Key = key;
+    request.KeyType = keyType;
+    return WriteAndRead<TFindCoordinatorResponseData>(header, request);
+}
+
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
     Cerr << ">>>>> TFetchRequestData\n";
 
@@ -1031,8 +1045,13 @@ void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVers
 void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent) {
     TKafkaVersion version = header->RequestApiVersion;
     TKafkaVersion headerVersion = RequestHeaderVersion(request->ApiKey(), version);
+    TKafkaVersion bodyVersion = version;
+    if (request->ApiKey() == API_VERSIONS && !IsApiVersionsRequestVersionSupported(version)) {
+        // Broker ignores the body (KIP-511). Serialize a v0 payload so the test client can send it.
+        bodyVersion = 0;
+    }
 
-    TKafkaInt32 size = header->Size(headerVersion) + request->Size(version);
+    TKafkaInt32 size = header->Size(headerVersion) + request->Size(bodyVersion);
     if (!silent) {
         Cerr << ">>>>> Size=" << size << Endl;
     }
@@ -1040,7 +1059,7 @@ void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApi
     so.Write(&size, sizeof(size));
 
     Write(so, header, headerVersion, silent);
-    Write(so, request, version, silent);
+    Write(so, request, bodyVersion, silent);
 
     so.Flush();
 }
@@ -1067,7 +1086,11 @@ TMessagePtr<T> TKafkaTestClient::Read(TSocketInput& si, TRequestHeaderData* requ
     UNIT_ASSERT_VALUES_EQUAL(header.CorrelationId, requestHeader->CorrelationId);
 
     auto response = CreateResponse(requestHeader->RequestApiKey);
-    response->Read(readable, requestHeader->RequestApiVersion);
+    TKafkaVersion responseVersion = requestHeader->RequestApiVersion;
+    if (requestHeader->RequestApiKey == API_VERSIONS) {
+        responseVersion = ApiVersionsResponseWriteVersion(responseVersion);
+    }
+    response->Read(readable, responseVersion);
 
     return TMessagePtr<T>(buffer, std::shared_ptr<TApiMessage>(response.release()));
 }

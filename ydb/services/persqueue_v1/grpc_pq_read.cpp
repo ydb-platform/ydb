@@ -9,6 +9,7 @@
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include <algorithm>
+#include <ydb/library/actors/core/log.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -80,14 +81,14 @@ void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, cons
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New commit offset request failed - cluster is not known yet");
 
         auto e = dynamic_cast<TEvCommitOffsetRequest*>(ev->Get());
-        Y_ENSURE(e);
+        AFL_ENSURE(e)("reason", "unexpected event type for commit offset")("local_cluster", LocalCluster);
         e->RaiseIssue(FillIssue("cluster initializing", PersQueue::ErrorCode::INITIALIZING));
         e->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
         std::unique_ptr<TEvCommitOffsetRequest> e;
         e.reset(dynamic_cast<TEvCommitOffsetRequest*>(ev->Release().Release()));
-        Y_ENSURE(e);
+        AFL_ENSURE(e)("reason", "unexpected event type for commit offset")("local_cluster", LocalCluster);
         ctx.Register(new TCommitOffsetActor(e.release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
     }
 }
@@ -103,9 +104,11 @@ void TPQReadService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdat
 }
 
 void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(ev->Get()->ClustersList);
+    AFL_ENSURE(ev->Get()->ClustersList)("local_cluster", LocalCluster);
 
-    Y_ABORT_UNLESS(ev->Get()->ClustersList->Clusters.size());
+    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size())
+        ("clusters", ev->Get()->ClustersList->Clusters.size())
+        ("local_cluster", LocalCluster);
 
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 
@@ -160,7 +163,7 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr&
         // TODO: Inc SLI Errors
         return;
     } else {
-        Y_ABORT_UNLESS(TopicsHandler != nullptr);
+        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
         auto ip = ev->Get()->GetPeerName();
 
         const ui64 cookie = NextCookie();
@@ -212,7 +215,7 @@ namespace NGRpcService {
 
 void DoPQReadInfoRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider&) {
     auto ev = dynamic_cast<TEvPQReadInfoRequest*>(ctx.release());
-    Y_ENSURE(ev);
+    AFL_ENSURE(ev)("reason", "unexpected request type for PQ read info");
 
     auto evHandle = std::make_unique<NActors::IEventHandle>(
         NGRpcProxy::V1::GetPQReadServiceActorID(),

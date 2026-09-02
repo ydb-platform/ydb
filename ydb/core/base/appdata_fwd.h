@@ -54,10 +54,12 @@ namespace NKikimrStream {
 
 namespace NKikimrConfig {
     class TAppConfig;
+    class TStateStorageConfig;
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
     class TKafkaProxyConfig;
+    class THttpProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
@@ -249,6 +251,7 @@ struct TAppData {
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig& HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -340,6 +343,7 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
+    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> UserFacingTracingConfigurator;
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;

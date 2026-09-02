@@ -17,7 +17,6 @@
 #include <boost/fusion/include/is_sequence.hpp>
 #include <boost/fusion/include/front.hpp>
 #include <boost/fusion/include/move.hpp>
-#include <boost/fusion/include/is_sequence.hpp>
 #include <utility>
 
 namespace boost { namespace spirit { namespace x3 { namespace traits

@@ -22,37 +22,31 @@ class TTypeRegistry
 public:
     void RegisterTypeDescriptor(std::unique_ptr<TTypeDescriptor> typeDescriptor) override
     {
-        YT_LOG_FATAL_IF(
-            Sealed_.load(),
-            "Cannot register type descriptor when registry is already sealed");
+        YT_TLOG_FATAL_IF(Sealed_.load(), "Cannot register type descriptor when registry is already sealed");
 
-        YT_LOG_FATAL_IF(
-            typeDescriptor->GetTag() == TTypeTag(),
-            "Invalid type tag (TypeTag: %x, TypeName: %v)",
-            typeDescriptor->GetTag(),
-            typeDescriptor->GetName());
+        YT_TLOG_FATAL_IF(typeDescriptor->GetTag() == TTypeTag(), "Invalid type tag")
+            .WithFormat("TypeTag", "%x", typeDescriptor->GetTag())
+            .With("TypeName", typeDescriptor->GetName());
 
         if (auto it = UniverseDescriptor_.TypeTagToDescriptor_.find(typeDescriptor->GetTag())) {
-            YT_LOG_FATAL("Duplicate type tag (TypeTag: %x, NewTypeName: %v, OldTypeName: %v)",
-                typeDescriptor->GetTag(),
-                typeDescriptor->GetName(),
-                it->second->GetName());
+            YT_TLOG_FATAL("Duplicate type tag")
+                .WithFormat("TypeTag", "%x", typeDescriptor->GetTag())
+                .With("NewTypeName", typeDescriptor->GetName())
+                .With("OldTypeName", it->second->GetName());
         }
 
         THashSet<TFieldTag> fieldTags;
         for (const auto& fieldDescriptor : typeDescriptor->Fields()) {
-            YT_LOG_FATAL_IF(
-                fieldDescriptor->GetTag() == TFieldTag(),
-                "Invalid field tag (TypeName: %v, FieldTag: %v, FieldName: %v)",
-                typeDescriptor->GetName(),
-                fieldDescriptor->GetTag(),
-                fieldDescriptor->GetName());
+            YT_TLOG_FATAL_IF(fieldDescriptor->GetTag() == TFieldTag(), "Invalid field tag")
+                .With("TypeName", typeDescriptor->GetName())
+                .With("FieldTag", fieldDescriptor->GetTag())
+                .With("FieldName", fieldDescriptor->GetName());
 
             if (!fieldTags.insert(fieldDescriptor->GetTag()).second) {
-                YT_LOG_FATAL("Duplicate field tag (TypeName: %v, FieldTag: %v, FieldName: %v)",
-                    typeDescriptor->GetName(),
-                    fieldDescriptor->GetTag(),
-                    fieldDescriptor->GetName());
+                YT_TLOG_FATAL("Duplicate field tag")
+                    .With("TypeName", typeDescriptor->GetName())
+                    .With("FieldTag", fieldDescriptor->GetTag())
+                    .With("FieldName", fieldDescriptor->GetName());
             }
         }
 
@@ -65,9 +59,9 @@ public:
             }
         }
 
-        YT_LOG_DEBUG("Type registered (TypeName: %v, TypeTag: %x)",
-            typeDescriptor->GetName(),
-            typeDescriptor->GetTag());
+        YT_TLOG_DEBUG("Type registered")
+            .With("TypeName", typeDescriptor->GetName())
+            .WithFormat("TypeTag", "%x", typeDescriptor->GetTag());
 
         EmplaceOrCrash(
             UniverseDescriptor_.TypeTagToDescriptor_,
@@ -78,7 +72,7 @@ public:
     const TUniverseDescriptor& GetUniverseDescriptor() override
     {
         if (!Sealed_.exchange(true)) {
-            YT_LOG_INFO("Type registry is sealed");
+            YT_TLOG_INFO("Type registry is sealed");
         }
         return UniverseDescriptor_;
     }
@@ -100,4 +94,3 @@ ITypeRegistry* ITypeRegistry::Get()
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NPhoenix
-

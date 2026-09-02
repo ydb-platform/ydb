@@ -3,7 +3,7 @@ from typing import Literal as L, Any
 
 from numpy import ufunc
 
-__all__: list[str]
+__all__ = ["NDArrayOperatorsMixin"]
 
 # NOTE: `NDArrayOperatorsMixin` is not formally an abstract baseclass,
 # even though it's reliant on subclasses implementing `__array_ufunc__`
@@ -17,7 +17,7 @@ class NDArrayOperatorsMixin(metaclass=ABCMeta):
     def __array_ufunc__(
         self,
         ufunc: ufunc,
-        method: L["__call__", "reduce", "reduceat", "accumulate", "outer", "inner"],
+        method: L["__call__", "reduce", "reduceat", "accumulate", "outer", "at"],
         *inputs: Any,
         **kwargs: Any,
     ) -> Any: ...

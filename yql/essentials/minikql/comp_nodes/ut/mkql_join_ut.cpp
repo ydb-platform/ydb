@@ -2,8 +2,9 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <util/generic/size_literals.h>
+
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreTupleTest) {
 Y_UNIT_TEST_LLVM(Inner) {
@@ -80,6 +81,39 @@ Y_UNIT_TEST_LLVM(InnerOrderRightFirst) {
                                                           {TMaybe<i32>{}, i32(4)},
                                                       });
 }
+#if !defined(_asan_enabled_)
+// https://github.com/ydb-platform/ydb/issues/40326
+Y_UNIT_TEST_LLVM(TestMemoryLimitExceptionTeardownSafety) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto strType = NTest::ConvertToMinikqlType<TStringBuf>(pb);
+
+    static constexpr ui32 RowCount = 20000;
+    static constexpr ui32 KeyCount = 16;
+    static constexpr size_t PayloadSize = 64;
+    const TString payload(PayloadSize, 'x');
+    TVector<std::tuple<TStringBuf, TStringBuf, i32, ui32>> rows(Reserve(RowCount));
+    for (ui32 i = 0; i < RowCount; ++i) {
+        if (i % 2) {
+            rows.emplace_back(TStringBuf(payload), TStringBuf(), i32(i % KeyCount), ui32(0));
+        } else {
+            rows.emplace_back(TStringBuf(), TStringBuf(payload), i32(i % KeyCount), ui32(1));
+        }
+    }
+    const auto list = NTest::ConvertValueToLiteralNode(pb, rows);
+
+    const auto outputType = pb.NewFlowType(pb.NewMultiType({strType, strType}));
+    const auto pgmReturn = pb.Collect(
+        pb.CommonJoinCore(pb.ToFlow(list, {}), EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, std::nullopt, EAnyJoinSettings::None, 3U, outputType));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    static constexpr ui64 MemoryLimit = 128_KB;
+    setup.Alloc.Ref().SetLimit(setup.Alloc.Ref().GetAllocated() + MemoryLimit);
+    UNIT_ASSERT_EXCEPTION(graph->GetValue(), TMemoryLimitExceededException);
+    setup.Alloc.Ref().SetLimit(0);
+}
+#endif // defined(_asan_enabled_)
 } // Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreTupleTest)
 
 Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreWideTest) {
@@ -224,5 +258,4 @@ Y_UNIT_TEST_LLVM(ExclusionOrderRightFirstAny) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreWideTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -24,6 +24,9 @@ SRCS(
     write_session_impl.cpp
     write_session.h
     write_session.cpp
+    deferred_publication_ack_tracker.h
+    deferred_publication_ack_tracker.cpp
+    deferred_publications.cpp
 )
 
 PEERDIR(
@@ -31,6 +34,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
     library/cpp/threading/future/subscription
+    library/cpp/yt/threading
     library/cpp/monlib/metrics
     library/cpp/string_utils/url
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate

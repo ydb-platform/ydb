@@ -87,7 +87,6 @@ private:
         ++iter.first->second;
     }
 
-private:
     THashMap<TInternName, ui32> Names_;
     TVector<TInternName> NameOrder_;
 };
@@ -1038,7 +1037,6 @@ private:
         Out_.AppendNoAlias(buf.data(), Pack64(value, buf.data()));
     }
 
-private:
     TString Out_;
     ui32 ReferenceCount_ = 0;
     THashMap<TInternName, ui32> Names_;
@@ -2216,7 +2214,6 @@ private:
         }
     }
 
-private:
     struct TNodeContext {
         const char* Start;
         ui32 NextPass;

@@ -5,7 +5,6 @@ from .constants import (
     NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     PACKAGE_JSON_FILENAME,
     PNPM_BUILD_BACKUP_LOCKFILE_FILENAME,
-    PNPM_PRE_LOCKFILE_FILENAME,
     PNPM_LOCKFILE_FILENAME,
     PNPM_WS_FILENAME,
 )
@@ -107,10 +106,6 @@ def extract_package_name_from_path(p):
 
 
 # PNPM-specific utility functions
-def build_pre_lockfile_path(p):
-    return os.path.join(p, PNPM_PRE_LOCKFILE_FILENAME)
-
-
 def build_build_backup_lockfile_path(p):
     return os.path.join(p, PNPM_BUILD_BACKUP_LOCKFILE_FILENAME)
 
@@ -127,18 +122,12 @@ def _remove_yaml_fields(path, fields):
     if not os.path.exists(path):
         return
 
-    try:
-        import ymakeyaml as yaml
-    except ImportError:
-        import yaml
-
     with open(path) as f:
-        data = yaml.load(f, Loader=yaml.CSafeLoader) or {}
+        lines = f.readlines()
 
-    for field in fields:
-        data.pop(field, None)
+    field_prefixes = tuple(prefix for field in fields for prefix in (f"{field}:", f'  "{field}":', f"  '{field}':"))
     with open(path, "w") as f:
-        yaml.dump(data, f, Dumper=yaml.CSafeDumper)
+        f.writelines(line for line in lines if not line.startswith(field_prefixes))
 
 
 def remove_node_modules_volatile_metadata(node_modules_path):

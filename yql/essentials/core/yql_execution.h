@@ -42,6 +42,7 @@ namespace NYql {
         TStage Stage;
 
         TString RemoteId;
+        TString WaitingRemoteId;
         THashMap<TString, TString> RemoteData;
 
         struct TCounters {

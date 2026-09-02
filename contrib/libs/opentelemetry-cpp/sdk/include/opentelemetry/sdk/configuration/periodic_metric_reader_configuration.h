@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -24,13 +25,17 @@ namespace configuration
 class PeriodicMetricReaderConfiguration : public MetricReaderConfiguration
 {
 public:
+  // TODO: spec default is 60000ms for interval, using 5000ms to preserve original behavior
+  static constexpr std::size_t kDefaultIntervalMs = 5000;
+  static constexpr std::size_t kDefaultTimeoutMs  = 30000;
+
   void Accept(MetricReaderConfigurationVisitor *visitor) const override
   {
     visitor->VisitPeriodic(this);
   }
 
-  std::size_t interval{0};
-  std::size_t timeout{0};
+  std::size_t interval{kDefaultIntervalMs};
+  std::size_t timeout{kDefaultTimeoutMs};
   std::unique_ptr<PushMetricExporterConfiguration> exporter;
   std::vector<std::unique_ptr<MetricProducerConfiguration>> producers;
   std::unique_ptr<CardinalityLimitsConfiguration> cardinality_limits;

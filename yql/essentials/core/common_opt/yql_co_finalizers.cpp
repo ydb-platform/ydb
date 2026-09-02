@@ -689,6 +689,16 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         return true;
     };
 
+    map[TCoSqlCombine::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToSqlCombine(input, members, ctx, " with multi-usage");
+            }
+        );
+
+        return true;
+    };
+
     map[""] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         FilterPushdownWithMultiusage(node, toOptimize, ctx, optCtx);
         if (toOptimize.empty() && TCoFlatMapBase::Match(node.Get()) && CanPushdownFiltersOverWindow(optCtx.Types)) {
@@ -698,6 +708,16 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
                 toOptimize[node.Get()] = opt;
             }
         }
+
+        return true;
+    };
+
+    map[TCoWithWorld::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToWithWorld(input, members, ctx, " with multi-usage");
+            }
+        );
 
         return true;
     };

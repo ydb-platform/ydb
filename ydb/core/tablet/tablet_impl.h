@@ -41,11 +41,14 @@ struct TEvTabletBase {
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletId;
         const TString ErrorReason;
+        const bool IsTabletStorageInfoVersionObsolete;
 
-        TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TString &reason = TString())
+        TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId,
+                const TString &reason = TString(), bool isTabletStorageInfoVersionObsolete = false)
             : Status(status)
             , TabletId(tabletId)
             , ErrorReason(reason)
+            , IsTabletStorageInfoVersionObsolete(isTabletStorageInfoVersionObsolete)
         {}
     };
 

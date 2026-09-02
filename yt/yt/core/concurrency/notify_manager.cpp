@@ -32,17 +32,17 @@ TNotifyManager::TNotifyManager(
 
 TCpuInstant TNotifyManager::GetMinEnqueuedAt() const
 {
-    return MinEnqueuedAt_.load(std::memory_order::acquire);
+    return MinEnqueuedAtInstant_.load(std::memory_order::acquire);
 }
 
 TCpuInstant TNotifyManager::UpdateMinEnqueuedAt(TCpuInstant newMinEnqueuedAt)
 {
-    auto minEnqueuedAt = MinEnqueuedAt_.load();
+    auto minEnqueuedAt = MinEnqueuedAtInstant_.load();
 
     while (newMinEnqueuedAt < minEnqueuedAt) {
-        if (MinEnqueuedAt_.compare_exchange_weak(minEnqueuedAt, newMinEnqueuedAt)) {
+        if (MinEnqueuedAtInstant_.compare_exchange_weak(minEnqueuedAt, newMinEnqueuedAt)) {
             minEnqueuedAt = newMinEnqueuedAt;
-            YT_VERIFY(minEnqueuedAt != SentinelMinEnqueuedAt);
+            YT_VERIFY(minEnqueuedAt != SentinelMinEnqueuedAtInstant);
             break;
         }
     }
@@ -54,25 +54,25 @@ TCpuInstant TNotifyManager::ResetMinEnqueuedAt()
 {
     // Disables notifies of already enqueued actions from invoke and
     // allows to set MinEnqueuedAt in NotifyFromInvoke for new actions.
-    return MinEnqueuedAt_.exchange(SentinelMinEnqueuedAt);
+    return MinEnqueuedAtInstant_.exchange(SentinelMinEnqueuedAtInstant);
 }
 
 void TNotifyManager::NotifyFromInvoke(TCpuInstant cpuInstant, bool force)
 {
     auto minEnqueuedAt = GetMinEnqueuedAt();
 
-    if (minEnqueuedAt == SentinelMinEnqueuedAt) {
-        MinEnqueuedAt_.compare_exchange_strong(minEnqueuedAt, cpuInstant);
+    if (minEnqueuedAt == SentinelMinEnqueuedAtInstant) {
+        MinEnqueuedAtInstant_.compare_exchange_strong(minEnqueuedAt, cpuInstant);
     }
 
     auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
     bool needNotify = force || waitTime > WaitLimit;
 
-    YT_LOG_TRACE("Notify from invoke (Force: %v, Decision: %v, WaitTime: %v, MinEnqueuedAt: %v)",
-        force,
-        needNotify,
-        waitTime,
-        CpuInstantToInstant(minEnqueuedAt));
+    YT_TLOG_TRACE("Notify from invoke")
+        .With("Force", force)
+        .With("Decision", needNotify)
+        .With("WaitTime", waitTime)
+        .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
     if (needNotify) {
         NotifyOne(cpuInstant);
@@ -87,15 +87,20 @@ void TNotifyManager::NotifyAfterFetch(TCpuInstant cpuInstant, TCpuInstant newMin
     auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
 
     if (waitTime > WaitLimit) {
-        YT_LOG_TRACE("Notify after fetch (WaitTime: %v, MinEnqueuedAt: %v)",
-            waitTime,
-            CpuInstantToInstant(minEnqueuedAt));
+        YT_TLOG_TRACE("Notify after fetch")
+            .With("WaitTime", waitTime)
+            .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
         NotifyOne(cpuInstant);
     }
 
-    // Reset LockedInstant to suppress action stuck warnings in case of progress.
-    LockedInstant_ = cpuInstant;
+    // Do not resurrect a concurrently unlocked notification.
+    auto notifyInstant = NotifyInstant_.load(std::memory_order::relaxed);
+    while (notifyInstant != UnlockedNotifyInstant && notifyInstant < cpuInstant) {
+        if (NotifyInstant_.compare_exchange_weak(notifyInstant, cpuInstant)) {
+            break;
+        }
+    }
 }
 
 void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function<bool()> isStopping)
@@ -139,9 +144,9 @@ void TNotifyManager::Wait(NThreading::TEventCount::TCookie cookie, std::function
             auto waitTime = CpuDurationToDuration(cpuInstant - minEnqueuedAt);
 
             if (waitTime > WaitLimit) {
-                YT_LOG_DEBUG("Wake up by timeout (WaitTime: %v, MinEnqueuedAt: %v)",
-                    waitTime,
-                    CpuInstantToInstant(minEnqueuedAt));
+                YT_TLOG_DEBUG("Wake up by timeout")
+                    .With("WaitTime", waitTime)
+                    .With("MinEnqueuedAt", CpuInstantToInstant(minEnqueuedAt));
 
                 WakeupByTimeoutCounter_.Increment();
 
@@ -208,26 +213,24 @@ void TNotifyManager::SetPollingPeriod(TDuration pollingPeriod)
 
 bool TNotifyManager::UnlockNotifies()
 {
-    return NotifyLock_.exchange(false);
+    return NotifyInstant_.exchange(UnlockedNotifyInstant) != UnlockedNotifyInstant;
 }
 
 void TNotifyManager::NotifyOne(TCpuInstant cpuInstant)
 {
-    if (!NotifyLock_.exchange(true)) {
-        LockedInstant_ = cpuInstant;
-        YT_LOG_TRACE("Notify futex (MinEnqueuedAt: %v)",
-            CpuInstantToInstant(GetMinEnqueuedAt()));
+    auto notifyInstant = UnlockedNotifyInstant;
+    if (NotifyInstant_.compare_exchange_strong(notifyInstant, cpuInstant)) {
+        YT_TLOG_TRACE("Notify futex")
+            .With("MinEnqueuedAt", CpuInstantToInstant(GetMinEnqueuedAt()));
         EventCount_->NotifyOne();
     } else {
-        static const auto WaitTimeWarningThresholdCpu = DurationToCpuDuration(WaitTimeWarningThreshold);
-
-        auto minEnqueuedAt = GetMinEnqueuedAt();
-        if (minEnqueuedAt != SentinelMinEnqueuedAt &&
-            cpuInstant - minEnqueuedAt > WaitTimeWarningThresholdCpu)
-        {
-            YT_LOG_WARNING("Action is probably stuck (MinEnqueuedAt: %v, WaitTime: %v)",
-                CpuInstantToInstant(minEnqueuedAt),
-                CpuDurationToDuration(cpuInstant - minEnqueuedAt));
+        auto waitTime = CpuDurationToDuration(cpuInstant - notifyInstant);
+        if (waitTime > WaitTimeWarningThreshold) {
+            // Notifications are locked during more than 30 seconds.
+            YT_TLOG_WARNING("Action is probably stuck")
+                .With("MinEnqueuedAt", CpuInstantToInstant(GetMinEnqueuedAt()))
+                .With("NotifyInstant", notifyInstant)
+                .With("WaitTime", waitTime);
         }
     }
 }

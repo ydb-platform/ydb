@@ -4,7 +4,7 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <library/cpp/yt/logging/logger.h>
 
@@ -12,7 +12,7 @@ namespace NYT::NTracing {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, JaegerLogger, "Jaeger");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, JaegerLogger, "Jaeger");
 
 ////////////////////////////////////////////////////////////////////////////////
 

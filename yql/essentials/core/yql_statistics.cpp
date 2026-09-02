@@ -52,7 +52,9 @@ TString TShufflingOrderingsByJoinLabels::ToString() const
         result << "TShufflingOrderingsByJoinLabels{" << ShufflingOrderingsByJoinLabels_.size() << " entries: ";
 
         for (size_t i = 0; i < ShufflingOrderingsByJoinLabels_.size(); ++i) {
-            if (i > 0) result << "; ";
+            if (i > 0) {
+                result << "; ";
+            }
 
             const auto& [joinLabels, shufflings] = ShufflingOrderingsByJoinLabels_[i];
             result << "{" << JoinSeq(", ", joinLabels) << ":" << shufflings.GetState() << "}";

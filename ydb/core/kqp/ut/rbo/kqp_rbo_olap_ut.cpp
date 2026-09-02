@@ -184,6 +184,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdown) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -554,7 +555,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(CompositeRangeOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -688,7 +689,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
    Y_UNIT_TEST(EmptyRange) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -819,7 +820,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(ExtractRangesSimple) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -865,7 +866,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(ExtractRangesSimpleLimit) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -910,7 +911,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(ExtractRanges) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -946,7 +947,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(ExtractRangesReverse) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -996,7 +997,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicateDoNotPushdown) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -1041,7 +1042,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdownPartial) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -1107,7 +1108,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdown_DifferentLvlOfFilters) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1160,7 +1161,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdown_LikePushedDownForStringType) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1288,10 +1289,126 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         }
     }
 
+    Y_UNIT_TEST(PredicatePushdown_Regexp) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        // For insert.
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    PRIMARY KEY(id)
+                )
+                WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        {
+            const auto res = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
+                    (1, "foobar", "foobar"),
+                    (2, "baz", "baz"),
+                    (3, "fooqux", "fooqux"),
+                    (4, NULL, NULL)
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+        }
+
+        std::vector<TString> predicates = {
+            "str REGEXP '.*foo.*'",
+            "str REGEXP 'foo.ar'",
+            "str REGEXP 'nomatch'",
+            "u_str REGEXP '.*foo.*'",
+            "u_str REGEXP 'foo.ar'",
+            "u_str REGEXP 'nomatch'",
+        };
+
+        std::vector<TString> expectedResults = {
+            "[[1];[3]]",
+            "[[1]]",
+            "[]",
+            "[[1];[3]]",
+            "[[1]]",
+            "[]",
+        };
+
+        UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
+
+        // Pragma ON: REGEXP must be pushed down (KqpOlapFilter present in AST) and produce correct results.
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownRegexp = "true";
+                SELECT id FROM `/Root/foo` WHERE
+                )") + predicates[i] + " ORDER BY id";
+            Cerr << "QUERY " << i << Endl << query << Endl;
+
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            const auto ast = result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
+                TStringBuilder() << "REGEXP not pushed down. Query: " << query);
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), expectedResults[i]);
+        }
+
+        // Pragma OFF (default): REGEXP must NOT be pushed down, but results must still be correct.
+        for (ui32 i = 0; i < predicates.size(); ++i) {
+            const auto& query = TString(R"(
+                SELECT id FROM `/Root/foo` WHERE
+                )") + predicates[i] + " ORDER BY id";
+
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            const auto ast = result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find("KqpOlapFilter") == std::string::npos,
+                TStringBuilder() << "REGEXP unexpectedly pushed down with pragma off. Query: " << query);
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), expectedResults[i]);
+        }
+
+        // Invalid regex must be ignored (no error), preserving current Re2 semantics, even when pushed down.
+        {
+            const auto query = R"(
+                PRAGMA kikimr.OptEnableOlapPushdownRegexp = "true";
+                SELECT id FROM `/Root/foo` WHERE str REGEXP '(' ORDER BY id;
+            )";
+            const auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues());
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), "[]");
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1555,7 +1672,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PredicatePushdownNulls) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
 
@@ -1584,10 +1701,70 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         UNIT_ASSERT(streamPart.IsSuccess());
     }
 
+    Y_UNIT_TEST(PredicatePushdownRenamedColumns) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 300, true);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString renamedSource = R"(
+            (SELECT `timestamp` AS ts, `level` AS lvl, `resource_id` AS rid, `uid` AS u
+             FROM `/Root/olapStore/olapTable`) AS s
+        )";
+
+        const std::vector<TString> predicates = {
+            R"(s.lvl IS NOT NULL)",
+            R"(s.lvl IS NULL)",
+            R"(s.lvl IS NOT NULL AND s.lvl > 2)",
+            R"(s.rid < s.u)",
+            R"(s.lvl IS NULL OR s.lvl > 3)",
+            R"(s.u IS NOT NULL AND (s.rid < s.u OR s.lvl IS NULL))",
+        };
+
+        for (const auto& predicate : predicates) {
+            auto buildQuery = [&](bool pushEnabled) {
+                TStringBuilder qBuilder;
+                qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
+                qBuilder << "SELECT s.ts, s.lvl FROM " << renamedSource << " WHERE " << predicate << " ORDER BY s.ts";
+                return TString(qBuilder);
+            };
+
+            const auto referenceQuery = buildQuery(false);
+            auto it = tableClient.StreamExecuteScanQuery(referenceQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), TStringBuilder() << predicate << ": " << it.GetIssues().ToString());
+            const auto referenceResult = CollectStreamResult(it);
+
+            const auto pushQuery = buildQuery(true);
+            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), TStringBuilder() << predicate << ": " << it.GetIssues().ToString());
+            const auto pushResult = CollectStreamResult(it);
+
+            CompareYson(referenceResult.ResultSetYson, pushResult.ResultSetYson);
+
+            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), TStringBuilder() << predicate << ": " << it.GetIssues().ToString());
+            const auto ast = CollectStreamResult(it).QueryStats->Getquery_ast();
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdownCastErrors) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1791,6 +1968,8 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             NYdb::NQuery::TExecuteQuerySettings scanSettings;
             scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
             auto it = client.StreamExecuteQuery(R"(
+                PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = "true";
+
                 SELECT
                     b, COUNT(*), SUM(a)
                 FROM `/Root/ColumnShard`
@@ -1865,7 +2044,8 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             NYdb::NQuery::TExecuteQuerySettings scanSettings;
             scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
             auto it = client.StreamExecuteQuery(R"(
-    	    	PRAGMA ydb.UseBlockHashJoin = "false";
+                PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = "true";
+                PRAGMA ydb.UseBlockHashJoin = "false";
                 PRAGMA ydb.OptimizerHints =
                 '
                     JoinType(T1 T2 Shuffle)
@@ -1920,7 +2100,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(DisableBlockExecutionPerQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1943,7 +2123,9 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         )";
 
         {
-            auto res = StreamExplainQuery(query, client);
+            auto res = StreamExplainQuery(
+                TStringBuilder() << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \"true\";\n" << query,
+                client);
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
             auto plan = CollectStreamResult(res);
@@ -2033,7 +2215,8 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(CountWhereColumnIsNull) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -2091,7 +2274,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(SimpleCount) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -2122,7 +2305,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(DoubleOutOfRangeInJson) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false).SetColumnShardDoubleOutOfRangeHandling(
             NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY);
         TKikimrRunner kikimr(settings);
@@ -2173,7 +2356,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(SimpleRequestHasProjections) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -2210,7 +2393,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(PushdownFilterKnownIssuies) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -2304,7 +2487,8 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(OlapFilterPeephole) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(true);
+
         auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -2362,7 +2546,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
- 
+
         auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
         // Columns limit 2 for tests.
         settings.AppConfig.MutableTableServiceConfig()->SetDisableOlapBlocksOnColumnsLimit(2);
@@ -2402,9 +2586,11 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto query = queries[i];
+            const TString explainQuery = TStringBuilder()
+                << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \"true\";\n" << query;
             auto result =
                 session2
-                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExecuteQuery(explainQuery, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -2427,9 +2613,11 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto query = queries[i];
+            const TString explainQuery = TStringBuilder()
+                << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \"true\";\n" << query;
             auto result =
                 session2
-                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExecuteQuery(explainQuery, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 

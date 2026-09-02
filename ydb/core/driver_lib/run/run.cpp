@@ -5,9 +5,11 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/core/kqp/common/dynamic_function_registry.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -53,6 +55,7 @@
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/tablet_types.h>
@@ -139,6 +142,7 @@
 #include <ydb/services/persqueue_v1/topic_deferred_publish.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/distributed_storage/grpc_service.h>
 #include <ydb/services/test_shard/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
@@ -482,6 +486,7 @@ public:
         }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
+        NPQ::InitMaxHeaderSize(appData->FeatureFlags);
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
@@ -883,6 +888,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["config"] = &hasConfig;
         TServiceCfg hasBridge = services.empty();
         names["bridge"] = &hasBridge;
+        TServiceCfg hasDistributedStorage = services.empty();
+        names["distributed_storage"] = &hasDistributedStorage;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
@@ -1202,6 +1209,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 
         if (hasBridge) {
             server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
+        if (hasDistributedStorage) {
+            server.AddService(new NGRpcService::TDistributedStorageGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (hasTestShard) {
@@ -1542,6 +1553,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
     }
 
+    if (runConfig.AppConfig.HasHttpProxyConfig()) {
+        AppData->HttpProxyConfig.CopyFrom(runConfig.AppConfig.GetHttpProxyConfig());
+    }
+
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
     }
@@ -1758,6 +1773,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 
     if (logConfig.HasAllowDropEntries()) {
         LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries());
+    }
+
+    if (logConfig.HasEnableStructuredLogInJson()) {
+        LogSettings->SetEnableStructuredLogInJson(logConfig.GetEnableStructuredLogInJson());
     }
 
     if (logConfig.HasUseLocalTimestamps()) {
@@ -2267,6 +2286,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCsFlowControlManager) {
+        sil->AddServiceInitializer(new TFlowControlManagerInitializer(runConfig));
+    }
+
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     if (serviceMask.EnableNBSService) {
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
@@ -2274,6 +2297,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 #endif
 
     if (serviceMask.EnableUdfStore) {
+        Y_ABORT_UNLESS(NKqp::AsDynamicFunctionRegistry(FunctionRegistry.Get()),
+            "FunctionRegistry must implement NKqp::IDynamicFunctionRegistry for UDF store");
         sil->AddServiceInitializer(new TUdfStoreInitializer(runConfig, FunctionRegistry));
     }
 
@@ -2423,12 +2448,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         StopGRpcServers(GRpcServersWrapper, true);
     }
 
-    if (ActorSystem) {
-        ActorSystem->Stop();
-    }
-
     if (YqSharedResources) {
         YqSharedResources->Stop();
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Stop();
     }
 
     if (ModuleFactories) {
@@ -2486,7 +2511,7 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     TypeRegistry.Reset(new NScheme::TKikimrTypeRegistry());
     TypeRegistry->CalculateMetadataEtag();
 
-    FunctionRegistry.Reset(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone());
+    FunctionRegistry = NKqp::CreateDynamicFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
     FormatFactory.Reset(new TFormatFactory);
 
     const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();

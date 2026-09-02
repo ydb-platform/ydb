@@ -72,7 +72,7 @@ def main(
 
         with zipfile.ZipFile(jar) as jf:
             for entry in jf.infolist():
-                if entry.filename.endswith('.java'):
+                if entry.filename.endswith(('.java', '.kt')):
                     dest = src_dir
 
                 elif entry.filename.endswith('.class'):

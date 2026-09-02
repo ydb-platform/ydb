@@ -23,4 +23,7 @@ TControlWrapper EnableStorageRetroTraceGenerationDefaultControl =
 TControlWrapper EnableStorageRetroTraceCollectionSlowRequestsDefaultControl =
         TControlWrapper(DefaultEnableStorageRetroTraceCollectionSlowRequests, false, true);
 
+TControlWrapper EnableChecksumCalcAndValidationOnDsProxyDefaultControl =
+        TControlWrapper(DefaultEnableChecksumCalcAndValidationOnDsProxy, false, true);
+
 } // namespace NKikimr

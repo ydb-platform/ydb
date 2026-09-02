@@ -2,7 +2,7 @@
 #include <Python.h>
 #include "structmember.h"
 #include "misc_thread_common.h"
-#define CFFI_VERSION  "2.1.0"
+#define CFFI_VERSION  "2.1.1"
 
 #ifdef MS_WIN32
 #include <windows.h>

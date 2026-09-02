@@ -54,14 +54,13 @@ namespace NActors {
         void StartHandshake() override;
         void ReestablishConnectionWithHandshake(TDisconnectReason reason) override;
         void CloseInputSession() override;
-        bool IsRdmaInUse() override { return false; }
-        bool HasRdmaState() const override { return false; }
+        ERdmaState GetRdmaState() const override { return ERdmaState::None; }
         bool SupportsContinuation() const override { return false; }
 
         const TSessionParams& GetParams() const override { return Params; }
         const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
-        ui64 GetTotalOutputQueueSize() const override { return 0; }
-        std::optional<ui8> GetXDCFlags() const override { return std::nullopt; }
+        ui64 GetTotalOutputQueueSize() const override;
+        std::optional<ui8> GetXDCFlags() const override;
         TDuration GetPingRTT() const override { return TDuration::FromValue(PingRTT->load()); }
         i64 GetClockSkew() const override { return ClockSkew->load(); }
         void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) override;
@@ -125,9 +124,6 @@ namespace NActors {
 
         // io_uring data plane
         ui64 EngineHandle = 0;
-
-        ui64 BytesSent = 0;
-        ui64 BytesReceived = 0;
 
         struct TSubscriberInfo {
             ui64 Cookie = 0;

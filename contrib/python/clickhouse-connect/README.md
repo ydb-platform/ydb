@@ -9,7 +9,9 @@ A high performance core database driver for connecting ClickHouse to Python, Pan
 * Superset Connector
 * SQLAlchemy Core (select, joins, lightweight deletes; limited feature set)
 
-ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum compatibility.
+ClickHouse Connect uses the ClickHouse HTTP interface for maximum compatibility. An experimental
+[chDB](https://clickhouse.com/docs/chdb) backend is also available for running queries against an embedded
+in-process engine with `get_client(interface='chdb')`. Install it with `pip install clickhouse-connect[chdb]`.
 
 ### Installation
 
@@ -42,12 +44,13 @@ because Apache Superset currently requires `sqlalchemy>=1.4,<2`.
 Supported features include:
 - Basic query execution via SQLAlchemy Core
 - `SELECT` queries with `JOIN`s (including ClickHouse-specific strictness, `USING`, and `GLOBAL` modifiers),
-  `ARRAY JOIN` (single and multi-column), `FINAL`, and `SAMPLE`
+  `ARRAY JOIN` (single and multi-column), `FINAL`, `SAMPLE`, and materialized CTEs
 - `VALUES` table function syntax
 - Lightweight `DELETE` statements
 - **Alembic** schema migrations (autogenerate, upgrade/downgrade, ClickHouse engine support)
 
-A small number of features require SQLAlchemy 2.x: `Values.cte()` and certain literal-rendering behaviors.
+A small number of features require SQLAlchemy 2.x. `Values.cte()` specifically requires SQLAlchemy 2.0.42 or later.
+Certain literal-rendering behaviors also require SQLAlchemy 2.x.
 All other dialect features, including those used by Superset, work on both 1.4 and 2.x.
 
 Basic ORM usage works for insert-heavy, read-focused workloads: declarative model definitions, `CREATE TABLE`,

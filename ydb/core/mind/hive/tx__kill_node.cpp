@@ -71,7 +71,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxKillNode::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", NodeId});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
         if (Local) {
             TNodeInfo* node = Self->FindNode(Local.NodeId());
             if (node == nullptr || node->IsDisconnected()) {

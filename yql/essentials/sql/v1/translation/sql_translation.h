@@ -32,7 +32,7 @@ inline TPosition GetPos(const TToken& token) {
 
 template <typename TToken>
 TIdentifier GetIdentifier(TTranslation& ctx, const TToken& node) {
-    auto token = node.GetToken1();
+    const auto& token = node.GetToken1();
     return TIdentifier(TPosition(token.GetColumn(), token.GetLine()), ctx.Identifier(token));
 }
 
@@ -274,7 +274,7 @@ protected:
     TNodePtr ValueConstructor(const TRule_value_constructor& node);
     TNodePtr ListLiteral(const TRule_list_literal& node);
     TNodePtr DictLiteral(const TRule_dict_literal& node);
-    TNodePtr StructLiteral(const TRule_struct_literal& node);
+    TNodeResult StructLiteral(const TRule_struct_literal& node);
     TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc = "");
     bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc = "");
     bool SimpleTableRefImpl(const TRule_simple_table_ref& node, TTableRef& result);
@@ -366,7 +366,7 @@ private:
     bool SortSpecification(const TRule_sort_specification& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
-    bool StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);
+    TSQLStatus StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);
     bool ValidateTableSettings(const TTableSettings& settings);
 
 protected:

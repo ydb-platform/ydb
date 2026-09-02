@@ -514,8 +514,9 @@ class TransferManager:
         for kwarg in actual:
             if kwarg not in allowed:
                 raise ValueError(
-                    "Invalid extra_args key '{}', "
-                    "must be one of: {}".format(kwarg, ', '.join(allowed))
+                    "Invalid extra_args key '{}', must be one of: {}".format(
+                        kwarg, ', '.join(allowed)
+                    )
                 )
 
     def _add_operation_defaults(self, extra_args):

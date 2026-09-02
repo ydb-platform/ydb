@@ -46,7 +46,7 @@ public:
 
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
-
+    void Bootstrap(const TActorContext& ctx) override;
     TString BuildLogPrefix() const override;
 
 protected:
@@ -58,6 +58,7 @@ protected:
     ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     void UpdateCounters(const TActorContext& ctx) override;
     void HandleWakeUpImpl() override;
+    bool CanExaust(TInstant now) override;
     THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const;
 
     TString Description() const override { return "Read quoter"; }
@@ -77,10 +78,15 @@ private:
     TConsumerReadQuota* GetConsumerQuotaIfExists(const TString& consumerStr);
     ui64 GetConsumerReadSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
     ui64 GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
+    ui64 GetConsumerReadMessageSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
+    ui64 GetConsumerReadMessageBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& consumerStr, const TActorContext& ctx) const;
+    ui64 GetTotalPartitionMessageSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
+    ui64 GetTotalPartitionMessageSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
 
 private:
-    THashMap<TString, TConsumerReadQuota> ConsumerQuotas;
     TActorId Parent;
+    THashMap<TString, TConsumerReadQuota> ConsumerQuotas;
+    TMaybe<TQuotaTracker> PartitionTotalMessageQuotaTracker;
 };
 
 } // namespace NKikimr::NPQ

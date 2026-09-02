@@ -5,6 +5,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy {
     bool ValidateWriteWithCodec(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const ui32 codecID, TString& error) {
@@ -14,7 +15,7 @@ namespace NKikimr::NGRpcProxy {
             const auto& ids = pqTabletConfig.codecs().ids();
             if (!ids.empty() && Find(ids, codecID) == ids.end()) {
                 const auto& names = pqTabletConfig.codecs().codecs();
-                Y_ABORT_UNLESS(ids.size() == names.size(), "PQ tabled supported codecs configuration is invalid");
+                AFL_ENSURE(ids.size() == names.size())("reason", "PQ tablet supported codecs configuration is invalid");
                 TStringBuilder errorBuilder;
                 errorBuilder << "given codec (id " << static_cast<i32>(codecID) << ") is not configured for the topic. Configured codecs are " << names[0] << " (id " << ids[0] << ")";
                 for (i32 i = 1; i != ids.size(); ++i) {

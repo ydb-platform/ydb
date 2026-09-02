@@ -5,7 +5,13 @@ import ydb
 import os
 import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param, get_ci_version, get_self_version
+from ydb.tests.olap.lib.utils import (
+    external_param_is_true,
+    get_external_param,
+    get_ci_version,
+    get_test_tools_git_info,
+    get_test_tools_version,
+)
 from time import time_ns
 from datetime import datetime
 
@@ -18,6 +24,21 @@ class ResultsProcessor:
             self._db = db
             self._table = table
             self._columns = columns
+
+        @property
+        def table_path(self) -> str:
+            return os.path.join(self._db, self._table)
+
+        def execute_query(self, query: str, parameters: dict | None = None) -> list:
+            logging.info(f"[ResultsProcessor] Reading from YDB endpoint: {self._endpoint}, db: {self._db}, table: {self._table}")
+            logging.debug(f"[ResultsProcessor] Query: {query}, parameters: {parameters}")
+            with ydb.QuerySessionPool(self._driver) as pool:
+                result_sets = pool.execute_with_retries(query, parameters)
+            rows = []
+            for result_set in result_sets:
+                rows.extend(result_set.rows)
+            logging.info(f"[ResultsProcessor] Got {len(rows)} rows from {self.table_path}")
+            return rows
 
         def send_data(self, data):
             try:
@@ -39,6 +60,7 @@ class ResultsProcessor:
 
     send_results = external_param_is_true('send-results')
     ignore_stderr_content = external_param_is_true('ignore_stderr_content')
+    tpcc_tool = 'ydb_cli_tpcc'
     _columns_types = (
         ydb.BulkUpsertColumns()
         .add_column('Db', ydb.PrimitiveType.Utf8)
@@ -211,7 +233,12 @@ class ResultsProcessor:
                 info['ci_sanitizer'] = ci_sanitizer
             info['ignore_stderr_content'] = cls.ignore_stderr_content
 
-            info['test_tools_version'] = get_self_version()
+            info['test_tools_version'] = get_test_tools_version()
+            test_git_info = get_test_tools_git_info()
+            if test_git_info:
+                info['test_tools_git'] = test_git_info
+            if os.getenv('CI_TEST_VERSION'):
+                info['test_version'] = os.getenv('CI_TEST_VERSION')
 
             data = {
                 'Db': cls.get_cluster_id(),
@@ -233,26 +260,135 @@ class ResultsProcessor:
                 endpoint.send_data(data)
 
     @classmethod
+    def get_tpcc_run_context(cls) -> dict:
+        """Cluster/branch/version identity of the current run.
+
+        Shared by the TPC-C results upload and the deviation check, so both
+        address history by exactly the same values.
+        """
+        cluster_info = YdbCluster.get_cluster_info()
+        cluster_name = os.getenv('CI_CLUSTER_NAME', '').replace('oltp-', '').replace('-', '') or cluster_info.get('name', '')
+        ver = cluster_info.get('version', '').split('.')
+        version = ver[-1]
+        branch = ver[0] if len(ver) > 1 else ''
+        commit_ts = 0
+        ci_git_info = os.getenv('CI_YDB_GIT_INFO')
+        if ci_git_info:
+            ci_git_info = json.loads(ci_git_info)
+            branch = ci_git_info.get('branch', branch)
+            version = ci_git_info.get('version', version)
+            commit_ts = ci_git_info.get('commit_timestamp', 0)
+        return {
+            'cluster': cluster_name,
+            'version': version,
+            'branch': f'origin/{branch}' if branch else '',
+            'commit_timestamp': commit_ts,
+        }
+
+    @staticmethod
+    def get_tpcc_metrics(results: dict) -> dict:
+        """Key TPC-C metrics of a run, keyed by the results table column names."""
+        summary = results.get('summary', {})
+        new_order = results.get('transactions', {}).get('NewOrder', {})
+        return {
+            'warehouses': summary.get('warehouses', 0),
+            'tpmC': summary.get('tpmc', 0),
+            'newOrderLatency90': new_order.get('percentiles', {}).get('90', 0),
+        }
+
+    @classmethod
+    def get_tpcc_history(cls, cluster: str, warehouses: int, run_type: str, before_ts: float, per_branch_limit: int) -> list:
+        """Up to `per_branch_limit` last runs of the same configuration, for every branch at once."""
+        endpoints = cls.get_tpcc_endpoints()
+        if not endpoints:
+            raise RuntimeError('TPC-C results table is not configured, set the results-tpcc-table param')
+        endpoint = endpoints[0]
+        query = f'''
+            DECLARE $cluster AS Utf8;
+            DECLARE $warehouses AS Uint32;
+            DECLARE $run_type AS Utf8;
+            DECLARE $tool AS Utf8;
+            DECLARE $before AS Timestamp;
+            DECLARE $limit AS Uint64;
+
+            $history = (
+                SELECT
+                    git_branch,
+                    timestamp,
+                    tpmC,
+                    newOrderLatency90,
+                    ROW_NUMBER() OVER (PARTITION BY git_branch ORDER BY timestamp DESC) AS row_num
+                FROM `{endpoint.table_path}`
+                WHERE cluster == $cluster
+                  AND warehouses == $warehouses
+                  AND run_type == $run_type
+                  AND tool == $tool
+                  AND timestamp < $before
+            );
+
+            SELECT git_branch, timestamp, tpmC, newOrderLatency90
+            FROM $history
+            WHERE row_num <= $limit
+            ORDER BY git_branch, timestamp DESC;
+        '''
+        parameters = {
+            '$cluster': (cluster, ydb.PrimitiveType.Utf8),
+            '$warehouses': (warehouses, ydb.PrimitiveType.Uint32),
+            '$run_type': (run_type, ydb.PrimitiveType.Utf8),
+            '$tool': (cls.tpcc_tool, ydb.PrimitiveType.Utf8),
+            '$before': (int(1000000 * before_ts), ydb.PrimitiveType.Timestamp),
+            '$limit': (per_branch_limit, ydb.PrimitiveType.Uint64),
+        }
+        return endpoint.execute_query(query, parameters)
+
+    @classmethod
     def upload_tpcc_results(cls, results, run_type: str, warmup_start_ts: float):
         if not cls.send_results or not cls.get_tpcc_endpoints():
             return
         with allure.step("Upload TPCC results to YDB"):
-            cluster_info = YdbCluster.get_cluster_info()
-            cluster_name = os.getenv('CI_CLUSTER_NAME', '').replace('oltp-', '').replace('-', '') or cluster_info.get('name', '')
-            ver = cluster_info.get('version', '').split('.')
-            version = ver[-1]
-            branch = ver[0] if len(ver) > 1 else ''
-            commit_ts = 0
-            ci_git_info = os.getenv('CI_YDB_GIT_INFO')
-            if ci_git_info:
-                ci_git_info = json.loads(ci_git_info)
-                branch = ci_git_info.get('branch', branch)
-                version = ci_git_info.get('version', version)
-                commit_ts = ci_git_info.get('commit_timestamp', 0)
-            branch = f'origin/{branch}' if branch else ''
+            run_context = cls.get_tpcc_run_context()
+            cluster_name = run_context['cluster']
+            version = run_context['version']
+            branch = run_context['branch']
+            commit_ts = run_context['commit_timestamp']
+            metrics = cls.get_tpcc_metrics(results)
 
             summary = results.get('summary', {})
-            json_string = json.dumps(results, separators=(',', ':'))
+            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+            if report_url is None:
+                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+                if sandbox_task_id is not None:
+                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            # Enrich payload stored in `json` with resolved run knobs / CI context.
+            # Keep original CLI summary fields (max_sessions/threads/warmup_seconds when present).
+            new_order = results.get('transactions', {}).get('NewOrder', {})
+            payload = dict(results)
+            payload['meta'] = {
+                'run_type': run_type,
+                'compaction_mode': get_external_param(
+                    'tpcc-compaction-mode',
+                    os.getenv('TPCC_COMPACTION_MODE', 'none'),
+                ),
+                'deploy_method': (
+                    os.getenv('CI_DEPLOY_METHOD')
+                    or get_external_param('deploy-method', '')
+                ),
+                'cluster': cluster_name,
+                'client_host': get_external_param('client-host', os.getenv('CLIENT_HOST', '')),
+                'max_sessions': summary.get('max_sessions'),
+                'threads': summary.get('threads'),
+                'warmup_seconds': summary.get('warmup_seconds'),
+                'report_url': report_url,
+                'ci_launch_id': os.getenv('CI_LAUNCH_ID') or None,
+                'ci_launch_url': os.getenv('CI_LAUNCH_URL') or None,
+                'test_tools_version': get_test_tools_version(),
+                'test_tools_git': get_test_tools_git_info() or None,
+                'test_version': os.getenv('CI_TEST_VERSION') or None,
+                # Full stays in column newOrderLatency90; Ms/Pure are alternate views.
+                'newOrderLatency90_ms': new_order.get('percentiles_ms', {}).get('90'),
+                'newOrderLatency90_pure': new_order.get('percentiles_pure', {}).get('90'),
+            }
+            json_string = json.dumps(payload, separators=(',', ':'))
             data = {
                 'timestamp': int(1000000 * warmup_start_ts),
                 'cluster': cluster_name,
@@ -261,15 +397,15 @@ class ResultsProcessor:
                 'git_commit_timestamp': 1000000 * commit_ts,
                 'git_branch': branch,
                 'run_type': run_type,
-                'tool': 'ydb_cli_tpcc',
+                'tool': cls.tpcc_tool,
                 'label': f"{datetime.fromtimestamp(commit_ts).strftime('%Y-%m-%d_%H%M%S')}_{version}_{summary.get('measure_start_ts', 0)}",
-                'warehouses': summary.get('warehouses', 0),
+                'warehouses': metrics['warehouses'],
                 'duration_seconds': summary.get('time_seconds', 0),
-                'tpmC': summary.get('tpmc', 0),
+                'tpmC': metrics['tpmC'],
                 'efficiency': summary.get('efficiency', 0),
                 'throughput': None,
                 'goodput': None,
-                'newOrderLatency90': results.get('transactions', {}).get('NewOrder', {}).get('percentiles', {}).get('90', 0),
+                'newOrderLatency90': metrics['newOrderLatency90'],
                 'json': json_string
             }
             allure.attach(json.dumps(data), 'data', allure.attachment_type.JSON)

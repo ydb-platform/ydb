@@ -2,7 +2,7 @@
 
 #include <library/cpp/yt/logging/logger.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <util/string/split.h>
 
@@ -13,7 +13,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(achulkov2): Remove this once we find all duplicate error codes.
-static YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "ErrorCode")
+static YT_DEFINE_LEAKY_GLOBAL(NLogging::TLogger, Logger, "ErrorCode")
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -48,6 +48,7 @@ private:
 
     void AbortExport(const TString& errorMessage);
     void KillExporter();
+    void AbortScanIfKnown(const TString& reason);
 
     void ScheduleTimeoutCheck();
     void HandleWakeup();

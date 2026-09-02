@@ -83,7 +83,8 @@ void TOperationTracker::Stop() {
 }
 
 TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& operation, TMaybe<ui32> publicId,
-    const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter)
+    const TString& ytServer, const TString& ytClusterName, const TOperationProgressWriter& progressWriter,
+    const TStatWriter& statWriter, std::function<void(NYT::TOperationId)> onOperationStarted, bool isExternalProgress)
 {
     auto future = operation->GetStartedFuture().Apply([operation](const auto& f) {
         f.GetValue();
@@ -100,7 +101,15 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
 
     std::shared_ptr<TString> lastRetriableErrorStatus = std::make_shared<TString>();
 
-    auto checker = [future, operation, ytServer, progress, progressWriter, ytClusterName, jobStatisticsUpdateTimer = TInstant::Now(), lastRetriableErrorStatus] () mutable {
+    operation->GetStartedFuture().Subscribe([operation, onOperationStarted](const TFuture<void> &){
+        auto id = operation->GetId();
+        onOperationStarted(id);
+    });
+
+    auto checker = [
+        future, operation, ytServer, progress, progressWriter, ytClusterName,
+        jobStatisticsUpdateTimer = TInstant::Now(), lastRetriableErrorStatus, isExternalProgress
+    ] () mutable {
         bool done = future.Wait(TDuration::Zero());
 
         if (!done) {
@@ -108,8 +117,14 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
             bool writeProgress = true;
             progress.Alerts.clear();
             if (operation->IsStarted()) {
-                if (!progress.RemoteId) {
-                    progress.RemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
+                if (isExternalProgress) {
+                    if (!progress.WaitingRemoteId) {
+                        progress.WaitingRemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
+                    }
+                } else {
+                    if (!progress.RemoteId) {
+                        progress.RemoteId = ytServer + "/" + GetGuidAsString(operation->GetId());
+                    }
                 }
 
                 auto attributes = operation->GetAttributes(
@@ -193,7 +208,7 @@ TFuture<void> TOperationTracker::MakeOperationWaiter(const NYT::IOperationPtr& o
                 }
                 stage = status;
             }
-            if (!stage.empty() && stage != progress.Stage.first) {
+            if (!stage.empty() && stage != progress.Stage.first && !isExternalProgress) {
                 progress.Stage = TOperationProgress::TStage{stage, TInstant::Now()};
                 writeProgress = true;
             }

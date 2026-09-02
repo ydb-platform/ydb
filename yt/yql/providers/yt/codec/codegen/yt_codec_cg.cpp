@@ -130,8 +130,8 @@ public:
 
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
-        if (!isOptional) {
-            GenerateRequired(elemPtr, buf, type, nativeYtTypeFlags, false);
+        if (!isOptional || IsOptionalSingular(type, nativeYtTypeFlags)) {
+            GenerateRequired(elemPtr, buf, unwrappedType, nativeYtTypeFlags, false);
         } else {
             const auto just = BasicBlock::Create(context, "just", Func_);
             const auto nothing = BasicBlock::Create(context, "nothing", Func_);
@@ -532,7 +532,7 @@ public:
 
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
-        if (isOptional || defValue) {
+        if ((isOptional || defValue) && !IsOptionalSingular(type, nativeYtTypeFlags)) {
             const auto just = BasicBlock::Create(context, "just", Func_);
             const auto nothing = BasicBlock::Create(context, "nothing", Func_);
             const auto done = BasicBlock::Create(context, "done", Func_);
@@ -546,8 +546,10 @@ public:
                 Block_ = just;
                 if (unwrappedType->IsData()) {
                     GenerateData(velemPtr, buf, static_cast<TDataType*>(unwrappedType), nativeYtTypeFlags);
-                } else if (unwrappedType->IsVoid() || unwrappedType->IsNull()) {
-                    // do nothing
+                } else if (unwrappedType->IsVoid()) {
+                    CallInst::Create(module.getFunction("FillOptionalZero"), { velemPtr }, "", Block_);
+                } else if (unwrappedType->IsNull()) {
+                    CallInst::Create(module.getFunction("FillOptionalNull"), { velemPtr }, "", Block_);
                 } else {
                     GenerateContainer(velemPtr, buf, unwrappedType, true, nativeYtTypeFlags);
                 }
@@ -566,8 +568,20 @@ public:
                 GenerateData(velemPtr, buf, static_cast<TDataType*>(unwrappedType), nativeYtTypeFlags);
             } else if (unwrappedType->IsPg()) {
                 GeneratePg(velemPtr, buf, static_cast<TPgType*>(unwrappedType));
-            } else if (unwrappedType->IsVoid() || unwrappedType->IsNull()) {
-                // do nothing
+            } else if (unwrappedType->IsVoid()) {
+                if (nativeYtTypeFlags & NTCF_COMPLEX) {
+                    CallInst::Create(module.getFunction("FillOptionalZero"), { velemPtr }, "", Block_);
+                } else {
+                    // Incorrect backward-compatible behavior TODO: drop this branch
+                    CallInst::Create(module.getFunction("FillNull"), { velemPtr }, "", Block_);
+                }
+            } else if (unwrappedType->IsNull()) {
+                if (nativeYtTypeFlags & NTCF_COMPLEX) {
+                    CallInst::Create(module.getFunction("FillOptionalNull"), { velemPtr }, "", Block_);
+                } else {
+                    // Incorrect backward-compatible behavior TODO: drop this branch
+                    CallInst::Create(module.getFunction("FillNull"), { velemPtr }, "", Block_);
+                }
             } else {
                 GenerateContainer(velemPtr, buf, unwrappedType, false, nativeYtTypeFlags);
             }
@@ -617,7 +631,7 @@ public:
 
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
-        if (isOptional) {
+        if (isOptional && !IsOptionalSingular(type, nativeYtTypeFlags)) {
             auto& module = Codegen_->GetModule();
             const auto just = BasicBlock::Create(context, "just", Func_);
             const auto nothing = BasicBlock::Create(context, "nothing", Func_);

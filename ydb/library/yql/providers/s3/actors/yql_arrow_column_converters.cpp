@@ -749,7 +749,7 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
 }
 
 TColumnConverter ArrowComputeConvertor(const std::string& columnName, const std::shared_ptr<arrow::DataType>& sourceType, const std::shared_ptr<arrow::DataType>& targetType) {
-    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Can not cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
+    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Cannot cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
     return [targetType](const std::shared_ptr<arrow::Array>& value) {
         auto res = arrow::compute::Cast(*value, targetType);
         THROW_ARROW_NOT_OK(res.status());
@@ -865,6 +865,10 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::Date:
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Uuid:
+        case NUdf::EDataSlot::DyNumber:
             return {};
         case NUdf::EDataSlot::Date32:
         case NUdf::EDataSlot::Datetime64:
@@ -966,6 +970,8 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
             type = arrow::timestamp(arrow::TimeUnit::SECOND, "UTC");
             return true;
         case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
             type = arrow::int64();
             return true;
         case NUdf::EDataSlot::Uint64:
@@ -980,7 +986,11 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::DyNumber:
             type = arrow::binary();
+            return true;
+        case NUdf::EDataSlot::Uuid:
+            type = arrow::fixed_size_binary(16);
             return true;
         case NUdf::EDataSlot::Decimal: {
             if (itemType) {

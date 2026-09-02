@@ -1,15 +1,19 @@
 LIBRARY()
 
 PEERDIR(
+    contrib/libs/xxhash
     ydb/library/actors/wilson
     library/cpp/deprecated/atomic
     library/cpp/lwtrace
     ydb/core/base
     ydb/core/protos
+    ydb/library/actors/util
 )
 
 SRCS(
     batched_vec.h
+    blobstorage_checksum.cpp
+    blobstorage_checksum.h
     blobstorage_events.cpp
     blobstorage_events.h
     blobstorage_host_record.h

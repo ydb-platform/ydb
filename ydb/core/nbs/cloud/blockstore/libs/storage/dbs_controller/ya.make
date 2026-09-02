@@ -4,6 +4,9 @@ SRCS(
     dbs_controller.cpp
     dbs_controller_actor.cpp
     dbs_controller_database.cpp
+    dbs_controller_permission.cpp
+    dbs_controller_query.cpp
+    dbs_controller_update_ddisk_map.cpp
     dbs_initschema.cpp
     dbs_loadstate.cpp
 )
@@ -19,10 +22,6 @@ PEERDIR(
 )
 
 END()
-
-RECURSE(
-    protos
-)
 
 RECURSE_FOR_TESTS(
     ut

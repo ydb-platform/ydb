@@ -17,10 +17,10 @@ inline NKikimrBlobStorage::TPDiskSpaceColor::E StatusFlagToSpaceColor(NPDisk::TS
         return TColor::RED;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceOrange) {
         return TColor::ORANGE;
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
-        return TColor::LIGHT_ORANGE;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpacePreOrange) {
         return TColor::PRE_ORANGE;
+    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
+        return TColor::LIGHT_ORANGE;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) {
         return TColor::YELLOW;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
@@ -80,6 +80,8 @@ inline NKikimrBlobStorage::TPDiskSpaceColor::E ColorByName(const TString name) {
         return TColor::RED;
     } else if (name == "orange") {
         return TColor::ORANGE;
+    } else if (name == "pre_orange") {
+        return TColor::PRE_ORANGE;
     } else if (name == "light_orange") {
         return TColor::LIGHT_ORANGE;
     } else if (name == "yellow") {
@@ -100,6 +102,7 @@ inline TString TPDiskSpaceColor_Name(const NKikimrBlobStorage::TPDiskSpaceColor:
     case TColor::BLACK: return "black";
     case TColor::RED: return "red";
     case TColor::ORANGE: return "orange";
+    case TColor::PRE_ORANGE: return "pre_orange";
     case TColor::LIGHT_ORANGE: return "light_orange";
     case TColor::YELLOW: return "yellow";
     case TColor::LIGHT_YELLOW: return "light_yellow";
@@ -116,6 +119,7 @@ inline TString TPDiskSpaceColor_HtmlCode(const NKikimrBlobStorage::TPDiskSpaceCo
     case TColor::BLACK: return "black";
     case TColor::RED: return "red";
     case TColor::ORANGE: return "orange";
+    case TColor::PRE_ORANGE: return "#FFC500";
     case TColor::LIGHT_ORANGE: return "#FFE500";
     case TColor::YELLOW: return "yellow";
     case TColor::LIGHT_YELLOW: return "#EEFF33";

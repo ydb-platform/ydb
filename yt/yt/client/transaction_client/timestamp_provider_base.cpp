@@ -25,9 +25,9 @@ TFuture<TTimestamp> TTimestampProviderBase::GenerateTimestamps(int count, TCellT
 {
     YT_ASSERT_THREAD_AFFINITY_ANY();
 
-    YT_LOG_DEBUG("Generating fresh timestamps (Count: %v, ClockClusterTag: %v)",
-        count,
-        clockClusterTag);
+    YT_TLOG_DEBUG("Generating fresh timestamps")
+        .With("Count", count)
+        .With("ClockClusterTag", clockClusterTag);
 
     return DoGenerateTimestamps(count, clockClusterTag).Apply(BIND(
         &TTimestampProviderBase::OnGenerateTimestamps,
@@ -70,18 +70,18 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
     const TErrorOr<TTimestamp>& timestampOrError)
 {
     if (!timestampOrError.IsOK()) {
-        auto error = TError("Error generating fresh timestamps") << timestampOrError;
-        YT_LOG_ERROR(error);
+        auto error = TError("Error generating fresh timestamps").With(timestampOrError);
+        YT_TLOG_ERROR("Error generating fresh timestamps")
+            .With(timestampOrError);
         return MakeFuture<TTimestamp>(error);
     }
 
     auto firstTimestamp = timestampOrError.Value();
-    auto lastTimestamp = firstTimestamp + count - 1;
+    auto lastTimestamp = TTimestamp(firstTimestamp.Underlying() + count - 1);
 
-    YT_LOG_DEBUG("Fresh timestamps generated (Timestamps: %v-%v, ClockClusterTag: %v)",
-        firstTimestamp,
-        lastTimestamp,
-        clockClusterTag);
+    YT_TLOG_DEBUG("Fresh timestamps generated")
+        .WithFormat("Timestamps", "%v-%v", firstTimestamp, lastTimestamp)
+        .With("ClockClusterTag", clockClusterTag);
 
     auto& latestTimestamp = GetLatestTimestampReferenceByTag(clockClusterTag);
     auto latestTimestampValue = latestTimestamp.load(std::memory_order::relaxed);
@@ -101,13 +101,14 @@ void TTimestampProviderBase::UpdateLatestTimestamp()
 {
     YT_ASSERT_THREAD_AFFINITY_ANY();
 
-    YT_LOG_DEBUG("Updating latest timestamp");
+    YT_TLOG_DEBUG("Updating latest timestamp");
     GenerateTimestamps(1).Subscribe(BIND([] (const TErrorOr<TTimestamp>& timestampOrError) {
             if (timestampOrError.IsOK()) {
-                YT_LOG_DEBUG("Latest timestamp updated (Timestamp: %v)",
-                    timestampOrError.Value());
+                YT_TLOG_DEBUG("Latest timestamp updated")
+                    .With("Timestamp", timestampOrError.Value());
             } else {
-                YT_LOG_WARNING(timestampOrError, "Error updating latest timestamp");
+                YT_TLOG_WARNING("Error updating latest timestamp")
+                    .With(timestampOrError);
             }
         }));
 
@@ -126,12 +127,13 @@ void TTimestampProviderBase::UpdateLatestTimestamp()
         GenerateTimestamps(1, cellTag).Subscribe(
         BIND([cellTag] (const TErrorOr<TTimestamp>& timestampOrError) {
             if (timestampOrError.IsOK()) {
-                YT_LOG_DEBUG("Latest timestamp updated (Timestamp: %v, AlienCellTag: %v)",
-                    timestampOrError.Value(),
-                    cellTag);
+                YT_TLOG_DEBUG("Latest timestamp updated")
+                    .With("Timestamp", timestampOrError.Value())
+                    .With("AlienCellTag", cellTag);
             } else {
-                YT_LOG_WARNING(timestampOrError, "Error updating latest timestamp (AlienCellTag: %v)",
-                cellTag);
+                YT_TLOG_WARNING("Error updating latest timestamp")
+                    .With("AlienCellTag", cellTag)
+                    .With(timestampOrError);
             }
         }));
 

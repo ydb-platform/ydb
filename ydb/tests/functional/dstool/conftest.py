@@ -26,7 +26,7 @@ class BaseConfigBuilder:
         return self
 
     def add_pdisk(self, node_id=1, pdisk_id=1, expected_slot_count=0, slot_size_in_units=0, enforced_dynamic_slot_size=0,
-                  box_id=1, pdisk_type=kikimr_bsbase3.EPDiskType.ROT, drive_status=kikimr_bsconfig.EDriveStatus.ACTIVE):
+                  box_id=1, pdisk_type=kikimr_bsbase3.EPDiskType.ROT, drive_status=kikimr_bsbase3.EDriveStatus.ACTIVE):
         pdisk = self._base_config.PDisk.add()
         pdisk.NodeId = node_id
         pdisk.PDiskId = pdisk_id
@@ -44,7 +44,7 @@ class BaseConfigBuilder:
 
     def add_vslot(self, node_id, pdisk_id, vslot_id, group_id,
                   group_generation=0, fail_realm_idx=0, fail_domain_idx=0, vdisk_idx=0,
-                  status='READY', allocated_size=0, available_size=0):
+                  status='READY', ready=None, allocated_size=0, available_size=0):
         vslot = self._base_config.VSlot.add()
         vslot.VSlotId.NodeId = node_id
         vslot.VSlotId.PDiskId = pdisk_id
@@ -58,8 +58,12 @@ class BaseConfigBuilder:
         vslot.VDiskMetrics.AllocatedSize = allocated_size
         vslot.VDiskMetrics.AvailableSize = available_size
         if status == 'READY':
+            # Default Ready=True for Status=READY; pass ready=False to model ReadyStablePeriod.
+            vslot.Ready = True if ready is None else ready
             vslot.VDiskMetrics.Replicated = True
             vslot.VDiskMetrics.State = EVDiskState.OK
+        elif ready is not None:
+            vslot.Ready = ready
         return self
 
     def add_group(self, group_id, erasure_species='none',
@@ -197,6 +201,29 @@ class FakeReassignGroupDiskHandler:
             config_response.Success = True
         else:
             config_response.Success = False
+
+        response = kikimr_msgbus.TResponse()
+        response.Status = MessageBusStatus.MSTATUS_OK
+        response.BlobStorageConfigResponse.CopyFrom(config_response)
+        return response
+
+
+class FakePopulatePDiskHandler:
+    def handle(self, func, *params):
+        assert func == 'BlobStorageConfig'
+        bs_request = params[0]
+
+        config_response = kikimr_bsconfig.TConfigResponse()
+        for command in bs_request.Request.Command:
+            assert command.HasField('PopulatePDisk')
+            config_response.Status.add().Success = True
+
+        if bs_request.Request.Rollback:
+            config_response.Success = False
+            config_response.ErrorDescription = 'fake transaction rollback'
+            config_response.RollbackSuccess = True
+        else:
+            config_response.Success = True
 
         response = kikimr_msgbus.TResponse()
         response.Status = MessageBusStatus.MSTATUS_OK

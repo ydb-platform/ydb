@@ -344,8 +344,6 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("sync_on_close", &TThis::SyncOnClose)
         .Default(true);
-    registrar.Parameter("enable_direct_io", &TThis::EnableDirectIO)
-        .Default(false);
     registrar.Parameter("enable_early_finish", &TThis::EnableEarlyFinish)
         .Default(false);
     registrar.Parameter("allocate_write_targets_backoff_time", &TThis::AllocateWriteTargetsBackoffTime)

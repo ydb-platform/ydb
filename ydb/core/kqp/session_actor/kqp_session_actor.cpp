@@ -3,10 +3,11 @@
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
-#include "kqp_user_facing_tracing.h"
+#include <ydb/core/kqp/tracing/user_facing.h>
 
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
+#include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tli.h>
 #include <ydb/core/kqp/common/kqp_query_text_cache_events.h>
@@ -117,6 +118,73 @@ std::optional<TExecutionDiagnosticsPolicy> MakeExecutionDiagnosticsPolicy(const 
         return std::nullopt;
     }
     return queryState->UserFacingTrace->GetDiagnosticsPolicy();
+}
+
+TUserFacingQueryMetrics BuildUserFacingQueryMetrics(const TKqpQueryStats& stats) {
+    TUserFacingQueryMetrics result;
+    result.ConsumedRu = CalcRequestUnit(stats);
+    result.LocksBrokenAsBreaker = stats.LocksBrokenAsBreaker;
+    result.LocksBrokenAsVictim = stats.LocksBrokenAsVictim;
+    for (const auto& execution : stats.Executions) {
+        for (const auto& table : execution.GetTables()) {
+            result.RowsRead += table.GetReadRows();
+            result.RowsWritten += table.GetWriteRows();
+            result.BytesRead += table.GetReadBytes();
+        }
+    }
+    return result;
+}
+
+IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
+        const TString& statusCode, NKikimrKqp::TEvQueryResponse* response = nullptr) {
+    auto context = std::move(state.UserFacingTrace);
+    if (!context) {
+        return nullptr;
+    }
+
+    TUserFacingQueryCompletion completion;
+    completion.FallbackName = FallbackUserFacingQueryName(state.GetType(), state.GetAction());
+    if (state.RequestEv && state.RequestEv->GetQuerySize() <= MaxUserFacingQueryTextSize) {
+        completion.QueryText = state.RequestEv->ExtractQuery();
+    }
+    if (state.UserRequestContext) {
+        completion.PoolId = state.UserRequestContext->PoolId;
+    }
+    completion.Metrics = BuildUserFacingQueryMetrics(state.QueryStats);
+    completion.Success = success;
+    completion.StatusCode = statusCode;
+
+    auto snapshot = context->DetachSnapshot(std::move(completion));
+    if (response) {
+        response->SetUserFacingTraceName(snapshot.RootName);
+        response->SetUserFacingTraceOperation(snapshot.Operation);
+        if (snapshot.ExecutionDelegated) {
+            response->SetUserFacingTraceCoverage("routing_session_only");
+        }
+    }
+    return CreateUserFacingTraceRendererActor(std::move(snapshot));
+}
+
+IActor* CreateRejectedUserFacingTraceRenderer(
+        const NPrivateEvents::TEvQueryRequest& request,
+        Ydb::StatusIds::StatusCode status) {
+    NWilson::TTraceId traceId = request.GetUserFacingWilsonTraceId();
+    if (!traceId) {
+        return nullptr;
+    }
+
+    TRejectedUserFacingQuerySnapshot snapshot;
+    snapshot.TraceId = std::move(traceId);
+    if (request.GetQuerySize() <= MaxUserFacingQueryTextSize) {
+        snapshot.QueryText = request.GetQuery();
+    }
+    snapshot.ProxyRequestHops.assign(request.Record.GetProxyRequestHops().begin(),
+        request.Record.GetProxyRequestHops().end());
+    snapshot.RejectedAt = MapUserFacingSessionStart(TInstant::Now(),
+        TInstant::MicroSeconds(request.Record.GetUserFacingTraceOriginSentAtUs()),
+        request.Record.GetProxyRequestHops());
+    snapshot.Status = status;
+    return CreateRejectedUserFacingTraceRendererActor(std::move(snapshot));
 }
 
 class TRequestFail : public yexception {

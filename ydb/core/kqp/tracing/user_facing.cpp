@@ -1,24 +1,11 @@
-#include "kqp_user_facing_tracing.h"
-#include "kqp_query_state.h"
-#include "kqp_query_stats.h"
+#include "user_facing.h"
 
-#include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
-#include <ydb/core/protos/kqp_stats.pb.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/library/actors/wilson/wilson_uploader.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <util/generic/utility.h>
-#include <util/generic/vector.h>
 
-#include <algorithm>
-#include <functional>
-#include <tuple>
 #include <vector>
-#include <util/string/builder.h>
 
 namespace NKikimr::NKqp {
 
@@ -123,22 +110,7 @@ void TUserFacingTraceContext::FinishCompile(bool fromCache,
 }
 
 void TUserFacingTraceContext::FinishSplit(Ydb::StatusIds::StatusCode status, TInstant at) {
-    if (!ActiveCompileAttempt && !OverflowCompileAttempt) {
-        return;
-    }
-    auto& attempt = ActiveCompileAttempt
-        ? CompileAttempts[*ActiveCompileAttempt]
-        : *OverflowCompileAttempt;
-    attempt.End = at;
-    attempt.Status = status;
-    attempt.Partial = true;
-    if (OverflowCompileAttempt) {
-        KeepCompileAttempt(CompileAttempts,
-            std::move(*OverflowCompileAttempt), CompileAttemptsDropped);
-        OverflowCompileAttempt.reset();
-    } else {
-        ActiveCompileAttempt.reset();
-    }
+    FinishCompile(/*fromCache*/ false, status, nullptr, std::nullopt, at);
 }
 
 void TUserFacingTraceContext::AddExecutions(
@@ -194,8 +166,6 @@ TTimeWindow FitUserFacingRemoteWindow(TTimeWindow window, const TTimeWindow& par
 }
 
 namespace {
-
-constexpr size_t MaxQueryTextForUserFacingTrace = 64 * 1024;
 
 TInstant ShiftTimestamp(TInstant value, i64 offsetUs) {
     if (value == TInstant::Zero() || offsetUs == 0) {
@@ -273,17 +243,8 @@ void ShiftCompileAttempt(TCompileAttemptDiagnostic& attempt, i64 offsetUs) {
 
 } // namespace
 
-void UpdateUserFacingRootSpanName(TKqpQueryState& state) {
-    if (!state.UserFacingTrace || !state.PreparedQuery) {
-        return;
-    }
-    const auto candidate = DescribeUserFacingQuery(state);
-    state.UserFacingTrace->UpdateQueryDescription(candidate);
-}
-
-TUserFacingQuerySnapshot TUserFacingTraceContext::DetachSnapshot(TKqpQueryState& state,
-        bool success, const TString& statusCode, NKikimrKqp::TEvQueryResponse* response) {
-    const TInstant localRootEnd = TInstant::Now();
+TUserFacingQuerySnapshot TUserFacingTraceContext::DetachSnapshot(
+        TUserFacingQueryCompletion completion, TInstant localRootEnd) {
     if (ActiveCompileAttempt) {
         CompileAttempts[*ActiveCompileAttempt].End = localRootEnd;
         ActiveCompileAttempt.reset();
@@ -302,11 +263,9 @@ TUserFacingQuerySnapshot TUserFacingTraceContext::DetachSnapshot(TKqpQueryState&
     }
     TUserFacingQuerySnapshot snapshot;
     snapshot.TraceId = std::move(TraceId);
-    snapshot.RootName = RootName ? RootName : FallbackUserFacingQueryName(state);
+    snapshot.RootName = RootName ? RootName : std::move(completion.FallbackName);
     snapshot.Operation = Operation ? Operation : snapshot.RootName;
-    if (state.RequestEv && state.RequestEv->GetQuerySize() <= MaxQueryTextForUserFacingTrace) {
-        snapshot.QueryText = state.RequestEv->ExtractQuery();
-    }
+    snapshot.QueryText = std::move(completion.QueryText);
     snapshot.RootEnd = ShiftTimestamp(localRootEnd, TimestampOffsetUs);
     snapshot.StartTime = SessionStart;
     snapshot.ProxyRequestHops = std::move(ProxyHops);
@@ -315,58 +274,17 @@ TUserFacingQuerySnapshot TUserFacingTraceContext::DetachSnapshot(TKqpQueryState&
     snapshot.AdmissionFinishedAt = ShiftTimestamp(
         AdmissionFinishedAt, TimestampOffsetUs);
     snapshot.AdmissionStatus = AdmissionStatus;
-    if (state.UserRequestContext) {
-        snapshot.PoolId = state.UserRequestContext->PoolId;
-    }
-    snapshot.QueryStats = std::move(state.QueryStats);
+    snapshot.PoolId = std::move(completion.PoolId);
+    snapshot.Metrics = completion.Metrics;
     snapshot.ExecutionTraces = std::move(ExecutionTraces);
     snapshot.ExecutionTraceTotals = ExecutionTraceTotals;
     snapshot.ExecutionTracesDropped = ExecutionTracesDropped;
     snapshot.CompileAttempts = std::move(CompileAttempts);
     snapshot.CompileAttemptsDropped = CompileAttemptsDropped;
     snapshot.ExecutionDelegated = ExecutionDelegated;
-    snapshot.Success = success;
-    snapshot.StatusCode = statusCode;
-    if (response) {
-        response->SetUserFacingTraceName(snapshot.RootName);
-        response->SetUserFacingTraceOperation(snapshot.Operation);
-        if (snapshot.ExecutionDelegated) {
-            response->SetUserFacingTraceCoverage("routing_session_only");
-        }
-    }
+    snapshot.Success = completion.Success;
+    snapshot.StatusCode = std::move(completion.StatusCode);
     return snapshot;
-}
-
-NActors::IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
-        const TString& statusCode, NKikimrKqp::TEvQueryResponse* response) {
-    auto context = std::move(state.UserFacingTrace);
-    if (!context) {
-        return nullptr;
-    }
-    return CreateUserFacingTraceRendererActor(
-        context->DetachSnapshot(state, success, statusCode, response));
-}
-
-NActors::IActor* CreateRejectedUserFacingTraceRenderer(
-        const NPrivateEvents::TEvQueryRequest& request,
-        Ydb::StatusIds::StatusCode status) {
-    NWilson::TTraceId traceId = request.GetUserFacingWilsonTraceId();
-    if (!traceId) {
-        return nullptr;
-    }
-
-    TRejectedUserFacingQuerySnapshot snapshot;
-    snapshot.TraceId = std::move(traceId);
-    if (request.GetQuerySize() <= MaxQueryTextForUserFacingTrace) {
-        snapshot.QueryText = request.GetQuery();
-    }
-    snapshot.ProxyRequestHops.assign(request.Record.GetProxyRequestHops().begin(),
-        request.Record.GetProxyRequestHops().end());
-    snapshot.RejectedAt = MapUserFacingSessionStart(TInstant::Now(),
-        TInstant::MicroSeconds(request.Record.GetUserFacingTraceOriginSentAtUs()),
-        request.Record.GetProxyRequestHops());
-    snapshot.Status = status;
-    return CreateRejectedUserFacingTraceRendererActor(std::move(snapshot));
 }
 
 } // namespace NKikimr::NKqp

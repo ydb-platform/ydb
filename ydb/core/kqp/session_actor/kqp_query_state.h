@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kqp_query_stats.h"
-#include "kqp_user_facing_tracing.h"
+#include <ydb/core/kqp/tracing/user_facing.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

@@ -1,5 +1,5 @@
 #include "kqp_query_state.h"
-#include "kqp_user_facing_tracing.h"
+#include <ydb/core/kqp/tracing/user_facing.h>
 
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -165,7 +165,10 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
     if (!CommandTagName) {
         CommandTagName = CompileResult->CommandTagName;
     }
-    UpdateUserFacingRootSpanName(*this);
+    if (UserFacingTrace) {
+        UserFacingTrace->UpdateQueryDescription(DescribeUserFacingQuery(
+            GetType(), Statements.size(), PreparedQuery->GetPhysicalQuery(), CommandTagName));
+    }
     for (const auto& param : PreparedQuery->GetParameters()) {
         const auto& ast = CompileResult->GetAst();
         if (!ast || !ast->PgAutoParamValues || !ast->PgAutoParamValues->Contains(param.GetName())) {

@@ -1388,7 +1388,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
                 }
             }
-            if (CollectTraceDiagnostics) {
+            if (CollectExecutionDiagnostics) {
                 auto task = MakeTaskTraceSnapshot(taskStats);
                 task.Failed = state == NYql::NDqProto::COMPUTE_STATE_FAILURE;
                 auto& stage = TraceStages[taskStats.GetStageId()];
@@ -1681,7 +1681,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
     ExportExecStatsImpl(stats, exportMode);
 }
 
-void TQueryExecutionStats::ExportTraceSnapshot(TExecutionTraceSnapshot& snapshot) {
+void TQueryExecutionStats::ExportDiagnosticsSnapshot(TExecutionTraceSnapshot& snapshot) {
     snapshot.CpuUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
     for (const auto& [stageId, stageInfo] : TasksGraph->GetStagesInfo()) {
         if (stageId.TxId != 0) {

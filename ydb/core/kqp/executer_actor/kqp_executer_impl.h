@@ -193,7 +193,7 @@ public:
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
 
         StartTime = TAppData::TimeProvider->Now();
-        InitializeDiagnosticsCapture();
+        InitializeExecutionDiagnostics();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
         }
@@ -353,7 +353,8 @@ protected:
                 {"ctx", *GetUserRequestContext()},
                 {"shardIdsCount", shardIds.size()},
                 {"traceId", TraceId()});
-            ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterShardsResolve, "WaitForShardsResolve", EExecutionPhase::ResolveShards);
+            ExecuterStateSpan = StartExecutionPhase(EExecutionPhase::ResolveShards,
+                TWilsonKqp::ExecuterShardsResolve, "WaitForShardsResolve");
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -1245,7 +1246,8 @@ protected:
             co_return;
         }
 
-        ExecuterStateSpan = MakePhaseSpan(TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve", EExecutionPhase::ResolveTables);
+        ExecuterStateSpan = StartExecutionPhase(EExecutionPhase::ResolveTables,
+            TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve");
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
@@ -1904,11 +1906,11 @@ protected:
     }
 
 protected:
-    void InitializeDiagnosticsCapture() {
+    void InitializeExecutionDiagnostics() {
         if (!Request.DiagnosticsPolicy) {
             return;
         }
-        Stats->CollectTraceDiagnostics = Request.DiagnosticsPolicy->CollectStageAggregates
+        Stats->CollectExecutionDiagnostics = Request.DiagnosticsPolicy->CollectStageAggregates
             || Request.DiagnosticsPolicy->CollectTaskSamples;
         Stats->CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy->CollectBufferLookup;
 
@@ -1927,14 +1929,14 @@ protected:
         }
 
         auto snapshot = ExecutionDiagnostics->Finish(ResponseEv->Record.GetResponse().GetStatus());
-        Stats->ExportTraceSnapshot(snapshot);
+        Stats->ExportDiagnosticsSnapshot(snapshot);
         AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals, snapshot);
         TrimExecutionTraceSnapshot(snapshot);
         ResponseEv->ExecutionTraces.push_back(std::move(snapshot));
         ExecutionDiagnostics.reset();
     }
 
-    NWilson::TSpan MakePhaseSpan(ui8 devVerbosity, const TString& devName, EExecutionPhase phase,
+    NWilson::TSpan StartExecutionPhase(EExecutionPhase phase, ui8 devVerbosity, const TString& devName,
             NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
         if (Y_UNLIKELY(ExecutionDiagnostics)) {
             ExecutionDiagnostics->OnPhaseStarted(phase);

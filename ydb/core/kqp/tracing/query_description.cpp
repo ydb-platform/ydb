@@ -1,16 +1,9 @@
-#include "kqp_user_facing_tracing.h"
-
-#include "kqp_query_state.h"
+#include "user_facing.h"
 
 #include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/library/security/util.h>
-#include <yql/essentials/sql/v1/format/sql_format.h>
-#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
-#include <google/protobuf/arena.h>
+#include <google/protobuf/any.pb.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NKqp {
@@ -163,8 +156,10 @@ TUserFacingQueryDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery&
 
 } // namespace
 
-TUserFacingQueryDescription DescribeUserFacingQuery(const TKqpQueryState& state) {
-    switch (state.GetType()) {
+TUserFacingQueryDescription DescribeUserFacingQuery(NKikimrKqp::EQueryType queryType,
+        size_t statementCount, const NKqpProto::TKqpPhyQuery& physicalQuery,
+        const TMaybe<TString>& commandTag) {
+    switch (queryType) {
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
@@ -172,46 +167,19 @@ TUserFacingQueryDescription DescribeUserFacingQuery(const TKqpQueryState& state)
         default:
             break;
     }
-    if (state.Statements.size() > 1) {
+    if (statementCount > 1) {
         return {"EXECUTE SCRIPT", "EXECUTE SCRIPT"};
     }
-    return DescribePhysicalQuery(state.PreparedQuery->GetPhysicalQuery(), state.CommandTagName);
+    return DescribePhysicalQuery(physicalQuery, commandTag);
 }
 
-TString SanitizeUserFacingQueryText(const TString& text) {
-    TString protectedText;
-    if (NKikimr::ProtectQueryForLoggingIfSensitive(text, protectedText)) {
-        return protectedText;
-    }
-    struct TSqlFactories {
-        NSQLTranslationV1::TLexers Lexers;
-        NSQLTranslationV1::TParsers Parsers;
-    };
-    static const TSqlFactories factories = [] {
-        TSqlFactories result;
-        result.Lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-        result.Lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-        result.Parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-        result.Parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-        return result;
-    }();
-    try {
-        google::protobuf::Arena arena;
-        NSQLTranslation::TTranslationSettings settings;
-        settings.Arena = &arena;
-        TString obfuscated;
-        NYql::TIssues issues;
-        if (NSQLFormat::MakeSqlFormatter(factories.Lexers, factories.Parsers, settings)->Format(
-                text, obfuscated, issues, NSQLFormat::EFormatMode::Obfuscate)) {
-            return obfuscated;
-        }
-    } catch (const yexception&) {
-    }
-    return {};
+TString ProtectUserFacingQueryText(const TString& text) {
+    return NKikimr::ProtectQueryForLoggingIfSensitive(text);
 }
 
-TString FallbackUserFacingQueryName(const TKqpQueryState& state) {
-    switch (state.GetType()) {
+TString FallbackUserFacingQueryName(NKikimrKqp::EQueryType queryType,
+        NKikimrKqp::EQueryAction queryAction) {
+    switch (queryType) {
         case NKikimrKqp::QUERY_TYPE_SQL_DDL:
             return "DDL";
         case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
@@ -221,7 +189,7 @@ TString FallbackUserFacingQueryName(const TKqpQueryState& state) {
         default:
             break;
     }
-    TString name = NKikimrKqp::EQueryAction_Name(state.GetAction());
+    TString name = NKikimrKqp::EQueryAction_Name(queryAction);
     constexpr TStringBuf prefix = "QUERY_ACTION_";
     if (name.StartsWith(prefix)) {
         name = name.substr(prefix.size());

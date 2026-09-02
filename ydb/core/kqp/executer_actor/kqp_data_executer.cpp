@@ -922,7 +922,8 @@ private:
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
             // Start before sending so nested snapshot work inherits the phase trace id.
-            ExecuterStateSpan = this->MakePhaseSpan(TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", EExecutionPhase::Snapshot, NWilson::EFlags::NONE);
+            ExecuterStateSpan = this->StartExecutionPhase(EExecutionPhase::Snapshot,
+                TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", NWilson::EFlags::NONE);
 
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),

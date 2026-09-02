@@ -441,7 +441,7 @@ private:
             return;
         }
         auto snapshot = ExecutionDiagnostics->Finish(status);
-        Stats->ExportTraceSnapshot(snapshot);
+        Stats->ExportDiagnosticsSnapshot(snapshot);
         AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals, snapshot);
         TrimExecutionTraceSnapshot(snapshot);
         ResponseEv->ExecutionTraces.push_back(std::move(snapshot));

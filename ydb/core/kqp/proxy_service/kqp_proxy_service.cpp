@@ -33,6 +33,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
+#include <ydb/core/kqp/tracing/user_facing.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -55,8 +56,6 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -84,118 +83,6 @@ static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
-struct TProxyUserFacingTraceSnapshot {
-    NWilson::TTraceId ParentTraceId;
-    NWilson::TTraceId RootTraceId;
-    TInstant StartedAt;
-    TInstant SentAt;
-    TInstant FinishedAt;
-    TString Name;
-    TString Operation;
-    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    ui32 NodeId = 0;
-    ui32 TargetNodeId = 0;
-    bool HasSessionTrace = false;
-    TString Coverage;
-};
-
-void RenderProxyUserFacingTrace(TProxyUserFacingTraceSnapshot snapshot) {
-    NWilson::TTraceId parentTraceId = std::move(snapshot.ParentTraceId);
-    NWilson::TTraceId rootTraceId = std::move(snapshot.RootTraceId);
-    if (!parentTraceId || !rootTraceId) {
-        return;
-    }
-    const bool success = snapshot.Status == Ydb::StatusIds::SUCCESS;
-    const auto spanStatus = success
-        ? NWilson::NTraceProto::Status::STATUS_CODE_OK
-        : NWilson::NTraceProto::Status::STATUS_CODE_ERROR;
-    NWilson::TSpan root = NWilson::TSpan::ConstructTerminated(
-        parentTraceId, rootTraceId, snapshot.StartedAt, snapshot.FinishedAt,
-        spanStatus, snapshot.Name, NWilson::MakeUserFacingWilsonUploaderId());
-    if (!root) {
-        return;
-    }
-    root.Attribute("ydb.tracing.layer", TString("user"));
-    root.Attribute("ydb.code.component", TString("KQP"));
-    root.Attribute("db.system.name", TString("ydb"));
-    root.Attribute("db.operation.name", snapshot.Operation);
-    root.Attribute("db.response.status_code", Ydb::StatusIds::StatusCode_Name(snapshot.Status));
-    root.Attribute("ydb.duration.source", TString("origin_monotonic"));
-    if (AppData()) {
-        root.Attribute("db.namespace", AppData()->TenantName);
-    }
-    if (!snapshot.HasSessionTrace) {
-        root.Attribute("ydb.trace.coverage", TString("proxy_only"));
-    } else if (snapshot.Coverage) {
-        root.Attribute("ydb.trace.coverage", snapshot.Coverage);
-    }
-
-    const TInstant proxyEnd = snapshot.SentAt != TInstant::Zero()
-        ? snapshot.SentAt : snapshot.FinishedAt;
-    NWilson::TSpan proxy = NWilson::TSpan::ConstructTerminated(
-        root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
-        snapshot.StartedAt, proxyEnd,
-        snapshot.SentAt == TInstant::Zero() ? spanStatus
-                                            : NWilson::NTraceProto::Status::STATUS_CODE_OK,
-        "KQP proxy", NWilson::MakeUserFacingWilsonUploaderId());
-    if (proxy) {
-        proxy.Attribute("ydb.actor.type", TString("TKqpProxyService"));
-        proxy.Attribute("ydb.node_id", static_cast<i64>(snapshot.NodeId));
-        if (snapshot.SentAt == TInstant::Zero()) {
-            proxy.Attribute("ydb.rejected", true);
-        }
-        proxy.End();
-    }
-    if (snapshot.SentAt != TInstant::Zero() && snapshot.FinishedAt >= snapshot.SentAt) {
-        NWilson::TSpan roundTrip = NWilson::TSpan::ConstructTerminated(
-            root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
-            snapshot.SentAt, snapshot.FinishedAt, spanStatus,
-            "KQP session round trip", NWilson::MakeUserFacingWilsonUploaderId());
-        if (roundTrip) {
-            roundTrip.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
-            roundTrip.Attribute("ydb.source_node_id", static_cast<i64>(snapshot.NodeId));
-            roundTrip.Attribute("ydb.target_node_id", static_cast<i64>(snapshot.TargetNodeId));
-            roundTrip.Attribute("ydb.forwarded", snapshot.NodeId != snapshot.TargetNodeId);
-            roundTrip.Attribute("ydb.duration.source", TString("origin_monotonic"));
-            roundTrip.End();
-        }
-    }
-    if (snapshot.SentAt != TInstant::Zero() && snapshot.NodeId != snapshot.TargetNodeId) {
-        NWilson::TSpan forwarding = NWilson::TSpan::ConstructTerminated(
-            root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
-            snapshot.SentAt, snapshot.SentAt, NWilson::NTraceProto::Status::STATUS_CODE_OK,
-            "Forward to KQP proxy", NWilson::MakeUserFacingWilsonUploaderId());
-        if (forwarding) {
-            forwarding.Attribute("ydb.actor.type", TString("InterconnectProxy"));
-            forwarding.Attribute("ydb.source_node_id", static_cast<i64>(snapshot.NodeId));
-            forwarding.Attribute("ydb.target_node_id", static_cast<i64>(snapshot.TargetNodeId));
-            forwarding.Attribute("ydb.duration.measured", false);
-            forwarding.End();
-        }
-    }
-    if (success) {
-        root.EndOk();
-    } else {
-        root.EndError(Ydb::StatusIds::StatusCode_Name(snapshot.Status));
-    }
-}
-
-class TProxyUserFacingTraceRendererActor
-    : public NActors::TActorBootstrapped<TProxyUserFacingTraceRendererActor> {
-public:
-    explicit TProxyUserFacingTraceRendererActor(TProxyUserFacingTraceSnapshot snapshot)
-        : Snapshot(std::move(snapshot))
-    {}
-
-    void Bootstrap() {
-        RenderProxyUserFacingTrace(std::move(Snapshot));
-        PassAway();
-    }
-
-private:
-    TProxyUserFacingTraceSnapshot Snapshot;
-};
-
 NActors::IActor* CreateProxyUserFacingTraceRenderer(TProxyUserFacingTraceContext& context,
         Ydb::StatusIds::StatusCode status, ui32 nodeId,
         TString name = {}, TString operation = {}, TString coverage = {}) {
@@ -220,7 +107,7 @@ NActors::IActor* CreateProxyUserFacingTraceRenderer(TProxyUserFacingTraceContext
         }
         operation = name;
     }
-    return new TProxyUserFacingTraceRendererActor({
+    return CreateProxyUserFacingTraceRendererActor({
         .ParentTraceId = std::move(parentTraceId),
         .RootTraceId = std::move(rootTraceId),
         .StartedAt = startedAt,

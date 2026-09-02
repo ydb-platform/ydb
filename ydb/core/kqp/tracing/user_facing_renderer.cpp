@@ -1,5 +1,6 @@
-#include "kqp_user_facing_tracing.h"
+#include "user_facing.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -690,21 +691,11 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
 
 void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
         const TUserFacingQuerySnapshot& state, TSpanBudget& budget) {
-    i64 rowsRead = 0;
-    i64 rowsWritten = 0;
-    i64 bytesRead = 0;
-    // Query stats and trace totals are accumulated before bounded diagnostics retention.
-    for (const auto& e : state.QueryStats.Executions) {
-        for (const auto& table : e.GetTables()) {
-            rowsRead += table.GetReadRows();
-            rowsWritten += table.GetWriteRows();
-            bytesRead += table.GetReadBytes();
-        }
-    }
-    userSpan.Attribute("ydb.consumed_ru", static_cast<i64>(CalcRequestUnit(state.QueryStats)));
-    userSpan.Attribute("ydb.rows_read", rowsRead);
-    userSpan.Attribute("ydb.rows_written", rowsWritten);
-    userSpan.Attribute("ydb.bytes_read", bytesRead);
+    // Metrics and trace totals are accumulated before bounded diagnostics retention.
+    userSpan.Attribute("ydb.consumed_ru", static_cast<i64>(state.Metrics.ConsumedRu));
+    userSpan.Attribute("ydb.rows_read", static_cast<i64>(state.Metrics.RowsRead));
+    userSpan.Attribute("ydb.rows_written", static_cast<i64>(state.Metrics.RowsWritten));
+    userSpan.Attribute("ydb.bytes_read", static_cast<i64>(state.Metrics.BytesRead));
     userSpan.Attribute("ydb.cpu_us", static_cast<i64>(state.ExecutionTraceTotals.CpuUs));
     if (state.ExecutionTraceTotals.WaitUs > 0) {
         userSpan.Attribute("ydb.wait_us", static_cast<i64>(state.ExecutionTraceTotals.WaitUs));
@@ -715,11 +706,11 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
     if (state.ExecutionTraceTotals.MaxTaskSkew > 1.0) {
         userSpan.Attribute("ydb.max_task_skew", state.ExecutionTraceTotals.MaxTaskSkew);
     }
-    if (state.QueryStats.LocksBrokenAsVictim > 0) {
-        userSpan.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(state.QueryStats.LocksBrokenAsVictim));
+    if (state.Metrics.LocksBrokenAsVictim > 0) {
+        userSpan.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(state.Metrics.LocksBrokenAsVictim));
     }
-    if (state.QueryStats.LocksBrokenAsBreaker > 0) {
-        userSpan.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(state.QueryStats.LocksBrokenAsBreaker));
+    if (state.Metrics.LocksBrokenAsBreaker > 0) {
+        userSpan.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(state.Metrics.LocksBrokenAsBreaker));
     }
 
     if (state.AdmissionStartedAt != TInstant::Zero()
@@ -855,7 +846,7 @@ void RenderUserFacingSpan(TUserFacingQuerySnapshot state) {
         sessionSpan.Attribute("db.operation.name", state.Operation ? state.Operation : state.RootName);
         sessionSpan.Attribute("ydb.status_code", state.StatusCode);
         if (state.QueryText) {
-            if (const TString queryText = SanitizeUserFacingQueryText(state.QueryText)) {
+            if (const TString queryText = ProtectUserFacingQueryText(state.QueryText)) {
                 sessionSpan.Attribute("db.query.text", queryText);
             }
         }
@@ -904,7 +895,7 @@ void RenderRejectedUserFacingSpan(TRejectedUserFacingQuerySnapshot snapshot) {
     session.Attribute("ydb.rejected", true);
     session.Attribute("ydb.trace.coverage", TString("rejected_before_query_state"));
     session.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(snapshot.Status));
-    if (const TString queryText = SanitizeUserFacingQueryText(snapshot.QueryText)) {
+    if (const TString queryText = ProtectUserFacingQueryText(snapshot.QueryText)) {
         session.Attribute("db.query.text", queryText);
     }
     session.EndError(Ydb::StatusIds::StatusCode_Name(snapshot.Status));
@@ -926,6 +917,103 @@ private:
     TRejectedUserFacingQuerySnapshot Snapshot;
 };
 
+void RenderProxyUserFacingTrace(TProxyUserFacingTraceSnapshot snapshot) {
+    NWilson::TTraceId parentTraceId = std::move(snapshot.ParentTraceId);
+    NWilson::TTraceId rootTraceId = std::move(snapshot.RootTraceId);
+    if (!parentTraceId || !rootTraceId) {
+        return;
+    }
+    const bool success = snapshot.Status == Ydb::StatusIds::SUCCESS;
+    const auto spanStatus = success
+        ? NWilson::NTraceProto::Status::STATUS_CODE_OK
+        : NWilson::NTraceProto::Status::STATUS_CODE_ERROR;
+    NWilson::TSpan root = NWilson::TSpan::ConstructTerminated(
+        parentTraceId, rootTraceId, snapshot.StartedAt, snapshot.FinishedAt,
+        spanStatus, snapshot.Name, NWilson::MakeUserFacingWilsonUploaderId());
+    if (!root) {
+        return;
+    }
+    root.Attribute("ydb.tracing.layer", TString("user"));
+    root.Attribute("ydb.code.component", TString("KQP"));
+    root.Attribute("db.system.name", TString("ydb"));
+    root.Attribute("db.operation.name", snapshot.Operation);
+    root.Attribute("db.response.status_code", Ydb::StatusIds::StatusCode_Name(snapshot.Status));
+    root.Attribute("ydb.duration.source", TString("origin_monotonic"));
+    if (AppData()) {
+        root.Attribute("db.namespace", AppData()->TenantName);
+    }
+    if (!snapshot.HasSessionTrace) {
+        root.Attribute("ydb.trace.coverage", TString("proxy_only"));
+    } else if (snapshot.Coverage) {
+        root.Attribute("ydb.trace.coverage", snapshot.Coverage);
+    }
+
+    const TInstant proxyEnd = snapshot.SentAt != TInstant::Zero()
+        ? snapshot.SentAt : snapshot.FinishedAt;
+    NWilson::TSpan proxy = NWilson::TSpan::ConstructTerminated(
+        root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
+        snapshot.StartedAt, proxyEnd,
+        snapshot.SentAt == TInstant::Zero() ? spanStatus
+                                            : NWilson::NTraceProto::Status::STATUS_CODE_OK,
+        "KQP proxy", NWilson::MakeUserFacingWilsonUploaderId());
+    if (proxy) {
+        proxy.Attribute("ydb.actor.type", TString("TKqpProxyService"));
+        proxy.Attribute("ydb.node_id", static_cast<i64>(snapshot.NodeId));
+        if (snapshot.SentAt == TInstant::Zero()) {
+            proxy.Attribute("ydb.rejected", true);
+        }
+        proxy.End();
+    }
+    if (snapshot.SentAt != TInstant::Zero() && snapshot.FinishedAt >= snapshot.SentAt) {
+        NWilson::TSpan roundTrip = NWilson::TSpan::ConstructTerminated(
+            root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
+            snapshot.SentAt, snapshot.FinishedAt, spanStatus,
+            "KQP session round trip", NWilson::MakeUserFacingWilsonUploaderId());
+        if (roundTrip) {
+            roundTrip.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
+            roundTrip.Attribute("ydb.source_node_id", static_cast<i64>(snapshot.NodeId));
+            roundTrip.Attribute("ydb.target_node_id", static_cast<i64>(snapshot.TargetNodeId));
+            roundTrip.Attribute("ydb.forwarded", snapshot.NodeId != snapshot.TargetNodeId);
+            roundTrip.Attribute("ydb.duration.source", TString("origin_monotonic"));
+            roundTrip.End();
+        }
+    }
+    if (snapshot.SentAt != TInstant::Zero() && snapshot.NodeId != snapshot.TargetNodeId) {
+        NWilson::TSpan forwarding = NWilson::TSpan::ConstructTerminated(
+            root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
+            snapshot.SentAt, snapshot.SentAt, NWilson::NTraceProto::Status::STATUS_CODE_OK,
+            "Forward to KQP proxy", NWilson::MakeUserFacingWilsonUploaderId());
+        if (forwarding) {
+            forwarding.Attribute("ydb.actor.type", TString("InterconnectProxy"));
+            forwarding.Attribute("ydb.source_node_id", static_cast<i64>(snapshot.NodeId));
+            forwarding.Attribute("ydb.target_node_id", static_cast<i64>(snapshot.TargetNodeId));
+            forwarding.Attribute("ydb.duration.measured", false);
+            forwarding.End();
+        }
+    }
+    if (success) {
+        root.EndOk();
+    } else {
+        root.EndError(Ydb::StatusIds::StatusCode_Name(snapshot.Status));
+    }
+}
+
+class TProxyUserFacingTraceRendererActor
+    : public NActors::TActorBootstrapped<TProxyUserFacingTraceRendererActor> {
+public:
+    explicit TProxyUserFacingTraceRendererActor(TProxyUserFacingTraceSnapshot snapshot)
+        : Snapshot(std::move(snapshot))
+    {}
+
+    void Bootstrap() {
+        RenderProxyUserFacingTrace(std::move(Snapshot));
+        PassAway();
+    }
+
+private:
+    TProxyUserFacingTraceSnapshot Snapshot;
+};
+
 
 NActors::IActor* CreateUserFacingTraceRendererActor(TUserFacingQuerySnapshot snapshot) {
     return new TUserFacingTraceRendererActor(std::move(snapshot));
@@ -934,6 +1022,11 @@ NActors::IActor* CreateUserFacingTraceRendererActor(TUserFacingQuerySnapshot sna
 NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
         TRejectedUserFacingQuerySnapshot snapshot) {
     return new TRejectedUserFacingTraceRendererActor(std::move(snapshot));
+}
+
+NActors::IActor* CreateProxyUserFacingTraceRendererActor(
+        TProxyUserFacingTraceSnapshot snapshot) {
+    return new TProxyUserFacingTraceRendererActor(std::move(snapshot));
 }
 
 } // namespace NKikimr::NKqp

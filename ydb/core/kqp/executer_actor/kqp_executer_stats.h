@@ -456,14 +456,14 @@ public:
 
     bool CollectStatsByLongTasks = false;
 
-    bool CollectTraceDiagnostics = false;
+    bool CollectExecutionDiagnostics = false;
     bool CollectBufferLookupDiagnostics = false;
     std::unordered_map<ui32, TStageTraceSnapshot> TraceStages;
     TBufferLookupDiagnostics BufferLookupDiagnostics;
 
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
         Ydb::Table::QueryStatsCollection::Mode exportMode);
-    void ExportTraceSnapshot(TExecutionTraceSnapshot& snapshot);
+    void ExportDiagnosticsSnapshot(TExecutionTraceSnapshot& snapshot);
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)

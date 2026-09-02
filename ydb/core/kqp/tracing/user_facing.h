@@ -3,11 +3,11 @@
 #include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
-#include "kqp_query_stats.h"
-
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 
 #include <optional>
 #include <vector>
@@ -18,12 +18,8 @@ class IActor;
 
 namespace NKikimr::NKqp {
 
-class TKqpQueryState;
-namespace NPrivateEvents {
-struct TEvQueryRequest;
-}
-
 constexpr size_t MaxUserFacingSpansPerQuery = 1000;
+constexpr size_t MaxUserFacingQueryTextSize = 64 * 1024;
 
 TInstant MapUserFacingSessionStart(TInstant localStart, TInstant originSentAt,
     const google::protobuf::RepeatedPtrField<NKikimrKqp::TProxyRequestHop>& proxyHops);
@@ -31,6 +27,24 @@ TInstant MapUserFacingSessionStart(TInstant localStart, TInstant originSentAt,
 struct TUserFacingQueryDescription {
     TString DisplayName;
     TString Operation;
+};
+
+struct TUserFacingQueryMetrics {
+    ui64 ConsumedRu = 0;
+    ui64 RowsRead = 0;
+    ui64 RowsWritten = 0;
+    ui64 BytesRead = 0;
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
+};
+
+struct TUserFacingQueryCompletion {
+    TString FallbackName;
+    TString QueryText;
+    TString PoolId;
+    TUserFacingQueryMetrics Metrics;
+    bool Success = false;
+    TString StatusCode;
 };
 
 struct TUserFacingQuerySnapshot;
@@ -62,8 +76,8 @@ public:
     void AddExecutions(std::vector<TExecutionTraceSnapshot>& source,
         const TExecutionTraceTotals& totals, size_t sourceDropped);
     void UpdateQueryDescription(const TUserFacingQueryDescription& description);
-    TUserFacingQuerySnapshot DetachSnapshot(TKqpQueryState& state, bool success,
-        const TString& statusCode, NKikimrKqp::TEvQueryResponse* response);
+    TUserFacingQuerySnapshot DetachSnapshot(TUserFacingQueryCompletion completion,
+        TInstant at = TInstant::Now());
 
 private:
     NWilson::TTraceId TraceId;
@@ -99,7 +113,7 @@ struct TUserFacingQuerySnapshot {
     TInstant AdmissionFinishedAt;
     Ydb::StatusIds::StatusCode AdmissionStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     TString PoolId;
-    TKqpQueryStats QueryStats;
+    TUserFacingQueryMetrics Metrics;
     std::vector<TExecutionTraceSnapshot> ExecutionTraces;
     TExecutionTraceTotals ExecutionTraceTotals;
     size_t ExecutionTracesDropped = 0;
@@ -118,9 +132,26 @@ struct TRejectedUserFacingQuerySnapshot {
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };
 
+struct TProxyUserFacingTraceSnapshot {
+    NWilson::TTraceId ParentTraceId;
+    NWilson::TTraceId RootTraceId;
+    TInstant StartedAt;
+    TInstant SentAt;
+    TInstant FinishedAt;
+    TString Name;
+    TString Operation;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    ui32 NodeId = 0;
+    ui32 TargetNodeId = 0;
+    bool HasSessionTrace = false;
+    TString Coverage;
+};
+
 NActors::IActor* CreateUserFacingTraceRendererActor(TUserFacingQuerySnapshot snapshot);
 NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
     TRejectedUserFacingQuerySnapshot snapshot);
+NActors::IActor* CreateProxyUserFacingTraceRendererActor(
+    TProxyUserFacingTraceSnapshot snapshot);
 
 TTimeWindow FitUserFacingRemoteWindow(TTimeWindow window, const TTimeWindow& parent);
 
@@ -162,19 +193,11 @@ private:
     ui64 Dropped_ = 0;
 };
 
-TUserFacingQueryDescription DescribeUserFacingQuery(const TKqpQueryState& state);
-TString SanitizeUserFacingQueryText(const TString& text);
-TString FallbackUserFacingQueryName(const TKqpQueryState& state);
-
-// Consumes the sampled context and detaches an immutable snapshot for asynchronous rendering.
-NActors::IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
-    const TString& statusCode, NKikimrKqp::TEvQueryResponse* response = nullptr);
-
-// Detaches a sampled request rejected before a per-query state can be created.
-NActors::IActor* CreateRejectedUserFacingTraceRenderer(const NPrivateEvents::TEvQueryRequest& request,
-    Ydb::StatusIds::StatusCode status);
-
-// Derives the root name from the physical query rather than raw SQL text.
-void UpdateUserFacingRootSpanName(TKqpQueryState& state);
+TUserFacingQueryDescription DescribeUserFacingQuery(NKikimrKqp::EQueryType queryType,
+    size_t statementCount, const NKqpProto::TKqpPhyQuery& physicalQuery,
+    const TMaybe<TString>& commandTag);
+TString ProtectUserFacingQueryText(const TString& text);
+TString FallbackUserFacingQueryName(NKikimrKqp::EQueryType queryType,
+    NKikimrKqp::EQueryAction queryAction);
 
 } // namespace NKikimr::NKqp

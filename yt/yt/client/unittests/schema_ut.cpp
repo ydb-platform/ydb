@@ -480,6 +480,31 @@ TEST(TTableSchemaTest, ValidateTableSchemaTest)
     expectBad("[{name=x;type=int64;sort_order=ascending;expression=\"uint64(y)\"}; {name=y;type=uint64;sort_order=ascending}; {name=a;type=int64}]");
 }
 
+TEST(TTableSchemaTest, ValidateShuffleColumns)
+{
+    auto makeSchema = [] (ESimpleLogicalValueType producerIdType) {
+        return TTableSchema({
+            TColumnSchema("key", SimpleLogicalType(ESimpleLogicalValueType::String), ESortOrder::Ascending),
+            TColumnSchema(ShuffleProducerIdColumnName, SimpleLogicalType(producerIdType), ESortOrder::Ascending),
+            TColumnSchema(ShuffleRowIdColumnName, SimpleLogicalType(ESimpleLogicalValueType::Int64), ESortOrder::Ascending),
+        });
+    };
+
+    auto schema = makeSchema(ESimpleLogicalValueType::Int64);
+    EXPECT_THROW(ValidateTableSchema(schema), std::exception);
+    EXPECT_NO_THROW(ValidateTableSchema(
+        schema,
+        /*isTableDynamic*/ false,
+        TSchemaValidationOptions{.AllowShuffleColumns = true}));
+
+    EXPECT_THROW(
+        ValidateTableSchema(
+            makeSchema(ESimpleLogicalValueType::String),
+            /*isTableDynamic*/ false,
+            TSchemaValidationOptions{.AllowShuffleColumns = true}),
+        std::exception);
+}
+
 TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
 {
     NProto::TColumnSchema columnSchemaProto;

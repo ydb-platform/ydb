@@ -140,6 +140,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithEmptyDatabase
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.CustomAccessRightsAlterSchema
 ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyNameBadRequest
+ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyRt3CdcWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyRt3TopicWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.MultipleCDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.NotTopicWithDescribeAccess
@@ -205,6 +206,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPosting
+ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.NullEmbedding
@@ -244,6 +246,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
 ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
@@ -260,6 +263,7 @@ ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.CreateExistingTop
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.CreateWithRetentionStorageBytes
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.FederationTopicNameFormats
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ImportantConsumerAndCodecsStored
+ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.NegativeReadSpeedRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ReadQuotaStored
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnknownCodecRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnknownFormatRejected

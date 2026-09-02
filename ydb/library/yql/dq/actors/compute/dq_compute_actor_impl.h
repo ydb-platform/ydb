@@ -2183,6 +2183,7 @@ protected:
                         .RandomProvider = randomProvider,
                         .TraceId = ComputeActorSpan.GetTraceId(),
                         .TaskCounters = TaskCounters,
+                        .HasCheckpoints = GetTaskCheckpointingMode(Task) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();

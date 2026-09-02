@@ -597,7 +597,9 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     IPqStaticGateway::TPtr pqGateway,
     bool enableStreamingQueriesCounters,
     i64 freeSpace,
-    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
+    i64 currentExecutionGeneration,
+    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
+    bool hasCheckpoints)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -614,9 +616,12 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
         callbacks,
         counters,
         freeSpace,
+        currentExecutionGeneration,
         pqGateway,
         enableStreamingQueriesCounters,
-        enableStreamingQueriesPqSinkDeduplicationFeatureFlag);
+        enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
+        hasCheckpoints
+    );
     return {actor, actor};
 }
 
@@ -627,9 +632,18 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
             auto txId = args.TxId;
-            auto taskParamsIt = args.TaskParams.find("query_path");
-            if (taskParamsIt != args.TaskParams.end()) {
-                txId = taskParamsIt->second;
+            if (const auto it = args.TaskParams.find("query_path"); it != args.TaskParams.end()) {
+                txId = it->second;
+            }
+
+            i64 currentExecutionGeneration = 0;
+            if (const auto it = args.TaskParams.find("current_execution_generation"); it != args.TaskParams.end()) {
+                currentExecutionGeneration = FromString<i64>(it->second);
+            }
+
+            bool hasCheckpoints = false;
+            if (const auto it = args.TaskParams.find("checkpoints_enabled"); it != args.TaskParams.end()) {
+                hasCheckpoints = FromString<bool>(it->second) && args.HasCheckpoints;
             }
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
             return CreateDqPqWriteActor(
@@ -646,7 +660,9 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 pqGateway,
                 enableStreamingQueriesCounters,
                 DqPqDefaultFreeSpace,
-                enableStreamingQueriesPqSinkDeduplicationFeatureFlag
+                currentExecutionGeneration,
+                enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
+                hasCheckpoints
             );
         });
 }

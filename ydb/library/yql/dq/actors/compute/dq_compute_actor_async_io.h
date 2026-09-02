@@ -313,6 +313,7 @@ public:
         IRandomProvider *const RandomProvider;
         NWilson::TTraceId TraceId;
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
+        bool HasCheckpoints = false;
     };
 
     struct TInputTransformArguments {

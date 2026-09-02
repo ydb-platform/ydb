@@ -36,6 +36,7 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, 
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
+_CHART_DATA_ROW_LIMIT = 100000
 _LOCAL_YDB_ACTIVITY_LIMIT = 200
 _EVENT_LOG_RECORD_BYTES = 4 * 1024 * 1024
 _LOCAL_YDB_ACTIVITY_RESPONSE_BYTES = 512 * 1024
@@ -879,10 +880,13 @@ function addProfile(){
     'r){alert(error.message)}}\n'
     "const chartColors=['#1b62b9','#c2410c','#087443','#7c3aed','#be185d','#0e7490','#854d0e','#94a3b8','#ef4444','#818cf8','"
     "#22c55e','#d946ef'];\n"
+    "const chartPointLimit=10000;\n"
     'function metricLabel(value){const number=Number(value);if(!Number.isFinite(number))return String(value);return Math.abs('
     "number)>=1e9?(number/1e9).toFixed(2)+'B':Math.abs(number)>=1e6?(number/1e6).toFixed(2)+'M':Math.abs(number)>=1e3?(number"
     "/1e3).toFixed(2)+'k':Number.isInteger(number)?String(number):number.toFixed(2)}\n"
     "function chartNumber(value){return value===null||value===undefined||typeof value==='string'&&!value.trim()?NaN:Number(value)}\n"
+    'function chartExtent(values){let minimum=Infinity,maximum=-Infinity;for(const value of values){const number=Number(value);'
+    'if(!Number.isFinite(number))continue;minimum=Math.min(minimum,number);maximum=Math.max(maximum,number)}return minimum===Infinity?null:[minimum,maximum]}\n'
     "function chartSeriesLabel(series,compact=false){return compact?series.affinity:series.run+' / '+series.profile+' / '+ser"
     'ies.affinity}\n'
     "function seriesCpuNote(series){if(series.cpu_masks&&Object.keys(series.cpu_masks).length)return 'CPUs by threads: '+Obje"
@@ -892,12 +896,13 @@ function addProfile(){
     'function svgChart(metric,xName,xValues,seriesRows,colors){\n'
     '  const width=900,height=330,left=78,right=24,top=24,bottom=52,plotWidth=width-left-right,plotHeight=height-top-bottom,v'
     'alueFor=(item,row)=>chartNumber(row?.[item.metric||metric]);\n'
-    '  const values=[];for(const item of seriesRows)for(const x of xValues){const value=valueFor(item,item.rows.get(String(x)'
-    '));if(Number.isFinite(value))values.push(value)}\n'
+    '  const xKeys=new Set(xValues.map(String)),values=[];for(const item of seriesRows)for(const [x,row] of item.rows){if(!xKeys.has(String(x)))continue;'
+    'const value=valueFor(item,row);if(Number.isFinite(value))values.push(value);if(values.length>chartPointLimit)return '
+    "'<div class=notice>Chart omitted because it has more than '+chartPointLimit+' numeric points. Select fewer runs or lines.</div>'}\n"
     "  if(!values.length)return '<div class=empty>No numeric values for '+esc(metric)+'.</div>';\n"
-    '  let yMin=Math.min(...values),yMax=Math.max(...values);if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+='
+    '  let [yMin,yMax]=chartExtent(values);if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+='
     'pad}else{const pad=(yMax-yMin)*.08;yMin-=pad;yMax+=pad}\n'
-    '  const numericX=xValues.map(Number),xMin=Math.min(...numericX),xMax=Math.max(...numericX),xPos=value=>left+(xMax===xMin'
+    '  const [xMin,xMax]=chartExtent(xValues),xPos=value=>left+(xMax===xMin'
     '?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth),yPos=value=>top+(yMax-Number(value))/(yMax-yMin)*plotHeight;\n'
     '  let svg=\'<svg viewBox="0 0 \'+width+\' \'+height+\'" role=img aria-label="\'+esc(metric)+\' by \'+esc(xName)+\'">\';\n'
     "  for(let tick=0;tick<=4;tick++){const y=top+plotHeight*tick/4,value=yMax-(yMax-yMin)*tick/4;svg+='<line class=chart-gri"
@@ -924,9 +929,6 @@ function addProfile(){
     '}\n'
     """
 function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,synchronize=false){
-  const width=900,left=78,right=24,plotWidth=width-left-right,numericX=xValues.map(Number);
-  const xMin=Math.min(...numericX),xMax=Math.max(...numericX);
-  const xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
   const seriesFor=metric=>Array.isArray(seriesRows)?seriesRows:(seriesRows[metric]||[]);
   const panels=[...container.querySelectorAll('.chart-panel')].map(panel=>({
     panel,
@@ -936,6 +938,9 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     tooltip:panel.querySelector('.chart-tooltip'),
     cursor:panel.querySelector('.chart-cursor'),
   })).filter(item=>item.svg&&item.surface&&item.tooltip&&item.cursor&&metrics.includes(item.metric));
+  const xExtent=chartExtent(xValues);if(!panels.length||!xExtent)return;
+  const width=900,left=78,right=24,plotWidth=width-left-right,[xMin,xMax]=xExtent;
+  const xPos=value=>left+(xMax===xMin?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth);
   const hideAll=()=>{for(const item of panels){
     item.tooltip.hidden=true;item.cursor.setAttribute('visibility','hidden');
     item.cursor.removeAttribute('data-selected-x')
@@ -1260,9 +1265,7 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
   }
   groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));
   groups.forEach((group,index)=>group.colorIndex=index);
-  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]
-    .sort((left,right)=>left-right);
-  if(!xValues.length){
+  if(!groups.some(group=>group.rows.size)){
     container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';
     return
   }
@@ -1290,6 +1293,16 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
     container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';
     return
   }
+  let pointCount=0;
+  for(const [,metric] of specifications)for(const group of groups)for(const row of group.rows.values()){
+    if(Number.isFinite(chartNumber(row[metric]))&&++pointCount>chartPointLimit){
+      container.innerHTML='<div class=notice>Search curves omitted because they have more than '+chartPointLimit+
+        ' numeric points. Select fewer runs.</div>';
+      return
+    }
+  }
+  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]
+    .sort((left,right)=>left-right);
   const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[
     alias,groups.map(group=>({...group,metric}))
   ]));
@@ -2566,6 +2579,7 @@ def chart_data(output, run_ids, benchmark_filter=None):
     if benchmark_filter is not None and benchmark_filter not in BENCHMARKS:
         raise BenchmarkError("unknown chart benchmark: {}".format(benchmark_filter))
     result = []
+    result_row_count = 0
     dimensions, metrics, metric_metadata, dimension_metadata = set(), set(), {}, {}
     for run_id in run_ids:
         root = _run_directory(output, run_id)
@@ -2652,6 +2666,9 @@ def chart_data(output, run_ids, benchmark_filter=None):
                     metric_fields = [metric.name for metric in benchmark_definition.metrics]
                     if has_memory_fairness:
                         metric_fields += list(_MEMORY_FAIRNESS_METRICS)
+                result_row_count += sum(len(rows) for rows in grouped.values())
+                if result_row_count > _CHART_DATA_ROW_LIMIT:
+                    raise BenchmarkError("selected chart data has too many rows")
                 dimensions.update(dimension_fields)
                 metrics.update(metric_fields)
                 file_metric_metadata = {}

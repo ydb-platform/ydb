@@ -7603,6 +7603,21 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
         self.assertIn("dimension_metadata", value)
 
+    def test_chart_data_bounds_total_rows_across_selected_runs(self):
+        for run_id in ("first", "second"):
+            self._manifest(self.root / run_id)
+            summary = self.root / run_id / "ping-bench" / "baseline" / "summary.csv"
+            summary.parent.mkdir(parents=True)
+            summary.write_text(
+                "affinity_mode,threads,median_msgs_per_sec\n" "none,1,10\n" "none,2,20\n",
+                encoding="utf-8",
+            )
+
+        with mock.patch.object(web, "_CHART_DATA_ROW_LIMIT", 3), self.assertRaisesRegex(
+            BenchmarkError, "selected chart data has too many rows"
+        ):
+            chart_data(self.root, ["first", "second"])
+
     def test_local_ydb_summary_is_available_to_comparison_charts(self):
         self._manifest(self.root / "complete")
         summary = self.root / "complete" / "local-ydb" / "capacity" / "summary.csv"
@@ -7884,6 +7899,14 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"class=modal-backdrop", script)
                 self.assertIn(b"role=dialog", script)
                 self.assertIn(b"function bindChartTooltips", script)
+                self.assertIn(b"const chartPointLimit=10000", script)
+                self.assertIn(b"function chartExtent", script)
+                self.assertIn(b"Chart omitted because it has more than", script)
+                self.assertIn(b"Search curves omitted because they have more than", script)
+                self.assertNotIn(b"Math.min(...values)", script)
+                self.assertNotIn(b"Math.max(...values)", script)
+                self.assertNotIn(b"Math.min(...numericX)", script)
+                self.assertNotIn(b"Math.max(...numericX)", script)
                 self.assertIn(b"function chartNumber", script)
                 self.assertIn(b"synchronize=false", script)
                 self.assertIn(b"targets=synchronize?panels:[active]", script)

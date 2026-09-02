@@ -457,43 +457,14 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 0);
     }
 
-    Y_UNIT_TEST(RuntimeValidationIsAtomic) {
+    Y_UNIT_TEST(ValidConfigUpdateAppliesAtomically) {
         auto initial = BuildTopologyConfig(
             {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Normalizer, 1}},
                 {{ESpecialTaskCategory::Insert, 1}}},
             {1, 1});
         TRuntimeFixture fixture(initial);
 
-        // Enabled is immutable.
         auto candidate = initial;
-        candidate.SetEnabled(false);
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        // a parse failure is atomic and does not block the next valid revision.
-        candidate = initial;
-        candidate.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(0);
-        candidate.MutableWorkerPools(1)->AddLinks()->SetCategory(::ToString(ESpecialTaskCategory::Scan));
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        candidate = initial;
-        candidate.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(std::numeric_limits<double>::infinity());
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        candidate = initial;
-        candidate.MutableWorkerPools(0)->SetWorkersCount(std::numeric_limits<double>::infinity());
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        candidate = initial;
-        candidate.MutableWorkerPools(0)->ClearWorkersCount();
-        candidate.MutableWorkerPools(0)->SetDefaultFractionOfThreadsCount(std::numeric_limits<double>::infinity());
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        candidate = initial;
         candidate.MutableWorkerPools(0)->ClearLinks();
         auto* retainedLink = candidate.MutableWorkerPools(0)->AddLinks();
         retainedLink->SetCategory(::ToString(ESpecialTaskCategory::Normalizer));

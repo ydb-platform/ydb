@@ -64,17 +64,7 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
         {"action", "composite_conveyor_config_received"},
         {"hasConfig", true});
 
-    auto configConclusion = NConfig::TConfig::BuildFromProto(candidateProto);
-    if (configConclusion.IsFail()) {
-        YDB_LOG_ERROR("",
-            {"name", ConveyorName},
-            {"action", "composite_conveyor_config_rejected"},
-            {"error", configConclusion.GetErrorMessage()});
-        ReplyConfigNotification(ev);
-        return;
-    }
-
-    auto desiredConfig = configConclusion.DetachResult();
+    auto desiredConfig = NConfig::TConfig::BuildFromProto(candidateProto).DetachResult();
     if (PendingConfigNotification) {
         YDB_LOG_INFO("",
             {"name", ConveyorName},
@@ -83,18 +73,9 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
         return;
     }
 
-    auto updateConclusion = Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters);
-    if (updateConclusion.IsFail()) {
-        YDB_LOG_ERROR("",
-            {"name", ConveyorName},
-            {"action", "composite_conveyor_config_update_rejected"},
-            {"error", updateConclusion.GetErrorMessage()});
-        ReplyConfigNotification(ev);
-        return;
-    }
-
+    const bool updateFinished = Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters);
     PendingConfigNotification = std::move(ev);
-    if (updateConclusion.DetachResult()) {
+    if (updateFinished) {
         CompleteConfigUpdate();
     }
     Y_UNUSED(Manager->DrainTasks());

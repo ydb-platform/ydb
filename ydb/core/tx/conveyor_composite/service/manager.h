@@ -93,19 +93,9 @@ public:
         return *Categories[(ui64)category];
     }
 
-    TConclusionStatus ValidateConfigUpdate(const NConfig::TConfig& config) const {
-        if (config.IsEnabled() != Config.IsEnabled()) {
-            return TConclusionStatus::Fail("runtime Enabled update is not supported yet");
-        }
-        return TConclusionStatus::Success();
-    }
-
-    TConclusion<bool> StartConfigUpdate(const NConfig::TConfig& config,
+    bool StartConfigUpdate(const NConfig::TConfig& config,
         const NActors::TActorId& distributorActorId, TCounters& counters) {
-        auto validation = ValidateConfigUpdate(config);
-        if (validation.IsFail()) {
-            return validation;
-        }
+        Y_ENSURE(config.IsEnabled() == Config.IsEnabled(), "runtime Enabled update is not supported yet");
 
         THashSet<TString> desiredPoolNames;
         desiredPoolNames.reserve(config.GetWorkerPools().size());

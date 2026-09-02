@@ -73,7 +73,7 @@ ALTER TABLE table_name ALTER COLUMN column_name
 
 #### SET COMPRESSION
 
-Изменяет [настройки сжатия](#compression) колонки в колоночной таблице.
+Изменяет настройки сжатия колонки в колоночной таблице.
 
 ### Примеры
 

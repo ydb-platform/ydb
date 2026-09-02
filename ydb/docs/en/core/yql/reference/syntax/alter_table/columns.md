@@ -73,7 +73,7 @@ Allows a column to contain `NULL` values.
 
 #### SET COMPRESSION
 
-Changes the [compression settings](#compression) of a column in a column-oriented table.
+Changes the compression settings of a column in a column-oriented table.
 
 ### Examples
 

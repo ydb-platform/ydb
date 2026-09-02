@@ -1046,6 +1046,7 @@ enum class EStoreType {
 enum class EMultiColumnStatisticsType {
     Unknown = 0,
     CountMinSketch = 1,
+    EqHeightHistogram = 2,
 };
 
 //! Represents multi-column table statistics description

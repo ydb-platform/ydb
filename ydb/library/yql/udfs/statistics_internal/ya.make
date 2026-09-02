@@ -8,8 +8,10 @@ YQL_ABI_VERSION(
 
 SRCS(
     cms_agg_func.h
+    eqh_agg_func.h
     ewh_agg_func.h
     hll_agg_func.h
+    presort_key_udf.h
     all_agg_funcs.cpp
     all_agg_funcs.h
     common.h
@@ -20,6 +22,7 @@ PEERDIR(
     library/cpp/hyperloglog
     yql/essentials/core/minsketch
     yql/essentials/core/histogram
+    yql/essentials/minikql/computation
 )
 
 END()

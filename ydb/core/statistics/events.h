@@ -8,13 +8,25 @@
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <bit>
 #include <variant>
 
 
 namespace NKikimr {
 
+// Count-min sketch and equi-width histogram blobs are serialized in native
+// byte order and persisted in .metadata/statistics_v2, then read back by other
+// nodes. That pins those stored formats to little-endian architectures.
+// Equi-height histograms use protobuf (endian-independent).
+// The count-min sketch additionally pins struct layout (member order, padding,
+// sizeof) since its blob is the in-memory object reinterpreted directly, so a
+// byte-swap layer alone would not unblock a big-endian port.
+static_assert(std::endian::native == std::endian::little,
+              "statistics blobs in .metadata/statistics_v2 are little-endian");
+
 class TCountMinSketch;
 class TEqWidthHistogram;
+class TEqHeightHistogram;
 
 namespace NStat {
 
@@ -35,6 +47,10 @@ struct TStatEqWidthHistogram {
     std::shared_ptr<TEqWidthHistogram> Data;
 };
 
+struct TStatEqHeightHistogram {
+    std::shared_ptr<TEqHeightHistogram> Data;
+};
+
 struct TStatTableSummary {
     std::optional<NKikimrStat::TTableSummaryStatistics> Data;
 };
@@ -52,6 +68,8 @@ enum class EStatType {
     EQ_WIDTH_HISTOGRAM = 3,
     // Correct table row count calculated during ANALYZE.
     TABLE_SUMMARY = 4,
+    // Equi-height histogram over a tuple of columns (multi-column).
+    EQ_HEIGHT_HISTOGRAM = 5,
 };
 
 // Absent for SIMPLE/TABLE_SUMMARY stats;
@@ -92,6 +110,7 @@ struct TResponse {
     TStatSimpleColumn SimpleColumn;
     TStatCountMinSketch CountMinSketch;
     TStatEqWidthHistogram EqWidthHistogram;
+    TStatEqHeightHistogram EqHeightHistogram;
     TStatTableSummary TableSummary;
 };
 

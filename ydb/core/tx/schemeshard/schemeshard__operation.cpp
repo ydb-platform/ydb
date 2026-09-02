@@ -94,6 +94,27 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
     }
 };
 
+// A part of an operation that was not planned as a whole reads bindings all the same. It is
+// bound here, from its own transaction, before it is first proposed; a part that reads no
+// bindings has no kind and is left alone.
+static std::optional<TRejectedOperation> BindUnplannedPart(const ISubOperation::TPtr& part, TOperationContext& context) {
+    if (part->IsPlanned()) {
+        return std::nullopt;
+    }
+    const auto kind = part->PlannedPartKind();
+    if (!kind) {
+        return std::nullopt;
+    }
+    auto planResult = PlanSinglePart(*kind, part->GetTransaction(), context.SS);
+    if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
+        return *rejected;
+    }
+    auto plan = std::get<std::shared_ptr<const TSealedOperationPlan>>(planResult);
+    Y_ABORT_UNLESS(plan->GetParts().size() == 1);
+    part->BindToPlan(plan, plan->GetParts().front());
+    return std::nullopt;
+}
+
 bool TSchemeShard::ProcessOperationParts(
     const TVector<ISubOperation::TPtr>& parts,
     const TTxId& txId,
@@ -116,6 +137,9 @@ bool TSchemeShard::ProcessOperationParts(
         if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else if (auto rejected = BindUnplannedPart(part, context)) {
+            response.Reset(new TProposeResponse(rejected->Status, ui64(txId), ui64(selfId)));
+            ApplyRejection(*response, *rejected);
         } else {
             response = part->Propose(owner, context);
         }
@@ -254,7 +278,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // mixes planned and unplanned types takes the legacy path below.
 
     if (AllOf(rewrittenTransactions, [](const auto& tx) { return IsPlannedOperationType(tx.GetOperationType()); })) {
-        auto planResult = PlanOperation(rewrittenTransactions, context);
+        auto planResult = PlanOperation(rewrittenTransactions, context.SS);
         if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
             response.Reset(new TProposeResponse(rejected->Status, ui64(txId), ui64(selfId)));
             ApplyRejection(*response, *rejected);
@@ -1804,7 +1828,10 @@ namespace {
 THashSet<TString> PlannedLocalSequences(const TSealedOperationPlan& plan, TPlanEffectId table) {
     THashSet<TString> sequences;
     for (const auto& other : plan.GetParts()) {
-        if (const auto* seq = std::get_if<TCopySequencePartBindings>(&other.Bindings); seq && seq->Container == table) {
+        if (other.Kind != EPlannedPartKind::CopySequence) {
+            continue;
+        }
+        if (const auto& seq = std::get<TTargetWithSourcePartBindings>(other.Bindings); seq.Container == table) {
             sequences.emplace(other.Tx.GetSequence().GetName());
         }
     }
@@ -1819,55 +1846,33 @@ ISubOperation::TPtr TDefaultOperationFactory::MakePlannedPart(
         const TPartBlueprint& blueprint,
         TOperationContext& context) const
 {
+    Y_UNUSED(context);
     const auto& tx = blueprint.Tx;
-    switch (tx.GetOperationType()) {
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
+    switch (blueprint.Kind) {
+    case EPlannedPartKind::MkDir:
         return CreateMkDir(id, tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        if (tx.GetCreateTable().HasCopyFromTable()) {
-            const auto& bindings = std::get<TCopyTablePartBindings>(blueprint.Bindings);
-            return CreateCopyTable(id, tx, PlannedLocalSequences(plan, bindings.Target));
-        }
+    case EPlannedPartKind::CreateTable:
         return CreateNewTable(id, tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex: {
-        const auto& bindings = std::get<TCreateIndexPartBindings>(blueprint.Bindings);
-        // Column tables use the OLAP local-index op; row tables use the generic one.
-        bool onColumnTable = false;
-        if (const auto& source = plan.Effect(bindings.Source); source.PathId) {
-            const TPath sourceIndex = TPath::Init(*source.PathId, context.SS);
-            if (sourceIndex.IsResolved()) {
-                const TPath sourceTable = sourceIndex.Parent();
-                onColumnTable = sourceTable.IsResolved() && sourceTable.Base()->IsColumnTable();
-            }
-        }
-        if (TTableIndexInfo::IsLocalIndex(tx.GetCreateTableIndex().GetType()) && onColumnTable) {
-            return CreateNewColumnTableLocalIndex(id, tx);
-        }
+    case EPlannedPartKind::CopyTable:
+        return CreateCopyTable(id, tx, PlannedLocalSequences(plan, std::get<TCopyTablePartBindings>(blueprint.Bindings).Target));
+    case EPlannedPartKind::CreateTableIndex:
         return CreateNewTableIndex(id, tx);
-    }
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
+    case EPlannedPartKind::CreateColumnTableLocalIndex:
+        return CreateNewColumnTableLocalIndex(id, tx);
+    case EPlannedPartKind::CopySequence:
         return CreateCopySequence(id, tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable: {
-        // DROP TABLE has no say in whether it drops a row or a column table; the object decides.
-        const auto& bindings = std::get<TDropPartBindings>(blueprint.Bindings);
-        if (const auto& target = plan.Effect(bindings.Target); target.PathId) {
-            const TPath table = TPath::Init(*target.PathId, context.SS);
-            if (table.IsResolved() && table.Base()->IsColumnTable()) {
-                return CreateDropColumnTable(id, tx);
-            }
-        }
+    case EPlannedPartKind::DropTable:
         return CreateDropTable(id, tx);
-    }
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex:
+    case EPlannedPartKind::DropColumnTable:
+        return CreateDropColumnTable(id, tx);
+    case EPlannedPartKind::DropTableIndex:
         return CreateDropTableIndex(id, tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
+    case EPlannedPartKind::DropCdcStreamImpl:
         return CreateDropCdcStreamImpl(id, tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
+    case EPlannedPartKind::DropSequence:
         return CreateDropSequence(id, tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+    case EPlannedPartKind::DropPersQueueGroup:
         return CreateDropPQ(id, tx);
-    default:
-        Y_ABORT("blueprint of an unplanned operation type %d", static_cast<int>(tx.GetOperationType()));
     }
 }
 

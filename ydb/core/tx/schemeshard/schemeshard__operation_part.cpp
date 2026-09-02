@@ -5,6 +5,8 @@
 #include "schemeshard_operation_planner.h"
 #include "schemeshard_path.h"
 
+#include <util/generic/overloaded.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/events.h>
@@ -135,7 +137,7 @@ TVector<ISubOperation::TPtr> ConstructPartsFromPlan(TOperationId nextId, std::sh
 // This helper serves the operations that decompose by hand -- drop index, drop backup
 // collection -- and appends the same parts the planner would.
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table, TOperationContext& context) {
-    auto planResult = PlanDropTableChildren(table, context);
+    auto planResult = PlanDropTableChildren(table, context.SS);
     if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
         return CreateReject(id, *rejected);
     }
@@ -144,24 +146,66 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
     return nullptr;
 }
 
-static TPath ResolvePlanned(const TSealedOperationPlan& plan, const TPlannedPathView& view, TOperationContext& context) {
+TPath TSubOperationBase::ResolveBound(const TPlannedPathView& view, TOperationContext& context) const {
     if (view.PathId) {
         TPath byId = TPath::Init(*view.PathId, context.SS);
         if (byId.IsResolved()) {
             return byId;
         }
     }
-    return TPath::Resolve(plan.Absolute(view.Path), context.SS);
+    return TPath::Resolve(GetPlan().Absolute(view.Path), context.SS);
 }
 
 TPath TSubOperationBase::PlannedPath(TPlanEffectId effect, TOperationContext& context) const {
-    const auto& plan = GetPlan();
-    return ResolvePlanned(plan, plan.ViewOfEffect(effect), context);
+    return ResolveBound(GetPlan().ViewOfEffect(effect), context);
 }
 
 TPath TSubOperationBase::PlannedWritePath(TPhysicalWriteId write, TOperationContext& context) const {
+    return ResolveBound(GetPlan().ViewOfWrite(write), context);
+}
+
+TPath TSubOperationBase::TargetPath(TOperationContext& context) const {
+    return ResolveBound(BoundTarget(), context);
+}
+
+TPath TSubOperationBase::ContainerPath(TOperationContext& context) const {
+    return ResolveBound(BoundContainer(), context);
+}
+
+TPath TSubOperationBase::SourcePath(TOperationContext& context) const {
+    return ResolveBound(BoundSource(), context);
+}
+
+TString TSubOperationBase::TargetLeafName() const {
+    return BoundTarget().LeafName;
+}
+
+TPlannedPathView TSubOperationBase::BoundTarget() const {
+    Y_ABORT_UNLESS(Bindings, "part is not planned");
     const auto& plan = GetPlan();
-    return ResolvePlanned(plan, plan.ViewOfWrite(write), context);
+    return std::visit(TOverloaded{
+        [&](const TMkDirPartBindings& b) { return plan.ViewOfWrite(b.Target); },
+        [&](const auto& b) { return plan.ViewOfEffect(b.Target); },
+    }, *Bindings);
+}
+
+TPlannedPathView TSubOperationBase::BoundContainer() const {
+    Y_ABORT_UNLESS(Bindings, "part is not planned");
+    const auto& plan = GetPlan();
+    return std::visit(TOverloaded{
+        [&](const TMkDirPartBindings& b) { return plan.ViewOfWrite(b.Container); },
+        [&](const auto& b) { return plan.ViewOfEffect(b.Container); },
+    }, *Bindings);
+}
+
+TPlannedPathView TSubOperationBase::BoundSource() const {
+    Y_ABORT_UNLESS(Bindings, "part is not planned");
+    const auto& plan = GetPlan();
+    return std::visit(TOverloaded{
+        [&](const TTargetWithSourcePartBindings& b) { return plan.ViewOfEffect(b.Source); },
+        [&](const TCopyTablePartBindings& b) { return plan.ViewOfEffect(b.Source); },
+        [&](const auto&) -> TPlannedPathView { Y_ABORT("part is bound without a source"); },
+    }, *Bindings);
 }
 
 }

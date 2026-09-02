@@ -39,6 +39,10 @@ public:
         Y_ABORT("%s cannot be bound to an operation plan", "TReject");
     }
 
+    bool IsPlanned() const override {
+        return false;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         Y_ABORT_UNLESS(Response);
 

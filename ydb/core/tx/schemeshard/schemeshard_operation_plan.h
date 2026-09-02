@@ -117,11 +117,25 @@ struct TPhysicalPathWrite {
 
 // Typed bindings: what one constructed part is licensed to touch, by id. A part never
 // searches the plan for something matching a role.
-struct TCreateTablePartBindings {
+//
+// Bindings are typed by shape, not by part class. A create, a drop, an index creation and a
+// sequence copy all name an object and the parent that gains or loses it; the copy kinds add
+// what they copy from. What the part *is* comes from the blueprint's kind.
+
+// The object the part creates, alters or removes, and its parent.
+struct TTargetPartBindings {
     TPlanEffectId Target;
     TPlanEffectId Container;
 };
 
+// The same, plus the object it is copied from.
+struct TTargetWithSourcePartBindings {
+    TPlanEffectId Target;
+    TPlanEffectId Container;
+    TPlanEffectId Source;
+};
+
+// A table copy also drops streams beneath its source.
 struct TCopyTablePartBindings {
     TPlanEffectId Target;
     TPlanEffectId Container;
@@ -135,38 +149,35 @@ struct TMkDirPartBindings {
     TPhysicalWriteId Container;
 };
 
-struct TCreateIndexPartBindings {
-    TPlanEffectId Target;
-    TPlanEffectId Container;
-    TPlanEffectId Source;                   // the index being copied
-};
-
-struct TCopySequencePartBindings {
-    TPlanEffectId Target;
-    TPlanEffectId Container;
-    TPlanEffectId Source;
-};
-
-// Every drop part -- table, column table, index, impl table, cdc stream, its topic, sequence
-// -- has the same shape: the object it removes and the parent that loses it. One binding type
-// serves them all; the part kind is the blueprint's operation type.
-struct TDropPartBindings {
-    TPlanEffectId Target;
-    TPlanEffectId Container;
-};
-
 using TPartBindings = std::variant<
-    TCreateTablePartBindings,
+    TTargetPartBindings,
+    TTargetWithSourcePartBindings,
     TCopyTablePartBindings,
-    TMkDirPartBindings,
-    TCreateIndexPartBindings,
-    TCopySequencePartBindings,
-    TDropPartBindings
+    TMkDirPartBindings
 >;
+
+// What a blueprint builds. Finer than the transaction's operation type where SchemeShard
+// itself decides by looking at the object -- a DROP TABLE of a column table, a local index on
+// a column table -- so that the factory does not resolve anything the planner already knew.
+enum class EPlannedPartKind : ui8 {
+    MkDir,
+    CreateTable,
+    CopyTable,
+    CreateTableIndex,
+    CreateColumnTableLocalIndex,
+    CopySequence,
+    DropTable,
+    DropColumnTable,
+    DropTableIndex,
+    DropCdcStreamImpl,
+    DropSequence,
+    DropPersQueueGroup,
+};
 
 struct TPartBlueprint {
     ui32 PartIdx;                           // TxPartId of the part built from this blueprint
     ui32 RequestIdx;                        // which request subplan it belongs to
+    EPlannedPartKind Kind;
     NKikimrSchemeOp::TModifyScheme Tx;      // the transaction the part is constructed from
     TPartBindings Bindings;
 };
@@ -270,9 +281,11 @@ public:
     ui32 AddRequest();
 
     // Returns the part index. The blueprint is appended to the request's generated-directory
-    // list or its part list, in call order.
+    // list or its part list, in call order. A directory the request itself asks for is an
+    // ordinary part with a logical target; only a directory the planner generates for a
+    // relative Name goes through AddGeneratedDirPart.
     ui32 AddGeneratedDirPart(ui32 requestIdx, NKikimrSchemeOp::TModifyScheme tx, TMkDirPartBindings bindings);
-    ui32 AddPart(ui32 requestIdx, NKikimrSchemeOp::TModifyScheme tx, TPartBindings bindings);
+    ui32 AddPart(ui32 requestIdx, EPlannedPartKind kind, NKikimrSchemeOp::TModifyScheme tx, TPartBindings bindings);
 
     const TString& GetDatabaseRoot() const {
         return Plan.DatabaseRoot;

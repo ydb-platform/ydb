@@ -101,6 +101,10 @@ class TCreateTableIndex: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::CreateTableIndex;
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -109,9 +113,7 @@ public:
         const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString name = IsPlanned()
-            ? PlannedLeafName(BindingsAs<TCreateIndexPartBindings>().Target)
-            : tableIndexCreation.GetName();
+        const TString name = TargetLeafName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateTableIndex Propose"
@@ -132,9 +134,7 @@ public:
             return result;
         }
 
-        NSchemeShard::TPath parentPath = IsPlanned()
-            ? PlannedPath(BindingsAs<TCreateIndexPartBindings>().Container, context)
-            : NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        NSchemeShard::TPath parentPath = ContainerPath(context);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks

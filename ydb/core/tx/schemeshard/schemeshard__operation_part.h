@@ -235,9 +235,17 @@ public:
     virtual const TTxTransaction& GetTransaction() const = 0;
 
     // Attaches the sealed plan of the operation and this part's typed bindings into it.
-    // Called once, where parts are built from blueprints. A part that cannot be planned
-    // aborts here rather than being silently left unbound.
+    // Called once, before the part is first proposed: where parts are built from blueprints,
+    // or by ProcessOperationParts for a part its operation did not plan. A part that cannot
+    // be planned aborts here rather than being silently left unbound.
     virtual void BindToPlan(std::shared_ptr<const TSealedOperationPlan> plan, const TPartBlueprint& blueprint) = 0;
+    virtual bool IsPlanned() const = 0;
+
+    // What this part is, for the single-part planner that binds it when its operation was not
+    // planned as a whole. Nullopt for a part that reads no bindings.
+    virtual std::optional<EPlannedPartKind> PlannedPartKind() const {
+        return std::nullopt;
+    }
 };
 
 class TSubOperationBase: public ISubOperation {
@@ -259,7 +267,7 @@ public:
         Bindings = blueprint.Bindings;
     }
 
-    bool IsPlanned() const {
+    bool IsPlanned() const override final {
         return Plan != nullptr;
     }
 
@@ -284,10 +292,19 @@ protected:
     TPath PlannedPath(TPlanEffectId effect, TOperationContext& context) const;
     TPath PlannedWritePath(TPhysicalWriteId write, TOperationContext& context) const;
 
-    // The leaf name the plan holds for a logical effect.
-    const TString& PlannedLeafName(TPlanEffectId effect) const {
-        return GetPlan().Effect(effect).LeafName;
-    }
+    // The paths this part is bound to, by shape. Every binding kind names a target and its
+    // container; the copy kinds add a source. Propose reads nothing else: a part is always
+    // bound by the time it is proposed, by its operation's plan or by the single-part planner.
+    TPath TargetPath(TOperationContext& context) const;
+    TPath ContainerPath(TOperationContext& context) const;
+    TPath SourcePath(TOperationContext& context) const;
+    TString TargetLeafName() const;
+
+private:
+    TPlannedPathView BoundTarget() const;
+    TPlannedPathView BoundContainer() const;
+    TPlannedPathView BoundSource() const;   // aborts for bindings without a source
+    TPath ResolveBound(const TPlannedPathView& view, TOperationContext& context) const;
 
 public:
     explicit TSubOperationBase(const TOperationId& id)

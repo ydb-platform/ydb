@@ -106,6 +106,10 @@ class TDropCdcStream: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::DropCdcStreamImpl;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetDrop();
@@ -117,11 +121,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
-        const auto streamPath = IsPlanned()
-            ? PlannedPath(BindingsAs<TDropPartBindings>().Target, context)
-            : op.HasId()
-                ? TPath::Init(context.SS->MakeLocalId(op.GetId()), context.SS)
-                : TPath::Resolve(workingDir, context.SS).Dive(streamName);
+        const auto streamPath = TargetPath(context);
         {
             const auto checks = streamPath.Check();
             checks
@@ -163,9 +163,7 @@ public:
             }
         }
 
-        const auto tablePath = IsPlanned()
-            ? PlannedPath(BindingsAs<TDropPartBindings>().Container, context)
-            : streamPath.Parent();
+        const auto tablePath = ContainerPath(context);
         {
             const auto checks = tablePath.Check();
             checks

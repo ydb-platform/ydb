@@ -513,12 +513,14 @@ public:
         return AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::CopyTable;
+    }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString& parentPath = Transaction.GetWorkingDir();
-        const TString name = IsPlanned()
-            ? PlannedLeafName(BindingsAs<TCopyTablePartBindings>().Target)
-            : Transaction.GetCreateTable().GetName();
+        const TString name = TargetLeafName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -529,12 +531,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        // A planned part takes its container and source from the plan it is bound to. A part
-        // of an unplanned operation -- one built by CreateConsistentCopyTables or a backup
-        // collection -- resolves them from its transaction as it always did.
-        TPath parent = IsPlanned()
-            ? PlannedPath(BindingsAs<TCopyTablePartBindings>().Container, context)
-            : TPath::Resolve(parentPath, context.SS);
+        TPath parent = ContainerPath(context);
         {
             TPath::TChecker checks = parent.Check();
             checks
@@ -575,9 +572,7 @@ public:
             }
         }
 
-        TPath srcPath = IsPlanned()
-            ? PlannedPath(BindingsAs<TCopyTablePartBindings>().Source, context)
-            : TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+        TPath srcPath = SourcePath(context);
 
         {
             TPath::TChecker checks = srcPath.Check();
@@ -708,19 +703,14 @@ public:
 
         if (Transaction.GetCreateTable().HasDropSrcCdcStream()) {
             const auto& dropOp = Transaction.GetCreateTable().GetDropSrcCdcStream();
-            // A planned part drops exactly the streams the plan bound it to, in request order.
-            TVector<TPlanEffectId> plannedDrops;
-            if (IsPlanned()) {
-                plannedDrops = BindingsAs<TCopyTablePartBindings>().DropStreams;
-                Y_ABORT_UNLESS(plannedDrops.size() == size_t(dropOp.StreamNameSize()),
-                    "plan binds %zu dropped streams, the request names %d",
-                    plannedDrops.size(), dropOp.StreamNameSize());
-            }
+            // The part drops exactly the streams the plan bound it to, in request order.
+            const auto& plannedDrops = BindingsAs<TCopyTablePartBindings>().DropStreams;
+            Y_ABORT_UNLESS(plannedDrops.size() == size_t(dropOp.StreamNameSize()),
+                "plan binds %zu dropped streams, the request names %d",
+                plannedDrops.size(), dropOp.StreamNameSize());
             size_t plannedDropIndex = 0;
             for (const auto& streamName : dropOp.GetStreamName()) {
-                TPath oldStreamPath = IsPlanned()
-                    ? PlannedPath(plannedDrops[plannedDropIndex++], context)
-                    : srcPath.Child(streamName);
+                TPath oldStreamPath = PlannedPath(plannedDrops[plannedDropIndex++], context);
 
                 auto checks = oldStreamPath.Check();
                 checks.NotEmpty().IsResolved().NotDeleted().IsCdcStream();
@@ -998,7 +988,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
     Y_ABORT_UNLESS(tx.GetCreateTable().HasCopyFromTable());
 
-    auto planResult = PlanOperation({tx}, context);
+    auto planResult = PlanOperation({tx}, context.SS);
     if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
         return {CreateReject(nextId, *rejected)};
     }

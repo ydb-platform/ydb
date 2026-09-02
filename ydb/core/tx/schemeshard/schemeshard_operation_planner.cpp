@@ -7,14 +7,33 @@
 
 namespace NKikimr::NSchemeShard {
 
-bool IsPlannedOperationType(NKikimrSchemeOp::EOperationType type) {
+namespace {
+
+// The registry of planned operation types. Adding a type means adding its file and one row
+// here; nothing else in the core switches on the type.
+struct TPlannedOperationType {
+    bool (TOperationPlanner::*Plan)(ui32 requestIdx, const NKikimrSchemeOp::TModifyScheme& tx);
+    TPath (*Anchor)(TSchemeShard* ss, const NKikimrSchemeOp::TModifyScheme& tx);
+};
+
+const TPlannedOperationType* FindPlannedType(NKikimrSchemeOp::EOperationType type) {
+    static const TPlannedOperationType createTable{&TOperationPlanner::PlanCreateTable, &TOperationPlanner::AnchorCreateTable};
+    static const TPlannedOperationType dropTable{&TOperationPlanner::PlanDropTable, &TOperationPlanner::AnchorDropTable};
+
     switch (type) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
+        return &createTable;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
-        return true;
+        return &dropTable;
     default:
-        return false;
+        return nullptr;
     }
+}
+
+} // namespace
+
+bool IsPlannedOperationType(NKikimrSchemeOp::EOperationType type) {
+    return FindPlannedType(type) != nullptr;
 }
 
 TOperationPlanner::TOperationPlanner(TSchemeShard* ss, TString databaseRoot)
@@ -35,14 +54,9 @@ TOperationPlanResult TOperationPlanner::Run(const TVector<TTxTransaction>& trans
 }
 
 bool TOperationPlanner::PlanRequest(ui32 requestIdx, const TTxTransaction& tx) {
-    switch (tx.GetOperationType()) {
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        return PlanCreateTable(requestIdx, tx);
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
-        return PlanDropTable(requestIdx, tx);
-    default:
-        Y_ABORT("operation type %d is not planned", static_cast<int>(tx.GetOperationType()));
-    }
+    const auto* type = FindPlannedType(tx.GetOperationType());
+    Y_ABORT_UNLESS(type, "operation type %d is not planned", static_cast<int>(tx.GetOperationType()));
+    return (this->*type->Plan)(requestIdx, tx);
 }
 
 // The database root has to come from a path that exists. What a request anchors on may not:
@@ -61,17 +75,14 @@ TString TOperationPlanner::DeriveDatabaseRoot(TSchemeShard* ss, const TPath& anc
     return probe.GetDomainPathString();
 }
 
+// The root is per operation, so it comes from the first request; every later request must be
+// expressible against it or its planner fails.
 TString TOperationPlanner::DeriveDatabaseRoot(TSchemeShard* ss, const TVector<TTxTransaction>& transactions) {
     Y_ABORT_UNLESS(!transactions.empty());
     const auto& tx = transactions.front();
-
-    // A drop by id anchors on the object; everything else on WorkingDir.
-    if (tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable && tx.GetDrop().HasId()) {
-        return DeriveDatabaseRoot(ss, TPath::Init(ss->MakeLocalId(tx.GetDrop().GetId()), ss));
-    }
-
-    const TString& workingDir = tx.GetWorkingDir();
-    return DeriveDatabaseRoot(ss, workingDir.empty() ? TPath(ss) : TPath::Resolve(workingDir, ss));
+    const auto* type = FindPlannedType(tx.GetOperationType());
+    Y_ABORT_UNLESS(type, "operation type %d is not planned", static_cast<int>(tx.GetOperationType()));
+    return DeriveDatabaseRoot(ss, type->Anchor(ss, tx));
 }
 
 bool TOperationPlanner::Fail(NKikimrScheme::EStatus status, TString reason) {
@@ -134,16 +145,16 @@ std::optional<TPathId> TOperationPlanner::PathIdOf(const TPath& path) {
     return std::nullopt;
 }
 
-TOperationPlanResult PlanOperation(const TVector<NKikimrSchemeOp::TModifyScheme>& transactions, TOperationContext& context) {
+TOperationPlanResult PlanOperation(const TVector<NKikimrSchemeOp::TModifyScheme>& transactions, TSchemeShard* ss) {
     for (const auto& tx : transactions) {
         Y_ABORT_UNLESS(IsPlannedOperationType(tx.GetOperationType()));
     }
-    TOperationPlanner planner(context.SS, TOperationPlanner::DeriveDatabaseRoot(context.SS, transactions));
+    TOperationPlanner planner(ss, TOperationPlanner::DeriveDatabaseRoot(ss, transactions));
     return planner.Run(transactions);
 }
 
-TOperationPlanResult PlanDropTableChildren(const TPath& table, TOperationContext& context) {
-    TOperationPlanner planner(context.SS, TOperationPlanner::DeriveDatabaseRoot(context.SS, table));
+TOperationPlanResult PlanDropTableChildren(const TPath& table, TSchemeShard* ss) {
+    TOperationPlanner planner(ss, TOperationPlanner::DeriveDatabaseRoot(ss, table));
     auto& builder = planner.GetBuilder();
     const ui32 requestIdx = builder.AddRequest();
 

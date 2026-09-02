@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // One blueprint, typed bindings to the two effects.
         UNIT_ASSERT_VALUES_EQUAL(plan.GetParts().size(), 1u);
-        const auto& bindings = std::get<TCreateTablePartBindings>(plan.GetParts()[0].Bindings);
+        const auto& bindings = std::get<TTargetPartBindings>(plan.GetParts()[0].Bindings);
         UNIT_ASSERT_VALUES_EQUAL(bindings.Target, effects[0].Id);
         UNIT_ASSERT_VALUES_EQUAL(bindings.Container, effects[1].Id);
     }
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT(plan.Write(dirA.Container).Reason == EPhysicalWriteReason::GeneratedDirectoryContainer);
         UNIT_ASSERT_VALUES_EQUAL(TString(plan.Write(dirB.Target).Path.Value()), "/DirA/DirB");
         UNIT_ASSERT_VALUES_EQUAL(dirB.Container, dirA.Target);
-        const auto& create = std::get<TCreateTablePartBindings>(parts[2].Bindings);
+        const auto& create = std::get<TTargetPartBindings>(parts[2].Bindings);
         UNIT_ASSERT_VALUES_EQUAL(create.Container, effects[1].Id);
     }
 
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(copy.Source, src.Id);
         UNIT_ASSERT_VALUES_EQUAL(copy.DropStreams, TVector<TPlanEffectId>{stream.Id});
 
-        const auto& indexPart = std::get<TCreateIndexPartBindings>(parts[1].Bindings);
+        const auto& indexPart = std::get<TTargetWithSourcePartBindings>(parts[1].Bindings);
         UNIT_ASSERT_VALUES_EQUAL(indexPart.Target, index.Id);
         UNIT_ASSERT_VALUES_EQUAL(indexPart.Container, dst.Id);
         UNIT_ASSERT_VALUES_EQUAL(indexPart.Source, srcIndex.Id);
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(implPart.Source, srcImpl.Id);
         UNIT_ASSERT(implPart.DropStreams.empty());
 
-        const auto& seqPart = std::get<TCopySequencePartBindings>(parts[3].Bindings);
+        const auto& seqPart = std::get<TTargetWithSourcePartBindings>(parts[3].Bindings);
         UNIT_ASSERT_VALUES_EQUAL(seqPart.Target, seq.Id);
         UNIT_ASSERT_VALUES_EQUAL(seqPart.Container, dst.Id);
         UNIT_ASSERT_VALUES_EQUAL(seqPart.Source, srcSeq.Id);
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         THashMap<TPlanEffectId, TPlanEffectId> containerOf;
         for (const auto& part : parts) {
-            const auto& bindings = std::get<TDropPartBindings>(part.Bindings);
+            const auto& bindings = std::get<TTargetPartBindings>(part.Bindings);
             UNIT_ASSERT(!containerOf.contains(bindings.Target));
             containerOf[bindings.Target] = bindings.Container;
         }

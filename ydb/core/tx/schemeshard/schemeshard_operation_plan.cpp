@@ -107,6 +107,7 @@ ui32 TOperationPlanBuilder::AddGeneratedDirPart(ui32 requestIdx, NKikimrSchemeOp
     Plan.Parts.push_back(TPartBlueprint{
         .PartIdx = partIdx,
         .RequestIdx = requestIdx,
+        .Kind = EPlannedPartKind::MkDir,
         .Tx = std::move(tx),
         .Bindings = bindings,
     });
@@ -114,11 +115,12 @@ ui32 TOperationPlanBuilder::AddGeneratedDirPart(ui32 requestIdx, NKikimrSchemeOp
     return partIdx;
 }
 
-ui32 TOperationPlanBuilder::AddPart(ui32 requestIdx, NKikimrSchemeOp::TModifyScheme tx, TPartBindings bindings) {
+ui32 TOperationPlanBuilder::AddPart(ui32 requestIdx, EPlannedPartKind kind, NKikimrSchemeOp::TModifyScheme tx, TPartBindings bindings) {
     const ui32 partIdx = Plan.Parts.size();
     Plan.Parts.push_back(TPartBlueprint{
         .PartIdx = partIdx,
         .RequestIdx = requestIdx,
+        .Kind = kind,
         .Tx = std::move(tx),
         .Bindings = std::move(bindings),
     });

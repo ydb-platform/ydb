@@ -121,6 +121,11 @@ bool TOperationPlanner::SplitCreateTable(const TTxTransaction& tx, TTxTransactio
     return true;
 }
 
+TPath TOperationPlanner::AnchorCreateTable(TSchemeShard* ss, const TTxTransaction& tx) {
+    const TString& workingDir = tx.GetWorkingDir();
+    return workingDir.empty() ? TPath(ss) : TPath::Resolve(workingDir, ss);
+}
+
 bool TOperationPlanner::PlanCreateTable(ui32 requestIdx, const TTxTransaction& tx) {
     if (tx.GetWorkingDir().empty()) {
         return Fail(NKikimrScheme::StatusPathDoesNotExist, "WorkingDir is empty");
@@ -182,7 +187,7 @@ bool TOperationPlanner::PlanCreateTable(ui32 requestIdx, const TTxTransaction& t
     }
 
     if (!copying.HasCopyFromTable()) {
-        Builder.AddPart(requestIdx, create, TCreateTablePartBindings{*targetEffect, *containerEffect});
+        Builder.AddPart(requestIdx, EPlannedPartKind::CreateTable, create, TTargetPartBindings{*targetEffect, *containerEffect});
         return true;
     }
 
@@ -268,7 +273,7 @@ bool TOperationPlanner::PlanCreateTable(ui32 requestIdx, const TTxTransaction& t
             operation->MutableDropSrcCdcStream()->CopyFrom(copying.GetDropSrcCdcStream());
         }
 
-        Builder.AddPart(requestIdx, std::move(schema),
+        Builder.AddPart(requestIdx, EPlannedPartKind::CopyTable, std::move(schema),
             TCopyTablePartBindings{*targetEffect, *containerEffect, sourceEffect, std::move(dropStreams)});
     }
 
@@ -308,8 +313,13 @@ bool TOperationPlanner::PlanCreateTable(ui32 requestIdx, const TTxTransaction& t
         const TPlanEffectId srcIndexEffect = Builder.AddReference(*srcIndexRel, name, PathIdOf(childPath),
             EPlanRole::Source, EPlanOrigin::RequestImplied);
 
-        Builder.AddPart(requestIdx, std::move(schema),
-            TCreateIndexPartBindings{*indexEffect, *targetEffect, srcIndexEffect});
+        // Column tables use the OLAP local-index op; row tables use the generic one. The
+        // planner has the source in hand, so the decision is made here, once.
+        const bool localIndexOnColumnTable = TTableIndexInfo::IsLocalIndex(indexInfo->Type)
+            && srcPath.Base()->IsColumnTable();
+        Builder.AddPart(requestIdx,
+            localIndexOnColumnTable ? EPlannedPartKind::CreateColumnTableLocalIndex : EPlannedPartKind::CreateTableIndex,
+            std::move(schema), TTargetWithSourcePartBindings{*indexEffect, *targetEffect, srcIndexEffect});
 
         if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
             continue; // local indexes have no impl tables
@@ -354,7 +364,7 @@ bool TOperationPlanner::PlanCreateTable(ui32 requestIdx, const TTxTransaction& t
             Builder.AddPhysicalWrite(*srcImplRel, implTableName, PathIdOf(implTable),
                 EPlanObservation::MustWrite, EPhysicalWriteReason::SourceStateFlip, srcImplEffect);
 
-            Builder.AddPart(requestIdx, std::move(implSchema),
+            Builder.AddPart(requestIdx, EPlannedPartKind::CopyTable, std::move(implSchema),
                 TCopyTablePartBindings{*implEffect, *indexEffect, srcImplEffect, {}});
 
             if (!PlanCopySequences(requestIdx, create, implTable, implAbs, *implEffect, EPlanOrigin::PartDerived)) {
@@ -397,8 +407,8 @@ bool TOperationPlanner::PlanCopySequences(ui32 requestIdx, const TTxTransaction&
         const TPlanEffectId srcSeqEffect = Builder.AddReference(*srcSeqRel, subName, PathIdOf(subPath),
             EPlanRole::Source, origin);
 
-        Builder.AddPart(requestIdx, std::move(scheme),
-            TCopySequencePartBindings{*seqEffect, containerEffect, srcSeqEffect});
+        Builder.AddPart(requestIdx, EPlannedPartKind::CopySequence, std::move(scheme),
+            TTargetWithSourcePartBindings{*seqEffect, containerEffect, srcSeqEffect});
     }
     return true;
 }

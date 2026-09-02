@@ -128,7 +128,7 @@ Y_UNIT_TEST(BlueprintsBindPartsById) {
     copy.SetWorkingDir("/MyRoot/DirA");
     copy.MutableCreateTable()->SetName("Dst");
     copy.MutableCreateTable()->SetCopyFromTable("/MyRoot/Src");
-    const ui32 copyPart = builder.AddPart(request, copy, TCopyTablePartBindings{target, container, source, {stream}});
+    const ui32 copyPart = builder.AddPart(request, EPlannedPartKind::CopyTable, copy, TCopyTablePartBindings{target, container, source, {stream}});
 
     auto plan = builder.Seal();
     UNIT_ASSERT_VALUES_EQUAL(mkdirPart, 0u);

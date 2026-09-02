@@ -279,6 +279,10 @@ class TDropTableIndex: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    std::optional<EPlannedPartKind> PlannedPartKind() const override {
+        return EPlannedPartKind::DropTableIndex;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -299,11 +303,7 @@ public:
             return result;
         }
 
-        TPath index = IsPlanned()
-            ? PlannedPath(BindingsAs<TDropPartBindings>().Target, context)
-            : Transaction.GetDrop().HasId()
-                ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
-                : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath index = TargetPath(context);
 
         {
             TPath::TChecker checks = index.Check();
@@ -323,9 +323,7 @@ public:
             }
         }
 
-        TPath parentTable = IsPlanned()
-            ? PlannedPath(BindingsAs<TDropPartBindings>().Container, context)
-            : index.Parent();
+        TPath parentTable = ContainerPath(context);
         {
             TPath::TChecker checks = parentTable.Check();
             checks
@@ -401,7 +399,7 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
 
-    auto planResult = PlanOperation({tx}, context);
+    auto planResult = PlanOperation({tx}, context.SS);
     if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
         return {CreateReject(nextId, *rejected)};
     }

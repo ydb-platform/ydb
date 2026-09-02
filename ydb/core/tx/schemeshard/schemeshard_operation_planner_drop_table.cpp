@@ -11,6 +11,16 @@ namespace NKikimr::NSchemeShard {
 // The table named by the request, and the directory that loses it. Mirrors the checks the
 // former CreateDropIndexedTable made before it built any part, including what its reject
 // response carried for a table that is already going away.
+// A drop by id anchors on the object; a drop by name on its WorkingDir.
+TPath TOperationPlanner::AnchorDropTable(TSchemeShard* ss, const TTxTransaction& tx) {
+    const auto& drop = tx.GetDrop();
+    if (drop.HasId()) {
+        return TPath::Init(ss->MakeLocalId(drop.GetId()), ss);
+    }
+    const TString& workingDir = tx.GetWorkingDir();
+    return workingDir.empty() ? TPath(ss) : TPath::Resolve(workingDir, ss);
+}
+
 bool TOperationPlanner::PlanDropTable(ui32 requestIdx, const TTxTransaction& tx) {
     const auto& drop = tx.GetDrop();
 
@@ -66,7 +76,8 @@ bool TOperationPlanner::PlanDropTable(ui32 requestIdx, const TTxTransaction& tx)
 
     // DROP TABLE has no say in whether it drops a row or a column table; the object decides,
     // and a column table has nothing to cascade into.
-    Builder.AddPart(requestIdx, tx, TDropPartBindings{*targetEffect, *containerEffect});
+    Builder.AddPart(requestIdx, columnTable ? EPlannedPartKind::DropColumnTable : EPlannedPartKind::DropTable,
+        tx, TTargetPartBindings{*targetEffect, *containerEffect});
     if (columnTable) {
         return true;
     }
@@ -123,16 +134,16 @@ bool TOperationPlanner::PlanDropTableChildren(ui32 requestIdx, const TPath& tabl
         if (child.IsSequence()) {
             auto dropSequence = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
             dropSequence.MutableDrop()->SetName(ToString(child->Name));
-            Builder.AddPart(requestIdx, std::move(dropSequence), TDropPartBindings{*childEffect, tableEffect});
+            Builder.AddPart(requestIdx, EPlannedPartKind::DropSequence, std::move(dropSequence), TTargetPartBindings{*childEffect, tableEffect});
             continue;
         } else if (child.IsTableIndex()) {
             auto dropIndex = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
             dropIndex.MutableDrop()->SetName(ToString(child.Base()->Name));
-            Builder.AddPart(requestIdx, std::move(dropIndex), TDropPartBindings{*childEffect, tableEffect});
+            Builder.AddPart(requestIdx, EPlannedPartKind::DropTableIndex, std::move(dropIndex), TTargetPartBindings{*childEffect, tableEffect});
         } else if (child.IsCdcStream()) {
             auto dropStream = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
             dropStream.MutableDrop()->SetName(ToString(child.Base()->Name));
-            Builder.AddPart(requestIdx, std::move(dropStream), TDropPartBindings{*childEffect, tableEffect});
+            Builder.AddPart(requestIdx, EPlannedPartKind::DropCdcStreamImpl, std::move(dropStream), TTargetPartBindings{*childEffect, tableEffect});
         }
 
         for (const auto& [implName, implPathId] : child.Base()->GetChildren()) {
@@ -179,14 +190,14 @@ bool TOperationPlanner::PlanDropTableChildren(ui32 requestIdx, const TPath& tabl
             if (implPath.Base()->IsTable()) {
                 auto dropIndexTable = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
                 dropIndexTable.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-                Builder.AddPart(requestIdx, std::move(dropIndexTable), TDropPartBindings{*implEffect, *childEffect});
+                Builder.AddPart(requestIdx, EPlannedPartKind::DropTable, std::move(dropIndexTable), TTargetPartBindings{*implEffect, *childEffect});
                 if (!PlanDropTableChildren(requestIdx, implPath, *implEffect, EPlanOrigin::PartDerived)) {
                     return false;
                 }
             } else if (implPath.Base()->IsPQGroup()) {
                 auto dropPQGroup = TransactionTemplate(child.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
                 dropPQGroup.MutableDrop()->SetName(ToString(implPath.Base()->Name));
-                Builder.AddPart(requestIdx, std::move(dropPQGroup), TDropPartBindings{*implEffect, *childEffect});
+                Builder.AddPart(requestIdx, EPlannedPartKind::DropPersQueueGroup, std::move(dropPQGroup), TTargetPartBindings{*implEffect, *childEffect});
             }
         }
     }

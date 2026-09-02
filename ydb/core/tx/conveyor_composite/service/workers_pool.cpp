@@ -19,7 +19,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, co
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         Y_ENSURE((ui64)i.GetCategory() < categories.size(), "worker pool category index is out of range: " << (ui64)i.GetCategory());
-        Processes.emplace_back(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory()));
+        CategoryLinks.emplace_back(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory()));
     }
     for (ui64 i = 0; i < WorkersCount; ++i) {
         const double cpuLimit = config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetPossibleMaxLimitThreads());
@@ -184,7 +184,7 @@ bool TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
 }
 
 bool TWorkersPool::DrainTasks() {
-    if (ActiveWorkersIdx.empty() || Processes.empty()) {
+    if (ActiveWorkersIdx.empty() || CategoryLinks.empty()) {
         return false;
     }
     const auto predHeap = [](const TWeightedCategory& l, const TWeightedCategory& r) {
@@ -199,8 +199,8 @@ bool TWorkersPool::DrainTasks() {
         }
         return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
     };
-    std::make_heap(Processes.begin(), Processes.end(), predHeap);
-    std::vector<TWeightedCategory> procLocal = Processes;
+    std::make_heap(CategoryLinks.begin(), CategoryLinks.end(), predHeap);
+    std::vector<TWeightedCategory> procLocal = CategoryLinks;
     bool newTask = false;
     while (ActiveWorkersIdx.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
         TDuration predicted = TDuration::Zero();
@@ -226,7 +226,7 @@ bool TWorkersPool::DrainTasks() {
             RunTask(std::move(tasks), std::move(completionContexts));
         }
     }
-    for (auto&& i : Processes) {
+    for (auto&& i : CategoryLinks) {
         if (!i.GetCategory()->HasTasks()) {
             i.GetCounters()->NoTasks->Add(1);
         }
@@ -253,7 +253,7 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const
 
 void TWorkersPool::ApplyTopologyUpdate(
     const NConfig::TWorkersPool& config, const std::vector<std::shared_ptr<TProcessCategory>>& categories) {
-    std::vector<TWeightedCategory> oldProcesses = std::move(Processes);
+    std::vector<TWeightedCategory> oldProcesses = std::move(CategoryLinks);
     std::vector<TWeightedCategory> newProcesses;
     newProcesses.reserve(config.GetLinks().size());
 
@@ -275,13 +275,14 @@ void TWorkersPool::ApplyTopologyUpdate(
     for (auto& process : oldProcesses) {
         process.GetCounters()->ValueWeight->Set(0);
     }
-    Processes = std::move(newProcesses);
+    CategoryLinks = std::move(newProcesses);
 }
 
 void TWorkersPool::ClearTopology() {
-    for (auto& process : Processes) {
+    for (auto& process : CategoryLinks) {
         process.GetCounters()->ValueWeight->Set(0);
     }
+    CategoryLinks.clear();
 }
 
 }   // namespace NKikimr::NConveyorComposite

@@ -36,7 +36,7 @@ Default value: `12h`
     ||
 |#
 
-### Configuring User Lockout {#account-lockout}
+### Configuring User Lockout
 
 You can configure {{ ydb-short-name }} to lock a user account out after a specified number of failed attempts to enter the correct password. To configure user lockout, define the `account_lockout` subsection inside the `auth_config` section.
 

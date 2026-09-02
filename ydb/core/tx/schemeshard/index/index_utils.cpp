@@ -734,20 +734,29 @@ auto CalcFulltextDictImplTableDescImpl(
 auto CalcFulltextStatsImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const TVector<TString>& prefixColumns)
 {
     auto tableColumns = ExtractInfo(baseTable);
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::NFulltext::StatsTable);
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
-    {
+
+    if (prefixColumns.size()) {
+        // Key is prefix
+        const THashSet<TString> prefixColumnsSet{prefixColumns.begin(), prefixColumns.end()};
+        FillIndexImplTableColumns(GetColumns(baseTable), prefixColumns, prefixColumnsSet, implTableDesc);
+    } else {
+        // Key is a single unused uint32 __ydb_id column always equal to 0
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::IdColumn);
         col->SetType("Uint32");
         col->SetTypeId(Ydb::Type::UINT32);
         col->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames(NFulltext::IdColumn);
     }
+
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::DocCountColumn);
@@ -762,7 +771,6 @@ auto CalcFulltextStatsImplTableDescImpl(
         col->SetTypeId(NFulltext::DocCountType);
         col->SetNotNull(true);
     }
-    implTableDesc.AddKeyColumnNames(NFulltext::IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -999,17 +1007,19 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const TVector<TString>& prefixColumns)
 {
-    return CalcFulltextStatsImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc);
+    return CalcFulltextStatsImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, prefixColumns);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const TVector<TString>& prefixColumns)
 {
-    return CalcFulltextStatsImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc);
+    return CalcFulltextStatsImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, prefixColumns);
 }
 
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {

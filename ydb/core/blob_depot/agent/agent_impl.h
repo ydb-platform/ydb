@@ -652,6 +652,19 @@ namespace NKikimr::NBlobDepot {
             TQuery::TFinishCallback Finish;
             ui64 ReadId;
             ui32 SlowDownRetries = 0;
+            NWilson::TSpan Span;
+
+            void Complete(std::optional<TString> data, const char *error) {
+                if (Span) {
+                    if (data) {
+                        Span.EndOk();
+                    } else {
+                        Span.EndError(error ? error : "");
+                    }
+                }
+
+                Finish(std::move(data), error);
+            }
         };
 
         TBackoff S3GetBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};

@@ -1602,3 +1602,7 @@ IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSc
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

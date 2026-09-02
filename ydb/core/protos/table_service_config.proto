@@ -243,7 +243,8 @@ message TTableServiceConfig {
     optional uint32 CompileTimeoutMs = 12 [default = 60000];
     optional TResourceManager ResourceManager = 13;
     optional TQueryLimits QueryLimits = 14;
-    optional uint32 SqlVersion = 15 [default = 1, (InvalidateCompileCache) = true];
+    // Deprecated no-op retained for compatibility with existing configurations.
+    optional uint32 SqlVersion = 15 [default = 1, deprecated = true];
     optional TSpillingServiceConfig SpillingServiceConfig = 16;
     optional TShutdownSettings ShutdownSettings = 17;
     optional TSessionBalancerSettings SessionBalancerSettings = 18;
@@ -451,7 +452,8 @@ message TTableServiceConfig {
 
     optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
+    // Deprecated no-op retained for compatibility with existing configurations.
+    optional bool EnforceSqlVersionV1 = 107 [default = true, deprecated = true];
 
     enum EBackportMode {
         Released = 0;

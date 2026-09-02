@@ -266,3 +266,7 @@ const absl::flat_hash_set<ui64>& TKqpDatashardComputeContext::GetVolatileReadDep
 
 } // namespace NMiniKQL
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

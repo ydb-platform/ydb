@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -123,7 +123,6 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
-    bool EnsureAtMostOne = false;
 
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
@@ -150,7 +149,6 @@ private:
         StageId = other.StageId;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
-        EnsureAtMostOne = other.EnsureAtMostOne;
         Metadata = other.Metadata;
         Statistics = other.Statistics;
         JoinAlgo = other.JoinAlgo;
@@ -686,6 +684,40 @@ public:
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TVector<TExpression> JoinFilters;
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
+/**
+ * Dependent join based on Neumann "Unnesting Arbitrary Queries".
+ *
+ */
+class TOpDependentJoin: public IBinaryOperator {
+public:
+    TOpDependentJoin(TIntrusivePtr<IOperator> domain, TIntrusivePtr<IOperator> input, const TVector<TInfoUnit>& dependencies, TPositionHandle pos);
+
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "DependentJoin"; }
+
+    TIntrusivePtr<IOperator>& GetDomain() {
+        return GetLeftInput();
+    }
+
+    TIntrusivePtr<IOperator>& GetInput() {
+        return GetRightInput();
+    }
+
+    void SetInput(TIntrusivePtr<IOperator> newInput) {
+        SetRightInput(std::move(newInput));
+    }
+
+    TVector<TInfoUnit> Dependencies;
 
 protected:
     void ComputeOutputIUs() override;

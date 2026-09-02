@@ -22,7 +22,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
-#include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {

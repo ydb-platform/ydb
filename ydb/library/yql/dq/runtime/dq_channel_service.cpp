@@ -144,7 +144,9 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
-    if (!FinishPushed && !Finished.load()) {
+    if ((!FinishPushed && !Finished.load()) ||
+        data.Checkpoint // Checkpoints may be generated after channel finish
+    ) {
         if (data.Finished) {
             FinishPushed = true;
         }
@@ -211,7 +213,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         NeedToNotifyOutput.store(true);
     }
 
-    NotifyInput(false);
+    NotifyInput(Finished.load());
 }
 
 bool TLocalBuffer::IsFinished() {
@@ -458,7 +460,9 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         PushStats.Resume();
     }
 
-    if (FinishPushed.load() && !data.ConfirmFinish) {
+    if (FinishPushed.load() && !data.ConfirmFinish &&
+        !data.Checkpoint // Checkpoint traffic should be handled after finish
+    ) {
         return;
     }
 
@@ -780,7 +784,9 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
-    if (!Descriptor->IsTerminatedOrAborted() && !Descriptor->IsFinished()) {
+    if (!Descriptor->IsTerminatedOrAborted() && (!Descriptor->IsFinished() ||
+        data.Checkpoint // Checkpoints may be generated after channel finish
+    )) {
         Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
     }
 }
@@ -845,7 +851,11 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
             Finished.store(true);
             ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
-        return false;
+
+        // Checkpoints may be generated after channel finish
+        if (!data.Checkpoint) {
+            return false;
+        }
     }
 
     std::lock_guard lock(QueueMutex);
@@ -2505,7 +2515,6 @@ TString TDqChannelService::GetDebugInfo() {
 // TFastDqOutputChannel::
 
 bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) {
-
     if (PausedByCheckpoint) {
         return false;
     }

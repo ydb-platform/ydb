@@ -93,6 +93,10 @@ public:
         return *Categories[(ui64)category];
     }
 
+    bool IsCurrentConfig(const NConfig::TConfig& config) const {
+        return Config == config;
+    }
+
     bool StartConfigUpdate(const NConfig::TConfig& config,
         const NActors::TActorId& distributorActorId, TCounters& counters) {
         Y_ENSURE(config.IsEnabled() == Config.IsEnabled(), "runtime Enabled update is not supported yet");

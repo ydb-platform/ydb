@@ -21,6 +21,8 @@ private:
 public:
     TWorkerPoolCategoryUsage() = default;
 
+    bool operator==(const TWorkerPoolCategoryUsage&) const = default;
+
     TWorkerPoolCategoryUsage(const ESpecialTaskCategory cat)
         : Category(cat) {
     }
@@ -50,6 +52,8 @@ public:
     TThreadsCountInfo() = default;
     TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction);
 
+    bool operator==(const TThreadsCountInfo&) const = default;
+
     TString DebugString() const;
 
     ui64 GetThreadsCount(const ui64 totalThreadsCount) const {
@@ -70,6 +74,8 @@ private:
     YDB_READONLY(ui64, MaxBatchSize, 30);
 
 public:
+    bool operator==(const TWorkersPool&) const = default;
+
     const TString& GetName() const;
 
     double GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThreadsCount) const;
@@ -104,6 +110,8 @@ private:
     YDB_READONLY_DEF(std::vector<ui64>, WorkerPools);
 
 public:
+    bool operator==(const TCategory&) const = default;
+
     TString DebugString() const;
 
     [[nodiscard]] bool AddWorkerPool(const ui32 id) {
@@ -141,6 +149,8 @@ private:
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
 
 public:
+    bool operator==(const TConfig&) const = default;
+
     static NKikimrConfig::TCompositeConveyorConfig BuildDefaultProto();
     static TConfig BuildDefault();
 

@@ -672,18 +672,21 @@ void TKqpPlanner::PrepareCheckpoints() {
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
+        const bool enabledCheckpoints = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED;
+        const bool isIngress = NDq::IsIngress(settings);
         if (enabledCheckpoints && isIngress) {
             hasStreamingIngress = true;
             break;
         }
     }
+
     LOG_D("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
+
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
     }
+
     TasksGraph.GetMeta().CreateSuspended = hasStreamingIngress;
 }
 
@@ -918,22 +921,22 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
                 << ": task " << dqTask.Id << " has no ComputeActorId (node disconnected / task not started)");
             return;
         }
+
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
         auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-            dqTask.Id,
-            enabledCheckpoints,
-            isIngress,
-            TasksGraph.IsEgressTask(dqTask),
-            NYql::NDq::HasState(settings),
-            dqTask.ComputeActorId
+            .Id = dqTask.Id,
+            .IsCheckpointingEnabled = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED,
+            .IsIngress = NDq::IsIngress(settings),
+            .IsEgress = NDq::IsEgress(settings),
+            .HasState = NDq::HasState(settings),
+            .ActorId = dqTask.ComputeActorId,
         };
         event->Tasks.emplace_back(std::move(task));
     }
+
     LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
-    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+    TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
     CheckpointsReadyStateSent = true;
 }
 

@@ -5,8 +5,6 @@
 namespace NKikimr::NDDisk {
 
 struct TDDiskConfig {
-    bool UseSQPoll = false;
-    bool UseIOPoll = false;
     bool ForcePDiskFallback = false;
     bool EnableChecksums = true;
     // Bounds the memory TIntegrityManager spends on cached data block checksums / digests

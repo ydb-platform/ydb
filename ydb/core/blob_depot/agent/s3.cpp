@@ -30,13 +30,21 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId) {
-        Agent.IssueOrEnqueueS3Read(TPendingS3Read{
+        TPendingS3Read read{
             .Key = key,
             .Offset = offset,
             .Len = len,
             .Finish = std::move(finish),
             .ReadId = readId,
-        });
+            .Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                "BlobDepotAgent.ReadS3", NWilson::EFlags::AUTO_END),
+        };
+
+        if (read.Span) {
+            read.Span.Attribute("size", static_cast<i64>(len));
+        }
+
+        Agent.IssueOrEnqueueS3Read(std::move(read));
     }
 
     void TBlobDepotAgent::IssueOrEnqueueS3Read(TPendingS3Read&& read) {
@@ -94,7 +102,7 @@ namespace NKikimr::NBlobDepot {
                     ++*Agent.S3GetsOk;
                     *Agent.S3GetBytesOk += msg.Body.size();
                     const ui64 bytes = msg.Body.size();
-                    Read.Finish(std::move(msg.Body), "");
+                    Read.Complete(std::move(msg.Body), "");
                     Agent.OnS3GetCompleted(/*success=*/true, bytes);
                     PassAway();
                     return;
@@ -121,7 +129,7 @@ namespace NKikimr::NBlobDepot {
                     if (Read.SlowDownRetries >= MaxS3GetSlowDownRetries) {
                         const TString reason = TStringBuilder()
                             << "too many S3 SlowDown retries: " << error.GetMessage();
-                        Read.Finish(std::nullopt, reason.c_str());
+                        Read.Complete(std::nullopt, reason.c_str());
                     } else {
                         ++Read.SlowDownRetries;
                         Agent.IssueOrEnqueueS3Read(std::move(Read));
@@ -131,9 +139,9 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
-                    Read.Finish(std::nullopt, "data has disappeared from S3");
+                    Read.Complete(std::nullopt, "data has disappeared from S3");
                 } else {
-                    Read.Finish(std::nullopt, error.GetMessage().c_str());
+                    Read.Complete(std::nullopt, error.GetMessage().c_str());
                 }
                 Agent.OnS3GetCompleted(/*success=*/false, 0);
                 PassAway();
@@ -145,7 +153,7 @@ namespace NKikimr::NBlobDepot {
                     {"agentId", Agent.LogId},
                     {"readId", Read.ReadId});
                 ++*Agent.S3GetsError;
-                Read.Finish(std::nullopt, "wrapper actor terminated");
+                Read.Complete(std::nullopt, "wrapper actor terminated");
                 Agent.OnS3GetCompleted(/*success=*/false, 0);
                 PassAway();
             }

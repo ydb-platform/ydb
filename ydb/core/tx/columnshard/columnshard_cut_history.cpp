@@ -194,13 +194,13 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, con
     CutHistoryCutter->OnBatchComplete(disproved, msg->Exhausted, ctx);
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvCutHistoryBarrierDone::TPtr& ev, const TActorContext& /*ctx*/) {
+void TColumnShard::Handle(TEvPrivate::TEvCutHistoryBarrierDone::TPtr& ev, const TActorContext& ctx) {
     if (!CutHistoryCutter) {
         return;
     }
     const auto* msg = ev->Get();
     TEntryKey key{ msg->Channel, msg->FromGeneration };
-    CutHistoryCutter->OnBarrierResult(key, msg->Ok);
+    CutHistoryCutter->OnBarrierResult(key, msg->Ok, ctx.Now());
 }
 
 void TColumnShard::OnPortionAddedToEngine(const NOlap::TPortionDataAccessor& accessor) {

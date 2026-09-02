@@ -403,9 +403,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
             for (const auto& tabletEntries : RetainedCutHistory) {
                 for (const auto& e : tabletEntries.second) {
-                    auto copy = std::make_unique<TEvTablet::TEvCutTabletHistory>();
-                    copy->Record.CopyFrom(e->Record);
-                    NTabletPipe::SendData(ctx, HivePipeClient, copy.release());
+                    NTabletPipe::SendData(ctx, HivePipeClient, new TEvTablet::TEvCutTabletHistory(e->Record));
                 }
             }
         }
@@ -822,8 +820,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         });
         if (Connected) {
             // Keep a copy for future reconnects; the original goes to Hive now.
-            auto copy = std::make_unique<TEvTablet::TEvCutTabletHistory>();
-            copy->Record.CopyFrom(record);
+            auto copy = std::make_unique<TEvTablet::TEvCutTabletHistory>(record);
             if (existing) {
                 *existing = std::move(copy);
             } else if (entries.size() < MaxRetainedCutHistoryPerTablet) {

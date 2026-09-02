@@ -2411,7 +2411,7 @@ FROM `{table_name}`"""
 
     @pytest.mark.parametrize(
         "max_tasks_per_stage, expected_actor_count",
-        [(0, 20), (2, 2), (50, 27)],
+        [(1, 1), (0, 20), (50, 27)],
         ids=["default", "max_tasks_2", "max_tasks_50"],
     )
     def test_pq_source_actor_count(

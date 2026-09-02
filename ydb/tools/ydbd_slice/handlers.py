@@ -49,7 +49,7 @@ class Slice:
         self.yav_version = yav_version
         self.walle_provider = walle_provider
         self.__config_client = config_client.ConfigClient(
-            self.cluster_details.hosts[0].hostname,
+            self.nodes.nodes_list[0],
             self.cluster_details.grpc_config.get('port'),
             retry_count=10,
         )

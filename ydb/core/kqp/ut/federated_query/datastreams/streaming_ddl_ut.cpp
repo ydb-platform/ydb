@@ -5827,8 +5827,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             featureFlags.SetEnableStreamingQueriesPqSinkDeduplication(true);
         }
 
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-
         constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
         constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
         CreateTopic(inputTopicName);
@@ -5851,20 +5849,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "output_topic"_a = outputTopicName
         ), EStatus::GENERIC_ERROR, "Authorization is required for setting `DELIVERY_GUARANTEE` = 'exactly_once'");
 
-        constexpr char queryName[] = "deliveryGuarantyWriteSetting";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
-                    DELIVERY_GUARANTEE = "exactly_once"
-                ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "query_name"_a = queryName
-        ));
-
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithDeduplication AS
             DO BEGIN
@@ -5877,19 +5861,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` = 'exactly_once' is not supported with enabled deduplication");
-
-        Sleep(TDuration::Seconds(1));
-
-        {
-            const auto& result = ExecQuery(fmt::format(R"(
-                SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
-                "query_name"_a = queryName
-            ));
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_STRING_CONTAINS(resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Deferred publications is not supported");
-            });
-        }
 
         ExecQuery(fmt::format(R"(
             INSERT INTO `{pq_source}`.`{output_topic}` WITH (

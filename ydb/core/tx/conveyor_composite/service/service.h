@@ -28,8 +28,7 @@ private:
     std::shared_ptr<TTasksManager> Manager;
     TCounters Counters;
 
-    NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr PendingConfigNotification;
-    NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr QueuedConfigNotification;
+    NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr LatestConfigNotification;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
@@ -43,6 +42,7 @@ private:
     void SubscribeToCompositeConveyorConfig();
     void ScheduleConfigSubscriptionRetry();
     void ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void TryApplyLatestConfig();
     void CompleteConfigUpdate();
 
 public:

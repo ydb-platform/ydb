@@ -58,23 +58,35 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
         return;
     }
 
-    const auto& candidateProto = appConfig.GetCompositeConveyorConfig();
     YDB_LOG_INFO("",
         {"name", ConveyorName},
         {"action", "composite_conveyor_config_received"},
         {"hasConfig", true});
 
-    auto desiredConfig = NConfig::TConfig::BuildFromProto(candidateProto).DetachResult();
-    if (PendingConfigNotification) {
+    LatestConfigNotification = std::move(ev);
+    if (Manager->HasWorkersUpdateInProgress()) {
         YDB_LOG_INFO("",
             {"name", ConveyorName},
             {"action", "composite_conveyor_config_update_queued"});
-        QueuedConfigNotification = std::move(ev);
+        return;
+    }
+
+    TryApplyLatestConfig();
+}
+
+void TDistributor::TryApplyLatestConfig() {
+    Y_ENSURE(LatestConfigNotification, "config update attempt without a notification");
+    Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update attempt while another update is in progress");
+
+    const auto& candidateProto = LatestConfigNotification->Get()->Record.GetConfig().GetCompositeConveyorConfig();
+    auto desiredConfig = NConfig::TConfig::BuildFromProto(candidateProto).DetachResult();
+    if (Manager->IsCurrentConfig(desiredConfig)) {
+        ReplyConfigNotification(LatestConfigNotification);
+        LatestConfigNotification.Reset();
         return;
     }
 
     const bool updateFinished = Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters);
-    PendingConfigNotification = std::move(ev);
     if (updateFinished) {
         CompleteConfigUpdate();
     }
@@ -87,18 +99,9 @@ void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfig
 }
 
 void TDistributor::CompleteConfigUpdate() {
-    Y_ENSURE(PendingConfigNotification, "config update completion without a pending notification");
+    Y_ENSURE(LatestConfigNotification, "config update completion without a notification");
     Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update completion while workers update is still in progress");
-
-    if (QueuedConfigNotification) {
-        PendingConfigNotification.Reset();
-        auto queuedConfigNotification = std::move(QueuedConfigNotification);
-        HandleMain(queuedConfigNotification);
-        return;
-    }
-
-    ReplyConfigNotification(PendingConfigNotification);
-    PendingConfigNotification.Reset();
+    TryApplyLatestConfig();
 }
 
 void TDistributor::HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {

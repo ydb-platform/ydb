@@ -165,28 +165,6 @@ IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
     return CreateUserFacingTraceRendererActor(std::move(snapshot));
 }
 
-IActor* CreateRejectedUserFacingTraceRenderer(
-        const NPrivateEvents::TEvQueryRequest& request,
-        Ydb::StatusIds::StatusCode status) {
-    NWilson::TTraceId traceId = request.GetUserFacingWilsonTraceId();
-    if (!traceId) {
-        return nullptr;
-    }
-
-    TRejectedUserFacingQuerySnapshot snapshot;
-    snapshot.TraceId = std::move(traceId);
-    if (request.GetQuerySize() <= MaxUserFacingQueryTextSize) {
-        snapshot.QueryText = request.GetQuery();
-    }
-    snapshot.ProxyRequestHops.assign(request.Record.GetProxyRequestHops().begin(),
-        request.Record.GetProxyRequestHops().end());
-    snapshot.RejectedAt = MapUserFacingSessionStart(TInstant::Now(),
-        TInstant::MicroSeconds(request.Record.GetUserFacingTraceOriginSentAtUs()),
-        request.Record.GetProxyRequestHops());
-    snapshot.Status = status;
-    return CreateRejectedUserFacingTraceRendererActor(std::move(snapshot));
-}
-
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -3540,7 +3518,7 @@ public:
             response->Record.SetUserFacingTraceCoverage("rejected_before_query_state");
         }
 
-        IActor* userFacingRenderer = CreateRejectedUserFacingTraceRenderer(
+        IActor* userFacingRenderer = CreateRejectedUserFacingTraceRendererActor(
             *request->Get(), ydbStatus);
 
         Send(request->Sender, response.release(), 0, proxyRequestId);

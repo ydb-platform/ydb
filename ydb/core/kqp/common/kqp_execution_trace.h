@@ -182,6 +182,47 @@ private:
     EExecutionPhase CurrentPhase = EExecutionPhase::Count;
 };
 
+// Captures SchemeCache request envelopes without exposing timestamp bookkeeping to the resolver.
+struct TTableResolverDiagnostics {
+    TTimeWindow Navigate;
+    TTimeWindow ResolveKeys;
+};
+
+class TTableResolverDiagnosticsCapture {
+public:
+    void OnNavigateStarted();
+    void OnNavigateFinished();
+    void OnResolveKeysStarted();
+    void OnResolveKeysFinished();
+
+    TTableResolverDiagnostics Finish();
+
+private:
+    TTableResolverDiagnostics Snapshot;
+};
+
+// Owns commit phase transitions and bounded shard acknowledgements for one commit attempt.
+class TCommitDiagnosticsCapture {
+public:
+    TCommitDiagnosticsCapture(bool collectTimeline, bool collectShards);
+
+    void OnPrepareStarted(TInstant at);
+    void OnImmediateCommitStarted(TInstant at);
+    void OnDistributedCommitStarted(TInstant at);
+    void OnCoordinatorPlanned();
+    void OnShardPrepared(ui64 shardId);
+    void OnShardCommitted(ui64 shardId);
+
+    TCommitDiagnostics Finish();
+
+private:
+    bool CollectTimeline = false;
+    bool CollectShards = false;
+    TShardAckDiagnosticsCollector PreparedShards;
+    TShardAckDiagnosticsCollector CommittedShards;
+    TCommitDiagnostics Snapshot;
+};
+
 void TrimExecutionTraceSnapshot(TExecutionTraceSnapshot& snapshot);
 
 void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots);

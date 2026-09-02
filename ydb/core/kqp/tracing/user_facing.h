@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <util/generic/string.h>
@@ -17,6 +18,10 @@ class IActor;
 }
 
 namespace NKikimr::NKqp {
+
+namespace NPrivateEvents {
+struct TEvQueryRequest;
+}
 
 constexpr size_t MaxUserFacingSpansPerQuery = 1000;
 constexpr size_t MaxUserFacingQueryTextSize = 64 * 1024;
@@ -147,9 +152,42 @@ struct TProxyUserFacingTraceSnapshot {
     TString Coverage;
 };
 
+// Owns the entry-proxy root and converts monotonic hop measurements to Wilson timestamps.
+class TProxyUserFacingTraceContext {
+public:
+    explicit TProxyUserFacingTraceContext(NPrivateEvents::TEvQueryRequest& request);
+
+    TProxyUserFacingTraceContext(const TProxyUserFacingTraceContext&) = delete;
+    TProxyUserFacingTraceContext& operator=(const TProxyUserFacingTraceContext&) = delete;
+    TProxyUserFacingTraceContext(TProxyUserFacingTraceContext&&) = default;
+    TProxyUserFacingTraceContext& operator=(TProxyUserFacingTraceContext&&) = default;
+
+    void MarkSent(ui32 sourceNodeId, ui32 targetNodeId,
+        NPrivateEvents::TEvQueryRequest& request);
+
+    std::optional<TProxyUserFacingTraceSnapshot> Detach(
+        Ydb::StatusIds::StatusCode status, ui32 nodeId,
+        TString name = {}, TString operation = {}, TString coverage = {});
+
+    bool IsOrigin() const;
+
+private:
+    NWilson::TTraceId ParentTraceId;
+    NWilson::TTraceId RootTraceId;
+    TInstant StartedAt;
+    NActors::TMonotonic MonotonicStartedAt;
+    NKikimrKqp::EQueryAction Action;
+    TInstant SentAt;
+    ui32 TargetNodeId = 0;
+    bool HasStart = false;
+    bool Origin = false;
+};
+
 NActors::IActor* CreateUserFacingTraceRendererActor(TUserFacingQuerySnapshot snapshot);
 NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
     TRejectedUserFacingQuerySnapshot snapshot);
+NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
+    const NPrivateEvents::TEvQueryRequest& request, Ydb::StatusIds::StatusCode status);
 NActors::IActor* CreateProxyUserFacingTraceRendererActor(
     TProxyUserFacingTraceSnapshot snapshot);
 

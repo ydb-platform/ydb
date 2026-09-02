@@ -30,7 +30,8 @@ public:
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
         , TasksGraph(tasksGraph)
-        , CollectTimeline(tasksGraph.GetMeta().CollectTimeline) {}
+        , Diagnostics(tasksGraph.GetMeta().CollectTimeline
+            ? std::make_unique<TTableResolverDiagnosticsCapture>() : nullptr) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -66,8 +67,8 @@ private:
     }
 
     void HandleResolveNames(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (CollectTimeline) {
-            NavigateWindow.End = TInstant::Now();
+        if (Diagnostics) {
+            Diagnostics->OnNavigateFinished();
         }
         if (ShouldTerminate) {
             PassAway();
@@ -232,8 +233,8 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (CollectTimeline) {
-            NavigateWindow.End = TInstant::Now();
+        if (Diagnostics) {
+            Diagnostics->OnNavigateFinished();
         }
         AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
@@ -277,8 +278,8 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
-        if (CollectTimeline) {
-            ResolveKeysWindow.End = TInstant::Now();
+        if (Diagnostics) {
+            Diagnostics->OnResolveKeysFinished();
         }
         AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
@@ -478,8 +479,8 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            if (CollectTimeline && NavigateWindow.Start == TInstant::Zero()) {
-                NavigateWindow.Start = TInstant::Now();
+            if (Diagnostics) {
+                Diagnostics->OnNavigateStarted();
             }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
             Become(&TKqpTableResolver::ResolveNamesState);
@@ -487,15 +488,15 @@ private:
         }
 
         if (requestNavigate->ResultSet.size()) {
-            if (CollectTimeline && NavigateWindow.Start == TInstant::Zero()) {
-                NavigateWindow.Start = TInstant::Now();
+            if (Diagnostics) {
+                Diagnostics->OnNavigateStarted();
             }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
         } else {
             NavigationFinished = true;
         }
-        if (CollectTimeline) {
-            ResolveKeysWindow.Start = TInstant::Now();
+        if (Diagnostics) {
+            Diagnostics->OnResolveKeysStarted();
         }
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         Become(&TKqpTableResolver::ResolveKeysState);
@@ -538,17 +539,7 @@ private:
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));
         replyEv->CpuTime = CpuTime;
-        if (CollectTimeline) {
-            const TInstant failedAt = TInstant::Now();
-            if (NavigateWindow.Start != TInstant::Zero() && NavigateWindow.End == TInstant::Zero()) {
-                NavigateWindow.End = failedAt;
-            }
-            if (ResolveKeysWindow.Start != TInstant::Zero() && ResolveKeysWindow.End == TInstant::Zero()) {
-                ResolveKeysWindow.End = failedAt;
-            }
-            replyEv->NavigateWindow = NavigateWindow;
-            replyEv->ResolveKeysWindow = ResolveKeysWindow;
-        }
+        AttachDiagnostics(*replyEv);
         Send(Owner, replyEv.release());
         PassAway();
     }
@@ -559,18 +550,24 @@ private:
         }
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->CpuTime = CpuTime;
-        replyEv->NavigateWindow = NavigateWindow;
-        replyEv->ResolveKeysWindow = ResolveKeysWindow;
+        AttachDiagnostics(*replyEv);
 
         Send(Owner, replyEv.release());
         PassAway();
     }
 
+    void AttachDiagnostics(TEvKqpExecuter::TEvTableResolveStatus& reply) {
+        if (!Diagnostics) {
+            return;
+        }
+        auto snapshot = Diagnostics->Finish();
+        reply.NavigateWindow = snapshot.Navigate;
+        reply.ResolveKeysWindow = snapshot.ResolveKeys;
+    }
+
 private:
     const TActorId Owner;
     const ui64 TxId;
-    TTimeWindow NavigateWindow;
-    TTimeWindow ResolveKeysWindow;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     THashMap<TString, TVector<TStageId>> TableRequestPathes;
@@ -582,7 +579,7 @@ private:
 
     // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
     TKqpTasksGraph& TasksGraph;
-    const bool CollectTimeline;
+    std::unique_ptr<TTableResolverDiagnosticsCapture> Diagnostics;
 
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;

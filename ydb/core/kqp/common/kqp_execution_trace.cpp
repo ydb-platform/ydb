@@ -31,6 +31,12 @@ auto ExecutionRank(const TExecutionTraceSnapshot& trace) {
     return std::tuple(Failed(trace.Status), anomalous, durationUs);
 }
 
+void CloseOpenWindow(TTimeWindow& window, TInstant at) {
+    if (window.Start != TInstant::Zero() && window.End == TInstant::Zero()) {
+        window.End = at;
+    }
+}
+
 // Online shard collection, compile dependency collection, and final query-wide top-N intentionally
 // stay separate: they update entries differently, protect different in-flight state, and apply
 // distinct eviction rules; one generic container would obscure these invariants.
@@ -151,6 +157,90 @@ void TExecutionDiagnosticsCapture::EndCurrentPhase(TInstant finishAt) {
         Snapshot.Timeline.Phase(CurrentPhase).End = finishAt;
         CurrentPhase = EExecutionPhase::Count;
     }
+}
+
+void TTableResolverDiagnosticsCapture::OnNavigateStarted() {
+    if (Snapshot.Navigate.Start == TInstant::Zero()) {
+        Snapshot.Navigate.Start = TInstant::Now();
+    }
+}
+
+void TTableResolverDiagnosticsCapture::OnNavigateFinished() {
+    Snapshot.Navigate.End = TInstant::Now();
+}
+
+void TTableResolverDiagnosticsCapture::OnResolveKeysStarted() {
+    Snapshot.ResolveKeys.Start = TInstant::Now();
+}
+
+void TTableResolverDiagnosticsCapture::OnResolveKeysFinished() {
+    Snapshot.ResolveKeys.End = TInstant::Now();
+}
+
+TTableResolverDiagnostics TTableResolverDiagnosticsCapture::Finish() {
+    const TInstant finishedAt = TInstant::Now();
+    CloseOpenWindow(Snapshot.Navigate, finishedAt);
+    CloseOpenWindow(Snapshot.ResolveKeys, finishedAt);
+    return std::move(Snapshot);
+}
+
+TCommitDiagnosticsCapture::TCommitDiagnosticsCapture(bool collectTimeline, bool collectShards)
+    : CollectTimeline(collectTimeline)
+    , CollectShards(collectShards)
+{}
+
+void TCommitDiagnosticsCapture::OnPrepareStarted(TInstant at) {
+    if (CollectTimeline) {
+        Snapshot.PrepareShards.Start = at;
+    }
+}
+
+void TCommitDiagnosticsCapture::OnImmediateCommitStarted(TInstant at) {
+    if (CollectTimeline) {
+        Snapshot.ApplyShards.Start = at;
+    }
+}
+
+void TCommitDiagnosticsCapture::OnDistributedCommitStarted(TInstant at) {
+    if (CollectTimeline) {
+        Snapshot.PrepareShards.End = at;
+        Snapshot.Coordinator.Start = at;
+    }
+}
+
+void TCommitDiagnosticsCapture::OnCoordinatorPlanned() {
+    if (CollectTimeline) {
+        Snapshot.Coordinator.End = TInstant::Now();
+        Snapshot.ApplyShards.Start = Snapshot.Coordinator.End;
+    }
+}
+
+void TCommitDiagnosticsCapture::OnShardPrepared(ui64 shardId) {
+    if (CollectShards && shardId) {
+        PreparedShards.OnAck(shardId);
+    }
+}
+
+void TCommitDiagnosticsCapture::OnShardCommitted(ui64 shardId) {
+    if (CollectShards && shardId) {
+        CommittedShards.OnAck(shardId);
+    }
+}
+
+TCommitDiagnostics TCommitDiagnosticsCapture::Finish() {
+    if (CollectTimeline) {
+        const TInstant finishedAt = TInstant::Now();
+        CloseOpenWindow(Snapshot.PrepareShards, finishedAt);
+        CloseOpenWindow(Snapshot.Coordinator, finishedAt);
+        CloseOpenWindow(Snapshot.ApplyShards, finishedAt);
+    }
+    if (CollectShards) {
+        Snapshot.PreparedShards = PreparedShards.Shards();
+        Snapshot.CommittedShards = CommittedShards.Shards();
+        Snapshot.PreparedShardsTruncated = PreparedShards.Dropped();
+        Snapshot.CommittedShardsTruncated = CommittedShards.Dropped();
+    }
+    return std::move(Snapshot);
 }
 
 void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots) {

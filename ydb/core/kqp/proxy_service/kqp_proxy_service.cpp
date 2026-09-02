@@ -83,46 +83,6 @@ static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
-NActors::IActor* CreateProxyUserFacingTraceRenderer(TProxyUserFacingTraceContext& context,
-        Ydb::StatusIds::StatusCode status, ui32 nodeId,
-        TString name = {}, TString operation = {}, TString coverage = {}) {
-    if (!context.IsOrigin()) {
-        return nullptr;
-    }
-    auto [parentTraceId, rootTraceId] = context.Take();
-    if (!parentTraceId || !rootTraceId) {
-        return nullptr;
-    }
-    const auto& seed = context.GetSeed();
-    const TInstant finishedAt = seed
-        ? seed->StartTime + (NActors::TMonotonic::Now() - seed->StartedAt)
-        : TInstant::Now();
-    const TInstant startedAt = seed ? seed->StartTime : finishedAt;
-    const bool hasSessionTrace = bool(name);
-    if (!hasSessionTrace) {
-        name = NKikimrKqp::EQueryAction_Name(context.GetAction());
-        constexpr TStringBuf prefix = "QUERY_ACTION_";
-        if (name.StartsWith(prefix)) {
-            name = name.substr(prefix.size());
-        }
-        operation = name;
-    }
-    return CreateProxyUserFacingTraceRendererActor({
-        .ParentTraceId = std::move(parentTraceId),
-        .RootTraceId = std::move(rootTraceId),
-        .StartedAt = startedAt,
-        .SentAt = context.GetSentAt(),
-        .FinishedAt = finishedAt,
-        .Name = std::move(name),
-        .Operation = std::move(operation),
-        .Status = status,
-        .NodeId = nodeId,
-        .TargetNodeId = context.GetTargetNodeId(),
-        .HasSessionTrace = hasSessionTrace,
-        .Coverage = std::move(coverage),
-    });
-}
-
 using VSessions = NKikimr::NSysView::Schema::QuerySessions;
 using namespace NKikimrConfig;
 
@@ -896,23 +856,8 @@ public:
             {"targetId", targetId});
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
-        TInstant userFacingTraceSentAt;
-        if (ev->Get()->Record.HasUserFacingTraceId()) {
-            const auto& seed = ev->Get()->GetProxyTraceSeed();
-            Y_ABORT_UNLESS(seed);
-            const TDuration hopDuration = TMonotonic::Now() - seed->StartedAt;
-            userFacingTraceSentAt = seed->StartTime + hopDuration;
-            if (!ev->Get()->Record.HasUserFacingTraceOriginSentAtUs()) {
-                ev->Get()->Record.SetUserFacingTraceOriginSentAtUs(
-                    userFacingTraceSentAt.MicroSeconds());
-            }
-            auto* hop = ev->Get()->Record.AddProxyRequestHops();
-            hop->SetNodeId(SelfId().NodeId());
-            hop->SetTargetNodeId(targetId.NodeId());
-            hop->SetDurationUs(hopDuration.MicroSeconds());
-        }
         PendingRequests.MarkUserFacingTraceSent(
-            requestId, targetId.NodeId(), userFacingTraceSentAt);
+            requestId, SelfId().NodeId(), targetId.NodeId(), *ev->Get());
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -1103,10 +1048,13 @@ public:
         if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
             if (proxyRequest->UserFacingTrace) {
                 const auto& record = ev->Get()->Record;
-                userFacingRenderer = CreateProxyUserFacingTraceRenderer(
-                    *proxyRequest->UserFacingTrace, record.GetYdbStatus(), SelfId().NodeId(),
-                    record.GetUserFacingTraceName(), record.GetUserFacingTraceOperation(),
-                    record.GetUserFacingTraceCoverage());
+                if (auto snapshot = proxyRequest->UserFacingTrace->Detach(
+                        record.GetYdbStatus(), SelfId().NodeId(),
+                        record.GetUserFacingTraceName(), record.GetUserFacingTraceOperation(),
+                        record.GetUserFacingTraceCoverage())) {
+                    userFacingRenderer = CreateProxyUserFacingTraceRendererActor(
+                        std::move(*snapshot));
+                }
             }
         }
 
@@ -1148,9 +1096,11 @@ public:
         IActor* renderer = nullptr;
         if (proxyRequest->UserFacingTrace) {
             const auto& record = ev->Get()->Record;
-            renderer = CreateProxyUserFacingTraceRenderer(
-                *proxyRequest->UserFacingTrace, record.GetYdbStatus(), SelfId().NodeId(),
-                record.GetName(), record.GetOperation(), record.GetCoverage());
+            if (auto snapshot = proxyRequest->UserFacingTrace->Detach(
+                    record.GetYdbStatus(), SelfId().NodeId(),
+                    record.GetName(), record.GetOperation(), record.GetCoverage())) {
+                renderer = CreateProxyUserFacingTraceRendererActor(std::move(*snapshot));
+            }
         }
         if (renderer) {
             Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
@@ -1875,9 +1825,9 @@ private:
                 auto* request = static_cast<TEvKqp::TEvQueryRequest*>(requestEvent->GetBase());
                 if (request && request->Record.HasUserFacingTraceId()) {
                     TProxyUserFacingTraceContext trace(*request);
-                    if (IActor* renderer = CreateProxyUserFacingTraceRenderer(
-                            trace, status, SelfId().NodeId())) {
-                        Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+                    if (auto snapshot = trace.Detach(status, SelfId().NodeId())) {
+                        Register(CreateProxyUserFacingTraceRendererActor(std::move(*snapshot)),
+                            TMailboxType::HTSwap, AppData()->BatchPoolId);
                     }
                 }
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();

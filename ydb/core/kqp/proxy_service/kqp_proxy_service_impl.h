@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/tracing/user_facing.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/services/workload_manager/query_classifier.h>
@@ -28,67 +29,6 @@
 namespace NKikimr::NKqp {
 
 using TNodeId = ui32;
-
-// The entry proxy owns the root; forwarded actors only receive its id as a parent.
-class TProxyUserFacingTraceContext {
-public:
-    explicit TProxyUserFacingTraceContext(NPrivateEvents::TEvQueryRequest& request)
-        : ParentTraceId(request.GetUserFacingWilsonTraceId())
-        , Seed(request.GetProxyTraceSeed())
-        , Action(request.GetAction())
-        , Origin(request.Record.ProxyRequestHopsSize() == 0)
-    {
-        if (Origin) {
-            RootTraceId = ParentTraceId.Span(ParentTraceId.GetVerbosity());
-            RootTraceId.Serialize(request.Record.MutableUserFacingTraceId());
-        } else {
-            RootTraceId = NWilson::TTraceId(ParentTraceId);
-        }
-    }
-
-    TProxyUserFacingTraceContext(const TProxyUserFacingTraceContext&) = delete;
-    TProxyUserFacingTraceContext& operator=(const TProxyUserFacingTraceContext&) = delete;
-    TProxyUserFacingTraceContext(TProxyUserFacingTraceContext&&) = default;
-    TProxyUserFacingTraceContext& operator=(TProxyUserFacingTraceContext&&) = default;
-
-    std::pair<NWilson::TTraceId, NWilson::TTraceId> Take() {
-        return {std::move(ParentTraceId), std::move(RootTraceId)};
-    }
-
-    void MarkSent(ui32 targetNodeId, TInstant sentAt) {
-        TargetNodeId = targetNodeId;
-        SentAt = sentAt;
-    }
-
-    const auto& GetSeed() const {
-        return Seed;
-    }
-
-    NKikimrKqp::EQueryAction GetAction() const {
-        return Action;
-    }
-
-    TInstant GetSentAt() const {
-        return SentAt;
-    }
-
-    ui32 GetTargetNodeId() const {
-        return TargetNodeId;
-    }
-
-    bool IsOrigin() const {
-        return Origin;
-    }
-
-private:
-    NWilson::TTraceId ParentTraceId;
-    NWilson::TTraceId RootTraceId;
-    std::optional<NPrivateEvents::TEvQueryRequest::TProxyTraceSeed> Seed;
-    NKikimrKqp::EQueryAction Action;
-    TInstant SentAt;
-    ui32 TargetNodeId = 0;
-    bool Origin = false;
-};
 
 struct TKqpProxyRequest {
     TActorId Sender;
@@ -119,9 +59,10 @@ struct TKqpProxyRequest {
         }
     }
 
-    void MarkUserFacingTraceSent(ui32 targetNodeId, TInstant sentAt) {
+    void MarkUserFacingTraceSent(ui32 sourceNodeId, ui32 targetNodeId,
+            NPrivateEvents::TEvQueryRequest& request) {
         if (UserFacingTrace) {
-            UserFacingTrace->MarkSent(targetNodeId, sentAt);
+            UserFacingTrace->MarkSent(sourceNodeId, targetNodeId, request);
         }
     }
 };
@@ -161,9 +102,10 @@ public:
         ptr->SetSessionId(sessionId, dbCounters);
     }
 
-    void MarkUserFacingTraceSent(ui64 requestId, ui32 targetNodeId, TInstant sentAt) {
+    void MarkUserFacingTraceSent(ui64 requestId, ui32 sourceNodeId, ui32 targetNodeId,
+            NPrivateEvents::TEvQueryRequest& request) {
         if (auto* ptr = PendingRequests.FindPtr(requestId)) {
-            ptr->MarkUserFacingTraceSent(targetNodeId, sentAt);
+            ptr->MarkUserFacingTraceSent(sourceNodeId, targetNodeId, request);
         }
     }
 

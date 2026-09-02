@@ -1,5 +1,6 @@
 #include "user_facing.h"
 
+#include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -8,6 +9,100 @@
 #include <vector>
 
 namespace NKikimr::NKqp {
+
+TProxyUserFacingTraceContext::TProxyUserFacingTraceContext(
+        NPrivateEvents::TEvQueryRequest& request)
+    : ParentTraceId(request.GetUserFacingWilsonTraceId())
+    , Action(request.GetAction())
+    , Origin(request.Record.ProxyRequestHopsSize() == 0) {
+    if (const auto& seed = request.GetProxyTraceSeed()) {
+        StartedAt = seed->StartTime;
+        MonotonicStartedAt = seed->StartedAt;
+        HasStart = true;
+    }
+    if (Origin) {
+        RootTraceId = ParentTraceId.Span(ParentTraceId.GetVerbosity());
+        RootTraceId.Serialize(request.Record.MutableUserFacingTraceId());
+    } else {
+        RootTraceId = NWilson::TTraceId(ParentTraceId);
+    }
+}
+
+void TProxyUserFacingTraceContext::MarkSent(ui32 sourceNodeId, ui32 targetNodeId,
+        NPrivateEvents::TEvQueryRequest& request) {
+    Y_ABORT_UNLESS(HasStart);
+    const TDuration hopDuration = NActors::TMonotonic::Now() - MonotonicStartedAt;
+    SentAt = StartedAt + hopDuration;
+    TargetNodeId = targetNodeId;
+    if (!request.Record.HasUserFacingTraceOriginSentAtUs()) {
+        request.Record.SetUserFacingTraceOriginSentAtUs(SentAt.MicroSeconds());
+    }
+    auto* hop = request.Record.AddProxyRequestHops();
+    hop->SetNodeId(sourceNodeId);
+    hop->SetTargetNodeId(targetNodeId);
+    hop->SetDurationUs(hopDuration.MicroSeconds());
+}
+
+std::optional<TProxyUserFacingTraceSnapshot> TProxyUserFacingTraceContext::Detach(
+        Ydb::StatusIds::StatusCode status, ui32 nodeId,
+        TString name, TString operation, TString coverage) {
+    if (!Origin || !ParentTraceId || !RootTraceId) {
+        return std::nullopt;
+    }
+    const TInstant finishedAt = HasStart
+        ? StartedAt + (NActors::TMonotonic::Now() - MonotonicStartedAt)
+        : TInstant::Now();
+    const TInstant startedAt = HasStart ? StartedAt : finishedAt;
+    const bool hasSessionTrace = bool(name);
+    if (!hasSessionTrace) {
+        name = NKikimrKqp::EQueryAction_Name(Action);
+        constexpr TStringBuf prefix = "QUERY_ACTION_";
+        if (name.StartsWith(prefix)) {
+            name = name.substr(prefix.size());
+        }
+        operation = name;
+    }
+    return TProxyUserFacingTraceSnapshot{
+        .ParentTraceId = std::move(ParentTraceId),
+        .RootTraceId = std::move(RootTraceId),
+        .StartedAt = startedAt,
+        .SentAt = SentAt,
+        .FinishedAt = finishedAt,
+        .Name = std::move(name),
+        .Operation = std::move(operation),
+        .Status = status,
+        .NodeId = nodeId,
+        .TargetNodeId = TargetNodeId,
+        .HasSessionTrace = hasSessionTrace,
+        .Coverage = std::move(coverage),
+    };
+}
+
+bool TProxyUserFacingTraceContext::IsOrigin() const {
+    return Origin;
+}
+
+NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
+        const NPrivateEvents::TEvQueryRequest& request,
+        Ydb::StatusIds::StatusCode status) {
+    NWilson::TTraceId traceId = request.GetUserFacingWilsonTraceId();
+    if (!traceId) {
+        return nullptr;
+    }
+
+    TRejectedUserFacingQuerySnapshot snapshot;
+    snapshot.TraceId = std::move(traceId);
+    if (request.GetQuerySize() <= MaxUserFacingQueryTextSize) {
+        snapshot.QueryText = request.GetQuery();
+    }
+    snapshot.ProxyRequestHops.assign(request.Record.GetProxyRequestHops().begin(),
+        request.Record.GetProxyRequestHops().end());
+    snapshot.RejectedAt = MapUserFacingSessionStart(TInstant::Now(),
+        TInstant::MicroSeconds(request.Record.GetUserFacingTraceOriginSentAtUs()),
+        request.Record.GetProxyRequestHops());
+    snapshot.Status = status;
+    return CreateRejectedUserFacingTraceRendererActor(std::move(snapshot));
+}
 
 TInstant MapUserFacingSessionStart(TInstant localStart, TInstant originSentAt,
         const google::protobuf::RepeatedPtrField<NKikimrKqp::TProxyRequestHop>& proxyHops) {

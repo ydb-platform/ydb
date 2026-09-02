@@ -123,7 +123,7 @@ namespace NKikimr::NBlobDepot {
     void TS3Manager::HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
         const TMonotonic now = TActivationContext::Monotonic();
         const bool timeThrottled = now < PutThrottleUntil;
-        const bool concurrencyThrottled = S3WritesInFlight >= CurrentMaxWritesInFlight;
+        const bool concurrencyThrottled = S3WritesInFlight >= EffectiveMaxWritesInFlight();
 
         if (timeThrottled || concurrencyThrottled) {
             YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3 queued",
@@ -132,7 +132,7 @@ namespace NKikimr::NBlobDepot {
                 {"timeThrottled", timeThrottled},
                 {"concurrencyThrottled", concurrencyThrottled},
                 {"S3WritesInFlight", S3WritesInFlight},
-                {"currentMaxWritesInFlight", CurrentMaxWritesInFlight},
+                {"currentMaxWritesInFlight", EffectiveMaxWritesInFlight()},
                 {"queueSize", PendingPrepareWrites.size()});
             PendingPrepareWrites.push_back(std::move(ev));
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
@@ -161,7 +161,7 @@ namespace NKikimr::NBlobDepot {
         Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUT_THROTTLE_ACTIVATIONS] += 1;
 
         CurrentMaxWritesInFlight = 1;
-        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = EffectiveMaxWritesInFlight();
         ConsecutiveSuccessfulWriteBatches = 0;
         const TDuration delay = PutBackoff.Next();
         PutThrottleUntil = TActivationContext::Monotonic() + delay;
@@ -170,7 +170,7 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDTS22"},
             {"id", Self->GetLogId()},
             {"delay", delay},
-            {"currentMaxWritesInFlight", CurrentMaxWritesInFlight},
+            {"currentMaxWritesInFlight", EffectiveMaxWritesInFlight()},
             {"S3WritesInFlight", S3WritesInFlight},
             {"queueSize", PendingPrepareWrites.size()});
         YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_put_throttled",
@@ -202,7 +202,7 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
-        while (!PendingPrepareWrites.empty() && S3WritesInFlight < CurrentMaxWritesInFlight) {
+        while (!PendingPrepareWrites.empty() && S3WritesInFlight < EffectiveMaxWritesInFlight()) {
             auto ev = std::move(PendingPrepareWrites.front());
             PendingPrepareWrites.pop_front();
 
@@ -229,15 +229,17 @@ namespace NKikimr::NBlobDepot {
         --S3WritesInFlight;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
 
-        if (success && CurrentMaxWritesInFlight < MaxWritesInFlight) {
+        const ui32 maxWritesInFlight = MaxWritesInFlight();
+        if (success && CurrentMaxWritesInFlight < maxWritesInFlight) {
             if (++ConsecutiveSuccessfulWriteBatches >= SuccessesPerWriteConcurrencyStepUp) {
                 ConsecutiveSuccessfulWriteBatches = 0;
                 ++CurrentMaxWritesInFlight;
-                if (CurrentMaxWritesInFlight >= MaxWritesInFlight) {
-                    CurrentMaxWritesInFlight = MaxWritesInFlight;
+                if (CurrentMaxWritesInFlight >= maxWritesInFlight) {
+                    CurrentMaxWritesInFlight = maxWritesInFlight;
                     PutBackoff.Reset();
                 }
-                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
+
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = EffectiveMaxWritesInFlight();
             }
         }
 

@@ -54,16 +54,18 @@ namespace NKikimr::NBlobDepot {
 
         // Throttling state for S3 SlowDown responses on agent put requests. Puts are issued by agents (one per
         // node), but throttling is centralized at the tablet by postponing TEvPrepareWriteS3Result.
-        static constexpr ui32 MaxWritesInFlight = 32;
         static constexpr ui32 SuccessesPerWriteConcurrencyStepUp = 3;
 
         TBackoff PutBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic PutThrottleUntil;
         bool PutWakeupScheduled = false;
-        ui32 CurrentMaxWritesInFlight = MaxWritesInFlight;
+        ui32 CurrentMaxWritesInFlight = Max<ui32>();
         ui32 ConsecutiveSuccessfulWriteBatches = 0;
         ui32 S3WritesInFlight = 0;
         std::deque<TEvBlobDepot::TEvPrepareWriteS3::TPtr> PendingPrepareWrites;
+
+        ui32 MaxWritesInFlight() const;
+        ui32 EffectiveMaxWritesInFlight() const { return Min(CurrentMaxWritesInFlight, MaxWritesInFlight()); }
 
         void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
         void NotifyPutSlowDown();
@@ -91,8 +93,6 @@ namespace NKikimr::NBlobDepot {
         class TTxDeleteTrashS3;
         struct TEvDeleteResult;
 
-        static constexpr ui32 MaxDeletesInFlight = 3;
-        static constexpr size_t MaxObjectsToDeleteAtOnce = 10;
         static constexpr ui32 SuccessesPerConcurrencyStepUp = 3;
 
         // items we are definitely going to delete (must be present in TrashS3)
@@ -106,8 +106,12 @@ namespace NKikimr::NBlobDepot {
         TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic DeleteThrottleUntil;
         bool DeleteWakeupScheduled = false;
-        ui32 CurrentMaxDeletesInFlight = MaxDeletesInFlight;
+        ui32 CurrentMaxDeletesInFlight = Max<ui32>();
         ui32 ConsecutiveSuccessfulDeleteBatches = 0;
+
+        ui32 MaxDeletesInFlight() const;
+        ui32 EffectiveMaxDeletesInFlight() const { return Min(CurrentMaxDeletesInFlight, MaxDeletesInFlight()); }
+        size_t MaxObjectsToDeleteAtOnce() const;
 
         void RunDeletersIfNeeded();
         void HandleDeleter(TAutoPtr<IEventHandle> ev);

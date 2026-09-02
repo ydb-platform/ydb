@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -642,9 +643,12 @@ namespace NKikimr::NBlobDepot {
         // restore the cap. Throttling is per-agent because GETs are issued from the agent without any tablet
         // round-trip, so there is no central place to gate them.
 
-        static constexpr ui32 MaxS3GetsInFlight = 32;
         static constexpr ui32 SuccessesPerGetConcurrencyStepUp = 3;
         static constexpr ui32 MaxS3GetSlowDownRetries = 100;
+
+        TControlWrapper S3MaxGetsInFlight = 32;
+        ui32 MaxS3GetsInFlight() const { return Max<ui32>(1, S3MaxGetsInFlight); }
+        ui32 EffectiveMaxS3GetsInFlight() const { return Min(CurrentMaxS3GetsInFlight, MaxS3GetsInFlight()); }
 
         struct TPendingS3Read {
             TString Key;
@@ -671,7 +675,7 @@ namespace NKikimr::NBlobDepot {
         TBackoff S3GetBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic S3GetThrottleUntil;
         bool S3GetWakeupScheduled = false;
-        ui32 CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
+        ui32 CurrentMaxS3GetsInFlight = Max<ui32>();
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
         ui32 S3PutsInFlight = 0;

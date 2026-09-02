@@ -1,10 +1,10 @@
-#include "fast_path_service.h"
 #include "partition_cleanup_actor.h"
 #include "partition_direct_actor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>

@@ -2,9 +2,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_cleanup_actor.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_cleanup_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>

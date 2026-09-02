@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h>
+#include "part_tx.h"
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

@@ -1,8 +1,7 @@
 #include "partition_cleanup_actor.h"
 
-#include "partition_direct_events_private.h"
-
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>

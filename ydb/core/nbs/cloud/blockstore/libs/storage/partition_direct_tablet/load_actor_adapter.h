@@ -1,8 +1,7 @@
 #pragma once
 
-#include "fast_path_service.h"
-
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

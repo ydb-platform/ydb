@@ -114,7 +114,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/dbs_controller.h>
 #endif
 

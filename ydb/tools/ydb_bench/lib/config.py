@@ -22,7 +22,11 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     workload_effective_warmup_seconds,
     workload_config_schema,
 )
-from ydb.tools.ydb_bench.lib.load_control import MAX_AUTOMATIC_SEARCH_ATTEMPTS, validate_search_attempt_bound
+from ydb.tools.ydb_bench.lib.load_control import (
+    MAX_AUTOMATIC_SEARCH_ATTEMPTS,
+    MAX_LOAD_VALUE,
+    validate_search_attempt_bound,
+)
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
@@ -146,12 +150,12 @@ def _profile_schema(benchmark):
                         "allow-errors": {"type": "boolean"},
                         "values": {
                             "type": "array",
-                            "items": {"type": "integer", "minimum": 1},
+                            "items": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                             "minItems": 1,
                             "uniqueItems": True,
                         },
-                        "start": {"type": "integer", "minimum": 1},
-                        "maximum": {"type": "integer", "minimum": 1},
+                        "start": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
+                        "maximum": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                         "multiplier": {"type": "number", "exclusiveMinimum": 1},
                         "target-role": {"enum": ["static", "dynamic", "total"]},
                         "plateau-gain-percent": {"type": "number", "minimum": 0},
@@ -181,8 +185,8 @@ def _profile_schema(benchmark):
                             "additionalProperties": False,
                             "required": ["start", "maximum"],
                             "properties": {
-                                "start": {"type": "integer", "minimum": 1},
-                                "maximum": {"type": "integer", "minimum": 1},
+                                "start": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
+                                "maximum": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                                 "multiplier": {"type": "number", "exclusiveMinimum": 1},
                                 "resolution-percent": {
                                     "type": "number",
@@ -399,6 +403,22 @@ def _positive_integer(value, location):
     return value
 
 
+def _load_value(value, location):
+    result = _positive_integer(value, location)
+    if result > MAX_LOAD_VALUE:
+        _config_error(location, "must be at most {}".format(MAX_LOAD_VALUE))
+    return result
+
+
+def _load_value_list(value, location):
+    if not isinstance(value, list) or not value:
+        _config_error(location, "must be a non-empty array of positive integers")
+    parsed = tuple(_load_value(item, "{}[{}]".format(location, index)) for index, item in enumerate(value))
+    if len(set(parsed)) != len(parsed):
+        _config_error(location, "must not contain duplicate values")
+    return parsed
+
+
 def _positive_integer_list(value, location):
     if not isinstance(value, list) or not value:
         _config_error(location, "must be a non-empty array of positive integers")
@@ -445,7 +465,10 @@ def _background_load_modes(value, location):
 def _timeout(value, location):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         _config_error(location, "must be a finite positive number")
-    value = float(value)
+    try:
+        value = float(value)
+    except (TypeError, ValueError, OverflowError):
+        _config_error(location, "must be a finite positive number")
     if value <= 0 or not math.isfinite(value):
         _config_error(location, "must be a finite positive number")
     return value
@@ -481,9 +504,12 @@ def _nonnegative_integer(value, location):
 
 
 def _finite_number(value, location, minimum=None, maximum=None, exclusive_minimum=False):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
         _config_error(location, "must be a finite number")
-    result = float(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(result):
+        _config_error(location, "must be a finite number")
     if minimum is not None and (result <= minimum if exclusive_minimum else result < minimum):
         _config_error(location, "must be {} {}".format("greater than" if exclusive_minimum else "at least", minimum))
     if maximum is not None and result > maximum:
@@ -621,7 +647,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         if load_mode == "points":
             if "values" not in load:
                 _config_error(location + ".load", "manual load requires values")
-            load_config["values"] = list(_positive_integer_list(load["values"], location + ".load.values"))
+            load_config["values"] = list(_load_value_list(load["values"], location + ".load.values"))
         else:
             for required in ("start", "maximum"):
                 if required not in load:
@@ -657,8 +683,8 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         for required in ("start", "maximum"):
             if required not in search:
                 _config_error(location + ".load.search", "missing required field: {}".format(required))
-        start = _positive_integer(search["start"], location + ".load.search.start")
-        maximum = _positive_integer(search["maximum"], location + ".load.search.maximum")
+        start = _load_value(search["start"], location + ".load.search.start")
+        maximum = _load_value(search["maximum"], location + ".load.search.maximum")
         if maximum < start:
             _config_error(location + ".load.search.maximum", "must not be below start")
         load_config["search"] = {

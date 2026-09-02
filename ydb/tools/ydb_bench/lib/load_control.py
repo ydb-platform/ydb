@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
 MAX_AUTOMATIC_SEARCH_ATTEMPTS = 64
+MAX_LOAD_VALUE = (1 << 53) - 1
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,8 @@ class LoadSearchResult:
 
 
 def _next_geometric(current, maximum, multiplier):
+    if multiplier >= maximum / current:
+        return maximum
     candidate = max(current + 1, int(round(current * multiplier)))
     return min(maximum, candidate)
 

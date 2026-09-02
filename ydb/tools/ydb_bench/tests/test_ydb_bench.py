@@ -3229,6 +3229,37 @@ class YdbBenchTest(unittest.TestCase):
         ):
             load_config(invalid)
 
+    def test_local_ydb_search_numbers_are_overflow_safe(self):
+        huge_multiplier = load_config(self._config("""
+            local-ydb:
+              bounded:
+                workload: {type: kv, operation: upsert}
+                load:
+                  parameter: rate
+                  search: {start: 10, maximum: 100, multiplier: 1.0e+308}
+                  objective: {type: latency-slo, percentile: p99, max-ms: 10}
+        """)).runs[0]
+        self.assertEqual(
+            huge_multiplier.parameters["local_ydb"]["load"]["search"]["multiplier"],
+            1.0e308,
+        )
+
+        invalid = self._config(
+            """
+            local-ydb:
+              too-large:
+                workload: {type: kv, operation: upsert}
+                load:
+                  parameter: rate
+                  search:
+                    start: 1
+                    maximum: __MAXIMUM__
+                  objective: {type: maximize-throughput}
+            """.replace("__MAXIMUM__", str(10**400))
+        )
+        with self.assertRaisesRegex(BenchmarkError, r"load\.search\.maximum.*must be at most"):
+            load_config(invalid)
+
     def test_local_ydb_verification_config_is_optional_bounded_and_counted_in_default_timeout(self):
         loaded = load_config(self._config("""
             local-ydb:
@@ -4743,6 +4774,25 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
         self.assertEqual(no_feasible_latency.outcome, "no-feasible-point")
         self.assertEqual(no_feasible_latency.failing_load, 10)
         self.assertEqual(below_start_attempts, [10])
+
+        huge_multiplier_attempts = []
+        huge_multiplier = load_control.search_load(
+            {
+                "parameter": "rate",
+                "search": {"start": 10, "maximum": 100, "multiplier": 1.0e308, "resolution_percent": 5},
+                "objective": {
+                    "type": "latency-slo",
+                    "percentile": "p99",
+                    "max_ms": 10,
+                    "max_errors": 0,
+                    "min_achieved_rate_ratio": 0.98,
+                },
+            },
+            lambda load: {"throughput": load, "errors": 0, "p99_ms": 5},
+            on_attempt=lambda attempt: huge_multiplier_attempts.append(attempt["load"]),
+        )
+        self.assertEqual(huge_multiplier.selected_load, 100)
+        self.assertEqual(huge_multiplier_attempts, [10, 100])
 
     def test_load_controllers_bound_automatic_search_attempts(self):
         measure = mock.Mock()
@@ -6265,7 +6315,7 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
 
     def test_config_rejects_non_finite_timeout(self):
         """Reject NaN, positive infinity, then negative infinity as profile timeouts."""
-        for value in (".nan", ".inf", "-.inf"):
+        for index, value in enumerate((".nan", ".inf", "-.inf", str(10**400))):
             with self.subTest(value=value), self.assertRaisesRegex(BenchmarkError, "finite positive number"):
                 load_config(
                     self._config(
@@ -6278,7 +6328,7 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
                             affinity: [none]
                             timeout: {}
                         """.format(value),
-                        name="timeout-{}.yaml".format(value.replace("/", "_")),
+                        name="timeout-{}.yaml".format(index),
                     )
                 )
 

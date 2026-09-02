@@ -368,8 +368,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (record.GetPurge()) {
                 for (const auto &x : OnlineTablets) {
                     ctx.Send(x.second.Tablet, new TEvents::TEvPoisonPill());
-                    if (x.first.second == 0) // leader
+                    if (x.first.second == 0) { // leader
                         RetainedCutHistory.erase(x.first.first);
+                    }
                 }
                 OnlineTablets.clear();
             }
@@ -920,8 +921,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
                 InbootTablets.erase(inbootIt);
             }
-            if (onlineIt->first.second == 0) // leader
+            if (onlineIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(onlineIt->first.first);
+            }
             OnlineTablets.erase(onlineIt);
             UpdateEstimate();
             return;
@@ -932,8 +934,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         });
         if (inbootIt != InbootTablets.end() && inbootIt->second.Generation <= generation) {
             MarkDeadTablet(inbootIt->first, generation, TEvLocal::TEvTabletStatus::StatusBootFailed, msg->Reason, ctx);
-            if (inbootIt->first.second == 0) // leader
+            if (inbootIt->first.second == 0) { // leader
                 RetainedCutHistory.erase(inbootIt->first.first);
+            }
             InbootTablets.erase(inbootIt);
             return;
         }

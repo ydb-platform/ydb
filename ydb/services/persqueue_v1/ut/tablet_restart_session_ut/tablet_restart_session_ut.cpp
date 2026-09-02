@@ -288,22 +288,12 @@ struct TTabletRestartReadSessionEnv {
         RunWithDispatch(runtime, [&] {
             Server->AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(
                 Server->ServerSettings, Server->GrpcPort, TString("/Root"));
-            return true;
-        });
+            Server->AnnoyingClient->SetNoConfigMode();
 
-        Server->AnnoyingClient->SetNoConfigMode();
-
-        // No-config mode: only need Root + /PQ.
-        RunWithDispatch(runtime, [&] {
+            // No-config mode: only need Root + /PQ.
             Server->AnnoyingClient->InitRootScheme();
-            return true;
-        });
-        RunWithDispatch(runtime, [&] {
             Server->AnnoyingClient->MkDir("/Root", "PQ");
-            return true;
-        });
 
-        RunWithDispatch(runtime, [&] {
             TDriver driver(MakeNoDiscoveryDriverConfig(Endpoint));
             TTopicClient client(driver);
             auto status = client.CreateTopic(

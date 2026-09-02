@@ -33,4 +33,4 @@ Parameterized queries provide the following advantages:
 
 ## See also
 
-- [{#T}](../../dev/example-app/java/index.md#param-queries)
+- [{#T}](../../dev/example-app/index.md#param-queries)

@@ -1122,18 +1122,38 @@ void TVisualizer::LoadPlans(const NJson::TJsonValue& root) {
 }
 
 void TVisualizer::LoadPlansSafe(const TString& plans, bool simplified) {
-    try {
-        LoadPlans(plans, simplified);
-    } catch (...) {
-        LoadError = CurrentExceptionMessage();
-    }
+    LoadSafe([&] { LoadPlans(plans, simplified); });
 }
 
 void TVisualizer::LoadPlansSafe(const NJson::TJsonValue& root) {
+    LoadSafe([&] { LoadPlans(root); });
+}
+
+void TVisualizer::LoadSafe(const std::function<void()>& load) {
+    LoadError.clear();
+
+    // Enough state to roll a failed load back. Without the rollback a reused
+    // visualizer would keep the failed call's half-loaded plans, and the CTE
+    // maps would keep pointers into them.
+    auto plans = Plans.size();
+    auto cteStages = CteStages;
+    auto cteSubPlans = CteSubPlans;
+    auto maxTime = MaxTime;
+    auto baseTime = BaseTime;
+    auto updateTime = UpdateTime;
+    auto groupId = GroupId;
+
     try {
-        LoadPlans(root);
+        load();
     } catch (...) {
         LoadError = CurrentExceptionMessage();
+        Plans.resize(plans);
+        CteStages = std::move(cteStages);
+        CteSubPlans = std::move(cteSubPlans);
+        MaxTime = maxTime;
+        BaseTime = baseTime;
+        UpdateTime = updateTime;
+        GroupId = groupId;
     }
 }
 

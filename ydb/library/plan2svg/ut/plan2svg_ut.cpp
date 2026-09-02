@@ -210,6 +210,20 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
         UNIT_ASSERT_EXCEPTION(viz.PrintSvg(), yexception);
     }
 
+    // A failed load is rolled back and the error is not sticky, so a reused
+    // visualizer behaves as if the failed call never happened.
+    Y_UNIT_TEST(LoadPlansSafeRollsBackAFailedLoad) {
+        TVisualizer viz;
+        viz.LoadPlansSafe(UnsupportedPlan());
+        UNIT_ASSERT(viz.LoadError);
+        UNIT_ASSERT(viz.Plans.empty());
+
+        viz.LoadPlansSafe(ReadPlan("cte_subplan"));
+        UNIT_ASSERT_C(!viz.LoadError, viz.LoadError);
+        UNIT_ASSERT(!viz.Plans.empty());
+        UNIT_ASSERT_VALUES_EQUAL(viz.PrintSvgSafe(), RenderPlan("cte_subplan", false));
+    }
+
     Y_UNIT_TEST(LoadPlansSafeRendersAGoodPlanNormally) {
         TPlanVisualizer safe;
         safe.LoadPlansSafe(ReadPlan("cte_subplan"));

@@ -41,6 +41,7 @@ SRCS(
     mon_helpers.h
     olap_helpers.cpp
     olap_helpers.h
+    operation_plan_capture.h
     schemeshard_counters.cpp
     schemeshard_counters.h
     shred_helpers.cpp

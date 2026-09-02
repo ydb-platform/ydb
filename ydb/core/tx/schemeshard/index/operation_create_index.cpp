@@ -109,7 +109,9 @@ public:
         const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = tableIndexCreation.GetName();
+        const TString name = IsPlanned()
+            ? PlannedLeafName(BindingsAs<TCreateIndexPartBindings>().Target)
+            : tableIndexCreation.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateTableIndex Propose"
@@ -130,7 +132,9 @@ public:
             return result;
         }
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        NSchemeShard::TPath parentPath = IsPlanned()
+            ? PlannedPath(BindingsAs<TCreateIndexPartBindings>().Container, context)
+            : NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks

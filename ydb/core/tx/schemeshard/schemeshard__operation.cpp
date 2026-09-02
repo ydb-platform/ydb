@@ -8,6 +8,7 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_operation_factory.h"
+#include "schemeshard_operation_planner.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -245,6 +246,53 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
 
     //
+
+    // # Planned operations
+    // When every transaction is of a planned type, one sealed plan is built for the whole
+    // operation before anything is constructed or proposed: it owns the MkDir split and the
+    // copy decomposition, and every part is built from one of its blueprints. A batch that
+    // mixes planned and unplanned types takes the legacy path below.
+
+    if (AllOf(rewrittenTransactions, [](const auto& tx) { return IsPlannedOperationType(tx.GetOperationType()); })) {
+        auto planResult = PlanCreateTableOperation(rewrittenTransactions, context);
+        if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
+            response.Reset(new TProposeResponse(rejected->Status, ui64(txId), ui64(selfId)));
+            response->SetError(rejected->Status, rejected->Reason);
+            return response;
+        }
+
+        operation->SetPlan(std::get<std::shared_ptr<const TSealedOperationPlan>>(planResult));
+        AppData()->SchemeOperationFactory->OnPlanSealed(ui64(txId), *operation->Plan);
+
+        Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
+
+        const auto parts = operation->ConstructPlannedParts(context);
+        const auto& blueprints = operation->Plan->GetParts();
+        bool prevProposeUndoSafe = true;
+
+        // Parts are proposed in blueprint order, which is TxPartId order. A generated
+        // directory is proposed alone, so dependent parts see it; the remaining parts of one
+        // request are proposed together, as one batch.
+        size_t i = 0;
+        while (i < blueprints.size()) {
+            TVector<ISubOperation::TPtr> batch;
+            const bool generatedDir = std::holds_alternative<TMkDirPartBindings>(blueprints[i].Bindings);
+            const ui32 requestIdx = blueprints[i].RequestIdx;
+            do {
+                batch.push_back(parts[i]);
+                ++i;
+            } while (!generatedDir && i < blueprints.size()
+                && blueprints[i].RequestIdx == requestIdx
+                && !std::holds_alternative<TMkDirPartBindings>(blueprints[i].Bindings));
+
+            operation->PreparedParts += batch.size();
+            if (!ProcessOperationParts(batch, txId, record, prevProposeUndoSafe, operation, response, context)) {
+                return response;
+            }
+        }
+
+        return response;
+    }
 
     TVector<TTxTransaction> transactions;
     TVector<TTxTransaction> generatedTransactions;
@@ -1357,6 +1405,12 @@ public:
         const TOperation& op,
         const TTxTransaction& tx,
         TOperationContext& context) const override;
+
+    ISubOperation::TPtr MakePlannedPart(
+        const TOperationId& id,
+        const TSealedOperationPlan& plan,
+        const TPartBlueprint& blueprint,
+        TOperationContext& context) const override;
 };
 
 IOperationFactory* DefaultOperationFactory() {
@@ -1724,6 +1778,78 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
 TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
     return AppData()->SchemeOperationFactory->MakeOperationParts(*this, tx, context);
+}
+
+TVector<ISubOperation::TPtr> TOperation::ConstructPlannedParts(TOperationContext& context) const {
+    Y_ABORT_UNLESS(Plan, "operation is not planned");
+    TVector<ISubOperation::TPtr> parts;
+    for (const auto& blueprint : Plan->GetParts()) {
+        Y_ABORT_UNLESS(blueprint.PartIdx == parts.size(), "blueprints must be in TxPartId order");
+        const TOperationId id(TxId, blueprint.PartIdx);
+        ISubOperation::TPtr part = AppData()->SchemeOperationFactory->MakePlannedPart(id, *Plan, blueprint, context);
+        part->BindToPlan(Plan, blueprint);
+        parts.push_back(std::move(part));
+    }
+    return parts;
+}
+
+void TOperation::SetPlan(std::shared_ptr<const TSealedOperationPlan> plan) {
+    Y_ABORT_UNLESS(plan);
+    Plan = std::move(plan);
+}
+
+namespace {
+
+// The sequences a copy part must know about are the ones planned beneath its target.
+THashSet<TString> PlannedLocalSequences(const TSealedOperationPlan& plan, TPlanEffectId table) {
+    THashSet<TString> sequences;
+    for (const auto& other : plan.GetParts()) {
+        if (const auto* seq = std::get_if<TCopySequencePartBindings>(&other.Bindings); seq && seq->Container == table) {
+            sequences.emplace(other.Tx.GetSequence().GetName());
+        }
+    }
+    return sequences;
+}
+
+} // namespace
+
+ISubOperation::TPtr TDefaultOperationFactory::MakePlannedPart(
+        const TOperationId& id,
+        const TSealedOperationPlan& plan,
+        const TPartBlueprint& blueprint,
+        TOperationContext& context) const
+{
+    const auto& tx = blueprint.Tx;
+    switch (tx.GetOperationType()) {
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
+        return CreateMkDir(id, tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
+        if (tx.GetCreateTable().HasCopyFromTable()) {
+            const auto& bindings = std::get<TCopyTablePartBindings>(blueprint.Bindings);
+            return CreateCopyTable(id, tx, PlannedLocalSequences(plan, bindings.Target));
+        }
+        return CreateNewTable(id, tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex: {
+        const auto& bindings = std::get<TCreateIndexPartBindings>(blueprint.Bindings);
+        // Column tables use the OLAP local-index op; row tables use the generic one.
+        bool onColumnTable = false;
+        if (const auto& source = plan.Effect(bindings.Source); source.PathId) {
+            const TPath sourceIndex = TPath::Init(*source.PathId, context.SS);
+            if (sourceIndex.IsResolved()) {
+                const TPath sourceTable = sourceIndex.Parent();
+                onColumnTable = sourceTable.IsResolved() && sourceTable.Base()->IsColumnTable();
+            }
+        }
+        if (TTableIndexInfo::IsLocalIndex(tx.GetCreateTableIndex().GetType()) && onColumnTable) {
+            return CreateNewColumnTableLocalIndex(id, tx);
+        }
+        return CreateNewTableIndex(id, tx);
+    }
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
+        return CreateCopySequence(id, tx);
+    default:
+        Y_ABORT("blueprint of an unplanned operation type %d", static_cast<int>(tx.GetOperationType()));
+    }
 }
 
 void TOperation::AddPart(ISubOperation::TPtr part) {

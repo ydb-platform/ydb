@@ -1,6 +1,9 @@
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
+#include "schemeshard_operation_factory.h"
+#include "schemeshard_operation_planner.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
@@ -513,7 +516,9 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString& parentPath = Transaction.GetWorkingDir();
-        const TString& name = Transaction.GetCreateTable().GetName();
+        const TString name = IsPlanned()
+            ? PlannedLeafName(BindingsAs<TCopyTablePartBindings>().Target)
+            : Transaction.GetCreateTable().GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -524,7 +529,12 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath parent = TPath::Resolve(parentPath, context.SS);
+        // A planned part takes its container and source from the plan it is bound to. A part
+        // of an unplanned operation -- one built by CreateConsistentCopyTables or a backup
+        // collection -- resolves them from its transaction as it always did.
+        TPath parent = IsPlanned()
+            ? PlannedPath(BindingsAs<TCopyTablePartBindings>().Container, context)
+            : TPath::Resolve(parentPath, context.SS);
         {
             TPath::TChecker checks = parent.Check();
             checks
@@ -565,7 +575,9 @@ public:
             }
         }
 
-        TPath srcPath = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+        TPath srcPath = IsPlanned()
+            ? PlannedPath(BindingsAs<TCopyTablePartBindings>().Source, context)
+            : TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
 
         {
             TPath::TChecker checks = srcPath.Check();
@@ -696,8 +708,19 @@ public:
 
         if (Transaction.GetCreateTable().HasDropSrcCdcStream()) {
             const auto& dropOp = Transaction.GetCreateTable().GetDropSrcCdcStream();
+            // A planned part drops exactly the streams the plan bound it to, in request order.
+            TVector<TPlanEffectId> plannedDrops;
+            if (IsPlanned()) {
+                plannedDrops = BindingsAs<TCopyTablePartBindings>().DropStreams;
+                Y_ABORT_UNLESS(plannedDrops.size() == size_t(dropOp.StreamNameSize()),
+                    "plan binds %zu dropped streams, the request names %d",
+                    plannedDrops.size(), dropOp.StreamNameSize());
+            }
+            size_t plannedDropIndex = 0;
             for (const auto& streamName : dropOp.GetStreamName()) {
-                TPath oldStreamPath = srcPath.Child(streamName);
+                TPath oldStreamPath = IsPlanned()
+                    ? PlannedPath(plannedDrops[plannedDropIndex++], context)
+                    : srcPath.Child(streamName);
 
                 auto checks = oldStreamPath.Check();
                 checks.NotEmpty().IsResolved().NotDeleted().IsCdcStream();
@@ -967,192 +990,30 @@ ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState,
     return MakeSubOperation<TCopyTable>(id, txState, state);
 }
 
+// The decomposition of a copy lives in the planner (schemeshard_operation_planner.cpp). This
+// overload exists for an operation that is not planned as a whole -- a batch mixing CreateTable
+// with other types -- and builds the same parts from the same blueprints, so there is one
+// implementation of what a copy expands into.
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+    Y_ABORT_UNLESS(tx.GetCreateTable().HasCopyFromTable());
 
-    auto copying = tx.GetCreateTable();
-    Y_ABORT_UNLESS(copying.HasCopyFromTable());
-
-    auto cdcPeerOp = tx.HasCreateCdcStream() ? &tx.GetCreateCdcStream() : nullptr;
-
-    TPath srcPath = TPath::Resolve(copying.GetCopyFromTable(), context.SS);
-
-    {
-        TPath::TChecker checks = srcPath.Check();
-        checks.NotEmpty()
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .NotUnderDeleting()
-            .IsTable();
-
-        // Allow copying index impl tables when feature flag is enabled
-        if (checks && !srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
-            checks.IsCommonSensePath();
-        }
-
-        if (!copying.GetAllowUnderSameOperation()) {
-            checks.NotUnderOperation();
-        }
-
-        if (!checks) {
-            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
-        }
+    auto planResult = PlanCreateTableOperation({tx}, context);
+    if (const auto* rejected = std::get_if<TRejectedOperation>(&planResult)) {
+        return {CreateReject(nextId, rejected->Status, rejected->Reason)};
     }
-
-    THashSet<TString> sequences = GetLocalSequences(context, srcPath);
-
-    TPath workDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    TPath dstPath = workDir.Child(copying.GetName());
+    auto plan = std::get<std::shared_ptr<const TSealedOperationPlan>>(planResult);
 
     TVector<ISubOperation::TPtr> result;
-    {
-        auto schema = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
-        schema.SetFailOnExist(tx.GetFailOnExist());
-
-        auto operation = schema.MutableCreateTable();
-        operation->SetName(copying.GetName());
-        operation->SetCopyFromTable(copying.GetCopyFromTable());
-        operation->SetOmitFollowers(copying.GetOmitFollowers());
-        operation->SetIsBackup(copying.GetIsBackup());
-        operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
-        if (cdcPeerOp) {
-            schema.MutableCreateCdcStream()->CopyFrom(*cdcPeerOp);
-        }
-
-        if (copying.HasDropSrcCdcStream()) {
-            operation->MutableDropSrcCdcStream()->CopyFrom(copying.GetDropSrcCdcStream());
-        }
-
-        result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
+    for (const auto& blueprint : plan->GetParts()) {
+        // The request was already split by SplitIntoTransactions; the planner finds nothing
+        // left to generate.
+        Y_ABORT_UNLESS(!std::holds_alternative<TMkDirPartBindings>(blueprint.Bindings));
+        const TOperationId id(nextId.GetTxId(), nextId.GetSubTxId() + result.size());
+        ISubOperation::TPtr part = AppData()->SchemeOperationFactory->MakePlannedPart(id, *plan, blueprint, context);
+        part->BindToPlan(plan, blueprint);
+        result.push_back(std::move(part));
     }
-
-    // Process indexes: always create index structure, but skip impl table copies if OmitIndexes is set
-    // (impl tables are handled separately by CreateConsistentCopyTables for incremental backups with CDC)
-    for (auto& child: srcPath.Base()->GetChildren()) {
-        auto name = child.first;
-        auto pathId = child.second;
-
-        TPath childPath = srcPath.Child(name);
-        if (childPath.IsDeleted()) {
-            continue;
-        }
-
-        if (childPath.IsSequence()) {
-            continue;
-        }
-
-        if (!childPath.IsTableIndex()) {
-            continue;
-        }
-
-        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-        TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
-
-        if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-            continue;
-        }
-
-        {
-            auto schema = TransactionTemplate(dstPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
-            schema.SetFailOnExist(tx.GetFailOnExist());
-
-            auto operation = schema.MutableCreateTableIndex();
-            operation->SetName(name);
-            operation->SetType(indexInfo->Type);
-            operation->SetState(indexInfo->State);
-            for (const auto& keyName: indexInfo->IndexKeys) {
-                *operation->MutableKeyColumnNames()->Add() = keyName;
-            }
-            for (const auto& dataColumn: indexInfo->IndexDataColumns) {
-                *operation->MutableDataColumnNames()->Add() = dataColumn;
-            }
-
-            switch (indexInfo->Type) {
-                case NKikimrSchemeOp::EIndexTypeGlobal:
-                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
-                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
-                    // no specialized index description
-                    Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
-                    break;
-                case NKikimrSchemeOp::EIndexTypeGlobalJson:
-                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
-                    // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
-                    if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
-                        *operation->MutableFulltextIndexDescription() = *ft;
-                    } else {
-                        Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
-                    }
-                    break;
-                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-                    *operation->MutableVectorIndexKmeansTreeDescription() =
-                        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
-                    break;
-                case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-                case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
-                    *operation->MutableFulltextIndexDescription() =
-                        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
-                    break;
-                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
-                    *operation->MutableBloomFilterDescription() =
-                        std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
-                    break;
-                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
-                    *operation->MutableBloomNGrammFilterDescription() =
-                        std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
-                    break;
-                default:
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
-            }
-
-            if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
-                // Column tables use the OLAP local-index op; row tables use the generic one.
-                if (srcPath.Base()->IsColumnTable()) {
-                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), schema));
-                } else {
-                    result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
-                }
-                continue; // local indexes have no impl tables
-            } else {
-                result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
-            }
-        }
-
-        // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)
-        if (copying.GetOmitIndexes()) {
-            continue;
-        }
-
-        for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
-            TPath implTable = childPath.Child(implTableName);
-            if (implTable.IsDeleted()) {
-                continue;
-            }
-            Y_ABORT_UNLESS(implTable.Base()->PathId == implTablePathId);
-
-            NKikimrSchemeOp::TModifyScheme schema;
-            schema.SetFailOnExist(tx.GetFailOnExist());
-            schema.SetWorkingDir(JoinPath({dstPath.PathString(), name}));
-            schema.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
-
-            auto operation = schema.MutableCreateTable();
-            operation->SetName(implTableName);
-            operation->SetCopyFromTable(implTable.PathString());
-            operation->SetOmitFollowers(copying.GetOmitFollowers());
-            operation->SetIsBackup(copying.GetIsBackup());
-
-            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, GetLocalSequences(context, implTable)));
-            AddCopySequences(nextId, tx, context, result, implTable, JoinPath({dstPath.PathString(), name, implTableName}));
-        }
-    }
-
-    AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString());
     return result;
 }
 

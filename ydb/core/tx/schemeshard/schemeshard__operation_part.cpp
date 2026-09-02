@@ -221,4 +221,25 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
     return nullptr;
 }
 
+
+static TPath ResolvePlanned(const TSealedOperationPlan& plan, const TPlannedPathView& view, TOperationContext& context) {
+    if (view.PathId) {
+        TPath byId = TPath::Init(*view.PathId, context.SS);
+        if (byId.IsResolved()) {
+            return byId;
+        }
+    }
+    return TPath::Resolve(plan.Absolute(view.Path), context.SS);
+}
+
+TPath TSubOperationBase::PlannedPath(TPlanEffectId effect, TOperationContext& context) const {
+    const auto& plan = GetPlan();
+    return ResolvePlanned(plan, plan.ViewOfEffect(effect), context);
+}
+
+TPath TSubOperationBase::PlannedWritePath(TPhysicalWriteId write, TOperationContext& context) const {
+    const auto& plan = GetPlan();
+    return ResolvePlanned(plan, plan.ViewOfWrite(write), context);
+}
+
 }

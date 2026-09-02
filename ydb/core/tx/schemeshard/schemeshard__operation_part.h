@@ -3,6 +3,7 @@
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
@@ -232,12 +233,61 @@ public:
     // getters
     virtual const TOperationId& GetOperationId() const = 0;
     virtual const TTxTransaction& GetTransaction() const = 0;
+
+    // Attaches the sealed plan of the operation and this part's typed bindings into it.
+    // Called once, where parts are built from blueprints. A part that cannot be planned
+    // aborts here rather than being silently left unbound.
+    virtual void BindToPlan(std::shared_ptr<const TSealedOperationPlan> plan, const TPartBlueprint& blueprint) = 0;
 };
 
 class TSubOperationBase: public ISubOperation {
 protected:
     const TOperationId OperationId;
     const TTxTransaction Transaction;
+
+    // The sealed plan of the operation this part belongs to and this part's typed bindings
+    // into it. Both are set together, once, where parts are built from blueprints. A part of
+    // an operation that is not planned -- or one restored after a reboot -- has neither, and
+    // derives its paths itself as it always did.
+    std::shared_ptr<const TSealedOperationPlan> Plan;
+    std::optional<TPartBindings> Bindings;
+
+public:
+    void BindToPlan(std::shared_ptr<const TSealedOperationPlan> plan, const TPartBlueprint& blueprint) override final {
+        Y_ABORT_UNLESS(plan);
+        Plan = std::move(plan);
+        Bindings = blueprint.Bindings;
+    }
+
+    bool IsPlanned() const {
+        return Plan != nullptr;
+    }
+
+    const TSealedOperationPlan& GetPlan() const {
+        Y_ABORT_UNLESS(Plan, "part is not planned");
+        return *Plan;
+    }
+
+    // The bindings of this part, of the kind the part expects. A part bound with bindings of
+    // another kind is a planning bug and aborts.
+    template <class TBindingsKind>
+    const TBindingsKind& BindingsAs() const {
+        Y_ABORT_UNLESS(Bindings, "part is not planned");
+        const auto* bindings = std::get_if<TBindingsKind>(&*Bindings);
+        Y_ABORT_UNLESS(bindings, "part is bound with bindings of another kind");
+        return *bindings;
+    }
+
+protected:
+    // The path a logical effect or a physical write of the plan describes. By id when the
+    // object exists; by the plan's own path string otherwise, since the plan carries it.
+    TPath PlannedPath(TPlanEffectId effect, TOperationContext& context) const;
+    TPath PlannedWritePath(TPhysicalWriteId write, TOperationContext& context) const;
+
+    // The leaf name the plan holds for a logical effect.
+    const TString& PlannedLeafName(TPlanEffectId effect) const {
+        return GetPlan().Effect(effect).LeafName;
+    }
 
 public:
     explicit TSubOperationBase(const TOperationId& id)

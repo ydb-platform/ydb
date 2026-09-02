@@ -531,7 +531,9 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         auto& copySequence = Transaction.GetCopySequence();
         auto& descr = Transaction.GetSequence();
-        const TString& name = descr.GetName();
+        const TString name = IsPlanned()
+            ? PlannedLeafName(BindingsAs<TCopySequencePartBindings>().Target)
+            : descr.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCopySequence Propose"
@@ -542,7 +544,9 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        NSchemeShard::TPath parentPath = IsPlanned()
+            ? PlannedPath(BindingsAs<TCopySequencePartBindings>().Container, context)
+            : NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks
@@ -576,7 +580,9 @@ public:
             }
         }
 
-        TPath srcPath = TPath::Resolve(copySequence.GetCopyFrom(), context.SS);
+        TPath srcPath = IsPlanned()
+            ? PlannedPath(BindingsAs<TCopySequencePartBindings>().Source, context)
+            : TPath::Resolve(copySequence.GetCopyFrom(), context.SS);
         {
             TPath::TChecker checks = srcPath.Check();
             checks

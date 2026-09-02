@@ -2,6 +2,8 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_plan.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/operation_plan_capture.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
@@ -18,6 +20,278 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardTest) {
+
+    // ---- ESchemeOpCreateTable is planned: one sealed plan exists before the first part is
+    // constructed or proposed, and every part is built from one of its blueprints. These tests
+    // capture that plan through the factory SchemeShard consults and assert it directly.
+
+    Y_UNIT_TEST(PlannedBareCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TOperationPlanCapture capture(runtime);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& captured = capture.LastSealed();
+        UNIT_ASSERT_VALUES_EQUAL(captured.TxId, txId);
+        const auto& plan = captured.Plan;
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetDatabaseRoot(), "/MyRoot");
+
+        const auto& effects = plan.GetLogicalEffects();
+        UNIT_ASSERT_VALUES_EQUAL(effects.size(), 2u);
+
+        // Paths are database-relative: "/Table1", not "/MyRoot/Table1".
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[0].Path.Value()), "/Table1");
+        UNIT_ASSERT_VALUES_EQUAL(effects[0].LeafName, "Table1");
+        UNIT_ASSERT(effects[0].Role == EPlanRole::Target);
+        UNIT_ASSERT(effects[0].Origin == EPlanOrigin::RequestNamed);
+        UNIT_ASSERT(effects[0].AsSchemaEffect() && effects[0].AsSchemaEffect()->Effect == EPlanEffect::Create);
+        UNIT_ASSERT(!effects[0].PathId.has_value());
+
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[1].Path.Value()), "/");
+        UNIT_ASSERT(effects[1].Role == EPlanRole::Container);
+        UNIT_ASSERT(effects[1].AsSchemaEffect() && effects[1].AsSchemaEffect()->Effect == EPlanEffect::ChildrenChanged);
+        UNIT_ASSERT(effects[1].PathId.has_value());
+
+        // The database root bumps its DirAlterVersion, so its write is demanded.
+        const auto& writes = plan.PathWriteAllowance();
+        UNIT_ASSERT_VALUES_EQUAL(writes.size(), 2u);
+        UNIT_ASSERT(writes[0].Reason == EPhysicalWriteReason::LogicalEffect && writes[0].LogicalEffect == effects[0].Id);
+        UNIT_ASSERT(writes[1].Reason == EPhysicalWriteReason::LogicalEffect && writes[1].LogicalEffect == effects[1].Id);
+        UNIT_ASSERT(writes[1].Expect == EPlanObservation::MustWrite);
+
+        // One blueprint, typed bindings to the two effects.
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetParts().size(), 1u);
+        const auto& bindings = std::get<TCreateTablePartBindings>(plan.GetParts()[0].Bindings);
+        UNIT_ASSERT_VALUES_EQUAL(bindings.Target, effects[0].Id);
+        UNIT_ASSERT_VALUES_EQUAL(bindings.Container, effects[1].Id);
+    }
+
+    Y_UNIT_TEST(PlannedNestedCreateKeepsGeneratedDirsPhysical) {
+        // A relative Name makes the planner generate directories. They are the operation's
+        // physical writes, not its logical effects: a consumer replaying the DDL gets them from
+        // the target database's own split.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TOperationPlanCapture capture(runtime);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "DirA/DirB/Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& plan = capture.LastSealed().Plan;
+
+        const auto& effects = plan.GetLogicalEffects();
+        UNIT_ASSERT_VALUES_EQUAL(effects.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[0].Path.Value()), "/DirA/DirB/Table1");
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[1].Path.Value()), "/DirA/DirB");
+        UNIT_ASSERT(!effects[1].PathId.has_value());
+        for (const auto& effect : effects) {
+            UNIT_ASSERT(effect.Origin != EPlanOrigin::PartDerived);
+        }
+
+        TVector<TString> generated;
+        for (const auto& write : plan.PathWriteAllowance()) {
+            if (write.Reason == EPhysicalWriteReason::GeneratedDirectory) {
+                generated.push_back(TString(write.Path.Value()));
+                UNIT_ASSERT(!write.LogicalEffect.has_value());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(generated, (TVector<TString>{"/DirA", "/DirA/DirB"}));
+
+        // Two MkDir blueprints, outermost first, then the create. Every part is typed.
+        const auto& parts = plan.GetParts();
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetRequests()[0].GeneratedDirParts, (TVector<ui32>{0, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetRequests()[0].Parts, (TVector<ui32>{2}));
+        const auto& dirA = std::get<TMkDirPartBindings>(parts[0].Bindings);
+        const auto& dirB = std::get<TMkDirPartBindings>(parts[1].Bindings);
+        UNIT_ASSERT_VALUES_EQUAL(TString(plan.Write(dirA.Target).Path.Value()), "/DirA");
+        UNIT_ASSERT_VALUES_EQUAL(TString(plan.Write(dirA.Container).Path.Value()), "/");
+        UNIT_ASSERT(plan.Write(dirA.Container).Reason == EPhysicalWriteReason::GeneratedDirectoryContainer);
+        UNIT_ASSERT_VALUES_EQUAL(TString(plan.Write(dirB.Target).Path.Value()), "/DirA/DirB");
+        UNIT_ASSERT_VALUES_EQUAL(dirB.Container, dirA.Target);
+        const auto& create = std::get<TCreateTablePartBindings>(parts[2].Bindings);
+        UNIT_ASSERT_VALUES_EQUAL(create.Container, effects[1].Id);
+    }
+
+    Y_UNIT_TEST(PlannedIndexedCopyEnumeratesEveryPath) {
+        // The acceptance case: an indexed table with a sequence and a changefeed, copied with
+        // the changefeed dropped. Target, container, source, index, impl table, sequence and
+        // dropped stream are each exactly one effect, and every part is bound by id.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Src"
+                Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Src"
+            StreamDescription {
+              Name: "Stream1"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TOperationPlanCapture capture(runtime);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Dst"
+            CopyFromTable: "/MyRoot/Src"
+            DropSrcCdcStream { StreamName: "Stream1" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& plan = capture.LastSealed().Plan;
+
+        auto find = [&](const TString& path) -> const TLogicalPathEffect& {
+            const TLogicalPathEffect* found = nullptr;
+            for (const auto& effect : plan.GetLogicalEffects()) {
+                if (TString(effect.Path.Value()) == path) {
+                    UNIT_ASSERT_C(!found, "path planned twice: " << path);
+                    found = &effect;
+                }
+            }
+            UNIT_ASSERT_C(found, "path is not in the plan: " << path);
+            return *found;
+        };
+        auto isCreate = [](const TLogicalPathEffect& e) {
+            return e.AsSchemaEffect() && e.AsSchemaEffect()->Effect == EPlanEffect::Create;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetLogicalEffects().size(), 10u);
+
+        const auto& dst = find("/Dst");
+        UNIT_ASSERT(isCreate(dst) && dst.Role == EPlanRole::Target && dst.Origin == EPlanOrigin::RequestNamed);
+        const auto& root = find("/");
+        UNIT_ASSERT(root.AsSchemaEffect()->Effect == EPlanEffect::ChildrenChanged);
+
+        // The source is referenced, not altered: its state is flipped and restored.
+        const auto& src = find("/Src");
+        UNIT_ASSERT(!src.IsSchemaEffect() && src.Role == EPlanRole::Source && src.PathId.has_value());
+
+        const auto& stream = find("/Src/Stream1");
+        UNIT_ASSERT(stream.AsSchemaEffect()->Effect == EPlanEffect::Drop && stream.PathId.has_value());
+
+        const auto& index = find("/Dst/ValueIndex");
+        UNIT_ASSERT(isCreate(index) && index.Origin == EPlanOrigin::RequestImplied);
+        const auto& srcIndex = find("/Src/ValueIndex");
+        UNIT_ASSERT(!srcIndex.IsSchemaEffect());
+
+        const auto& impl = find("/Dst/ValueIndex/indexImplTable");
+        UNIT_ASSERT(isCreate(impl) && impl.Origin == EPlanOrigin::PartDerived);
+        const auto& srcImpl = find("/Src/ValueIndex/indexImplTable");
+        UNIT_ASSERT(!srcImpl.IsSchemaEffect() && srcImpl.Origin == EPlanOrigin::PartDerived);
+
+        const auto& seq = find("/Dst/myseq");
+        UNIT_ASSERT(isCreate(seq) && seq.Origin == EPlanOrigin::RequestImplied);
+        const auto& srcSeq = find("/Src/myseq");
+        UNIT_ASSERT(!srcSeq.IsSchemaEffect());
+
+        // The record projection: what a consumer replaying the DDL sees.
+        TVector<TString> record;
+        for (const auto* effect : plan.SchemaEffectsForRecord()) {
+            record.push_back(TString(effect->Path.Value()));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(record, (TVector<TString>{"/Dst", "/", "/Src/Stream1", "/Dst/ValueIndex", "/Dst/myseq"}));
+
+        // The source's row is written for the state flip, and nothing else about it.
+        bool sawSourceFlip = false;
+        for (const auto& write : plan.PathWriteAllowance()) {
+            if (write.LogicalEffect == src.Id) {
+                UNIT_ASSERT(write.Reason == EPhysicalWriteReason::SourceStateFlip);
+                sawSourceFlip = true;
+            }
+        }
+        UNIT_ASSERT(sawSourceFlip);
+
+        // Blueprints in TxPartId order: copy, index, impl copy, sequence. Bound by id.
+        const auto& parts = plan.GetParts();
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 4u);
+        UNIT_ASSERT(plan.GetRequests()[0].GeneratedDirParts.empty());
+
+        const auto& copy = std::get<TCopyTablePartBindings>(parts[0].Bindings);
+        UNIT_ASSERT_VALUES_EQUAL(copy.Target, dst.Id);
+        UNIT_ASSERT_VALUES_EQUAL(copy.Container, root.Id);
+        UNIT_ASSERT_VALUES_EQUAL(copy.Source, src.Id);
+        UNIT_ASSERT_VALUES_EQUAL(copy.DropStreams, TVector<TPlanEffectId>{stream.Id});
+
+        const auto& indexPart = std::get<TCreateIndexPartBindings>(parts[1].Bindings);
+        UNIT_ASSERT_VALUES_EQUAL(indexPart.Target, index.Id);
+        UNIT_ASSERT_VALUES_EQUAL(indexPart.Container, dst.Id);
+        UNIT_ASSERT_VALUES_EQUAL(indexPart.Source, srcIndex.Id);
+
+        const auto& implPart = std::get<TCopyTablePartBindings>(parts[2].Bindings);
+        UNIT_ASSERT_VALUES_EQUAL(implPart.Target, impl.Id);
+        UNIT_ASSERT_VALUES_EQUAL(implPart.Container, index.Id);
+        UNIT_ASSERT_VALUES_EQUAL(implPart.Source, srcImpl.Id);
+        UNIT_ASSERT(implPart.DropStreams.empty());
+
+        const auto& seqPart = std::get<TCopySequencePartBindings>(parts[3].Bindings);
+        UNIT_ASSERT_VALUES_EQUAL(seqPart.Target, seq.Id);
+        UNIT_ASSERT_VALUES_EQUAL(seqPart.Container, dst.Id);
+        UNIT_ASSERT_VALUES_EQUAL(seqPart.Source, srcSeq.Id);
+
+        // And the copy really happened the way the plan said.
+        TestLs(runtime, "/MyRoot/Dst/ValueIndex/indexImplTable", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        TestLs(runtime, "/MyRoot/Dst/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        TestLs(runtime, "/MyRoot/Src/Stream1", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(PlannedCreateRejectsPathsOutsideTheDatabase) {
+        // A request the plan cannot express is rejected with the status Propose used to give,
+        // and no plan is sealed for it. Includes an empty WorkingDir, which used to be a
+        // derivation edge case rather than a request.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TOperationPlanCapture capture(runtime);
+
+        TestCreateTable(runtime, ++txId, "/NotMyRoot/DirA", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusPathDoesNotExist});
+
+        TestCreateTable(runtime, ++txId, "", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusPathDoesNotExist});
+
+        UNIT_ASSERT(capture.Sealed.empty());
+    }
+
     Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

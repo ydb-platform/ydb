@@ -35,6 +35,10 @@ public:
         return fake;
     }
 
+    void BindToPlan(std::shared_ptr<const TSealedOperationPlan>, const TPartBlueprint&) override {
+        Y_ABORT("%s cannot be bound to an operation plan", "TReject");
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         Y_ABORT_UNLESS(Response);
 

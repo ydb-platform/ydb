@@ -46,7 +46,11 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 Изменяет свойства существующей колонки в указанной таблице. Изменение свойства происходит без пересоздания колонки. Некоторые свойства применяются только к свежим записанным данным или в процессе компакшена (детали можно найти в описании конкретного свойства)
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ALTER COLUMN column_name
+  { SET FAMILY <family_name>
+  | DROP NOT NULL
+  | SET COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
+  };
 ```
 
 ### Параметры запроса
@@ -59,22 +63,24 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 Имя колонки, которая будет изменена в указанной таблице.
 
-#### SET
+#### SET FAMILY
 
-Установить параметр колонки
+Перемещает колонку строковой таблицы в указанную группу колонок.
 
-#### DROP
+#### DROP NOT NULL
 
-Удалить параметр колонки. На текущий момент поддерживается только удаление `NOT NULL`.
+Разрешает хранить значения `NULL` в колонке.
 
-{% include [column_option_list.md](../_includes/column_option_list.md) %}
+#### SET COMPRESSION
+
+Изменяет [настройки сжатия](#compression) колонки в колоночной таблице.
 
 ### Примеры
 
-Приведённый ниже код запретит пустые значения в колонке `title` из таблицы `episodes`.
+Приведённый ниже код разрешит пустые значения в колонке `title` из таблицы `episodes`.
 
 ```yql
-ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
+ALTER TABLE episodes ALTER COLUMN title DROP NOT NULL;
 ```
 
 {% if oss == true and backend_name == "YDB" %}

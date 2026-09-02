@@ -10,6 +10,8 @@
 ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
 ```
 
+При добавлении колонки с ограничением `NOT NULL` в [строковую таблицу](../../../../concepts/datamodel/table.md#row-oriented-tables) необходимо также указать `DEFAULT`, чтобы заполнить новую колонку в существующих строках. В колоночную таблицу добавить колонку с ограничением `NOT NULL` нельзя, поскольку значения `DEFAULT` для таких таблиц не поддерживаются.
+
 ## Параметры запроса
 
 ### table_name

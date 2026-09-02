@@ -123,18 +123,17 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     TIntrusivePtr<TDrainProgress> LastDrainRequest;
 
-    // Retained cut-history tuples awaiting forwarding to Hive after reconnect.
-    // Hive sends no ack; TTxCutTabletHistory is a no-op for an already-erased
-    // entry, so replay-on-reconnect is safe.  Memory is bounded by one
-    // incarnation's cut entries (TEvTabletDead cleans up); cost is one no-op
-    // Hive tx per retained tuple per reconnect.
-    struct TCutEntry {
-        ui32 Channel;
-        ui32 FromGeneration;
-        ui32 GroupId;
-    };
+    // Retained cut-history events awaiting forwarding to Hive after reconnect.
+    // One event is kept per (tablet, channel, fromGeneration) tuple; a newer
+    // arrival for the same tuple replaces the stored one.  On reconnect a copy
+    // of each stored event is sent through the pipe; the master copy is kept
+    // for subsequent reconnects.  Hive sends no ack; TTxCutTabletHistory is a
+    // no-op for an already-erased entry, so replay-on-reconnect is safe.
+    // Memory is bounded by one tablet incarnation's cut entries (TEvTabletDead
+    // cleans up).
+    using TCutHistoryEvent = std::unique_ptr<TEvTablet::TEvCutTabletHistory>;
     static constexpr size_t MaxRetainedCutHistoryPerTablet = 1024;
-    THashMap<ui64, TVector<TCutEntry>> RetainedCutHistory;
+    THashMap<ui64, TVector<TCutHistoryEvent>> RetainedCutHistory;
 
     NKikimrTabletBase::TMetrics ResourceLimit;
     TResourceProfilesPtr ResourceProfiles;
@@ -402,14 +401,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
             Connected = true;
             YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
-            for (const auto& [tId, entries] : RetainedCutHistory) {
-                for (const auto& e : entries) {
-                    auto replay = std::make_unique<TEvTablet::TEvCutTabletHistory>();
-                    replay->Record.SetTabletID(tId);
-                    replay->Record.SetChannel(e.Channel);
-                    replay->Record.SetFromGeneration(e.FromGeneration);
-                    replay->Record.SetGroupID(e.GroupId);
-                    NTabletPipe::SendData(ctx, HivePipeClient, replay.release());
+            for (const auto& tabletEntries : RetainedCutHistory) {
+                for (const auto& e : tabletEntries.second) {
+                    auto copy = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+                    copy->Record.CopyFrom(e->Record);
+                    NTabletPipe::SendData(ctx, HivePipeClient, copy.release());
                 }
             }
         }
@@ -820,25 +816,46 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         const ui64 tabletId = record.GetTabletID();
         const ui32 channel = record.GetChannel();
         const ui32 fromGen = record.GetFromGeneration();
-        const ui32 groupId = record.GetGroupID();
         auto& entries = RetainedCutHistory[tabletId];
-        if (auto* existing = FindIfPtr(entries, [&](const TCutEntry& e) {
-                return e.Channel == channel && e.FromGeneration == fromGen;
-            })) {
-            existing->GroupId = groupId;
-        } else if (entries.size() < MaxRetainedCutHistoryPerTablet) {
-            entries.push_back({channel, fromGen, groupId});
-        } else {
-            // The tuple space is sender-controlled; a misbehaving cutter must not grow
-            // this node's memory without bound. Dropping degrades to the pre-fix
-            // behavior for this tuple: the cut is lost until the tablet restarts.
-            YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: retained cut-history overflow, dropping",
-                {"tabletId", tabletId},
-                {"channel", channel},
-                {"fromGeneration", fromGen});
-        }
-        if (Connected)
+        auto* existing = FindIfPtr(entries, [&](const TCutHistoryEvent& e) {
+            return e->Record.GetChannel() == channel && e->Record.GetFromGeneration() == fromGen;
+        });
+        if (Connected) {
+            // Keep a copy for future reconnects; the original goes to Hive now.
+            auto copy = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+            copy->Record.CopyFrom(record);
+            if (existing) {
+                *existing = std::move(copy);
+            } else if (entries.size() < MaxRetainedCutHistoryPerTablet) {
+                entries.push_back(std::move(copy));
+            } else {
+                // The per-tablet buffer is capped because the tuple space is sender-controlled.
+                // On overflow the copy is not retained; the cut reaches Hive this time but will
+                // not be replayed on reconnect, so it must be re-derived after tablet restart.
+                YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: retained cut-history overflow, dropping",
+                    {"tabletId", tabletId},
+                    {"channel", channel},
+                    {"fromGeneration", fromGen});
+            }
             NTabletPipe::SendData(ctx, HivePipeClient, ev.Get()->Release().Release());
+        } else {
+            // Not connected: move the event directly into the store (zero copy).
+            auto owned = TCutHistoryEvent(ev.Get()->Release().Release());
+            if (existing) {
+                *existing = std::move(owned);
+            } else if (entries.size() < MaxRetainedCutHistoryPerTablet) {
+                entries.push_back(std::move(owned));
+            } else {
+                // The per-tablet buffer is capped because the tuple space is sender-controlled.
+                // On overflow the request is dropped with a warning; the cut for this
+                // (channel, fromGeneration) entry is delivered to Hive only after the tablet
+                // restarts and re-derives it.
+                YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: retained cut-history overflow, dropping",
+                    {"tabletId", tabletId},
+                    {"channel", channel},
+                    {"fromGeneration", fromGen});
+            }
+        }
     }
 
     void Handle(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {

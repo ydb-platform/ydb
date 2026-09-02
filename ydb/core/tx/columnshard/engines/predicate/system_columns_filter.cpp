@@ -3,6 +3,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #include <util/memory/pool.h>
@@ -15,16 +16,16 @@ namespace NKikimr::NOlap {
 namespace {
 constexpr ui32 PartitionColumnId = static_cast<ui32>(TKeyDesc::EColumnIdDataShard);
 constexpr ui32 PortionColumnId = static_cast<ui32>(TKeyDesc::EColumnIdPortion);
-const NScheme::TTypeInfo Uint64Type{NScheme::NTypeIds::Uint64};
+const NScheme::TTypeInfo Uint64Type{ NScheme::NTypeIds::Uint64 };
 
 bool ConvertTypedValueToCell(const Ydb::TypedValue& value, TCell& cell, NScheme::TTypeInfo& type, TString& owned, TString& err) {
     NScheme::TTypeInfoMod typeMod;
-    if (!NScheme::TypeInfoFromProto(value.GetType(), typeMod, err)) {
+    if (!NScheme::TypeInfoFromProto(value.type(), typeMod, err)) {
         return false;
     }
     type = typeMod.TypeInfo;
     TMemoryPool pool(256);
-    if (!CellFromProtoVal(type, 0, &value.GetValue(), false, cell, err, pool)) {
+    if (!CellFromProtoVal(type, 0, &value.value(), false, cell, err, pool)) {
         return false;
     }
     if (!cell.IsNull() && !cell.IsInline()) {

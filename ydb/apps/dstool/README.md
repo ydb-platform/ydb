@@ -612,3 +612,50 @@ The above command performs various
 
 operations until user terminates the process (e.g. by entering ```Ctrl + c```). The operations are created so that they don't
 break failure model of any groups.
+
+The workload can also be configured with YAML:
+
+```bash
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster workload run --config-file workload.yaml
+```
+
+For example:
+
+```yaml
+sleep_between_rounds: 2s
+check_fail_model: true
+random_seed: 42
+
+actions:
+  wipe_vdisk:
+    - weight: 1
+  evict_vdisk:
+    - weight: 1
+  restart_node:
+    - weight: 2
+      signal: KILL
+      ask_cms:
+        availability_mode: MODE_KEEP_AVAILABLE
+      filter:
+        only_types:
+          types: [STORAGE_NODE]
+```
+
+Each entry in `actions` is selected by its relative positive `weight`, which defaults to `1`. An action can be listed more
+than once with different weights, filters, or CMS settings. Supported actions are `wipe_vdisk`, `evict_vdisk`,
+`set_read_only`, `restart_node`, `change_pdisk_key`, `restart_pdisk`, `obliterate_pdisk`, `kill_tablet`, `switch_pile`,
+`disconnect_pile`, and `disconnect_socket`.
+
+Node restarts are unlimited by default. Set `max_node_restarts_per_minute` to apply a rolling aggregate rate limit across
+all `restart_node` configurations. Tenant filters match the single tenant path of each dynamic node; serverless databases
+are out of scope.
+
+Field and enum names are case-insensitive and separators are ignored, so names such as `WipeVDisk`, `wipe_vdisk`, and
+`wipe-vdisk` are equivalent. Durations use protobuf duration syntax, for example `0.5s`, `2s`, or `1.5s`. Unknown fields,
+invalid values, and duplicate fields are rejected before the workload connects to the cluster. When `--config-file` is set,
+the legacy workload-specific options are ignored. The workload intentionally rejects the global `--dry-run` option because
+several actions cannot be simulated safely. See [`protos/cluster_workload.proto`](protos/cluster_workload.proto) for the complete
+field and filter schema.
+
+`change_pdisk_key` and `obliterate_pdisk` use the Berkanavt test-cluster paths shown by the existing workload tooling and are
+intended for that deployment layout. `change_pdisk_key` refuses to run unless the node uses the expected PDisk key file.

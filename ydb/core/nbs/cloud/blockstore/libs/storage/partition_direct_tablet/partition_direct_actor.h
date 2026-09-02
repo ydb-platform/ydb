@@ -154,6 +154,10 @@ private:
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
+    [[nodiscard]] std::unique_ptr<
+        NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+    MakeAllocateDDiskBlockGroupRequest() const;
+
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,

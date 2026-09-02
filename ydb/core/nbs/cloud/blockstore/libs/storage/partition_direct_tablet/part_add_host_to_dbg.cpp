@@ -404,12 +404,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     // re-sent request returns the same DDisk from BSController's persisted
     // allocation, so a retry (e.g. after a restart) is safe.
     const ui32 numDDisks = newHostIndex + 1;
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-    request->Record.SetTabletId(TabletID());
+    auto request = MakeAllocateDDiskBlockGroupRequest();
 
     auto* op = request->Record.AddDirectBlockGroupOperations();
     op->SetDirectBlockGroupId(dbgId);

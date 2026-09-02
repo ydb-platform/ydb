@@ -398,14 +398,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 {
     CreateBSControllerPipeClient(ctx);
 
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-
-    // TODO: fill with tablet id
-    request->Record.SetTabletId(TabletID());
+    auto request = MakeAllocateDDiskBlockGroupRequest();
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     const ui64 regionsCount =
@@ -419,6 +412,18 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
     }
 
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
+}
+
+std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+TPartitionActor::MakeAllocateDDiskBlockGroupRequest() const
+{
+    auto request = std::make_unique<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
+    request->Record.SetPersistentBufferDDiskPoolName(
+        StorageConfig->GetPersistentBufferDDiskPoolName());
+    request->Record.SetTabletId(TabletID());
+    return request;
 }
 
 TString TPartitionActor::GetSocketPath() const

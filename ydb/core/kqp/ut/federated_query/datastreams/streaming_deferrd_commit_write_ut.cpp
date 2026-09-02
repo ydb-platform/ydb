@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             ) AS
             DO BEGIN
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }}
                 ] @@;

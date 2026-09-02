@@ -129,8 +129,9 @@ block device.
 An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
 measurement, and cleanup command. Workload-specific safety limits still apply
 when they are shorter. Without an explicit cap, setup and cleanup retain their
-workload-specific budgets; the computed default covers cluster control and the
-configured search measurements.
+workload-specific budgets. The computed default is used as a conservative
+per-command budget for cluster control; it is not a deadline or an estimate of
+the total profile runtime.
 
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
 benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. Topic
@@ -148,6 +149,8 @@ CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
 first failing point, then a binary search to find the highest load whose
 millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
 Automatic search is limited to 64 measurements per cluster-geometry stage.
+The `storage` preset can run a separate search after each dynamic-node scaling
+step, so a complete profile can contain more than 64 measurements.
 Latency-SLO configuration validation rejects ranges, multipliers, or
 resolutions whose deterministic worst-case search path can exceed that limit.
 Throughput search stops at the limit and reports the best point measured so far
@@ -247,9 +250,10 @@ compatibility, but newly generated YAML uses `search` and `objective`.
 point. Set `measurement.verification-repetitions` to run additional independent
 samples at the load selected by the search; it defaults to `0` so existing
 configurations keep their previous runtime and is limited to 20. These
-post-search samples are included when deriving the default cluster-control
-timeout. An explicitly configured `timeout` also caps each workload command;
-it remains a per-command safety bound rather than an absolute profile deadline.
+post-search samples are included when deriving the conservative default
+cluster-control command budget. An explicitly configured `timeout` also caps
+each workload command; it remains a per-command safety bound rather than an
+absolute profile deadline.
 Verification never
 changes the selected load or dynamic-node scaling decision. Its holdout samples
 are written separately to `verification-repetitions.csv` and

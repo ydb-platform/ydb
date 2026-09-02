@@ -33,13 +33,5 @@ Y_UNIT_TEST_SUITE(NormalizePathTest) {
         UNIT_ASSERT_EXCEPTION(AdjustPath("/abc", FakeConfig("/root/db")), TMisuseException);
         UNIT_ASSERT_EXCEPTION(AdjustPath("/root/bd/abc", FakeConfig("/root/db")), TMisuseException);
     }
-
-    Y_UNIT_TEST(TestAdjustmentWithRelativeDatabase) {
-        UNIT_ASSERT(AdjustPath("abc", FakeConfig("mydb")) == "abc");
-        UNIT_ASSERT(AdjustPath("/root/mydb/abc", FakeConfig("mydb")) == "/root/mydb/abc");
-
-        auto config = FakeConfig("mydb");
-        config.Path = "current";
-        UNIT_ASSERT(AdjustPath("abc", config) == "current/abc");
-    }
 }
+

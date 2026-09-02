@@ -85,7 +85,7 @@ private:
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(Request_->GetDatabaseRelativePath(req->path()));
+        record->SetPath(req->path());
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }

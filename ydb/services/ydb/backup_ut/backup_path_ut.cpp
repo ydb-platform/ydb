@@ -858,7 +858,7 @@ void ExportWithCommonSourcePathAndExplicitTableInsideImpl(TBackupTestFixture& f,
     {
         auto exportSettings = traits.MakeExportSettings(f, "");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "Root/RecursiveFolderProcessing/dir1/Table1", .Dst = "ExplicitTable1Prefix"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/Table1", .Dst = "ExplicitTable1Prefix"})
             .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);

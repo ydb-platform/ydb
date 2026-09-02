@@ -188,7 +188,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
+            destinationPathPair = SplitPath(req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, "Invalid path: " + req->path(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -304,7 +304,7 @@ private:
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(Request_->GetDatabaseRelativePath(req->path()));
+        record->SetPath(req->path());
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -331,7 +331,7 @@ private:
         const auto req = this->GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(this->Request_->GetDatabaseRelativePath(req->path()));
+            pathPair = SplitPath(req->path());
         } catch (const std::exception& ex) {
             this->Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return ReplyWithResult(StatusIds::BAD_REQUEST, ctx);
@@ -406,7 +406,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
+            destinationPathPair = SplitPath(req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, "Invalid path: " + req->path(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -547,7 +547,7 @@ private:
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(Request_->GetDatabaseRelativePath(req->path()));
+        record->SetPath(req->path());
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -577,7 +577,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
+            destinationPathPair = SplitPath(req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, "Invalid path: " + req->path(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);

@@ -189,13 +189,6 @@ TString NormalizePath(const TString& database, const TString& path) {
     return NormalizePathJoin(database, path);
 }
 
-TString ResolvePathToDatabase(TStringBuf database, TStringBuf path) {
-    if (path.empty() || path.StartsWith('/')) {
-        return TString{path};
-    }
-    return NormalizePathJoin(database, path);
-}
-
 ui32 CanonizedPathLen(const TVector<TString>& path) {
     ui32 ret = path.size();
     for (auto &x : path)

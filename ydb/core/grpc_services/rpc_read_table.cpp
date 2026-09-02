@@ -489,7 +489,7 @@ private:
         settings.DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
 
         settings.Owner = SelfId();
-        settings.TablePath = Request_->GetDatabaseRelativePath(req->path());
+        settings.TablePath = req->path();
         settings.Ordered = req->ordered();
         settings.RequireResultSet = true;
 

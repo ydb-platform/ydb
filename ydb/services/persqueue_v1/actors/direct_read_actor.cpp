@@ -272,9 +272,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "empty topic in init request");
         }
 
-        TopicsToResolve.insert(TopicsHandler.GetConverterFactory()->GetNoDCMode()
-            ? Request->GetDatabaseRelativePath(path)
-            : path);
+        TopicsToResolve.insert(path);
     }
 
     if (Request->GetSerializedToken().empty()) {

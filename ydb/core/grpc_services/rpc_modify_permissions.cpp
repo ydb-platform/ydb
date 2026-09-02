@@ -42,7 +42,7 @@ private:
     void SendRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
 
-        const std::pair<TString, TString> pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
+        const std::pair<TString, TString> pathPair = SplitPath(req->path());
 
         const auto& workingDir = pathPair.first;
         const auto& name = pathPair.second;

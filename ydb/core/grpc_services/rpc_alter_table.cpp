@@ -37,7 +37,6 @@ public:
     TAlterTableRPC(IRequestOpCtx* msg)
         : TBase(msg)
         , DatabaseName(Request_->GetDatabaseName().GetOrElse(""))
-        , TablePath(Request_->GetDatabaseRelativePath(GetProtoRequest()->path()))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -81,7 +80,6 @@ public:
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
-            IndexBuildSettings.set_source_path(TablePath);
 
             PrepareAlterTableWithTxId();
             break;
@@ -89,7 +87,7 @@ public:
         case EOp::Attribute:
         case EOp::AddChangefeed:
         case EOp::DropChangefeed:
-            Navigate(TablePath);
+            Navigate(GetProtoRequest()->path());;
             break;
 
         case EOp::DropIndex:
@@ -101,7 +99,6 @@ public:
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
-            ForcedCompactionSettings.set_source_path(TablePath);
 
             PrepareAlterTableWithTxId();
             break;
@@ -110,7 +107,6 @@ public:
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
-            SetColumnConstraintSettings.SetTablePath(TablePath);
 
             PrepareAlterTableWithTxId();
             break;
@@ -190,7 +186,7 @@ private:
         TxId = msg->TxId;
         LogPrefix = TStringBuilder() << "[AlterTable" << OpType << ' ' << SelfId() << " TxId# " << TxId << "] ";
 
-        Navigate(TablePath);
+        Navigate(GetProtoRequest()->path());
     }
 
     void Navigate(const TString& path) {
@@ -298,7 +294,7 @@ private:
                 }
 
                 const auto& child = list->Children.at(0);
-                AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(TablePath), child.Name)));
+                AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(GetProtoRequest()->path()), child.Name)));
             } else {
                 Navigate(entry.TableId);
             }
@@ -489,20 +485,13 @@ private:
     }
 
     void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) {
-        const auto* req = GetProtoRequest();
-        Ydb::Table::AlterTableRequest requestWithResolvedPaths;
-        if (req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl()) {
-            requestWithResolvedPaths.CopyFrom(*req);
-            ResolveTtlStoragePaths(*requestWithResolvedPaths.mutable_set_ttl_settings(), *Request_);
-            req = &requestWithResolvedPaths;
-        }
-
+        const auto req = GetProtoRequest();
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         auto modifyScheme = proposeRequest->Record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetAllowAccessToPrivatePaths(overridePath.Defined());
         Ydb::StatusIds::StatusCode code;
         TString error;
-        if (!BuildAlterTableModifyScheme(overridePath.GetOrElse(TablePath), req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
+        if (!BuildAlterTableModifyScheme(overridePath.GetOrElse(req->path()), req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
@@ -513,7 +502,6 @@ private:
 
     ui64 TxId = 0;
     const TString DatabaseName;
-    const TString TablePath;
     TString LogPrefix;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPathId ResolvedPathId;

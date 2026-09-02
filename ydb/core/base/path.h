@@ -29,7 +29,6 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
  */
 TString NormalizePath(TStringBuf database, TStringBuf path);
 TString NormalizePath(const TString& database, const TString& path);
-TString ResolvePathToDatabase(TStringBuf database, TStringBuf path);
 
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {

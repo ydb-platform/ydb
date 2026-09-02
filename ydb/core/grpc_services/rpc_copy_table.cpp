@@ -32,10 +32,9 @@ public:
 private:
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
-        const TString destinationPath = Request_->GetDatabaseRelativePath(req->destination_path());
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(destinationPath);
+            destinationPathPair = SplitPath(req->destination_path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -51,7 +50,7 @@ private:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         auto create = modifyScheme->MutableCreateTable();
         create->SetName(name);
-        create->SetCopyFromTable(Request_->GetDatabaseRelativePath(req->source_path()));
+        create->SetCopyFromTable(req->source_path());
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 };

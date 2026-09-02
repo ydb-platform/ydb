@@ -24,8 +24,7 @@ public:
         auto navigateRequest = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
-        navigateRequest->Record.MutableDescribePath()->SetPath(
-            Request_->GetDatabaseRelativePath(GetProtoRequest()->path()));
+        navigateRequest->Record.MutableDescribePath()->SetPath(GetProtoRequest()->path());
 
         Send(MakeTxProxyID(), navigateRequest.release());
         Become(&TDescribeSecretRPC::StateDescribeScheme);

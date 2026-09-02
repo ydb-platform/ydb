@@ -332,8 +332,8 @@ void RenderDbgList(
                             str << inflight;
                         }
                         TABLED () {
-                            str << consecutiveErrors << " / "
-                                << consecutiveSuccesses;
+                            str << consecutiveSuccesses << " / "
+                                << consecutiveErrors;
                         }
                         TABLED () {
                             str << pBuffersUsage.Print(true);
@@ -817,9 +817,7 @@ void RenderVChunkCounters(IOutputStream& str, const TMonPageData& data)
                "<option value=''>select DBG</option>";
         for (const auto& row: perDbg) {
             str << "<option value='" << row.DbgIndex << "'";
-            if (data.SelectedVChunkDbg &&
-                *data.SelectedVChunkDbg == row.DbgIndex)
-            {
+            if (data.SelectedDbg && *data.SelectedDbg == row.DbgIndex) {
                 str << " selected";
             }
             str << ">#" << row.DbgIndex << "</option>";
@@ -834,7 +832,7 @@ void RenderVChunkCounters(IOutputStream& str, const TMonPageData& data)
         const bool showBody = data.ShowVChunks;
         str << "<div id='vcVChunksBody'"
             << (showBody ? "" : " class='lat-hidden'") << ">";
-        if (!data.SelectedVChunkDbg) {
+        if (!data.SelectedDbg) {
             DIV_CLASS ("alert alert-info") {
                 str << "Select a DBG to list its vchunks.";
             }

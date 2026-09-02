@@ -154,11 +154,10 @@ struct TMonPageData
     std::optional<TVChunkSnapshot> VChunk;
 
     // VChunk counters tab: disk / per-DBG totals, and optional per-vchunk
-    // rows for SelectedVChunkDbg when ShowVChunks is set. VChunkStatsLimit
+    // rows for SelectedDbg when ShowVChunks is set. VChunkStatsLimit
     // is the per-vchunk row cap (0 = dump everything).
     std::optional<TVChunkStatsGatherResult> VChunkStats;
     size_t VChunkStatsLimit = DefaultVChunkStatsLimit;
-    std::optional<ui32> SelectedVChunkDbg;
     bool ShowVChunks = false;
 
     // Latency tab: which percentile colors the heatmap / slot grid, and
@@ -167,7 +166,7 @@ struct TMonPageData
     std::optional<EOperation> SelectedLatencyOperation;
 
     // Chaos controller state.
-    TChaosSnapshot Chaos;
+    TChaosConfig Chaos;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

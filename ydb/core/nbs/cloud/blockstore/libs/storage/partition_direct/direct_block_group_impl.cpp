@@ -747,9 +747,9 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
         ddiskId.Serialize(&disksIds.back());
     };
 
-    // First DDisk in request should be coordinators DDisk.
+    // The coordinator's DDisk must be first in the request.
     addDDisk(coordinatorHostIndex);
-    // Then all others DDisk.
+    // The remaining DDisks follow in any order.
     for (auto host:
          hostIndexes.Exclude(THostMask::MakeOne(coordinatorHostIndex)))
     {

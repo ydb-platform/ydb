@@ -24,6 +24,24 @@ NThreading::TFuture<T> MakeUndeliveredFuture()
     return NThreading::MakeFuture(std::move(result));
 }
 
+// Replaces received replies from nodes that were disabled when the request
+// was sent, without suppressing the underlying request.
+void InjectUndeliveryErrors(
+    const TSet<ui32>& disabledNodeIds,
+    IStorageTransport::TEvWriteToManyPersistentBuffersResult* result)
+{
+    for (auto& pBufferResult: *result->MutableResult()) {
+        if (disabledNodeIds.contains(
+                pBufferResult.GetPersistentBufferId().GetNodeId()))
+        {
+            SetErrorStatus(
+                TReplyStatus::ERROR,
+                UndeliveryErrorMessage,
+                *pBufferResult.MutableResult());
+        }
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -148,6 +166,27 @@ void TTransportChaosInjector::WriteToManyPBuffers(
         callback(response->Record, std::move(span));
         return;
     }
+
+    TSet<ui32> disabledNodes;
+    for (const auto& ddiskId: persistentBufferIds) {
+        if (IsNodeDisabled(ddiskId.GetNodeId())) {
+            disabledNodes.insert(ddiskId.GetNodeId());
+        }
+    }
+
+    if (disabledNodes) {
+        auto underlyingCallback = std::move(callback);
+        callback = [disabledNodes = std::move(disabledNodes),
+                    underlyingCallback = std::move(underlyingCallback)]   //
+            (const TEvWriteToManyPersistentBuffersResult& result,
+             std::shared_ptr<NWilson::TSpan> span) mutable
+        {
+            auto resultWithChaos = result;
+            InjectUndeliveryErrors(disabledNodes, &resultWithChaos);
+            underlyingCallback(resultWithChaos, std::move(span));
+        };
+    }
+
     UnderlyingTransport->WriteToManyPBuffers(
         connection,
         selector,

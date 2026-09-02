@@ -58,7 +58,8 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
-    // Writes to many persistent buffers or reports coordinator undelivery.
+    // Sends the request unless the coordinator is disabled. Replies from
+    // target nodes disabled at dispatch time are reported as undelivered.
     void WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
@@ -78,7 +79,8 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
-    // Synchronizes through the destination DDisk or returns undelivery.
+    // Synchronizes a PBuffer with a DDisk or returns undelivery when either
+    // node is disabled.
     NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,

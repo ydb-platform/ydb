@@ -11,6 +11,7 @@ using TStorageTransportPtr = std::shared_ptr<IStorageTransport>;
 
 class IChaosInjectorControl;
 using IChaosInjectorControlPtr = std::shared_ptr<IChaosInjectorControl>;
+using IChaosInjectorControlWeakPtr = std::weak_ptr<IChaosInjectorControl>;
 
 class ITransportWithChaosInjectorControl;
 using TTransportWithChaosInjectorControlPtr =

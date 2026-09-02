@@ -499,23 +499,32 @@ void TGRpcClientLow::AddWorkerThreadForTest() {
         CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
         auto* cq = CQS_.back().get();
         WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
-            PullEvents(cq);
-        }).Release());
+                                                             PullEvents(cq);
+                                                         })
+                                        .Release());
     } else {
         auto* cq = CQS_.back().get();
         WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
-            PullEvents(cq);
-        }).Release());
+                                                             PullEvents(cq);
+                                                         })
+                                        .Release());
     }
 }
 
 TGRpcClientLow::~TGRpcClientLow() {
-    StopInternal(true);
-    WaitInternal();
+    StopGracefully(true);
 }
 
 void TGRpcClientLow::Stop(bool wait) {
     StopInternal(false);
+
+    if (wait) {
+        WaitInternal();
+    }
+}
+
+void TGRpcClientLow::StopGracefully(bool wait) {
+    StopInternal(true);
 
     if (wait) {
         WaitInternal();
@@ -585,7 +594,6 @@ void TGRpcClientLow::WaitInternal() {
 
 void TGRpcClientLow::WaitIdle() {
     std::unique_lock<std::mutex> guard(Mtx_);
-
     while (!Contexts_.empty()) {
         ContextsEmpty_.wait(guard);
     }

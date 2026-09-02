@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 
@@ -35,13 +36,13 @@ public:
         const std::string& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
-        IInternalClient* client
-    );
+        IInternalClient* client);
 
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();
     void InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+    void ResetCredentials();
     NThreading::TFuture<void> GetCredentialsReady() const;
     std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
 #ifndef YDB_GRPC_UNSECURE_AUTH
@@ -93,6 +94,10 @@ private:
 // Tracker allows to get driver state by database and credentials
 class TDbDriverStateTracker {
     using TStateKey = std::tuple<std::string, std::string, std::string, EDiscoveryMode, TSslCredentials>;
+    struct TTrackedState {
+        std::weak_ptr<TDbDriverState> State;
+        std::uint64_t Generation = 0;
+    };
     struct TStateKeyHash {
         size_t operator()(const TStateKey& k) const noexcept {
             THash<std::string> strHash;
@@ -108,22 +113,22 @@ class TDbDriverStateTracker {
     };
 public:
     TDbDriverStateTracker(IInternalClient* client);
-    using TNotificationCbRunner = std::function<NThreading::TFuture<void>(TDbDriverState::TCb& cb)>;
 
     TDbDriverState::TPtr GetDriverState(
         const std::string& database,
         const std::string& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
-        std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
-    );
-    NThreading::TFuture<void> SendNotification(
-        TDbDriverState::ENotifyType type,
-        TNotificationCbRunner cbRunner = {});
-    void SetMetricRegistry(::NMonitoring::TMetricRegistry *sensorsRegistry);
+        std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+    NThreading::TFuture<void> SendNotification(TDbDriverState::ENotifyType type);
+    std::vector<TDbDriverState::TPtr> GetStates();
+    void WaitEmpty();
+    void SetMetricRegistry(::NMonitoring::TMetricRegistry* sensorsRegistry);
+
 private:
     IInternalClient* DiscoveryClient_;
-    std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
+    std::unordered_map<TStateKey, TTrackedState, TStateKeyHash> States_;
+    std::uint64_t NextGeneration_ = 0;
     std::shared_mutex Lock_;
     std::condition_variable_any Notify_;
 };

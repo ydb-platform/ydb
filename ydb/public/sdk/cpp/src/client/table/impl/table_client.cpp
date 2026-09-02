@@ -31,6 +31,7 @@ TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
 TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , Settings_(settings)
+    , SessionCleanupContext_(Connections_->CreateContext())
     , SessionPool_(
         Settings_.SessionPoolSettings_.MaxActiveSessions_,
         Settings_.SessionPoolSettings_.MinPoolSize_
@@ -81,6 +82,7 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
+        // Waiting on the sole callback worker would prevent Drain() completions from running.
         const bool waitForDrain = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
         auto drainFuture = Drain();
         if (waitForDrain) {
@@ -95,12 +97,11 @@ bool TTableClient::TImpl::LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpo
 
 void TTableClient::TImpl::InitStopper() {
     std::weak_ptr<TTableClient::TImpl> weak = shared_from_this();
-    auto cb = [weak]() mutable {
-        auto strong = weak.lock();
-        if (!strong) {
-            return MakeReadyFuture();
+    auto cb = [weak]() -> NThreading::TFuture<void> {
+        if (auto strong = weak.lock()) {
+            return strong->Drain();
         }
-        return strong->Drain();
+        return {};
     };
 
     DbDriverState_->AddCb(std::move(cb), TDbDriverState::ENotifyType::STOP);
@@ -380,15 +381,6 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
             sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(Promise, Client, CreateSessionSettings, RpcSettings, 0, true));
         }
 
-        void ScheduleOnDeadlineWaiterCleanup() override {
-            Client->Connections_->ScheduleDelayedTask(
-                [client = Client]() {
-                    client->SessionPool_.ClearOldWaiters();
-                },
-                GetDeadline()
-            );
-        }
-
         TDeadline GetDeadline() const override {
             return std::min(RpcSettings.Deadline, TDeadline::AfterDuration(NSessionPool::MAX_WAIT_SESSION_TIMEOUT));
         }
@@ -409,7 +401,17 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
 
     auto ctx = std::make_unique<TTableClientGetSessionCtx>(shared_from_this(), settings);
     auto future = ctx->GetFuture();
-    SessionPool_.GetSession(std::move(ctx));
+    if (Connections_->IsStopping()) {
+        ctx->ReplyError(TStatus(TPlainStatus(EStatus::CLIENT_CANCELLED, "Driver is stopped")));
+    } else {
+        SessionPool_.GetSession(std::move(ctx), [this](TDeadline deadline) {
+            Connections_->ScheduleDelayedTask(
+                [client = shared_from_this()] {
+                    client->SessionPool_.ClearOldWaiters();
+                },
+                deadline);
+        });
+    }
     return future;
 }
 
@@ -1103,7 +1105,8 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TVal
     return promise.GetFuture();
 }
 
-TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings)
+TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings,
+    std::shared_ptr<NYdbGrpc::IQueueClientContext> context)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, sessionImpl->GetEndpointKey())
         .TryUpdateDeadline(sessionImpl->PropagatedDeadline_);
@@ -1113,7 +1116,8 @@ TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, co
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
         std::move(request),
         &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
-        rpcSettings
+        rpcSettings,
+        std::move(context)
     );
 }
 
@@ -1121,7 +1125,7 @@ TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* session
     const auto internalCloseSessionSettings = TCloseSessionSettings().ClientTimeout(TDuration::Seconds(2));
 
     auto driver = Connections_;
-    return Close(sessionImpl, internalCloseSessionSettings)
+    return Close(sessionImpl, internalCloseSessionSettings, SessionCleanupContext_)
         .Apply([driver{std::move(driver)}](TAsyncStatus status) mutable
         {
             driver.reset();

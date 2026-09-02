@@ -7,9 +7,6 @@
 
 #include <library/cpp/string_utils/quote/quote.h>
 
-#include <thread>
-#include <unordered_map>
-
 namespace {
     void Quote(std::string& url, const char* safe = "/") {
         TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
@@ -67,6 +64,13 @@ void TDbDriverState::InitCredentials(
     Credentials.CallCredentials = grpc::MetadataCredentialsFromPlugin(
         std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(Credentials.Provider)));
 #endif
+}
+
+void TDbDriverState::ResetCredentials() {
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    Credentials.CallCredentials.reset();
+#endif
+    Credentials.Provider.reset();
 }
 
 NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
@@ -198,7 +202,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         std::shared_lock lock(Lock_);
         auto state = States_.find(key);
         if (state != States_.end()) {
-            auto strong = state->second.lock();
+            auto strong = state->second.State.lock();
             if (strong) {
                 return strong;
             }
@@ -213,7 +217,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             if (state == States_.end()) {
                 return true;
             }
-            strongState = state->second.lock();
+            strongState = state->second.State.lock();
             if (strongState) {
                 return true;
             }
@@ -223,21 +227,22 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             return strongState;
         }
         {
-            auto deleter = [this, key](TDbDriverState* p) {
-                {
-                    std::unique_lock lock(Lock_);
-                    States_.erase(key);
-                    Notify_.notify_all();
-                }
-                delete p;
-            };
-
-            auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
-            auto& weakState = it->second;
+            auto [it, inserted] = States_.try_emplace(key);
+            const auto generation = ++NextGeneration_;
+            it->second.Generation = generation;
             lock.unlock(); // temporarily release lock
 
             try {
                 Y_ABORT_UNLESS(inserted);
+                auto deleter = [this, key, generation](TDbDriverState* p) {
+                    delete p;
+                    std::unique_lock lock(Lock_);
+                    auto state = States_.find(key);
+                    if (state != States_.end() && state->second.Generation == generation) {
+                        States_.erase(state);
+                        Notify_.notify_all();
+                    }
+                };
                 strongState = std::shared_ptr<TDbDriverState>(
                     new TDbDriverState(
                         quotedDatabase,
@@ -257,15 +262,20 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                 }
             } catch (...) {
                 lock.lock();
-                Y_ABORT_UNLESS(weakState.expired());
-                Y_ABORT_UNLESS(States_.erase(key));
-                Notify_.notify_all();
+                auto state = States_.find(key);
+                if (state != States_.end() && state->second.Generation == generation) {
+                    Y_ABORT_UNLESS(state->second.State.expired());
+                    States_.erase(state);
+                    Notify_.notify_all();
+                }
                 throw;
             }
 
             lock.lock(); // re-acquire lock
-            Y_ABORT_UNLESS(weakState.expired());
-            weakState = strongState; // reference remains valid
+            auto state = States_.find(key);
+            Y_ABORT_UNLESS(state != States_.end() && state->second.Generation == generation);
+            Y_ABORT_UNLESS(state->second.State.expired());
+            state->second.State = strongState;
             Notify_.notify_all();
         }
     }
@@ -302,32 +312,24 @@ void TDbDriverState::PostToResponseQueue(TPostTaskCb&& f) {
     Client->PostToResponseQueue(std::move(f));
 }
 
-NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
-    TDbDriverState::ENotifyType type,
-    TNotificationCbRunner cbRunner
-) {
-    std::vector<std::weak_ptr<TDbDriverState>> states;
-    {
-        std::shared_lock lock(Lock_);
-        states.reserve(States_.size());
-        for (auto& weak : States_) {
-            states.push_back(weak.second);
+NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(TDbDriverState::ENotifyType type) {
+    auto states = GetStates();
+    std::vector<TDbDriverState::TCb> callbacks;
+    for (auto& state : states) {
+        std::lock_guard lock(state->NotifyCbsLock);
+        for (auto& cb : state->NotifyCbs[static_cast<size_t>(type)]) {
+            if (cb) {
+                callbacks.push_back(cb);
+            }
         }
     }
+
     std::vector<NThreading::TFuture<void>> results;
-    for (auto& state : states) {
-        auto strong = state.lock();
-        if (strong) {
-            std::lock_guard lock(strong->NotifyCbsLock);
-            for (auto& cb : strong->NotifyCbs[static_cast<size_t>(type)]) {
-                if (cb) {
-                    auto future = cbRunner ? cbRunner(cb) : cb();
-                    if (!future.HasException()) {
-                        results.push_back(future);
-                    }
-                    //TODO: Add loger
-                }
-            }
+    results.reserve(callbacks.size());
+    for (auto& cb : callbacks) {
+        auto result = cb();
+        if (result.Initialized() && !result.HasException()) {
+            results.push_back(std::move(result));
         }
     }
     if (results.empty()) {
@@ -341,21 +343,29 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
     return NThreading::WaitExceptionOrAll(results);
 }
 
-void TDbDriverStateTracker::SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry) {
-    std::vector<std::weak_ptr<TDbDriverState>> states;
-    {
-        std::shared_lock lock(Lock_);
-        states.reserve(States_.size());
-        for (auto& weak : States_) {
-            states.push_back(weak.second);
+std::vector<TDbDriverState::TPtr> TDbDriverStateTracker::GetStates() {
+    std::vector<TDbDriverState::TPtr> states;
+    std::shared_lock lock(Lock_);
+    states.reserve(States_.size());
+    for (auto& weak : States_) {
+        if (auto state = weak.second.State.lock()) {
+            states.push_back(std::move(state));
         }
     }
+    return states;
+}
 
-    for (auto& weak : states) {
-        if (auto strong = weak.lock()) {
-            strong->StatCollector.SetMetricRegistry(sensorsRegistry);
-            strong->EndpointPool.SetStatCollector(strong->StatCollector);
-        }
+void TDbDriverStateTracker::WaitEmpty() {
+    std::unique_lock lock(Lock_);
+    Notify_.wait(lock, [this] {
+        return States_.empty();
+    });
+}
+
+void TDbDriverStateTracker::SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry) {
+    for (auto& state : GetStates()) {
+        state->StatCollector.SetMetricRegistry(sensorsRegistry);
+        state->EndpointPool.SetStatCollector(state->StatCollector);
     }
 }
 

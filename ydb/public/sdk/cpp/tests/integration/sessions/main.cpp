@@ -11,6 +11,7 @@
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/create_channel.h>
 
+#include <chrono>
 #include <random>
 #include <thread>
 
@@ -61,6 +62,35 @@ void WaitForSessionsInPool(NYdb::NQuery::TQueryClient& client, std::int64_t expe
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     ASSERT_EQ(client.GetCurrentPoolSize(), expected);
+}
+
+void CheckSessionsDeleted(
+    const std::vector<std::string>& sessionIds,
+    std::chrono::steady_clock::duration retryTimeout = std::chrono::steady_clock::duration::zero()) {
+    auto channel = grpc::CreateChannel(std::getenv("YDB_ENDPOINT"), grpc::InsecureChannelCredentials());
+    auto stub = Ydb::Table::V1::TableService::NewStub(channel);
+    const auto deadline = std::chrono::steady_clock::now() + retryTimeout;
+
+    for (const auto& sessionId : sessionIds) {
+        while (true) {
+            grpc::ClientContext context;
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(1));
+            Ydb::Table::KeepAliveRequest request;
+            request.set_session_id(sessionId);
+            Ydb::Table::KeepAliveResponse response;
+            auto status = stub->KeepAlive(&context, request, &response);
+            ASSERT_TRUE(status.ok()) << status.error_message();
+
+            const auto& operation = response.operation();
+            ASSERT_TRUE(operation.ready());
+            if (operation.status() == Ydb::StatusIds::BAD_SESSION) {
+                break;
+            }
+            ASSERT_EQ(operation.status(), Ydb::StatusIds::SUCCESS);
+            ASSERT_LT(std::chrono::steady_clock::now(), deadline)
+                << "Session was not deleted: " << sessionId;
+        }
+    }
 }
 
 }
@@ -650,20 +680,7 @@ TEST(YdbSdkSessions, CloseSessionAfterDriverDtorWithoutSessionPool) {
         sessionIds.push_back(session1.GetId());
     }
 
-    std::shared_ptr<grpc::Channel> channel;
-    channel = grpc::CreateChannel(std::getenv("YDB_ENDPOINT"), grpc::InsecureChannelCredentials());
-    auto stub = Ydb::Table::V1::TableService::NewStub(channel);
-    for (const auto& sessionId : sessionIds) {
-        grpc::ClientContext context;
-        Ydb::Table::KeepAliveRequest request;
-        request.set_session_id(sessionId);
-        Ydb::Table::KeepAliveResponse response;
-        auto status = stub->KeepAlive(&context, request, &response);
-        ASSERT_TRUE(status.ok());
-        auto deferred = response.operation();
-        ASSERT_TRUE(deferred.ready() == true);
-        ASSERT_EQ(deferred.status(), Ydb::StatusIds::BAD_SESSION);
-    }
+    CheckSessionsDeleted(sessionIds, std::chrono::seconds(30));
 }
 
 TEST(YdbSdkSessions, CloseSessionWithSessionPoolExplicit) {
@@ -707,20 +724,7 @@ TEST(YdbSdkSessions, CloseSessionWithSessionPoolExplicit) {
         }
     }
 
-    std::shared_ptr<grpc::Channel> channel;
-    channel = grpc::CreateChannel(std::getenv("YDB_ENDPOINT"), grpc::InsecureChannelCredentials());
-    auto stub = Ydb::Table::V1::TableService::NewStub(channel);
-    for (const auto& sessionId : sessionIds) {
-        grpc::ClientContext context;
-        Ydb::Table::KeepAliveRequest request;
-        request.set_session_id(sessionId);
-        Ydb::Table::KeepAliveResponse response;
-        auto status = stub->KeepAlive(&context, request, &response);
-        ASSERT_TRUE(status.ok());
-        auto deferred = response.operation();
-        ASSERT_TRUE(deferred.ready() == true);
-        ASSERT_EQ(deferred.status(), Ydb::StatusIds::BAD_SESSION);
-    }
+    CheckSessionsDeleted(sessionIds);
 }
 
 TEST(YdbSdkSessions, CloseSessionWithSessionPoolExplicitDriverStopOnly) {
@@ -749,20 +753,7 @@ TEST(YdbSdkSessions, CloseSessionWithSessionPoolExplicitDriverStopOnly) {
         driver.Stop(true);
     }
 
-    std::shared_ptr<grpc::ChannelInterface> channel;
-    channel = grpc::CreateChannel(std::getenv("YDB_ENDPOINT"), grpc::InsecureChannelCredentials());
-    auto stub = Ydb::Table::V1::TableService::NewStub(channel);
-    for (const auto& sessionId : sessionIds) {
-        grpc::ClientContext context;
-        Ydb::Table::KeepAliveRequest request;
-        request.set_session_id(sessionId);
-        Ydb::Table::KeepAliveResponse response;
-        auto status = stub->KeepAlive(&context, request, &response);
-        ASSERT_TRUE(status.ok());
-        auto deferred = response.operation();
-        ASSERT_TRUE(deferred.ready() == true);
-        ASSERT_EQ(deferred.status(), Ydb::StatusIds::BAD_SESSION);
-    }
+    CheckSessionsDeleted(sessionIds, std::chrono::seconds(30));
 }
 
 TEST(YdbSdkSessions, CloseSessionWithSessionPoolFromDtors) {
@@ -790,18 +781,5 @@ TEST(YdbSdkSessions, CloseSessionWithSessionPoolFromDtors) {
         }
     }
 
-    std::shared_ptr<grpc::Channel> channel;
-    channel = grpc::CreateChannel(std::getenv("YDB_ENDPOINT"), grpc::InsecureChannelCredentials());
-    auto stub = Ydb::Table::V1::TableService::NewStub(channel);
-    for (const auto& sessionId : sessionIds) {
-        grpc::ClientContext context;
-        Ydb::Table::KeepAliveRequest request;
-        request.set_session_id(sessionId);
-        Ydb::Table::KeepAliveResponse response;
-        auto status = stub->KeepAlive(&context, request, &response);
-        ASSERT_TRUE(status.ok());
-        auto deferred = response.operation();
-        ASSERT_TRUE(deferred.ready() == true);
-        ASSERT_EQ(deferred.status(), Ydb::StatusIds::BAD_SESSION);
-    }
+    CheckSessionsDeleted(sessionIds);
 }

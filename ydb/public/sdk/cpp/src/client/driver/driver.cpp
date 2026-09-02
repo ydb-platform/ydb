@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/runtime/runtime.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -13,21 +14,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <util/stream/file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_ca.h>
-#include <thread>
 namespace NYdb::inline Dev {
 
-using NYdbGrpc::TGRpcClientLow;
-using NYdbGrpc::TServiceConnection;
-using NYdbGrpc::TSimpleRequestProcessor;
-using NYdbGrpc::TGRpcClientConfig;
-using NYdbGrpc::TResponseCallback;
-using NYdbGrpc::TGrpcStatus;
 using NYdbGrpc::TTcpKeepAliveSettings;
-using NYdbGrpc::IsGRpcCompletionThread;
-
-using Ydb::StatusIds;
-
-using namespace NThreading;
 
 class TDriverConfig::TImpl : public IConnectionsParams {
 public:
@@ -55,7 +44,6 @@ public:
     uint64_t GetMaxOutboundMessageSize() const override { return MaxOutboundMessageSize; }
     uint64_t GetMaxMessageSize() const override { return MaxMessageSize; }
     const TLog& GetLog() const override { return Log; }
-    std::shared_ptr<IExecutor> GetExecutor() const override { return Executor; }
     std::string GetBuildInfoExtra() const override { return BuildInfoExtra; }
     std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const override { return MetricRegistry; }
     std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const override { return TraceProvider; }
@@ -362,14 +350,16 @@ TDriver::TDriver(const TDriverConfig& config) {
         ythrow yexception() << "Invalid config object";
     }
 
+    GetSdkRuntime().GetOrInitialize(
+        config.Impl_->Executor,
+        config.Impl_->ClientThreadsNum,
+        config.Impl_->MaxQueuedResponses);
     Impl_.reset(new TGRpcConnectionsImpl(config.Impl_), TGRpcConnectionsDeleter());
+    Impl_->Start();
 }
 
-void TDriver::Stop(bool wait) {
-    auto impl = Impl_;
-    impl->DriverScope_->DeferOrRun([impl, wait]() mutable {
-        impl->Stop(wait);
-    });
+void TDriver::Stop(bool) {
+    Impl_->Stop();
 }
 
 TDriverConfig TDriver::GetConfig() const {

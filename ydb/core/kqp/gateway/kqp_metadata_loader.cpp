@@ -19,7 +19,6 @@
 
 #include <atomic>
 #include <algorithm>
-#include <functional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
@@ -102,14 +101,14 @@ ui64 GetExpectedVersion(const TString&) {
     return 0;
 }
 
-template<typename TRequest, typename TResponse, typename TResult>
+template<typename TRequest, typename TResponse, typename TResult, typename TExtractStatus>
 TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
     typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
-    std::shared_ptr<ICompileDependencyDiagnostics> diagnostics = {},
-    ECompileDependency dependency = ECompileDependency::SchemeCache,
-    TString target = {},
-    std::function<ECompileDependencyStatus(const TResponse&)> extractStatus = {},
-    ECompileDependencyPurpose purpose = ECompileDependencyPurpose::QueryTable)
+    std::shared_ptr<ICompileDependencyDiagnostics> diagnostics,
+    ECompileDependency dependency,
+    TStringBuf target,
+    TExtractStatus extractStatus,
+    ECompileDependencyPurpose purpose)
 {
     auto promise = NewPromise<TResult>();
     if (!diagnostics) {
@@ -120,7 +119,7 @@ TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& act
         return promise.GetFuture();
     }
 
-    auto diagnostic = diagnostics->Begin(dependency, std::move(target), purpose);
+    auto diagnostic = diagnostics->Begin(dependency, TString(target), purpose);
     auto diagnosticFinished = std::make_shared<std::atomic<bool>>(false);
     auto finishDiagnostic = [diagnostics, diagnostic, diagnosticFinished](ECompileDependencyStatus status) mutable {
         if (diagnostics && !diagnosticFinished->exchange(true, std::memory_order_relaxed)) {
@@ -130,7 +129,7 @@ TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& act
     auto tracedCallback = [callback = std::move(callback), finishDiagnostic,
             extractStatus = std::move(extractStatus)]
             (TPromise<TResult> promise, TResponse&& response) mutable {
-        finishDiagnostic(extractStatus ? extractStatus(response) : ECompileDependencyStatus::Unknown);
+        finishDiagnostic(extractStatus(response));
         callback(std::move(promise), std::move(response));
     };
     auto failedCallback = [finishDiagnostic = std::move(finishDiagnostic)]() mutable {

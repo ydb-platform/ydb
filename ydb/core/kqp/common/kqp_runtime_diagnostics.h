@@ -50,6 +50,8 @@ public:
             ActiveStarts_.emplace(shardId, startTimeMs);
             return startTimeMs;
         }
+        // Keep timings for the oldest in-flight reads. Overflow failures and retries
+        // remain retainable because they rank ahead of successful samples.
         return 0;
     }
 

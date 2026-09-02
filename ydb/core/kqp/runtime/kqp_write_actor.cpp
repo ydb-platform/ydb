@@ -4593,7 +4593,7 @@ public:
     bool Prepare(std::optional<NWilson::TTraceId> traceId) {
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
-        if (CommitDiagnosticsCapture) {
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
             CommitDiagnosticsCapture->OnPrepareStarted(OperationStartTime);
         }
 
@@ -4624,7 +4624,7 @@ public:
         Counters->BufferActorImmediateCommits->Inc();
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
-        if (CommitDiagnosticsCapture) {
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
             CommitDiagnosticsCapture->OnImmediateCommitStarted(OperationStartTime);
         }
 
@@ -4651,7 +4651,7 @@ public:
     void DistributedCommit() {
         Counters->BufferActorDistributedCommits->Inc();
         OperationStartTime = TInstant::Now();
-        if (CommitDiagnosticsCapture) {
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
             CommitDiagnosticsCapture->OnDistributedCommitStarted(OperationStartTime);
         }
 
@@ -5021,7 +5021,7 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
-                if (CommitDiagnosticsCapture) {
+                if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
                     CommitDiagnosticsCapture->OnCoordinatorPlanned();
                 }
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
@@ -5815,7 +5815,7 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
-        if (CommitDiagnosticsCapture) {
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
             CommitDiagnosticsCapture->OnShardPrepared(preparedInfo.ShardId);
         }
         if (HandleDeferredLocksBrokenOnPrepare()) return;
@@ -5855,7 +5855,7 @@ public:
                 ("writeResult", writeResultTimestamp->TxId)
                 ("shardId", shardId);
         }
-        if (CommitDiagnosticsCapture) {
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
             CommitDiagnosticsCapture->OnShardCommitted(shardId);
         }
         if (PendingCommitShards > 0) {
@@ -5871,7 +5871,7 @@ public:
                 {"txId", TxId.value_or(0)});
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             auto result = std::make_unique<TEvKqpBuffer::TEvResult>(BuildStats(), std::move(CommitTimestamp));
-            if (CommitDiagnosticsCapture) {
+            if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
                 result->CommitDiagnostics = CommitDiagnosticsCapture->Finish();
             }
             Send<ESendingType::Tail>(ExecuterActorId, result.release());
@@ -6149,7 +6149,7 @@ public:
         Become(&TKqpBufferWriteActor::StateError);
 
         TCommitDiagnostics diagnostics;
-        if (CommitDiagnosticsCapture) {
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
             diagnostics = CommitDiagnosticsCapture->Finish();
         }
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{

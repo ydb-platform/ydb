@@ -299,6 +299,7 @@ void ShiftShardAcks(std::vector<TShardAckDiagnostic>& shards, i64 offsetUs) {
     }
 }
 
+// Normalizes timestamps to origin.
 void ShiftExecutionTrace(TExecutionTraceSnapshot& trace, i64 offsetUs) {
     ShiftWindow(trace.Timeline.Execute, offsetUs);
     for (auto& phase : trace.Timeline.Phases) {

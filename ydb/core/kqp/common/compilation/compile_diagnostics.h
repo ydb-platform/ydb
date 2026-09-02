@@ -150,6 +150,8 @@ private:
                 }
             }
             if (least == Dependencies.end()) {
+                // Older pending dependencies are already the longest-running candidates;
+                // keep them and expose this overflow through Dropped.
                 return 0;
             }
             *least = {id, {dependency, purpose, std::move(target), start, end, status}};

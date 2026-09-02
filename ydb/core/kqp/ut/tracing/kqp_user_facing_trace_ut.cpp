@@ -1113,11 +1113,18 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             }));
 
         NKqp::TShardReadDiagnosticsCollector boundedConcurrentCollector;
-        for (ui64 shardId = 1; shardId <= NKqp::MaxActiveShardReadDiagnostics; ++shardId) {
+        for (ui64 shardId = 1; shardId <= NKqp::MaxShardReadDiagnostics; ++shardId) {
+            boundedConcurrentCollector.OnStart(shardId, TInstant::MilliSeconds(10));
+            boundedConcurrentCollector.OnFinish(shardId, 0, 0, 0,
+                Ydb::StatusIds::SUCCESS, true, TInstant::MilliSeconds(11));
+        }
+        constexpr ui64 activeShardBase = 100;
+        for (ui64 shardId = activeShardBase;
+                shardId < activeShardBase + NKqp::MaxActiveShardReadDiagnostics; ++shardId) {
             UNIT_ASSERT(boundedConcurrentCollector.OnStart(
                 shardId, TInstant::MilliSeconds(100)) != 0);
         }
-        const ui64 untrackedFailedShard = NKqp::MaxActiveShardReadDiagnostics + 1;
+        const ui64 untrackedFailedShard = activeShardBase + NKqp::MaxActiveShardReadDiagnostics;
         UNIT_ASSERT_VALUES_EQUAL(boundedConcurrentCollector.OnStart(
             untrackedFailedShard, TInstant::MilliSeconds(200)), 0u);
         boundedConcurrentCollector.OnFinish(untrackedFailedShard, 0, 0, 7,
@@ -1206,6 +1213,16 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
     }
 
     void CheckCommitDiagnosticsRetention() {
+        const TInstant transitionAt = TInstant::Seconds(1);
+        NKqp::TCommitDiagnosticsCapture timeline(/*collectTimeline*/ true,
+            /*collectShards*/ false);
+        timeline.OnPrepareStarted(transitionAt);
+        timeline.OnDistributedCommitStarted(transitionAt);
+        auto snapshot = timeline.Finish();
+        UNIT_ASSERT(snapshot.PrepareShards);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.PrepareShards.End - snapshot.PrepareShards.Start,
+            TDuration::MicroSeconds(1));
+
         NKqp::TShardAckDiagnosticsCollector commitCollector;
         for (ui64 shardId = 1; shardId <= NKqp::MaxCommitShardDiagnostics + 2; ++shardId) {
             commitCollector.OnAck(shardId, TInstant::MilliSeconds(shardId));

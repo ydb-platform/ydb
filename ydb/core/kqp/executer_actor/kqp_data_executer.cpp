@@ -224,16 +224,14 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
-            if (Y_UNLIKELY(ExecutionDiagnostics)) {
-                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Commit);
-            }
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            event->CollectTimeline = ExecutionDiagnostics
-                && Request.DiagnosticsPolicy->CollectCommitTimeline;
-            event->CollectShards = ExecutionDiagnostics
-                && Request.DiagnosticsPolicy->CollectShardSamples;
+            if (Y_UNLIKELY(ExecutionDiagnostics)) {
+                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Commit);
+                event->CollectTimeline = Request.DiagnosticsPolicy->CollectCommitTimeline;
+                event->CollectShards = Request.DiagnosticsPolicy->CollectShardSamples;
+            }
             Send<ESendingType::Tail>(
                 BufferActorId,
                 event.release(),

@@ -164,23 +164,21 @@ public:
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         ResponseStatsMode = Request.StatsMode;
         CollectionStatsMode = ResponseStatsMode;
-        if (Request.DiagnosticsPolicy && Request.DiagnosticsPolicy->CollectShardSamples) {
-            CollectionStatsMode = Max(CollectionStatsMode,
-                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
-        } else if (Request.DiagnosticsPolicy
-                && (Request.DiagnosticsPolicy->CollectStageAggregates
-                    || Request.DiagnosticsPolicy->CollectTaskSamples)) {
-            CollectionStatsMode = Max(CollectionStatsMode,
-                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        if (Request.DiagnosticsPolicy) {
+            const auto& policy = *Request.DiagnosticsPolicy;
+            if (policy.CollectShardSamples) {
+                CollectionStatsMode = Max(CollectionStatsMode,
+                    Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+            } else if (policy.CollectStageAggregates || policy.CollectTaskSamples) {
+                CollectionStatsMode = Max(CollectionStatsMode,
+                    Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+            }
+            TasksGraph.GetMeta().CollectShardDiagnostics = policy.CollectShardSamples;
+            TasksGraph.GetMeta().CollectBufferLookupDiagnostics = policy.CollectBufferLookup;
+            TasksGraph.GetMeta().CollectTimeline = policy.CollectTimeline;
         }
         TasksGraph.GetMeta().StatsMode = CollectionStatsMode;
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
-        TasksGraph.GetMeta().CollectShardDiagnostics = Request.DiagnosticsPolicy
-            && Request.DiagnosticsPolicy->CollectShardSamples;
-        TasksGraph.GetMeta().CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy
-            && Request.DiagnosticsPolicy->CollectBufferLookup;
-        TasksGraph.GetMeta().CollectTimeline = Request.DiagnosticsPolicy
-            && Request.DiagnosticsPolicy->CollectTimeline;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
             TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
         }

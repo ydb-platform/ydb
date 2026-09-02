@@ -83,8 +83,7 @@ public:
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
         , HasVectorTopK(settings.HasVectorTopK())
-        , CollectDiagnostics(settings.GetCollectDiagnostics())
-        , ShardReadDiagnostics(CollectDiagnostics
+        , ShardReadDiagnostics(settings.GetCollectDiagnostics()
             ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
@@ -1470,7 +1469,6 @@ private:
     const bool UseFollowers;
     const bool IsTableImmutable;
     const bool HasVectorTopK;
-    const bool CollectDiagnostics;
     std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;

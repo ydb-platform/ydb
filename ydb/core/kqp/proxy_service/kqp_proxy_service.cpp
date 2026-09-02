@@ -730,7 +730,10 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ev->Get()->EnsureProxyTraceSeed();
+        const bool collectUserFacingTrace = ev->Get()->Record.HasUserFacingTraceId();
+        if (collectUserFacingTrace) {
+            ev->Get()->EnsureProxyTraceSeed();
+        }
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
         }
@@ -745,7 +748,9 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
-        PendingRequests.SetUserFacingTrace(requestId, *ev->Get());
+        if (collectUserFacingTrace) {
+            PendingRequests.SetUserFacingTrace(requestId, *ev->Get());
+        }
         // Hold external client queries until warmup finishes; warmup's own traffic (PREPARE compilations, internal calls, the Metadata-system-user sysview fetch) must pass or it self-deadlocks.
         if (!WarmupGateOpen && !ev->Get()->GetIsWarmupCompilation() && !ev->Get()->IsInternalCall()) {
             const auto& userToken = ev->Get()->GetUserToken();
@@ -856,8 +861,10 @@ public:
             {"targetId", targetId});
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
-        PendingRequests.MarkUserFacingTraceSent(
-            requestId, SelfId().NodeId(), targetId.NodeId(), *ev->Get());
+        if (collectUserFacingTrace) {
+            PendingRequests.MarkUserFacingTraceSent(
+                requestId, SelfId().NodeId(), targetId.NodeId(), *ev->Get());
+        }
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 

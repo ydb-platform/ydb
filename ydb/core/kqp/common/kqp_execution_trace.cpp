@@ -31,9 +31,15 @@ auto ExecutionRank(const TExecutionTraceSnapshot& trace) {
     return std::tuple(Failed(trace.Status), anomalous, durationUs);
 }
 
+void FinishWindow(TTimeWindow& window, TInstant at) {
+    if (window.Start != TInstant::Zero()) {
+        window.End = Max(at, window.Start + TDuration::MicroSeconds(1));
+    }
+}
+
 void CloseOpenWindow(TTimeWindow& window, TInstant at) {
-    if (window.Start != TInstant::Zero() && window.End == TInstant::Zero()) {
-        window.End = at;
+    if (window.End == TInstant::Zero()) {
+        FinishWindow(window, at);
     }
 }
 
@@ -148,13 +154,13 @@ TExecutionTraceSnapshot TExecutionDiagnosticsCapture::Finish(
         Snapshot.FailedPhase = CurrentPhase;
     }
     EndCurrentPhase(finishAt);
-    Snapshot.Timeline.Execute.End = finishAt;
+    FinishWindow(Snapshot.Timeline.Execute, finishAt);
     return std::move(Snapshot);
 }
 
 void TExecutionDiagnosticsCapture::EndCurrentPhase(TInstant finishAt) {
     if (CurrentPhase != EExecutionPhase::Count) {
-        Snapshot.Timeline.Phase(CurrentPhase).End = finishAt;
+        FinishWindow(Snapshot.Timeline.Phase(CurrentPhase), finishAt);
         CurrentPhase = EExecutionPhase::Count;
     }
 }
@@ -166,7 +172,7 @@ void TTableResolverDiagnosticsCapture::OnNavigateStarted() {
 }
 
 void TTableResolverDiagnosticsCapture::OnNavigateFinished() {
-    Snapshot.Navigate.End = TInstant::Now();
+    FinishWindow(Snapshot.Navigate, TInstant::Now());
 }
 
 void TTableResolverDiagnosticsCapture::OnResolveKeysStarted() {
@@ -174,7 +180,7 @@ void TTableResolverDiagnosticsCapture::OnResolveKeysStarted() {
 }
 
 void TTableResolverDiagnosticsCapture::OnResolveKeysFinished() {
-    Snapshot.ResolveKeys.End = TInstant::Now();
+    FinishWindow(Snapshot.ResolveKeys, TInstant::Now());
 }
 
 TTableResolverDiagnostics TTableResolverDiagnosticsCapture::Finish() {
@@ -203,14 +209,14 @@ void TCommitDiagnosticsCapture::OnImmediateCommitStarted(TInstant at) {
 
 void TCommitDiagnosticsCapture::OnDistributedCommitStarted(TInstant at) {
     if (CollectTimeline) {
-        Snapshot.PrepareShards.End = at;
+        FinishWindow(Snapshot.PrepareShards, at);
         Snapshot.Coordinator.Start = at;
     }
 }
 
 void TCommitDiagnosticsCapture::OnCoordinatorPlanned() {
     if (CollectTimeline) {
-        Snapshot.Coordinator.End = TInstant::Now();
+        FinishWindow(Snapshot.Coordinator, TInstant::Now());
         Snapshot.ApplyShards.Start = Snapshot.Coordinator.End;
     }
 }

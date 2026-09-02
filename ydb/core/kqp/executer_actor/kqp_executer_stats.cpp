@@ -1211,7 +1211,7 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
 void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
     NKqpProto::TKqpTaskExtraStats extraStats;
     if (taskStats.GetExtra().UnpackTo(&extraStats)) {
-        if (CollectBufferLookupDiagnostics) {
+        if (Y_UNLIKELY(CollectBufferLookupDiagnostics)) {
             for (const auto& shard : extraStats.GetShardReads()) {
                 if (BufferLookupDiagnostics.Shards.size() >= MaxShardReadDiagnostics) {
                     ++BufferLookupDiagnostics.ShardsTruncated;
@@ -1388,7 +1388,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
                 }
             }
-            if (CollectExecutionDiagnostics) {
+            if (Y_UNLIKELY(CollectExecutionDiagnostics)) {
                 auto task = MakeTaskTraceSnapshot(taskStats);
                 task.Failed = state == NYql::NDqProto::COMPUTE_STATE_FAILURE;
                 auto& stage = TraceStages[taskStats.GetStageId()];

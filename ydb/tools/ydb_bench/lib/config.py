@@ -22,6 +22,7 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     workload_effective_warmup_seconds,
     workload_config_schema,
 )
+from ydb.tools.ydb_bench.lib.load_control import MAX_AUTOMATIC_SEARCH_ATTEMPTS, validate_search_attempt_bound
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
@@ -754,6 +755,10 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
                 }
             )
         load_config["objective"] = parsed_objective
+        try:
+            validate_search_attempt_bound(load_config)
+        except BenchmarkError as error:
+            _config_error(location + ".load.search", str(error))
 
     measurement = _mapping(
         value.get("measurement"),
@@ -797,7 +802,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         ),
     }
 
-    attempts = len(load_config.get("values", ())) or 64
+    attempts = len(load_config.get("values", ())) or MAX_AUTOMATIC_SEARCH_ATTEMPTS
     measurement_runs = attempts * measurement_config["repetitions"] + measurement_config["verification_repetitions"]
     effective_warmup = workload_effective_warmup_seconds(workload, measurement_config["warmup"])
     computed_timeout = 300 + measurement_runs * (effective_warmup + measurement_config["duration"] + 10)

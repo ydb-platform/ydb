@@ -3018,6 +3018,29 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(profile["affinity"]["ydb_cli"]["cpus"], "one-chiplet")
         self.assertEqual(profile["measurement"]["verification_repetitions"], 0)
 
+    def test_local_ydb_rejects_automatic_search_that_exceeds_attempt_budget(self):
+        invalid = self._config("""
+            local-ydb:
+              unbounded:
+                workload: {type: kv, operation: upsert}
+                load:
+                  parameter: rate
+                  search:
+                    start: 1
+                    maximum: 1000000
+                    multiplier: 1.000001
+                    resolution-percent: 2
+                  objective:
+                    type: latency-slo
+                    percentile: p99
+                    max-ms: 10
+        """)
+        with self.assertRaisesRegex(
+            BenchmarkError,
+            r"load\.search.*more than 64 attempts",
+        ):
+            load_config(invalid)
+
     def test_local_ydb_verification_config_is_optional_bounded_and_counted_in_default_timeout(self):
         loaded = load_config(self._config("""
             local-ydb:
@@ -4532,6 +4555,48 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
         self.assertEqual(no_feasible_latency.outcome, "no-feasible-point")
         self.assertEqual(no_feasible_latency.failing_load, 10)
         self.assertEqual(below_start_attempts, [10])
+
+    def test_load_controllers_reject_automatic_search_that_exceeds_attempt_budget(self):
+        measure = mock.Mock()
+        latency = {
+            "parameter": "rate",
+            "search": {
+                "start": 1,
+                "maximum": 1000000,
+                "multiplier": 1.000001,
+                "resolution_percent": 2,
+            },
+            "objective": {
+                "type": "latency-slo",
+                "percentile": "p99",
+                "max_ms": 10,
+                "max_errors": 0,
+                "min_achieved_rate_ratio": 0.98,
+            },
+        }
+        with self.assertRaisesRegex(BenchmarkError, "more than 64 attempts"):
+            load_control.search_load(latency, measure)
+        measure.assert_not_called()
+
+        throughput = {
+            "parameter": "rate",
+            "search": {
+                "start": 1,
+                "maximum": 1000000,
+                "multiplier": 2,
+                "resolution_percent": 0.000001,
+            },
+            "objective": {
+                "type": "maximize-throughput",
+                "target_role": "dynamic",
+                "cpu_saturation_percent": 90,
+                "plateau_gain_percent": 1,
+                "plateau_points": 2,
+            },
+        }
+        with self.assertRaisesRegex(BenchmarkError, "more than 64 attempts"):
+            load_control.search_load(throughput, measure)
+        measure.assert_not_called()
 
     def test_throughput_plateau_uses_absolute_gain_and_stable_lowest_load(self):
         result = load_control.search_load(

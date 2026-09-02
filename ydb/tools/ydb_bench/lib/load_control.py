@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
+MAX_AUTOMATIC_SEARCH_ATTEMPTS = 64
+
 
 @dataclass(frozen=True)
 class LoadSearchResult:
@@ -18,6 +20,69 @@ class LoadSearchResult:
 def _next_geometric(current, maximum, multiplier):
     candidate = max(current + 1, int(round(current * multiplier)))
     return min(maximum, candidate)
+
+
+def _binary_probe_count(low, high, resolution):
+    probes = 0
+    width = high - low
+    while width > resolution:
+        probes += 1
+        width = (width + 1) // 2
+    return probes
+
+
+def _maximum_latency_attempts(search):
+    current = search["start"]
+    maximum = search["maximum"]
+    probes = 1
+    worst = probes
+    while current < maximum:
+        previous = current
+        current = _next_geometric(current, maximum, search["multiplier"])
+        probes += 1
+        resolution = max(1, int(round(max(current, 1) * search["resolution_percent"] / 100.0)))
+        worst = max(worst, probes + _binary_probe_count(previous, current, resolution))
+        if worst > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+            return worst
+    return worst
+
+
+def _maximum_throughput_attempts(search):
+    width = search["maximum"] - search["start"]
+    resolution = max(1, int(round(width * search["resolution_percent"] / 100.0)))
+    attempts = 1
+    while width > resolution:
+        third = max(1, width // 3)
+        if third >= width - third:
+            break
+        attempts += 2
+        width = width - third - 1
+        if attempts > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+            return attempts
+    return attempts + 3
+
+
+def validate_search_attempt_bound(config):
+    """Reject automatic searches whose worst path exceeds the runtime budget."""
+    objective_type = config["objective"]["type"]
+    if objective_type == "maximize-throughput":
+        attempts = _maximum_throughput_attempts(config["search"])
+    elif objective_type == "latency-slo":
+        attempts = _maximum_latency_attempts(config["search"])
+    else:
+        raise BenchmarkError("unsupported load objective: {}".format(objective_type))
+    if attempts > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+        raise BenchmarkError(
+            "automatic load search may require more than {} attempts; "
+            "narrow the range or increase multiplier/resolution-percent".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        )
+
+
+def _ensure_attempt_capacity(attempts):
+    if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+        raise BenchmarkError(
+            "automatic load search exceeded its {}-attempt safety limit".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        )
 
 
 def _target_cpu(metrics, target_role):
@@ -159,6 +224,7 @@ def _run_throughput(config, measure, on_attempt):
         nonlocal failing_load
         if load in measured:
             return measured[load]
+        _ensure_attempt_capacity(attempts)
         metrics = measure(load)
         saturated = _target_cpu(metrics, objective["target_role"]) >= objective["cpu_saturation_percent"]
         passed, evaluation_reason = evaluate_load(config, load, metrics)
@@ -295,6 +361,7 @@ def _run_latency(config, measure, on_attempt):
     def sample(load):
         if load in measured:
             return measured[load]
+        _ensure_attempt_capacity(attempts)
         metrics = measure(load)
         passed, reason = evaluate_load(config, load, metrics)
         record = _with_decision(metrics, load, passed, reason)
@@ -366,6 +433,7 @@ def search_load(config, measure, on_attempt=None):
     """Run the configured controller using ``measure(load) -> metrics``."""
     if "values" in config:
         return _run_points(config, measure, on_attempt)
+    validate_search_attempt_bound(config)
     objective_type = config["objective"]["type"]
     if objective_type == "maximize-throughput":
         return _run_throughput(config, measure, on_attempt)

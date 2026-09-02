@@ -1296,8 +1296,7 @@ namespace Tests {
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            const auto protoConfig = NConveyorComposite::NConfig::TConfig::BuildDefaultProto();
-            const auto serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
+            const auto serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
             const auto registerService = [&](const ui32 poolId, const bool useBatchPool) {
                 auto counters = appData.Counters->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
                 auto* actor = NConveyorComposite::CreateService(serviceConfig, counters);

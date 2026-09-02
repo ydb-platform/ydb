@@ -35,8 +35,6 @@ private:
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
     void HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
-    void HandleMain(TEvInternal::TEvWorkerCPULimitUpdated::TPtr& ev);
-    void HandleMain(TEvInternal::TEvWorkerStopped::TPtr& ev);
     void HandleMain(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev);
@@ -54,8 +52,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExecution::TEvNewTask, HandleMain);
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
-            hFunc(TEvInternal::TEvWorkerCPULimitUpdated, HandleMain);
-            hFunc(TEvInternal::TEvWorkerStopped, HandleMain);
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleMain);

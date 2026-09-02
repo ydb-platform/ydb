@@ -1,4 +1,5 @@
 #include "schemeshard__affected_paths_traits.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -467,6 +468,18 @@ public:
             return result;
         }
 
+        // Pilot finding: there is nothing here worth consuming from the plan, and trying to
+        // do so was a regression. By the time this Propose runs, SplitIntoTransactions has
+        // already rewritten WorkingDir to be the container, so the plan's container effect is
+        // the same string -- a no-op in the valid case. In the *invalid* case it is worse than
+        // a no-op: for an empty Name, deriving the container as parent-of-target yields the
+        // grandparent, and the malformed-input checks below then report the wrong status
+        // (caught by TSchemeShardTest::CreateTable).
+        //
+        // The general lesson, recorded in the pilot plan: a create has no id to consume and its
+        // path is already normalised, so for creates the plan is a *record*, not a resolution
+        // source. Consumption only pays off for operations acting on objects that already
+        // exist.
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -917,6 +930,106 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTable>(
 }
 
 } // namespace NOperation
+
+// Pilot (AP M3's first entry): the same operation planned under the new model.
+//
+// Reads as three cases because it is three cases. Every field is stated -- nothing inherited
+// from a default, which is what stops an operation quietly asserting something about a path.
+//
+// Not listed: the operation's own domain. Creating a table consumes quota and bumps
+// PathsInside, but that writes SubDomains rather than a path row, and nothing about the
+// database is logically changed. It is also identical for all 123 operations and derivable
+// from any effect's path, so recording it per-operation would be noise a consumer can compute.
+TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
+        const TTxTransaction& tx, TOperationContext& context)
+{
+    const auto& create = tx.GetCreateTable();
+    const TString& workingDir = tx.GetWorkingDir();
+
+    // The database root comes from the parent, which exists. The target does not exist yet, so
+    // it cannot supply its own domain -- that ordering is forced, not chosen.
+    const TPath parentForDomain = TPath::Resolve(workingDir, context.SS);
+    if (!parentForDomain.IsResolved()) {
+        return TConclusionStatus::Fail("cannot resolve WorkingDir to a database root");
+    }
+    const TString dbRoot = parentForDomain.GetDomainPathString();
+    const TString targetAbs = CanonizePath(JoinPath({workingDir, create.GetName()}));
+
+    TLogicalOperationPlan plan;
+    plan.SetDatabaseRoot(dbRoot);
+    auto relative = [&dbRoot](const TString& absolute) {
+        return TDatabaseRelativePath::FromAbsolute(dbRoot, absolute);
+    };
+
+    // --- 1. the table this DDL creates ------------------------------------------------
+    auto target = relative(targetAbs);
+    if (target.IsFail()) {
+        return target;
+    }
+    plan.Add(target.DetachResult(), std::nullopt,   // no PathId: it does not exist yet
+        EPlanEffectClass::SchemaEffect, EPlanEffect::Create, EPlanRole::Target,
+        EPlanOrigin::RequestNamed, EPlanObservation::MustWrite);
+
+    // --- 2. the directory that gains it -----------------------------------------------
+    // Derived from the target's parent, not from WorkingDir: a create may name a relative
+    // path, and then the directory gaining the child is deeper than WorkingDir.
+    if (const TStringBuf containerAbs = ExtractParent(targetAbs); !containerAbs.empty()) {
+        const TPath container = TPath::Resolve(TString(containerAbs), context.SS);
+
+        // MustWrite only where the row is actually bumped: :785 does that for a directory or a
+        // domain root and nothing else -- which is why creating a vector index's impl table
+        // leaves the index's own row untouched. The predicate, not a guess from a failing test.
+        const bool bumpsDirAlterVersion = container.IsResolved()
+            && (container.Base()->IsDirectory() || container.Base()->IsDomainRoot());
+
+        auto containerRel = relative(TString(containerAbs));
+        if (containerRel.IsFail()) {
+            return containerRel;
+        }
+        plan.Add(containerRel.DetachResult(),
+            container.IsResolved() ? std::make_optional(container.Base()->PathId) : std::nullopt,
+            EPlanEffectClass::SchemaEffect, EPlanEffect::ChildrenChanged, EPlanRole::Container,
+            EPlanOrigin::RequestNamed,
+            bumpsDirAlterVersion ? EPlanObservation::MustWrite : EPlanObservation::MayWrite);
+    }
+
+    if (!create.HasCopyFromTable()) {
+        return plan;
+    }
+
+    // --- 3. copy-from-table: the source, and drops beneath it -------------------------
+    // Absolute, never joined with WorkingDir (schemeshard__operation_copy_table.cpp:568).
+    const TString sourceAbs = CanonizePath(create.GetCopyFromTable());
+    const TPath source = TPath::Resolve(sourceAbs, context.SS);
+
+    auto sourceRel = relative(sourceAbs);
+    if (sourceRel.IsFail()) {
+        return sourceRel;
+    }
+    // Altered, not merely referenced: the copy moves it to EPathStateCopying and writes its
+    // row, so it is observably changed for the duration (copy_table.cpp:821, :840).
+    plan.Add(sourceRel.DetachResult(),
+        source.IsResolved() ? std::make_optional(source.Base()->PathId) : std::nullopt,
+        EPlanEffectClass::SchemaEffect, EPlanEffect::Alter, EPlanRole::Source,
+        EPlanOrigin::RequestNamed, EPlanObservation::MustWrite);
+
+    // A create that drops things, beneath a table it is only reading from. Easy to miss: that
+    // write sits ~95 lines above every other Persist* in the copy's Propose (:697-727).
+    for (const auto& streamName : create.GetDropSrcCdcStream().GetStreamName()) {
+        const TString streamAbs = CanonizePath(JoinPath({sourceAbs, streamName}));
+        const TPath stream = TPath::Resolve(streamAbs, context.SS);
+        auto streamRel = relative(streamAbs);
+        if (streamRel.IsFail()) {
+            return streamRel;
+        }
+        plan.Add(streamRel.DetachResult(),
+            stream.IsResolved() ? std::make_optional(stream.Base()->PathId) : std::nullopt,
+            EPlanEffectClass::SchemaEffect, EPlanEffect::Drop, EPlanRole::Source,
+            EPlanOrigin::RequestNamed, EPlanObservation::MustWrite);
+    }
+
+    return plan;
+}
 
 ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);

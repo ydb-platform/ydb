@@ -306,6 +306,24 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             }));
     }
 
+    // Pilot: build the new-model plan for the whole operation, before anything is constructed
+    // or proposed. Bound to the operation *type*, not to a sub-operation class -- a top-level
+    // CreateTable carrying CopyFromTable is re-dispatched to TCopyTable, so a planner called
+    // from TCreateTable::Propose never runs for that shape. Found by a test asserting the plan
+    // for a copy and getting an empty source.
+    for (const auto& transaction : rewrittenTransactions) {
+        if (transaction.GetOperationType() != NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable) {
+            continue;
+        }
+        auto planned = PlanCreateTableEffects(transaction, context);
+        if (planned.IsSuccess()) {
+            operation->PilotPlan = planned.DetachResult();
+            if (LastPlannedOperation) {
+                *LastPlannedOperation = *operation->PilotPlan;
+            }
+        }
+    }
+
     // Refusing here rather than later is the whole point of declaring this early: nothing
     // has proposed, Operations does not yet contain txId, and so AbortOperationPropose --
     // whose per-operation stubs are Y_ABORT in 52 files -- is not callable. The refusal is

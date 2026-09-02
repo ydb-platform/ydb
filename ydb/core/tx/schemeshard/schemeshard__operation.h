@@ -2,6 +2,7 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard_affected_paths.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard_tx_infly.h"
 
 #include <util/generic/set.h>
@@ -9,6 +10,12 @@
 #include <optional>
 
 namespace NKikimr::NSchemeShard {
+
+// Pilot: the CreateTable planner, defined beside the operation it plans
+// (schemeshard__operation_create_table.cpp). Declared here because IgniteOperation builds the
+// plan before any part exists.
+TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
+    const TTxTransaction& tx, TOperationContext& context);
 
 struct TOperation: TSimpleRefCount<TOperation> {
     using TPtr = TIntrusivePtr<TOperation>;
@@ -21,6 +28,13 @@ struct TOperation: TSimpleRefCount<TOperation> {
     // operation type is exempt rather than that it affects nothing -- the two must stay
     // distinguishable or an unmigrated op reads as "touches no paths".
     TVector<std::optional<TAffectedPaths>> DeclaredAffectedPaths;
+
+    // Pilot (see .omc/plans/pilot-create-table.md): the new-model plan, built once for the
+    // whole operation before any part is constructed or proposed. Deliberately not per part --
+    // a top-level CreateTable carrying CopyFromTable is re-dispatched to TCopyTable, so a
+    // planner hung off the sub-operation class never runs for that shape. Planning is a
+    // property of the operation type, which is exactly why it belongs here.
+    std::optional<TLogicalOperationPlan> PilotPlan;
 
     // The declaration of each constructed part, keyed by its SubTxId.
     //

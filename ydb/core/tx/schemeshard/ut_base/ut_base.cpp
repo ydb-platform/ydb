@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_affected_paths.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_plan.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
@@ -100,6 +101,134 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 "plan omits " << expected << ", computed before that directory existed: "
                     << JoinSeq(", ", plan));
         }
+    }
+
+    // ---- Pilot: ESchemeOpCreateTable planned under the new model (see
+    // .omc/plans/pilot-create-table.md). Asserts the plan itself, not behaviour inferred from
+    // it, which is the property the older model could never be asked about directly.
+
+    Y_UNIT_TEST(PilotPlanBareCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimr::NSchemeShard::TLogicalOperationPlan plan;
+        NKikimr::NSchemeShard::LastPlannedOperation = &plan;
+        Y_DEFER { NKikimr::NSchemeShard::LastPlannedOperation = nullptr; };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& effects = plan.GetEffects();
+        UNIT_ASSERT_VALUES_EQUAL(effects.size(), 2u);
+
+        // Paths are database-relative: "/Table1", not "/MyRoot/Table1".
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[0].Path.Value()), "/Table1");
+        UNIT_ASSERT(effects[0].Role == NKikimr::NSchemeShard::EPlanRole::Target);
+        UNIT_ASSERT(effects[0].Effect == NKikimr::NSchemeShard::EPlanEffect::Create);
+        UNIT_ASSERT(effects[0].Origin == NKikimr::NSchemeShard::EPlanOrigin::RequestNamed);
+        // No id: the object does not exist when the plan is built.
+        UNIT_ASSERT(!effects[0].PathId.has_value());
+
+        // The database root itself is the container, and it does bump DirAlterVersion, so the
+        // write is demanded rather than merely permitted (create_table.cpp:785).
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[1].Path.Value()), "/");
+        UNIT_ASSERT(effects[1].Role == NKikimr::NSchemeShard::EPlanRole::Container);
+        UNIT_ASSERT(effects[1].Effect == NKikimr::NSchemeShard::EPlanEffect::ChildrenChanged);
+        UNIT_ASSERT(effects[1].Expect == NKikimr::NSchemeShard::EPlanObservation::MustWrite);
+    }
+
+    Y_UNIT_TEST(PilotPlanNestedCreateNamesTheDeepParent) {
+        // A relative Name is split before the sub-operation exists, and the tx is rewritten so
+        // WorkingDir becomes the deepest directory. Deriving the container from WorkingDir is
+        // therefore right only after the rewrite -- computing it from the target's parent is
+        // right either way, which is what the planner does.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimr::NSchemeShard::TLogicalOperationPlan plan;
+        NKikimr::NSchemeShard::LastPlannedOperation = &plan;
+        Y_DEFER { NKikimr::NSchemeShard::LastPlannedOperation = nullptr; };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "DirA/DirB/Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& effects = plan.GetEffects();
+        UNIT_ASSERT_VALUES_EQUAL(effects.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[0].Path.Value()), "/DirA/DirB/Table1");
+        UNIT_ASSERT_VALUES_EQUAL(TString(effects[1].Path.Value()), "/DirA/DirB");
+
+        // The generated directories are not this operation's semantic effects -- they are
+        // separate MkDir transactions of the same TxId. A consumer replaying the DDL gets them
+        // from the target database's own split, so the plan must not offer them here.
+        for (const auto& effect : effects) {
+            UNIT_ASSERT_C(effect.Origin != NKikimr::NSchemeShard::EPlanOrigin::PartDerived,
+                "the CreateTable part's own plan should carry no decomposition artefacts");
+        }
+    }
+
+    Y_UNIT_TEST(PilotPlanCopyNamesSourceAndDroppedStreams) {
+        // The case that took six rounds to find the first time: a *create* that drops paths
+        // beneath a table it is only reading from. The write sits ~95 lines from every other
+        // Persist* in the copy's Propose, which is why reading adjacent lines missed it.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Src"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Src"
+            StreamDescription {
+              Name: "Stream1"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NKikimr::NSchemeShard::TLogicalOperationPlan plan;
+        NKikimr::NSchemeShard::LastPlannedOperation = &plan;
+        Y_DEFER { NKikimr::NSchemeShard::LastPlannedOperation = nullptr; };
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Dst"
+            CopyFromTable: "/MyRoot/Src"
+            DropSrcCdcStream { StreamName: "Stream1" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        bool sawSource = false;
+        bool sawDroppedStream = false;
+        for (const auto& effect : plan.GetEffects()) {
+            if (TString(effect.Path.Value()) == "/Src") {
+                sawSource = true;
+                UNIT_ASSERT(effect.Role == NKikimr::NSchemeShard::EPlanRole::Source);
+                // Altered, not merely referenced: the copy moves it to EPathStateCopying.
+                UNIT_ASSERT(effect.Effect == NKikimr::NSchemeShard::EPlanEffect::Alter);
+            }
+            if (TString(effect.Path.Value()) == "/Src/Stream1") {
+                sawDroppedStream = true;
+                UNIT_ASSERT(effect.Effect == NKikimr::NSchemeShard::EPlanEffect::Drop);
+            }
+        }
+        UNIT_ASSERT_C(sawSource, "plan omits the table being copied from");
+        UNIT_ASSERT_C(sawDroppedStream,
+            "plan omits the cdc stream this create drops beneath its source");
     }
 
     Y_UNIT_TEST(PathCheckModesAreHeldPerTablet) {

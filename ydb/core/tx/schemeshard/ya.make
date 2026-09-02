@@ -281,6 +281,7 @@ SRCS(
     schemeshard_domain_links.h
     schemeshard_effective_acl.cpp
     schemeshard_effective_acl.h
+    schemeshard_operation_plan.h
     schemeshard_scheme_builders.cpp
     schemeshard_scheme_builders.h
     schemeshard_export.cpp

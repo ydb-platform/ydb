@@ -20,6 +20,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_affected_paths.cpp
+    ut_operation_plan.cpp
     ut_base.cpp
     ut_counters.cpp
     ut_database_relative_path.cpp

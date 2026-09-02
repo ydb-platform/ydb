@@ -142,6 +142,9 @@ public:
             pool.UpdateMaxBatchSize(poolConfig.GetMaxBatchSize());
             pool.ApplyTopologyUpdate(poolConfig, Categories);
         }
+        for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
+            MutableCategoryVerified(category).ApplyConfig(config.GetCategoryConfig(category));
+        }
         Config = config;
 
         // CPU usage updates

@@ -55,7 +55,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     TScannerConstructorContext context(snapshot, 0, sorting);
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
-        TReadDescription read(Self->TabletID(), snapshot, sorting, true);
+        TReadDescription read(Self->TabletID(), snapshot, sorting, true, true);
         read.SetScanIdentifier(request.TaskIdentifier);
         {
             auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(

@@ -94,7 +94,28 @@ void TTxScan::Complete(const TActorContext& ctx) {
     std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
-        TReadDescription read(Self->TabletID(), snapshot, sorting, deduplicationEnabled);
+        const TString defaultReader = [&]() {
+            const TString defGlobal =
+                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "TRIVIAL";
+            if (Self->HasIndex()) {
+                return Self->GetIndexAs<TColumnEngineForLogs>()
+                    .GetVersionedIndex()
+                    .GetLastSchema()
+                    ->GetIndexInfo()
+                    .GetScanReaderPolicyName()
+                    .value_or(defGlobal);
+            } else {
+                return defGlobal;
+            }
+        }();
+        const TString scanType = [&]() {
+            const TString policy = request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
+            if (policy == "EXPORT") {
+                return TString("PLAIN");
+            }
+            return policy;
+        }();
+        TReadDescription read(Self->TabletID(), snapshot, sorting, deduplicationEnabled, scanType == "TRIVIAL");
         read.GroupedMemoryLimiterOperator =
             request.GetCSScanPolicy() == "EXPORT" ? EScanGroupedMemoryLimiterOperator::Deduplication : EScanGroupedMemoryLimiterOperator::Scan;
         read.Orbit = orbit;
@@ -122,28 +143,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
             LWTRACK(StartScan, *orbit, rawPathId, Self->TabletID(), request.GetTxId(), request.GetScanId());
         }
 
-        const TString defaultReader = [&]() {
-            const TString defGlobal =
-                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "TRIVIAL";
-            if (Self->HasIndex()) {
-                return Self->GetIndexAs<TColumnEngineForLogs>()
-                    .GetVersionedIndex()
-                    .GetLastSchema()
-                    ->GetIndexInfo()
-                    .GetScanReaderPolicyName()
-                    .value_or(defGlobal);
-            } else {
-                return defGlobal;
-            }
-        }();
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
-            const TString scanType = [&]() {
-                const TString policy = request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
-                if (policy == "EXPORT") {
-                    return TString("PLAIN");
-                }
-                return policy;
-            }();
             auto constructor =
                 NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
             if (!constructor) {

@@ -29,18 +29,6 @@ enum class ESourcesSorting {
     LastPkDesc,
 };
 
-inline ESourcesSorting GetSourcesSorting(const ERequestSorting sorting, const bool deduplicationEnabled) {
-    switch (sorting) {
-        case ERequestSorting::ASC:
-            return ESourcesSorting::FirstPkAsc;
-        case ERequestSorting::DESC:
-            return ESourcesSorting::LastPkDesc;
-        case ERequestSorting::NONE:
-            // deduplication needs key order; last_pk keeps the duplicates filter borders window small
-            return deduplicationEnabled ? ESourcesSorting::LastPkAsc : ESourcesSorting::SourceIdAsc;
-    }
-}
-
 // Describes read/scan request
 class TReadDescription {
 private:
@@ -50,6 +38,10 @@ private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_READONLY(ERequestSorting, Sorting, ERequestSorting::NONE);
     YDB_READONLY(bool, DeduplicationEnabled, false);
+    // False gives deduplicated scans the old first_pk order: strictly worse, it enlarges the duplicates
+    // filter borders window and breaks cursor resume between readers. Kept only so the simple reader can
+    // be compared against the trivial one; delete it together with the simple reader.
+    YDB_READONLY(bool, SortSourcesForDeduplicationByLastPk, true);
     YDB_READONLY(ui64, TabletId, 0);
 
 public:
@@ -69,7 +61,18 @@ public:
     std::optional<THashSet<TInsertWriteId>> ownPortions;
 
     ESourcesSorting GetSourcesSorting() const {
-        return NReader::GetSourcesSorting(Sorting, NeedDuplicateFiltering());
+        switch (Sorting) {
+            case ERequestSorting::ASC:
+                return ESourcesSorting::FirstPkAsc;
+            case ERequestSorting::DESC:
+                return ESourcesSorting::LastPkDesc;
+            case ERequestSorting::NONE:
+                if (!NeedDuplicateFiltering()) {
+                    return ESourcesSorting::SourceIdAsc;
+                }
+                // deduplication needs key order
+                return SortSourcesForDeduplicationByLastPk ? ESourcesSorting::LastPkAsc : ESourcesSorting::FirstPkAsc;
+        }
     }
 
     bool NeedDuplicateFiltering() const {
@@ -135,10 +138,12 @@ public:
         }
     }
 
-    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting, const bool deduplicationEnabled)
+    TReadDescription(const ui64 tabletId, const TSnapshot& snapshot, const ERequestSorting sorting, const bool deduplicationEnabled,
+        const bool sortSourcesForDeduplicationByLastPk)
         : Snapshot(snapshot)
         , Sorting(sorting)
         , DeduplicationEnabled(deduplicationEnabled)
+        , SortSourcesForDeduplicationByLastPk(sortSourcesForDeduplicationByLastPk)
         , TabletId(tabletId)
         , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
     {

@@ -78,7 +78,6 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashI
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithManyPartitionAndData
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.UnauthorizedPurger
-ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStream
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsATable
@@ -194,7 +193,6 @@ ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state_and_parts
 ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
-ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_mismatching_size_in_units
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
@@ -839,7 +837,6 @@ ydb/tests/olap/scenario py3test.[*/*] chunk
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_vector
-ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/fulltext_workload/tests py3test.sole chunk
 ydb/tests/stress/fulltext_workload/tests test_workload.py.TestYdbFulltextWorkload.test
 ydb/tests/stress/kafka/tests py3test.sole chunk

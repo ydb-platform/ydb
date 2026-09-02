@@ -631,21 +631,7 @@ void ValidateStatistics(TTestActorRuntime& runtime, const TPathId& pathId, ui64 
         {.Tag = 1, .Probes = std::nullopt},
         {.Tag = 2, .Probes = {{{"1", N / 10}, {"2", N / 10}, {"10", 0}}}},
     };
-    // Retry until the value-column sketch is loaded (serverless StatService lag).
-    // Do not catch TAssertException: UNIT_ASSERT records a test error before throw.
-    constexpr size_t maxRetries = 20;
-    for (size_t i = 0; i < maxRetries; ++i) {
-        auto responses = GetStatistics(
-            runtime, pathId, EStatType::COUNT_MIN_SKETCH, {std::optional<ui32>(2)});
-        const bool valueSketchReady = responses.size() == 1
-            && responses[0].Success
-            && responses[0].CountMinSketch.CountMin;
-        if (valueSketchReady || i + 1 == maxRetries) {
-            CheckCountMinSketch(runtime, pathId, expected);
-            return;
-        }
-        runtime.SimulateSleep(TDuration::MilliSeconds(200));
-    }
+    CheckCountMinSketch(runtime, pathId, expected);
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {

@@ -93,8 +93,9 @@ public:
             return TStatus::Error;
         }
 
-        if (!TPqTopic::Match(input->Child(TPqWriteTopic::idx_Topic))) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPqWriteTopic::idx_Topic)->Pos()), "Expected PQ topic."));
+        const auto topic = input->Child(TPqWriteTopic::idx_Topic);
+        if (!TPqTopic::Match(topic)) {
+            ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), "Expected PQ topic."));
             return TStatus::Error;
         }
 
@@ -128,7 +129,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!ValidateWriteSetting(*input->Child(TPqWriteTopic::idx_Settings), ctx)) {
+        if (!ValidateWriteSetting(*input->Child(TPqWriteTopic::idx_Settings), TPqTopic(topic).Cluster(), ctx)) {
             return TStatus::Error;
         }
 
@@ -198,8 +199,9 @@ public:
             return TStatus::Error;
         }
 
-        if (!TPqTopic::Match(input->Child(TPqInsert::idx_Topic))) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPqInsert::idx_Topic)->Pos()), "Expected PQ topic."));
+        const auto topic = input->Child(TPqInsert::idx_Topic);
+        if (!TPqTopic::Match(topic)) {
+            ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), "Expected PQ topic."));
             return TStatus::Error;
         }
 
@@ -208,7 +210,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!ValidateWriteSetting(*input->Child(TPqInsert::idx_Settings), ctx)) {
+        if (!ValidateWriteSetting(*input->Child(TPqInsert::idx_Settings), TPqTopic(topic).Cluster(), ctx)) {
             return TStatus::Error;
         }
 
@@ -220,12 +222,12 @@ public:
     }
 
 private:
-    bool ValidateWriteSetting(TExprNode& settings, TExprContext& ctx) const {
+    bool ValidateWriteSetting(TExprNode& settings, const TStringBuf& cluster, TExprContext& ctx) const {
         if (!State_->EnableSettingsValidation) {
             return true;
         }
 
-        const auto validator = [state = State_](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
+        const auto validator = [state = State_, cluster](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
             if (name == NDeliveryGuaranteeSetting::Name) {
                 if (setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder() << "Expected `" << NDeliveryGuaranteeSetting::PrettyName << "` = value"));
@@ -256,6 +258,14 @@ private:
 
                     if (!state->EnableExactlyOnceDeliveryGuaranty) {
                         ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Exactly once delivery guarantee is disabled. Please contact your system administrator to enable it."));
+                        return false;
+                    }
+
+                    const auto tokenIt = state->Configuration->Tokens.find(cluster);
+                    if (tokenIt == state->Configuration->Tokens.end() || CreateStructuredTokenParser(tokenIt->second).IsNoAuth()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                            << "Authorization is required for setting `" << NDeliveryGuaranteeSetting::PrettyName << "` = '" << NDeliveryGuaranteeSetting::ExactlyOnceValue << "'"
+                        ));
                         return false;
                     }
                 }

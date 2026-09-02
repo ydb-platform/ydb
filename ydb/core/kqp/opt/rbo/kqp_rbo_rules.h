@@ -36,20 +36,6 @@ class TExtractJoinExpressionsRule : public IRule {
 };
 
 /**
- * Filter pull-up rule for correlated subqueries. Currently handles only basic form of correlated subqueries
- * Matches a filter on top of add dependencies operator. Extracts join conditions from this filter that are
- * dependent on outer columns. Pushes the filter up the plan though map and aggregate operators.
- */
-
- class TPullUpCorrelatedFilterRule : public IRule {
-  public:
-    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
-
-    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
- };
-
-/**
  * Rewrites scalar subplans into cross join plans
  */
 class TInlineScalarSubplanRule : public IRule {
@@ -62,7 +48,8 @@ class TInlineScalarSubplanRule : public IRule {
 class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
   public:
     TInlineSimpleInExistsSubplanRule()
-        : ISimplifiedRule("Inline simple in or exists subplan", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
+        : ISimplifiedRule("Inline simple in or exists subplan",
+                          ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs | ERuleProperties::RequireTypes) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
@@ -74,6 +61,101 @@ class TInlineGenericInExistsSubplanRule : public ISimplifiedRule {
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Dependent join decorrelation based on Neumann "Unnesting Arbitrary Queries".
+ */
+
+class TRewriteDependentJoinToCrossJoinRule: public ISimplifiedRule {
+public:
+    TRewriteDependentJoinToCrossJoinRule()
+        : ISimplifiedRule("Rewrite dependent join into cross join", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TRewriteDependentJoinToCrossJoinNoFreeVarsRule: public ISimplifiedRule {
+public:
+    TRewriteDependentJoinToCrossJoinNoFreeVarsRule()
+        : ISimplifiedRule("Rewrite dependent join into cross join when input does not have free vars",
+                          ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TEliminateDependentJoinDomainRule: public ISimplifiedRule {
+public:
+    TEliminateDependentJoinDomainRule()
+        : ISimplifiedRule("Eliminate dependent join domain", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushDependentJoinThroughFilterRule: public ISimplifiedRule {
+public:
+    TPushDependentJoinThroughFilterRule()
+        : ISimplifiedRule("Push dependent join through filter", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushDependentJoinThroughMapRule: public ISimplifiedRule {
+public:
+    TPushDependentJoinThroughMapRule()
+        : ISimplifiedRule("Push dependent join through map", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushDependentJoinThroughAggregateRule: public ISimplifiedRule {
+public:
+    TPushDependentJoinThroughAggregateRule()
+        : ISimplifiedRule("Push dependent join through aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushDependentJoinThroughUnionAllRule: public ISimplifiedRule {
+public:
+    TPushDependentJoinThroughUnionAllRule()
+        : ISimplifiedRule("Push dependent join through union all", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TPushDependentJoinThroughJoinRule: public ISimplifiedRule {
+public:
+    TPushDependentJoinThroughJoinRule()
+        : ISimplifiedRule("Push dependent join through join", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+class TDependentJoinNotSupportedRule: public ISimplifiedRule {
+public:
+    TDependentJoinNotSupportedRule()
+        : ISimplifiedRule("Dependent join not supported", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**
@@ -405,7 +487,7 @@ class TInlineCBOTreeRule : public ISimplifiedRule {
  */
 class TAssignStagesRule : public IRule {
   public:
-    TAssignStagesRule() : IRule("Assign stages", ERuleProperties::RequireParents) {}
+    TAssignStagesRule() : IRule("Assign stages", ERuleProperties::RequireParents | ERuleProperties::RequireMetadata) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -503,7 +585,7 @@ class TPropagateHashFuncStage : public IRBOStage {
 class TPropagateAggregateThroughStageRule: public ISimplifiedRule {
 public:
     TPropagateAggregateThroughStageRule()
-        : ISimplifiedRule("Propagate aggregate operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+        : ISimplifiedRule("Propagate aggregate operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {
     }
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;

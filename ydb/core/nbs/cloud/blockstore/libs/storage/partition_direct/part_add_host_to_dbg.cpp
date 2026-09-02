@@ -188,16 +188,14 @@ void TPartitionActor::CompleteAddHostToDBG(
 
     Y_ABORT_UNLESS(FastPathService);
 
-    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
-    Y_ABORT_UNLESS(dbgId < directBlockGroups.size());
-
     // The new connection was persisted at NewHostIndex; read its DDisk/PBuffer
     // back out to hand to the DBG.
     const auto& newConnection =
         args.DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
             .GetConnections(args.NewHostIndex);
 
-    auto dbgPtr = directBlockGroups[dbgId];
+    auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
+    Y_ABORT_UNLESS(dbgPtr);
     auto executor = dbgPtr->GetExecutor();
     executor->ExecuteSimple(
         [dbgPtr,
@@ -380,12 +378,8 @@ void TPartitionActor::RejectAddHost(
 
     // Notify the DBG that asked for the host. dbgId is always a valid request
     // index (see ValidateAddHostToDBGRequest), so the DBG exists.
-    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
-    Y_ABORT_UNLESS(
-        dbgId < directBlockGroups.size(),
-        "RejectAddHost for a non-existent DBG (dbgId=%lu)",
-        dbgId);
-    auto dbgPtr = directBlockGroups[dbgId];
+    auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
+    Y_ABORT_UNLESS(dbgPtr);
     auto executor = dbgPtr->GetExecutor();
     executor->ExecuteSimple([dbgPtr, error]()
                             { dbgPtr->OnAddHostResult(error, 0, {}, {}); });

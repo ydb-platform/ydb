@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimrBlobStorage {
     class TStorageConfig;

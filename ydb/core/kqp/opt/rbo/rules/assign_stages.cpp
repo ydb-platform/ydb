@@ -215,10 +215,10 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        if (!aggregate->KeyColumns.empty()) {
-            auto connection = MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex);
-
-            props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));
+        if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TMapConnection>(outputIndex));
+        } else if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }
@@ -272,7 +272,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
     } else {
-        Y_ENSURE(false, "Unknown operator encountered");
+        Y_ENSURE(false, TStringBuilder() << "Unknown operator encountered: " << input->GetExplainName());
     }
 
     return true;

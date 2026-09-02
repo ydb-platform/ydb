@@ -261,6 +261,7 @@ struct TReplicationReaderConfig
     TDuration IoConsumedReportWindow;
 
     //! If set, reported to data nodes via the io_fair_share_weight request field.
+    //! Not reported when an attached job I/O meter has reporting disabled.
     std::optional<double> IoFairShareWeight;
 
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
@@ -400,6 +401,7 @@ struct TReplicationWriterConfig
     TDuration IoConsumedReportWindow;
 
     //! If set, reported to data nodes via the io_fair_share_weight request field.
+    //! Not reported when an attached job I/O meter has reporting disabled.
     std::optional<double> IoFairShareWeight;
 
     int GetDirectUploadNodeCount();

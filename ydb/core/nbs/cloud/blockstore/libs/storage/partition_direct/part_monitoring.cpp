@@ -22,16 +22,54 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NTabletFlatExecutor;
+using namespace NThreading;
 
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
+
+struct TChaosAction
+{
+    ui32 NodeId = 0;
+    // An absent index means all DBGs.
+    std::optional<ui32> DbgIndex;
+    EChaosMode Mode = EChaosMode::Enabled;
+};
+
+std::optional<EChaosMode> ParseChaosMode(TStringBuf action)
+{
+    if (action == "disable") {
+        return EChaosMode::Disabled;
+    }
+    if (action == "enable") {
+        return EChaosMode::Enabled;
+    }
+    return std::nullopt;
+}
+
+TString MakeRedirectResponse(
+    ui64 tabletId,
+    TStringBuf page,
+    TStringBuf message,
+    TStringBuf querySuffix = {})
+{
+    TStringBuilder reply;
+    reply << "<p>" << message << "</p>"
+          << "<meta http-equiv='refresh' content='0; ?TabletID=" << tabletId
+          << "&page=" << page << querySuffix << "'/>";
+    return reply;
+}
 
 EMonPage ParsePage(const TCgiParameters& cgi)
 {
     const TString& page = cgi.Get("page");
     if (page == "dbg") {
         return EMonPage::Dbg;
+    }
+    if (page == "chaos") {
+        return EMonPage::Chaos;
     }
     if (page == "localdb") {
         return EMonPage::LocalDb;
@@ -55,6 +93,37 @@ std::optional<size_t> ParseSelectedDbg(const TCgiParameters& cgi)
         return dbgIndex;
     }
     return std::nullopt;
+}
+
+std::optional<TChaosAction> ParseChaosAction(const TCgiParameters& cgi)
+{
+    const auto mode = ParseChaosMode(cgi.Get("action"));
+    if (!mode) {
+        return std::nullopt;
+    }
+
+    ui32 nodeId = 0;
+    if (!cgi.Has("node") || !TryFromString(cgi.Get("node"), nodeId)) {
+        return std::nullopt;
+    }
+
+    if (cgi.Get("dbg") == "all") {
+        return TChaosAction{
+            .NodeId = nodeId,
+            .Mode = *mode,
+        };
+    }
+
+    ui32 dbgIndex = 0;
+    if (!cgi.Has("dbg") || !TryFromString(cgi.Get("dbg"), dbgIndex)) {
+        return std::nullopt;
+    }
+
+    return TChaosAction{
+        .NodeId = nodeId,
+        .DbgIndex = dbgIndex,
+        .Mode = *mode,
+    };
 }
 
 std::optional<ui32> ParseSelectedVChunk(const TCgiParameters& cgi)
@@ -154,20 +223,39 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     const auto& cgi = ev->Get()->Cgi();
     const EMonPage page = ParsePage(cgi);
 
-    // Overview (and the not-yet-ready tablet) render synchronously.
-    if (!FastPathService || page == EMonPage::Overview) {
-        TMonPageData data{
-            .Page = page,
-            .TabletInfo = MakeMonTabletInfo(),
-        };
-        if (!FastPathService) {
-            data.RuntimeError = "tablet is still initializing";
-        } else {
-            data.FastPathServiceInfo = FastPathService->GetMonInfo();
-        }
+    TMonPageData data{
+        .Page = page,
+        .TabletInfo = MakeMonTabletInfo(),
+        .SelectedDbg = ParseSelectedDbg(cgi),
+        .SelectedVChunk = ParseSelectedVChunk(cgi),
+        .VChunkStatsLimit = ParseVChunkStatsLimit(cgi),
+        .ShowVChunks = cgi.Get("showvchunks") == "1",
+        .SelectedPercentile = ParseSelectedPercentile(cgi),
+        .SelectedLatencyOperation = ParseSelectedLatencyOperation(cgi)};
+
+    // The not-yet-ready tablet renders synchronously.
+    if (!FastPathService) {
+        data.RuntimeError = "tablet is still initializing";
         ctx.Send(
             ev->Sender,
             new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+        return true;
+    }
+
+    if (page == EMonPage::Overview) {
+        data.FastPathServiceInfo = FastPathService->GetMonInfo();
+        FastPathService->GatherMonSnapshots(std::nullopt)
+            .Subscribe(
+                [data = std::move(data),
+                 requester = ev->Sender,
+                 actorSystem = TActivationContext::ActorSystem()]   //
+                (const TFuture<TVector<TDbgSnapshot>>& future) mutable
+                {
+                    data.Dbgs = future.GetValue();
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
         return true;
     }
 
@@ -181,34 +269,21 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     // VChunk page: no index - just the input form (synchronous); with an
     // index - gather the snapshot from the owning DBG's executor.
     if (page == EMonPage::VChunk) {
-        const std::optional<ui32> selectedVChunk = ParseSelectedVChunk(cgi);
-        if (!selectedVChunk) {
-            TMonPageData data{
-                .Page = page,
-                .TabletInfo = MakeMonTabletInfo(),
-            };
+        if (!data.SelectedVChunk) {
             ctx.Send(
                 ev->Sender,
                 new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
             return true;
         }
 
-        auto* actorSystem = TActivationContext::ActorSystem();
-        const TActorId requester = ev->Sender;
-        FastPathService->GatherVChunkMonSnapshot(*selectedVChunk)
+        FastPathService->GatherVChunkMonSnapshot(*data.SelectedVChunk)
             .Subscribe(
-                [tabletInfo = MakeMonTabletInfo(),
-                 page,
-                 selectedVChunk,
-                 requester,
-                 actorSystem](const auto& future)
+                [data = std::move(data),
+                 requester = ev->Sender,
+                 actorSystem = TActivationContext::ActorSystem()]   //
+                (const TFuture<std::optional<TVChunkSnapshot>>& future) mutable
                 {
-                    TMonPageData data{
-                        .Page = page,
-                        .TabletInfo = tabletInfo,
-                        .SelectedVChunk = selectedVChunk,
-                        .VChunk = future.GetValue(),
-                    };
+                    data.VChunk = future.GetValue();
                     actorSystem->Send(
                         requester,
                         new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
@@ -217,35 +292,17 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     }
 
     if (page == EMonPage::VChunkCounters) {
-        auto* actorSystem = TActivationContext::ActorSystem();
-        const TActorId requester = ev->Sender;
-        const size_t limit = ParseVChunkStatsLimit(cgi);
-        const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
-        const bool showVChunks = cgi.Get("showvchunks") == "1";
-        const auto detail = (showVChunks && selectedDbg)
+        const auto detail = (data.ShowVChunks && data.SelectedDbg)
                                 ? EVChunkStatsDetail::PerVChunk
                                 : EVChunkStatsDetail::TotalOnly;
-        FastPathService->GatherVChunkStats(detail, selectedDbg)
+        FastPathService->GatherVChunkStats(detail, data.SelectedDbg)
             .Subscribe(
-                [tabletInfo = MakeMonTabletInfo(),
-                 page,
-                 limit,
-                 selectedDbg,
-                 showVChunks,
-                 requester,
-                 actorSystem](const auto& future)
+                [data = std::move(data),
+                 requester = ev->Sender,
+                 actorSystem = TActivationContext::ActorSystem()]   //
+                (const TFuture<TVChunkStatsGatherResult>& future) mutable
                 {
-                    TMonPageData data{
-                        .Page = page,
-                        .TabletInfo = tabletInfo,
-                        .VChunkStats = future.GetValue(),
-                        .VChunkStatsLimit = limit,
-                        .ShowVChunks = showVChunks,
-                    };
-                    if (selectedDbg) {
-                        data.SelectedVChunkDbg =
-                            static_cast<ui32>(*selectedDbg);
-                    }
+                    data.VChunkStats = future.GetValue();
                     actorSystem->Send(
                         requester,
                         new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
@@ -253,83 +310,115 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    // Latency page always gathers every DBG (needs the full node map).
-    const std::optional<size_t> selectedDbg =
-        (page == EMonPage::Latency) ? std::nullopt : ParseSelectedDbg(cgi);
-    const ELatencyPercentile selectedPercentile = ParseSelectedPercentile(cgi);
-    const std::optional<EOperation> selectedLatencyOperation =
-        ParseSelectedLatencyOperation(cgi);
+    if (page == EMonPage::Chaos && ev->Get()->GetMethod() == HTTP_METHOD_POST) {
+        const auto action = ParseChaosAction(cgi);
+        if (action) {
+            LOG_INFO(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "%s Mon page requested chaos action=%s nodeId=%u dbg=%s",
+                LogTitle.GetWithTime().c_str(),
+                cgi.Get("action").c_str(),
+                action->NodeId,
+                cgi.Get("dbg").c_str());
+
+            FastPathService->SetNodeChaosMode(
+                action->NodeId,
+                action->DbgIndex,
+                action->Mode);
+        }
+
+        const TStringBuf message = action
+                                       ? "Chaos configuration updated."
+                                       : "Invalid chaos configuration request.";
+        ctx.Send(
+            ev->Sender,
+            new NMon::TEvRemoteHttpInfoRes(
+                MakeRedirectResponse(TabletID(), "chaos", message)));
+        return true;
+    }
 
     // The "Add host" button. POST only: link prefetching must not add hosts.
-    //
     // The index is user input from the URL, but HandleAddHostToDBG treats an
     // out-of-range index as a bug and aborts - so bounds-check it here. All
     // other checks live there. The reply bounces back to the same DBG page.
-    if (page == EMonPage::Dbg && selectedDbg &&
+    if (page == EMonPage::Dbg && data.SelectedDbg &&
         cgi.Get("action") == "addhost" &&
         ev->Get()->GetMethod() == HTTP_METHOD_POST)
     {
-        const bool dbgExists =
-            *selectedDbg < FastPathService->GetDirectBlockGroups().size();
-        if (dbgExists) {
+        TStringBuilder reply;
+        if (FastPathService->GetDirectBlockGroup(*data.SelectedDbg)) {
             LOG_INFO(
                 ctx,
                 NKikimrServices::NBS_PARTITION,
                 "%s Mon page requested AddHost dbgId=%lu",
                 LogTitle.GetWithTime().c_str(),
-                *selectedDbg);
+                *data.SelectedDbg);
 
-            FastPathService->QueryAddHost(*selectedDbg, 0);
-        }
-
-        TStringBuilder reply;
-        if (dbgExists) {
-            reply << "<p>Add host requested for DBG #" << *selectedDbg
-                  << ".</p>";
+            FastPathService->QueryAddHost(*data.SelectedDbg, 0);
+            reply << "<p>Add host requested for "
+                  << PrintDbgId(*data.SelectedDbg) << ".</p>";
         } else {
-            reply << "<p>DBG #" << *selectedDbg << " not found.</p>";
+            reply << "<p>" << PrintDbgId(*data.SelectedDbg)
+                  << " not found.</p>";
         }
+
         // Bounce straight back to the same DBG page.
         reply << "<meta http-equiv='refresh' content='0; ?TabletID="
-              << TabletID() << "&page=dbg&dbg=" << *selectedDbg << "'/>";
+              << TabletID() << "&page=dbg&dbg=" << *data.SelectedDbg << "'/>";
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(reply));
         return true;
     }
 
-    // DBG / Latency page: gather snapshots, then render + reply in the
-    // callback. Safe off-thread - captures are taken here and RenderMonPage
-    // is pure.
-    auto* actorSystem = TActivationContext::ActorSystem();
-    const TActorId requester = ev->Sender;
+    if (page == EMonPage::Dbg) {
+        FastPathService->GatherMonSnapshots(data.SelectedDbg)
+            .Subscribe(
+                [data = std::move(data),
+                 requester = ev->Sender,
+                 actorSystem = TActivationContext::ActorSystem()]   //
+                (const TFuture<TVector<TDbgSnapshot>>& future) mutable
+                {
+                    data.Dbgs = future.GetValue();
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
+        return true;
+    }
 
-    FastPathService->GatherMonSnapshots(selectedDbg)
-        .Subscribe(
-            [tabletInfo = MakeMonTabletInfo(),
-             page,
-             selectedDbg,
-             selectedPercentile,
-             selectedLatencyOperation,
-             requester,
-             actorSystem](const auto& future)
-            {
-                TMonPageData data{
-                    .Page = page,
-                    .TabletInfo = tabletInfo,
-                    .Dbgs = future.GetValue(),
-                    .SelectedPercentile = selectedPercentile,
-                    .SelectedLatencyOperation = selectedLatencyOperation,
-                };
-                if (selectedDbg) {
-                    data.SelectedDbg = static_cast<ui32>(*selectedDbg);
-                }
-                Sort(
-                    data.Dbgs,
-                    [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
-                    { return lhs.Index < rhs.Index; });
-                actorSystem->Send(
-                    requester,
-                    new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
-            });
+    if (page == EMonPage::Latency) {
+        FastPathService->GatherMonSnapshots(std::nullopt)
+            .Subscribe(
+                [data = std::move(data),
+                 requester = ev->Sender,
+                 actorSystem = TActivationContext::ActorSystem()]   //
+                (const TFuture<TVector<TDbgSnapshot>>& future) mutable
+                {
+                    data.Dbgs = future.GetValue();
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
+        return true;
+    }
+
+    if (page == EMonPage::Chaos) {
+        data.Chaos = FastPathService->GetChaosConfig();
+        FastPathService->GatherMonSnapshots(std::nullopt)
+            .Subscribe(
+                [data = std::move(data),
+                 requester = ev->Sender,
+                 actorSystem = TActivationContext::ActorSystem()]   //
+                (const TFuture<TVector<TDbgSnapshot>>& future) mutable
+                {
+                    data.Dbgs = future.GetValue();
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
+        return true;
+    }
+
     return true;
 }
 

@@ -6132,7 +6132,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       }
       WriteSpeedInMessagesPerSecond: 80000
       BurstSizeInMessages: 40000
-      SourceIdMaxCounts: 6000000
+      SourceIdMaxCounts: 100000
     }
     Version: 6
     LocalDC: true

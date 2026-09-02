@@ -7078,8 +7078,7 @@
                     "ChannelBufferSize": "262144",
                     "MkqlHeavyProgramMemoryLimit": "1048576",
                     "MkqlLightProgramMemoryLimit": "65536"
-                },
-                "SqlVersion": 1
+                }
             },
             "TenantPoolConfig": {
                 "Slots": [
@@ -8134,8 +8133,7 @@
                     "ChannelBufferSize": "262144",
                     "MkqlHeavyProgramMemoryLimit": "1048576",
                     "MkqlLightProgramMemoryLimit": "65536"
-                },
-                "SqlVersion": 1
+                }
             },
             "TenantPoolConfig": {
                 "Slots": [
@@ -9190,8 +9188,7 @@
                     "ChannelBufferSize": "262144",
                     "MkqlHeavyProgramMemoryLimit": "1048576",
                     "MkqlLightProgramMemoryLimit": "65536"
-                },
-                "SqlVersion": 1
+                }
             },
             "TenantPoolConfig": {
                 "Slots": [

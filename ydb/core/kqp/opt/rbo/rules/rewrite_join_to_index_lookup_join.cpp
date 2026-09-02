@@ -73,7 +73,7 @@ std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, const TInt
         conjuncts.insert(conjuncts.end(), original.begin(), original.end());
     }
     if (filter) {
-        const auto filters = filter->FilterExpr.SplitConjunct();
+        const auto filters = filter->GetFilterExpression().SplitConjunct();
         conjuncts.insert(conjuncts.end(), filters.begin(), filters.end());
     }
 

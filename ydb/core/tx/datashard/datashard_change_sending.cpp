@@ -466,3 +466,7 @@ void TDataShard::Handle(TEvChangeExchange::TEvSplitAck::TPtr&, const TActorConte
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

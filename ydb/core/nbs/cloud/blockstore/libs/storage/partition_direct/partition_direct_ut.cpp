@@ -1977,6 +1977,80 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
     }
 
+    Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        const auto query = [&](TString request, HTTP_METHOD method)
+        {
+            runtime->SendToPipe(
+                tabletId,
+                edge,
+                new NActors::NMon::TEvRemoteHttpInfo(request, method),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+
+            auto response =
+                env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                    edge,
+                    false);
+            UNIT_ASSERT(response);
+            return response->Get()->Html;
+        };
+
+        constexpr ui32 NodeId = 100500;
+        const TString requestPrefix =
+            "/app?TabletID=" + ToString(tabletId) + "&page=chaos";
+
+        const TString initial = query(requestPrefix, HTTP_METHOD_GET);
+        UNIT_ASSERT_STRING_CONTAINS(initial, "DBG #0");
+
+        const TString disable = query(
+            requestPrefix + "&action=disable&node=" + ToString(NodeId) +
+                "&dbg=0",
+            HTTP_METHOD_POST);
+        UNIT_ASSERT_STRING_CONTAINS(disable, "configuration updated");
+
+        const TString disabled = query(requestPrefix, HTTP_METHOD_GET);
+        UNIT_ASSERT_STRING_CONTAINS(disabled, "Node 100500");
+        UNIT_ASSERT_STRING_CONTAINS(
+            disabled,
+            "action=enable&node=100500&dbg=0");
+
+        const TString disableAll = query(
+            requestPrefix + "&action=disable&node=" + ToString(NodeId) +
+                "&dbg=all",
+            HTTP_METHOD_POST);
+        UNIT_ASSERT_STRING_CONTAINS(disableAll, "configuration updated");
+
+        const TString allDisabled = query(requestPrefix, HTTP_METHOD_GET);
+        UNIT_ASSERT_STRING_CONTAINS(
+            allDisabled,
+            "action=enable&node=100500&dbg=all");
+
+        const TString enable = query(
+            requestPrefix + "&action=enable&node=" + ToString(NodeId) +
+                "&dbg=all",
+            HTTP_METHOD_POST);
+        UNIT_ASSERT_STRING_CONTAINS(enable, "configuration updated");
+
+        const TString enabled = query(requestPrefix, HTTP_METHOD_GET);
+        UNIT_ASSERT_STRING_CONTAINS(
+            enabled,
+            "action=disable&node=100500&dbg=0");
+    }
+
     Y_UNIT_TEST(StandardTabletPageRenders)
     {
         TEnvironmentSetup env{{
@@ -2094,6 +2168,80 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         UNIT_ASSERT(bootstrapperDeathObserved);
         UNIT_ASSERT(partitionDeathDelivered);
+    }
+
+    Y_UNIT_TEST(ShouldRestartOnTabletPipePoison)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        TActorId bootstrapperId;
+        const ui64 tabletId =
+            CreatePartitionTablet(env, 32768, &bootstrapperId);
+
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        bool bootstrapperDeathObserved = false;
+        bool rebootObserved = false;
+        const auto isExpectedTabletDeath = [&](IEventHandle& ev)
+        {
+            if (ev.GetTypeRewrite() != TEvTablet::TEvTabletDead::EventType) {
+                return false;
+            }
+
+            const auto* msg = ev.Get<TEvTablet::TEvTabletDead>();
+            if (msg->TabletID != tabletId) {
+                return false;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TEvTablet::TEvTabletDead::ReasonPill,
+                msg->Reason);
+            return true;
+        };
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            Y_UNUSED(nodeId);
+            if (isExpectedTabletDeath(*ev) &&
+                ev->GetRecipientRewrite() == bootstrapperId)
+            {
+                bootstrapperDeathObserved = true;
+            }
+            if (ev->GetRecipientRewrite() == edge) {
+                return false;
+            }
+            return true;
+        };
+
+        // Same event RestartTablet sends over the tablet pipe.
+        runtime->SendToPipe(
+            tabletId,
+            edge,
+            new TEvents::TEvPoison(),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        runtime->Sim(
+            [&] { return !bootstrapperDeathObserved || !rebootObserved; },
+            [&](IEventHandle& ev)
+            {
+                if (ev.GetTypeRewrite() == TEvTablet::EvBoot &&
+                    bootstrapperDeathObserved)
+                {
+                    rebootObserved = true;
+                }
+            });
+
+        UNIT_ASSERT(bootstrapperDeathObserved);
+        UNIT_ASSERT(rebootObserved);
     }
 
     Y_UNIT_TEST(ShouldKeepOtherDBGConnectionsWhenAddingHosts)

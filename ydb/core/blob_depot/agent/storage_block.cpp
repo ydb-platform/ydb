@@ -19,19 +19,13 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                // lookup existing blocks to try fail-fast
-                const auto& [blockedGeneration, issuerGuid] = Agent.BlocksManager.GetBlockForTablet(Request.TabletId);
-                if (Request.Generation < blockedGeneration || (Request.Generation == blockedGeneration && (
-                        Request.IssuerGuid != issuerGuid || !Request.IssuerGuid || !issuerGuid))) {
-                    // we don't consider ExpirationTimestamp here because blocked generation may only increase
-                    return EndWithError(NKikimrProto::ALREADY, "block race detected");
-                }
-
                 // issue request to the tablet
                 NKikimrBlobDepot::TEvBlock block;
                 block.SetTabletId(Request.TabletId);
                 block.SetBlockedGeneration(Request.Generation);
                 block.SetIssuerGuid(Request.IssuerGuid);
+                block.SetVersion(Request.Version);
+                block.SetWriteSourceOp(WriteSourceToProto(Request.WriteSource));
                 Agent.Issue(std::move(block), this, std::make_shared<TBlockContext>(TActivationContext::Monotonic()));
             }
 
@@ -49,12 +43,15 @@ namespace NKikimr::NBlobDepot {
                 if (!msg.Record.HasStatus()) {
                     EndWithError(NKikimrProto::ERROR, "incorrect TEvBlockResult response");
                 } else if (const auto status = msg.Record.GetStatus(); status != NKikimrProto::OK) {
-                    EndWithError(status, msg.Record.GetErrorReason());
+                    EndWithError(status, msg.Record.GetErrorReason(),
+                        msg.Record.GetIsTabletStorageInfoVersionObsolete());
                 } else {
                     // update blocks cache
                     auto& blockContext = context->Obtain<TBlockContext>();
-                    Agent.BlocksManager.SetBlockForTablet(Request.TabletId, Request.Generation, blockContext.Timestamp,
-                        TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs()));
+                    if (Request.WriteSource != TWriteSource::SyncerMergeBlock) {
+                        Agent.BlocksManager.SetBlockForTablet(Request.TabletId, Request.Generation,
+                            blockContext.Timestamp, TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs()));
+                    }
                     EndWithSuccess(std::make_unique<TEvBlobStorage::TEvBlockResult>(NKikimrProto::OK));
                 }
             }

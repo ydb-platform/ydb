@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -124,6 +125,7 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
+    TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
@@ -137,6 +139,7 @@ TFastPathService::TFastPathService(
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
+    , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
           this,
           this,
@@ -170,6 +173,8 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
+    Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+
     const ui64 copyRangeBandwidth =
         StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
     if (copyRangeBandwidth) {
@@ -216,6 +221,12 @@ NThreading::TFuture<void> TFastPathService::Run()
     ScheduleVChunkCountersUpdate();
 
     return NThreading::WaitAll(initialReadyFutures);
+}
+
+IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
+{
+    return dbgIndex >= DirectBlockGroups.size() ? nullptr
+                                                : DirectBlockGroups[dbgIndex];
 }
 
 NThreading::TFuture<void> TFastPathService::Stop()
@@ -490,6 +501,62 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
     };
 }
 
+void TFastPathService::SetNodeChaosMode(
+    ui32 nodeId,
+    std::optional<ui32> dbgIndex,
+    TChaosConfig::TChaosNodeConfig::EChaosMode mode)
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s SetChaosNodeMode %s %s %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintNodeId(nodeId).c_str(),
+        dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all",
+        ToString(mode).c_str());
+
+    auto apply = [&](TChaosConfig::TDbgAndNodeId id)
+    {
+        if (id.DbgIndex >= DirectBlockGroups.size()) {
+            return;
+        }
+        ChaosConfig.NodeConfigs[id].Mode = mode;
+
+        auto controller = id.DbgIndex < ChaosInjectorControls.size()
+                              ? ChaosInjectorControls[id.DbgIndex]
+                              : nullptr;
+        if (!controller) {
+            return;
+        }
+        switch (mode) {
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Disabled: {
+                controller->DisableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Enabled: {
+                controller->EnableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Partial: {
+                break;
+            }
+        }
+    };
+
+    if (!dbgIndex) {
+        for (ui32 i = 0; i < DirectBlockGroups.size(); ++i) {
+            const auto id =
+                TChaosConfig::TDbgAndNodeId{.NodeId = nodeId, .DbgIndex = i};
+            apply(id);
+        }
+    } else {
+        const auto id = TChaosConfig::TDbgAndNodeId{
+            .NodeId = nodeId,
+            .DbgIndex = *dbgIndex};
+        apply(id);
+    }
+}
+
 NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
     std::optional<size_t> dbgIndex) const
 {
@@ -512,6 +579,10 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
             for (const auto& future: futures) {
                 snapshots.push_back(future.GetValue());
             }
+            Sort(
+                snapshots,
+                [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
+                { return lhs.Index < rhs.Index; });
             return snapshots;
         });
 }

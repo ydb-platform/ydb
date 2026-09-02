@@ -391,7 +391,7 @@ public:
                 if (name == NDeliveryGuaranteeSetting::Name && value == NDeliveryGuaranteeSetting::ExactlyOnceValue && !State_->DeferredPublicationExtIdPrefix) {
                     TIssue issue(ctx.GetPosition(setting.Pos()), TStringBuilder()
                         << "`" << NDeliveryGuaranteeSetting::PrettyName << "` = '" << NDeliveryGuaranteeSetting::ExactlyOnceValue
-                        << "' can not be used in current query context, falling back to default '" << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"
+                        << "' cannot be used in current query context, falling back to default '" << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"
                     );
                     issue.Severity = TSeverityIds::S_WARNING;
                     ctx.AddWarning(issue);
@@ -532,7 +532,7 @@ public:
         auto outputsBuilder = Build<TDqStageOutputsList>(ctx, topicNode.Pos());
         if (const auto outputs = inputStage.Outputs()) {
             outputsBuilder.InitFrom(outputs.Cast());
-            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
         }
         outputsBuilder.Add(dqSink);
 

@@ -22,7 +22,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
-#include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -54,7 +53,7 @@ public:
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
-        std::unique_ptr<NTransport::IStorageTransport> storageTransport,
+        NTransport::TStorageTransportPtr storageTransport,
         NMonitoring::TDynamicCounterPtr counters);
 
     ~TDirectBlockGroup() override;
@@ -284,11 +283,12 @@ private:
     const ui64 TabletId;
     const ui32 TabletGeneration;
     const size_t DirectBlockGroupIndex;
-    const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
+    const NTransport::TStorageTransportPtr StorageTransport;
 
     TLogTitle LogTitle;
     ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
+    // DDiskConnections and PBufferConnections always have the same size.
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
     TDDiskIdToHostIndex PBufferIdToHostIndex;

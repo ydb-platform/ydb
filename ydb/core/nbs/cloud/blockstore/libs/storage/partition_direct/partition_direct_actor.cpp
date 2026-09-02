@@ -11,9 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_direct_storage_transport.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
@@ -28,6 +26,8 @@
 #include <util/system/fs.h>
 
 #include <unistd.h>
+
+#include <utility>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -298,14 +298,26 @@ void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
     StateInitImpl(ev, SelfId());
 }
 
-TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
-    TDirectBlockGroupsConnections directBlockGroupsConnections)
+TFastPathServicePtr TPartitionActor::CreateFastPathService(
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates)
 {
     const auto nbsService = GetNbsService();
+    Y_ABORT_UNLESS(nbsService);
+    Y_ABORT_UNLESS(nbsService->Scheduler);
+    Y_ABORT_UNLESS(nbsService->Timer);
+
     TVector<IDirectBlockGroupPtr> directBlockGroups;
+    directBlockGroups.reserve(DirectBlockGroupsCount);
+    TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
+    chaosInjectorControls.reserve(DirectBlockGroupsCount);
+
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
+    // Session counters are aggregated at the disk level: all direct block
+    // groups of this tablet share the same counters chain, so per-group
+    // increments naturally sum up into disk-level counters.
     NMonitoring::TDynamicCounterPtr dbgCountersRoot = MakeCountersChain(
         AppData()->Counters,
         StorageConfig->GetDDiskPoolName(),
@@ -313,7 +325,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
     for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
         const auto& conn =
-            directBlockGroupsConnections.GetDirectBlockGroupConnections(
+            DirectBlockGroupsConnections.GetDirectBlockGroupConnections(
                 dbgIndex);
         TVector<NBsController::TDDiskId> ddiskIds;
         for (const auto& connection: conn.GetConnections()) {
@@ -326,26 +338,21 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
                 connection.GetPersistentBufferDDiskId()));
         }
 
-        // Session counters are aggregated at the disk level: all direct block
-        // groups of this tablet share the same counters chain, so per-group
-        // increments naturally sum up into disk-level counters.
-        std::unique_ptr<NTransport::IStorageTransport> transport;
         const bool enableChecksums =
             nbsService->StorageConfig->GetEnableChecksums();
-        if (nbsService->StorageConfig->GetUseDirectSessionTransport()) {
-            transport = NTransport::CreateDirectStorageTransport(
-                TActivationContext::ActorSystem(),
-                DiskDescription,
-                dbgIndex,
-                enableChecksums);
-        } else {
-            transport = std::make_unique<NTransport::TICStorageTransport>(
-                TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(
-                    DiskDescription,
-                    dbgIndex,
-                    enableChecksums));
-        }
+        auto transport = NTransport::CreateStorageTransport(
+            TActivationContext::ActorSystem(),
+            DiskDescription,
+            dbgIndex,
+            nbsService->StorageConfig->GetUseDirectSessionTransport(),
+            enableChecksums);
+
+        // TODO: Create the wrapper only when chaos injection is enabled and
+        // keep a null control for this DBG otherwise.
+        auto chaosInjector =
+            NTransport::CreateTransportChaosInjector(std::move(transport));
+        chaosInjectorControls.emplace_back(chaosInjector);
+        transport = std::move(chaosInjector);
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
@@ -361,7 +368,21 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
 
-    return directBlockGroups;
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    return std::make_shared<TFastPathService>(
+        TActivationContext::ActorSystem(),
+        SelfId(),
+        DiskDescription,
+        blockCount,
+        VolumeConfig.GetBlockSize(),
+        std::move(directBlockGroups),
+        std::move(chaosInjectorControls),
+        vChunkConfigs,
+        dirtyMapStates,
+        StorageConfig,
+        nbsService->Scheduler,
+        nbsService->Timer,
+        AppData()->Counters);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -423,27 +444,9 @@ void TPartitionActor::Start(
         "%s Starting",
         LogTitle.GetWithTime().c_str());
 
-    auto nbsService = GetNbsService();
-    Y_ABORT_UNLESS(nbsService);
-    Y_ABORT_UNLESS(nbsService->Scheduler);
-    Y_ABORT_UNLESS(nbsService->Timer);
+    DirectBlockGroupsConnections = std::move(directBlockGroupsConnections);
 
-    DirectBlockGroupsConnections = directBlockGroupsConnections;
-
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    FastPathService = std::make_shared<TFastPathService>(
-        TActivationContext::ActorSystem(),
-        SelfId(),
-        DiskDescription,
-        blockCount,
-        VolumeConfig.GetBlockSize(),
-        CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
-        vChunkConfigs,
-        dirtyMapStates,
-        StorageConfig,
-        nbsService->Scheduler,
-        nbsService->Timer,
-        AppData()->Counters);
+    FastPathService = CreateFastPathService(vChunkConfigs, dirtyMapStates);
 
     // Synchronous start mode - requests pass as the initial quorum of Locked
     // DDisk sessions across all DBGs is achieved.
@@ -801,7 +804,6 @@ void TPartitionActor::HandleUpdateDirtyMapState(
 void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
 {
     switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
         HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
         HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);

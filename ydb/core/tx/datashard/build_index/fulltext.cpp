@@ -954,3 +954,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

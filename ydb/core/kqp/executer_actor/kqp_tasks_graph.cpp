@@ -2297,6 +2297,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
         }
+
+        GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
     }
 }
 
@@ -2527,9 +2529,28 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             }
         }
     } else if (shuffleEliminated /* save partitioning for shuffle elimination */) {
-        std::size_t stageInternalTaskId = 0;
         columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
         columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
+
+        // in runtime we calc hash, which will be in [0; shardcount]
+        // so we merge two mappings: hash -> shardID and shardID -> channelID for runtime
+        THashMap<ui64, ui64> hashByShardId;
+        Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't been delivered yet.");
+        const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+        const auto& sharding = tableDesc.GetSharding();
+        for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+            hashByShardId.insert({sharding.GetColumnShards(si), si});
+        }
+
+        // The shuffling stage creates one output channel per task of this stage, walking stageInfo.Tasks in order
+        // (BuildHashShuffleChannels), and at runtime TaskIndexByHash is used as an index into that channel vector
+        // (TColumnShardHashV1::Finish). So a task must be addressed by its position in the placed stageInfo.Tasks,
+        // not by its position in the nodeShards traversal below: tasksByNode preserves the order inside a node, but
+        // nodeShards is a hash map, so the per-node blocks come in an order unrelated to the placed one.
+        THashMap<ui64 /* taskId */, ui64 /* position in stageInfo.Tasks */> taskPositionInStage;
+        for (std::size_t i = 0; i < stageInfo.Tasks.size(); ++i) {
+            taskPositionInStage[stageInfo.Tasks[i]] = i;
+        }
 
         for (auto&& [nodeId, shardsInfo] : nodeShards) {
             auto& nodeTasks = tasksByNode.at(nodeId);
@@ -2553,17 +2574,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 }
             }
 
-            // in runtime we calc hash, which will be in [0; shardcount]
-            // so we merge two mappings: hash -> shardID and shardID -> channelID for runtime
-            THashMap<ui64, ui64> hashByShardId;
-            Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't been delivered yet.");
-            const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
-            const auto& sharding = tableDesc.GetSharding();
-            for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
-                hashByShardId.insert({sharding.GetColumnShards(si), si});
-            }
-
-            for (ui32 t = 0; t < tasksPerNode; ++t, ++stageInternalTaskId) {
+            for (ui32 t = 0; t < tasksPerNode; ++t) {
                 auto& task = GetTask(nodeTasks[t]);
                 task.Reason = TTaskType::SHUFFLE_ELIMINATE_SCAN;
                 task.Meta = metas[t];
@@ -2572,6 +2583,7 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 task.Meta.ScanTask = true;
                 task.SetMetaId(t);
 
+                const ui64 stageInternalTaskId = taskPositionInStage.at(nodeTasks[t]);
                 for (const auto& readInfo: *task.Meta.Reads) {
                     Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
                     (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
@@ -3333,6 +3345,9 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
     if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
         settings.SetLockMode(*GetMeta().LockMode);
     }
+    settings.SetCollectAffectedRows(
+        GetMeta().CollectAffectedRows && !settings.GetIsIndexImplTable());
+
         // Use per-transaction QuerySpanId if available (for deferred effects),
         // otherwise fall back to global QuerySpanId; apply per-table suppression.
         {

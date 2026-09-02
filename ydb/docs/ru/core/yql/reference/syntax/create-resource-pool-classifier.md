@@ -36,7 +36,7 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 * `HAS_FULL_SCAN` (String) — путь к объекту, по которому ожидается полное сканирование; поддерживает wildcard `*`. Подробнее — [ниже](#has-full-scan).
 * `HAS_STREAM` (Bool) — признак стримингового запроса. Подробнее — [ниже](#has-stream).
 
-#### MEMBER_NAME {#member-name}
+#### MEMBER_NAME {#member-name} {#member-name-format}
 
 `MEMBER_NAME` сравнивается посимвольно с [SID](../../../concepts/glossary.md#access-sid) пользователя или любым SID группы из его токена аутентификации. Формат SID зависит от того, каким способом пользователь пришёл в систему.
 

@@ -1087,6 +1087,18 @@ Implementation sequence:
     14/14 TPCH plus the unchanged 25/25 TPC-DS obligations, raising the
     checked floor to 39/39 without changing any weaker inventory. M87's capped
     ordinary dashboards remain authoritative. M4 remains current.
+89. M4: Milestone 90 revisits already formula-covered TPC-DS q7/q26/q43/q62
+    at unchanged M89 proof-producing code. q7/q26 remain `UNKNOWN` at their
+    localized preferred payload branches, while q43/q62 prove in the
+    four-query run and again in an independent two-query repeat. The
+    unresolved results are neither proofs nor counterexamples, and no
+    intervening semantic change is credited. Policy commit `ad7acfd848f`,
+    based on M89 documentation commit `2f755528cfc`, changes only the proof
+    policy and its fixture; focused policy validation passes 16/16. Fresh
+    policy-valid proof gates verify the unchanged 14/14 TPCH plus 27/27
+    TPC-DS obligations, raising the checked floor to 41/41 without changing
+    any weaker inventory. M87's capped ordinary dashboards remain
+    authoritative. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -4154,7 +4166,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   seconds respectively; TPCH includes a cold build, and neither outer duration
   is solver time. Combined proof work is 20,915/346,034 ms.
 
-  The current checked floor is therefore 39/39: 39/121 workload rows (32.2%),
+  The M89 checked floor is therefore 39/39: 39/121 workload rows (32.2%),
   39/101 formula-covered exact pairs (38.6%), and within TPCH 14/22 workload
   rows (63.6%) and 14/20 formula-covered rows (70.0%). TPC-DS remains 25/99
   workload rows (25.3%) and 25/81 formula-covered rows (30.9%). Every weaker
@@ -4164,6 +4176,117 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   formula counts, 2/18 optimizer failures, preparation 20/2 and 73/26, and all
   101 formulas. Complete evidence is preserved under
   `.rbo-verification-artifacts/20260902-m89-tpch-q7-promotion/`.
+
+  Milestone 90 is a retrospective TPC-DS proof-policy promotion at unchanged
+  M89 proof-producing code. A focused `solver_experiment` at exact completed
+  M89 documentation checkpoint
+  `2f755528cfc0ba07236c6ddc88d45827fa2c4d56` selects exactly q7/q26/q43/q62
+  under the existing two-row/two-task bound and 60,000-ms timeout. All four
+  prepare, capture exactly Initial then Final, and enter the verifier; the
+  embedded policy is valid with zero violations:
+
+  | Query | Preparation / verifier ms | Status | First unresolved branch |
+  |---|---:|---|---|
+  | q7 | 205 / 60,850 | `UNKNOWN` | 8/14, `preferred_left_row_0_column_2_payload_mismatch` |
+  | q26 | 198 / 60,852 | `UNKNOWN` | 9/14, `preferred_left_row_0_column_3_payload_mismatch` |
+  | q43 | 349 / 9,860 | `VERIFIED_BOUNDED` | none |
+  | q62 | 227 / 36,686 | `VERIFIED_BOUNDED` | none |
+
+  The q7/q26 solvers returned `unknown` at those first unresolved branches;
+  neither result is a proof or counterexample. Summed preparation/verifier
+  work is 979/168,248 ms. The 9,536-byte report, 18,380-byte trace, 656-byte
+  metadata, and 1,832-byte principal output have SHA-256 values
+  `7b9c7900989b14d90f21b8da72edb9cfb2dbdc4d71ed31b334882a1e2959ce86`,
+  `d6dfa0cce05d6d16062198b59a144f8d8e24771430e0986d6808bad1f482e93f`,
+  `e57414dba8d0cd7a2e44f5e5b89a0361587188efd9cb9d26fb2f6dfb5b4c5d44`,
+  and `a7255c8dd771f844c55fe6b6d4043881e1cec15962a6a42ad381f662da432177`.
+  Subtest/metadata/chunk-wall times are
+  172.886864/173.903423/173.890615 seconds, peak process-tree RSS is 1,115,632
+  KiB, and the outer command takes 189.82 seconds; the outer duration is not
+  solver time.
+
+  The unresolved rows retain byte-exact evidence. For q7, the query, Initial,
+  Final, formula, and verdict are 1,075, 29,287, 17,089, 403,956, and 210 bytes
+  with SHA-256 values
+  `2e0869248deec01574090217b00f868108f8fd2da9adc5a58e4386ec2ed22a3b`,
+  `edfc97f8e89925f0844aeaae7c909cf9b22dd6d867c1287ecab4dd59150afed8`,
+  `d06ccf1de873cee379cb766f8fb792e00caacc56017064588666c59467db4de5`,
+  `3acd23c3d9a19fa289fd4a948b106fe56930f061b83e0ad926b8d87addc71ed8`,
+  and `dccc929709cf0f1a4b5b13e5ec569c9f6410917bfd06f77bbd468bc0373cdcab`.
+  For q26, the same artifacts are 1,009, 36,761, 18,495, 414,596, and 210
+  bytes with SHA-256 values
+  `9f09d2b470df2e55252ccf8b12243331b95777964ebb21735e87610588f012bc`,
+  `a39a62771b51630e7b5858f1d663f3c913573cd96153713b8406352af9f7eb29`,
+  `e0bad5414fc4f875b2d320d135cfaba0cc8701cbab167ddefcefa78ef61d3b42`,
+  `930e45276fd846f4b418bc649f58cb3136b7028e0ea1d710c6a6baea4935fca2`,
+  and `aedbfa0f2994893fbfc1b8ec9f0a9bab3e7b4e5854b18c8d09d8f5cae792bfc6`.
+
+  An independent q43/q62-only run at the same checkpoint is policy-valid with
+  zero violations and proves both rows again after 200/8,904 and 230/36,409
+  ms, 430/45,313 ms summed. Its 6,414-byte report, 18,404-byte trace, 655-byte
+  metadata, and 1,800-byte principal output have SHA-256 values
+  `8f74d696b24ee963e73e4a0085cde26010d7fffe15f2c4755f4d93d513e17ae9`,
+  `422bd2b7b7b59b9ee231a747cdcf67421b0fa6c519fbe2db89757fa80f260777`,
+  `c54bac08b4e17d7559a0508d2203553d9b524ff023101eff9f45d88f3bd2122d`,
+  and `7aca45276cf86fbb28dce5aadd9bc61982c4a3f3733c20497203847b0d6c22d2`.
+  Subtest/metadata/chunk-wall times are
+  49.458531/50.647937/50.646373 seconds, peak process-tree RSS is 1,106,772
+  KiB, and the non-solver outer-command duration is 67.23 seconds. The
+  q43/q62 rows are identical across runs after removing only preparation and
+  verification timings; successful rows retain no standalone formula.
+
+  Policy commit `ad7acfd848f4c60b85f765ad7dec228fb00303cc`, based on completed
+  M89 documentation commit `2f755528cfc`, adds only q43/q62 to the TPC-DS
+  required-proof set and updates their C++ policy fixture. Its two-file diff
+  changes no optimizer, exporter, snapshot/IR, semantic verifier, SMT renderer,
+  row/task bound, solver schedule, formula/exact-pair/verifier-entry/preparation
+  floor, or defect inventory; the fixture rewrite adds four net physical test
+  lines. Focused policy validation passes 16/16. Its 33,255-byte trace and
+  654-byte zero-exit metadata have SHA-256 values
+  `178ff7dc8349fc2a217d6d897060b73027665db323f9e72524675e3764240f64`
+  and `0b00e6598d29974abfcd8c13d49b682a9da323696a2422860e3821e383545caf`.
+  Metadata time is 0.949548 seconds and the 16 recorded test-body times sum
+  to 0.006753 seconds. The 723.27-second outer command includes a cold build
+  and is not solver time.
+
+  Fresh committed-policy proof gates are authoritative and policy-valid with
+  zero violations. TPCH selects exactly q3/q4/q6/q7/q11/q12/q13/q14/q15/q16/
+  q18/q19/q21/q22 and proves 14/14 after 2,188/112,161 ms. Its 10,766-byte
+  report, 18,442-byte trace, 656-byte metadata, and 1,417-byte principal output
+  have SHA-256 values
+  `9a1588808cc1b3b07335db1794c2b36d5e97f67392ba7a6858e838548acffd4a`,
+  `c7c9b50f96ae7ad944fc97349f5a926209e0b2ff6d937811a05a0754104945e1`,
+  `0c38dfe861fc31b1b41da7c388e9f84f56d6807f5ffca7b7be31832377c0f90f`,
+  and `f09207ac51ea231e9c97f9aea4d9cd206696a5f38ba52ecdb8d191e910900518`.
+  Subtest/metadata/chunk-wall times are
+  116.341711/117.181253/117.165068 seconds, peak process-tree RSS is 903,368
+  KiB, and the outer command takes 132.90 seconds.
+
+  TPC-DS selects exactly q3/q8/q9/q15/q16/q19/q21/q28/q34/q38/q42/q43/q48/
+  q52/q55/q62/q69/q73/q87/q88/q90/q93/q94/q95/q96/q97/q99 and proves 27/27
+  after 19,444/316,120 ms; q43 and q62 take 168/8,858 and 221/37,311 ms. Its
+  21,168-byte report, 18,410-byte trace, 656-byte metadata, and 2,240-byte
+  principal output have SHA-256 values
+  `4dca7db47f8cd66715bb575cb381e6e321d17957ffbad8723cbd537b163a36b7`,
+  `0c13ceee40379d942e67bb08c4ec14509c179a526163419024c4c8a31dbe85f1`,
+  `3e520bcd8665fd885d30654c5ed469deb7786ec2d0035a120a85e38aa73ecfaf`,
+  and `a7930c07394efcdd177f352db96831075ef09e2233d9b22b860963a5cd90b5fb`.
+  Subtest/metadata/chunk-wall times are
+  339.514435/340.583582/340.589461 seconds, peak process-tree RSS is 1,152,164
+  KiB, and the outer command takes 358.45 seconds. Neither gate's outer
+  duration is solver time. Combined gate preparation/verifier work is
+  21,632/428,281 ms.
+
+  The current checked floor is therefore 41/41: 41/121 workload rows (33.9%),
+  41/101 formula-covered exact pairs (40.6%), and within TPC-DS 27/99 workload
+  rows (27.3%) and 27/81 formula-covered rows (33.3%). TPCH remains 14/22
+  workload rows (63.6%) and 14/20 formula-covered rows (70.0%). Every weaker
+  inventory is unchanged. Because M90 changes only policy, fixtures, and
+  documentation, it makes no fresh ordinary-dashboard claim: M87's capped
+  TPCH and TPC-DS dashboards remain authoritative for the unchanged 20/81
+  formula counts, 2/18 optimizer failures, preparation 20/2 and 73/26, and all
+  101 formulas. Complete evidence is preserved under
+  `.rbo-verification-artifacts/20260902-m90-tpcds-q43-q62-promotion/`.
 
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
@@ -4443,10 +4566,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q7, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
-  q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q42, q48, q52, q55, q69,
-  q73, q87, q88, q90, q93, q94, q95, q96, q97, and q99 with a fixed 60-second
-  per-query budget. The current policy covers 14 TPCH and 25 TPC-DS queries:
-  39 obligations, 39/121 (32.2%) of the workload, and 39/101 (38.6%) of
+  q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q42, q43, q48, q52, q55,
+  q62, q69, q73, q87, q88, q90, q93, q94, q95, q96, q97, and q99 with a fixed
+  60-second per-query budget. The current policy covers 14 TPCH and 27 TPC-DS
+  queries: 41 obligations, 41/121 (33.9%) of the workload, and 41/101 (40.6%) of
   formula-covered queries.
   Historically, the post-M78 reports verified all 32/32 as
   `VERIFIED_BOUNDED`: TPCH passed 13/13
@@ -5281,9 +5404,16 @@ regression locks the corrected boundary.
   `678e003f448`, promotes already formula-covered TPCH q7 after two repeatable
   focused proofs. The companion q1/q8 results remain `UNKNOWN`, and no
   intervening semantic change is credited for q7. Policy tests pass 16/16;
-  fresh 14/14 TPCH plus unchanged 25/25 TPC-DS gates raise the current floor to
+  fresh 14/14 TPCH plus unchanged 25/25 TPC-DS gates raise the M89 floor to
   39/39 while every weaker inventory and M87's authoritative dashboards remain
   unchanged.
+  M90 policy commit `ad7acfd848f`, based on M89 documentation checkpoint
+  `2f755528cfc`, promotes already formula-covered TPC-DS q43/q62 after two
+  repeatable focused proofs. The companion q7/q26 results remain `UNKNOWN`,
+  neither proof nor counterexample; no intervening semantic change is
+  credited. Policy tests pass 16/16; fresh unchanged 14/14 TPCH plus 27/27
+  TPC-DS gates raise the current floor to 41/41 while every weaker inventory
+  and M87's authoritative dashboards remain unchanged.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

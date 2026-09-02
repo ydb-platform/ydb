@@ -61,7 +61,7 @@ For information about managing roles and users, see [{#T}](../security/authoriza
 
 ### Password complexity {#password-complexity}
 
-{{ ydb-short-name }}allows you to configure password complexity requirements. If a password provided via the `CREATE USER` or `ALTER USER` commands does not meet the complexity criteria, the command execution will fail.
+{{ ydb-short-name }} allows you to configure password complexity requirements. If a password provided via the `CREATE USER` or `ALTER USER` commands does not meet the complexity criteria, the command execution will fail.
 By default, no restrictions are imposed on passwords: a password of any length is accepted, including an empty string; the password may contain any number of digits and letters in any case, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set password complexity restrictions, you need to fill in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
 
 ### Forced user lock/unlock

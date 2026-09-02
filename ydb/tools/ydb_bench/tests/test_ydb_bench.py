@@ -7202,6 +7202,58 @@ class WebTest(unittest.TestCase):
             worker.join()
             server.server_close()
 
+    def test_local_ydb_activity_bounds_persisted_replay_to_recent_tail(self):
+        run_root = self.root / "local-ydb-tail-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [{"benchmark": "local-ydb", "profile": "capacity", "status": "running"}]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            }
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        events = [
+            {
+                "sequence": sequence,
+                "type": "step-progress",
+                "step_id": "capacity-step",
+                "fields": {"progress": {"phase": "measuring", "attempt": sequence, "padding": "x" * 80}},
+            }
+            for sequence in range(1, 21)
+        ]
+        (run_root / "events.jsonl").write_text(
+            "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in events),
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(web, "_LOCAL_YDB_ACTIVITY_SCAN_BYTES", 256), mock.patch.object(
+            web, "_EVENT_LOG_RECORD_BYTES", 512
+        ):
+            service = RunService(self.root)
+            try:
+                activity = service.local_ydb_activity("local-ydb-tail-activity", "capacity")
+                self.assertTrue(activity["truncated"])
+                self.assertGreater(activity["events"][0]["sequence"], 1)
+                self.assertEqual(activity["events"][-1]["sequence"], 20)
+                self.assertEqual(activity["after"], 20)
+
+                first_sequence = activity["events"][0]["sequence"]
+                replay = service.local_ydb_activity(
+                    "local-ydb-tail-activity",
+                    "capacity",
+                    after=first_sequence - 1,
+                )
+                self.assertFalse(replay["truncated"])
+                self.assertEqual(replay["events"], activity["events"])
+                self.assertEqual(replay["after"], 20)
+            finally:
+                service.shutdown()
+
     def test_local_ydb_profile_projection_supports_preparing_and_live_results(self):
         run_root = self.root / "local-ydb-run"
         self._manifest(run_root, "running")

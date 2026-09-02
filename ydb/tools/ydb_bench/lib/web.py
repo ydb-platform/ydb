@@ -38,6 +38,7 @@ _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self';
 _STREAM_CHUNK_SIZE = 1024 * 1024
 _CHART_DATA_ROW_LIMIT = 100000
 _LOCAL_YDB_ACTIVITY_LIMIT = 200
+_LOCAL_YDB_ACTIVITY_SCAN_BYTES = 4 * 1024 * 1024
 _EVENT_LOG_RECORD_BYTES = 4 * 1024 * 1024
 _LOCAL_YDB_ACTIVITY_RESPONSE_BYTES = 512 * 1024
 _MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
@@ -3474,6 +3475,7 @@ class RunService:
         cursor = after
         matched = 0
         activity = deque(maxlen=_LOCAL_YDB_ACTIVITY_LIMIT)
+        replay_gap = False
 
         def consume(event):
             nonlocal cursor, matched
@@ -3513,8 +3515,21 @@ class RunService:
             except OSError as error:
                 raise BenchmarkError("cannot read run event log") from error
             with stream:
-                remaining = snapshot_size
-                previous_sequence = 0
+                replay_start = max(
+                    0,
+                    snapshot_size - _LOCAL_YDB_ACTIVITY_SCAN_BYTES - _EVENT_LOG_RECORD_BYTES,
+                )
+                if replay_start:
+                    stream.seek(replay_start - 1)
+                    starts_at_record_boundary = stream.read(1) == b"\n"
+                    stream.seek(replay_start)
+                    if not starts_at_record_boundary:
+                        partial = stream.readline(min(snapshot_size - replay_start, _EVENT_LOG_RECORD_BYTES + 1))
+                        if len(partial) > _EVENT_LOG_RECORD_BYTES or not partial.endswith(b"\n"):
+                            raise BenchmarkError("run event log contains an oversized or incomplete event")
+                remaining = snapshot_size - stream.tell()
+                previous_sequence = None
+                first_sequence = None
                 while remaining:
                     line = stream.readline(min(remaining, _EVENT_LOG_RECORD_BYTES + 1))
                     if not line:
@@ -3532,15 +3547,20 @@ class RunService:
                     if (
                         not isinstance(sequence, int)
                         or isinstance(sequence, bool)
-                        or sequence <= previous_sequence
+                        or sequence <= 0
+                        or (previous_sequence is not None and sequence <= previous_sequence)
                         or sequence > _MAX_SAFE_JSON_INTEGER
                     ):
                         raise BenchmarkError("run event log sequences must be strictly increasing integers")
+                    if first_sequence is None:
+                        first_sequence = sequence
                     previous_sequence = sequence
                     if not isinstance(event.get("type"), str):
                         raise BenchmarkError("run event log event type must be a string")
                     consume(event)
-
+                if replay_start and first_sequence is None:
+                    raise BenchmarkError("run event log contains an oversized or incomplete event")
+                replay_gap = bool(replay_start and first_sequence > after + 1)
         bounded = deque()
         response_bytes = 0
         for item in reversed(activity):
@@ -3554,7 +3574,7 @@ class RunService:
         return {
             "events": list(bounded),
             "after": cursor,
-            "truncated": matched > len(bounded),
+            "truncated": replay_gap or matched > len(bounded),
         }
 
     def local_ydb_comparison(self, run_ids):

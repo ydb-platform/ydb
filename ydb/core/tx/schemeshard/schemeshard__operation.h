@@ -34,7 +34,12 @@ struct TOperation: TSimpleRefCount<TOperation> {
     // a top-level CreateTable carrying CopyFromTable is re-dispatched to TCopyTable, so a
     // planner hung off the sub-operation class never runs for that shape. Planning is a
     // property of the operation type, which is exactly why it belongs here.
-    std::optional<TLogicalOperationPlan> PilotPlan;
+    // Indexed 1:1 with the post-split transaction list, the same shape as
+    // DeclaredAffectedPaths. One plan per *operation* is wrong: an operation carries many
+    // transactions -- a consistent copy issues one CreateTable per table -- and parts are
+    // constructed per transaction, so a single plan bound part 0 of every batch to the last
+    // transaction's effects. Caught by TSchemeShardCheckProposeSize::CopyTables.
+    TVector<std::optional<TLogicalOperationPlan>> PilotPlans;
 
     // The declaration of each constructed part, keyed by its SubTxId.
     //

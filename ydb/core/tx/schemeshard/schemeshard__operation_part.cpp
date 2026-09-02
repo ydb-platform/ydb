@@ -221,4 +221,28 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
     return nullptr;
 }
 
+
+TPath TSubOperationBase::PlannedPath(EPlanRole role, const TString& ownResolution,
+        TOperationContext& context) const
+{
+    if (!PlannedEffects) {
+        return TPath::Resolve(ownResolution, context.SS);
+    }
+    for (const auto& effect : *PlannedEffects) {
+        if (effect.Role != role) {
+            continue;
+        }
+        return effect.PathId
+            ? TPath::Init(*effect.PathId, context.SS)
+            : TPath::Resolve(ownResolution, context.SS);
+    }
+    // Planned, but nothing for this role. Loud rather than silent: falling back here is how a
+    // mis-planned part gets a plausible path and fails later somewhere unrelated.
+    Y_ABORT_UNLESS(!PlanDivergenceIsFatal,
+        "part has a plan that does not mention the role it needs, txId: %" PRIu64
+        ", subTxId: %" PRIu64,
+        ui64(OperationId.GetTxId()), ui64(OperationId.GetSubTxId()));
+    return TPath::Resolve(ownResolution, context.SS);
+}
+
 }

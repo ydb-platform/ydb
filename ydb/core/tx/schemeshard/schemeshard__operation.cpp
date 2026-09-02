@@ -311,15 +311,19 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // CreateTable carrying CopyFromTable is re-dispatched to TCopyTable, so a planner called
     // from TCreateTable::Propose never runs for that shape. Found by a test asserting the plan
     // for a copy and getting an empty source.
-    for (const auto& transaction : rewrittenTransactions) {
-        if (transaction.GetOperationType() != NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable) {
+    // Built over the post-split list, because that is what parts are constructed from and the
+    // binding below has to line up with it. Still before Phase Two, so the whole plan exists
+    // before anything proposes.
+    operation->PilotPlans.resize(transactions.size());
+    for (size_t i = 0; i < transactions.size(); ++i) {
+        if (transactions[i].GetOperationType() != NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable) {
             continue;
         }
-        auto planned = PlanCreateTableEffects(transaction, context);
+        auto planned = PlanCreateTableEffects(transactions[i], context);
         if (planned.IsSuccess()) {
-            operation->PilotPlan = planned.DetachResult();
+            operation->PilotPlans[i] = planned.DetachResult();
             if (LastPlannedOperation) {
-                *LastPlannedOperation = *operation->PilotPlan;
+                *LastPlannedOperation = *operation->PilotPlans[i];
             }
         }
     }
@@ -417,6 +421,24 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // of giving it up wholesale as Incomplete, which switches the check off exactly where
     // the paths are least obvious. Like the generated MkDirs, these widen the observation
     // set only: the outbox record follows the request, not the parts conjured to serve it.
+    // Hand each part the effects the plan says it owns -- once, here, where parts are made.
+    // Per part, not per operation: a shared list would let any part match any role, which is
+    // how an index-impl copy part bound the main table's source.
+    const auto bindPlanToParts = [&](const TVector<ISubOperation::TPtr>& parts, size_t txIndex) {
+        if (txIndex >= operation->PilotPlans.size() || !operation->PilotPlans[txIndex]) {
+            return;
+        }
+        const auto& plan = *operation->PilotPlans[txIndex];
+        for (const auto& partPlan : plan.GetParts()) {
+            if (partPlan.PartIdx >= parts.size()) {
+                continue;
+            }
+            if (auto* base = dynamic_cast<TSubOperationBase*>(parts[partPlan.PartIdx].Get())) {
+                base->SetPlannedEffects(plan.EffectsOfPart(partPlan.PartIdx));
+            }
+        }
+    };
+
     const auto admitParts = [&](const TVector<ISubOperation::TPtr>& parts) {
         for (const auto& part : parts) {
             const auto& partTx = part->GetTransaction();
@@ -451,6 +473,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     for (const auto& transaction : generatedTransactions) {
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
+        // Generated MkDirs have no plan of their own; they resolve for themselves.
         admitParts(parts);
 
         if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
@@ -461,9 +484,11 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
-    for (const auto& transaction : transactions) {
+    for (size_t txIndex = 0; txIndex < transactions.size(); ++txIndex) {
+        const auto& transaction = transactions[txIndex];
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
+        bindPlanToParts(parts, txIndex);
         admitParts(parts);
 
         if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {

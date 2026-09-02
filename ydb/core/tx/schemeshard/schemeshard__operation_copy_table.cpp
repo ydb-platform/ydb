@@ -565,7 +565,11 @@ public:
             }
         }
 
-        TPath srcPath = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+        // The source the plan already resolved, not a second derivation of the same proto
+        // field. A part that this planner did not describe -- an index impl table copy, say --
+        // has no plan and resolves for itself, which PlannedPath handles explicitly.
+        TPath srcPath = PlannedPath(EPlanRole::Source,
+            Transaction.GetCreateTable().GetCopyFromTable(), context);
 
         {
             TPath::TChecker checks = srcPath.Check();

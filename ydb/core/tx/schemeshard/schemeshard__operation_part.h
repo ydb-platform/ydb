@@ -3,6 +3,7 @@
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
@@ -238,6 +239,36 @@ class TSubOperationBase: public ISubOperation {
 protected:
     const TOperationId OperationId;
     const TTxTransaction Transaction;
+
+    // The effects this part owns, handed over when the part is built -- the same way its
+    // transaction is. Optional rather than empty-by-default, because "this part has no plan"
+    // and "this part's plan names nothing" are different facts and must not look alike.
+    std::optional<TVector<TPlannedPathEffect>> PlannedEffects;
+
+public:
+    void SetPlannedEffects(TVector<TPlannedPathEffect> effects) {
+        PlannedEffects = std::move(effects);
+    }
+
+    bool HasPlan() const {
+        return PlannedEffects.has_value();
+    }
+
+protected:
+    // The path for this role. Three outcomes, deliberately not collapsed into one:
+    //
+    //   no plan at all        -> resolve for ourselves. Ordinary: a part built by another
+    //                            part's decomposition, a part restored from TTxState after
+    //                            reboot, or an operation whose planner does not exist yet.
+    //   planned, with an id   -> use it. The plan already decided which object this is.
+    //   planned, without one  -> resolve for ourselves. Also ordinary: the object does not
+    //                            exist yet, so there is no id to carry (a create's target).
+    //   planned, role absent  -> resolve, but REPORT. The part believes it is planned and the
+    //                            plan does not mention this role, which is a planning bug. An
+    //                            earlier version of this helper silently fell back here, and
+    //                            that is what let a copy part bind the main table's source.
+    TPath PlannedPath(EPlanRole role, const TString& ownResolution,
+        TOperationContext& context) const;
 
 public:
     explicit TSubOperationBase(const TOperationId& id)

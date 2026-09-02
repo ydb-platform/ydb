@@ -144,6 +144,31 @@ public:
         return id;
     }
 
+    // Which part owns which effects. Without this a part can only *search* a shared list for
+    // something matching its role, and role is not identity: copying an indexed table makes one
+    // part per index impl table, and every one of them matches Role::Source. The pilot bound an
+    // index-impl part to the main table's source exactly this way.
+    void AddPart(ui32 partIdx, TVector<TPlanEffectId> effects) {
+        Parts.push_back(TPartPlan{.PartIdx = partIdx, .Effects = std::move(effects)});
+    }
+
+    const TVector<TPartPlan>& GetParts() const {
+        return Parts;
+    }
+
+    TVector<TPlannedPathEffect> EffectsOfPart(ui32 partIdx) const {
+        TVector<TPlannedPathEffect> owned;
+        for (const auto& part : Parts) {
+            if (part.PartIdx != partIdx) {
+                continue;
+            }
+            for (const TPlanEffectId id : part.Effects) {
+                owned.push_back(Effects[id]);
+            }
+        }
+        return owned;
+    }
+
     // Both directions, so neither half of a move has to be found by scanning.
     void Pair(TPlanEffectId a, TPlanEffectId b) {
         Effects[a].Related = b;

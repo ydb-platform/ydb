@@ -940,6 +940,14 @@ std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTable>(
 // PathsInside, but that writes SubDomains rather than a path row, and nothing about the
 // database is logically changed. It is also identical for all 123 operations and derivable
 // from any effect's path, so recording it per-operation would be noise a consumer can compute.
+static TVector<TPlanEffectId> AllEffectIds(const TLogicalOperationPlan& plan) {
+    TVector<TPlanEffectId> ids;
+    for (const auto& effect : plan.GetEffects()) {
+        ids.push_back(effect.Id);
+    }
+    return ids;
+}
+
 TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
         const TTxTransaction& tx, TOperationContext& context)
 {
@@ -948,9 +956,22 @@ TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
 
     // The database root comes from the parent, which exists. The target does not exist yet, so
     // it cannot supply its own domain -- that ordering is forced, not chosen.
-    const TPath parentForDomain = TPath::Resolve(workingDir, context.SS);
+    // The database root has to come from a path that exists. WorkingDir may not: the auto-mkdir
+    // split rewrites it to a directory this same operation is about to create, so resolving it
+    // directly fails for every nested create.
+    //
+    // This is GP E36's overlay question, narrowed. E36 concluded no overlay was needed, and
+    // that was right *while declarations were pure string arithmetic*. A planner that resolves
+    // anything real meets it again. Walking up to the nearest existing ancestor is enough here,
+    // because domain membership is inherited -- a full namespace overlay would buy nothing.
+    TString probe = workingDir;
+    TPath parentForDomain = TPath::Resolve(probe, context.SS);
+    while (!parentForDomain.IsResolved() && probe != "/" && !probe.empty()) {
+        probe = TString(ExtractParent(probe));
+        parentForDomain = TPath::Resolve(probe, context.SS);
+    }
     if (!parentForDomain.IsResolved()) {
-        return TConclusionStatus::Fail("cannot resolve WorkingDir to a database root");
+        return TConclusionStatus::Fail("cannot resolve a database root for WorkingDir");
     }
     const TString dbRoot = parentForDomain.GetDomainPathString();
     const TString targetAbs = CanonizePath(JoinPath({workingDir, create.GetName()}));
@@ -994,6 +1015,9 @@ TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
     }
 
     if (!create.HasCopyFromTable()) {
+        // The primary part is index 0 of what ConstructParts returns; a bare create makes only
+        // that one. Naming it explicitly is what stops a derived part later matching by role.
+        plan.AddPart(0, AllEffectIds(plan));
         return plan;
     }
 
@@ -1028,6 +1052,12 @@ TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
             EPlanOrigin::RequestNamed, EPlanObservation::MustWrite);
     }
 
+    // Only the primary copy part is described here. CreateCopyTable also builds one part per
+    // index impl table and per sequence (schemeshard__operation_copy_table.cpp:1117-1150);
+    // those are its own decomposition and this planner does not model them, so they are given
+    // no effects and resolve for themselves. Modelling them is what M7 means by "the planner
+    // owns the decomposition".
+    plan.AddPart(0, AllEffectIds(plan));
     return plan;
 }
 

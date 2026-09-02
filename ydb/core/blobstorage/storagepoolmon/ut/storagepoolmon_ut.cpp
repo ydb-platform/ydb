@@ -82,6 +82,47 @@ Y_UNIT_TEST(RequestLatencyCountersIncludeCompletedAndInFlight) {
     UNIT_ASSERT_VALUES_EQUAL(inFlightMaxLatency->Val(), 1'500);
 }
 
+Y_UNIT_TEST(RequestLatencyCountersAggregateManyInFlightRequests) {
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    TRequestMonItem requestMonItem;
+    requestMonItem.Init(counters, NPDisk::DEVICE_TYPE_ROT);
+
+    constexpr ui64 requestCount = 1024;
+    ui64 startTimeUsSum = 0;
+    for (ui64 requestId = 1; requestId <= requestCount; ++requestId) {
+        const ui64 startTimeUs = requestId;
+        startTimeUsSum += startTimeUs;
+        requestMonItem.AddInFlightRequest(requestId, TMonotonic::MicroSeconds(startTimeUs));
+    }
+
+    auto inFlightSum = counters->FindCounter("inFlightResponseTimeUsSum");
+    auto inFlightCount = counters->FindCounter("inFlightCount");
+    auto inFlightMaxLatency = counters->FindCounter("inFlightResponseTimeMsMax");
+
+    UNIT_ASSERT(inFlightSum);
+    UNIT_ASSERT(inFlightCount);
+    UNIT_ASSERT(inFlightMaxLatency);
+
+    const ui64 firstUpdateUs = 10'000;
+    requestMonItem.Update(TMonotonic::MicroSeconds(firstUpdateUs));
+
+    UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), requestCount * firstUpdateUs - startTimeUsSum);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), requestCount);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightMaxLatency->Val(), 9);
+
+    for (ui64 requestId = 1; requestId <= requestCount; requestId += 2) {
+        requestMonItem.RemoveInFlightRequest(requestId);
+        startTimeUsSum -= requestId;
+    }
+
+    const ui64 secondUpdateUs = 20'000;
+    requestMonItem.Update(TMonotonic::MicroSeconds(secondUpdateUs));
+
+    UNIT_ASSERT_VALUES_EQUAL(inFlightSum->Val(), requestCount / 2 * secondUpdateUs - startTimeUsSum);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightCount->Val(), requestCount / 2);
+    UNIT_ASSERT_VALUES_EQUAL(inFlightMaxLatency->Val(), 19);
+}
+
 } // Y_UNIT_TEST_SUITE TBlobStorageStoragePoolMonTest
 } // namespace NBlobStorageStoragePoolMonTest
 } // namespace NKikimr

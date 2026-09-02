@@ -9785,6 +9785,69 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
+    Y_UNIT_TEST(TestCutHistoryRetainedAcrossHiveReconnect) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetCutHistoryAllowList("Dummy");
+        });
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeConsoleID(), TTabletTypes::Console), &NConsole::CreateConsole);
+        runtime.EnableScheduleForActor(hiveActor);
+        const TActorId senderA = runtime.AllocateEdgeActor(0);
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        bool done = false;
+        auto doneObserver = runtime.AddObserver<TEvHive::TEvShrinkStoragePoolDone>([&](auto&&) { done = true; });
+
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+
+        // Get the group that Hive wants to vacate: one request, one reply.
+        auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
+        request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
+        request->Record.MutableSubDomain()->SetPathId(1);
+        request->Record.SetStoragePool("def1");
+        request->Record.SetNewSize(1);
+        request->Record.SetVersion(1);
+        runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_C(response->Record.GroupsToRemoveSize() > 0, "Expected at least one group to remove");
+        const ui32 group = response->Record.GetGroupsToRemove(0);
+        UNIT_ASSERT_C(group != 0, "Expected a non-zero group id");
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTablet::EvMoveData);
+            runtime.DispatchEvents(options);
+        }
+
+        // Reboot Hive while blocking reconnect so the registrar is disconnected
+        TBlockEvents<TEvLocal::TEvPing> blockPing(runtime);
+        RebootTablet(runtime, hiveTablet, senderA);
+        runtime.WaitFor("ping blocked", [&] { return !blockPing.empty(); });
+
+        // Inject CutTabletHistory to the registrar while disconnected
+        const TActorId localRegistrarId = MakeLocalRegistrarID(runtime.GetNodeId(0), hiveTablet);
+        for (ui32 channel = 0; channel < 3; ++channel) {
+            auto cutEv = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+            cutEv->Record.SetTabletID(tabletId);
+            cutEv->Record.SetChannel(channel);
+            cutEv->Record.SetFromGeneration(0);
+            cutEv->Record.SetGroupID(group);
+            runtime.Send(new IEventHandle(localRegistrarId, senderA, cutEv.release()), 0);
+        }
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(10));
+
+        // Unblock reconnect; registrar replays retained events and Done fires
+        blockPing.Unblock();
+
+        runtime.WaitFor("TEvShrinkStoragePoolDone after registrar reconnect replayed CutTabletHistory", [&] { return done; });
+    }
+
     Y_UNIT_TEST(TestLockedTabletMetricsAfterHiveRestart) {
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);

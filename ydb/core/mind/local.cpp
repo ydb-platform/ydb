@@ -18,6 +18,7 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/system/info.h>
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 
 #include <unordered_map>
@@ -121,6 +122,19 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     i32 PrevEstimate = 0;
 
     TIntrusivePtr<TDrainProgress> LastDrainRequest;
+
+    // Retained cut-history tuples awaiting forwarding to Hive after reconnect.
+    // Hive sends no ack; TTxCutTabletHistory is a no-op for an already-erased
+    // entry, so replay-on-reconnect is safe.  Memory is bounded by one
+    // incarnation's cut entries (TEvTabletDead cleans up); cost is one no-op
+    // Hive tx per retained tuple per reconnect.
+    struct TCutEntry {
+        ui32 Channel;
+        ui32 FromGeneration;
+        ui32 GroupId;
+    };
+    static constexpr size_t MaxRetainedCutHistoryPerTablet = 1024;
+    THashMap<ui64, TVector<TCutEntry>> RetainedCutHistory;
 
     NKikimrTabletBase::TMetrics ResourceLimit;
     TResourceProfilesPtr ResourceProfiles;
@@ -353,8 +367,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
 
             if (record.GetPurge()) {
-                for (const auto &x : OnlineTablets)
+                for (const auto &x : OnlineTablets) {
                     ctx.Send(x.second.Tablet, new TEvents::TEvPoisonPill());
+                    if (x.first.second == 0) // leader
+                        RetainedCutHistory.erase(x.first.first);
+                }
                 OnlineTablets.clear();
             }
 
@@ -385,6 +402,16 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
             Connected = true;
             YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
+            for (const auto& [tId, entries] : RetainedCutHistory) {
+                for (const auto& e : entries) {
+                    auto replay = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+                    replay->Record.SetTabletID(tId);
+                    replay->Record.SetChannel(e.Channel);
+                    replay->Record.SetFromGeneration(e.FromGeneration);
+                    replay->Record.SetGroupID(e.GroupId);
+                    NTabletPipe::SendData(ctx, HivePipeClient, replay.release());
+                }
+            }
         }
 
         HiveGeneration = hiveGen;
@@ -789,7 +816,28 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void Handle(TEvTablet::TEvCutTabletHistory::TPtr &ev, const TActorContext &ctx) {
-        if (Connected) // must be 'connected' check
+        const auto& record = ev->Get()->Record;
+        const ui64 tabletId = record.GetTabletID();
+        const ui32 channel = record.GetChannel();
+        const ui32 fromGen = record.GetFromGeneration();
+        const ui32 groupId = record.GetGroupID();
+        auto& entries = RetainedCutHistory[tabletId];
+        if (auto* existing = FindIfPtr(entries, [&](const TCutEntry& e) {
+                return e.Channel == channel && e.FromGeneration == fromGen;
+            })) {
+            existing->GroupId = groupId;
+        } else if (entries.size() < MaxRetainedCutHistoryPerTablet) {
+            entries.push_back({channel, fromGen, groupId});
+        } else {
+            // The tuple space is sender-controlled; a misbehaving cutter must not grow
+            // this node's memory without bound. Dropping degrades to the pre-fix
+            // behavior for this tuple: the cut is lost until the tablet restarts.
+            YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: retained cut-history overflow, dropping",
+                {"tabletId", tabletId},
+                {"channel", channel},
+                {"fromGeneration", fromGen});
+        }
+        if (Connected)
             NTabletPipe::SendData(ctx, HivePipeClient, ev.Get()->Release().Release());
     }
 
@@ -858,6 +906,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
                 InbootTablets.erase(inbootIt);
             }
+            if (onlineIt->first.second == 0) // leader
+                RetainedCutHistory.erase(onlineIt->first.first);
             OnlineTablets.erase(onlineIt);
             UpdateEstimate();
             return;
@@ -868,6 +918,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         });
         if (inbootIt != InbootTablets.end() && inbootIt->second.Generation <= generation) {
             MarkDeadTablet(inbootIt->first, generation, TEvLocal::TEvTabletStatus::StatusBootFailed, msg->Reason, ctx);
+            if (inbootIt->first.second == 0) // leader
+                RetainedCutHistory.erase(inbootIt->first.first);
             InbootTablets.erase(inbootIt);
             return;
         }

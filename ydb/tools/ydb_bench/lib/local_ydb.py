@@ -827,6 +827,7 @@ class WorkloadLifecycle:
         affinities,
         cancel_event,
         progress,
+        command_timeout_seconds=None,
     ):
         self.cluster = cluster
         self.workload_cli = workload_cli
@@ -839,11 +840,21 @@ class WorkloadLifecycle:
         self.affinities = affinities
         self.cancel_event = cancel_event
         self.progress = progress
+        if command_timeout_seconds is not None and (
+            not _is_finite_number(command_timeout_seconds) or command_timeout_seconds <= 0
+        ):
+            raise BenchmarkError("workload command timeout must be a positive finite number")
+        self.command_timeout_seconds = command_timeout_seconds
         self.definition = workload_definition(workload["type"])
         self._profile_opened = False
         self._profile_closed = False
         self._profile_state = None
         self._geometry_state = None
+
+    def _plan_timeout(self, plan):
+        if self.command_timeout_seconds is None:
+            return plan.timeout_seconds
+        return min(plan.timeout_seconds, self.command_timeout_seconds)
 
     @property
     def profile_commands(self):
@@ -924,7 +935,7 @@ class WorkloadLifecycle:
                         self.affinities["ydb_cli"],
                     ),
                 )
-                result, attempts = self.cluster.init_workload(plan.argv, timeout=plan.timeout_seconds)
+                result, attempts = self.cluster.init_workload(plan.argv, timeout=self._plan_timeout(plan))
                 state.commands.extend(
                     _command_record(
                         phase,
@@ -996,7 +1007,7 @@ class WorkloadLifecycle:
             try:
                 result = self.cluster._run(
                     plan.argv,
-                    timeout=plan.timeout_seconds,
+                    timeout=self._plan_timeout(plan),
                     cpu_affinity=self.affinities["ydb_cli"],
                     ignore_cancellation=True,
                 )
@@ -1123,7 +1134,7 @@ class WorkloadLifecycle:
             )
             result = self.cluster._run(
                 warmup_plan.argv,
-                timeout=warmup_plan.timeout_seconds,
+                timeout=self._plan_timeout(warmup_plan),
                 cpu_affinity=self.affinities["ydb_cli"],
             )
             commands.append(
@@ -1183,7 +1194,7 @@ class WorkloadLifecycle:
             result = run_command(
                 plan.argv,
                 {},
-                plan.timeout_seconds,
+                self._plan_timeout(plan),
                 cpu_affinity=self.affinities["ydb_cli"],
                 cancel_event=self.cancel_event,
                 on_process_started=lambda process: cli_pids.append(process.pid),
@@ -1437,6 +1448,7 @@ def run_local_ydb(
             affinities,
             cancel_event,
             publish_progress,
+            command_timeout_seconds=(configuration.timeout_seconds if configuration.timeout_explicit else None),
         )
         lifecycle.open_profile(output_directory / "workload", "ydb_bench_profile")
         while True:

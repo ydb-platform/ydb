@@ -123,6 +123,12 @@ Each static node gets its own `NONE`-profile SectorMap with the virtual size
 specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
 
+An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
+measurement, and cleanup command. Workload-specific safety limits still apply
+when they are shorter. Without an explicit cap, setup and cleanup retain their
+workload-specific budgets; the computed default covers cluster control and the
+configured search measurements.
+
 `load.parameter` selects the one monotonic YDB CLI setting controlled by the
 benchmark: `rate` maps to `--rate`, while `threads` maps to `--threads`. Topic
 also searches `rate`, but maps it to the Topic CLI's `--message-rate`. The `kv`
@@ -231,9 +237,10 @@ compatibility, but newly generated YAML uses `search` and `objective`.
 point. Set `measurement.verification-repetitions` to run additional independent
 samples at the load selected by the search; it defaults to `0` so existing
 configurations keep their previous runtime and is limited to 20. These
-post-search samples contribute to the automatically computed default command
-timeout; `timeout` remains a per-command safety bound rather than an absolute
-profile deadline. Verification never
+post-search samples are included when deriving the default cluster-control
+timeout. An explicitly configured `timeout` also caps each workload command;
+it remains a per-command safety bound rather than an absolute profile deadline.
+Verification never
 changes the selected load or dynamic-node scaling decision. Its holdout samples
 are written separately to `verification-repetitions.csv` and
 `verification-summary.csv`; a completed holdout becomes the reported metric

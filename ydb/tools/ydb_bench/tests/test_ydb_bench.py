@@ -391,7 +391,13 @@ class YdbBenchTest(unittest.TestCase):
         return definition, {"type": "synthetic", "operation": "run", "options": {}}
 
     @staticmethod
-    def _synthetic_workload_lifecycle(workload, cluster, progress, cancel_event=None):
+    def _synthetic_workload_lifecycle(
+        workload,
+        cluster,
+        progress,
+        cancel_event=None,
+        command_timeout_seconds=None,
+    ):
         topology = CpuTopology(
             allowed_cpus=(0,),
             numa_nodes=((0, (0,)),),
@@ -410,6 +416,7 @@ class YdbBenchTest(unittest.TestCase):
             {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
             cancel_event,
             lambda phase, **fields: progress.append({"phase": phase, **fields}),
+            command_timeout_seconds=command_timeout_seconds,
         )
 
     def _worker_metrics_benchmark(self):
@@ -1641,6 +1648,7 @@ class YdbBenchTest(unittest.TestCase):
                 workload,
                 cluster,
                 progress,
+                command_timeout_seconds=3,
             )
             lifecycle.open_profile(profile_directory, "tpcc-dataset")
             first_metrics, first_commands = lifecycle.run_sample(
@@ -1666,10 +1674,11 @@ class YdbBenchTest(unittest.TestCase):
 
         self.assertEqual(cluster.init_workload.call_count, 2)
         self.assertEqual([call.args[0][2] for call in cluster.init_workload.call_args_list], ["init", "import"])
+        self.assertTrue(all(call.kwargs["timeout"] == 3 for call in cluster.init_workload.call_args_list))
         self.assertEqual(execute.call_count, 2)
         self.assertEqual(cluster._run.call_count, 1)
         self.assertTrue(cluster._run.call_args.kwargs["ignore_cancellation"])
-        self.assertEqual(cluster._run.call_args.kwargs["timeout"], 5)
+        self.assertEqual(cluster._run.call_args.kwargs["timeout"], 3)
         self.assertEqual(
             [item["phase"] for item in progress],
             [
@@ -1694,7 +1703,7 @@ class YdbBenchTest(unittest.TestCase):
         for call in execute.call_args_list:
             argv = call.args[0]
             self.assertEqual(argv[argv.index("--warmup") + 1], 5)
-            self.assertEqual(call.args[2], 45)
+            self.assertEqual(call.args[2], 3)
         profile_commands = lifecycle.profile_commands
         self.assertEqual([item["argv"][2] for item in profile_commands], ["init", "import", "clean"])
 
@@ -4194,6 +4203,7 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
         with (output / "verification-summary.csv").open(newline="", encoding="utf-8") as stream:
             verification_summary = list(csv.DictReader(stream))
         self.assertEqual([float(row["throughput"]) for row in search_rows], [10])
+
         self.assertEqual([float(row["throughput"]) for row in verification_rows], [20, 30])
         self.assertNotIn("passed", verification_rows[0])
         self.assertEqual(verification_summary[0]["samples"], "2")
@@ -4214,6 +4224,47 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
         )
         artifacts = next(event["artifacts"] for event in events if event["type"] == "step-artifacts")
         self.assertIn("verification-repetitions.csv", artifacts)
+
+    def test_local_ydb_only_explicit_profile_timeout_caps_workload_commands(self):
+        def configuration(name, timeout=""):
+            return load_config(
+                self._config(
+                    """
+                    local-ydb:
+                      {name}:
+                        {timeout}
+                        workload: {{type: kv, operation: upsert}}
+                        load: {{parameter: threads, values: [1]}}
+                        measurement: {{warmup: 0, duration: 1, repetitions: 1}}
+                        affinity:
+                          ydb-cli: {{mode: none}}
+                          static-nodes: {{mode: none}}
+                          dynamic-nodes: {{mode: none}}
+                    """.format(name=name, timeout=timeout),
+                    name + ".yaml",
+                )
+            ).runs[0]
+
+        original_lifecycle = local_ydb.WorkloadLifecycle
+        command_timeouts = []
+
+        def lifecycle(*args, **kwargs):
+            command_timeouts.append(kwargs.get("command_timeout_seconds"))
+            return original_lifecycle(*args, **kwargs)
+
+        with mock.patch.object(local_ydb, "WorkloadLifecycle", side_effect=lifecycle):
+            self._run_mock_local_ydb(
+                configuration("default-timeout"),
+                "default-timeout",
+                [{"throughput": 1}],
+            )
+            self._run_mock_local_ydb(
+                configuration("explicit-timeout", "timeout: 3"),
+                "explicit-timeout",
+                [{"throughput": 1}],
+            )
+
+        self.assertEqual(command_timeouts, [None, 3])
 
     def test_local_ydb_disabled_verification_keeps_search_metrics(self):
         configuration = load_config(self._config("""

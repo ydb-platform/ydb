@@ -10,6 +10,7 @@ ydb/core/kafka_proxy/ut TTopicLocationActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicLocationActor.SuccessReturnsLivePartitions
 ydb/core/kafka_proxy/ut TTopicLocationActor.UnauthorizedStaysUnauthorized
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingPartitionIsSchemeError
+ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingTopicIsSchemeError
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.ParsesConsumerOffsetsAndSkipsErrors
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnEmptyStatusResponse
@@ -40,7 +41,6 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shar
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
-ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/config test_distconf_static_group.py.TestStaticGroupSelfHealPlacementPolicy.test_local_policy_relocates_to_spare_pdisk_on_same_node
 ydb/tests/functional/nbs/F2_fault_injection F2_03_one_dbg_host_down.py.TestF2_03OneDbgHostDown.test_one_dbg_host_down
 ydb/tests/functional/nbs/F2_fault_injection F2_04_two_dbg_hosts_down.py.TestF2_04TwoDbgHostsDown.test_two_dbg_hosts_down

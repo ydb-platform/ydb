@@ -1279,7 +1279,7 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
     ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)']
   ];
   const customSpecifications=curveMetrics.map(metric=>[
-    'workload_'+metric.name,(metric.name==='errors'?'max_':'median_')+metric.name,
+    'workload_'+metric.name,(metric.repetition_aggregation==='sum'?'sum_':'median_')+metric.name,
     localMetricLabel(schema,metric.name)+' ('+metric.unit+')'
   ]);
   const [percentile,sloMetric]=localPreferredSlo(schema,objective);
@@ -1287,7 +1287,7 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
     ['throughput','median_throughput','Achieved throughput ('+schema.throughput_unit+')'],
     ['latency_ms','median_'+sloMetric,percentile+' latency (ms)'],
     ...cpuSpecifications,
-    ['errors','max_errors','Maximum errors per repetition']
+    ['errors','sum_errors','Errors across repetitions']
   ]:customSpecifications.concat(cpuSpecifications)).filter(([,metric])=>groups.some(group=>[...group.rows.values()]
     .some(row=>Number.isFinite(chartNumber(row[metric])))));
   if(!specifications.length){
@@ -2618,7 +2618,7 @@ def chart_data(output, run_ids, benchmark_filter=None):
                 benchmark_definition = BENCHMARKS.get(benchmark_name) if benchmark_name in BENCHMARKS else None
                 normalized_repetitions = benchmark_name == "memory-bandwidth-bench"
                 has_memory_fairness = False
-                prefixes = ("median_", "mean_", "min_", "max_")
+                prefixes = ("median_", "mean_", "min_", "max_", "sum_")
                 metric_fields = [name for name in fields if name.startswith(prefixes)]
                 dimension_fields = [
                     name
@@ -2707,7 +2707,10 @@ def chart_data(output, run_ids, benchmark_filter=None):
                             "unit": descriptor["unit"],
                             "description": descriptor.get("description", ""),
                         }
-                        for prefix in ("median_", "min_", "max_"):
+                        prefixes = ["median_", "min_", "max_"]
+                        if descriptor["repetition_aggregation"] == "sum":
+                            prefixes.append("sum_")
+                        for prefix in prefixes:
                             file_metric_metadata[prefix + descriptor["name"]] = metadata
                 for name, metadata in file_metric_metadata.items():
                     _merge_chart_metric_metadata(metric_metadata, name, metadata)

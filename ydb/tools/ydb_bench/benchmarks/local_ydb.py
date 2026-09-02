@@ -65,10 +65,11 @@ def validate_metrics(rows, configuration, _case):
         raise BenchmarkError("YDB CLI workload reported {} errors".format(errors))
 
 
-def summarize_metrics(repetition_rows, benchmark, metric_names=None):
+def summarize_metrics(repetition_rows, benchmark, metric_names=None, metric_aggregations=None):
     metric_names = (
         tuple(metric_names) if metric_names is not None else tuple(metric.name for metric in benchmark.metrics)
     )
+    metric_aggregations = metric_aggregations or {}
     grouped = {}
     for row in repetition_rows:
         key = tuple(row[item.name] for item in benchmark.dimensions)
@@ -91,17 +92,22 @@ def summarize_metrics(repetition_rows, benchmark, metric_names=None):
             record["median_" + name] = statistics.median(values)
             record["min_" + name] = min(values)
             record["max_" + name] = max(values)
+            if metric_aggregations.get(name) == "sum":
+                record["sum_" + name] = sum(values)
         result.append(record)
     return result
 
 
-def render_summary(rows, benchmark, metric_names=None):
+def render_summary(rows, benchmark, metric_names=None, metric_aggregations=None):
     metric_names = (
         tuple(metric_names) if metric_names is not None else tuple(metric.name for metric in benchmark.metrics)
     )
+    metric_aggregations = metric_aggregations or {}
     columns = ["affinity_mode"] + [item.name for item in benchmark.dimensions] + ["samples"]
     for name in metric_names:
         columns += ["median_" + name, "min_" + name, "max_" + name]
+        if metric_aggregations.get(name) == "sum":
+            columns.append("sum_" + name)
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=columns, lineterminator="\n")
     writer.writeheader()

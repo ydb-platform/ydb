@@ -602,11 +602,7 @@ class LocalYdbCluster:
         while time.monotonic() < deadline:
             self._check_cancelled()
             last_result = run_command(command, {}, 10, work_dir_hint=self.directory, cancel_event=self.cancel_event)
-            if (
-                not last_result.exit_code
-                and not last_result.timed_out
-                and _database_status_ready(last_result.stdout)
-            ):
+            if not last_result.exit_code and not last_result.timed_out and _database_status_ready(last_result.stdout):
                 atomic_write_text(self.directory / "database-status.txt", last_result.stdout)
                 return
             if any(process.poll() is not None for process in self.static_processes + self.dynamic_processes):
@@ -1325,6 +1321,7 @@ def run_local_ydb(
     definition = workload_definition(profile["workload"]["type"])
     workload_metrics = definition.result_adapter.metrics
     metric_columns = _workload_metric_columns(benchmark, workload_metrics)
+    metric_aggregations = {metric.name: metric.repetition_aggregation for metric in workload_metrics}
     topology = discover_topology()
     affinities = plan_role_affinity(profile["affinity"], topology)
     _validate_role_affinity(profile["geometry"], affinities)
@@ -1579,7 +1576,12 @@ def run_local_ydb(
             )
             cluster.add_dynamic_nodes(new_count - dynamic_nodes)
 
-        summary_rows = benchmark.summarize_metrics(repetition_rows, benchmark, metric_columns)
+        summary_rows = benchmark.summarize_metrics(
+            repetition_rows,
+            benchmark,
+            metric_columns,
+            metric_aggregations,
+        )
         _write_csv(
             output_directory / "repetitions.csv",
             repetition_rows,
@@ -1587,7 +1589,7 @@ def run_local_ydb(
         )
         atomic_write_text(
             output_directory / "summary.csv",
-            benchmark.render_summary(summary_rows, benchmark, metric_columns),
+            benchmark.render_summary(summary_rows, benchmark, metric_columns, metric_aggregations),
         )
 
         verification_repetitions = profile["measurement"].get("verification_repetitions", 0)
@@ -1650,10 +1652,20 @@ def run_local_ydb(
                         verification_rows,
                         [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
                     )
-                    partial_summary = benchmark.summarize_metrics(verification_rows, benchmark, metric_columns)
+                    partial_summary = benchmark.summarize_metrics(
+                        verification_rows,
+                        benchmark,
+                        metric_columns,
+                        metric_aggregations,
+                    )
                     atomic_write_text(
                         output_directory / "verification-summary.csv",
-                        benchmark.render_summary(partial_summary, benchmark, metric_columns),
+                        benchmark.render_summary(
+                            partial_summary,
+                            benchmark,
+                            metric_columns,
+                            metric_aggregations,
+                        ),
                     )
                     verification.update(
                         {

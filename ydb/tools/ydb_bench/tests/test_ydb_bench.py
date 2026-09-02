@@ -4650,6 +4650,32 @@ Total\t120\t1\t4\t\t7\t\t8\t\t9\t\t180\t2\t12\t2026-08-25T10:00:14Z
         summary = LOCAL_YDB_BENCHMARK.summarize_metrics(rows, LOCAL_YDB_BENCHMARK)
         self.assertEqual([(row["load"], row["dynamic_nodes"]) for row in summary], [(2, 1)])
 
+    def test_local_ydb_summary_exports_schema_aggregation(self):
+        rows = [
+            {"load": 10, "dynamic_nodes": 1, "throughput": 100, "errors": 1},
+            {"load": 10, "dynamic_nodes": 1, "throughput": 120, "errors": 1},
+            {"load": 10, "dynamic_nodes": 1, "throughput": 110, "errors": 1},
+        ]
+        metric_names = ("throughput", "errors")
+        aggregations = {"throughput": "median", "errors": "sum"}
+        summary = LOCAL_YDB_BENCHMARK.summarize_metrics(
+            rows,
+            LOCAL_YDB_BENCHMARK,
+            metric_names,
+            aggregations,
+        )
+        self.assertEqual(summary[0]["median_throughput"], 110)
+        self.assertEqual(summary[0]["max_errors"], 1)
+        self.assertEqual(summary[0]["sum_errors"], 3)
+        rendered = LOCAL_YDB_BENCHMARK.render_summary(
+            summary,
+            LOCAL_YDB_BENCHMARK,
+            metric_names,
+            aggregations,
+        )
+        parsed = next(csv.DictReader(io.StringIO(rendered)))
+        self.assertEqual(parsed["sum_errors"], "3")
+
     def test_local_ydb_scaling_uses_failing_boundary_and_minimum_attempt(self):
         attempts = (
             {"load": 50, "dynamic_cpu_mean": 90, "static_cpu_mean": 20},
@@ -7768,9 +7794,18 @@ class WebTest(unittest.TestCase):
             row = {"load": load, "dynamic_nodes": dynamic_nodes}
             row.update({metric.name: (index + 1) * scale for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
             rows.append(row)
-        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics(rows, LOCAL_YDB_BENCHMARK)
+        aggregations = {"errors": "sum"}
+        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics(
+            rows,
+            LOCAL_YDB_BENCHMARK,
+            metric_aggregations=aggregations,
+        )
         summary.write_text(
-            LOCAL_YDB_BENCHMARK.render_summary(summarized, LOCAL_YDB_BENCHMARK),
+            LOCAL_YDB_BENCHMARK.render_summary(
+                summarized,
+                LOCAL_YDB_BENCHMARK,
+                metric_aggregations=aggregations,
+            ),
             encoding="utf-8",
         )
 
@@ -7787,6 +7822,7 @@ class WebTest(unittest.TestCase):
         self.assertIn("median_p99_ms", value["metrics"])
         self.assertIn("median_dynamic_cpu_mean", value["metrics"])
         self.assertIn("max_errors", value["metrics"])
+        self.assertIn("sum_errors", value["metrics"])
         unrelated = self.root / "complete" / "ping-bench" / "broken" / "summary.csv"
         unrelated.parent.mkdir(parents=True)
         with unrelated.open("wb") as stream:
@@ -8004,7 +8040,8 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"...Object.keys(config)", script)
                 self.assertIn(b"series.benchmark!=='local-ydb'", script)
                 self.assertIn(b"const curveMetrics=localComparisonCurveMetrics", script)
-                self.assertIn(b"(metric.name==='errors'?'max_':'median_')+metric.name", script)
+                self.assertIn(b"metric.repetition_aggregation==='sum'?'sum_':'median_'", script)
+                self.assertIn(b"['errors','sum_errors','Errors across repetitions']", script)
                 self.assertIn(b"localMetricLabel(schema,metric.name)", script)
                 self.assertIn(b"dynamicNodes", script)
                 self.assertIn(b"connectMeasuredPoints", script)

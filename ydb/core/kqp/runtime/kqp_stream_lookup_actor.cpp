@@ -1118,10 +1118,10 @@ private:
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_INTERNAL_ERROR: {
-                return RuntimeError(
-                    TStringBuilder() << "Table: `" << StreamLookupWorker->GetTablePath() << "`. " << "Internal error",
-                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                    getIssues());
+                YDB_LOG_DEBUG("Lock request returned STATUS_INTERNAL_ERROR",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", record.GetTabletId()});
+                return RetryLock(lockIt->second, false, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_BAD_REQUEST: {
                 return RuntimeError(
@@ -1328,7 +1328,8 @@ private:
         }
     }
 
-    void RetryLock(TLockState& failedLock, bool allowInstantRetry = true) {
+    void RetryLock(TLockState& failedLock, bool allowInstantRetry = true,
+        NYql::NDqProto::StatusIds::StatusCode terminalStatus = NYql::NDqProto::StatusIds::UNAVAILABLE) {
         YDB_LOG_DEBUG("Retry locking",
             {"logPrefix", this->LogPrefix},
             {"shard", failedLock.ShardId},
@@ -1336,7 +1337,7 @@ private:
 
         if (CheckTotalRetriesExceeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' lock retry limit exceeded",
-                NYql::NDqProto::StatusIds::UNAVAILABLE);
+                terminalStatus);
         }
         ++TotalRetryAttempts;
 

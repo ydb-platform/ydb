@@ -386,11 +386,17 @@ public:
                     getIssues());
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_INTERNAL_ERROR: {
-                return RuntimeError(
-                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                    NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                    TStringBuilder() << "Internal error",
-                    getIssues());
+                YDB_LOG_DEBUG("Received STATUS_INTERNAL_ERROR from datashard",
+                    {"logPrefix", this->LogPrefix},
+                    {"shard", shardId});
+                if (!RetryLockRequest(record.GetRequestId(), false)) {
+                    return RuntimeError(
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                        TStringBuilder() << "Table: `" << Settings.TablePath << "` retry limit exceeded.",
+                        getIssues());
+                }
+                return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_BAD_REQUEST:{
                 return RuntimeError(

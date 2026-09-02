@@ -66,9 +66,6 @@ struct TPoolSensors {
     NMonitoring::TDynamicCounters::TCounterPtr Limit;
     NMonitoring::TDynamicCounters::TCounterPtr Allocated;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;
-    NMonitoring::TDynamicCounters::TCounterPtr DeniedBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr SpillingFlag;
-    NMonitoring::TDynamicCounters::TCounterPtr WouldBeDeniedBytes;
 };
 
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
@@ -87,19 +84,15 @@ public:
             Sensors->Limit = sensorGroup->GetCounter("MemoryLimit", false);
             Sensors->Allocated = sensorGroup->GetCounter("MemoryAllocated", false);
             Sensors->DeniedRequests = sensorGroup->GetCounter("MemoryDeniedRequests", true);
-            Sensors->DeniedBytes = sensorGroup->GetCounter("MemoryDeniedBytes", true);
-            Sensors->SpillingFlag = sensorGroup->GetCounter("MemorySpillingFlag", false);
-            Sensors->WouldBeDeniedBytes = sensorGroup->GetCounter("MemoryWouldBeDeniedBytes", true);
             Sensors->Limit->Set(Limit);
         }
     }
 
     ~TMemoryResource() {
-        // gauges must not keep stale values after the pool record is erased; cumulative counters stay
+        // gauges must not keep stale values after the pool record is erased
         if (Sensors) {
             Sensors->Limit->Set(0);
             Sensors->Allocated->Set(0);
-            Sensors->SpillingFlag->Set(0);
         }
     }
 
@@ -128,11 +121,7 @@ public:
     }
 
     void UpdateCookie() {
-        bool reached = Available() < OverLimit;
-        SpillingCookie->SpillingPercentReached.store(reached);
-        if (Sensors) {
-            Sensors->SpillingFlag->Set(reached ? 1 : 0);
-        }
+        SpillingCookie->SpillingPercentReached.store(Available() < OverLimit);
     }
 
     ui64 GetUsed() const {
@@ -173,33 +162,14 @@ public:
         return Limit;
     }
 
-    void RecordDenied(ui64 bytes) {
+    void RecordDenied() {
         if (Sensors) {
             Sensors->DeniedRequests->Inc();
-            *Sensors->DeniedBytes += bytes;
-        }
-    }
-
-    void RecordWouldBeDenied(ui64 bytes) {
-        if (Sensors) {
-            *Sensors->WouldBeDeniedBytes += bytes;
         }
     }
 
     ui64 GetDeniedRequests() const {
         return Sensors ? Sensors->DeniedRequests->Val() : 0;
-    }
-
-    ui64 GetDeniedBytes() const {
-        return Sensors ? Sensors->DeniedBytes->Val() : 0;
-    }
-
-    ui64 GetWouldBeDeniedBytes() const {
-        return Sensors ? Sensors->WouldBeDeniedBytes->Val() : 0;
-    }
-
-    bool IsSpillingReached() const {
-        return SpillingCookie->SpillingPercentReached.load();
     }
 
     TString ToString() const {
@@ -368,10 +338,7 @@ public:
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
-                    poolMemory->RecordDenied(resources.Memory);
-                } else if (resources.ExternalMemory && !poolMemory->Has(resources.ExternalMemory)) {
-                    // ExternalMemory is not charged to the pool; count what the pool limit would have denied
-                    poolMemory->RecordWouldBeDenied(resources.ExternalMemory);
+                    poolMemory->RecordDenied();
                 }
 
                 if (!tx.PoolMemoryCookie) {
@@ -1018,8 +985,7 @@ private:
                     str << "<tr>"
                         << "<th>Database</th><th>Pool</th>"
                         << "<th>Limit</th><th>Allocated</th>"
-                        << "<th>DeniedRequests</th><th>DeniedBytes</th>"
-                        << "<th>SpillingFlag</th><th>WouldBeDeniedBytes</th>"
+                        << "<th>DeniedRequests</th>"
                         << "</tr>";
                     for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
                         str << "<tr>"
@@ -1028,9 +994,6 @@ private:
                             << "<td>" << pool->GetLimit() << "</td>"
                             << "<td>" << pool->GetUsed() << "</td>"
                             << "<td>" << pool->GetDeniedRequests() << "</td>"
-                            << "<td>" << pool->GetDeniedBytes() << "</td>"
-                            << "<td>" << (pool->IsSpillingReached() ? "1" : "0") << "</td>"
-                            << "<td>" << pool->GetWouldBeDeniedBytes() << "</td>"
                             << "</tr>";
                     }
                     str << "</table>";

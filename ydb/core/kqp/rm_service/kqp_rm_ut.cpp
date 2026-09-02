@@ -297,8 +297,6 @@ public:
         UNIT_TEST(DisonnectNodes);
         UNIT_TEST(P09PoolLimitAndAllocated);
         UNIT_TEST(P11PoolDenied);
-        UNIT_TEST(P12PoolWouldBeDeniedBytes);
-        UNIT_TEST(P13PoolSpillingFlag);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -318,8 +316,6 @@ public:
     void DisonnectNodes();
     void P09PoolLimitAndAllocated();
     void P11PoolDenied();
-    void P12PoolWouldBeDeniedBytes();
-    void P13PoolSpillingFlag();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -783,63 +779,14 @@ void KqpRm::P11PoolDenied() {
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
 
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedRequests", true)->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedBytes", true)->Val(), 0);
 
     UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
 
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedRequests", true)->Val(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedBytes", true)->Val(), (i64)chunk);
 
     UNIT_ASSERT(!rm->AllocateResources(*tx, 4, request));
 
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedRequests", true)->Val(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedBytes", true)->Val(), (i64)(2 * chunk));
-}
-
-// P-12: WouldBeDeniedBytes grows when ExternalMemory exceeds the pool's remaining headroom after Memory is acquired.
-void KqpRm::P12PoolWouldBeDeniedBytes() {
-    StartRms();
-    NKikimr::TActorSystemStub stub;
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
-
-    // Pool limit = 50% of 1000 = 500. Pre-fill 400 bytes, leaving 100 headroom.
-    auto tx = MakePoolTx(1, rm, "pool_d", 50);
-    auto sg = GetPoolSensorGroup("db1", "pool_d");
-
-    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 400}));
-
-    // Memory=50 acquired (headroom 100→50); ExternalMemory=200 > 50 → WouldBeDeniedBytes += 200.
-    UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 50, .ExternalMemory = 200}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemoryWouldBeDeniedBytes", true)->Val(), 200);
-
-    // Memory=10 acquired (headroom 50→40); ExternalMemory=30 ≤ 40 → counter must not move.
-    UNIT_ASSERT(rm->AllocateResources(*tx, 3, NRm::TKqpResourcesRequest{.Memory = 10, .ExternalMemory = 30}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemoryWouldBeDeniedBytes", true)->Val(), 200);
-}
-
-// Default SpillingPercent = 80 (proto default; not set by MakeKqpResourceManagerConfig).
-// Pool = 50% of 1000 = 500; OverLimit = 500*(100-80)/100 = 100; spilling when Available() < 100 (Used > 400).
-void KqpRm::P13PoolSpillingFlag() {
-    StartRms();
-    NKikimr::TActorSystemStub stub;
-    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
-
-    auto tx = MakePoolTx(1, rm, "pool_e", 50);
-    auto sg = GetPoolSensorGroup("db1", "pool_e");
-
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 0);
-
-    // Used = 400, Available = 100 = OverLimit; 100 < 100 is false → no spilling.
-    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 400}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 0);
-
-    // Used = 401, Available = 99 < 100 → spilling triggered.
-    UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 1}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 1);
-
-    // Release the 1-byte task: Used = 400, Available = 100; 100 < 100 is false → no spilling.
-    rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 1});
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 0);
 }
 
 } // namespace NKqp

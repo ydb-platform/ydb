@@ -723,10 +723,12 @@ private:
             return {false, std::nullopt};
         }
 
-        // service accounts allowed to register dynamic nodes in the cluster
-        // can connect to any database without having connect rights
+        // The user-level connect right cannot limit node registration: registration is a
+        // cluster-wide system action (via the discovery service), not a per-database/tenant
+        // one. Requiring here the root database as a cluster alias would add no value and
+        // introduce technical issues.
         if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a service account for nodes registration",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a special subject for node registration",
                 {"database", CheckedDatabaseName_},
                 {"user", TBase::GetUserSID()},
                 {"ip", GrpcRequestBaseCtx_->GetPeerName()});

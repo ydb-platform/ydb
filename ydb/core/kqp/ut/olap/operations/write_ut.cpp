@@ -418,35 +418,41 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(ColumnShardMaxOperationBytes) {
-        auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        auto countPortionsWithOperationSizeLimit = [&](const size_t limit) -> size_t {
+            auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
+            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        auto* tableServiceConfig = settings.AppConfig.MutableTableServiceConfig();
-        tableServiceConfig->SetEnableOlapSink(true);
-        tableServiceConfig->MutableWriteActorSettings()->SetColumnShardMaxOperationBytes(64_KB);
-        TKikimrRunner kikimr(settings);
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            auto* tableServiceConfig = settings.AppConfig.MutableTableServiceConfig();
+            tableServiceConfig->SetEnableOlapSink(true);
+            tableServiceConfig->MutableWriteActorSettings()->SetColumnShardMaxOperationBytes(limit);
 
-        TTypedLocalHelper helper("Utf8", kikimr);
-        helper.CreateTestOlapTable(1, 1);
+            TKikimrRunner kikimr(settings);
+            TTypedLocalHelper helper("Utf8", kikimr);
+            helper.CreateTestOlapTable(1, 1);
 
-        auto result = kikimr.GetQueryClient()
-            .ExecuteQuery(R"(
-                $rows = ListMap(ListFromRange(0, 50000), ($x) -> { RETURN AsStruct($x AS item); });
-                UPSERT INTO `/Root/olapStore/olapTable` (pk_int, field)
-                SELECT CAST(item AS Int64), CAST(item AS Utf8) FROM AS_TABLE($rows);
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-            .ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto result = kikimr.GetQueryClient()
+                .ExecuteQuery(R"(
+                    $rows = ListMap(ListFromRange(0, 50000), ($x) -> { RETURN AsStruct($x AS item); });
+                    UPSERT INTO `/Root/olapStore/olapTable` (pk_int, field)
+                    SELECT CAST(item AS Int64), CAST(item AS Utf8) FROM AS_TABLE($rows);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        auto tableClient = kikimr.GetTableClient();
-        auto rows = ExecuteScanQuery(tableClient, R"(
-            SELECT COUNT(*) AS count
-            FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`;
-        )");
-        UNIT_ASSERT_GT(GetUint64(rows[0].at("count")), 1);
-        UNIT_ASSERT_VALUES_EQUAL(helper.GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore/olapTable`;"), "[[50000u]]");
-        UNIT_ASSERT_VALUES_EQUAL(csController->GetCompactionStartedCounter().Val(), 0);
+            auto tableClient = kikimr.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, R"(
+                SELECT COUNT(*) AS count
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`;
+            )");
+            const size_t portions = GetUint64(rows[0].at("count"));
+            UNIT_ASSERT_VALUES_EQUAL(helper.GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore/olapTable`;"), "[[50000u]]");
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetCompactionStartedCounter().Val(), 0);
+            return portions;
+        };
+
+        UNIT_ASSERT_GT(countPortionsWithOperationSizeLimit(64_KB), 3);
+        UNIT_ASSERT_VALUES_EQUAL(countPortionsWithOperationSizeLimit(64_MB), 1);
     }
 
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {

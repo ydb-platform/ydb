@@ -170,7 +170,7 @@ private:
                     row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
                     row.BreakerNodeId = protoLock.GetBreakerNodeId();
                 }
-                for (const auto& proto : protoLock.GetWriteSeqNumResults()) {
+                for (const auto& proto : protoLock.GetWriteSeqNumStates()) {
                     TWriteSeqNumState state;
                     state.WriterIndex = proto.GetWriterIndex();
                     state.WriteSeqNum = proto.GetWriteSeqNum();
@@ -659,7 +659,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
             if (state.WriteSeqNum == 0) {
                 continue;
             }
-            auto* proto = protoLockInfo->AddWriteSeqNumResults();
+            auto* proto = protoLockInfo->AddWriteSeqNumStates();
             proto->SetWriterIndex(writerIndex);
             proto->SetWriteSeqNum(state.WriteSeqNum);
             if (!state.SerializedResult.empty()) {

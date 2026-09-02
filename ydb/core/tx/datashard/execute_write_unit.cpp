@@ -225,10 +225,11 @@ public:
 
             THashSet<TPathId> tables = lock->GetReadTables();
             tables.insert(lock->GetWriteTables().begin(), lock->GetWriteTables().end());
+            const auto writeSeqNum = lock->GetLockWriteSeqNum();
             for (const TPathId& pathId : tables) {
                 res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
                                lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
-                               lock->IsWriteLock(), lock->GetWriteSeqNums());
+                               lock->IsWriteLock(), writeSeqNum.WriterIndex, writeSeqNum.WriteSeqNum);
             }
             writeOp->SetWriteResult(std::move(res));
             writeOp->ReleaseTxData(txc);
@@ -279,7 +280,7 @@ public:
             }
 
             writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites,
-                TVector<std::pair<ui64, ui64>>{{lock.WriterIndex, lock.WriteSeqNum}});
+                lock.WriterIndex, lock.WriteSeqNum);
 
             YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add lock",
                 {"result", writeResult.Record.GetTxLocks().rbegin()->ShortDebugString()});
@@ -319,20 +320,6 @@ public:
             lock->SetWriteSeqNumResult(guardLocks.SetWriteSeqNum->WriterIndex,
                 SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record), db);
         }
-    }
-
-    // Consume seq num and persist the error; skip this update's rolled-back ranges.
-    void PersistFailedWriteSeqNum(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
-        ILocksDb* db, const TActorContext& ctx)
-    {
-        if (!guardLocks.SetWriteSeqNum) {
-            return;
-        }
-        if (!DataShard.SysLocksTable().PersistWriteSeqNum(*guardLocks.SetWriteSeqNum, db)) {
-            return;
-        }
-        DataShard.SubscribeNewLocks(ctx);
-        StoreWriteSeqNumResult(writeOp, guardLocks, db);
     }
 
     void ResetChanges(TDataShardUserDb& userDb, TTransactionContext& txc) {
@@ -945,6 +932,8 @@ public:
                 txc.DB.RollbackChanges();
             }
 
+            guardLocks.SetWriteSeqNum.reset();
+
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
             }
@@ -961,7 +950,7 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeOp->GetWriteResult()->Record.MutableTxStats());
 
-            PersistFailedWriteSeqNum(writeOp, guardLocks, &locksDb, ctx);
+            guardLocks.SetWriteSeqNum.reset();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
@@ -987,8 +976,7 @@ public:
             }
 
             ResetChanges(userDb, txc);
-
-            PersistFailedWriteSeqNum(writeOp, guardLocks, &locksDb, ctx);
+            guardLocks.SetWriteSeqNum.reset();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
@@ -1002,7 +990,7 @@ public:
                 {"operation", *writeOp},
                 {"tabletId", DataShard.TabletID()});
 
-            PersistFailedWriteSeqNum(writeOp, guardLocks, &locksDb, ctx);
+            guardLocks.SetWriteSeqNum.reset();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;

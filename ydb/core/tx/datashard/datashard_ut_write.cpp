@@ -5089,8 +5089,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 11\n");
     }
 
-    // Lost CONSTRAINT_VIOLATION is replayed even after the conflicting row is gone.
-    Y_UNIT_TEST(UncommittedWriteSeqNumConstraintViolationReplay) {
+    // A failed INSERT does not consume WriteSeqNum; the same seq can be retried
+    // and applies once the conflicting row is gone.
+    Y_UNIT_TEST(UncommittedWriteSeqNumConstraintViolationRetry) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
@@ -5127,23 +5128,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             return Write(runtime, sender, shard, std::move(req), expected);
         };
 
-        TString issueMessage;
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
             UNIT_ASSERT(!result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            issueMessage = result.GetIssues(0).message();
-            UNIT_ASSERT(issueMessage.Contains("Conflict with existing key."));
+            UNIT_ASSERT(result.GetIssues(0).message().Contains("Conflict with existing key."));
         }
 
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
-            UNIT_ASSERT(result.GetIsDuplicate());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues(0).message(), issueMessage);
+            UNIT_ASSERT(!result.GetIsDuplicate());
         }
 
-        // Conflicting row gone: retry must still not apply the insert.
         {
             auto req = MakeWriteRequestOneKeyValue(std::nullopt,
                 NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
@@ -5152,18 +5148,22 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             Write(runtime, sender, shard, std::move(req));
         }
 
+        NKikimrDataEvents::TLock lock;
         {
-            auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
-            UNIT_ASSERT(result.GetIsDuplicate());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues(0).message(), issueMessage);
+            auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(!result.GetIsDuplicate());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            lock = result.GetTxLocks().at(0);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
         }
 
+        CommitLock(runtime, sender, shard, lock);
+
         auto tableState = ReadTable(server, shards, tableId);
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "");
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 22\n");
     }
 
-    // Same after reboot: result is restored from the Locks column.
+    // Same after reboot: the failed seq num was not persisted.
     Y_UNIT_TEST(UncommittedWriteSeqNumConstraintViolationAfterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -5202,12 +5202,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             return Write(runtime, sender, shard, std::move(req), expected);
         };
 
-        TString issueMessage;
         {
             auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
             UNIT_ASSERT(!result.GetIsDuplicate());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            issueMessage = result.GetIssues(0).message();
         }
 
         RebootTablet(runtime, shard, sender);
@@ -5220,19 +5217,23 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             Write(runtime, sender, shard, std::move(req));
         }
 
+        NKikimrDataEvents::TLock lock;
         {
-            auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION);
-            UNIT_ASSERT(result.GetIsDuplicate());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues(0).message(), issueMessage);
+            auto result = insertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT(!result.GetIsDuplicate());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxLocks().size(), 1u);
+            lock = result.GetTxLocks().at(0);
+            UNIT_ASSERT_VALUES_EQUAL(WriteSeqNumOf(lock).GetWriteSeqNum(), 1u);
         }
 
+        CommitLock(runtime, sender, shard, lock);
+
         auto tableState = ReadTable(server, shards, tableId);
-        UNIT_ASSERT_VALUES_EQUAL(tableState, "");
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 1, value = 22\n");
     }
 
-    // Lost LOCKS_BROKEN from a snapshot-isolation write conflict is replayed.
-    Y_UNIT_TEST(UncommittedWriteSeqNumWriteConflictReplay) {
+    // A snapshot-isolation write conflict does not consume WriteSeqNum.
+    Y_UNIT_TEST(UncommittedWriteSeqNumWriteConflictRetry) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
@@ -5274,29 +5275,23 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             return Write(runtime, sender, shard, std::move(req), expected);
         };
 
-        TString issueMessage;
         {
             auto result = upsertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
             UNIT_ASSERT(!result.GetIsDuplicate());
             UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            issueMessage = result.GetIssues(0).message();
-            UNIT_ASSERT(issueMessage.Contains("Write conflict with concurrent transaction."));
+            UNIT_ASSERT(result.GetIssues(0).message().Contains("Write conflict with concurrent transaction."));
         }
 
         {
             auto result = upsertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-            UNIT_ASSERT(result.GetIsDuplicate());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues(0).message(), issueMessage);
+            UNIT_ASSERT(!result.GetIsDuplicate());
         }
 
         RebootTablet(runtime, shard, sender);
 
         {
             auto result = upsertSeq1(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-            UNIT_ASSERT(result.GetIsDuplicate());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetIssues(0).message(), issueMessage);
+            UNIT_ASSERT(!result.GetIsDuplicate());
         }
 
         auto tableState = ReadTable(server, shards, tableId);

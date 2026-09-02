@@ -476,15 +476,20 @@ public:
         }
         return std::nullopt;
     }
-    TVector<std::pair<ui64, ui64>> GetWriteSeqNums() const {
-        TVector<std::pair<ui64, ui64>> result;
+    TVector<TLockWriteSeqNum> GetWriteSeqNums() const {
+        TVector<TLockWriteSeqNum> result;
         result.reserve(WriteSeqNumStates.size());
         for (const auto& [idx, state] : WriteSeqNumStates) {
             if (state.WriteSeqNum) {
-                result.emplace_back(idx, state.WriteSeqNum);
+                result.push_back(TLockWriteSeqNum{idx, state.WriteSeqNum});
             }
         }
         return result;
+    }
+    // TLock reports a single writer; DataShard enforces one writer per lock.
+    TLockWriteSeqNum GetLockWriteSeqNum() const {
+        auto seqs = GetWriteSeqNums();
+        return seqs.size() == 1 ? seqs[0] : TLockWriteSeqNum{};
     }
     bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
 
@@ -1219,9 +1224,6 @@ public:
      */
     EEnsureCurrentLock EnsureCurrentLock(bool createMissing = true);
 
-    // Persist seq num without this update's ranges (write was rolled back).
-    bool PersistWriteSeqNum(const TLockWriteSeqNum& seq, ILocksDb* db);
-
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
 
@@ -1306,9 +1308,9 @@ private:
     ILocksDb* Db = nullptr;
 
     TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-        const TVector<std::pair<ui64, ui64>>& writeSeqNums = {}) const;
+        TLockWriteSeqNum writeSeqNum = {}) const;
     TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-        const TVector<std::pair<ui64, ui64>>& writeSeqNums = {}) const;
+        TLockWriteSeqNum writeSeqNum = {}) const;
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;

@@ -1378,7 +1378,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     for (auto& table : Update->AffectedTables) {
         out.emplace_back(MakeLock(Update->LockTxId, lock ? lock->GetGeneration() : Self->Generation(), counter,
             table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock(),
-            Update->Lock ? Update->Lock->GetWriteSeqNums() : TVector<std::pair<ui64, ui64>>{}));
+            Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
     }
     return {out, brokenLocks};
 }
@@ -1458,7 +1458,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
             Y_ENSURE(tableIds.size() == 1);
-            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock(), txLock->GetWriteSeqNums());
+            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
         } else { // locks v2
             Y_ENSURE(key.size() == 4);
             TPathId tableId;
@@ -1466,7 +1466,7 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
             if (ok && tableId) {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
-                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock(), txLock->GetWriteSeqNums());
+                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
                 } else {
                     YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock exists, but not set for table",
                         {"lockTxId", lockTxId},
@@ -1740,30 +1740,8 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     return EEnsureCurrentLock::Success;
 }
 
-bool TSysLocks::PersistWriteSeqNum(const TLockWriteSeqNum& seq, ILocksDb* db) {
-    Y_ENSURE(Update && Update->LockTxId);
-    Y_ENSURE(db, "PersistWriteSeqNum needs a valid locks database");
-
-    TLockInfo::TPtr lock = Update->Lock;
-    if (!lock) {
-        lock = Locker.GetLock(Update->LockTxId);
-    }
-    if (!lock || lock->IsBroken()) {
-        return false;
-    }
-
-    if (!lock->IsPersistent()) {
-        lock->PersistLock(db);
-        Locker.ExpireQueue.Remove(lock.Get());
-    }
-    lock->SetWriteSeqNum(seq.WriterIndex, seq.WriteSeqNum, db);
-    lock->AddWaitPersistentCallback(db);
-    Update->Lock = lock;
-    return true;
-}
-
 TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-    const TVector<std::pair<ui64, ui64>>& writeSeqNums) const
+    TLockWriteSeqNum writeSeqNum) const
 {
     TLock lock;
     lock.LockId = lockTxId;
@@ -1774,17 +1752,15 @@ TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counte
     lock.PathId = pathId.LocalPathId;
     lock.HasWrites = hasWrites;
     lock.WriteSeqNumKnown = true;
-    if (writeSeqNums.size() == 1) {
-        lock.WriterIndex = writeSeqNums[0].first;
-        lock.WriteSeqNum = writeSeqNums[0].second;
-    }
+    lock.WriterIndex = writeSeqNum.WriterIndex;
+    lock.WriteSeqNum = writeSeqNum.WriteSeqNum;
     return lock;
 }
 
 TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-    const TVector<std::pair<ui64, ui64>>& writeSeqNums) const
+    TLockWriteSeqNum writeSeqNum) const
 {
-    TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites, writeSeqNums);
+    TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites, writeSeqNum);
     if (AccessLog)
         AccessLog->Locks[lockTxId] = lock;
     return lock;

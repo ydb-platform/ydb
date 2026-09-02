@@ -14,8 +14,6 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <util/generic/vector.h>
-
 namespace NKikimr::NEvents {
 
 struct TDataEvents {
@@ -160,7 +158,7 @@ struct TDataEvents {
         }
 
         void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites,
-            const TVector<std::pair<ui64, ui64>>& writeSeqNums = {})
+            ui64 writerIndex = 0, ui64 writeSeqNum = 0)
         {
             auto entry = Record.AddTxLocks();
             entry->SetLockId(lockId);
@@ -172,12 +170,10 @@ struct TDataEvents {
             if (hasWrites) {
                 entry->SetHasWrites(true);
             }
-            for (const auto& [writerIndex, writeSeqNum] : writeSeqNums) {
-                if (writeSeqNum) {
-                    auto* entryWriteSeqNum = entry->AddWriteSeqNums();
-                    entryWriteSeqNum->SetWriterIndex(writerIndex);
-                    entryWriteSeqNum->SetWriteSeqNum(writeSeqNum);
-                }
+            if (writeSeqNum) {
+                auto* entryWriteSeqNum = entry->AddWriteSeqNums();
+                entryWriteSeqNum->SetWriterIndex(writerIndex);
+                entryWriteSeqNum->SetWriteSeqNum(writeSeqNum);
             }
         }
 

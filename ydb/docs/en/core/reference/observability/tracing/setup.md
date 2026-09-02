@@ -123,7 +123,7 @@ A detailed description of these options is provided in the [{#T}](./setup.md#sem
 
 The `external_throttling` section is not mandatory; if it is absent, all trace-ids in requests are **ignored** (no external traces are continued).
 
-This section can be modified without restarting the node using the [dynamic configuration](../../../devops/configuration-management/configuration-v1/dynamic-config.md) mechanism.
+This section can be modified without restarting the node using the [dynamic configuration](../../../maintenance/manual/dynamic-config.md) mechanism.
 
 ### Sampling
 
@@ -158,7 +158,7 @@ Both fields are mandatory.
 
 The `sampling` section is not mandatory; no requests will be sampled if it is absent.
 
-This section can be modified without restarting the node using the [dynamic configuration](../../../devops/configuration-management/configuration-v1/dynamic-config.md) mechanism.
+This section can be modified without restarting the node using the [dynamic configuration](../../../maintenance/manual/dynamic-config.md) mechanism.
 
 ## Rule semantics {#semantics}
 
@@ -253,9 +253,9 @@ The limits on the number of traced requests are local to the cluster node. For e
 
 ### Detail levels {#tracing-levels}
 
-As with [logs](../../../reference/ydb-ui/logs.md), diagnosing most system issues does not require the most detailed trace. Therefore, in {{ ydb-short-name }}, each span has its own level described by an integer from 0 to 15 inclusive. Each rule in the `sampling` section must include the detail level of the generated trace (`level`); spans with a level less than or equal to `level` will be included in it.
+As with [logs](../../../reference/embedded-ui/logs.md), diagnosing most system issues does not require the most detailed trace. Therefore, in {{ ydb-short-name }}, each span has its own level described by an integer from 0 to 15 inclusive. Each rule in the `sampling` section must include the detail level of the generated trace (`level`); spans with a level less than or equal to `level` will be included in it.
 
-The [{{ ydb-short-name }} architecture](../../../concepts/index.md#ydb-architecture) section describes the system's division into 5 layers:
+The [{{ ydb-short-name }} architecture](../../../concepts/architecture/index.md#ydb-architecture) section describes the system's division into 5 layers:
 
 | Layer | Components |
 | ---- | --------- |

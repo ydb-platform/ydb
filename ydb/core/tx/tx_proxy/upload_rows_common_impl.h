@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -177,6 +178,13 @@ protected:
     TVector<TFieldDescription> KeyColumnPositions;
     TVector<TString> ValueColumnNames;
     TVector<TFieldDescription> ValueColumnPositions;
+
+    struct TOmittedDefaultColumn {
+        ui32 ColId;
+        NScheme::TTypeInfo Type;
+        Ydb::TypedValue DefaultLiteral; // owns the value data
+    };
+    TVector<TOmittedDefaultColumn> OmittedDefaultColumns;
 
     // Additional schema info (for OLAP dst or source format)
     TVector<std::pair<TString, NScheme::TTypeInfo>> SrcColumns; // source columns in CSV could have any order
@@ -655,14 +663,33 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing columns under `SET NOT NULL` operation: %s. It is forbidden to insert NULL values.", JoinSeq(", ", setNotNullInProgressColumnsLeft).c_str()));
         }
 
-        if (!defaultColumnsLeft.empty() && UpsertIfExists) {
-            // some default columns are not specified in the request, but upsert will only update existing rows
-            // and only the columns specified in the request will be updated; unspecified default columns will not be changed.
-            defaultColumnsLeft.clear();
+        if (isPublicBulkUpsert) {
+            if (!isColumnTable) {
+                auto& entry2 = ResolveNamesResult->ResultSet.front();
+                for (const auto& colName : defaultColumnsLeft) {
+                    const ui32* colIdPtr = columnByName.FindPtr(colName);
+                    if (!colIdPtr) {
+                        continue;
+                    }
+                    const auto& ci = *entry2.Columns.FindPtr(*colIdPtr);
+                    TOmittedDefaultColumn omitted;
+                    omitted.ColId = ci.Id;
+                    omitted.Type = ci.PType;
+                    omitted.DefaultLiteral = ci.DefaultFromLiteral;
+                    OmittedDefaultColumns.push_back(std::move(omitted));
+                }
+            }
         }
+        else {
+            if (!defaultColumnsLeft.empty() && UpsertIfExists) {
+                // some default columns are not specified in the request, but upsert will only update existing rows
+                // and only the columns specified in the request will be updated; unspecified default columns will not be changed.
+                defaultColumnsLeft.clear();
+            }
 
-        if (!defaultColumnsLeft.empty()) {
-            return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
+            if (!defaultColumnsLeft.empty()) {
+                return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
+            }
         }
 
         TConclusionStatus res = TConclusionStatus::Success();
@@ -1248,6 +1275,10 @@ private:
                 for (const auto& fd : ValueColumnPositions) {
                     ev->Record.MutableRowScheme()->AddValueColumnIds(fd.ColId);
                 }
+                for (const auto& omitted : OmittedDefaultColumns) {
+                    ev->Record.MutableRowScheme()->AddValueColumnIds(omitted.ColId);
+                }
+                ev->Record.SetDefaultColumnCount(OmittedDefaultColumns.size());
                 if (WriteToTableShadow) {
                     ev->Record.SetWriteToTableShadow(true);
                 }
@@ -1262,7 +1293,26 @@ private:
             }
 
             auto keyColumns = keyValue.first;
-            auto valueColumns = keyValue.second;
+            TString valueColumns = keyValue.second;
+
+            if (!OmittedDefaultColumns.empty()) {
+                TSerializedCellVec existingValues(valueColumns);
+                TVector<TCell> allValueCells(existingValues.GetCells().begin(), existingValues.GetCells().end());
+
+                size_t poolSize = 256 * OmittedDefaultColumns.size();
+                TMemoryPool defaultCellPool(poolSize > 4096 ? 4096 : poolSize);
+                for (const auto& omitted : OmittedDefaultColumns) {
+                    TCell defaultCell;
+                    TString cellErr;
+                    if (!CellFromProtoVal(omitted.Type, -1, &omitted.DefaultLiteral.value(), false, defaultCell, cellErr, defaultCellPool)) {
+                        Y_ABORT("Failed to convert DEFAULT literal for column %u: %s",
+                            omitted.ColId, cellErr.c_str());
+                    }
+                    allValueCells.push_back(std::move(defaultCell));
+                }
+
+                valueColumns = TSerializedCellVec::Serialize(allValueCells);
+            }
 
             auto* row = ev->Record.AddRows();
             row->SetKeyColumns(keyColumns.GetBuffer());

@@ -1059,8 +1059,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = kikimr.RunCall([&] {
                 return tableClient.BulkUpsert("/Root/AddNonColumnDoesnotReturnInternalError", rowsBuilder.Build()).GetValueSync();
             });
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         runtime.WaitFuture(alterFuture);
@@ -1744,8 +1743,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             rowsBuilder.EndList();
 
             auto result = tableClient.BulkUpsert("/Root/DefaultColumnAndBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -2862,8 +2860,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             rowsBuilder.EndList();
 
             auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: DefaultCol");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {

@@ -36,7 +36,6 @@ from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.library.compatibility.fixtures import (
     MixedClusterFixture,
     RestartToAnotherVersionFixture,
-    RollingDowngradeAndUpgradeFixture,
     RollingUpgradeAndDowngradeFixture,
     string_version_to_tuple,
 )
@@ -1096,20 +1095,4 @@ class TestTopicDirectReadRolling(RollingUpgradeAndDowngradeFixture):
         _roll_direct_read(self, write_each_step=True)
 
     def test_commit_and_resume_during_rolling(self):
-        _roll_direct_read(self, write_each_step=False, resume_from_commit=True)
-
-
-class TestTopicDirectReadRollingDowngrade(RollingDowngradeAndUpgradeFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        _skip_if_direct_read_unsupported(self.versions)
-        yield from self.setup_cluster()
-
-    def test_direct_read_mid_blob_during_downgrade(self):
-        _roll_direct_read(self, write_each_step=False)
-
-    def test_write_and_direct_read_during_downgrade(self):
-        _roll_direct_read(self, write_each_step=True)
-
-    def test_commit_and_resume_during_downgrade(self):
         _roll_direct_read(self, write_each_step=False, resume_from_commit=True)

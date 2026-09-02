@@ -22,59 +22,26 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Validates a BSController add-host allocation response and, on success,
-// appends the newly granted DDisk/PBuffer to `result` (a copy of `current`).
-// Returns a retriable error - never aborts - for a failed or malformed
-// response: the add-host intent stays persisted and is replayed on recovery, so
-// a bad response must not crash-loop the tablet.
+// Builds in `updated` the connections the add will commit: `connections` with
+// the granted host appended. BSController answers with the whole group, so the
+// granted host is its last entry. A response that does not fit is answered
+// with an error and not with an abort: the intent stays on disk, so the add is
+// retried at the next start.
 NProto::TError AddConnection(
-    const TDirectBlockGroupsConnections& current,
+    const TDirectBlockGroupsConnections& connections,
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
     size_t dbgId,
     ui32 expectedCurrent,
-    TDirectBlockGroupsConnections* result)
+    TDirectBlockGroupsConnections* updated)
 {
-    const auto& record = msg.Record;
-
-    if (record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController error: " << record.GetErrorReason());
+    const auto response = ValidateAllocationResponse(
+        msg,
+        dbgId,
+        static_cast<size_t>(expectedCurrent) + 1);
+    if (HasError(response.Error)) {
+        return response.Error;
     }
-
-    if (record.DirectBlockGroupsSize() != 1) {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController returned " << record.DirectBlockGroupsSize()
-                << " DirectBlockGroups, expected 1");
-    }
-
-    const auto& group = record.GetDirectBlockGroups(0);
-    if (group.GetDirectBlockGroupId() != dbgId) {
-        return MakeError(
-            E_REJECTED,
-            "BSController response is for a different DirectBlockGroup");
-    }
-
-    if (group.GetError()) {
-        return MakeError(
-            E_REJECTED,
-            "BSController reported an error for this DirectBlockGroup");
-    }
-
-    if (static_cast<ui32>(group.DDiskIdSize()) != expectedCurrent + 1 ||
-        static_cast<ui32>(group.PersistentBufferDDiskIdSize()) !=
-            expectedCurrent + 1)
-    {
-        return MakeError(
-            E_REJECTED,
-            TStringBuilder()
-                << "BSController returned " << group.DDiskIdSize()
-                << " ddisks / " << group.PersistentBufferDDiskIdSize()
-                << " pbuffers, expected " << (expectedCurrent + 1));
-    }
+    const auto& group = *response.Group;
 
     const auto& newDDiskId = group.GetDDiskId(expectedCurrent);
     const auto& newPBufferId =
@@ -83,7 +50,7 @@ NProto::TError AddConnection(
     const TString newDDiskIdBytes = newDDiskId.SerializeAsString();
     const TString newPBufferIdBytes = newPBufferId.SerializeAsString();
     for (const auto& conn:
-         current.GetDirectBlockGroupConnections(dbgId).GetConnections())
+         connections.GetDirectBlockGroupConnections(dbgId).GetConnections())
     {
         if (conn.GetDDiskId().SerializeAsString() == newDDiskIdBytes ||
             conn.GetPersistentBufferDDiskId().SerializeAsString() ==
@@ -95,9 +62,9 @@ NProto::TError AddConnection(
         }
     }
 
-    *result = current;
+    *updated = connections;
     auto* connection =
-        result->MutableDirectBlockGroupConnections(dbgId)->AddConnections();
+        updated->MutableDirectBlockGroupConnections(dbgId)->AddConnections();
     connection->MutableDDiskId()->CopyFrom(newDDiskId);
     connection->MutablePersistentBufferDDiskId()->CopyFrom(newPBufferId);
     return {};

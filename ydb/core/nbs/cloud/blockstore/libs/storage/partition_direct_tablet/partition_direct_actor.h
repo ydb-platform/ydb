@@ -300,4 +300,17 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TAllocationResponse
+{
+    NProto::TError Error;
+    const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+        TDirectBlockGroup* Group = nullptr;
+};
+
+[[nodiscard]] TAllocationResponse ValidateAllocationResponse(
+    const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult&
+        msg,
+    size_t dbgId,
+    size_t expectedHostCount);
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

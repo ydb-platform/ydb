@@ -880,4 +880,55 @@ STFUNC(TPartitionActor::StateWork)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TAllocationResponse ValidateAllocationResponse(
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
+    size_t dbgId,
+    size_t expectedHostCount)
+{
+    const auto& record = msg.Record;
+
+    if (record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder()
+                    << "BSController error: " << record.GetErrorReason())};
+    }
+    if (record.DirectBlockGroupsSize() != 1) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder() << "BSController returned "
+                                 << record.DirectBlockGroupsSize()
+                                 << " DirectBlockGroups, expected 1")};
+    }
+
+    const auto& allocated = record.GetDirectBlockGroups(0);
+    if (allocated.GetDirectBlockGroupId() != dbgId) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                "BSController response is for a different DirectBlockGroup")};
+    }
+    if (allocated.GetError()) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                "BSController reported an error for this DirectBlockGroup")};
+    }
+    if (allocated.DDiskIdSize() != expectedHostCount ||
+        allocated.PersistentBufferDDiskIdSize() != expectedHostCount)
+    {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder()
+                    << "BSController returned " << allocated.DDiskIdSize()
+                    << " ddisks / " << allocated.PersistentBufferDDiskIdSize()
+                    << " pbuffers, expected " << expectedHostCount)};
+    }
+
+    return {.Group = &allocated};
+}
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

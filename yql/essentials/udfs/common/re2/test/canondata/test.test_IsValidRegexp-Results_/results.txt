@@ -8,49 +8,77 @@
                         "StructType";
                         [
                             [
-                                "column0";
+                                "invalid_star_at_start";
                                 [
                                     "DataType";
                                     "Bool"
                                 ]
                             ];
                             [
-                                "column1";
+                                "invalid_unclosed_bracket";
                                 [
                                     "DataType";
                                     "Bool"
                                 ]
                             ];
                             [
-                                "column2";
+                                "valid_dot_metachar";
                                 [
                                     "DataType";
                                     "Bool"
                                 ]
                             ];
                             [
-                                "column3";
+                                "valid_literal_string";
                                 [
                                     "DataType";
                                     "Bool"
                                 ]
                             ];
                             [
-                                "column4";
+                                "valid_byte_default_encoding";
                                 [
                                     "DataType";
                                     "Bool"
                                 ]
                             ];
                             [
-                                "column5";
+                                "invalid_byte_utf8_encoding";
                                 [
                                     "DataType";
                                     "Bool"
                                 ]
                             ];
                             [
-                                "column6";
+                                "valid_byte_latin1_encoding";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "posix_invalid_non_capturing_group";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "re2_default_valid_non_capturing_group";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "null_string";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "null_options";
                                 [
                                     "DataType";
                                     "Bool"
@@ -61,16 +89,21 @@
                 ];
                 "Data" = [
                     [
+                        %false;
+                        %false;
                         %true;
                         %true;
                         %true;
+                        %false;
                         %true;
+                        %false;
                         %true;
-                        %true;
-                        %false
+                        %false;
+                        %true
                     ]
                 ]
             }
-        ]
+        ];
+        "Unordered" = %true
     }
 ]

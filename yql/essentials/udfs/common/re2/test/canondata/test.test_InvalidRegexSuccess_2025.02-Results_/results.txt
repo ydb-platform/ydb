@@ -10,8 +10,11 @@
                             [
                                 "column0";
                                 [
-                                    "DataType";
-                                    "Bool"
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
                                 ]
                             ]
                         ]
@@ -19,10 +22,11 @@
                 ];
                 "Data" = [
                     [
-                        %false
+                        []
                     ]
                 ]
             }
-        ]
+        ];
+        "Unordered" = %true
     }
 ]

@@ -621,3 +621,7 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitPartitioningChanged(
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

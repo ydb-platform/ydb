@@ -1,8 +1,8 @@
-#include "fast_path_service.h"
 #include "part_database.h"
 #include "partition_direct_actor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 

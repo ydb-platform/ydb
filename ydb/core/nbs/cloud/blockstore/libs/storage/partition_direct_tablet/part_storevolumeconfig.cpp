@@ -1,6 +1,5 @@
+#include "part_database.h"
 #include "partition_direct_actor.h"
-
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database.h>
 
 #include <util/generic/fwd.h>
 

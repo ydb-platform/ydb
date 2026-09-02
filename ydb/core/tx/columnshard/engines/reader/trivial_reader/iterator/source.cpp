@@ -457,8 +457,8 @@ TPortionDataSource::TPortionDataSource(
           portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())
     , Portion(portion)
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
-    , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
-    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()))
+    , Start(TReplaceKeyAdapter::BuildStart(*portion, context->GetReadMetadata()->GetSorting()))
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, context->GetReadMetadata()->GetSorting()))
 {
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {

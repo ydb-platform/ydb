@@ -212,6 +212,10 @@ public:
         return result;
     }
 
+    ESorting GetSorting() const {
+        return Sorting;
+    }
+
     bool IsAscSorted() const {
         return Sorting == ESorting::ASC;
     }

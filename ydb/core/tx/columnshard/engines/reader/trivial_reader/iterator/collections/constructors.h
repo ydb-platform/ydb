@@ -37,11 +37,8 @@ public:
     }
 
     TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isVisible, const NReader::ERequestSorting sorting)
-        : NCommon::TDataSourceConstructor(
-              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-                  sorting == NReader::ERequestSorting::DESC),
-              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
-                  sorting == NReader::ERequestSorting::DESC), !isVisible)
+        : NCommon::TDataSourceConstructor(NCommon::TReplaceKeyAdapter::BuildStart(*portion, sorting),
+              NCommon::TReplaceKeyAdapter::BuildFinish(*portion, sorting), !isVisible)
         , Portion(std::move(portion))
         , RecordsCount(portion->GetRecordsCount())
     {

@@ -20,16 +20,16 @@ std::partial_ordering TReplaceKeyAdapter::Compare(const TReplaceKeyAdapter& item
     }
 }
 
-TReplaceKeyAdapter TReplaceKeyAdapter::BuildStart(const TPortionInfo& portion, const TReadMetadataBase& readMetadata) {
-    if (readMetadata.IsDescSorted()) {
+TReplaceKeyAdapter TReplaceKeyAdapter::BuildStart(const TPortionInfo& portion, const ERequestSorting sorting) {
+    if (sorting == ERequestSorting::DESC) {
         return TReplaceKeyAdapter(portion.IndexKeyEnd(), true);
     } else {
         return TReplaceKeyAdapter(portion.IndexKeyStart(), false);
     }
 }
 
-TReplaceKeyAdapter TReplaceKeyAdapter::BuildFinish(const TPortionInfo& portion, const TReadMetadataBase& readMetadata) {
-    if (readMetadata.IsDescSorted()) {
+TReplaceKeyAdapter TReplaceKeyAdapter::BuildFinish(const TPortionInfo& portion, const ERequestSorting sorting) {
+    if (sorting == ERequestSorting::DESC) {
         return TReplaceKeyAdapter(portion.IndexKeyStart(), true);
     } else {
         return TReplaceKeyAdapter(portion.IndexKeyEnd(), false);

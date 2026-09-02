@@ -16,18 +16,25 @@
                                         "String"
                                     ]
                                 ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "Int32"
+                                ]
                             ]
                         ]
                     ]
                 ];
                 "Data" = [
                     [
-                        [
-                            "SELECT\n    0,\n    'str',\n    FALSE,\n    0.0\n;\n"
-                        ]
+                        #;
+                        "0"
                     ]
                 ]
             }
-        ]
+        ];
+        "Unordered" = %true
     }
 ]

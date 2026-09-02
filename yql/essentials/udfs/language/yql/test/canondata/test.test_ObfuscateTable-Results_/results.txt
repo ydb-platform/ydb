@@ -23,11 +23,12 @@
                 "Data" = [
                     [
                         [
-                            "SELECT\n    id\nFROM (\n    SELECT\n        0 AS id\n);\n"
+                            "SELECT\n    *\nFROM\n    id\n;\n"
                         ]
                     ]
                 ]
             }
-        ]
+        ];
+        "Unordered" = %true
     }
 ]

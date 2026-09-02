@@ -1990,7 +1990,7 @@ Subtest/metadata/chunk-wall times are 65.455408/66.587568/66.5466856956 seconds,
 with 861,528 KiB peak process-tree RSS. Combined proof work is
 20,968/336,675 ms.
 
-The trusted bounded theorem is unchanged; its current checked sample grows to
+The trusted bounded theorem is unchanged; its M88 checked sample grows to
 38/38: 38/121 workload rows (31.4%), 38/101 formula-covered exact pairs
 (37.6%), and within TPC-DS 25/99 workload rows (25.3%) and 25/81
 formula-covered rows (30.9%). M88 changes only policy, fixtures, and
@@ -1999,6 +1999,89 @@ capped dashboards continue to establish the unchanged formula, exact-pair,
 entry, preparation, and defect inventories: TPCH 20 formulas/two optimizer
 failures with preparation 20/2, TPC-DS 81 formulas/18 optimizer failures with
 preparation 73/26, and 101 combined formulas.
+
+M89 likewise changes no trusted or proof-producing code. At the earlier
+nullable Date-year checkpoint, TPCH q7 returned `UNKNOWN` after 230/64,641 ms
+because earlier solver work exhausted the global deadline before unattempted
+branch 4/4 (`right_outcome_0_unmatched`). A fresh `solver_experiment` at exact
+completed M88 checkpoint
+`678e003f448140aea2bb8fd9157ed3aade3b2770` selects q1/q7/q8 under the same
+two-row/two-task bound and 60,000-ms deadline. All three prepare, capture
+exactly Initial then Final, and enter the verifier; policy evaluation is valid
+with zero violations. q1 remains `UNKNOWN` after 115/60,603 ms at branch
+10/22, `preferred_left_row_0_column_5_payload_mismatch`; q7 is
+`VERIFIED_BOUNDED` after 231/19,291 ms; q8 remains `UNKNOWN` after 287/63,152
+ms at branch 7/8, `preferred_left_row_0_column_1_payload_mismatch`. The
+6,237-byte report and 18,387-byte trace have SHA-256 values
+`66abfac058c58618e111bd270a8a90d908bc61d5441ed58436e81ccc9b9a4d11`
+and
+`d75eea41f8b46e2e24a3bc56dad063f786f0fb867c330bd1c2b80527541340f5`.
+Summed preparation/verifier work is 633/143,046 ms;
+subtest/metadata/chunk-wall times are
+145.467995/146.373951/146.3665597439 seconds and peak process-tree RSS is
+1,385,524 KiB. q1/q8 retain 143,700-byte/1,852,563-byte canonical formulas
+with SHA-256 values
+`6e1abb36772e50eb144b7fc6a5e988aa149e6a1a7bd73e38472ac436b0e58a8d`
+and
+`62605a0485c7519a897425dde89e503b677a356432c57981355d7b7952def69b`.
+Their `UNKNOWN` results are neither proofs nor counterexamples.
+
+An independent q7-only run at the same checkpoint is also policy-valid with
+zero violations and returns `VERIFIED_BOUNDED` after 228/20,761 ms. Its
+3,140-byte report and 18,341-byte trace have SHA-256 values
+`c95d62419be20239d943a69c74df3bb9e725e12af2a6a092ed1124b440810913`
+and
+`691d1548abe7ad417b2ecb4d9ffb6276c046d18c8d1b3d609586e1548c235cf1`.
+Subtest/metadata/chunk-wall times are
+22.920553/23.917251/23.8199396133 seconds, with 903,700 KiB peak process-tree
+RSS. The two q7 result rows differ only in preparation/verification timings;
+successful runs retain no standalone formula. The repeatability supports
+promotion, but without an attribution run it does not identify a causal
+intervening optimization.
+
+Policy commit `a2503167b9b8256eb96e3358543793efabbf9d89`, based on completed
+M88 documentation commit `678e003f448`, adds q7 only to the TPCH
+required-proof set and updates only its C++ policy fixture. It changes no
+optimizer, exporter, snapshot/IR, semantic evaluator, SMT renderer, model
+bound, solver protocol, proof theorem, formula, exact-pair, verifier-entry,
+preparation, or defect floor. Focused policy validation passes 16/16 in
+0.976443 seconds. Its 33,297-byte trace and 654-byte metadata have SHA-256
+values
+`172fb0202aff27b2711c8eef5b76b55c44cfd68c570dd2fcc12f1c0b127c88fd`
+and
+`5a8ebae9d429a29b276e23e1e8a3d7378a2588dcf128102647edeb3f3e11c00f`.
+
+Fresh committed-HEAD proof reports are policy-valid with zero violations.
+TPCH has 14 successful preparations, pairs, entries, and
+`VERIFIED_BOUNDED` rows after 2,004/79,518 ms. Its 10,763-byte report and
+18,401-byte trace have SHA-256 values
+`0344aa3f2c1b341facf8b0366832fa82fbb3d37c5a243e2e02690deaf4d1b17a`
+and
+`26373071d3afe9200e82f13a279a10667437a6cb181f08009ee87155f075e20d`;
+subtest/metadata/chunk-wall times are
+83.615226/84.490431/84.4962787628 seconds, with 902,620 KiB peak process-tree
+RSS. TPC-DS retains the corresponding 25/25 rows after 18,911/266,516 ms. Its
+19,963-byte report and 18,387-byte trace have SHA-256 values
+`77e2cf8e268e36ed85090c375bf9956836043c5a19fae0c7e0852b5478e42ec3`
+and
+`a1078df9694974801dde18aa15a96bd85d42b8f5084a46a2928a1b4548a7e0cd`;
+subtest/metadata/chunk-wall times are
+289.492089/290.398357/290.36300683 seconds, with 1,153,960 KiB peak
+process-tree RSS. The TPCH and TPC-DS outer commands take 2,018.41 and 354.53
+seconds respectively; TPCH includes a cold build, and neither outer duration
+is solver time. Combined proof work is 20,915/346,034 ms.
+
+The trusted bounded theorem is unchanged; its checked sample grows to 39/39:
+39/121 workload rows (32.2%), 39/101 formula-covered exact pairs (38.6%), and
+within TPCH 14/22 workload rows (63.6%) and 14/20 formula-covered rows (70.0%).
+TPC-DS remains 25/99 workload rows (25.3%) and 25/81 formula-covered rows
+(30.9%). M89 changes only policy, fixtures, and documentation, so no new
+ordinary dashboard is claimed. M87's authoritative capped dashboards continue
+to establish the unchanged formula, exact-pair, entry, preparation, and defect
+inventories: TPCH 20 formulas/two optimizer failures with preparation 20/2,
+TPC-DS 81 formulas/18 optimizer failures with preparation 73/26, and 101
+combined formulas. Complete evidence is preserved under
+`.rbo-verification-artifacts/20260902-m89-tpch-q7-promotion/`.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -3279,6 +3362,30 @@ solver schedule, and diagnostic tooling do not grow. Physical size does not
 replace the stale-evidence review, repeatability check, policy diff audit, or
 authoritative proof gates above.
 
+The post-M89 physical-line audit compares completed M88 documentation commit
+`678e003f448` with policy/fixture commit `a2503167b9b` plus this four-file
+closeout. Counts use the same raw tracked `wc -l` sets as M88: the ten trusted
+Python modules, five C++ exporter files, every tracked file under `ut/`,
+`*_ut/`, and `prefix_capture/ut/`, the remaining diagnostic/orchestration
+source, and every tracked Markdown file under this directory.
+
+| Area | M88 physical lines | M89 physical lines | Delta |
+|---|---:|---:|---:|
+| Ten trusted Python semantic modules | 17,788 | 17,788 | 0 |
+| C++ exporter (including both private window headers) | 16,632 | 16,632 | 0 |
+| **Proof-producing code total** | **34,420** | **34,420** | **0** |
+| Tests, outside the TCB | 85,638 | 85,638 | 0 |
+| Diagnostic/orchestration tools, outside the TCB | 5,432 | 5,432 | 0 |
+| Documentation, outside the TCB | 17,926 | 18,355 | +429 |
+
+M89's only tracked non-document changes replace the TPCH required-proof list
+and matching policy-fixture lines to add q7; their test-set net is zero
+physical lines. Trusted Python, the C++ exporter, the semantic theorem, the
+snapshot/IR wire, bounds, solver schedule, weaker coverage floors, and
+diagnostic tooling do not grow. Physical size does not replace the historical
+evidence review, q7 repeatability check, q1/q8 unresolved-result retention,
+policy diff audit, or authoritative proof gates above.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -3546,4 +3653,4 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Ordered Decimal ROWS windows | `semantic_snapshot.cpp`; `window_expression_export_impl.h`; `window_projection_audit_impl.h`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `stages.py`; `verify.py` | `ut/test_window_rows.py`; exact q51 four-leaf/three-Project JSON; C++ binder plus cross-language names, local orders, frame, types, SUM-Aggregate provenance, distinct MAX-input, topology, mixed-family, fanout, and subplan mutations; concrete required/nullable item partition, NULL input, peer-order, prefix-SUM/MAX, Decimal-special/headroom, task-local, and no-published-order references; item-only HashV2 and Date-liveness routing checks; focused formula and 60-second `UNKNOWN`; focused real-host exact Initial/Final capture with later physical `YqlAggWin` failure |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; synthetic window full-group-key `COUNTEREXAMPLE` and synthetic partition-only `VERIFIED_BOUNDED`, with production q12 post-fix `UNKNOWN`; nullable-key routing, global/disjoint/untracked/malformed gather, rename-history/current-input checks, and `cpp_ut/stage_assignment_rules_ut.cpp`; staged Decimal-AVG carrier payload transport plus HashShuffle-key/Merge-order rejection; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; same-occurrence/opposite-fact gating, ordinary eight-row threshold, forced eligible Broadcast compaction, HashShuffle eight-cell/ten-cell boundary, conditional hash-key ITE and opposite new routing facts, NULL/Decimal/integral-AVG state preservation, and overlapping Broadcast multiplicity; `P ⊆ K` global promotion, broken-certificate alternatives, Broadcast non-promotion, cross-task duplicate rejection, and choice-free Merge-network cap boundary; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; delayed Filter/Cross single, reversed, composite, residual, factor-local rejection/NULL/order/outcome/work-cap, deferred-factor scheduling, certified seed rebase and three-factor continuation, explicit reordered-inner equivalence, mutation, exact column-restoration, cap, override, shared-producer, subplan, choice, and StageGraph-gate tests; literal-false Join inputs across all kinds, poisoned payloads, symbolic-presence retention, sequence-metadata erasure, and exact cap accounting; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; exact independently rebuilt structural sharing and class/sort/atom/operation/child-order near misses; Script-owner isolation; global, shadowed, nested, and sibling quantifier scopes; definition-parameter scopes; deterministic hygienic aliases; deep and colliding-hash DAGs; real and forced 16,384/16,385 cap boundaries; byte-exact identity fallback and nested structural re-entry; Z3 equivalence; identity and semantic-mutation obligations; preferred metadata/canonical-formula invariance, soundness-first protocol, canonical-skip versus ordinary canonical-first scheduling, all-branch proof, winning-branch replay, shared decreasing deadline, untried-branch rejection, first-UNKNOWN preservation, and empty-portfolio rejection |
-| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97/q88/q99/q21/q15/q19, the clean M80 20/20, M82 21/21, M83 22/22, M85/M86/M87 23/23, and M88 25/25 TPC-DS proof gates, the M83/M84/M85 q21/q56/q60 batches, M86 q56/q60 batch, q21 and q15/q19 repeats, canonical-formula stability, Decimal-SUM and M87 structural-CSE formula-size reductions, q56/q60 preferred payload localization, the superseded uncapped TPCH performance diagnostic, capped TPCH recovery, all 101 formula rows, inspector, and replay for candidates |
+| Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports including focused q97/q88/q99/q21/q15/q19 and q1/q7/q8, the clean M80 20/20, M82 21/21, M83 22/22, M85/M86/M87 23/23, M88/M89 25/25 TPC-DS gates, and M89 14/14 TPCH gate, the M83/M84/M85 q21/q56/q60 batches, M86 q56/q60 batch, q21, q15/q19, and q7 repeats, q1/q8 retained `UNKNOWN` formulas, canonical-formula stability, Decimal-SUM and M87 structural-CSE formula-size reductions, q56/q60 preferred payload localization, the superseded uncapped TPCH performance diagnostic, capped TPCH recovery, all 101 formula rows, inspector, and replay for candidates |

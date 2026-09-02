@@ -233,6 +233,9 @@ verifier-entry requirement.
 TPC-DS q15/q19 are pinned at successful preparation, formula construction,
 and bounded proof. M88 adds only the proof requirements; neither has a
 separate verifier-entry requirement.
+TPCH q7 is pinned at successful preparation, formula construction, and bounded
+proof. M89 adds only the proof requirement; it has no separate verifier-entry
+requirement.
 TPC-DS q84 is pinned at successful preparation and formula construction
 through the checked-Concat demand contract; it is not separately pinned at
 verifier entry and is not in the proof floor.
@@ -433,8 +436,18 @@ unchanged M87 proof-producing checkpoint `bde0d7acdf5` now prove q15/q19 2/2.
 No particular intervening semantic change is credited. Policy commit
 `b3ce77ab1d2` changes only the proof policy and its fixtures, passes 16/16
 focused policy tests, and fresh gates prove 13/13 TPCH plus 25/25 TPC-DS. The
-current floor is 38/38; every weaker inventory is unchanged, and M87's capped
+M88 floor is 38/38; every weaker inventory is unchanged, and M87's capped
 dashboards remain authoritative because M88 ran no ordinary dashboard.
+
+Milestone 89 revisits the historical TPCH q1/q7/q8 solver slice at unchanged
+M88 proof-producing code. A focused run keeps q1/q8 `UNKNOWN` at their first
+unresolved preferred payload branches but proves q7; an independent q7-only
+repeat proves it again. No intervening semantic change is credited without an
+attribution run. Policy commit `a2503167b9b` adds only q7 to the TPCH proof
+floor and its matching fixture. Focused policy validation passes 16/16, and
+fresh policy-valid gates prove 14/14 TPCH plus the unchanged 25/25 TPC-DS.
+The current floor is 39/39; every weaker inventory and M87's ordinary
+dashboards remain unchanged.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -1826,13 +1839,97 @@ Subtest/metadata/chunk-wall times are 65.455408/66.587568/66.5466856956 seconds,
 and peak process-tree RSS is 861,528 KiB. Combined proof work is
 20,968/336,675 ms.
 
-The checked floor is now 38/38: 38/121 workload rows (31.4%), 38/101
+The M88 checked floor is 38/38: 38/121 workload rows (31.4%), 38/101
 formula-covered exact pairs (37.6%), and within TPC-DS 25/99 workload rows
 (25.3%) and 25/81 formula-covered rows (30.9%). M88 changes only policy,
 fixtures, and documentation, so it makes no fresh ordinary-dashboard claim.
 The capped M87 TPCH and TPC-DS dashboards remain authoritative for the
 unchanged 20/81 formula counts, 2/18 optimizer failures, preparation 20/2 and
 73/26, and all 101 formula-covered exact pairs.
+
+M89 is another retrospective proof-policy promotion at unchanged
+proof-producing code. At the earlier nullable Date-year checkpoint, TPCH q7
+had returned `UNKNOWN` after 230/64,641 ms because earlier solver work
+exhausted the global deadline before unattempted branch 4/4
+(`right_outcome_0_unmatched`). A fresh `solver_experiment` at exact completed
+M88 checkpoint `678e003f448140aea2bb8fd9157ed3aade3b2770` selects q1/q7/q8
+under the same two-row/two-task bound and 60,000-ms deadline. All three
+prepare, capture exactly Initial then Final, and enter the verifier; the
+embedded policy is valid with zero violations. q1 remains `UNKNOWN` after
+115/60,603 ms at branch 10/22,
+`preferred_left_row_0_column_5_payload_mismatch`; q7 is
+`VERIFIED_BOUNDED` after 231/19,291 ms; and q8 remains `UNKNOWN` after
+287/63,152 ms at branch 7/8,
+`preferred_left_row_0_column_1_payload_mismatch`. Summed preparation/verifier
+work is 633/143,046 ms. The 6,237-byte report and 18,387-byte trace have
+SHA-256 values
+`66abfac058c58618e111bd270a8a90d908bc61d5441ed58436e81ccc9b9a4d11`
+and
+`d75eea41f8b46e2e24a3bc56dad063f786f0fb867c330bd1c2b80527541340f5`.
+Subtest/metadata/chunk-wall times are
+145.467995/146.373951/146.3665597439 seconds, with 1,385,524 KiB peak
+process-tree RSS.
+
+The unresolved q1/q8 rows retain their exact canonical formulas. q1's
+143,700-byte formula has SHA-256
+`6e1abb36772e50eb144b7fc6a5e988aa149e6a1a7bd73e38472ac436b0e58a8d`;
+q8's 1,852,563-byte formula has SHA-256
+`62605a0485c7519a897425dde89e503b677a356432c57981355d7b7952def69b`.
+Those two results are neither proofs nor counterexamples.
+
+An independent q7-only run at the same checkpoint is policy-valid with zero
+violations and again returns `VERIFIED_BOUNDED`, after 228/20,761 ms. Its
+3,140-byte report and 18,341-byte trace have SHA-256 values
+`c95d62419be20239d943a69c74df3bb9e725e12af2a6a092ed1124b440810913`
+and
+`691d1548abe7ad417b2ecb4d9ffb6276c046d18c8d1b3d609586e1548c235cf1`.
+Subtest/metadata/chunk-wall times are
+22.920553/23.917251/23.8199396133 seconds, with 903,700 KiB peak process-tree
+RSS. Removing only preparation and verification timings makes the two q7 rows
+identical. Successful q7 runs retain no standalone SMT formula. These current
+results justify promotion, but no individual intervening optimization is
+claimed to have caused the historical outcome to change.
+
+Promotion commit `a2503167b9b8256eb96e3358543793efabbf9d89`, based on
+completed M88 documentation commit `678e003f448`, adds q7 only to the TPCH
+required-proof list and updates the corresponding C++ policy fixture. The
+two-file diff changes no optimizer, exporter, snapshot/IR, semantic verifier,
+SMT renderer, row/task bound, solver schedule, formula/pair/entry/preparation
+floor, or defect inventory. Focused policy validation passes 16/16 in
+0.976443 seconds. Its 33,297-byte trace has SHA-256
+`172fb0202aff27b2711c8eef5b76b55c44cfd68c570dd2fcc12f1c0b127c88fd`;
+the 654-byte zero-exit metadata has SHA-256
+`5a8ebae9d429a29b276e23e1e8a3d7378a2588dcf128102647edeb3f3e11c00f`.
+
+Fresh committed-HEAD proof gates are authoritative and policy-valid with zero
+violations. TPCH prepares, captures, enters, and proves 14/14 after
+2,004/79,518 ms. Its 10,763-byte report and 18,401-byte trace have SHA-256
+values
+`0344aa3f2c1b341facf8b0366832fa82fbb3d37c5a243e2e02690deaf4d1b17a`
+and
+`26373071d3afe9200e82f13a279a10667437a6cb181f08009ee87155f075e20d`.
+Subtest/metadata/chunk-wall times are
+83.615226/84.490431/84.4962787628 seconds, with 902,620 KiB peak process-tree
+RSS. TPC-DS retains 25/25 after 18,911/266,516 ms. Its 19,963-byte report and
+18,387-byte trace have SHA-256 values
+`77e2cf8e268e36ed85090c375bf9956836043c5a19fae0c7e0852b5478e42ec3`
+and
+`a1078df9694974801dde18aa15a96bd85d42b8f5084a46a2928a1b4548a7e0cd`.
+Subtest/metadata/chunk-wall times are
+289.492089/290.398357/290.36300683 seconds, with 1,153,960 KiB peak
+process-tree RSS. The TPCH and TPC-DS outer commands take 2,018.41 and 354.53
+seconds respectively; TPCH includes a cold build, and neither outer duration
+is solver time. Combined proof work is 20,915/346,034 ms.
+
+The checked floor is now 39/39: 39/121 workload rows (32.2%), 39/101
+formula-covered exact pairs (38.6%), and within TPCH 14/22 workload rows
+(63.6%) and 14/20 formula-covered rows (70.0%). TPC-DS remains 25/99 workload
+rows (25.3%) and 25/81 formula-covered rows (30.9%). M89 changes only policy,
+fixtures, and documentation, so it makes no fresh ordinary-dashboard claim.
+The capped M87 TPCH and TPC-DS dashboards remain authoritative for the
+unchanged 20/81 formula counts, 2/18 optimizer failures, preparation 20/2 and
+73/26, and all 101 formula-covered exact pairs. Complete M89 evidence is
+preserved under `.rbo-verification-artifacts/20260902-m89-tpch-q7-promotion/`.
 
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
@@ -2099,6 +2196,12 @@ focused proofs. Their older `UNKNOWN` evidence predates M84/M85 and is retained
 as historical evidence without causal attribution. Focused policy validation
 passes 16/16; fresh 13/13 TPCH plus 25/25 TPC-DS gates raise the current floor
 to 38/38 while all weaker inventories and the M87 dashboards stay unchanged.
+M89 policy commit `a2503167b9b`, based on M88 checkpoint `678e003f448`, then
+promotes already formula-covered TPCH q7 after two independent bounded proofs.
+The companion q1/q8 results remain `UNKNOWN`; no intervening semantic change
+is credited for q7 without an attribution run. Focused policy validation passes
+16/16; fresh 14/14 TPCH plus 25/25 TPC-DS gates raise the current floor to
+39/39 while all weaker inventories and the M87 dashboards stay unchanged.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -2335,9 +2438,10 @@ inventing relationships to other calendar expressions.
 This moves TPCH q7, q8, and q9 through formula construction. Their complete
 dashboard rows spent 237/3,318, 278/2,954, and 187/1,628 ms respectively in
 preparation/verifier work. Separate focused 60-second solver experiments all
-returned `UNKNOWN`: q7 after 230/64,641 ms at branch 4/4
-`right_outcome_0_unmatched`, q8 after 280/65,107 ms at branch 4/28
-`left_outcome_1_unmatched`, and q9 after 181/62,461 ms at branch 4/4
+returned `UNKNOWN` because earlier solver work exhausted each global deadline
+before the named unattempted branch: q7 after 230/64,641 ms before branch 4/4
+`right_outcome_0_unmatched`, q8 after 280/65,107 ms before branch 4/28
+`left_outcome_1_unmatched`, and q9 after 181/62,461 ms before branch 4/4
 `right_outcome_0_unmatched`. At that Date-year checkpoint they extended the
 formula floor, not its then unchanged nineteen-query proof floor. Focused C++
 mutations exercise the material
@@ -2391,11 +2495,11 @@ returned `UNKNOWN` after 327/72,599 ms, with the global deadline exhausted
 before mismatch branch 3/6. q6 is therefore formula-covered, not proved.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy now
-requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q13, q14, q15,
+requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q7, q11, q12, q13, q14, q15,
 q16, q18, q19, q21, and q22 plus TPC-DS q3, q8, q9, q15, q16, q19, q21, q28,
 q34, q38, q42, q48, q52, q55, q69, q73, q87, q88, q90, q93, q94, q95, q96,
-q97, and q99: thirty-eight obligations, 38/121 (31.4%) of the workload and
-38/101 (37.6%) of the current formula-covered exact pairs. The post-M75
+q97, and q99: thirty-nine obligations, 39/121 (32.2%) of the workload and
+39/101 (38.6%) of the current formula-covered exact pairs. The post-M75
 through M79 32-query checkpoints below remain historical records.
 
 The M78 checked-in proof policy contained 13 TPCH and 19 TPC-DS obligations,
@@ -2446,8 +2550,11 @@ M85 semantic commit `67655eaa786` then proves q21 through the exact preferred
 keyed cover; policy commit `95182b541fb` adds it. The M85 floor was 36/36,
 with fresh 13/13 TPCH and 23/23 TPC-DS reports recorded above. M88 policy
 commit `b3ce77ab1d2` adds already formula-covered q15/q19 after repeatable
-focused proofs; the current floor is 38/38, with fresh 13/13 TPCH and 25/25
+focused proofs; the M88 floor is 38/38, with fresh 13/13 TPCH and 25/25
 TPC-DS reports recorded above.
+M89 policy commit `a2503167b9b` adds already formula-covered TPCH q7 after two
+repeatable focused proofs; the current floor is 39/39, with fresh 14/14 TPCH
+and unchanged 25/25 TPC-DS reports recorded above.
 
 The immediately preceding 30-obligation complete gate spent 1,633/56,327 ms for
 TPCH and produced report SHA-256

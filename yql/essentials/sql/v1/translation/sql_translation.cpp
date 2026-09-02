@@ -4144,13 +4144,6 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         case TRule_table_hint::kAltTableHint4: {
             const auto& alt = rule.GetAlt_table_hint4();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
-            Ctx_.Error(pos) << "WATERMARK AS (expr) syntax is deprecated and no longer supported, use WATERMARK = expr";
-            return false;
-        }
-
-        case TRule_table_hint::kAltTableHint5: {
-            const auto& alt = rule.GetAlt_table_hint5();
-            const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TNodePtr expr = Unwrap(TSqlExpression(*this).Build(alt.GetRule_expr3()));
             if (!expr) {

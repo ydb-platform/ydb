@@ -3566,6 +3566,20 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         },
     }),
     TableElemExt({
+        .CanonicalName = "UdfBridge",
+        .IsYqlSelectCompatible = true,
+        .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
+            auto& ctx = query.Context();
+            if (!values.empty() || pragmaValueDefault) {
+                query.Error() << "Expected no pragma arguments";
+                return {};
+            }
+            return BuildPragma(ctx.Pos(), TString(ConfigProviderName), "flags",
+                               TVector<TDeferredAtom>{TDeferredAtom(ctx.Pos(), TString("UdfBridge"))},
+                               /*valueDefault=*/false);
+        },
+    }),
+    TableElemExt({
         .CanonicalName = "Library",
         .IsYqlSelectCompatible = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
@@ -4115,18 +4129,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         .IsYqlSelectCompatible = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
-            if (values.size() != 1 || !values[0].GetLiteral() || !(*values[0].GetLiteral() == "enable" || *values[0].GetLiteral() == "disable"))
-            {
-                query.Error() << "Expected `enable|disable' argument for: " << pragma;
+            if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [&](auto& out) {
+                    out << "PRAGMA " << pragma << " has been deprecated";
+                })) {
                 return {};
             }
-
-            if (*values[0].GetLiteral() == "enable") {
-                ctx.PragmaDataWatermarks = true;
-            } else if (*values[0].GetLiteral() == "disable") {
-                ctx.PragmaDataWatermarks = false;
-            }
-
             return TNodePtr{};
         },
     }),
@@ -4150,14 +4157,9 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         .IsYqlSelectCompatible = false,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
             auto& ctx = query.Context();
-            if (values.size() == 1 && values[0].GetLiteral()) {
-                const auto& value = *values[0].GetLiteral();
-                if ("prototype" == value) {
-                    ctx.FeatureR010 = true;
-                } else {
-                    return {};
-                }
-            } else {
+            if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [&](auto& out) {
+                    out << "PRAGMA " << pragma << " has been deprecated";
+                })) {
                 return {};
             }
             return TNodePtr{};

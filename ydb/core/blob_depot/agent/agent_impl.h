@@ -459,7 +459,8 @@ namespace NKikimr::NBlobDepot {
 
             void CheckQueryExecutionTime(TMonotonic now);
 
-            void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason);
+            void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
+                bool isTabletStorageInfoVersionObsolete = false);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;
             TString GetQueryId() const;

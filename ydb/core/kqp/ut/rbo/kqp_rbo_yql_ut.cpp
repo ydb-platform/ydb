@@ -2175,6 +2175,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(DistinctAllTypeMatchesLogicalOutputColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -2841,6 +2842,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void TestAggregation(bool columnStore) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -4620,6 +4622,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto runQueries = [&](bool newRbo) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+            appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
             appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
             appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
             appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -9093,6 +9096,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(JoinOptionalKeys) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -10107,8 +10111,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto& query = queries[i];
             auto session = queryClient.GetSession().GetValueSync().GetSession();
+            const TString explainQuery = TStringBuilder()
+                << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \"true\";\n" << query;
             auto result =
-                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                session.ExecuteQuery(explainQuery, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             auto ast = *result.GetStats()->GetAst();

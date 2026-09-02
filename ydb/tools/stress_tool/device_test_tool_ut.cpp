@@ -65,12 +65,14 @@ template<typename P, typename T>
 void ProbeTest(const TString &testDescription, bool expectResults,
         TMaybe<NKikimr::TResultPrinter::EOutputFormat> format = {},
         bool disableDDiskChecksums = false,
+        bool forcePDiskFallback = false,
         TVector<std::pair<TString, TString>>* outResults = nullptr) {
     UNIT_ASSERT(!(expectResults && format));
     TTempFileHandle file;
     file.Resize(FileSize);
     NKikimr::TPerfTestConfig config(file.Name(), "name", "ROT", "json", "", true,
-        "1", "0", "0", false, disableDDiskChecksums);
+        "1", "0", "0", false, disableDDiskChecksums, forcePDiskFallback);
+    config.PersistentBufferChunks = 10;
 
     P testProto;
     NProtoBuf::TextFormat::ParseFromString(testDescription, &testProto);
@@ -315,7 +317,7 @@ void ProbeDDiskRead(bool disableDDiskChecksums, float backgroundWriteRatio = 0,
     )___";
 
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(
-        perfCfg.Str(), true, {}, disableDDiskChecksums, outResults);
+        perfCfg.Str(), true, {}, disableDDiskChecksums, false, outResults);
 }
 
 Y_UNIT_TEST(DDiskTestRead) {
@@ -373,7 +375,7 @@ Y_UNIT_TEST(DDiskTestWriteLargeIo) {
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
 }
 
-void ProbePersistentBufferWrite(bool disableDDiskChecksums) {
+void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallback = false) {
     TStringStream perfCfg;
     perfCfg << R"___(
         PersistentBufferTestList: {
@@ -393,7 +395,7 @@ void ProbePersistentBufferWrite(bool disableDDiskChecksums) {
     )___";
 
     ProbeTest<NDevicePerfTest::TPersistentBufferTest, TPersistentBufferTest32>(
-        perfCfg.Str(), true, {}, disableDDiskChecksums);
+        perfCfg.Str(), true, {}, disableDDiskChecksums, forcePDiskFallback);
 }
 
 Y_UNIT_TEST(PersistentBufferTestWrite) {
@@ -401,7 +403,7 @@ Y_UNIT_TEST(PersistentBufferTestWrite) {
 }
 
 Y_UNIT_TEST(PersistentBufferTestWriteChecksumsDisabled) {
-    ProbePersistentBufferWrite(true);
+    ProbePersistentBufferWrite(true, true);
 }
 
 Y_UNIT_TEST(PDiskTestLogWrite) {

@@ -12,8 +12,6 @@ $data = [
     <|dt: 1688911000, event: 'B'|>,
 ];
 
-PRAGMA FeatureR010 = 'prototype';
-
 SELECT
     *
 FROM

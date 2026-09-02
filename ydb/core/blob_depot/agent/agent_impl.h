@@ -7,6 +7,8 @@
 #include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -418,9 +420,10 @@ namespace NKikimr::NBlobDepot {
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg);
 
         template<typename T, typename = typename TEvBlobDepot::TEventFor<T>::Type>
-        ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context);
+        ui64 Issue(T msg, TRequestSender *sender, TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
 
-        ui64 Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
+        ui64 Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context,
+            NWilson::TTraceId traceId = {});
 
         void Handle(TEvBlobDepot::TEvPushNotify::TPtr ev);
 
@@ -447,6 +450,7 @@ namespace NKikimr::NBlobDepot {
             bool Destroyed = false;
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
             ui32 BlockChecksRemain = 3;
+            NWilson::TSpan Span;
 
             struct TLifetimeToken {};
             std::shared_ptr<TLifetimeToken> LifetimeToken;
@@ -596,7 +600,8 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DS proxy interaction
 
-        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender, TRequestContext::TPtr context);
+        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender,
+            TRequestContext::TPtr context, NWilson::TTraceId traceId = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blocks
@@ -648,6 +653,19 @@ namespace NKikimr::NBlobDepot {
             TQuery::TFinishCallback Finish;
             ui64 ReadId;
             ui32 SlowDownRetries = 0;
+            NWilson::TSpan Span;
+
+            void Complete(std::optional<TString> data, const char *error) {
+                if (Span) {
+                    if (data) {
+                        Span.EndOk();
+                    } else {
+                        Span.EndError(error ? error : "");
+                    }
+                }
+
+                Finish(std::move(data), error);
+            }
         };
 
         TBackoff S3GetBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};

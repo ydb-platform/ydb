@@ -25,13 +25,13 @@ TBlobWithAdditionalAccessorData TBinaryDenseConstructor::DoSerializeToBlobAndMet
     const auto* trivial = static_cast<const TTrivialArray*>(columnData.get());
     AFL_VERIFY(arrow::is_binary_like(trivial->GetArray()->type_id()))("element_type", trivial->GetArray()->type()->ToString());
     const auto& binary = static_cast<const arrow::BinaryArray&>(*trivial->GetArray());
-    return { SerializeBinaryArray(binary, GetCompressionCodec(externalInfo)),
+    return { SerializeBinaryLikeArray(binary, GetCompressionCodec(externalInfo)),
         std::make_shared<TEmptyAdditionalData>() };
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TBinaryDenseConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
-    auto array = DeserializeBinaryArray(
+    auto array = DeserializeBinaryLikeArray(
         originalData, externalInfo.GetRecordsCount(), externalInfo.GetColumnType(), GetCompressionCodec(externalInfo));
     return std::make_shared<TTrivialArray>(array);
 }
@@ -44,7 +44,7 @@ TBlobWithAdditionalAccessorData TDictionaryDenseConstructor::DoSerializeToBlobAn
     AFL_VERIFY(arrow::is_binary_like(dictionary->type_id()))("element_type", dictionary->type()->ToString());
     const auto& dictBinary = static_cast<const arrow::BinaryArray&>(*dictionary);
     const auto codec = GetCompressionCodec(externalInfo);
-    const TString dictBlob = SerializeBinaryArray(dictBinary, codec);
+    const TString dictBlob = SerializeBinaryLikeArray(dictBinary, codec);
 
     AFL_VERIFY(dictBinary.length() <= Max<ui32>())("length", dictBinary.length());
     const ui32 dictLength = static_cast<ui32>(dictBinary.length());
@@ -81,7 +81,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TDictionaryDenseConstructor::DoDeser
     const TStringBuf positionsBlob(originalData.data() + dictionaryBlobSize, originalData.size() - dictionaryBlobSize);
     const auto codec = GetCompressionCodec(externalInfo);
 
-    auto dictionary = DeserializeBinaryArray(dictBlob, dictLength, externalInfo.GetColumnType(), codec);
+    auto dictionary = DeserializeBinaryLikeArray(dictBlob, dictLength, externalInfo.GetColumnType(), codec);
     std::shared_ptr<arrow::Array> positions = DeserializeIndices(
         positionsBlob, externalInfo.GetRecordsCount(), NDictionary::TConstructor::GetTypeByVariantsCount(dictLength), codec);
     return std::make_shared<TDictionaryArray>(dictionary, positions);

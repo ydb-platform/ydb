@@ -177,7 +177,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     if (Manager->OnTaskProcessedResult(ev.GetWorkersPoolId(), ev.GetWorkerIdx())) {
         CompleteConfigUpdate();
     }
-    Y_UNUSED(Manager->DrainTasks());
+    DrainTasks();
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {

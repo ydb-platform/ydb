@@ -152,7 +152,8 @@ bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
-void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts) {
+void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts,
+    TConveyorWorkUnits&& workUnits) {
     Y_ENSURE(HasFreeWorker(), "cannot run a task without a free worker");
     Y_ENSURE(tasksBatch.size(), "cannot run an empty task batch");
     const auto workerIdx = ActiveWorkersIdx.back();
@@ -160,7 +161,7 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletio
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
     auto& worker = Workers[workerIdx];
-    worker.OnStartTask(std::move(completionContexts));
+    worker.OnStartTask(std::move(completionContexts), std::move(workUnits));
     TActivationContext::Send(
         worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit()));
 }

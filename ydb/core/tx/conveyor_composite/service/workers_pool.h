@@ -75,9 +75,10 @@ private:
             StopRequested = true;
         }
 
-        void OnStartTask(TTaskCompletionContexts&& completionContexts) {
+        void OnStartTask(TTaskCompletionContexts&& completionContexts, TConveyorWorkUnits&& workUnits) {
             Y_ENSURE(!RunningTask, "worker already has a running task");
             Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
+            Y_ENSURE(WorkUnits.empty(), "worker has unfinished workload units");
             RunningTask = true;
             CompletionContexts = std::move(completionContexts);
             WorkUnits = std::move(workUnits);
@@ -85,6 +86,7 @@ private:
 
         void OnStopTask() {
             Y_ENSURE(RunningTask, "worker has no running task to stop");
+            Y_ENSURE(WorkUnits.empty(), "worker has unfinished workload units");
             RunningTask = false;
             CompletionContexts.clear();
         }

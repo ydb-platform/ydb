@@ -6,7 +6,23 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 
+#include <cmath>
+
 namespace NKikimr::NKqp::NScheduler {
+
+struct TCpuQuotaSettings {
+    double RefillRateUsPerSecond = std::numeric_limits<double>::infinity();
+    double BurstCapacityUs = std::numeric_limits<double>::infinity();
+
+    bool IsUnlimited() const {
+        return std::isinf(RefillRateUsPerSecond) && std::isinf(BurstCapacityUs);
+    }
+};
+
+struct TWorkloadCpuQuotaSettings {
+    TCpuQuotaSettings Query;
+    TCpuQuotaSettings Pool;
+};
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
@@ -29,6 +45,8 @@ public:
     NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
     void UpdateQueriesInPool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TStaticAttributes& attrs);
     NHdrf::NDynamic::TQueryPtr GetQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId) const;
+    std::optional<TWorkloadCpuQuotaSettings> GetCpuQuotaSettings(const NHdrf::TDatabaseId& databaseId,
+                                                                 const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId) const;
     NHdrf::NDynamic::TQueryPtr GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const;
     bool RemoveQuery(const NHdrf::TQueryId& queryId);
 

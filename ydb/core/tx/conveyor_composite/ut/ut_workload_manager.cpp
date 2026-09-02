@@ -120,10 +120,12 @@ namespace NKikimr::NConveyorComposite {
             auto query = scheduler->AddOrUpdateQuery("database", "limited", LimitedQueryId, {
                                                                                                 .CpuLimit = 2,
                                                                                             });
-            auto first = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), query);
-            auto second = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), query);
-            auto third = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), query);
-            auto extraDemand = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), query);
+            auto queryState = std::make_shared<TWorkloadQueryState>(
+                MakeWorkloadContext(LimitedQueryId), query, std::make_shared<TWorkloadPoolState>());
+            auto first = std::make_unique<TConveyorWorkUnit>(queryState);
+            auto second = std::make_unique<TConveyorWorkUnit>(queryState);
+            auto third = std::make_unique<TConveyorWorkUnit>(queryState);
+            auto extraDemand = std::make_unique<TConveyorWorkUnit>(queryState);
             scheduler->UpdateFairShare();
 
             UNIT_ASSERT(first->TryStart());
@@ -147,10 +149,88 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(query->CpuDemand.load(), 0);
 
             {
-                auto work = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), query);
+                auto queryState = std::make_shared<TWorkloadQueryState>(
+                    MakeWorkloadContext(LimitedQueryId), query, std::make_shared<TWorkloadPoolState>());
+                auto work = std::make_unique<TConveyorWorkUnit>(queryState);
                 UNIT_ASSERT_VALUES_EQUAL(query->CpuDemand.load(), 1);
             }
             UNIT_ASSERT_VALUES_EQUAL(query->CpuDemand.load(), 0);
+        }
+
+        Y_UNIT_TEST(QueryCpuTimeQuotaUsesActualDuration) {
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto scheduler = BuildScheduler(counters);
+            scheduler->UpdateQueriesInPool("database", "limited", {
+                                                                      .CpuRefillRateUsPerSecond = 0,
+                                                                      .CpuBurstCapacityUs = 10,
+                                                                  });
+
+            TWorkloadScheduler workloadScheduler(scheduler);
+            const auto context = MakeWorkloadContext(LimitedQueryId);
+            workloadScheduler.RegisterProcess(context);
+
+            TConveyorWorkUnits firstBatch;
+            UNIT_ASSERT(workloadScheduler.TryAddToBatch(context, firstBatch));
+            firstBatch.at(LimitedQueryId)->Finish(TDuration::MicroSeconds(11));
+            firstBatch.clear();
+
+            TConveyorWorkUnits secondBatch;
+            UNIT_ASSERT(!workloadScheduler.TryAddToBatch(context, secondBatch));
+            UNIT_ASSERT(workloadScheduler.ExtractNextWakeup());
+            workloadScheduler.UnregisterProcess(context);
+        }
+
+        Y_UNIT_TEST(PoolCpuTimeQuotaIsSharedByQueries) {
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto scheduler = BuildScheduler(counters);
+            scheduler->AddOrUpdatePool("database", "limited", {
+                                                                  .CpuRefillRateUsPerSecond = 0,
+                                                                  .CpuBurstCapacityUs = 10,
+                                                              });
+            scheduler->AddOrUpdateQuery("database", "limited", 2, {.CpuLimit = 1});
+            scheduler->UpdateFairShare();
+
+            TWorkloadScheduler workloadScheduler(scheduler);
+            const auto firstContext = MakeWorkloadContext(LimitedQueryId);
+            const auto secondContext = MakeWorkloadContext(2);
+            workloadScheduler.RegisterProcess(firstContext);
+            workloadScheduler.RegisterProcess(secondContext);
+
+            TConveyorWorkUnits firstBatch;
+            UNIT_ASSERT(workloadScheduler.TryAddToBatch(firstContext, firstBatch));
+            firstBatch.at(LimitedQueryId)->Finish(TDuration::MicroSeconds(11));
+            firstBatch.clear();
+
+            TConveyorWorkUnits secondBatch;
+            UNIT_ASSERT(!workloadScheduler.TryAddToBatch(secondContext, secondBatch));
+            workloadScheduler.UnregisterProcess(firstContext);
+            workloadScheduler.UnregisterProcess(secondContext);
+        }
+
+        Y_UNIT_TEST(CpuTimeQuotaUpdateAffectsExistingQueryState) {
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto scheduler = BuildScheduler(counters);
+            scheduler->UpdateQueriesInPool("database", "limited", {
+                                                                      .CpuRefillRateUsPerSecond = 0,
+                                                                      .CpuBurstCapacityUs = 0,
+                                                                  });
+
+            TWorkloadScheduler workloadScheduler(scheduler);
+            const auto context = MakeWorkloadContext(LimitedQueryId);
+            workloadScheduler.RegisterProcess(context);
+
+            TConveyorWorkUnits batch;
+            UNIT_ASSERT(!workloadScheduler.TryAddToBatch(context, batch));
+
+            scheduler->UpdateQueriesInPool("database", "limited", {
+                                                                      .CpuRefillRateUsPerSecond = std::numeric_limits<double>::infinity(),
+                                                                      .CpuBurstCapacityUs = std::numeric_limits<double>::infinity(),
+                                                                  });
+            scheduler->UpdateFairShare();
+            UNIT_ASSERT(workloadScheduler.TryAddToBatch(context, batch));
+            batch.at(LimitedQueryId)->Finish(TDuration::MicroSeconds(1));
+            batch.clear();
+            workloadScheduler.UnregisterProcess(context);
         }
 
         Y_UNIT_TEST(QueryLimitIsIndependentForDifferentQueries) {
@@ -158,9 +238,13 @@ namespace NKikimr::NConveyorComposite {
             auto scheduler = BuildScheduler(counters, 2);
             auto firstQuery = scheduler->AddOrUpdateQuery("database", "limited", LimitedQueryId, {.CpuLimit = 1});
             auto secondQuery = scheduler->AddOrUpdateQuery("database", "limited", 2, {.CpuLimit = 1});
-            auto first = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), firstQuery);
-            auto blocked = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), firstQuery);
-            auto second = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(2), secondQuery);
+            auto poolState = std::make_shared<TWorkloadPoolState>();
+            auto firstQueryState = std::make_shared<TWorkloadQueryState>(
+                MakeWorkloadContext(LimitedQueryId), firstQuery, poolState);
+            auto secondQueryState = std::make_shared<TWorkloadQueryState>(MakeWorkloadContext(2), secondQuery, poolState);
+            auto first = std::make_unique<TConveyorWorkUnit>(firstQueryState);
+            auto blocked = std::make_unique<TConveyorWorkUnit>(firstQueryState);
+            auto second = std::make_unique<TConveyorWorkUnit>(secondQueryState);
             scheduler->UpdateFairShare();
 
             UNIT_ASSERT(first->TryStart());
@@ -177,8 +261,10 @@ namespace NKikimr::NConveyorComposite {
             auto query = scheduler->GetQuery("database", "limited", LimitedQueryId);
 
             scheduler->UpdateQueriesInPool("database", "limited", {.CpuLimit = 1});
-            auto first = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), query);
-            auto second = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), query);
+            auto queryState = std::make_shared<TWorkloadQueryState>(
+                MakeWorkloadContext(LimitedQueryId), query, std::make_shared<TWorkloadPoolState>());
+            auto first = std::make_unique<TConveyorWorkUnit>(queryState);
+            auto second = std::make_unique<TConveyorWorkUnit>(queryState);
             scheduler->UpdateFairShare();
 
             UNIT_ASSERT(first->TryStart());
@@ -190,10 +276,14 @@ namespace NKikimr::NConveyorComposite {
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto scheduler = BuildScheduler(counters);
             auto secondQuery = scheduler->AddOrUpdateQuery("database", "limited", 2, {.CpuLimit = 1});
-            auto second = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(2), secondQuery);
+            auto poolState = std::make_shared<TWorkloadPoolState>();
+            auto secondQueryState = std::make_shared<TWorkloadQueryState>(MakeWorkloadContext(2), secondQuery, poolState);
+            auto second = std::make_unique<TConveyorWorkUnit>(secondQueryState);
             {
                 auto firstQuery = scheduler->GetQuery("database", "limited", LimitedQueryId);
-                auto first = std::make_unique<TConveyorWorkUnit>(MakeWorkloadContext(LimitedQueryId), firstQuery);
+                auto firstQueryState = std::make_shared<TWorkloadQueryState>(
+                    MakeWorkloadContext(LimitedQueryId), firstQuery, poolState);
+                auto first = std::make_unique<TConveyorWorkUnit>(firstQueryState);
                 scheduler->UpdateFairShare();
 
                 UNIT_ASSERT(first->TryStart());

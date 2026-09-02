@@ -26,6 +26,8 @@ using namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic;
 namespace {
 
 constexpr double Epsilon = 1e-8;
+constexpr double CpuMicrosecondsPerSecond = 1'000'000.0;
+constexpr double CpuQuotaBurstWindowSeconds = 1.0;
 
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
@@ -117,13 +119,12 @@ public:
 
         if (const auto& cpuLimitPercent = ev->Get()->Params.TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
             if (cpuLimitPercent == 0) {
-                attrs.CpuLimit = 0;
                 attrs.ReadLimit = TDuration::Zero();
             } else {
-                attrs.CpuLimit = std::max<ui64>(1, cpuLimitPercent * Scheduler->GetTotalCpuLimit() / 100);
                 attrs.ReadLimit = TDuration::MilliSeconds(cpuLimitPercent * 10);
             }
         }
+        ApplyCpuLimits(attrs, ev->Get()->Params.TotalCpuLimitPercentPerNode);
 
         Y_ASSERT(!poolId.empty());
 
@@ -168,18 +169,17 @@ public:
             UpdatePoolsGuarantee();
 
             poolIt->second.QueryCpuLimitPercentPerNode = ev->Get()->Config->QueryCpuLimitPercentPerNode;
-            UpdatePoolQueriesCpuLimit(databaseId, poolId);
+            UpdatePoolQueriesCpuLimits(databaseId, poolId);
 
             // Update limit
             if (const auto& cpuLimitPercent = ev->Get()->Config->TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
                 if (cpuLimitPercent == 0) {
-                    attrs.CpuLimit = 0;
                     attrs.ReadLimit = TDuration::Zero();
                 } else {
-                    attrs.CpuLimit = std::max<ui64>(1, cpuLimitPercent * Scheduler->GetTotalCpuLimit() / 100);
                     attrs.ReadLimit = TDuration::MilliSeconds(cpuLimitPercent * 10);
                 }
             }
+            ApplyCpuLimits(attrs, ev->Get()->Config->TotalCpuLimitPercentPerNode);
 
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
 
@@ -214,8 +214,8 @@ public:
         auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
         NHdrf::TStaticAttributes attrs {
             .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
-            .CpuLimit = CpuLimitFromPercent(poolIt == PoolSubscribtions.end() ? -1 : poolIt->second.QueryCpuLimitPercentPerNode),
         };
+        ApplyCpuLimits(attrs, poolIt == PoolSubscribtions.end() ? -1 : poolIt->second.QueryCpuLimitPercentPerNode);
 
         auto response = MakeHolder<TEvQueryResponse>();
         if (Scheduler->IsEnabled()) {
@@ -277,11 +277,31 @@ private:
         return 0;
     }
 
-    void UpdatePoolQueriesCpuLimit(const TString& databaseId, const TString& poolId) {
+    TCpuQuotaSettings CpuQuotaFromPercent(double percent) const {
+        if (percent < 0) {
+            return {};
+        }
+
+        const double refillRate = percent * Scheduler->GetTotalCpuLimit() * CpuMicrosecondsPerSecond / 100.0;
+        return {
+            .RefillRateUsPerSecond = refillRate,
+            .BurstCapacityUs = refillRate * CpuQuotaBurstWindowSeconds,
+        };
+    }
+
+    void ApplyCpuLimits(NHdrf::TStaticAttributes& attrs, double percent) const {
+        const auto cpuQuota = CpuQuotaFromPercent(percent);
+        attrs.CpuLimit = CpuLimitFromPercent(percent);
+        attrs.CpuRefillRateUsPerSecond = cpuQuota.RefillRateUsPerSecond;
+        attrs.CpuBurstCapacityUs = cpuQuota.BurstCapacityUs;
+    }
+
+    void UpdatePoolQueriesCpuLimits(const TString& databaseId, const TString& poolId) {
         const auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
-        const auto cpuLimit = CpuLimitFromPercent(
-            poolIt == PoolSubscribtions.end() ? -1 : poolIt->second.QueryCpuLimitPercentPerNode);
-        Scheduler->UpdateQueriesInPool(databaseId, poolId, {.CpuLimit = cpuLimit});
+        const auto cpuLimitPercent = poolIt == PoolSubscribtions.end() ? -1 : poolIt->second.QueryCpuLimitPercentPerNode;
+        NHdrf::TStaticAttributes attrs;
+        ApplyCpuLimits(attrs, cpuLimitPercent);
+        Scheduler->UpdateQueriesInPool(databaseId, poolId, attrs);
     }
 
 private:
@@ -419,6 +439,35 @@ TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TDatabaseId& databaseId, cons
         return {};
     }
     return std::static_pointer_cast<TQuery>(pool->GetQuery(queryId));
+}
+
+std::optional<TWorkloadCpuQuotaSettings> TComputeScheduler::GetCpuQuotaSettings(
+    const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId) const {
+    TReadGuard lock(Mutex);
+
+    auto database = Root->GetDatabase(databaseId);
+    if (!database) {
+        return std::nullopt;
+    }
+    auto pool = database->GetPool(poolId);
+    if (!pool) {
+        return std::nullopt;
+    }
+    auto query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId));
+    if (!query) {
+        return std::nullopt;
+    }
+
+    return TWorkloadCpuQuotaSettings{
+        .Query = {
+            .RefillRateUsPerSecond = query->GetCpuRefillRateUsPerSecond(),
+            .BurstCapacityUs = query->GetCpuBurstCapacityUs(),
+        },
+        .Pool = {
+            .RefillRateUsPerSecond = pool->GetCpuRefillRateUsPerSecond(),
+            .BurstCapacityUs = pool->GetCpuBurstCapacityUs(),
+        },
+    };
 }
 
 NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {

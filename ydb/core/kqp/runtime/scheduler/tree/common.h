@@ -35,6 +35,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         std::optional<ui64> CpuLimit;
         std::optional<ui64> CpuGuarantee;
+        std::optional<double> CpuRefillRateUsPerSecond;
+        std::optional<double> CpuBurstCapacityUs;
         std::optional<TDuration> ReadLimit; // per second
 
         auto GetCpuLimit() const {
@@ -43,6 +45,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         auto GetCpuGuarantee() const {
             return CpuGuarantee.value_or(0);
+        }
+
+        auto GetCpuRefillRateUsPerSecond() const {
+            return CpuRefillRateUsPerSecond.value_or(std::numeric_limits<double>::infinity());
+        }
+
+        auto GetCpuBurstCapacityUs() const {
+            return CpuBurstCapacityUs.value_or(std::numeric_limits<double>::infinity());
         }
 
         auto GetWeight() const {
@@ -63,6 +73,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             if (other.CpuGuarantee) {
                 CpuGuarantee = other.CpuGuarantee;
             }
+            if (other.CpuRefillRateUsPerSecond) {
+                CpuRefillRateUsPerSecond = other.CpuRefillRateUsPerSecond;
+            }
+            if (other.CpuBurstCapacityUs) {
+                CpuBurstCapacityUs = other.CpuBurstCapacityUs;
+            }
             if (other.ReadLimit) {
                 ReadLimit = other.ReadLimit;
             }
@@ -73,6 +89,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
                 << "Weight: " << GetWeight()
                 << ", CpuLimit: " << GetCpuLimit()
                 << ", CpuGuarantee: " << GetCpuGuarantee()
+                << ", CpuRefillRateUsPerSecond: " << GetCpuRefillRateUsPerSecond()
+                << ", CpuBurstCapacityUs: " << GetCpuBurstCapacityUs()
                 << ", ReadLimit: " << GetReadLimit();
         }
     };

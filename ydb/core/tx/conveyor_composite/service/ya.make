@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tx/conveyor_composite/tracing
     ydb/core/tx/conveyor_composite/usage
+    ydb/core/util
 )
 
 END()

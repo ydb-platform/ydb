@@ -37,7 +37,7 @@ public:
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
         NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
-        : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
+        : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed)
         , Width(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
         , ClusterName(clusterName)

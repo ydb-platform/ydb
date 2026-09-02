@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(done);
         UNIT_ASSERT(done->Get()->Ok);
 
-        cutter.OnBarrierResult(key, done->Get()->Ok);
+        cutter.OnBarrierResult(key, done->Get()->Ok, runtime.GetCurrentTime());
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
         UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
 
@@ -619,6 +619,86 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(edgeBs));
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::SentBarrier);
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(key), 0);
+    }
+
+    // Open item 4: a failed barrier must enter the disproval cooldown (~10m), not
+    // retry the whole sweep + barrier every nomination cadence against the same
+    // obstacle. Observable contract: TryNominate returns false within the window
+    // and true once it lapses. Repeated barrier failures plateau at the same ~10m
+    // window (they do not escalate the way sweep disprovals do, because the
+    // pre-barrier Attempts erase resets the counter back to 0 before each new
+    // OnBarrierResult raises it to 1 again). Assertions are purely behavioral:
+    // TryNominate return value and TEvCollectGarbage reaching the proxy.
+    Y_UNIT_TEST(BarrierFailureEntersDisprovalCooldown) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 4041;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 CurrentGen = 5;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeBs = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), edgeBs);
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        auto tryNominate = [&](bool expected) {
+            bool result = !expected;
+            runInActor([&](const NActors::TActorContext& ctx) {
+                result = cutter.TryNominate(ctx);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
+        };
+        // Drives a clean sweep all the way to the barrier message (empty portion
+        // snapshot, no disprovals). The observable outcome is TEvCollectGarbage
+        // going out to the proxy — that is the only assertion inside this lambda.
+        auto sweepCleanToBarrier = [&]() {
+            UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+            cutter.SetPortionSnapshot({});
+            runInActor([&](const NActors::TActorContext& ctx) {
+                cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+            });
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(edgeBs));
+        };
+
+        // First sweep → barrier → failure → cooldown window (~10m).
+        tryNominate(true);
+        sweepCleanToBarrier();
+        cutter.OnBarrierResult(key, /*ok=*/false, runtime.GetCurrentTime());
+
+        // cooldown(1) ≈ 10m from the failure: 2m and 7m are still inside the
+        // window; 11m clears it.
+        runtime.AdvanceCurrentTime(TDuration::Minutes(2));
+        tryNominate(false);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(5));
+        tryNominate(false);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(4));
+        tryNominate(true);
+
+        // Second sweep → barrier → second failure. The window must stay at ~10m
+        // (not escalate to ~20m), proving that repeated barrier failures plateau
+        // at the same cooldown level.
+        sweepCleanToBarrier();
+        cutter.OnBarrierResult(key, /*ok=*/false, runtime.GetCurrentTime());
+
+        // Second cooldown window: 2m blocked, then another 9m (total 11m from
+        // the second failure) clears it — same ~10m as the first window.
+        runtime.AdvanceCurrentTime(TDuration::Minutes(2));
+        tryNominate(false);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(9));
+        tryNominate(true);
     }
 
     Y_UNIT_TEST(InFlightGCTaskPinsDrainGate) {

@@ -172,8 +172,10 @@ TPC-C warmup is inline. The CLI receives the explicit value
 complete before measurement; YAML `warmup: 0` requests that minimum rather
 than the CLI's adaptive warmup. Measurement duration must be at least two
 seconds. Canonical throughput is uncapped successful NewOrder transactions per
-measured second. The CLI-reported, warehouse-capped `tpmC` remains available as
-the separate `tpcc_tpmc` metric. Latency SLOs use the admitted latency of
+requested admission second. Requests admitted before the deadline may finish
+during graceful drain; `cli_elapsed_seconds` exposes that drain-inclusive CLI
+interval. The CLI-reported, warehouse-capped `tpmC` and efficiency remain
+drain-inclusive diagnostics. Latency SLOs use the admitted latency of
 `latency-transaction`: it excludes the queue created by the configured
 `max-sessions` limit, but includes session acquisition and SDK retries. This
 keeps the latency signal monotonic enough for load search; the full terminal

@@ -277,7 +277,8 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
     metrics = {
         "transactions": selected["ok_count"] if new_orders > 0 else 0,
         "new_orders": new_orders,
-        "throughput": new_orders / measured_seconds,
+        "throughput": new_orders / request.duration_seconds,
+        "cli_elapsed_seconds": measured_seconds,
         "tpcc_tpmc": tpcc_tpmc,
         "efficiency_pct": efficiency,
         "errors": sum(transaction["failed_count"] for transaction in parsed_transactions.values()),
@@ -296,7 +297,7 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
 
 
 TPCC_JSON_RESULT = WorkloadResultAdapter(
-    schema_id="tpcc-json-v2",
+    schema_id="tpcc-json-v3",
     parse=_parse_tpcc_json_result,
     metrics=(
         WorkloadMetric(
@@ -312,25 +313,34 @@ TPCC_JSON_RESULT = WorkloadResultAdapter(
             "new_orders",
             "new orders",
             required=True,
-            description="Successful NewOrder transactions in the measurement window",
+            description=(
+                "Successful NewOrder transactions admitted during the requested measurement interval; completion "
+                "may include graceful drain"
+            ),
         ),
         WorkloadMetric(
             "throughput",
             "new orders/s",
             required=True,
-            description="Successful NewOrder transactions divided by measured seconds",
+            description="Successful NewOrder transactions divided by the requested admission interval",
+        ),
+        WorkloadMetric(
+            "cli_elapsed_seconds",
+            "s",
+            required=True,
+            description="CLI-reported elapsed measurement time including graceful drain",
         ),
         WorkloadMetric(
             "tpcc_tpmc",
             "tpmC",
             required=True,
-            description="CLI-reported capped TPC-C tpmC",
+            description="CLI-reported capped TPC-C tpmC using the drain-inclusive elapsed time",
         ),
         WorkloadMetric(
             "efficiency_pct",
             "%",
             required=True,
-            description="CLI-reported TPC-C efficiency",
+            description="CLI-reported TPC-C efficiency using the drain-inclusive elapsed time",
         ),
         WorkloadMetric(
             "errors",

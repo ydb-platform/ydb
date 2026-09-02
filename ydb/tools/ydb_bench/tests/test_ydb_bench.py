@@ -487,7 +487,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[2]["options"][4]["choices"], ["row", "column"])
         self.assertEqual(
             [item["result_schema_id"] for item in catalog],
-            ["generic-total-v1"] * 3 + ["tpcc-json-v2", "topic-window-v1"],
+            ["generic-total-v1"] * 3 + ["tpcc-json-v3", "topic-window-v1"],
         )
         self.assertEqual(
             [item["throughput_unit"] for item in catalog],
@@ -1445,7 +1445,7 @@ class YdbBenchTest(unittest.TestCase):
         for call in monitor.summary.call_args_list:
             self.assertEqual(call.kwargs, {"started_at_unix": 1001.0, "finished_at_unix": 1010.0})
         details = json.loads((self.root / "tpcc-repeat-1" / "workload-result.json").read_text(encoding="utf-8"))
-        self.assertEqual(details["schema_id"], "tpcc-json-v2")
+        self.assertEqual(details["schema_id"], "tpcc-json-v3")
         self.assertEqual(details["details"], payload)
         self.assertEqual(
             [item["phase"] for item in progress],
@@ -2183,7 +2183,8 @@ class YdbBenchTest(unittest.TestCase):
             {
                 "transactions": 300,
                 "new_orders": 120,
-                "throughput": 10,
+                "throughput": 12,
+                "cli_elapsed_seconds": 12,
                 "tpcc_tpmc": 25.5,
                 "efficiency_pct": 80.25,
                 "errors": 10,
@@ -2197,7 +2198,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result.details, payload)
         self.assertEqual(result.measurement_window, (1001.0, 1010.0))
         schema = local_ydb_workloads.workload_result_schema("tpcc")
-        self.assertEqual(schema["schema_id"], "tpcc-json-v2")
+        self.assertEqual(schema["schema_id"], "tpcc-json-v3")
         self.assertEqual(schema["throughput_unit"], "new orders/s")
         self.assertEqual(schema["slo_metrics"]["p999"], "p999_ms")
         self.assertNotIn("p99.9", schema["slo_metrics"])

@@ -345,7 +345,7 @@ bool IsNamedColumn(const TExprBase& node, const TStringBuf name) {
 }
 
 std::optional<Ydb::TypedValue> TryMakeTypedValue(const TCoDataCtor& literal) {
-    const auto* type = literal.Ref().GetTypeAnn();
+    const TTypeAnnotationNode* type = literal.Ref().GetTypeAnn();
     if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
         return std::nullopt;
     }
@@ -432,7 +432,7 @@ std::optional<int> CompareTypedValues(const Ydb::TypedValue& left, const Ydb::Ty
     NScheme::TTypeInfoMod leftType;
     NScheme::TTypeInfoMod rightType;
     TString err;
-    if (!NScheme::TypeInfoFromProto(left.GetType(), leftType, err) || !NScheme::TypeInfoFromProto(right.GetType(), rightType, err)) {
+    if (!NScheme::TypeInfoFromProto(left.type(), leftType, err) || !NScheme::TypeInfoFromProto(right.type(), rightType, err)) {
         return std::nullopt;
     }
     if (leftType.TypeInfo.GetTypeId() != rightType.TypeInfo.GetTypeId()) {
@@ -441,8 +441,8 @@ std::optional<int> CompareTypedValues(const Ydb::TypedValue& left, const Ydb::Ty
     TMemoryPool pool(256);
     TCell leftCell;
     TCell rightCell;
-    if (!CellFromProtoVal(leftType.TypeInfo, 0, &left.GetValue(), false, leftCell, err, pool) ||
-        !CellFromProtoVal(rightType.TypeInfo, 0, &right.GetValue(), false, rightCell, err, pool))
+    if (!CellFromProtoVal(leftType.TypeInfo, 0, &left.value(), false, leftCell, err, pool) ||
+        !CellFromProtoVal(rightType.TypeInfo, 0, &right.value(), false, rightCell, err, pool))
     {
         return std::nullopt;
     }
@@ -513,21 +513,6 @@ std::optional<TPhyRange> RangeFromCompareOp(const TStringBuf op, const Ydb::Type
     return std::nullopt;
 }
 
-std::optional<int> CompareFromBounds(const TPhyRange& l, const TPhyRange& r) {
-    if (!l.HasFrom()) {
-        return r.HasFrom() ? std::optional<int>(-1) : std::optional<int>(0);
-    }
-    if (!r.HasFrom()) {
-        return 1;
-    }
-    const auto* left = GetBoundLiteral(l.GetFrom());
-    const auto* right = GetBoundLiteral(r.GetFrom());
-    if (!left || !right) {
-        return std::nullopt;
-    }
-    return CompareTypedValues(*left, *right);
-}
-
 bool RangeIsPoint(const TPhyRange& range) {
     if (!range.HasFrom() || !range.HasTo() || !range.GetFrom().GetInclusive() || !range.GetTo().GetInclusive()) {
         return false;
@@ -546,13 +531,13 @@ std::optional<ui64> TryGetUint64Bound(const NKqpProto::TKqpPhySystemColumnBound&
     if (!literal) {
         return std::nullopt;
     }
-    switch (literal->GetType().type_id()) {
+    switch (literal->type().type_id()) {
         case Ydb::Type::UINT64:
         case Ydb::Type::TIMESTAMP:
-            return literal->GetValue().uint64_value();
+            return literal->value().uint64_value();
         case Ydb::Type::UINT32:
         case Ydb::Type::DATETIME:
-            return literal->GetValue().uint32_value();
+            return literal->value().uint32_value();
         default:
             return std::nullopt;
     }

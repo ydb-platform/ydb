@@ -3676,6 +3676,78 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["comparisonMissing"], "—")
         self.assertIn("config.measurement.warmup=localYdbDefaultWarmupSeconds(nextDefinition)", web._JS)
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the verification provenance UI test")
+    def test_local_ydb_web_shows_verification_cluster_provenance(self):
+        label_start = web._JS.index("function localVerificationClusterLabel")
+        label_finish = web._JS.index("function localVerificationBadge", label_start)
+        summary_start = web._JS.index("function localVerificationSummary")
+        summary_finish = web._JS.index("function localElapsed", summary_start)
+        context_start = web._JS.index("function localComparisonContext")
+        context_finish = web._JS.index("function localComparisonBuild", context_start)
+        mount_start = web._JS.index("function mountLocalYdbComparison(container")
+        mount_finish = web._JS.index("const localPhaseLabels", mount_start)
+        script = (
+            """
+            const esc=value=>String(value??'');
+            const metricLabel=value=>String(value??'—');
+            const localVerificationCount=()=>1;
+            const localVerificationBadge=()=>'<badge>';
+            const localComparisonStable=value=>value;
+            const localResultMetrics=result=>({
+              verified:result?.metrics_source==='verification',
+              source:result?.metrics_source==='verification'?'Holdout':'Search',
+              metrics:result?.verified_metrics||result?.selected_metrics||{}
+            });
+            """
+            + web._JS[label_start:label_finish]
+            + web._JS[summary_start:summary_finish]
+            + web._JS[context_start:context_finish]
+            + """
+            const localComparisonKey=item=>JSON.stringify([item.run,item.profile]);
+            const localComparisonId=item=>item.run+' / '+item.profile;
+            const localResultSchema=()=>({schema_id:'test',throughput_unit:'items/s'});
+            const localDisplayedMetrics=()=>[];
+            const localComparisonConfig=()=>({});
+            const localComparisonBuild=()=>({});
+            const localComparisonSemantic=()=>({same:true});
+            const localMetricLabel=()=>'';
+            const localMetricDirection=()=>null;
+            const localComparisonDelta=()=>'';
+            const mountLocalYdbComparisonCurves=()=>{};
+            """
+            + web._JS[mount_start:mount_finish]
+            + """
+            const verified=cluster=>({
+              result:{metrics_source:'verification',verified_metrics:{throughput:1},holdout_accepted:true},
+              parameters:{},verification:{cluster,status:'completed',accepted:true}
+            });
+            const container={dataset:{},closest:()=>({}),querySelector:()=>({}),_html:'',
+              set innerHTML(value){this._html=value},get innerHTML(){return this._html}};
+            mountLocalYdbComparison(container,{entries:[
+              {run:'base',profile:'p',state:'passed',...verified('search')},
+              {run:'candidate',profile:'p',state:'passed',...verified('fresh')}
+            ]});
+            process.stdout.write(JSON.stringify({
+              fresh:localVerificationSummary(verified('fresh')),
+              search:localVerificationSummary(verified('search')),
+              comparison:container.innerHTML
+            }));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertIn("fresh cluster", result["fresh"])
+        self.assertIn("retained search cluster", result["search"])
+        self.assertIn("Comparable with warnings", result["comparison"])
+        self.assertIn("Verification cluster", result["comparison"])
+        self.assertIn("retained search cluster → fresh cluster", result["comparison"])
+
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
     def test_local_ydb_web_hides_latency_for_empty_measurements(self):
         result_start = web._JS.index("function localResultMetrics")
@@ -7241,6 +7313,7 @@ class WebTest(unittest.TestCase):
         verified=False,
         result_schema=None,
         extra_metrics=None,
+        verification_cluster="search",
     ):
         self._manifest(directory)
         main_path = directory / "run.json"
@@ -7304,6 +7377,7 @@ class WebTest(unittest.TestCase):
             )
             verification = {
                 "status": "completed",
+                "cluster": verification_cluster,
                 "configured_repetitions": 3,
                 "completed_repetitions": 3,
                 "accepted": True,
@@ -8129,6 +8203,7 @@ class WebTest(unittest.TestCase):
             self.assertEqual(comparison["entries"][0]["result"]["verified_metrics"]["throughput"], 1050)
             self.assertNotIn("commands", comparison["entries"][0]["result"]["verified_metrics"])
             self.assertTrue(comparison["entries"][0]["verification"]["accepted"])
+            self.assertEqual(comparison["entries"][0]["verification"]["cluster"], "search")
             self.assertNotIn("samples", comparison["entries"][0]["verification"])
             self.assertEqual(comparison["entries"][1]["parameters"]["workload"]["operation"], "mixed")
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):

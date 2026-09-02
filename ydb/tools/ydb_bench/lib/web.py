@@ -1207,7 +1207,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localComparisonContext(item){return {\n'
     "  'Host':item.platform?.uname?.node??'—','CPU':item.platform?.cpu_model??'—',\n"
     "  'Kernel':item.platform?.uname?.release??'—','CPU topology':JSON.stringify(localComparisonStable(item.cpu_topology??null)),\n"
-    "  'YDB CLI build':item.binaries?.ydb_cli?.sha256??'—'\n"
+    "  'YDB CLI build':item.binaries?.ydb_cli?.sha256??'—',\n"
+    "  'Verification cluster':localResultMetrics(item.result).verified?localVerificationClusterLabel(item.verification):'not applicable'\n"
     '}}\n'
     "function localComparisonBuild(item){return {'ydbd':item.binaries?.ydbd?.sha256??'—','Tool revision':item.tool_revision??'—'}}\n"
     'function localComparisonStable(value){\n'
@@ -1238,6 +1239,11 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localVerificationCount(result,parameters={},verification={}){\n'
     '  return result?.verification_repetitions??verification?.configured_repetitions??verification?.completed_repetitions??\n'
     '    parameters?.measurement?.verification_repetitions??0\n'
+    '}\n'
+    'function localVerificationClusterLabel(verification={}){\n'
+    "  if(verification?.cluster==='fresh')return 'fresh cluster';\n"
+    "  if(verification?.cluster==='search')return 'retained search cluster';\n"
+    "  return 'unknown cluster'\n"
     '}\n'
     'function localVerificationBadge(result,parameters={},verification={}){\n'
     '  const view=localResultMetrics(result);if(!view.verified)return \'\';\n'
@@ -1524,6 +1530,7 @@ function localVerificationSummary(data){
     repetitions+' independent holdout repetition'+(Number(repetitions)===1?'':'s'):
     'Independent holdout measurements';
   const outcomes=[];
+  if(verification.cluster)outcomes.push(localVerificationClusterLabel(verification));
   if(verification.decision){
     outcomes.push((verification.evaluation_kind==='objective'?'Objective':'Validity check')+': '+verification.decision)
   }
@@ -3725,6 +3732,7 @@ class RunService:
                             "finished_at",
                             "load",
                             "dynamic_nodes",
+                            "cluster",
                             "configured_repetitions",
                             "completed_repetitions",
                             "accepted",

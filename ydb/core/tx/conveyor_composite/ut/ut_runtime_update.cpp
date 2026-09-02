@@ -237,6 +237,13 @@ ui64 GetQueueSizeLimitCounter(const TRuntimeFixture& fixture, const ESpecialTask
         ->Val();
 }
 
+ui64 GetWorkersCountLimitCounter(const TRuntimeFixture& fixture, const TString& poolName) {
+    return fixture.Counters->GetSubgroup("module_id", "COMPOSITE_CONVEYOR")
+        ->GetSubgroup("pool_name", poolName)
+        ->GetCounter("Value/WorkersCountLimit")
+        ->Val();
+}
+
 std::pair<ui32, ui32> RunWeightedPhase(TRuntimeFixture& fixture, const ESpecialTaskCategory blockerCategory) {
     TAtomicCounter counter;
     TAutoPtr<NActors::IEventHandle> heldTask;
@@ -888,7 +895,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         fixture.Runtime.SetObserverFunc(previousObserver);
     }
 
-    Y_UNIT_TEST(NewConfigSupersedesInProgressUpdate) {
+    Y_UNIT_TEST(LatestConfigSupersedesInProgressShrinkAndGrows) {
         TRuntimeFixture fixture(BuildSinglePoolConfig(2.4));
         TAtomicCounter counter;
         TAutoPtr<NActors::IEventHandle> heldTask;
@@ -912,7 +919,12 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT(responses.empty());
 
-        auto latestConfig = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}}, {1.4});
+        auto intermediateConfig = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}}, {1.4});
+        const auto [intermediateId, intermediateCookie] = fixture.SendUpdate(intermediateConfig);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(responses.empty());
+
+        auto latestConfig = BuildSinglePoolConfig(3.4);
         const auto [latestId, latestCookie] = fixture.SendUpdate(latestConfig);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT(responses.empty());
@@ -927,10 +939,13 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         fixture.WaitForUpdate(latestId, latestCookie);
         UNIT_ASSERT(std::find(responses.begin(), responses.end(), latestId) != responses.end());
         UNIT_ASSERT(std::find(responses.begin(), responses.end(), firstId) == responses.end());
+        UNIT_ASSERT(std::find(responses.begin(), responses.end(), intermediateId) == responses.end());
         Y_UNUSED(firstCookie);
+        Y_UNUSED(intermediateCookie);
 
         fixture.Runtime.SetObserverFunc(previousObserver);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 4);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 1);
     }
 

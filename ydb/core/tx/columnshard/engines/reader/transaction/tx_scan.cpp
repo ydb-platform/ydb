@@ -17,22 +17,8 @@ namespace NKikimr::NOlap::NReader {
 LWTRACE_USING(YDB_CS_SCAN);
 
 void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
-    YDB_LOG_WARN("",
-        {"event", "TTxScan failed"},
-        {"problem", problem},
-        {"details", details});
     const auto& request = Ev->Get()->Record;
-    const TString table = request.GetTablePath();
-    const ui32 scanGen = request.GetGeneration();
-    const auto scanComputeActor = Ev->Sender;
-
-    auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
-    ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-    auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-        TStringBuilder() << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << problem << "/" << details);
-    NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-
-    ctx.Send(scanComputeActor, ev.Release());
+    SendScanError(Self->TabletID(), Ev->Sender, request.GetGeneration(), request.GetTablePath(), problem, details, ctx);
 }
 
 TSnapshot TTxScan::GetSnapshot(const NColumnShard::TSchemeShardLocalPathId& ssPathId) const {
@@ -170,17 +156,6 @@ TConclusionStatus TTxScan::InitPKRangesFilter(TReadDescription& read) const {
     return TConclusionStatus::Success();
 }
 
-TConclusion<TReadMetadataBase::TConstPtr> TTxScan::BuildReadMetadata(
-    const TReadDescription& read, const IScannerConstructor& scannerConstructor) const {
-    const TInstant startInstant = TAppData::TimeProvider->Now();
-    auto newRange = scannerConstructor.BuildReadMetadata(Self, read);
-    if (newRange.IsFail()) {
-        return TConclusionStatus::Fail(newRange.GetErrorMessage());
-    }
-    Self->Counters.GetScanCounters().OnReadMetadata(TAppData::TimeProvider->Now() - startInstant);
-    return TReadMetadataBase::TConstPtr(TValidator::CheckNotNull(newRange.DetachResult()));
-}
-
 std::unique_ptr<TTxScan::TDiagnosticsEvent> TTxScan::MakeDiagnosticsEvent(const TReadDescription& read) const {
     if (!AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
         return nullptr;
@@ -291,7 +266,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         return SendError("cannot build ranges filter", status.GetErrorMessage(), ctx);
     }
 
-    auto metadataConclusion = BuildReadMetadata(read, *scannerConstructor);
+    auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), *scannerConstructor, read);
     if (metadataConclusion.IsFail()) {
         return SendError("cannot build metadata", metadataConclusion.GetErrorMessage(), ctx);
     }

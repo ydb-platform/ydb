@@ -1,4 +1,6 @@
 #pragma once
+#include "common.h"
+
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
@@ -22,8 +24,7 @@ private:
     NConveyorComposite::TCPULimitsConfig GetCpuLimits() const;
     const TVersionedPresetSchemas& GetPresetSchemas() const;
 
-    // Steps building the read description. A step that can fail returns only the failure details:
-    // Complete() names the failed step itself, so the scan error keeps its two-part message.
+    // Steps building the read description
     TReadDescription MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
         const std::shared_ptr<NLWTrace::TOrbit>& orbit, const TString& readerName) const;
     TConclusionStatus InitTableAccessor(
@@ -34,8 +35,6 @@ private:
     TConclusionStatus InitScanCursor(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
     TConclusionStatus InitProgram(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
     TConclusionStatus InitPKRangesFilter(TReadDescription& read) const;
-    TConclusion<TReadMetadataBase::TConstPtr> BuildReadMetadata(
-        const TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
 
     // Null when diagnostics are disabled.
     std::unique_ptr<TDiagnosticsEvent> MakeDiagnosticsEvent(const TReadDescription& read) const;

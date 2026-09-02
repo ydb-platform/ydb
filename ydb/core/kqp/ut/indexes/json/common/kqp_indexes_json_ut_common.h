@@ -35,7 +35,9 @@ extern const std::string kSecondLongSqlInValue;
 
 TKikimrRunner Kikimr(bool enableJsonIndex = true, bool enableJsonIndexAutoSelect = false);
 
-TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect = false);
+TKikimrRunner KikimrJson(bool enableJsonIndexAutoSelect = false, bool compact = false);
+
+TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect = false, bool compact = false);
 
 void CreateTestTable(NYdb::NQuery::TQueryClient& db, const std::string& type = "Json", bool withIndex = false);
 

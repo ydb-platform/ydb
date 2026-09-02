@@ -61,7 +61,7 @@ private:
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
             return Finish.GetValue();
         } else {
@@ -69,7 +69,7 @@ private:
         }
     }
 
-    virtual NArrow::TSimpleRow GetFinishPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetLastPK() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
             return Start.GetValue();
         } else {

@@ -29,6 +29,24 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+EHostState ProtoToHostState(const PartitionDirect::NProto::EHostState state)
+{
+    switch (state) {
+        case PartitionDirect::NProto::Online:
+            return EHostState::Online;
+        case PartitionDirect::NProto::TemporaryOffline:
+            return EHostState::TemporaryOffline;
+        case PartitionDirect::NProto::Offline:
+            return EHostState::Offline;
+        default:
+            Y_ABORT("unexpected proto host state: %d", state);
+    }
+}
+
+}   // namespace
+
 using namespace NKikimr;
 using namespace NActors;
 
@@ -327,6 +345,12 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
                 connection.GetPersistentBufferDDiskId()));
         }
+        TVector<std::pair<EHostState, bool>> initialHostStates;
+        for (const auto& connection: conn.GetConnections()) {
+            initialHostStates.emplace_back(
+                ProtoToHostState(connection.GetState()),
+                connection.GetIsBroken());
+        }
 
         // Session counters are aggregated at the disk level: all direct block
         // groups of this tablet share the same counters chain, so per-group
@@ -350,6 +374,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+            std::move(initialHostStates),
             std::move(transport),
             dbgCountersRoot);
 
@@ -641,6 +666,9 @@ void TPartitionActor::HandleInitialAllocationResult(
                 connection->MutableDDiskId()->CopyFrom(node.GetDDiskId());
                 connection->MutablePersistentBufferDDiskId()->CopyFrom(
                     node.GetPersistentBufferDDiskId());
+                connection->SetState(
+                    PartitionDirect::NProto::EHostState::Online);
+                connection->SetIsBroken(false);
             }
         }
 

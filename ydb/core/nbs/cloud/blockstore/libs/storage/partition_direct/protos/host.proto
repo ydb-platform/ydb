@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package NYdb.NBS.PartitionDirect.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
+
+enum EHostState
+{
+    Online = 0;
+    TemporaryOffline = 1;
+    Offline = 2;
+};

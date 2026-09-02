@@ -140,7 +140,8 @@ private:
 
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
-    IHostStateController* hostStateController)
+    IHostStateController* hostStateController,
+    const TVector<std::pair<EHostState, bool>>& initialStates)
     : StorageConfig(std::move(storageConfig))
     , OracleConfig(std::make_shared<TOracleConfig>(StorageConfig))
     , HostStateController(hostStateController)
@@ -153,10 +154,11 @@ TOracle::TOracle(
     , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
     , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
-    , HostStatistics(DirectBlockGroupHostCount)
-    , HostStates(DirectBlockGroupHostCount)
+    , HostStatistics(initialStates.size())
+    , HostStates(initialStates.size())
+    , HostsHealths(initialStates.size())
     , HostsReconnectDelays(
-          DirectBlockGroupHostCount,
+          initialStates.size(),
           TBackoffDelayProvider(MinReconnectDelay, MaxReconnectDelay))
     , TimePredictors(
           OperationCount,
@@ -164,9 +166,21 @@ TOracle::TOracle(
               OracleConfig->GetTimePredictionHistorySize(),
               OracleConfig->GetTimePredictionNthFromEnd()))
 {
-    HostsHealths.resize(HostStates.size());
-    for (auto& healths: HostsHealths) {
-        healths = EHostHealth::Online;
+    for (size_t i = 0; i < initialStates.size(); ++i) {
+        const auto [state, isBroken] = initialStates[i];
+        HostStates[i].State = state;
+        switch (state) {
+            case EHostState::Online:
+                HostsHealths[i] = EHostHealth::Online;
+                break;
+            case EHostState::TemporaryOffline:
+                HostsHealths[i] = EHostHealth::TemporaryOffline;
+                break;
+            case EHostState::Offline:
+                HostsHealths[i] =
+                    isBroken ? EHostHealth::Broken : EHostHealth::Offline;
+                break;
+        }
     }
 }
 

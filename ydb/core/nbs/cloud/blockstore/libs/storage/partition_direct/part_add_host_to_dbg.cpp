@@ -100,6 +100,9 @@ NProto::TError AddConnection(
         result->MutableDirectBlockGroupConnections(dbgId)->AddConnections();
     connection->MutableDDiskId()->CopyFrom(newDDiskId);
     connection->MutablePersistentBufferDDiskId()->CopyFrom(newPBufferId);
+    connection->SetState(PartitionDirect::NProto::EHostState::Online);
+    connection->SetIsBroken(false);
+
     return {};
 }
 

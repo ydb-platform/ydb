@@ -509,7 +509,6 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             }
         }
     }
-
 } // TSentinelBaseTests
 
 Y_UNIT_TEST_SUITE(TSentinelTests) {
@@ -896,6 +895,133 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal);
         }
         env.SetPDiskState({id}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+    }
+
+    Y_UNIT_TEST(PDiskFaultyGuardWithMaintenanceStatusChange) {
+        ui32 nodes = 1;
+        ui32 disksPerShelf = 5;
+        ui32 disksPerNode = disksPerShelf;
+
+        NKikimrCms::TCmsConfig config;
+        config.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+        config.MutableSentinelConfig()->SetFaultyPDisksThresholdPerNode(disksPerShelf - 1);
+        config.MutableSentinelConfig()->SetDefaultStateLimit(1);
+        TTestEnv env(nodes, disksPerNode, config);
+        env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_ERROR);
+
+        const ui32 nodeIdx = 0;
+        const ui32 nodeId = env.GetNodeId(nodeIdx);
+        const TPDiskID targetId = env.PDiskId(nodeIdx, disksPerShelf - 1);
+
+        env.SetNodeFaulty(nodeId, true);
+        env.SimulateSleep(TDuration::Minutes(1));
+
+        bool targetSeenFaulty = false;
+        bool targetSeenMaintenanceNoRequest = false;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            const auto& request = event->Get()->Record;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    if (update.GetHostKey().GetNodeId() == targetId.NodeId
+                            && update.GetPDiskId() == targetId.DiskId) {
+                        if (update.GetStatus() == NKikimrBlobStorage::EDriveStatus::FAULTY) {
+                            targetSeenFaulty = true;
+                        }
+                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST) {
+                            targetSeenMaintenanceNoRequest = true;
+                        }
+                    }
+                }
+            }
+        });
+
+        for (ui32 pdiskIdx = 0; pdiskIdx < disksPerShelf; ++pdiskIdx) {
+            env.SetPDiskState({env.PDiskId(nodeIdx, pdiskIdx)}, FaultyStates[0]);
+        }
+        env.SetNodeFaulty(nodeId, false);
+        env.SimulateSleep(TDuration::Minutes(5));
+
+        observerHolder.Remove();
+        UNIT_ASSERT_C(!targetSeenFaulty,
+            "FAULTY must not bypass guardian when maintenance status changes at the same time");
+        UNIT_ASSERT_C(targetSeenMaintenanceNoRequest,
+            "Maintenance status must still be updated independently when drive status is blocked");
+    }
+
+    Y_UNIT_TEST(MaintenanceStatus) {
+        NKikimrCms::TCmsConfig cmsConfig;
+        cmsConfig.MutableSentinelConfig()->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::MAINTENANCE);
+        TTestEnv env(8, 4, cmsConfig);
+
+        const TPDiskID id = env.RandomPDiskID();
+        bool maintenanceOnlyReasonSeen = false;
+        auto logObserverHolder = env.AddObserver<TCms::TEvPrivate::TEvLogAndSend>([&](TCms::TEvPrivate::TEvLogAndSend::TPtr& event) {
+            const auto& logData = event->Get()->LogData;
+            if (logData.GetRecordType() != NKikimrCms::TLogRecordData::PDISK_MONITOR_ACTION) {
+                return;
+            }
+
+            const auto& action = logData.GetPDiskMonitorAction();
+            if (action.GetPDiskId().GetNodeId() == id.NodeId
+                    && action.GetPDiskId().GetDiskId() == id.DiskId
+                    && action.GetCurrentMaintenanceStatus() != action.GetRequiredMaintenanceStatus()) {
+                UNIT_ASSERT_VALUES_EQUAL(action.GetReason(), "maintenance only");
+                maintenanceOnlyReasonSeen = true;
+            }
+        });
+
+        bool maintenanceStatusSeen = false;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            const auto& request = event->Get()->Record;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    ui32 nodeId = update.GetHostKey().GetNodeId();
+                    ui32 pdiskId = update.GetPDiskId();
+
+                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
+                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
+                            maintenanceStatusSeen = true;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Set node as faulty which should trigger LONG_TERM_MAINTENANCE_PLANNED status
+        env.SetNodeFaulty(id.NodeId, true);
+        env.SimulateSleep(TDuration::Minutes(1));
+
+        observerHolder.Remove();
+        UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status LONG_TERM_MAINTENANCE_PLANNED should have been sent");
+
+        maintenanceStatusSeen = false;
+        observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            const auto& request = event->Get()->Record;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    ui32 nodeId = update.GetHostKey().GetNodeId();
+                    ui32 pdiskId = update.GetPDiskId();
+
+                    if (id.NodeId == nodeId && id.DiskId == pdiskId) {
+                        if (update.GetMaintenanceStatus() == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST) {
+                            maintenanceStatusSeen = true;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Reset faulty marker on the node
+        env.SetNodeFaulty(id.NodeId, false);
+        env.SimulateSleep(TDuration::Minutes(1));
+
+        observerHolder.Remove();
+        UNIT_ASSERT_C(maintenanceStatusSeen, "Maintenance status NO_REQUEST should have been sent after removing faulty marker");
+        logObserverHolder.Remove();
+        UNIT_ASSERT_C(maintenanceOnlyReasonSeen, "Maintenance-only status changes must have a meaningful reason");
     }
 } // TSentinelTests
 

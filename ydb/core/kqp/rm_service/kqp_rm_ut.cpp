@@ -737,7 +737,6 @@ void KqpRm::DisonnectNodes() {
     CheckSnapshot(0, {{1000, 100}}, rm_first);
 }
 
-// P-09: Limit sensor reflects the configured pool percent; Allocated grows on acquire and drops on release.
 void KqpRm::P09PoolLimitAndAllocated() {
     StartRms();
     NKikimr::TActorSystemStub stub;
@@ -753,9 +752,7 @@ void KqpRm::P09PoolLimitAndAllocated() {
     NRm::TKqpResourcesRequest request{.Memory = chunk};
     UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
 
-    // Limit is set when the pool record is first created
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Limit", false)->Val(), (i64)poolLimit);
-    // Allocated grows after acquire
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), (i64)chunk);
 
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
@@ -768,14 +765,12 @@ void KqpRm::P09PoolLimitAndAllocated() {
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), 0);
 }
 
-// P-11: DeniedRequests and DeniedBytes grow when the pool limit denies an allocation.
 void KqpRm::P11PoolDenied() {
     StartRms();
     NKikimr::TActorSystemStub stub;
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
-    // Pool limit = 10% of 1000 = 100. Each chunk = 40.
-    // First two allocations fill the pool (40 + 40 = 80 < 100); third is denied (80 + 40 > 100).
+    // Pool limit = 10% of 1000 = 100. chunk=40; first two fill 80 < 100, third (80+40 > 100) is denied.
     constexpr double poolPercent = 10;
     constexpr ui64 chunk = 40;
 
@@ -788,23 +783,20 @@ void KqpRm::P11PoolDenied() {
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
 
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes",    true)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes", true)->Val(), 0);
 
-    // Third allocation exceeds the 100-byte pool limit
     UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
 
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes",    true)->Val(), (i64)chunk);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes", true)->Val(), (i64)chunk);
 
-    // A second denial accumulates
     UNIT_ASSERT(!rm->AllocateResources(*tx, 4, request));
 
     UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes",    true)->Val(), (i64)(2 * chunk));
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes", true)->Val(), (i64)(2 * chunk));
 }
 
-// P-12: WouldBeDeniedBytes grows when ExternalMemory on a memory-bearing request exceeds
-// the pool's remaining headroom after the memory portion is acquired.
+// P-12: WouldBeDeniedBytes grows when ExternalMemory exceeds the pool's remaining headroom after Memory is acquired.
 void KqpRm::P12PoolWouldBeDeniedBytes() {
     StartRms();
     NKikimr::TActorSystemStub stub;
@@ -816,22 +808,17 @@ void KqpRm::P12PoolWouldBeDeniedBytes() {
 
     UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 400}));
 
-    // Memory=50 succeeds (pool used → 450, headroom → 50).
-    // ExternalMemory=200 exceeds headroom of 50 → WouldBeDeniedBytes += 200.
+    // Memory=50 acquired (headroom 100→50); ExternalMemory=200 > 50 → WouldBeDeniedBytes += 200.
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 50, .ExternalMemory = 200}));
     UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("WouldBeDeniedBytes", true)->Val(), 200);
 
-    // Memory=10 succeeds (pool used → 460, headroom → 40).
-    // ExternalMemory=30 ≤ headroom of 40 → counter must not move.
+    // Memory=10 acquired (headroom 50→40); ExternalMemory=30 ≤ 40 → counter must not move.
     UNIT_ASSERT(rm->AllocateResources(*tx, 3, NRm::TKqpResourcesRequest{.Memory = 10, .ExternalMemory = 30}));
     UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("WouldBeDeniedBytes", true)->Val(), 200);
 }
 
-// P-13: SpillingFlag becomes 1 when pool usage crosses the spilling threshold,
-// and returns to 0 when usage drops back below it.
 // Default SpillingPercent = 80 (proto default; not set by MakeKqpResourceManagerConfig).
-// Pool limit = 50% of 1000 = 500.
-// OverLimit = 500 * (100-80)/100 = 100; spilling when Available() < 100, i.e. Used > 400.
+// Pool = 50% of 1000 = 500; OverLimit = 500*(100-80)/100 = 100; spilling when Available() < 100 (Used > 400).
 void KqpRm::P13PoolSpillingFlag() {
     StartRms();
     NKikimr::TActorSystemStub stub;

@@ -84,11 +84,11 @@ public:
         SetActualLimits();
         if (sensorGroup) {
             Sensors = std::make_unique<TPoolSensors>();
-            Sensors->Limit           = sensorGroup->GetCounter("Limit",              false);
-            Sensors->Allocated       = sensorGroup->GetCounter("Allocated",          false);
-            Sensors->DeniedRequests  = sensorGroup->GetCounter("DeniedRequests",     true);
-            Sensors->DeniedBytes     = sensorGroup->GetCounter("DeniedBytes",        true);
-            Sensors->SpillingFlag    = sensorGroup->GetCounter("SpillingFlag",       false);
+            Sensors->Limit = sensorGroup->GetCounter("Limit", false);
+            Sensors->Allocated = sensorGroup->GetCounter("Allocated", false);
+            Sensors->DeniedRequests = sensorGroup->GetCounter("DeniedRequests", true);
+            Sensors->DeniedBytes = sensorGroup->GetCounter("DeniedBytes", true);
+            Sensors->SpillingFlag = sensorGroup->GetCounter("SpillingFlag", false);
             Sensors->WouldBeDeniedBytes = sensorGroup->GetCounter("WouldBeDeniedBytes", true);
             Sensors->Limit->Set(Limit);
         }

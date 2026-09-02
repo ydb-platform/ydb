@@ -206,8 +206,8 @@ public:
     // Returns the counter subgroup for a named pool's sensors.
     NMonitoring::TDynamicCounterPtr GetPoolSensorGroup(const TString& database, const TString& poolId) {
         return GetServiceCounters(Counters, "kqp")
-            ->GetSubgroup("pool_db", database)
-            ->GetSubgroup("pool_name", poolId);
+            ->GetSubgroup("subsystem", "workload_manager")
+            ->GetSubgroup("pool", database + "/" + poolId);
     }
 
     void AssertResourceManagerStats(
@@ -752,17 +752,17 @@ void KqpRm::P09PoolLimitAndAllocated() {
     NRm::TKqpResourcesRequest request{.Memory = chunk};
     UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
 
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Limit", false)->Val(), (i64)poolLimit);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), (i64)chunk);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryLimit", false)->Val(), (i64)poolLimit);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), (i64)chunk);
 
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), (i64)(2 * chunk));
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), (i64)(2 * chunk));
 
     rm->FreeResources(*tx, 1, request);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), (i64)chunk);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), (i64)chunk);
 
     rm->FreeResources(*tx, 2, request);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("Allocated", false)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 0);
 }
 
 void KqpRm::P11PoolDenied() {
@@ -782,18 +782,18 @@ void KqpRm::P11PoolDenied() {
     UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
 
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes", true)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedRequests", true)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedBytes", true)->Val(), 0);
 
     UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
 
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes", true)->Val(), (i64)chunk);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedRequests", true)->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedBytes", true)->Val(), (i64)chunk);
 
     UNIT_ASSERT(!rm->AllocateResources(*tx, 4, request));
 
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedRequests", true)->Val(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("DeniedBytes", true)->Val(), (i64)(2 * chunk));
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedRequests", true)->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryDeniedBytes", true)->Val(), (i64)(2 * chunk));
 }
 
 // P-12: WouldBeDeniedBytes grows when ExternalMemory exceeds the pool's remaining headroom after Memory is acquired.
@@ -810,11 +810,11 @@ void KqpRm::P12PoolWouldBeDeniedBytes() {
 
     // Memory=50 acquired (headroom 100→50); ExternalMemory=200 > 50 → WouldBeDeniedBytes += 200.
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 50, .ExternalMemory = 200}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("WouldBeDeniedBytes", true)->Val(), 200);
+    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemoryWouldBeDeniedBytes", true)->Val(), 200);
 
     // Memory=10 acquired (headroom 50→40); ExternalMemory=30 ≤ 40 → counter must not move.
     UNIT_ASSERT(rm->AllocateResources(*tx, 3, NRm::TKqpResourcesRequest{.Memory = 10, .ExternalMemory = 30}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("WouldBeDeniedBytes", true)->Val(), 200);
+    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemoryWouldBeDeniedBytes", true)->Val(), 200);
 }
 
 // Default SpillingPercent = 80 (proto default; not set by MakeKqpResourceManagerConfig).
@@ -827,19 +827,19 @@ void KqpRm::P13PoolSpillingFlag() {
     auto tx = MakePoolTx(1, rm, "pool_e", 50);
     auto sg = GetPoolSensorGroup("db1", "pool_e");
 
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("SpillingFlag", false)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 0);
 
     // Used = 400, Available = 100 = OverLimit; 100 < 100 is false → no spilling.
     UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 400}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("SpillingFlag", false)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 0);
 
     // Used = 401, Available = 99 < 100 → spilling triggered.
     UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 1}));
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("SpillingFlag", false)->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 1);
 
     // Release the 1-byte task: Used = 400, Available = 100; 100 < 100 is false → no spilling.
     rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 1});
-    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("SpillingFlag", false)->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sg->GetCounter("MemorySpillingFlag", false)->Val(), 0);
 }
 
 } // namespace NKqp

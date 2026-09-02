@@ -84,12 +84,12 @@ public:
         SetActualLimits();
         if (sensorGroup) {
             Sensors = std::make_unique<TPoolSensors>();
-            Sensors->Limit = sensorGroup->GetCounter("Limit", false);
-            Sensors->Allocated = sensorGroup->GetCounter("Allocated", false);
-            Sensors->DeniedRequests = sensorGroup->GetCounter("DeniedRequests", true);
-            Sensors->DeniedBytes = sensorGroup->GetCounter("DeniedBytes", true);
-            Sensors->SpillingFlag = sensorGroup->GetCounter("SpillingFlag", false);
-            Sensors->WouldBeDeniedBytes = sensorGroup->GetCounter("WouldBeDeniedBytes", true);
+            Sensors->Limit = sensorGroup->GetCounter("MemoryLimit", false);
+            Sensors->Allocated = sensorGroup->GetCounter("MemoryAllocated", false);
+            Sensors->DeniedRequests = sensorGroup->GetCounter("MemoryDeniedRequests", true);
+            Sensors->DeniedBytes = sensorGroup->GetCounter("MemoryDeniedBytes", true);
+            Sensors->SpillingFlag = sensorGroup->GetCounter("MemorySpillingFlag", false);
+            Sensors->WouldBeDeniedBytes = sensorGroup->GetCounter("MemoryWouldBeDeniedBytes", true);
             Sensors->Limit->Set(Limit);
         }
     }
@@ -356,9 +356,8 @@ public:
                 if (success) {
                     NMonitoring::TDynamicCounterPtr sensorGroup;
                     if (Counters) {
-                        sensorGroup = Counters->GetKqpCounters()
-                            ->GetSubgroup("pool_db", tx.Database)
-                            ->GetSubgroup("pool_name", tx.PoolId);
+                        sensorGroup = Counters->GetWorkloadManagerCounters()
+                            ->GetSubgroup("pool", TStringBuilder() << tx.Database << "/" << tx.PoolId);
                     }
                     it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load(), sensorGroup);
                 } else {

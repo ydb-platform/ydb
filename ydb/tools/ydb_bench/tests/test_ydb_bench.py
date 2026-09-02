@@ -4744,7 +4744,7 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
         self.assertEqual(no_feasible_latency.failing_load, 10)
         self.assertEqual(below_start_attempts, [10])
 
-    def test_load_controllers_reject_automatic_search_that_exceeds_attempt_budget(self):
+    def test_load_controllers_bound_automatic_search_attempts(self):
         measure = mock.Mock()
         latency = {
             "parameter": "rate",
@@ -4782,9 +4782,34 @@ Total 999 999 999 999 999 999 999 999 999 2026-08-25T10:00:14Z
                 "plateau_points": 2,
             },
         }
-        with self.assertRaisesRegex(BenchmarkError, "more than 64 attempts"):
-            load_control.search_load(throughput, measure)
-        measure.assert_not_called()
+        result = load_control.search_load(
+            throughput,
+            lambda load: {
+                "throughput": load,
+                "errors": 0,
+                "dynamic_cpu_mean": 0,
+                "static_cpu_mean": 0,
+                "host_cpu_mean": 0,
+            },
+        )
+        self.assertLessEqual(len(result.attempts), load_control.MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        self.assertNotEqual(result.outcome, "search-limit-reached")
+
+        bounded = load_control.search_load(
+            {
+                **throughput,
+                "search": {**throughput["search"], "maximum": 10**15},
+            },
+            lambda load: {
+                "throughput": load,
+                "errors": 0,
+                "dynamic_cpu_mean": 0,
+                "static_cpu_mean": 0,
+                "host_cpu_mean": 0,
+            },
+        )
+        self.assertEqual(len(bounded.attempts), load_control.MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        self.assertEqual(bounded.outcome, "search-limit-reached")
 
     def test_throughput_plateau_uses_absolute_gain_and_stable_lowest_load(self):
         result = load_control.search_load(

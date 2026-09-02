@@ -47,26 +47,14 @@ def _maximum_latency_attempts(search):
     return worst
 
 
-def _maximum_throughput_attempts(search):
-    width = search["maximum"] - search["start"]
-    resolution = max(1, int(round(width * search["resolution_percent"] / 100.0)))
-    attempts = 1
-    while width > resolution:
-        third = max(1, width // 3)
-        if third >= width - third:
-            break
-        attempts += 2
-        width = width - third - 1
-        if attempts > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
-            return attempts
-    return attempts + 3
-
-
 def validate_search_attempt_bound(config):
-    """Reject automatic searches whose worst path exceeds the runtime budget."""
+    """Reject latency searches whose worst path exceeds the runtime budget."""
     objective_type = config["objective"]["type"]
     if objective_type == "maximize-throughput":
-        attempts = _maximum_throughput_attempts(config["search"])
+        # Throughput search branches on both feasibility and observed throughput.
+        # It is stopped gracefully by the runtime budget instead of rejecting a
+        # range using a pessimistic estimate which cannot account for cached probes.
+        return
     elif objective_type == "latency-slo":
         attempts = _maximum_latency_attempts(config["search"])
     else:
@@ -219,6 +207,7 @@ def _run_throughput(config, measure, on_attempt):
     failing_load = None
     plateau = 0
     plateau_confirmed = False
+    search_limit_reached = False
 
     def sample(load, reason, baseline=None, search_low=None, search_high=None):
         nonlocal failing_load
@@ -280,11 +269,17 @@ def _run_throughput(config, measure, on_attempt):
         upper_load = high - third
         if lower_load >= upper_load:
             break
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and lower_load not in measured:
+            search_limit_reached = True
+            break
         lower = sample(lower_load, "lower ternary probe", search_low=low, search_high=high)
         if not lower["passed"]:
             plateau = 0
             high = lower_load - 1
             continue
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and upper_load not in measured:
+            search_limit_reached = True
+            break
         upper = sample(
             upper_load,
             "upper ternary probe",
@@ -312,13 +307,21 @@ def _run_throughput(config, measure, on_attempt):
             low = lower_load + 1
 
     for load in sorted({low, (low + high) // 2, high}):
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and load not in measured:
+            search_limit_reached = True
+            break
         sample(load, "final ternary candidate", search_low=low, search_high=high)
     selected = (
         _lowest_saturated_plateau_load(attempts, objective["plateau_gain_percent"])
         if plateau_confirmed
         else _best_throughput(attempts)
     )
-    if selected is None:
+    if search_limit_reached:
+        outcome = "search-limit-reached"
+        stop_reason = "throughput search reached its {}-attempt safety limit".format(
+            MAX_AUTOMATIC_SEARCH_ATTEMPTS
+        )
+    elif selected is None:
         outcome = "no-feasible-point"
         stop_reason = "ternary search found no feasible load"
     elif plateau_confirmed:

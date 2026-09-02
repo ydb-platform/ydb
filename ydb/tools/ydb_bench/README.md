@@ -147,9 +147,12 @@ saturated measurement. A plateau is confirmed only when the selected role's
 CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
 first failing point, then a binary search to find the highest load whose
 millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
-Automatic search is limited to 64 measurements. Configuration validation
-rejects ranges, multipliers, or resolutions whose worst-case search path can
-exceed that limit, so the computed profile timeout remains a real upper bound.
+Automatic search is limited to 64 measurements per cluster-geometry stage.
+Latency-SLO configuration validation rejects ranges, multipliers, or
+resolutions whose deterministic worst-case search path can exceed that limit.
+Throughput search stops at the limit and reports the best point measured so far
+with a `search-limit-reached` outcome, because its path depends on measured
+throughput, feasibility, and cached probes.
 For example:
 
 ```yaml

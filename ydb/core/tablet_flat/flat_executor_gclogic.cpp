@@ -243,6 +243,9 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Deleted) {
         auto &channel = ChannelInfo[blobId.Channel()];
         channel.CommittedDelta[time].Deleted.push_back(blobId);
+        // A DoNotKeep mark still pins its entry: the flag is delivered to the group the
+        // blob's generation resolves to, and cutting the entry makes that unresolvable.
+        HistoryCutter.SeenBlob(blobId);
     }
 }
 

@@ -714,6 +714,9 @@
     "name": "dq.ChunkSizeLimit"
   },
   {
+    "name": "dq.Clique"
+  },
+  {
     "name": "dq.CollectCoreDumps"
   },
   {
@@ -1243,6 +1246,9 @@
   },
   {
     "name": "Udf"
+  },
+  {
+    "name": "UdfBridge"
   },
   {
     "name": "UnicodeLiterals"

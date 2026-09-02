@@ -2581,3 +2581,7 @@ void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

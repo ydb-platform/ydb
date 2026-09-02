@@ -59,8 +59,6 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
-    // Chaos controllers are indexed by DirectBlockGroup index.
-    TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -281,14 +279,15 @@ private:
 
     [[nodiscard]] TString GetSocketPath() const;
 
+    TFastPathServicePtr CreateFastPathService(
+        const TVChunkConfigs& vChunkConfigs,
+        const TDirtyMapStateProtos& dirtyMapStates);
+
     void Start(
         const NActors::TActorContext& ctx,
         TDirectBlockGroupsConnections directBlockGroupsConnections,
         const TVChunkConfigs& vChunkConfigs,
         const TDirtyMapStateProtos& dirtyMapStates);
-
-    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(
-        TDirectBlockGroupsConnections directBlockGroupsConnections);
 
     BLOCKSTORE_PARTITION_TRANSACTIONS(
         BLOCKSTORE_IMPLEMENT_TRANSACTION,

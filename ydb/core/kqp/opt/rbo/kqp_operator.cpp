@@ -877,6 +877,42 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
 }
 
 /**
+ * OpDependentJoin.
+ * Note: it does not have runtime support. We have to eliminate it or to rewrite it.
+ */
+
+TOpDependentJoin::TOpDependentJoin(TIntrusivePtr<IOperator> domain, TIntrusivePtr<IOperator> input, const TVector<TInfoUnit>& dependencies,
+                                   TPositionHandle pos)
+    : IBinaryOperator(EOperator::DependentJoin, pos, domain, input)
+    , Dependencies(dependencies) {
+    Y_ENSURE(!Dependencies.empty(), "Dependent join must have correlated columns");
+}
+
+void TOpDependentJoin::ComputeOutputIUs() {
+    TVector<TInfoUnit> res = GetDomain()->GetOutputIUs();
+    for (const auto& iu : GetInput()->GetOutputIUs()) {
+        if (!ContainsInfoUnit(res, iu)) {
+            res.push_back(iu);
+        }
+    }
+    Props.OutputIUs = std::move(res);
+}
+
+TString TOpDependentJoin::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "DependentJoin, Domain: [";
+    for (size_t i = 0; i < Dependencies.size(); i++) {
+        if (i) {
+            res << ", ";
+        }
+        res << Dependencies[i].GetFullName();
+    }
+    res << "]";
+    return res;
+}
+
+/**
  * OpUnionAll operator methods
  */
 

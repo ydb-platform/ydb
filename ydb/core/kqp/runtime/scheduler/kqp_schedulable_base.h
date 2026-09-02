@@ -2,6 +2,8 @@
 
 #include "fwd.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+
 #include <library/cpp/time_provider/monotonic.h>
 
 #include <util/system/hp_timer.h>
@@ -12,21 +14,28 @@ namespace NActors {
 
 namespace NKikimr::NKqp::NScheduler {
 
-class TSchedulableActorBase {
+class TSchedulableBase : public NYql::NDq::IDqSchedulableWork {
 public:
     struct TOptions {
         NHdrf::NDynamic::TQueryPtr Query;
         bool IsSchedulable;
     };
 
+    explicit TSchedulableBase(const TOptions& options);
+
 protected:
-    explicit TSchedulableActorBase(const TOptions& options);
+    std::optional<TDuration> TryStartExecution(TMonotonic now) override;
+    void StopExecution() override;
+    void RegisterForResume(const NActors::TActorId& actorId) override;
+    NYql::NDq::TWorkScope GetWorkScope() const override { return Scope; }
+
+    bool StartExecution(TMonotonic now);
+    TDuration CalculateDelay(TMonotonic now) const;
+    void StopExecution(bool& forcedResume);
 
     static inline TMonotonic Now() {
         return TMonotonic::Now();
     }
-
-    void RegisterForResume(const NActors::TActorId& actorId);
 
     inline bool IsAccountable() const {
         return !!SchedulableTask;
@@ -35,15 +44,11 @@ protected:
         return Throttled;
     }
 
-    bool StartExecution(TMonotonic now);
-    void StopExecution(bool& forcedResume);
-
-    TDuration CalculateDelay(TMonotonic now) const;
-
 private:
     void Resume();
 
     TSchedulableTaskPtr SchedulableTask;
+    const NYql::NDq::TWorkScope Scope;
     const bool IsSchedulable;
 
     THPTimer Timer;
@@ -55,6 +60,6 @@ private:
     ui64 ExecuteAttempts = 0;
 };
 
-using TSchedulableActorOptions = TSchedulableActorBase::TOptions;
+using TSchedulableOptions = TSchedulableBase::TOptions;
 
 } // namespace NKikimr::NKqp::NScheduler

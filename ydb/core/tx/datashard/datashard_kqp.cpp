@@ -561,3 +561,7 @@ void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& 
 
 }  // namespace NDataShard
 }  // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

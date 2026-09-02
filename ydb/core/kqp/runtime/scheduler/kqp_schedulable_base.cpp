@@ -1,4 +1,4 @@
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_base.h"
 
 #include "kqp_schedulable_task.h"
 
@@ -12,8 +12,25 @@ static constexpr TDuration AverageExecutionTime = TDuration::MicroSeconds(100); 
 
 using namespace NHdrf::NDynamic;
 
-TSchedulableActorBase::TSchedulableActorBase(const TOptions& options)
-    : IsSchedulable(options.IsSchedulable)
+namespace {
+    NYql::NDq::TWorkScope ExtractScope(const NHdrf::NDynamic::TQueryPtr& query) {
+        NYql::NDq::TWorkScope scope;
+        if (!query) {
+            return scope;
+        }
+        if (auto* pool = query->GetParent()) {
+            scope.Name = std::get<NHdrf::TPoolId>(pool->GetId());
+            if (auto* database = pool->GetParent()) {
+                scope.Namespace = std::get<NHdrf::TDatabaseId>(database->GetId());
+            }
+        }
+        return scope;
+    }
+} // namespace
+
+TSchedulableBase::TSchedulableBase(const TOptions& options)
+    : Scope(ExtractScope(options.Query))
+    , IsSchedulable(options.IsSchedulable)
     , LastExecutionTime(AverageExecutionTime)
 {
     if (options.Query) {
@@ -23,7 +40,7 @@ TSchedulableActorBase::TSchedulableActorBase(const TOptions& options)
     Y_ENSURE(!IsSchedulable || IsAccountable());
 }
 
-void TSchedulableActorBase::RegisterForResume(const NActors::TActorId& actorId) {
+void TSchedulableBase::RegisterForResume(const NActors::TActorId& actorId) {
     Y_ASSERT(SchedulableTask);
 
     if (IsSchedulable) {
@@ -31,7 +48,19 @@ void TSchedulableActorBase::RegisterForResume(const NActors::TActorId& actorId) 
     }
 }
 
-bool TSchedulableActorBase::StartExecution(TMonotonic now) {
+std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {
+    if (StartExecution(now)) {
+        return std::nullopt;
+    }
+    return CalculateDelay(now);
+}
+
+void TSchedulableBase::StopExecution() {
+    bool forced = false;
+    StopExecution(forced);
+}
+
+bool TSchedulableBase::StartExecution(TMonotonic now) {
     Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);
 
@@ -69,7 +98,7 @@ bool TSchedulableActorBase::StartExecution(TMonotonic now) {
     return Executed;
 }
 
-void TSchedulableActorBase::StopExecution(bool& forcedResume) {
+void TSchedulableBase::StopExecution(bool& forcedResume) {
     Y_ASSERT(SchedulableTask);
 
     if (Executed) {
@@ -91,7 +120,7 @@ void TSchedulableActorBase::StopExecution(bool& forcedResume) {
     }
 }
 
-TDuration TSchedulableActorBase::CalculateDelay(TMonotonic) const {
+TDuration TSchedulableBase::CalculateDelay(TMonotonic) const {
     Y_ASSERT(SchedulableTask);
 
     const auto query = SchedulableTask->Query;
@@ -117,7 +146,7 @@ TDuration TSchedulableActorBase::CalculateDelay(TMonotonic) const {
     return delayDuration;
 }
 
-void TSchedulableActorBase::Resume() {
+void TSchedulableBase::Resume() {
     Y_ASSERT(Throttled);
 
     Throttled = false;

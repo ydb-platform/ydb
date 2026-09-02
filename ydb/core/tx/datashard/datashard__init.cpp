@@ -1016,3 +1016,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

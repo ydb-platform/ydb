@@ -1167,3 +1167,7 @@ const NMiniKQL::TEngineHostCounters& TDataShardUserDb::GetCounters() const {
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

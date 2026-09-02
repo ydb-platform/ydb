@@ -19,8 +19,8 @@ public:
         : Category(cat)
         , Counters(counters)
     {
-        AFL_VERIFY(Counters);
-        AFL_VERIFY(cat);
+        Y_ENSURE(Counters, "worker pool category counters are not initialized");
+        Y_ENSURE(cat, "worker pool category is not initialized");
         SetWeight(weight);
     }
 
@@ -29,7 +29,7 @@ public:
     }
 
     void SetWeight(const double weight) {
-        AFL_VERIFY(weight > 0);
+        Y_ENSURE(std::isfinite(weight) && weight > 0, "invalid worker pool category weight: " << weight);
         Weight = weight;
         Counters->ValueWeight->Set(weight);
     }
@@ -57,6 +57,7 @@ private:
         YDB_READONLY(bool, RunningTask, false);
         YDB_READONLY_DEF(NActors::TActorId, WorkerId);
         YDB_READONLY(double, CPULimit, 1);
+        YDB_READONLY(bool, StopRequested, false);
         TTaskCompletionContexts CompletionContexts;
 
     public:
@@ -69,33 +70,36 @@ private:
             CPULimit = value;
         }
 
+        void RequestStop() {
+            StopRequested = true;
+        }
+
         void OnStartTask(TTaskCompletionContexts&& completionContexts) {
-            AFL_VERIFY(!RunningTask);
-            AFL_VERIFY(!completionContexts.empty());
+            Y_ENSURE(!RunningTask, "worker already has a running task");
+            Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
             RunningTask = true;
             CompletionContexts = std::move(completionContexts);
         }
 
         void OnStopTask() {
-            AFL_VERIFY(RunningTask);
+            Y_ENSURE(RunningTask, "worker has no running task to stop");
             RunningTask = false;
             CompletionContexts.clear();
         }
 
         const TTaskCompletionContext& GetCompletionContext(const ESpecialTaskCategory category) const {
             const auto it = CompletionContexts.find(category);
-            AFL_VERIFY(it != CompletionContexts.end())("category", category)("contexts_count", CompletionContexts.size());
+            Y_ENSURE(it != CompletionContexts.end(), "completion context is missing for category " << category);
             return it->second;
         }
     };
 
     struct TWorkersUpdateState {
         ui64 DesiredWorkersCount = 0;
-        THashSet<ui64> WorkersWaitingForLimitUpdate;
-        THashSet<ui64> WorkersWaitingForStop;
+        THashSet<ui64> WorkersWaitingForRelease;
 
         bool IsFinished() const {
-            return WorkersWaitingForLimitUpdate.empty() && WorkersWaitingForStop.empty();
+            return WorkersWaitingForRelease.empty();
         }
     };
 
@@ -137,12 +141,10 @@ public:
 
     void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId = 0, const ui64 workerIdx = 0);
     bool HasFreeWorker() const;
-    void ReleaseWorker(const ui64 workerIdx);
+    bool ReleaseWorker(const ui64 workerIdx);
 
     bool StartWorkersUpdate(const std::vector<double>& desiredCPULimits);
     bool StartWorkersRetirement();
-    bool OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev);
-    bool OnWorkerStopped(const TEvInternal::TEvWorkerStopped& ev);
 
     bool HasWorkersUpdateInProgress() const {
         return WorkersUpdate.has_value();

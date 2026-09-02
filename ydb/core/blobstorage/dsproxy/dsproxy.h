@@ -321,8 +321,7 @@ private:
     std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
     bool ExecutionRelayUsed = false;
     bool FirstResponse = true;
-    TRequestMonItem* StoragePoolRequestMonItem = nullptr;
-    ui64 StoragePoolRequestInFlightId = 0;
+    TRequestMonItem::TInFlightLatencyGuard StoragePoolRequestInFlight;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

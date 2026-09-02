@@ -7,8 +7,6 @@
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/mon/mon.h>
 
-#include <atomic>
-
 #include <util/digest/numeric.h>
 #include <util/generic/bitops.h>
 #include <util/generic/hash.h>
@@ -39,8 +37,6 @@ private:
     static_assert((InFlightRequestsShardCount & (InFlightRequestsShardCount - 1)) == 0);
 
     struct alignas(64) TInFlightRequestsShard {
-        std::atomic<ui64> RequestCount = 0;
-        std::atomic<ui64> RequestStartTimeUsSum = 0;
         TMutex Mutex;
         THashMap<ui64, TMonotonic> Requests;
     };
@@ -51,7 +47,80 @@ private:
         return InFlightRequestsShards[IntHash(requestId) & (InFlightRequestsShardCount - 1)];
     }
 
+    bool AddInFlightRequest(ui64 requestId, TMonotonic receivedTime) {
+        TInFlightRequestsShard& shard = GetInFlightRequestsShard(requestId);
+        TGuard<TMutex> guard(shard.Mutex);
+        return shard.Requests.emplace(requestId, receivedTime).second;
+    }
+
+    void RemoveInFlightRequest(ui64 requestId) {
+        TInFlightRequestsShard& shard = GetInFlightRequestsShard(requestId);
+        TGuard<TMutex> guard(shard.Mutex);
+        auto it = shard.Requests.find(requestId);
+        if (it != shard.Requests.end()) {
+            shard.Requests.erase(it);
+        }
+    }
+
 public:
+    // Owns one in-flight request record. Construction/destruction updates the tracked
+    // request set immediately; visible monitoring counters are snapshot-published by Update().
+    class TInFlightLatencyGuard {
+    public:
+        TInFlightLatencyGuard() = default;
+
+        TInFlightLatencyGuard(TRequestMonItem* requestMonItem, ui64 requestId, TMonotonic receivedTime)
+            : RequestMonItem(requestMonItem)
+            , RequestId(requestId)
+        {
+            if (RequestMonItem && !RequestMonItem->AddInFlightRequest(RequestId, receivedTime)) {
+                RequestMonItem = nullptr;
+                RequestId = 0;
+            }
+        }
+
+        ~TInFlightLatencyGuard() {
+            Reset();
+        }
+
+        TInFlightLatencyGuard(const TInFlightLatencyGuard&) = delete;
+        TInFlightLatencyGuard& operator=(const TInFlightLatencyGuard&) = delete;
+
+        TInFlightLatencyGuard(TInFlightLatencyGuard&& other) noexcept
+            : RequestMonItem(other.RequestMonItem)
+            , RequestId(other.RequestId)
+        {
+            other.RequestMonItem = nullptr;
+            other.RequestId = 0;
+        }
+
+        TInFlightLatencyGuard& operator=(TInFlightLatencyGuard&& other) noexcept {
+            if (this != &other) {
+                Reset();
+                RequestMonItem = other.RequestMonItem;
+                RequestId = other.RequestId;
+                other.RequestMonItem = nullptr;
+                other.RequestId = 0;
+            }
+            return *this;
+        }
+
+        void Reset() {
+            if (RequestMonItem) {
+                RequestMonItem->RemoveInFlightRequest(RequestId);
+                RequestMonItem = nullptr;
+            }
+            RequestId = 0;
+        }
+
+        TRequestMonItem* GetRequestMonItem() const {
+            return RequestMonItem;
+        }
+
+    private:
+        TRequestMonItem* RequestMonItem = nullptr;
+        ui64 RequestId = 0;
+    };
 
     void Init(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
         RequestBytes = counters->GetCounter("requestBytes", true);
@@ -83,53 +152,22 @@ public:
         ResponseTimeCompletedCount->Inc();
     }
 
-    void AddInFlightRequest(ui64 requestId, TMonotonic receivedTime) {
-        TInFlightRequestsShard& shard = GetInFlightRequestsShard(requestId);
-        TGuard<TMutex> guard(shard.Mutex);
-        const auto [it, inserted] = shard.Requests.emplace(requestId, receivedTime);
-        Y_UNUSED(it);
-        if (inserted) {
-            shard.RequestCount.fetch_add(1, std::memory_order_relaxed);
-            shard.RequestStartTimeUsSum.fetch_add(receivedTime.MicroSeconds(), std::memory_order_relaxed);
-        }
-    }
-
-    void RemoveInFlightRequest(ui64 requestId) {
-        TInFlightRequestsShard& shard = GetInFlightRequestsShard(requestId);
-        TGuard<TMutex> guard(shard.Mutex);
-        auto it = shard.Requests.find(requestId);
-        if (it != shard.Requests.end()) {
-            shard.RequestCount.fetch_sub(1, std::memory_order_relaxed);
-            shard.RequestStartTimeUsSum.fetch_sub(it->second.MicroSeconds(), std::memory_order_relaxed);
-            shard.Requests.erase(it);
-        }
-    }
-
     void Update() {
         Update(TMonotonic::Now());
     }
 
     void Update(TMonotonic now) {
         ui64 inFlightCount = 0;
-        ui64 startTimeUsSum = 0;
-        for (TInFlightRequestsShard& shard : InFlightRequestsShards) {
-            inFlightCount += shard.RequestCount.load(std::memory_order_relaxed);
-            startTimeUsSum += shard.RequestStartTimeUsSum.load(std::memory_order_relaxed);
-        }
-
-        const ui64 nowUs = now.MicroSeconds();
-        const ui64 nowUsSum = inFlightCount * nowUs;
-        const ui64 latencyUsSum = nowUsSum >= startTimeUsSum
-            ? nowUsSum - startTimeUsSum
-            : 0;
-
+        ui64 latencyUsSum = 0;
         ui64 latencyMsMax = 0;
         for (TInFlightRequestsShard& shard : InFlightRequestsShards) {
             TGuard<TMutex> guard(shard.Mutex);
+            inFlightCount += shard.Requests.size();
             for (const auto& [requestId, receivedTime] : shard.Requests) {
                 Y_UNUSED(requestId);
                 if (now > receivedTime) {
                     const TDuration latency = now - receivedTime;
+                    latencyUsSum += latency.MicroSeconds();
                     latencyMsMax = Max<ui64>(latencyMsMax, latency.MilliSeconds());
                 }
             }

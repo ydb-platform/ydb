@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NBlobStorageStoragePoolMonTest {
@@ -39,8 +40,10 @@ Y_UNIT_TEST(RequestLatencyCountersIncludeCompletedAndInFlight) {
     requestMonItem.Init(counters, NPDisk::DEVICE_TYPE_ROT);
 
     requestMonItem.Register(42, 2, 84, 0.123);
-    requestMonItem.AddInFlightRequest(1, TMonotonic::MilliSeconds(1'000));
-    requestMonItem.AddInFlightRequest(2, TMonotonic::MilliSeconds(1'500));
+    TRequestMonItem::TInFlightLatencyGuard firstInFlight(
+        &requestMonItem, 1, TMonotonic::MilliSeconds(1'000));
+    TRequestMonItem::TInFlightLatencyGuard secondInFlight(
+        &requestMonItem, 2, TMonotonic::MilliSeconds(1'500));
     requestMonItem.Update(TMonotonic::MilliSeconds(2'500));
 
     auto completedSum = counters->FindCounter("responseTimeUsCompletedSum");
@@ -71,7 +74,7 @@ Y_UNIT_TEST(RequestLatencyCountersIncludeCompletedAndInFlight) {
     UNIT_ASSERT_VALUES_EQUAL(maxLatency->Val(), 123);
     UNIT_ASSERT_VALUES_EQUAL(inFlightMaxLatency->Val(), 1'500);
 
-    requestMonItem.RemoveInFlightRequest(1);
+    firstInFlight.Reset();
     requestMonItem.Update(TMonotonic::MilliSeconds(3'000));
 
     UNIT_ASSERT_VALUES_EQUAL(completedSum->Val(), 123'000);
@@ -89,10 +92,12 @@ Y_UNIT_TEST(RequestLatencyCountersAggregateManyInFlightRequests) {
 
     constexpr ui64 requestCount = 1024;
     ui64 startTimeUsSum = 0;
+    TVector<TRequestMonItem::TInFlightLatencyGuard> inFlight;
+    inFlight.reserve(requestCount);
     for (ui64 requestId = 1; requestId <= requestCount; ++requestId) {
         const ui64 startTimeUs = requestId;
         startTimeUsSum += startTimeUs;
-        requestMonItem.AddInFlightRequest(requestId, TMonotonic::MicroSeconds(startTimeUs));
+        inFlight.emplace_back(&requestMonItem, requestId, TMonotonic::MicroSeconds(startTimeUs));
     }
 
     auto inFlightSum = counters->FindCounter("inFlightResponseTimeUsSum");
@@ -111,7 +116,7 @@ Y_UNIT_TEST(RequestLatencyCountersAggregateManyInFlightRequests) {
     UNIT_ASSERT_VALUES_EQUAL(inFlightMaxLatency->Val(), 9);
 
     for (ui64 requestId = 1; requestId <= requestCount; requestId += 2) {
-        requestMonItem.RemoveInFlightRequest(requestId);
+        inFlight[requestId - 1].Reset();
         startTimeUsSum -= requestId;
     }
 

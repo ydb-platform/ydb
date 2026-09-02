@@ -901,10 +901,11 @@ namespace NKikimr {
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!Dead);
         if (RequestHandleClass && PoolCounters && FirstResponse) {
-            TRequestMonItem& requestMonItem = StoragePoolRequestMonItem
-                ? *StoragePoolRequestMonItem
-                : PoolCounters->GetItem(*RequestHandleClass, RequestBytes);
-            requestMonItem.Register(
+            TRequestMonItem* requestMonItem = StoragePoolRequestInFlight.GetRequestMonItem();
+            if (!requestMonItem) {
+                requestMonItem = &PoolCounters->GetItem(*RequestHandleClass, RequestBytes);
+            }
+            requestMonItem->Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
             UnregisterStoragePoolRequestInFlight();
         }
@@ -944,18 +945,14 @@ namespace NKikimr {
 
     void TBlobStorageGroupRequestActor::RegisterStoragePoolRequestInFlight() {
         if (RequestHandleClass && PoolCounters) {
-            StoragePoolRequestMonItem = &PoolCounters->GetItem(*RequestHandleClass, RequestBytes);
-            StoragePoolRequestInFlightId = SelfId().LocalId();
-            StoragePoolRequestMonItem->AddInFlightRequest(StoragePoolRequestInFlightId, RequestStartTime);
+            TRequestMonItem& requestMonItem = PoolCounters->GetItem(*RequestHandleClass, RequestBytes);
+            StoragePoolRequestInFlight = TRequestMonItem::TInFlightLatencyGuard(
+                &requestMonItem, SelfId().LocalId(), RequestStartTime);
         }
     }
 
     void TBlobStorageGroupRequestActor::UnregisterStoragePoolRequestInFlight() {
-        if (StoragePoolRequestMonItem) {
-            StoragePoolRequestMonItem->RemoveInFlightRequest(StoragePoolRequestInFlightId);
-            StoragePoolRequestMonItem = nullptr;
-            StoragePoolRequestInFlightId = 0;
-        }
+        StoragePoolRequestInFlight.Reset();
     }
 
     double TBlobStorageGroupRequestActor::GetStartTime(const NKikimrBlobStorage::TTimestamps& timestamps) {

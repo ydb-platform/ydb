@@ -512,6 +512,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         _config_error(location, "does not support --perf; CPU utilization is collected per process role")
 
     workload = normalize_workload(value.get("workload"), location + ".workload")
+    workload_metadata = workload_definition(workload["type"])
 
     geometry = _mapping(
         value.get("geometry"),
@@ -554,7 +555,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
 
     client = _mapping(value.get("client"), location + ".client", ("threads",))
     client_threads = _positive_integer(
-        client.get("threads", workload_definition(workload["type"]).default_client_threads),
+        client.get("threads", workload_metadata.default_client_threads),
         location + ".client.threads",
     )
 
@@ -769,8 +770,13 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
             verification_location,
             "must be at most {}".format(MAX_LOCAL_YDB_VERIFICATION_REPETITIONS),
         )
+    configured_warmup = (
+        _nonnegative_integer(measurement["warmup"], location + ".measurement.warmup")
+        if "warmup" in measurement
+        else workload_metadata.default_warmup_seconds
+    )
     measurement_config = {
-        "warmup": _nonnegative_integer(measurement.get("warmup", 10), location + ".measurement.warmup"),
+        "warmup": configured_warmup,
         "duration": _positive_integer(measurement.get("duration", 30), location + ".measurement.duration"),
         "repetitions": _positive_integer(measurement.get("repetitions", 3), location + ".measurement.repetitions"),
         "verification_repetitions": verification_repetitions,

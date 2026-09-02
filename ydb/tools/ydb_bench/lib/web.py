@@ -258,6 +258,15 @@ function localYdbDefaultClientThreads(definition){
   const value=Number(definition?.default_client_threads);
   return Number.isSafeInteger(value)&&value>0?value:64
 }
+function localYdbDefaultWarmupSeconds(definition){
+  if(definition?.default_warmup_seconds===null)return null;
+  const value=Number(definition?.default_warmup_seconds);
+  return Number.isSafeInteger(value)&&value>=0?value:10
+}
+function localYdbWarmupInput(id,definition){
+  const raw=document.querySelector('#'+id).value.trim();
+  return raw===''?localYdbDefaultWarmupSeconds(definition):localInteger(id,0)
+}
 function localYdbParameterDefaults(parameter,definition=null,workload=null){
   const source=localYdbLoadDefaults[parameter]||localYdbLoadDefaults.threads;
   const limit=localYdbLoadLimit(definition,workload,parameter);
@@ -295,7 +304,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "ions}}\n"
     "function defaultLocalYdb(){const definition=localYdbWorkloadDefinition('kv');return {workload:defaultLocalYdbWorkload('kv'),"
     "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
-    ":{threads:localYdbDefaultClientThreads(definition)},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:10,duration:30,rep"
+    ":{threads:localYdbDefaultClientThreads(definition)},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:localYdbDefaultWarmupSeconds(definition),duration:30,rep"
     "etitions:3,verification_repetitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
     ",cpus:null},dynamic_nodes:{mode:'none',cpus:null}}}}\n"
     "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;lines.push('    work"
@@ -311,8 +320,9 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "ive.type);if(config.load.objective.type==='maximize-throughput')for(const [key,yamlKey] of Object.entries(localYdbOb"
     "jectiveKeys))lines.push('        '+yamlKey+': '+config.load.objective[key]);else{lines.push('        percentile: '+config.load.o"
     "bjective.percentile);for(const [key,yamlKey] of Object.entries(localYdbSloKeys))lines.push('        '+yamlKey+': '+con"
-    "fig.load.objective[key])}}lines.push('    measurement:','      warmup: '+config.measurement.warmup,' "
-    "     duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,"
+    "fig.load.objective[key])}}lines.push('    measurement:');if("
+    "config.measurement.warmup!==null&&config.measurement.warmup!==undefined)lines.push('      warmup: '+config.measurement.warmup);lines.push("
+    "'      duration: '+config.measurement.duration,'      repetitions: '+config.measurement.repetitions,"
     "'      verification-repetitions: '+(config.measurement.verification_repetitions??0),'    affinity:');f"
     "or(const [key,yamlKey] of Object.entries(localYdbAffinityKeys)){const role=config.affinity[key];lines.push('      '+yam"
     "lKey+':','        mode: '+role.mode);if(role.cpus!==null&&role.cpus!==undefined)lines.push('        cpus: '+role.cpus)}"
@@ -428,6 +438,9 @@ function localYdbSloPercentile(definition,requested=null){
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
   const definition=localYdbWorkloadDefinition(workload.type);
+  const warmupHelp=definition.default_warmup_seconds===null?
+    'Empty uses adaptive YDB CLI warmup.':
+    'Empty uses the workload default ('+localYdbDefaultWarmupSeconds(definition)+' seconds).';
   const clientThreadsHelp=workload.type==='topic'?
     'Applied to both producer and consumer thread counts; every consumer gets this many reader threads.':'';
   const loadMode=load.values?'points':load.objective.type;
@@ -502,7 +515,7 @@ function localYdbProfileEditor(profile){
     '</div><h3>Client and load</h3><div class=form-grid>'+
     localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
     loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
-    localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,'','type=number min=0')+
+    localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,warmupHelp,'type=number min=0')+
     localField(
       'local-measurement-duration','Duration (seconds)',measurement.duration,'',
       'type=number min='+(definition.minimum_duration_seconds||1)
@@ -563,6 +576,7 @@ function bindLocalYdbEditor(profile){
       const nextDefinition=localYdbWorkloadDefinition(event.target.value);
       const parameters=nextDefinition.load_parameters;
       config.client.threads=localYdbDefaultClientThreads(nextDefinition);
+      config.measurement.warmup=localYdbDefaultWarmupSeconds(nextDefinition);
       config.load=localYdbLoadForWorkload(config.load,parameters,nextDefinition,config.workload);
       config.measurement.duration=Math.max(
         config.measurement.duration,nextDefinition.minimum_duration_seconds||1
@@ -679,7 +693,7 @@ function bindLocalYdbEditor(profile){
     }
     config.load=localYdbClampLoad(config.load,workloadDefinition,config.workload);
     config.measurement={
-      warmup:localInteger('local-measurement-warmup',0),
+      warmup:localYdbWarmupInput('local-measurement-warmup',workloadDefinition),
       duration:localInteger('local-measurement-duration',workloadDefinition.minimum_duration_seconds||1),
       repetitions:localInteger('local-measurement-repetitions'),
       verification_repetitions:localInteger('local-measurement-verification-repetitions',0,20)
@@ -1170,10 +1184,12 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localComparisonConfig(item){\n'
     '  const parameters=item.parameters||{},workload=parameters.workload||{},geometry=parameters.geometry||{},client=parameters.client||{};\n'
     '  const measurement=parameters.measurement||{},load=parameters.load||{},objective=load.objective||{};\n'
+    "  const warmup=Object.prototype.hasOwnProperty.call(measurement,'warmup')?"
+    "(measurement.warmup===null?'automatic':measurement.warmup):'—';\n"
     "  const values={\n"
     "    'Workload':workload.type??'—','Operation':workload.operation??'—','Load parameter':load.parameter??'—',\n"
     "    'Load values':JSON.stringify(localComparisonStable(load.values??null)),\n"
-    "    'Objective':objective.type??'points','Warmup seconds':measurement.warmup??'—',\n"
+    "    'Objective':objective.type??'points','Warmup seconds':warmup,\n"
     "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
     "    'Verification repetitions':measurement.verification_repetitions??0,\n"
     "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"

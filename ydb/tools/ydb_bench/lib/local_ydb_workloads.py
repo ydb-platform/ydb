@@ -148,6 +148,7 @@ _TPCC_SLO_METRICS = (
 )
 _TPCC_TERMINALS_PER_WAREHOUSE = 10
 _TPCC_MIN_WARMUP_PER_TERMINAL_MS = 10
+_TPCC_MAX_ADAPTIVE_WARMUP_SECONDS = 60 * 60
 _TPCC_JSON_MAX_BYTES = 1024 * 1024
 
 
@@ -191,10 +192,24 @@ def _tpcc_percentile_values(value, location):
 
 
 def _tpcc_effective_warmup_seconds(workload, requested_seconds):
+    # Keep this in sync with the adaptive heuristic in
+    # ydb/library/workload/tpcc/runner.cpp::TPCCRunner::RunSync.
     warehouses = workload["options"]["warehouses"]
     terminals = warehouses * _TPCC_TERMINALS_PER_WAREHOUSE
     minimum = terminals * _TPCC_MIN_WARMUP_PER_TERMINAL_MS // 1000 + 1
-    return max(requested_seconds, minimum)
+    if requested_seconds is not None:
+        return max(requested_seconds, minimum)
+    if warehouses <= 10:
+        adaptive = 30
+    elif warehouses <= 100:
+        adaptive = 5 * 60
+    elif warehouses <= 1000:
+        adaptive = 10 * 60
+    elif warehouses <= 10000:
+        adaptive = 20 * 60
+    else:
+        adaptive = 30 * 60
+    return min(max(adaptive, minimum), _TPCC_MAX_ADAPTIVE_WARMUP_SECONDS)
 
 
 def _parse_tpcc_json_result(command_result, normalized_workload, request):
@@ -702,6 +717,7 @@ class WorkloadDefinition:
     minimum_duration_seconds: int = 1
     load_limits: tuple = ()
     default_client_threads: int = 64
+    default_warmup_seconds: int | None = 10
 
 
 def _config_error(location, message):
@@ -909,13 +925,17 @@ def _tpcc_init_builder(cli, definition, path, workload):
 
 def _tpcc_run_command(cli, definition, path, workload, load, seconds, client_threads, warmup_seconds):
     options = workload["options"]
-    effective_warmup = _tpcc_effective_warmup_seconds(workload, warmup_seconds)
     command = _workload_base(cli, definition, path) + [
         "run",
         "--warehouses",
         options["warehouses"],
-        "--warmup",
-        "{}s".format(effective_warmup),
+    ]
+    if warmup_seconds is not None:
+        command += [
+            "--warmup",
+            "{}s".format(_tpcc_effective_warmup_seconds(workload, warmup_seconds)),
+        ]
+    command += [
         "--time",
         "{}s".format(seconds),
         "--max-sessions",
@@ -986,7 +1006,7 @@ def _tpcc_run_plan_builder(
                 load,
                 seconds,
                 client_threads,
-                effective_warmup,
+                warmup_seconds,
             )
         ),
         effective_warmup + seconds + 60,
@@ -1316,6 +1336,14 @@ def _validate_catalog(definitions):
                 raise ValueError("{} must be callable for {}".format(name, definition.name))
         if definition.warmup_mode == "inline" and definition.run_plan_builder is None:
             raise ValueError("inline warmup requires a run plan builder for {}".format(definition.name))
+        if definition.default_warmup_seconds is not None and (
+            isinstance(definition.default_warmup_seconds, bool)
+            or not isinstance(definition.default_warmup_seconds, int)
+            or definition.default_warmup_seconds < 0
+        ):
+            raise ValueError("default warmup must be a non-negative integer or None for {}".format(definition.name))
+        if definition.default_warmup_seconds is None and definition.effective_warmup_builder is None:
+            raise ValueError("automatic warmup requires an effective warmup builder for {}".format(definition.name))
         if (
             isinstance(definition.minimum_duration_seconds, bool)
             or not isinstance(definition.minimum_duration_seconds, int)
@@ -1521,6 +1549,7 @@ _DEFINITIONS = (
         minimum_duration_seconds=2,
         load_limits=(("max-sessions", "warehouses", _TPCC_TERMINALS_PER_WAREHOUSE),),
         default_client_threads=2,
+        default_warmup_seconds=None,
     ),
     WorkloadDefinition(
         name="topic",
@@ -1651,6 +1680,7 @@ def web_workload_catalog():
             "result_schema_id": definition.result_adapter.schema_id,
             "minimum_duration_seconds": definition.minimum_duration_seconds,
             "default_client_threads": definition.default_client_threads,
+            "default_warmup_seconds": definition.default_warmup_seconds,
             "load_limits": {
                 parameter: {"option": option, "multiplier": multiplier}
                 for parameter, option, multiplier in definition.load_limits
@@ -1712,15 +1742,27 @@ def validate_workload_profile(workload, load, measurement, location):
 
 
 def workload_effective_warmup_seconds(workload, requested_seconds):
-    """Return the explicit warmup passed to the CLI for one workload run."""
+    """Return the numeric warmup expected from one workload run."""
 
-    if isinstance(requested_seconds, bool) or not isinstance(requested_seconds, int) or requested_seconds < 0:
-        raise BenchmarkError("workload warmup must be a non-negative integer")
     definition = _definition(workload["type"])
+    if requested_seconds is None:
+        if definition.default_warmup_seconds is not None:
+            raise BenchmarkError("{} does not support automatic warmup".format(definition.name))
+        if definition.effective_warmup_builder is None:
+            raise BenchmarkError("{} does not support automatic warmup".format(definition.name))
+    if requested_seconds is not None and (
+        isinstance(requested_seconds, bool) or not isinstance(requested_seconds, int) or requested_seconds < 0
+    ):
+        raise BenchmarkError("workload warmup must be a non-negative integer")
     if definition.effective_warmup_builder is None:
         return requested_seconds
     effective = definition.effective_warmup_builder(workload, requested_seconds)
-    if isinstance(effective, bool) or not isinstance(effective, int) or effective < requested_seconds:
+    if (
+        isinstance(effective, bool)
+        or not isinstance(effective, int)
+        or effective < 0
+        or (requested_seconds is not None and effective < requested_seconds)
+    ):
         raise BenchmarkError("{} returned an invalid effective warmup".format(definition.name))
     return effective
 
@@ -1797,6 +1839,7 @@ def build_run_plan(
     """Build one pure workload command plan without executing a process."""
 
     definition = _definition(workload["type"])
+    workload_effective_warmup_seconds(workload, warmup_seconds)
     if load_parameter not in definition.load_parameters:
         raise BenchmarkError(
             "local YDB workload {} does not support load parameter {}".format(definition.name, load_parameter)

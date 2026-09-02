@@ -167,15 +167,17 @@ The result is rejected if the CLI reports a different number of execution
 threads than `client.threads`, which prevents CPU-based CLI clamping from
 silently changing the configuration being compared.
 
-TPC-C warmup is inline. The CLI receives the explicit value
-`max(measurement.warmup, floor(warehouses / 10) + 1)` so terminal startup is
-complete before measurement; YAML `warmup: 0` requests that minimum rather
-than the CLI's adaptive warmup. Measurement duration must be at least two
-seconds. Canonical throughput is uncapped successful NewOrder transactions per
-requested admission second. Requests admitted before the deadline may finish
-during graceful drain; `cli_elapsed_seconds` exposes that drain-inclusive CLI
-interval. The CLI-reported, warehouse-capped `tpmC` and efficiency remain
-drain-inclusive diagnostics. Latency SLOs use the admitted latency of
+TPC-C warmup is inline. When `measurement.warmup` is omitted, `--warmup` is
+also omitted and the CLI selects its adaptive warmup from the warehouse count.
+Timeouts and progress use the same heuristic as the CLI. An explicit value is
+raised to at least `floor(warehouses / 10) + 1` seconds so terminal startup is
+complete before measurement; YAML `warmup: 0` therefore requests that minimum.
+Measurement duration must be at least two seconds. Canonical throughput is
+uncapped successful NewOrder transactions per requested admission second.
+Requests admitted before the deadline may finish during graceful drain;
+`cli_elapsed_seconds` exposes that drain-inclusive CLI interval. The
+CLI-reported, warehouse-capped `tpmC` and efficiency remain drain-inclusive
+diagnostics. Latency SLOs use the admitted latency of
 `latency-transaction`: it excludes the queue created by the configured
 `max-sessions` limit, but includes session acquisition and SDK retries. This
 keeps the latency signal monotonic enough for load search; the full terminal

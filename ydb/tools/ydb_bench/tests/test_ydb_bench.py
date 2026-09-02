@@ -499,6 +499,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[3]["load_parameters"], ["max-sessions"])
         self.assertEqual(catalog[3]["slo_metrics"]["p999"], "p999_ms")
         self.assertEqual(catalog[3]["default_client_threads"], 2)
+        self.assertIsNone(catalog[3]["default_warmup_seconds"])
         self.assertEqual(catalog[3]["minimum_duration_seconds"], 2)
         self.assertEqual(
             catalog[3]["load_limits"],
@@ -508,6 +509,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(catalog[4]["load_parameters"], ["rate"])
         self.assertEqual(catalog[4]["slo_metrics"], {"p99": "full_p99_ms"})
         self.assertEqual(catalog[4]["default_client_threads"], 1)
+        self.assertEqual([item["default_warmup_seconds"] for item in catalog[:3] + catalog[4:]], [10] * 4)
         self.assertEqual(catalog[4]["minimum_duration_seconds"], 2)
         self.assertEqual(
             {option["name"]: option["default"] for option in catalog[4]["options"]},
@@ -595,6 +597,74 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(local_ydb_workloads.workload_effective_warmup_seconds(profile["workload"], 1), 2)
         self.assertEqual(local_ydb_workloads.workload_effective_warmup_seconds(profile["workload"], 7), 7)
 
+        automatic = load_config(
+            self._config(
+                """
+            local-ydb:
+              tpcc-automatic:
+                workload: {type: tpcc, operation: run}
+                load: {parameter: max-sessions, values: [1]}
+                measurement: {duration: 2, repetitions: 1}
+        """,
+                "tpcc-automatic.yaml",
+            )
+        )
+        automatic_profile = automatic.runs[0].parameters["local_ydb"]
+        self.assertIsNone(automatic_profile["measurement"]["warmup"])
+        self.assertEqual(
+            local_ydb_workloads.workload_effective_warmup_seconds(automatic_profile["workload"], None),
+            30,
+        )
+        self.assertEqual(automatic.runs[0].timeout_seconds, 300 + 30 + 2 + 10)
+
+        explicit_null = self._config(
+            """
+            local-ydb:
+              invalid-tpcc-warmup:
+                workload: {type: tpcc, operation: run}
+                load: {parameter: max-sessions, values: [1]}
+                measurement: {warmup: null, duration: 2, repetitions: 1}
+        """,
+            "tpcc-null-warmup.yaml",
+        )
+        with self.assertRaisesRegex(BenchmarkError, "warmup"):
+            load_config(explicit_null)
+
+    def test_local_ydb_tpcc_adaptive_warmup_matches_cli_heuristic(self):
+        for warehouses, expected in (
+            (10, 30),
+            (11, 300),
+            (100, 300),
+            (101, 600),
+            (1000, 600),
+            (1001, 1200),
+            (10000, 1200),
+            (10001, 1800),
+            (20000, 2001),
+            (100000, 3600),
+        ):
+            with self.subTest(warehouses=warehouses):
+                workload = local_ydb_workloads.normalize_workload(
+                    {"type": "tpcc", "operation": "run", "options": {"warehouses": warehouses}},
+                    "workload",
+                )
+                self.assertEqual(local_ydb_workloads.workload_effective_warmup_seconds(workload, None), expected)
+
+        kv = local_ydb_workloads.normalize_workload({"type": "kv", "operation": "upsert"}, "workload")
+        with self.assertRaisesRegex(BenchmarkError, "does not support automatic warmup"):
+            local_ydb_workloads.workload_effective_warmup_seconds(kv, None)
+        with self.assertRaisesRegex(BenchmarkError, "does not support automatic warmup"):
+            local_ydb_workloads.build_run_plan(
+                local_ydb_workloads.WorkloadCli("ydb", "grpc://host:2135", "/Root/bench"),
+                "table",
+                kv,
+                "rate",
+                1,
+                1,
+                1,
+                warmup_seconds=None,
+            )
+
         invalid_profiles = (
             (
                 """
@@ -647,6 +717,19 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(profile["client"]["threads"], 1)
         self.assertEqual(profile["load"], {"parameter": "rate", "allow_errors": False, "values": [100]})
+        default_warmup = load_config(
+            self._config(
+                """
+            local-ydb:
+              topic-default-warmup:
+                workload: {type: topic, operation: full}
+                load: {parameter: rate, values: [100]}
+                measurement: {duration: 2, repetitions: 1}
+        """,
+                "topic-default-warmup.yaml",
+            )
+        )
+        self.assertEqual(default_warmup.runs[0].parameters["local_ydb"]["measurement"]["warmup"], 10)
         definition = local_ydb_workloads.workload_definition("topic")
         self.assertEqual((definition.dataset_scope, definition.warmup_mode), ("sample", "inline"))
 
@@ -1090,6 +1173,33 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(run.timeout_seconds, 92)
         self.assertEqual(run.progress_duration_seconds, 32)
+        automatic_warmup = local_ydb_workloads.build_run_plan(
+            cli_context,
+            "tpcc-dataset",
+            workload,
+            "max-sessions",
+            50,
+            30,
+            3,
+            warmup_seconds=None,
+        )
+        self.assertNotIn("--warmup", automatic_warmup.argv)
+        self.assertEqual(automatic_warmup.timeout_seconds, 390)
+        self.assertEqual(automatic_warmup.progress_duration_seconds, 330)
+        for invalid_warmup in (-1, True):
+            with self.subTest(invalid_warmup=invalid_warmup), self.assertRaisesRegex(
+                BenchmarkError, "non-negative integer"
+            ):
+                local_ydb_workloads.build_run_plan(
+                    cli_context,
+                    "tpcc-dataset",
+                    workload,
+                    "max-sessions",
+                    50,
+                    30,
+                    3,
+                    warmup_seconds=invalid_warmup,
+                )
         requested_warmup = local_ydb_workloads.build_run_plan(
             cli_context,
             "tpcc-dataset",
@@ -1271,6 +1381,15 @@ class YdbBenchTest(unittest.TestCase):
             local_ydb_workloads._validate_catalog((replace(definition, run_plan_builder=None),))
         with self.assertRaisesRegex(ValueError, "default client threads"):
             local_ydb_workloads._validate_catalog((replace(definition, default_client_threads=0),))
+        for invalid_warmup in (-1, True, "10"):
+            with self.subTest(default_warmup_seconds=invalid_warmup), self.assertRaisesRegex(
+                ValueError, "default warmup"
+            ):
+                local_ydb_workloads._validate_catalog((replace(definition, default_warmup_seconds=invalid_warmup),))
+        with self.assertRaisesRegex(ValueError, "automatic warmup requires"):
+            local_ydb_workloads._validate_catalog(
+                (replace(definition, default_warmup_seconds=None, effective_warmup_builder=None),)
+            )
         string_limit = replace(
             definition,
             options=(local_ydb_workloads.WorkloadOption("scale", "auto", kind="string"),),
@@ -1371,7 +1490,7 @@ class YdbBenchTest(unittest.TestCase):
             warehouses=2,
             max_sessions=20,
             threads=2,
-            warmup_seconds=1,
+            warmup_seconds=30,
             time_seconds=10,
             new_orders=100,
         )
@@ -1395,7 +1514,7 @@ class YdbBenchTest(unittest.TestCase):
                 local_ydb_workloads.WorkloadCli(cluster.ydb_cli, cluster.client_endpoint, cluster.database),
                 workload,
                 {"parameter": "max-sessions"},
-                {"warmup": 0, "duration": 10},
+                {"warmup": None, "duration": 10},
                 2,
                 LOCAL_YDB_BENCHMARK,
                 topology_record,
@@ -1437,7 +1556,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual([command["phase"] for command in first_commands], ["measuring"])
         self.assertEqual([command["phase"] for command in second_commands], ["verification-measuring"])
         run_argv = execute.call_args_list[0].args[0]
-        self.assertEqual(run_argv[run_argv.index("--warmup") + 1], "1s")
+        self.assertNotIn("--warmup", run_argv)
         self.assertEqual(run_argv[run_argv.index("--threads") + 1], 2)
         self.assertEqual(first_metrics["throughput"], 10)
         self.assertEqual(second_metrics["transactions"], 300)
@@ -1458,6 +1577,9 @@ class YdbBenchTest(unittest.TestCase):
                 "cleaning-rmdir",
             ],
         )
+        measurements = [item for item in progress if item["phase"].endswith("measuring")]
+        self.assertTrue(all(item["inline_warmup_seconds"] == 30 for item in measurements))
+        self.assertTrue(all("configured_warmup_seconds" not in item for item in measurements))
 
     def test_local_ydb_profile_inline_lifecycle_prepares_once_and_cleans_once(self):
         definition, workload = self._synthetic_profile_workload()
@@ -3157,9 +3279,12 @@ class YdbBenchTest(unittest.TestCase):
             const compatible=localYdbLoadForWorkload(custom,['rate','threads']);
             const tpccDefinition={
               load_parameters:['max-sessions'],default_client_threads:2,
+              default_warmup_seconds:null,
               load_limits:{'max-sessions':{option:'warehouses',multiplier:10}}
             };
-            const topicDefinition={load_parameters:['rate'],default_client_threads:1,load_limits:{}};
+            const topicDefinition={
+              load_parameters:['rate'],default_client_threads:1,default_warmup_seconds:10,load_limits:{}
+            };
             const tpccWorkload={options:{warehouses:10}};
             const switchedToTpcc=localYdbLoadForWorkload(
               custom,tpccDefinition.load_parameters,tpccDefinition,tpccWorkload
@@ -3181,6 +3306,7 @@ class YdbBenchTest(unittest.TestCase):
               tpccThreads:localYdbDefaultClientThreads(tpccDefinition),
               topicThreads:localYdbDefaultClientThreads(topicDefinition),
               fallbackThreads:localYdbDefaultClientThreads({}),
+              warmups:[tpccDefinition,topicDefinition,{}].map(localYdbDefaultWarmupSeconds),
               units:['kv','stock','log','topic','future'].map(localYdbThroughputUnit),
               axes:['kv','stock','topic'].map(workload=>localSearchAxisLabel('rate',workload))
             }));
@@ -3238,6 +3364,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["tpccThreads"], 2)
         self.assertEqual(result["topicThreads"], 1)
         self.assertEqual(result["fallbackThreads"], 64)
+        self.assertEqual(result["warmups"], [None, 10, 10])
         self.assertEqual(
             result["units"],
             ["requests/s", "transactions/s", "batches/s", "messages/s", "operations/s"],
@@ -3246,6 +3373,57 @@ class YdbBenchTest(unittest.TestCase):
             result["axes"],
             ["Offered rate (requests/s)", "Offered rate (transactions/s)", "Offered rate (messages/s)"],
         )
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the web Builder warmup test")
+    def test_local_ydb_web_builder_omits_automatic_tpcc_warmup(self):
+        start = web._JS.index("function yamlArray")
+        finish = web._JS.index("async function syncEditor", start)
+        comparison_start = web._JS.index("function localComparisonConfig")
+        comparison_finish = web._JS.index("function localComparisonSemantic", comparison_start)
+        script = (
+            """
+            const editor={model:{local_ydb_workloads:[]}};
+            const document={querySelector:()=>({value:''})};
+            function localInteger(){throw Error('blank automatic warmup must not be parsed as an integer')}
+        """
+            + web._JS[start:finish]
+            + web._JS[comparison_start:comparison_finish]
+            + """
+            const tpcc={default_warmup_seconds:null};
+            const kv={default_warmup_seconds:10};
+            function profile(warmup){return {timeout:null,local_ydb:{
+              workload:{type:'tpcc',operation:'run',options:{warehouses:10}},
+              geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},
+              client:{threads:2},load:{parameter:'max-sessions',allow_errors:false,values:[1]},
+              measurement:{warmup,duration:2,repetitions:1,verification_repetitions:0},
+              affinity:{ydb_cli:{mode:'none',cpus:null},static_nodes:{mode:'none',cpus:null},dynamic_nodes:{mode:'none',cpus:null}}
+            }}}
+            const automatic=[];serializeLocalYdb(automatic,profile(null));
+            const explicit=[];serializeLocalYdb(explicit,profile(0));
+            process.stdout.write(JSON.stringify({
+              automatic:automatic.join('\\n'),explicit:explicit.join('\\n'),
+              blankTpcc:localYdbWarmupInput('warmup',tpcc),
+              blankKv:localYdbWarmupInput('warmup',kv),
+              comparisonAutomatic:localComparisonConfig({parameters:{measurement:{warmup:null}}})['Warmup seconds'],
+              comparisonMissing:localComparisonConfig({parameters:{measurement:{}}})['Warmup seconds']
+            }));
+        """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertNotIn("warmup:", result["automatic"])
+        self.assertIn("warmup: 0", result["explicit"])
+        self.assertIsNone(result["blankTpcc"])
+        self.assertEqual(result["blankKv"], 10)
+        self.assertEqual(result["comparisonAutomatic"], "automatic")
+        self.assertEqual(result["comparisonMissing"], "—")
+        self.assertIn("config.measurement.warmup=localYdbDefaultWarmupSeconds(nextDefinition)", web._JS)
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
     def test_local_ydb_web_hides_latency_for_empty_measurements(self):
@@ -3441,6 +3619,7 @@ class YdbBenchTest(unittest.TestCase):
             const definition={type:'fake',operations:['run'],load_parameters:['rate'],options:[],slo_metrics:{p90:'latency_ms'},reports_errors:false};
             const editor={model:{local_ydb_workloads:[definition],affinity_modes:['none'],benchmarks:[{name:'local-ydb'}]}};
             function localYdbWorkloadDefinition(){return definition}
+            function localYdbDefaultWarmupSeconds(){return 10}
         """
             + web._JS[start:finish]
             + """

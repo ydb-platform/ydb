@@ -1161,7 +1161,7 @@ class WorkloadLifecycle:
                 load,
                 self.measurement["duration"],
                 self.client_threads,
-                warmup_seconds=warmup if self.definition.warmup_mode == "inline" else 0,
+                warmup_seconds=configured_warmup if self.definition.warmup_mode == "inline" else 0,
             )
             self.cluster.ensure_running("cannot start workload measurement")
             progress_fields = {
@@ -1177,7 +1177,7 @@ class WorkloadLifecycle:
             }
             if self.definition.warmup_mode == "inline":
                 progress_fields["inline_warmup_seconds"] = warmup
-                if warmup != configured_warmup:
+                if configured_warmup is not None and warmup != configured_warmup:
                     progress_fields["configured_warmup_seconds"] = configured_warmup
             self.progress(phases["measure"], **progress_fields)
             result = run_command(

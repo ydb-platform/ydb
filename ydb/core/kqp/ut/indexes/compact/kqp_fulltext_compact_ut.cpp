@@ -62,7 +62,6 @@ void RestartFulltextShards(TKikimrRunner& kikimr, NQuery::TQueryClient& db, bool
     RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplTable");
     if (withRelevance) {
         RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplDocsTable");
-        RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplDictTable");
         RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplStatsTable");
     }
 

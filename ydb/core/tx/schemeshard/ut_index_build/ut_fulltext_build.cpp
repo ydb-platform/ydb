@@ -727,8 +727,24 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     void EnableAutoProvisionFlags(TTestActorRuntime& runtime) {
         auto& appData = runtime.GetAppData();
         appData.FeatureFlags.SetEnableFulltextIndex(true);
+        appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
         appData.FeatureFlags.SetEnableAddUniqueIndex(true);
         appData.FeatureFlags.SetEnableUniqConstraint(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    }
+
+    void CheckCompactFulltextImplTable(TTestBasicRuntime& runtime, const TString& path) {
+        TestDescribeResult(DescribePrivatePath(runtime, path), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                  NTableIndex::NFulltext::SegmentColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn },
+                /*strictCount=*/ true),
+        });
     }
 
     Y_UNIT_TEST(AutoProvision_FirstFulltextBuildAddsRowIdAndUniqueIndex) {
@@ -1028,15 +1044,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(indexNames.size(), 2);
         UNIT_ASSERT(indexNames.contains(NTableIndex::NFulltext::RowIdUniqueIndexName));
         UNIT_ASSERT(indexNames.contains("fulltext_one"));
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_one/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn,
-                 NTableIndex::NFulltext::FreqColumn},
-                {},
-                {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn},
-                /*ensureNoOther=*/ true),
-        });
+        CheckCompactFulltextImplTable(runtime, "/MyRoot/texts/fulltext_one/indexImplTable");
     }
 
     Y_UNIT_TEST(AutoProvision_ConcurrentFulltextBuildsSerializeAndReuseInfra) {
@@ -1138,24 +1146,9 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         UNIT_ASSERT(indexNames.contains("fulltext_one"));
         UNIT_ASSERT(indexNames.contains("fulltext_two"));
 
-        // Both successful builds use the single synthetic document id.
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_one/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*ensureNoOther=*/ true),
-        });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn,
-                  NTableIndex::NFulltext::FreqColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*ensureNoOther=*/ true),
-        });
+        // Both successful builds use compact posting tables backed by the shared synthetic document id.
+        CheckCompactFulltextImplTable(runtime, "/MyRoot/texts/fulltext_one/indexImplTable");
+        CheckCompactFulltextImplTable(runtime, "/MyRoot/texts/fulltext_two/indexImplTable");
     }
 
     Y_UNIT_TEST(AutoProvision_SingleIntegerPkUnaffected) {
@@ -1308,6 +1301,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         // Start with the legacy layout and some data, then deliver each SchemeShard config update
         // synchronously (SetConfig waits for TEvConfigNotificationResponse) before starting the next
         // public BuildIndex operation. This makes the physical-type decision deterministic.
+        SetCompactFulltextFlag(runtime, false);
         DoCreateTextTableAndIndex(runtime, env, txId, /*relevance*/ false,
             [](Ydb::Table::TableIndex& index) { index.add_data_columns("data"); });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx"), {

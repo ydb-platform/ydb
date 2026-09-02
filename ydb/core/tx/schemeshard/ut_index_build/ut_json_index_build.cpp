@@ -631,8 +631,8 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
                 /*strictCount=*/ true),
         });
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
-        // Distinct JSON tokens: root plus key/value pairs for a=1, b=2 and c=3.
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 7u);
+        // Distinct JSON tokens: key/value pairs for a=1, b=2 and c=3.
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 6u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
         const TString mainRowsBeforeTopology = ReadShards(
             runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts").at(0);
@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         });
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 6u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
         UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard,
             "/MyRoot/texts").at(0), mainRowsBeforeTopology);
@@ -723,8 +723,8 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
             Ydb::Table::IndexBuildState::STATE_DONE, rebuild.DebugString());
 
         const TString rebuiltImpl = "/MyRoot/texts/json_after_topology/indexImplTable";
-        // a=1 remains in ptwo; replacing pone adds the new topology key and value token: 7 + 2.
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rebuiltImpl), 9u);
+        // a=1 remains in ptwo; replacing pone adds the new topology key and value token: 6 + 2.
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rebuiltImpl), 8u);
         TString physicalRows;
         for (const auto& shard : ReadShards(runtime, TTestTxConfig::SchemeShard, rebuiltImpl)) {
             physicalRows += shard;
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         const TString rowIdImpl = TStringBuilder() << "/MyRoot/texts/"
             << NTableIndex::NFulltext::RowIdUniqueIndexName << "/" << NTableIndex::ImplTable;
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/json_idx/indexImplTable"), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/json_idx/indexImplTable"), 6u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
         TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/json_idx")), {
             NLs::PathNotExist,
@@ -840,7 +840,7 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/json_idx/indexImplTable"), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/json_idx/indexImplTable"), 6u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
         TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/json_idx")), {
             NLs::PathNotExist,

@@ -81,6 +81,15 @@ CREATE RESOURCE POOL CLASSIFIER cl_archive WITH (
 
 {% endnote %}
 
+Установка идентификатора приложения в клиенте:
+
+- **{{ ydb-short-name }} Embedded UI** — фиксированное значение `ydb-ui`, задаётся viewer-ом и не настраивается пользователем.
+- **YDB CLI** — не поддерживается: идентификатор клиентского приложения в запросе не отправляется.
+- **YDB CPP SDK** — на каждом запросе через параметр `Header` настроек [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, где константа [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) равна `x-ydb-application-name`.
+- **YDB Go SDK** — на драйвере через опцию [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) в вызове `ydb.Open`.
+- **YDB Java SDK** — на транспорте через метод [`GrpcTransportBuilder.withApplicationName`](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.4.11/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java#L280).
+- **YDB Python SDK** — dedicated параметра нет; задаётся на каждом запросе через generic-заголовок: `settings.with_header("x-ydb-application-name", "my-app")` (метод [`BaseRequestSettings.with_header`](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.4/ydb/settings.py#L66)).
+
 **Пример.** Направить запросы от Embedded UI в пул `pool_adhoc`:
 
 ```yql

@@ -229,7 +229,7 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
         .AppendItem({.Src = "Root/mydb/missing", .Dst = "one"})
         .AppendItem({.Src = "/Root/mydb/missing", .Dst = "two"});
     const auto exportResult = exportClient.ExportToS3(exportSettings).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(exportResult.GetStatus(), EStatus::SCHEME_ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(exportResult.Status().GetStatus(), EStatus::SCHEME_ERROR);
 
     AssertSuccess(schemeClient.MakeDirectory("Root").GetValueSync());
     NYdb::NTopic::TTopicClient topicClient(driver);

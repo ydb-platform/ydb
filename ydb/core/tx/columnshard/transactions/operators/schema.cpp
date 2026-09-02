@@ -390,9 +390,6 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             AFL_VERIFY(owner.TablesManager.IsGenerateInternalPathId());
             AFL_VERIFY(!owner.TablesManager.IsStoreTablet());
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
-            // After restart Truncating fence is empty and GenerationIndex.Live is
-            // rebuilt from DB. Re-fence the path (same as MoveTablePropose replay) so writes stay
-            // blocked while TRUNCATE is still pending.
             const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
             AFL_VERIFY(internalPathId);
             AFL_VERIFY(owner.TablesManager.HasTable(*internalPathId));

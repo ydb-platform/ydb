@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct)
+UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet)
 
 FORK_SUBTESTS()
 

@@ -207,6 +207,7 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
         ydb/core/nbs/cloud/blockstore/bootstrap
         ydb/core/nbs/cloud/blockstore/config/protos
         ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
+        ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet
         ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/libs/storage/volume
 

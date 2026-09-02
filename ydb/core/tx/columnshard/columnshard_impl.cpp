@@ -458,8 +458,6 @@ void TColumnShard::RunTruncateTable(
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
-    // Prefer the propose-time fence (Truncating): ResolveInternalPathId is empty
-    // after TruncateTablePropose, by design. Fall back to Resolve for defensive coverage.
     std::optional<TInternalPathId> oldInternalPathId = TablesManager.GetTruncatingInternalPathId(schemeShardLocalPathId);
     if (!oldInternalPathId) {
         oldInternalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
@@ -483,8 +481,6 @@ void TColumnShard::RunTruncateTable(
 
     LOG_S_DEBUG("TruncateTable for pathId: " << pathId << " at tablet " << TabletID());
 
-    // Capture schema + TTL/lifecycle settings of the table being truncated BEFORE TruncateTable() drops it,
-    // so the freshly generated internal path id inherits the same configuration.
     const auto lastVersionInfo = TablesManager.LoadLastTableVersionInfo(*oldInternalPathId, db);
     const auto ttlSettings = TablesManager.GetTableTtlProto(*oldInternalPathId, version);
 
@@ -503,9 +499,6 @@ void TColumnShard::RunTruncateTable(
 
     if (ttlSettings) {
         *tableVerProto.MutableTtlSettings() = *ttlSettings;
-        // NOTE: Tables with tiering are rejected at propose time (schema.cpp).
-        // If tiering support is added later, remove the propose-time check and
-        // re-activate tiering here with ActivateTiering(newInternalPathId, usedTiers).
     }
 
     TablesManager.AddTableVersion(newInternalPathId, version, tableVerProto, std::nullopt, db);

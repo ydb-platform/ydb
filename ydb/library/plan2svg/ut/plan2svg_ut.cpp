@@ -260,12 +260,23 @@ Y_UNIT_TEST_SUITE(TPlan2SvgEscape) {
         UNIT_ASSERT_VALUES_EQUAL(SvgEscape("&lt;"), "&amp;lt;");
     }
 
+    // Control characters other than \t \n \r cannot appear in XML 1.0 at all,
+    // even as entities; a query over a binary string literal puts them into
+    // operator info via JSON \u escapes.
+    Y_UNIT_TEST(ControlCharactersAreReplaced) {
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(TStringBuf("a\001b", 3)), "a?b");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(TStringBuf("\000\037", 2)), "??");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape("a\tb\nc\rd"), "a\tb\nc\rd");
+        UNIT_ASSERT_VALUES_EQUAL(SvgEscape(TStringBuf("<\001>", 3)), "&lt;?&gt;");
+    }
+
     // Operator descriptions routinely contain markup-looking text ("_col := <expr>",
-    // "a <- b", "x && y"), which used to reach the output verbatim.
+    // "a <- b", "x && y"), which used to reach the output verbatim. The \u0001 is
+    // decoded by the JSON reader into a raw control byte XML cannot carry.
     Y_UNIT_TEST(PlanTextWithMarkupStaysWellFormed) {
         TPlanVisualizer viz;
         viz.LoadPlans(TString(R"({"Plan":{"Plans":[{"Node Type":"ResultSet <&>","Plans":[
-            {"Node Type":"Stage","Operators":[{"Name":"Filter","Predicate":"item.a < 1 && item.b > 2"}]}
+            {"Node Type":"Stage","Operators":[{"Name":"Filter","Predicate":"item.a < 1 && item.b > \u0001"}]}
         ]}]}})"));
         auto svg = viz.PrintSvg();
         AssertWellFormed(svg, "plan with markup in operator info");

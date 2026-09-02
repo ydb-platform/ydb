@@ -9,8 +9,9 @@ namespace NPlan2Svg {
 // Text taken from the plan - operator descriptions, predicates, table and column
 // names - lands in SVG element content, which a browser parses as XML: a single
 // unescaped '&' or '<' makes the whole document fail to load rather than just
-// that one label. SvgText escapes what it is given, so only the places that
-// stream plan text into a <title> by hand have to call this themselves.
+// that one label. Control characters XML cannot represent at all are replaced
+// with '?'. SvgText escapes what it is given, so only the places that stream
+// plan text into a <title> by hand have to call this themselves.
 //
 // Attribute values are not covered because none of them carry plan text; they
 // are numbers, palette entries and class names produced by this library.

@@ -7,18 +7,27 @@
 
 namespace NPlan2Svg {
 
+// Control characters other than tab, newline and carriage return are not
+// representable in XML 1.0 at all, not even as entities. Plan text can carry
+// them - a predicate over a binary string literal round-trips the raw bytes -
+// so they are replaced rather than left to invalidate the whole document.
+static bool IsControl(char c) {
+    return static_cast<unsigned char>(c) < 0x20 && c != '\t' && c != '\n' && c != '\r';
+}
+
 TString SvgEscape(TStringBuf text) {
     size_t extra = 0;
+    bool controls = false;
     for (char c : text) {
         switch (c) {
             case '&': extra += 4; break; // &amp;
             case '<': extra += 3; break; // &lt;
             case '>': extra += 3; break; // &gt;
-            default: break;
+            default: controls |= IsControl(c); break;
         }
     }
 
-    if (extra == 0) {
+    if (extra == 0 && !controls) {
         return TString(text);
     }
 
@@ -29,7 +38,7 @@ TString SvgEscape(TStringBuf text) {
             case '&': result += "&amp;"; break;
             case '<': result += "&lt;"; break;
             case '>': result += "&gt;"; break;
-            default: result += c; break;
+            default: result += IsControl(c) ? '?' : c; break;
         }
     }
     return result;

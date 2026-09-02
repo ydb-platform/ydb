@@ -11,6 +11,7 @@ Main materials:
 - [{#T}](dynamic-config-selectors.md)
 - [{#T}](config-settings.md)
 - [{#T}](cluster-expansion.md)
+- [{#T}](state-storage-reconfiguration.md)
 - [{#T}](state-storage-move.md)
 - [{#T}](static-group-move.md)
 - [{#T}](replacing-nodes.md)

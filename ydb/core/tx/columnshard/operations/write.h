@@ -80,7 +80,8 @@ public:
         const NEvWrite::EModificationType mType, const bool isBulk);
 
     void Start(TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
-        const NOlap::TWritingContext& context, const std::shared_ptr<NLWTrace::TOrbit>& orbit, const ui64 txId, const TMonotonic orbitStartInstant);
+        const NOlap::TWritingContext& context, const std::shared_ptr<NLWTrace::TOrbit>& orbit, const ui64 txId,
+        const TMonotonic orbitStartInstant);
     void OnWriteFinish(
         NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;

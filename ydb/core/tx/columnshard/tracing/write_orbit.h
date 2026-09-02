@@ -4,8 +4,8 @@
 
 namespace NKikimr::NColumnShard {
 
-void TrackStartWrite(NLWTrace::TOrbit& orbit, ui64 pathId, ui64 tabletId, ui64 txId, ui64 cookie, const TString& sender,
-    TDuration writeTimeout, ui64 size, const TString& modificationType, bool isBulk);
+void TrackStartWrite(NLWTrace::TOrbit& orbit, ui64 pathId, ui64 tabletId, ui64 txId, ui64 cookie, const TString& sender, TDuration writeTimeout,
+    ui64 size, const TString& modificationType, bool isBulk);
 
 void TrackWritePrepareDataBlobs(const NEvWrite::TWriteMeta& meta, TDuration duration, ui64 blobBytes);
 void TrackWritePrepareIndexBlobs(const NEvWrite::TWriteMeta& meta, TDuration duration, ui64 blobBytes);

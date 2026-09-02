@@ -71,8 +71,8 @@ private:
             evResult = NEvents::TDataEvents::TEvWriteResult::BuildError(owner.TabletID(), txInfo.GetTxId(),
                 NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, GetProposeStartInfoVerified().GetStatusMessage());
         } else {
-            TrackCommitWriteResult(owner.TabletID(), txInfo.GetTxId(), txInfo.Cookie, TxInfo.Source.ToString(), true,
-                "transaction operator (prepared)", "", "");
+            TrackCommitWriteResult(
+                owner.TabletID(), txInfo.GetTxId(), txInfo.Cookie, TxInfo.Source.ToString(), true, "transaction operator (prepared)", "", "");
             evResult = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(
                 owner.TabletID(), txInfo.GetTxId(), owner.GetProgressTxController().BuildCoordinatorInfo(txInfo));
         }

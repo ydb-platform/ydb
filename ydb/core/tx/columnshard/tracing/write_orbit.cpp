@@ -1,6 +1,5 @@
-#include "write_orbit.h"
-
 #include "probes.h"
+#include "write_orbit.h"
 
 #include <ydb/library/actors/core/monotonic.h>
 
@@ -14,8 +13,8 @@ ui64 PathIdOf(const NEvWrite::TWriteMeta& meta) {
 }
 }   // namespace
 
-void TrackStartWrite(NLWTrace::TOrbit& orbit, ui64 pathId, ui64 tabletId, ui64 txId, ui64 cookie, const TString& sender,
-    TDuration writeTimeout, ui64 size, const TString& modificationType, bool isBulk) {
+void TrackStartWrite(NLWTrace::TOrbit& orbit, ui64 pathId, ui64 tabletId, ui64 txId, ui64 cookie, const TString& sender, TDuration writeTimeout,
+    ui64 size, const TString& modificationType, bool isBulk) {
     LWTRACK(StartWrite, orbit, pathId, tabletId, txId, cookie, sender, writeTimeout, size, modificationType, isBulk);
 }
 
@@ -31,8 +30,7 @@ void TrackWritePrepareIndexBlobs(const NEvWrite::TWriteMeta& meta, TDuration dur
     }
 }
 
-void TrackWritePrepareBlobs(
-    const NEvWrite::TWriteMeta& meta, TDuration dataDuration, ui64 dataBytes, TDuration indexDuration, ui64 indexBytes) {
+void TrackWritePrepareBlobs(const NEvWrite::TWriteMeta& meta, TDuration dataDuration, ui64 dataBytes, TDuration indexDuration, ui64 indexBytes) {
     TrackWritePrepareDataBlobs(meta, dataDuration, dataBytes);
     TrackWritePrepareIndexBlobs(meta, indexDuration, indexBytes);
 }
@@ -55,8 +53,8 @@ void TrackWriteFinished(NLWTrace::TOrbit& orbit, ui64 pathId, ui64 tabletId, ui6
         writeTime);
 }
 
-void TrackWriteFinished(const NEvWrite::TWriteMeta& meta, const TString& type, TDuration transactionTime, TDuration completeTime,
-    TDuration txTotalTime) {
+void TrackWriteFinished(
+    const NEvWrite::TWriteMeta& meta, const TString& type, TDuration transactionTime, TDuration completeTime, TDuration txTotalTime) {
     if (const auto& orbit = meta.GetOrbit()) {
         const auto now = TMonotonic::Now();
         TrackWriteFinished(*orbit, PathIdOf(meta), meta.GetTabletId(), meta.GetTxId(), meta.GetCookie(), meta.GetSource().ToString(), type,
@@ -71,8 +69,8 @@ void TrackWriteFailed(NLWTrace::TOrbit& orbit, ui64 pathId, ui64 tabletId, ui64 
 
 void TrackWriteFailed(const NEvWrite::TWriteMeta& meta, const TString& type, const TString& status, const TString& reason) {
     if (const auto& orbit = meta.GetOrbit()) {
-        TrackWriteFailed(*orbit, PathIdOf(meta), meta.GetTabletId(), meta.GetTxId(), meta.GetCookie(), meta.GetSource().ToString(), type,
-            status, reason);
+        TrackWriteFailed(
+            *orbit, PathIdOf(meta), meta.GetTabletId(), meta.GetTxId(), meta.GetCookie(), meta.GetSource().ToString(), type, status, reason);
     }
 }
 

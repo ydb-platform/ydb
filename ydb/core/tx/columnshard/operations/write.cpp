@@ -35,9 +35,8 @@ void TWriteOperation::Start(TColumnShard& owner, const NEvWrite::IDataContainer:
     const NOlap::TWritingContext& context, const std::shared_ptr<NLWTrace::TOrbit>& orbit, const ui64 txId, const TMonotonic orbitStartInstant) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
-    auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>(
-        (ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(), context.GetWritingCounters()->GetWriteFlowCounters(), orbit,
-        context.GetTabletId(), Cookie, txId, orbitStartInstant);
+    auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>((ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(),
+        context.GetWritingCounters()->GetWriteFlowCounters(), orbit, context.GetTabletId(), Cookie, txId, orbitStartInstant);
     writeMeta->SetModificationType(ModificationType);
     writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);

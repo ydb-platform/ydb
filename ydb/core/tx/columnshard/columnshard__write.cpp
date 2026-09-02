@@ -159,8 +159,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         const TString errorMessage = ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails";
         NColumnShard::TrackWriteFailed(writeMeta, "write_blob_result", ToString(ev->Get()->GetWriteResultStatus()), errorMessage);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), ev->Get()->GetWriteResultStatus(),
-            errorMessage);
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+            TabletID(), operation->GetLockId(), ev->Get()->GetWriteResultStatus(), errorMessage);
         ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
         Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
         wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
@@ -372,14 +372,14 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         TrackStartWrite(*orbit, pathId, TabletID(), txId, cookie, sender, timeout, size, modificationType, isBulk);
     };
     const auto trackFailed = [&](ui64 pathId, ui64 size, const TString& modificationType, bool isBulk, const TString& type,
-                                   const TString& status, const TString& reason) {
+                                 const TString& status, const TString& reason) {
         trackStart(pathId, size, modificationType, isBulk);
         TrackWriteFailed(*orbit, pathId, TabletID(), txId, cookie, sender, type, status, reason);
     };
 
     if (!TablesManager.GetPrimaryIndex()) {
-        trackFailed(0, 0, "", false, "immediate error", ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST),
-            "schema not ready for writing");
+        trackFailed(
+            0, 0, "", false, "immediate error", ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "schema not ready for writing");
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "schema not ready for writing");
@@ -412,8 +412,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    const auto sendError = [&](const TString& message, const NKikimrDataEvents::TEvWriteResult::EStatus status, ui64 pathId = 0,
-        ui64 size = 0, const TString& modificationType = TString(), bool isBulk = false) {
+    const auto sendError = [&](const TString& message, const NKikimrDataEvents::TEvWriteResult::EStatus status, ui64 pathId = 0, ui64 size = 0,
+                               const TString& modificationType = TString(), bool isBulk = false) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         trackFailed(pathId, size, modificationType, isBulk, "immediate error", ToString(status), message);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), record.GetTxId(), status, message);
@@ -467,8 +467,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 }
                 if (commitOperation->NeedSyncLocks()) {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
-                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) + " != " +
-                                      ::ToString(commitOperation->GetGeneration()),
+                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
+                                      " != " + ::ToString(commitOperation->GetGeneration()),
                             NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
                         sendError(

@@ -63,10 +63,10 @@ set -o pipefail
   2>&1 | tail -n 100
 ```
 
-The checked-in proof floor runs the forty-one curated obligations with the
+The checked-in proof floor runs the forty-two curated obligations with the
 pinned Z3 4.16.0 target and a fixed 60-second per-query budget. It selects TPCH
 q3, q4, q6, q7, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus
-TPC-DS q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q42, q43, q48, q52,
+TPC-DS q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q41, q42, q43, q48, q52,
 q55, q62, q69, q73, q87, q88, q90, q93, q94, q95, q96, q97, and q99 directly
 from the policy. It accepts only `VERIFIED_BOUNDED` and ignores every ambient
 `RBO_COVERAGE_*` variable:
@@ -137,8 +137,8 @@ five's independent semantic classification from hiding a preparation
 regression. The exact-pair floor is the union of the formula and verifier-entry
 floors with the supplemental `required_snapshot_pair_queries`. The supplemental
 lists are empty for both suites because q49, q51, q53, q63, and q89 now belong
-to the stronger formula floor. The effective schema-v5 exact-pair floors remain
-20 TPCH and 81 TPC-DS queries, 101 overall. A pair is exact only
+to the stronger formula floor. The effective schema-v5 exact-pair floors are
+20 TPCH and 82 TPC-DS queries, 102 overall. A pair is exact only
 when capture produces exactly two results in
 Initial-then-Final order; unsupported pairs still satisfy this floor, while a
 zero-, one-, extra-, or reordered capture does not.
@@ -154,11 +154,11 @@ automatically entering the preparation floor. The formula-construction floor
 requires TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14,
 q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q4, q5, q6, q7, q8, q9,
 q10, q11, q12, q13, q15, q16, q18, q19, q20, q21, q22, q24, q25, q26, q28, q29, q31, q33,
-q34, q35, q37, q38, q40, q42, q43, q45, q46, q48, q49, q50, q51, q52, q53, q54, q55,
+q34, q35, q37, q38, q40, q41, q42, q43, q45, q46, q48, q49, q50, q51, q52, q53, q54, q55,
 q56, q58, q59, q60, q61, q62, q63, q64, q65, q66, q68, q69, q71, q72, q73,
 q74, q75, q76, q77, q78, q79, q80, q82, q83, q84, q85, q87, q88, q89, q90,
-q91, q93, q94, q95, q96, q97, q98, and q99. This is 20 TPCH plus 81 TPC-DS
-formulas, 101 overall.
+q91, q93, q94, q95, q96, q97, q98, and q99. This is 20 TPCH plus 82 TPC-DS
+formulas, 102 overall.
 The integral-AVG Slice A policy also pins TPC-DS q7, q13, and q26 in
 `required_prepare_success_queries`; each must therefore preserve both
 successful preparation and formula construction. The integral-extrema policy
@@ -216,13 +216,18 @@ separate verifier-entry requirement.
 TPC-DS q43/q62 are already pinned at successful preparation and formula
 construction. M90 additionally pins both at bounded proof; neither has a
 separate verifier-entry requirement.
+TPC-DS q41 is pinned at successful preparation and formula construction by
+M91's narrow repeated-common-correlation `OR` scalar-aggregate contract. Its
+exact pair derives from formula membership; it has no supplemental-pair or
+explicit verifier-entry requirement. M91 promotes it to bounded proof only
+after two focused `VERIFIED_BOUNDED` runs.
 TPCH q7 is already pinned at successful preparation and formula construction.
 M89 additionally pins it at bounded proof; it has no separate verifier-entry
 requirement.
 The preparation-success, exact-pair, verifier-entry, and formula floors are
 enforced only for a complete formula-only suite. The proof floor requires TPCH q3, q4, q6,
 q7, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS q3, q8, q9,
-q15, q16, q19, q21, q28, q34, q38, q42, q43, q48, q52, q55, q62, q69, q73,
+q15, q16, q19, q21, q28, q34, q38, q41, q42, q43, q48, q52, q55, q62, q69, q73,
 q87, q88, q90, q93, q94, q95, q96, q97, and q99;
 dedicated hermetic tests require each one both to complete preparation and to
 remain `VERIFIED_BOUNDED`.
@@ -1751,9 +1756,22 @@ and again in an independent two-query repeat. The unresolved results are
 neither proofs nor counterexamples, and no intervening semantic change is
 credited. Policy commit `ad7acfd848f` adds only q43/q62 and their matching
 fixtures. Focused policy validation passes 16/16; fresh policy-valid gates
-prove the unchanged 14/14 TPCH plus 27/27 TPC-DS and raise the current floor
+prove the unchanged 14/14 TPCH plus 27/27 TPC-DS and raise the M90 floor
 to 41/41. Every weaker inventory and M87's ordinary dashboards remain
 unchanged.
+
+Milestone 91 admits TPC-DS q41's narrow scalar-aggregate common-`OR`
+correlation at `da9e8812791`: every branch repeats the same ordered direct
+ordinary outer=inner equality and has only dependency-free, available-inner
+residuals. Local factorization runs after the existing structural gates,
+preserves the original source predicate on the Initial semantic wire and its
+SQL Bool3 semantics, and does not change relational `EXISTS`. Formula policy
+`b0d09a595ea` adds only q41 preparation and
+formula requirements; proof policy `957984763cb` follows two focused bounded
+proofs. Fresh dashboards establish 20/82 formulas and preparation 20/2 plus
+74/25; fresh policy-valid gates prove 14/14 plus 28/28. The current floor is
+42/42, with complete evidence under
+`.rbo-verification-artifacts/20260902-m91-q41-common-or-correlation/`.
 
 The complete post-M71 formula dashboards are TPCH 20 / 0 / 2 after
 3,020/93,251 ms (report SHA-256
@@ -1956,7 +1974,7 @@ measured start to 96, M77 raises it to 99, and M78 raises the measured floor to
 100. Later blockers can
 invalidate any query-count projection. The remaining 20 workload entries have
 no exact captured pair and require frontend/optimizer work before verifier semantics
-can help; consequently the present captured-pair ceiling is 101/121.
+can help; consequently the post-M79 captured-pair ceiling was 101/121.
 Even reaching that ceiling would establish formula construction, not solver
 proof.
 Before M79 there was one exact-pair exporter gap and zero verifier-side
@@ -2018,6 +2036,11 @@ counterexample, and no intervening semantic change is credited. Focused
 policy validation passes 16/16; fresh unchanged 14/14 TPCH plus 27/27 TPC-DS
 gates raise the proof floor to 41/41. Every weaker inventory remains fixed and
 the M87 dashboards remain authoritative.
+M91 production/formula/proof commits `da9e8812791`, `b0d09a595ea`, and
+`957984763cb` move q41 to required preparation, formula, derived-pair, and
+bounded-proof depth. Fresh dashboards establish 102 formulas, and fresh
+14/14 TPCH plus 28/28 TPC-DS gates establish the current 42/42 floor. Exact
+theorem, repeatability, retention, and evidence details are recorded below.
 M4 remains the current milestone.
 
 The exact sorting-network slice adds TPCH q2 to the formula and preparation
@@ -2858,21 +2881,26 @@ checked floor is thirty-nine.
 M90 then promotes already-supported TPC-DS q43/q62 without changing those
 weaker counts. The TPC-DS proof floor rises to 27/99 workload rows (27.3%) and
 27/81 formula-covered rows (33.3%); with the unchanged 14 TPCH proofs the
-current checked floor is forty-one.
+M90 checked floor is forty-one.
+M91 then adds q41 at preparation, formula, derived-pair, and proof depth. The
+formula denominator grows before proof density is recomputed: TPC-DS is 82/99
+formulas and 28/99 proofs (28.3%), or 28/82 formula-covered rows (34.1%). With
+unchanged TPCH 20 formulas and 14 proofs, the current floors are 102 formulas
+and forty-two bounded proofs.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
 159/63,937 ms. Focused q65 emits a formula after 687/30,318 ms. The proof floor
-contains forty-one confirmed `VERIFIED_BOUNDED` obligations.
+contains forty-two confirmed `VERIFIED_BOUNDED` obligations.
 
 ## Curated proof floor and focused results
 
 - The checked-in proof floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q7, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
-  q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q42, q43, q48, q52, q55,
+  q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q41, q42, q43, q48, q52, q55,
   q62, q69, q73, q87, q88, q90, q93, q94,
   q95, q96, q97, and q99, each at two rows per referenced table and two tasks.
-  These are forty-one bounded proofs, 41/121 (33.9%) of the workload,
+  These are forty-two bounded proofs, 42/121 (34.7%) of the workload,
   for the modeled pre-physical semantics, not unbounded SQL-equivalence claims.
   Fresh post-M78 reports pass 13/13 TPCH after 1,745/82,550 ms (SHA-256
   `8a3ca5e010d927d5f90d06c59a0dec6aeba73338adcfdba4b5d5234267428ffd`)
@@ -3654,7 +3682,7 @@ contains forty-one confirmed `VERIFIED_BOUNDED` obligations.
   duration is solver time. Combined gate preparation/verifier work is
   21,632/428,281 ms.
 
-  The current floor is 41/41: 41/121 workload rows (33.9%), 41/101
+  The M90 floor is 41/41: 41/121 workload rows (33.9%), 41/101
   formula-covered pairs (40.6%), and within TPC-DS 27/99 workload rows (27.3%)
   and 27/81 formula rows (33.3%). TPCH remains 14/22 workload rows (63.6%) and
   14/20 formula rows (70.0%). M90 changes only policy, fixtures, and
@@ -3663,6 +3691,116 @@ contains forty-one confirmed `VERIFIED_BOUNDED` obligations.
   failures, preparation 20/2 and 73/26, and all 101 formula-covered exact
   pairs. Complete M90 evidence is preserved under
   `.rbo-verification-artifacts/20260902-m90-tpcds-q43-q62-promotion/`.
+
+  M91 moves TPC-DS q41 from preparation failure/no pair to successful
+  preparation, formula construction, and bounded proof. Production commit
+  `da9e8812791277ded3035dea38045bd461775fc7` invokes local factoring only on
+  the Aggregate pull-up path beneath the existing Filter, single-consumer, and
+  `AddDependencies` gates; q41's verified admission is a scalar subplan with
+  one ungrouped Aggregate.
+  It factors a local predicate copy for inspection: every flattened `OR`
+  branch must have exactly one dependency-bearing conjunct, and that conjunct
+  must be the same structural, same ordered, direct ordinary outer=inner
+  equality in every branch. Residuals must be dependency-free and use available
+  inner columns. The original predicate and plan remain untouched until all
+  existing pull-up checks pass. M91 adds no new global factorization registration;
+  this admission inspects a local factored proxy.
+  Missing/different/inconsistently reversed/multiple/null-safe/non-equality
+  correlations, dependent or unavailable residuals, non-Aggregate inputs, and
+  unsafe topology fail closed.
+
+  Export preserves the full source `OR`, while Python independently flattens
+  and validates its branch contract and evaluates the original SQL Bool3
+  `AND`/`OR`/Filter semantics. Relational `EXISTS` is unchanged. Focused gates
+  pass 10/10 correlated-rule C++ suite tests and 1/1 focused exporter test;
+  the Python subplan suite passes 102 tests, with eight existing solver skips;
+  and 1/1 real-host mini-q41 verification passes. The positive integration
+  shape repeats the `MatchKey` equality around nullable non-key
+  `Payload == 7/8`; negatives cover different/per-branch-reversed/missing/multiple/
+  null-safe correlations, residual dependencies or unavailable columns, and
+  no-mutation rejection.
+  The real-host test takes 4.448036 seconds (metadata/trace wall
+  5.355600/5.361682 seconds), peaks at 842,984 KiB tree RSS, and retains
+  trace/metadata hashes
+  `f27df0162ab47906baf13da3282d5b66e049e7c68219f4d04d54ba0512a8b592` and
+  `2b9031c8649b18ea501ef5df47c47290b45a0040df48fa36fab0bcea6dd81cfd`.
+  The retained real-host trace predates the production commit and carries no
+  Git identity; it validates the candidate subsequently committed.
+
+  Formula-policy commit `b0d09a595ea73f90016a4943f6dafdbd84467bce`
+  adds q41 only to required preparation success and formula construction; the
+  pair floor derives from formula membership, and explicit pair, entry, and
+  proof lists remain unchanged. Independent formula-only runs are
+  `FORMULA_EMITTED` after 188/629 and 178/611 ms and have identical normalized
+  reports after timing removal (2,079 bytes, SHA-256
+  `fd847646f8589217ee3a6989f524efc12708908a0965d784c6fc2d807704b6d3`).
+  The first predates the production commit timestamp and is retained as
+  candidate-worktree evidence; the repeat follows it, but neither report embeds
+  Git identity. The formula-policy slice was observed 16/16 GOOD in 106.09
+  outer seconds, without retained raw bytes. Their exact artifact hashes are:
+
+  | Run | Report | Trace | Metadata | Principal output |
+  |---|---|---|---|---|
+  | first | `e784ea6cf2dbff89bd250a7ef858800f8914e2e587e8093a634893bf0c31f1a2` | `3d6e050739bfba3705ce5acc9992552a9c97421705c7b44909dd420d276bed6f` | `4104a2c29de8e3d9d41d155b20a37916883b3220b75139048394d6440142bb41` | `d05cc053d0d7d478091d530eb31ff45938b1d31bd49f4be9b35f8d5300d92bf4` |
+  | repeat | `536dff5b796017afcebb7664bd6151e1acc1244210034c7e9528ae8e2eacfc57` | `906f32a4ffaafe6782fe460ae3d8addd41655257342e795c9b7c6bb2271bd0ed` | `580d7fc4a9f13dd001b81a2aeff47abb4630cc82742ab50bae942b18b968d67f` | `539943048f418dd9e151e39e4f16d11b78382dcb0d1c4d9e269b0bfb435206db` |
+
+  Focused 2x2, 60-second solver experiments then return
+  `VERIFIED_BOUNDED` twice after 173/3,226 and 177/3,620 ms, with observed outer
+  walls 24.19/26.78 seconds. The normalized
+  semantic rows match, but path-stable Ya publication overwrote the first raw
+  files and repeat trace before retention. This is deliberately not described
+  as byte-identical raw evidence. Authentic retained repeat report/output
+  hashes are
+  `2e6496020ca7799811d22d04874e3627a06e731e6e6d6cb8ca82d090900c56e8`
+  and `72f0532e9422c6d92f6b58d8880b2101dbe2ec7d3c656d0647856d4b315e438c`;
+  the observed but not bundle-retained metadata hash is
+  `9c0d5497b627ca6daada2ecdfede5a88a7f7edb4d64ab3d3235f9bc1f85892b1`.
+  No standalone successful formula or verdict was retained, and no absent hash
+  is reconstructed. Proof-policy commit
+  `957984763cbc458014badfc2873ec957ba430671` adds only q41 and exact fixtures
+  to the required TPC-DS proof set. Observed post-promotion policy validation
+  is 16/16 GOOD in 97.03 outer seconds; the isolated hermetic-floor test is 1/1
+  GOOD in 28.32 seconds. Their raw bundles were overwritten before retention.
+
+  Fresh full formula dashboards at proof-policy HEAD are exact and
+  policy-valid with zero violations:
+
+  | Suite | Rows | Semantic summary | Preparation | Exact pairs / actual entries | Preparation / verifier ms | Outer seconds |
+  |---|---:|---|---|---:|---:|---:|
+  | TPCH | 22 | 20 `FORMULA_EMITTED`, 2 `OPTIMIZER_FAILURE` | 20 / 2 | 20 / 20 | 4,381 / 142,777 | 167.34 |
+  | TPC-DS | 99 | 82 `FORMULA_EMITTED`, 17 `OPTIMIZER_FAILURE` | 74 / 25 | 82 / 82 | 77,695 / 824,625 | 926.56 |
+
+  TPC-DS has no unsupported row and 19 overlapping preparation-failure reason
+  groups; q41 takes 180/611 ms. Compared with M87, q41 is the only normalized
+  semantic-inventory change; q23's raw reason changes only volatile AST IDs.
+  TPC-DS report/trace/metadata/output hashes are
+  `9f5032b1771f9323f1e9e094c2653d6d87d47de261f168bef358770cc2ac2006`,
+  `5d3dd65d6b0dabf9d5ce2c5a53198d367593ff719a0d552104d5897de04a7bbf`,
+  `452c684cb23b05c5d4e27484b6863d886d1f656ec96b15a01ba38b8afe9eafd8`,
+  and `d49542bf081109e25c4b879937f2855e46db7c0b8e39eb10ee4224610fc9dbe8`.
+  The unchanged TPCH values are
+  `245c3a1006575b7bd5e0a3d92260ad2cf1c424ba6de36f6cb25079fa77a8368c`,
+  `e49d72bfe42e2d8bd079a446ed65d525e02160d8b855df4a91f3ecb9ce03a6a7`,
+  `ed0b8a5b186ccd3a9d06dbaa8786fd465ec2aa64fca338ce4cca3e00a6f0883b`,
+  and `d8a80e1e2f45cde799a8b218fd936b16fcfb06ea8b8fd3c95ed32647f39cbacf`.
+
+  Fresh proof-floor reports are likewise policy-valid with zero violations:
+
+  | Suite | Required / verified | Preparation / verifier ms | q41 ms | Outer seconds | Report / trace / metadata / output SHA-256 |
+  |---|---:|---:|---:|---:|---|
+  | TPCH | 14 / 14 | 2,034 / 83,899 | n/a | 104.94 | `5e54bac68ce4e1736901fc89a381326e87187332e75e0f1a9f1f07a8c6f99d8d` / `9ecfc86fa6a27d341aab1ed383961ea8554c9a7a486e1b89b7f91c74b9271744` / `6707d960802f6156dc830a090f4e978042a3fc626ac93ee885ce1d3b85d79757` / `bd7c52f98425e79eaa4bbf6f101a36707e89f28a1fb597e46fe46053a6ada4b0` |
+  | TPC-DS | 28 / 28 | 26,135 / 365,205 | 158 / 3,167 | 426.13 | `ce171c0329a8e636b7061cec5a208cfc6e273875224b797724da8cef5eec1725` / `d951143b3eab3b118a971ae82ae5ebc2cbdc228072d262b5452d231e067c27d7` / `85c2c496920408f45a27cd5d73e5273cf82d4278f2ca8ba142b0d196e0424d8d` / `74366f4272e756c51c25a35c072865448862ab369e1648b743e8deeca61310cc` |
+
+  Combined proof work is 28,169/449,104 ms. Formula coverage is now 102/121
+  (84.3%): TPCH 20/22 (90.9%) and TPC-DS 82/99 (82.8%). Proof coverage is
+  42/121 (34.7%) and 42/102 formula-covered pairs (41.2%): TPCH 14/22 and
+  14/20, TPC-DS 28/99 (28.3%) and 28/82 (34.1%). The retained bundle has 30
+  files and 566,280 bytes; all 29 files covered by its checksum inventory pass
+  validation. `MANIFEST.md` and `SHA256SUMS` have SHA-256 values
+  `285a2e7042bad017e298cdc43483646b720565ef171811552f2b87228ae9c755`
+  and `6df144791f8b197e89fcee6f1f7fd01242aa9beea9cdbc9c528f3647c1cad3c9`.
+  Complete M91 evidence is preserved under
+  `.rbo-verification-artifacts/20260902-m91-q41-common-or-correlation/`.
 
   Focused q8 prepares in 695 ms and proves after 2,041 ms.
   The preceding 30-obligation complete reports had SHA-256 values
@@ -4484,12 +4622,18 @@ counterexample; no intervening semantic change is credited. Policy validation
 passes 16/16; fresh unchanged 14/14 TPCH plus 27/27 TPC-DS gates raise the
 proof floor to 41/41 while every weaker inventory and the M87 dashboards
 remain fixed.
+M91 production commit `da9e8812791` admits q41's scalar-only repeated-common-
+correlation `OR`; formula policy `b0d09a595ea` adds q41 to preparation and
+formula depth, and proof policy `957984763cb` follows two focused bounded
+proofs. The original source predicate on the Initial semantic wire, its Bool3
+semantics, and the separate `EXISTS` contract remain intact. Fresh dashboards establish 102 formulas and preparation 94/27;
+fresh 14/14 TPCH plus 28/28 TPC-DS gates raise the proof floor to 42/42.
 More than two dependencies, other correlation shapes, coercing dynamic `IN`,
 nullable String and non-positive nullable contexts, broader range grammars,
 and other OLAP pushdowns remain later work. Solver/formula-size work promotes
 supported queries only after reproducible `VERIFIED_BOUNDED` results. The
-required policy now contains forty-one obligations. Fresh M90 gates confirm
-14/14 TPCH and 27/27 TPC-DS. The earlier
+required policy now contains forty-two obligations. Fresh M91 gates confirm
+14/14 TPCH and 28/28 TPC-DS. The earlier
 contended q9 `UNKNOWN` was a failed operational run, not a counterexample or a
 new optimizer finding.
 

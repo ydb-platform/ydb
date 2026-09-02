@@ -798,8 +798,9 @@ Implementation sequence:
 31. M4: repeatable proof-depth sweep over the newly admitted formulas;
 32. M4: exact canonical-first, per-outcome mismatch decomposition under one
     solver deadline;
-33. M4: exact one-equality-correlated scalar aggregation with an explicit
-    per-invocation outer binding;
+33. M4: exact one-equality-correlated scalar aggregation, including q41's
+    narrow repeated-common-correlation `OR`, with an explicit per-invocation
+    outer binding;
 34. M4: exact row-level `DistinctAll` aggregation, beginning with TPC-DS q6;
 35. M4: canonical generic-to-OLAP `EndsWith`/`StringContains` bridge;
 36. M4: exact same-type Decimal aggregate `min`;
@@ -1099,6 +1100,19 @@ Implementation sequence:
     TPC-DS obligations, raising the checked floor to 41/41 without changing
     any weaker inventory. M87's capped ordinary dashboards remain
     authoritative. M4 remains current.
+90. M4: Milestone 91 admits TPC-DS q41 through a scalar-only common-`OR`
+    correlation gate. Every flattened branch must repeat the same ordered
+    direct ordinary outer=inner equality and have only dependency-free,
+    available-inner residuals; local factoring begins after the existing
+    Filter, sole-consumer, `AddDependencies`, and Aggregate gates, preserves
+    the original source predicate on the Initial semantic wire and its SQL
+    three-valued semantics, and leaves relational `EXISTS` unchanged. Commits
+    `da9e8812791`, `b0d09a595ea`, and
+    `957984763cb` implement the slice, add q41 to required preparation/formula,
+    then promote it after two focused bounded proofs. Fresh dashboards produce
+    102/121 formulas with TPC-DS preparation 74/25; fresh proof gates verify
+    unchanged 14/14 TPCH plus 28/28 TPC-DS, raising the checked floor to 42/42.
+    M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -4277,7 +4291,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   duration is solver time. Combined gate preparation/verifier work is
   21,632/428,281 ms.
 
-  The current checked floor is therefore 41/41: 41/121 workload rows (33.9%),
+  The M90 checked floor is therefore 41/41: 41/121 workload rows (33.9%),
   41/101 formula-covered exact pairs (40.6%), and within TPC-DS 27/99 workload
   rows (27.3%) and 27/81 formula-covered rows (33.3%). TPCH remains 14/22
   workload rows (63.6%) and 14/20 formula-covered rows (70.0%). Every weaker
@@ -4287,6 +4301,116 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   formula counts, 2/18 optimizer failures, preparation 20/2 and 73/26, and all
   101 formulas. Complete evidence is preserved under
   `.rbo-verification-artifacts/20260902-m90-tpcds-q43-q62-promotion/`.
+
+  Milestone 91 closes one optimizer/exporter gap rather than broadening
+  correlation generally. Production commit
+  `da9e8812791277ded3035dea38045bd461775fc7` lets the existing scalar
+  aggregate pull-up inspect a locally factored copy of a source `OR` only
+  after its Filter, sole-consumer, `AddDependencies`, and Aggregate gates.
+  Flattening must yield at least two branches. Each branch must contain exactly
+  one dependency-bearing conjunct: the same structural, same ordered, direct
+  ordinary outer-column=inner-column equality in every branch. All residuals
+  are dependency-free and use available inner columns. The existing strict
+  recognizer still validates the extracted equality. M91 adds no new global
+  factorization registration: this admission inspects a local factored proxy,
+  while the source predicate is neither exported through that proxy nor
+  mutated on rejection, and every existing check must pass before plan
+  mutation. Different/inconsistently reversed/multiple/null-safe/non-equality
+  correlations, residual dependencies or unavailable columns, singleton
+  shapes, non-Aggregate inputs, and unsafe topology fail closed.
+
+  C++ serializes the original `OR`; Python independently flattens and validates
+  the same exact branch contract, then evaluates the original expression using
+  the existing SQL Bool3 `AND`/`OR`/Filter rules. The proof therefore covers
+  factorization including NULL, rather than treating it as an exporter axiom.
+  The old non-`OR` single-equality scalar path and relational `EXISTS` are
+  unchanged. The mini-q41 integration uses nullable non-key `Payload == 7/8`
+  residuals, retaining the scalar subplan/`OR` initially and requiring the
+  existing left-join/count-zero final repair with no subplan or `outer_bind`.
+
+  Focused gates pass 10/10 correlated-rule C++ suite tests and 1/1 focused
+  exporter test; the Python subplan suite passes 102 tests, with eight existing
+  solver skips; and 1/1 real-host mini-q41 2x2 verification passes. These cover the
+  positive factor/source-`OR`/NULL cases and fail-closed different correlation,
+  per-branch-reversed correlation, missing or multiple dependency conjunct, residual
+  dependency/unavailable column, null-safe/non-equality, and no-mutation paths.
+  The retained real-host trace predates the production commit and carries no
+  Git identity; it validates the candidate subsequently committed.
+
+  Formula-policy commit `b0d09a595ea73f90016a4943f6dafdbd84467bce`
+  adds q41 only to TPC-DS required preparation success and formula construction;
+  its pair is derived and no supplemental-pair, explicit verifier-entry, or
+  proof requirement is added. Focused formula runs emit the same normalized
+  report after 188/629 and 178/611 ms; after timing removal it is 2,079 bytes
+  with SHA-256
+  `fd847646f8589217ee3a6989f524efc12708908a0965d784c6fc2d807704b6d3`.
+  The first run predates the production commit timestamp and is retained as
+  candidate-worktree evidence; the repeat follows it, but neither report embeds
+  a Git identity. The formula-policy slice was observed 16/16 GOOD in 106.09
+  outer seconds, without retained raw bytes. First report/trace/metadata/output hashes are
+  `e784ea6cf2dbff89bd250a7ef858800f8914e2e587e8093a634893bf0c31f1a2`,
+  `3d6e050739bfba3705ce5acc9992552a9c97421705c7b44909dd420d276bed6f`,
+  `4104a2c29de8e3d9d41d155b20a37916883b3220b75139048394d6440142bb41`,
+  and `d05cc053d0d7d478091d530eb31ff45938b1d31bd49f4be9b35f8d5300d92bf4`;
+  repeat values are
+  `536dff5b796017afcebb7664bd6151e1acc1244210034c7e9528ae8e2eacfc57`,
+  `906f32a4ffaafe6782fe460ae3d8addd41655257342e795c9b7c6bb2271bd0ed`,
+  `580d7fc4a9f13dd001b81a2aeff47abb4630cc82742ab50bae942b18b968d67f`,
+  and `539943048f418dd9e151e39e4f16d11b78382dcb0d1c4d9e269b0bfb435206db`.
+
+  Focused solver runs then prove q41 twice at the fixed 2x2 bound and 60-second
+  timeout after 173/3,226 and 177/3,620 ms, with observed outer walls
+  24.19/26.78 seconds. Their normalized semantic rows are
+  equal. Path-stable Ya publication overwrote the first raw bundle and repeat
+  trace before preservation, so M91 makes no byte-for-byte repeat claim and no
+  first-run or repeat-trace hash claim. The authentic retained repeat report
+  and output hashes are
+  `2e6496020ca7799811d22d04874e3627a06e731e6e6d6cb8ca82d090900c56e8`
+  and `72f0532e9422c6d92f6b58d8880b2101dbe2ec7d3c656d0647856d4b315e438c`;
+  the observed but not bundle-retained metadata hash is
+  `9c0d5497b627ca6daada2ecdfede5a88a7f7edb4d64ab3d3235f9bc1f85892b1`.
+  No standalone successful formula/verdict artifacts were retained. Proof-policy
+  commit `957984763cbc458014badfc2873ec957ba430671` then adds only q41 to
+  the TPC-DS required-proof list and exact fixtures. Observed post-promotion
+  policy and hermetic-floor gates are 16/16 GOOD in 97.03 outer seconds and
+  1/1 GOOD in 28.32 seconds; their raw bundles were not retained.
+
+  Fresh proof-policy-HEAD dashboards are GOOD, policy-valid, and have zero
+  violations. TPCH remains 20 formulas/two optimizer failures, preparation
+  20/2, after 4,381/142,777 ms and 167.34 outer seconds. TPC-DS has 99 rows,
+  82 formulas/17 terminal optimizer failures, preparation 74/25, 82 exact pairs
+  and actual entries, no unsupported row, and 19 failure-reason groups after
+  77,695/824,625 ms and 926.56 outer seconds; q41 takes 180/611 ms. The TPC-DS
+  report/trace/metadata/output hashes are
+  `9f5032b1771f9323f1e9e094c2653d6d87d47de261f168bef358770cc2ac2006`,
+  `5d3dd65d6b0dabf9d5ce2c5a53198d367593ff719a0d552104d5897de04a7bbf`,
+  `452c684cb23b05c5d4e27484b6863d886d1f656ec96b15a01ba38b8afe9eafd8`,
+  and `d49542bf081109e25c4b879937f2855e46db7c0b8e39eb10ee4224610fc9dbe8`.
+
+  Fresh proof gates are also GOOD and policy-valid. TPCH proves unchanged
+  14/14 after 2,034/83,899 ms and 104.94 outer seconds. TPC-DS proves 28/28,
+  now including q41, after 26,135/365,205 ms; q41 takes 158/3,167 ms and the
+  outer command takes 426.13 seconds. Combined proof work is
+  28,169/449,104 ms. The TPC-DS report/trace/metadata/output hashes are
+  `ce171c0329a8e636b7061cec5a208cfc6e273875224b797724da8cef5eec1725`,
+  `d951143b3eab3b118a971ae82ae5ebc2cbdc228072d262b5452d231e067c27d7`,
+  `85c2c496920408f45a27cd5d73e5273cf82d4278f2ca8ba142b0d196e0424d8d`,
+  and `74366f4272e756c51c25a35c072865448862ab369e1648b743e8deeca61310cc`;
+  the TPCH values are
+  `5e54bac68ce4e1736901fc89a381326e87187332e75e0f1a9f1f07a8c6f99d8d`,
+  `9ecfc86fa6a27d341aab1ed383961ea8554c9a7a486e1b89b7f91c74b9271744`,
+  `6707d960802f6156dc830a090f4e978042a3fc626ac93ee885ce1d3b85d79757`,
+  and `bd7c52f98425e79eaa4bbf6f101a36707e89f28a1fb597e46fe46053a6ada4b0`.
+
+  The current formula floor is 102/121 (84.3%): TPCH 20/22 (90.9%) and
+  TPC-DS 82/99 (82.8%). The current proof floor is 42/121 (34.7%) and 42/102
+  formula pairs (41.2%): TPCH 14/22 and 14/20, TPC-DS 28/99 (28.3%) and
+  28/82 (34.1%). The 30-file, 566,280-byte retained bundle passes its complete
+  checksum inventory. Its `MANIFEST.md` and `SHA256SUMS` hashes are
+  `285a2e7042bad017e298cdc43483646b720565ef171811552f2b87228ae9c755`
+  and `6df144791f8b197e89fcee6f1f7fd01242aa9beea9cdbc9c528f3647c1cad3c9`.
+  Complete evidence is under
+  `.rbo-verification-artifacts/20260902-m91-q41-common-or-correlation/`.
 
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
@@ -4312,7 +4436,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   formula dashboards and policy gates are closed. M4 remains current. The 20
   no-pair entries
   require frontend/optimizer progress; the
-  present captured-pair ceiling is 101/121, and formula construction is not
+  post-M79 captured-pair ceiling was 101/121, and formula construction is not
   solver proof. Milestone 76 reset that planning pass to 96 formulas and
   removed q12/q20/q98 from the exact-pair exporter gap. Milestone 77 moves
   q53/q63/q89 through formula construction with the closed AVG/Abs grammar
@@ -4323,7 +4447,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   gates and both proof gates are closed: 100 formulas and all 32/32 curated
   proofs are green.
   Milestone 79 subsequently closes that q51 exporter gap under the fixed
-  four-leaf ordered-ROWS contract above. The current floor is 101 formulas for
+  four-leaf ordered-ROWS contract above. The M79 floor is 101 formulas for
   all 101 exact pairs; the 20 no-pair workload entries still require
   frontend/optimizer progress, and formula construction is still not proof.
 
@@ -4566,10 +4690,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   256-node/64-depth/64-KiB budget.
 - A checked-in hermetic solver floor requires `VERIFIED_BOUNDED` for TPCH q3,
   q4, q6, q7, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
-  q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q42, q43, q48, q52, q55,
+  q3, q8, q9, q15, q16, q19, q21, q28, q34, q38, q41, q42, q43, q48, q52, q55,
   q62, q69, q73, q87, q88, q90, q93, q94, q95, q96, q97, and q99 with a fixed
-  60-second per-query budget. The current policy covers 14 TPCH and 27 TPC-DS
-  queries: 41 obligations, 41/121 (33.9%) of the workload, and 41/101 (40.6%) of
+  60-second per-query budget. The current policy covers 14 TPCH and 28 TPC-DS
+  queries: 42 obligations, 42/121 (34.7%) of the workload, and 42/102 (41.2%) of
   formula-covered queries.
   Historically, the post-M78 reports verified all 32/32 as
   `VERIFIED_BOUNDED`: TPCH passed 13/13
@@ -5412,8 +5536,19 @@ regression locks the corrected boundary.
   repeatable focused proofs. The companion q7/q26 results remain `UNKNOWN`,
   neither proof nor counterexample; no intervening semantic change is
   credited. Policy tests pass 16/16; fresh unchanged 14/14 TPCH plus 27/27
-  TPC-DS gates raise the current floor to 41/41 while every weaker inventory
+  TPC-DS gates raise the M90 floor to 41/41 while every weaker inventory
   and M87's authoritative dashboards remain unchanged.
+  M91's verified slice at production commit `da9e8812791` covers q41's
+  repeated-common-correlation `OR` for scalar Aggregate pull-up while preserving the original
+  source predicate on the Initial semantic wire, its Bool3 semantics, and the
+  separate `EXISTS` boundary. Formula
+  policy `b0d09a595ea` adds q41 at preparation/formula depth; proof policy
+  `957984763cb` follows two focused bounded proofs. Focused implementation,
+  formula-repeat, policy, and hermetic gates are green, subject to the recorded
+  solver raw-retention caveat. Fresh TPCH/TPC-DS dashboards establish 20/82
+  formulas and preparation 20/2 plus 74/25; fresh 14/14 plus 28/28 gates raise
+  the current floor to 42/42. Complete evidence is under
+  `.rbo-verification-artifacts/20260902-m91-q41-common-or-correlation/`.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

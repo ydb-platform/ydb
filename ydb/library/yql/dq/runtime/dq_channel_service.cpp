@@ -846,14 +846,16 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     (*InputBufferChunks)++;
     *InputBufferBytes += data.Bytes;
 
-    if (FinishPushed.load() &&
-        !data.Checkpoint // Checkpoints may be generated after channel finish
-    ) {
+    if (FinishPushed.load()) {
         if (data.ConfirmFinish) {
             Finished.store(true);
             ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
-        return false;
+
+        // Checkpoints may be generated after channel finish
+        if (!data.Checkpoint) {
+            return false;
+        }
     }
 
     std::lock_guard lock(QueueMutex);

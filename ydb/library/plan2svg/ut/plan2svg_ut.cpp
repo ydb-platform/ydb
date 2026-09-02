@@ -485,6 +485,46 @@ Y_UNIT_TEST_SUITE(TPlan2SvgMetricHistory) {
             UNIT_ASSERT_GE(v.first, 2000);
             UNIT_ASSERT_LE(v.first, 3000);
         }
+        // The derivative covers only the in-window increment (20 -> 30). The
+        // sample at 4000 lies entirely past the window: its interval starts at
+        // 3000, so it contributes nothing, not its full out-of-window delta.
+        ui64 total = 0;
+        for (const auto& d : history.Deriv) {
+            total += d.second;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(total, 10);
+        UNIT_ASSERT_VALUES_EQUAL(history.Deriv.back().second, 0);
+    }
+
+    // An interval straddling the window end is split by time, like every other
+    // bucket-crossing interval: the last bucket gets the inside share.
+    Y_UNIT_TEST(TailBeyondWindowIsSplitProportionally) {
+        TMetricHistory history;
+        // 1000 grows over [2999, 3099]; 1 of those 100ms is inside the window.
+        history.Load(Json("[1000, 0, 2999, 0, 3099, 1000]"), 0, 3000);
+        UNIT_ASSERT_VALUES_EQUAL(history.Deriv.back().second, 10);
+        UNIT_ASSERT_VALUES_EQUAL(history.MaxDeriv, 10);
+    }
+
+    // The explicit-vector entry point gets time arrays straight from the JSON,
+    // with no parser in between to drop a non-monotonic tail. A series that
+    // comes back to a repeated timestamp used to divide by zero.
+    Y_UNIT_TEST(NonMonotonicExplicitTimesAreTruncated) {
+        TMetricHistory history;
+        std::vector<ui64> times = {0, 100, 50, 50, 200};
+        history.Load(times, Json("[1, 2, 3, 4, 5]"), 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(history.MaxTime, 100);
+        UNIT_ASSERT_VALUES_EQUAL(history.Values.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(history.Values.back().second, 2);
+    }
+
+    Y_UNIT_TEST(InvertedExplicitWindowLoadsNothing) {
+        TMetricHistory history;
+        std::vector<ui64> times = {1000, 2000};
+        std::vector<ui64> values = {10, 20};
+        history.Load(times, values, 3000, 1500);
+        UNIT_ASSERT(history.Values.empty());
+        UNIT_ASSERT(history.Deriv.empty());
     }
 
     Y_UNIT_TEST(LoadValuesOnlyIsPaddedToTimes) {

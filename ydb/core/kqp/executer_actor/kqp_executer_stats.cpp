@@ -23,6 +23,23 @@ ui64 ExportMaxStats(std::vector<ui64>& data);
 
 namespace {
 
+void KeepInterestingShard(TTaskTraceSnapshot& snapshot, NKqpProto::TKqpShardReadStats&& candidate) {
+    if (snapshot.Shards.size() < MaxShardReadDiagnostics) {
+        snapshot.Shards.push_back(std::move(candidate));
+        return;
+    }
+
+    ++snapshot.ShardsTruncated;
+    const auto leastInteresting = std::min_element(snapshot.Shards.begin(), snapshot.Shards.end(),
+        [](const auto& lhs, const auto& rhs) {
+            return ShardReadDiagnosticsRank(lhs) < ShardReadDiagnosticsRank(rhs);
+        });
+    if (leastInteresting != snapshot.Shards.end()
+            && ShardReadDiagnosticsRank(*leastInteresting) < ShardReadDiagnosticsRank(candidate)) {
+        *leastInteresting = std::move(candidate);
+    }
+}
+
 TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& task) {
     TTaskTraceSnapshot snapshot;
     snapshot.TaskId = task.GetTaskId();
@@ -51,9 +68,10 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
         NKqpProto::TKqpTaskExtraStats extra;
         if (task.GetExtra().UnpackTo(&extra)) {
             snapshot.ReadRetries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
-            const size_t count = Min<size_t>(extra.GetShardReads().size(), MaxShardReadDiagnostics);
-            snapshot.Shards.assign(extra.GetShardReads().begin(), extra.GetShardReads().begin() + count);
-            snapshot.ShardsTruncated = extra.GetShardReadsTruncated() + extra.GetShardReads().size() - count;
+            snapshot.ShardsTruncated = extra.GetShardReadsTruncated();
+            for (const auto& shard : extra.GetShardReads()) {
+                KeepInterestingShard(snapshot, NKqpProto::TKqpShardReadStats(shard));
+            }
         }
     }
     for (const auto& source : task.GetSources()) {
@@ -62,27 +80,16 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
             if (!TryFromString(partition.GetPartitionId(), shardId)) {
                 continue;
             }
-            if (snapshot.Shards.size() >= MaxShardReadDiagnostics) {
-                ++snapshot.ShardsTruncated;
-                continue;
-            }
-            auto& shard = snapshot.Shards.emplace_back();
+            NKqpProto::TKqpShardReadStats shard;
             shard.SetShardId(shardId);
             shard.SetStartTimeMs(partition.GetFirstMessageMs());
             shard.SetFinishTimeMs(partition.GetLastMessageMs());
             shard.SetRows(partition.GetExternalRows());
             shard.SetTiming(NKqpProto::TKqpShardReadStats::FIRST_TO_LAST_MESSAGE);
+            KeepInterestingShard(snapshot, std::move(shard));
         }
     }
 
-    auto shardRank = [](const NKqpProto::TKqpShardReadStats& shard) {
-        const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
-            && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
-        const ui64 durationMs = shard.GetStartTimeMs()
-                && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
-            ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
-        return std::tuple(failed, shard.GetRetries() > 0, durationMs);
-    };
     for (const auto& shard : snapshot.Shards) {
         if (!shard.GetStartTimeMs() || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
             continue;
@@ -94,7 +101,7 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
         snapshot.Window.End = Max(snapshot.Window.End, shardEnd);
     }
     std::sort(snapshot.Shards.begin(), snapshot.Shards.end(), [&](const auto& lhs, const auto& rhs) {
-        return shardRank(lhs) > shardRank(rhs);
+        return ShardReadDiagnosticsRank(lhs) > ShardReadDiagnosticsRank(rhs);
     });
     if (snapshot.Shards.size() > MaxInterestingShardsPerTask) {
         snapshot.ShardsTruncated += snapshot.Shards.size() - MaxInterestingShardsPerTask;

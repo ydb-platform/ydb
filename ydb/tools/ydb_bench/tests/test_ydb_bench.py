@@ -975,7 +975,21 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(run.timeout_seconds, 60)
         self.assertEqual(cleanup[0].argv, tuple(base + ["clean"]))
-        self.assertIsNone(cleanup[0].timeout_seconds)
+        self.assertEqual(cleanup[0].timeout_seconds, 120)
+
+    def test_local_ydb_cleanup_plan_rejects_custom_plan_without_timeout(self):
+        cli_context = local_ydb_workloads.WorkloadCli(Path("ydb"), "grpc://host:2135", "/Root/bench")
+
+        def unbounded_cleanup(*_args):
+            return (local_ydb_workloads.WorkloadCommandPlan("clean", ("ydb", "clean")),)
+
+        definition = replace(
+            local_ydb_workloads.workload_definition("kv"),
+            cleanup_plan_builder=unbounded_cleanup,
+        )
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            with self.assertRaisesRegex(BenchmarkError, "must have a positive timeout"):
+                local_ydb_workloads.build_cleanup_plan(cli_context, "table-prefix", {"type": "kv"})
 
     def test_local_ydb_tpcc_builds_golden_prepare_run_and_cleanup_plans(self):
         cli_context = local_ydb_workloads.WorkloadCli(
@@ -2098,7 +2112,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(self.last_local_ydb_cluster._run.call_args.kwargs["ignore_cancellation"])
         self.last_local_ydb_cluster.stop.assert_called_once_with()
 
-    def test_local_ydb_cleanup_plan_uses_cluster_configuration_timeout(self):
+    def test_local_ydb_cleanup_plan_uses_bounded_default_timeout(self):
         cluster = local_ydb.LocalYdbCluster(
             self.root / "ydbd",
             self.root / "ydb",
@@ -2106,7 +2120,7 @@ class YdbBenchTest(unittest.TestCase):
             self.root / "cluster-timeout",
             {"static_nodes": 1, "dynamic_nodes": 1},
             {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
-            73,
+            10000,
         )
         cli_context = local_ydb_workloads.WorkloadCli(cluster.ydb_cli, "grpc://host:2135", cluster.database)
         plan = local_ydb_workloads.build_cleanup_plan(
@@ -2118,8 +2132,8 @@ class YdbBenchTest(unittest.TestCase):
         with mock.patch.object(local_ydb, "run_command", return_value=result) as execute:
             cluster._run(plan.argv, timeout=plan.timeout_seconds, ignore_cancellation=True)
 
-        self.assertIsNone(plan.timeout_seconds)
-        self.assertEqual(execute.call_args.args[2], 73)
+        self.assertEqual(plan.timeout_seconds, 120)
+        self.assertEqual(execute.call_args.args[2], 120)
 
     def test_local_ydb_cli_total_row_is_parsed_in_milliseconds(self):
         metrics = parse_cli_metrics("""

@@ -130,6 +130,7 @@ GENERIC_TOTAL_RESULT = WorkloadResultAdapter(
     ),
 )
 
+_DEFAULT_CLEANUP_TIMEOUT_SECONDS = 120
 _TPCC_TRANSACTION_NAMES = ("NewOrder", "Delivery", "OrderStatus", "Payment", "StockLevel")
 _TPCC_PERCENTILES = (
     ("50", "p50_ms"),
@@ -282,10 +283,7 @@ def _parse_tpcc_json_result(command_result, normalized_workload, request):
         "errors": sum(transaction["failed_count"] for transaction in parsed_transactions.values()),
     }
     metrics.update(
-        {
-            metric_name: value
-            for (_percentile, metric_name), value in zip(_TPCC_PERCENTILES, selected["percentiles_ms"])
-        }
+        {metric_name: value for (_percentile, metric_name), value in zip(_TPCC_PERCENTILES, selected["percentiles_ms"])}
     )
     return WorkloadResult(
         metrics,
@@ -1708,7 +1706,7 @@ def build_clean_argv(cli, path, workload_type):
     return _workload_base(cli, definition, path) + ["clean"]
 
 
-def _validate_command_plans(plans, description, allow_default_timeout=False):
+def _validate_command_plans(plans, description):
     if not isinstance(plans, tuple) or not plans:
         raise BenchmarkError("{} must produce a non-empty tuple of command plans".format(description))
     for plan in plans:
@@ -1718,9 +1716,7 @@ def _validate_command_plans(plans, description, allow_default_timeout=False):
             raise BenchmarkError("{} produced an invalid command plan name".format(description))
         if not isinstance(plan.argv, tuple) or not plan.argv:
             raise BenchmarkError("{} command {} must have a non-empty argv tuple".format(description, plan.name))
-        if plan.timeout_seconds is None and allow_default_timeout:
-            pass
-        elif not _is_finite_number(plan.timeout_seconds) or plan.timeout_seconds <= 0:
+        if not _is_finite_number(plan.timeout_seconds) or plan.timeout_seconds <= 0:
             raise BenchmarkError("{} command {} must have a positive timeout".format(description, plan.name))
         if plan.measurement_window_builder is not None and not callable(plan.measurement_window_builder):
             raise BenchmarkError(
@@ -1817,16 +1813,12 @@ def build_cleanup_plan(cli, path, workload):
             WorkloadCommandPlan(
                 "clean",
                 tuple(_workload_base(cli, definition, path) + ["clean"]),
-                None,
+                _DEFAULT_CLEANUP_TIMEOUT_SECONDS,
             ),
         )
     else:
         plans = definition.cleanup_plan_builder(cli, definition, path, workload)
-    return _validate_command_plans(
-        plans,
-        "{} cleanup plan".format(definition.name),
-        allow_default_timeout=True,
-    )
+    return _validate_command_plans(plans, "{} cleanup plan".format(definition.name))
 
 
 def workload_definition(workload_type):

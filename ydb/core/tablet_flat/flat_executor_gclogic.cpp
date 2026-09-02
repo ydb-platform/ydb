@@ -1,5 +1,7 @@
 #include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <unordered_set>
@@ -269,7 +271,7 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     const TGCTime minTime = std::min(uncommittedTime, std::min(uncommitedSnap, minBarrier));
 
     for (auto it = ChannelInfo.begin(); it != ChannelInfo.end(); ++it) {
-        it->second.SendCollectGarbage(minTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
+        SentinelDroppedMarks += it->second.SendCollectGarbage(minTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
     }
 }
 
@@ -440,9 +442,10 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
     ++GcWaitFor;
 }
 
-void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
+ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (GcWaitFor > 0)
-        return;
+        return 0;
+    ui64 droppedMarks = 0;
 
     MinUncollectedTime = uncommittedTime;
     PendingRetry = false;
@@ -520,6 +523,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 
                 if (vec) {
                     vec->push_back(blobId);
+                } else {
+                    ++droppedMarks;
                 }
             }
 
@@ -536,6 +541,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 
                 if (vec) {
                     vec->push_back(blobId);
+                } else {
+                    ++droppedMarks;
                 }
             }
 
@@ -544,6 +551,14 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             }
         }
     }
+    if (droppedMarks) {
+        LOG_WARN_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+            "GC marks dropped by sentinel guard (blob generation below first surviving history entry)"
+            << " tablet " << tabletStorageInfo->TabletID
+            << " channel " << channel
+            << " dropped " << droppedMarks);
+    }
+    return droppedMarks;
 }
 
 bool TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {

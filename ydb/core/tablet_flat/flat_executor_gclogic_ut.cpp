@@ -414,6 +414,9 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             "a collect request must never be addressed to the Max<ui32>() sentinel group");
         UNIT_ASSERT_VALUES_EQUAL_C(collectsByProxy.size(), 1u,
             "collects must go to the surviving group only");
+        // The guard's second observable: monitoring reports both below-sentinel marks
+        // (the gen-5 keep and the gen-6 delete) as dropped.
+        UNIT_ASSERT_VALUES_EQUAL(gcLogic.TakeSentinelDroppedMarks(), 2u);
     }
 }
 

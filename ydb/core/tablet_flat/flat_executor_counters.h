@@ -121,6 +121,7 @@ namespace NTabletFlatExecutor {
     XX(GC_FORGOTTEN, "GcBlobsForgotten") \
     XX(GC_KEEPSET, "GcKeepFlagsSet") \
     XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \
+    XX(GC_SENTINEL_DROPPED_MARKS, "GcSentinelDroppedMarks") \
     XX(CONSUMED_CPU, "ConsumedCPU") \
     XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \
     XX(COMPACTION_READ_CACHE_HITS, "CompactionReadCacheHits") \

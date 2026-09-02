@@ -100,10 +100,6 @@ struct TEvInternal {
     enum EEv {
         EvNewTask = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvTaskProcessedResult,
-        EvUpdateWorkerCPULimit,
-        EvWorkerCPULimitUpdated,
-        EvRetireWorker,
-        EvWorkerStopped,
         EvRetryConfigSubscription,
         EvEnd
     };
@@ -114,6 +110,7 @@ struct TEvInternal {
     private:
         std::vector<TWorkerTask> Tasks;
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY(double, CPULimit, 1);
 
     public:
         TEvNewTask() = default;
@@ -122,8 +119,9 @@ struct TEvInternal {
             return std::move(Tasks);
         }
 
-        explicit TEvNewTask(std::vector<TWorkerTask>&& tasks)
-            : Tasks(std::move(tasks)) {
+        TEvNewTask(std::vector<TWorkerTask>&& tasks, const double cpuLimit)
+            : Tasks(std::move(tasks))
+            , CPULimit(cpuLimit) {
         }
     };
 
@@ -146,39 +144,6 @@ struct TEvInternal {
 
         TEvTaskProcessedResult(
             std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId);
-    };
-
-    class TEvUpdateWorkerCPULimit: public NActors::TEventLocal<TEvUpdateWorkerCPULimit, EvUpdateWorkerCPULimit> {
-    public:
-        const double NewLimit;
-
-        explicit TEvUpdateWorkerCPULimit(const double newLimit)
-            : NewLimit(newLimit) {
-        }
-    };
-
-    class TEvWorkerCPULimitUpdated: public NActors::TEventLocal<TEvWorkerCPULimitUpdated, EvWorkerCPULimitUpdated> {
-    public:
-        const ui64 WorkersPoolId;
-        const ui64 WorkerIdx;
-
-        TEvWorkerCPULimitUpdated(const ui64 workersPoolId, const ui64 workerIdx)
-            : WorkersPoolId(workersPoolId)
-            , WorkerIdx(workerIdx) {
-        }
-    };
-
-    class TEvRetireWorker: public NActors::TEventLocal<TEvRetireWorker, EvRetireWorker> {};
-
-    class TEvWorkerStopped: public NActors::TEventLocal<TEvWorkerStopped, EvWorkerStopped> {
-    public:
-        const ui64 WorkersPoolId;
-        const ui64 WorkerIdx;
-
-        TEvWorkerStopped(const ui64 workersPoolId, const ui64 workerIdx)
-            : WorkersPoolId(workersPoolId)
-            , WorkerIdx(workerIdx) {
-        }
     };
 
     class TEvRetryConfigSubscription: public NActors::TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};

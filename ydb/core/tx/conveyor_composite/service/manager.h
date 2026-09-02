@@ -34,7 +34,8 @@ private:
     ui64 AddWorkerPool(const NConfig::TWorkersPool& poolConfig,
         const NActors::TActorId& distributorActorId, TCounters& counters) {
         const ui64 workersPoolId = FindFreeWorkerPoolsPosition();
-        AFL_VERIFY(WorkerPoolNameToIndex.emplace(poolConfig.GetName(), workersPoolId).second);
+        Y_ENSURE(WorkerPoolNameToIndex.emplace(poolConfig.GetName(), workersPoolId).second,
+            "duplicate worker pool name: " << poolConfig.GetName());
         WorkerPools[workersPoolId] = std::make_shared<TWorkersPool>(poolConfig.GetName(), workersPoolId, distributorActorId, poolConfig,
             counters.GetWorkersPoolSignals(poolConfig.GetName()), Categories);
         return workersPoolId;
@@ -71,8 +72,8 @@ public:
     }
 
     TWorkersPool& MutableWorkersPool(const ui64 workersPoolId) {
-        AFL_VERIFY(workersPoolId < WorkerPools.size());
-        AFL_VERIFY(WorkerPools[workersPoolId]);
+        Y_ENSURE(workersPoolId < WorkerPools.size(), "worker pool index is out of range: " << workersPoolId);
+        Y_ENSURE(WorkerPools[workersPoolId], "worker pool is not active: " << workersPoolId);
         return *WorkerPools[workersPoolId];
     }
 
@@ -99,9 +100,12 @@ public:
         return TConclusionStatus::Success();
     }
 
-    bool StartConfigUpdate(const NConfig::TConfig& config,
+    TConclusion<bool> StartConfigUpdate(const NConfig::TConfig& config,
         const NActors::TActorId& distributorActorId, TCounters& counters) {
-        AFL_VERIFY(!ValidateConfigUpdate(config).IsFail());
+        auto validation = ValidateConfigUpdate(config);
+        if (validation.IsFail()) {
+            return validation;
+        }
 
         THashSet<TString> desiredPoolNames;
         desiredPoolNames.reserve(config.GetWorkerPools().size());
@@ -155,14 +159,11 @@ public:
         return !HasWorkersUpdateInProgress();
     }
 
-    bool OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev) {
-        MutableWorkersPool(ev.WorkersPoolId).OnWorkerCPULimitUpdated(ev);
-        return !HasWorkersUpdateInProgress();
-    }
-
-    bool OnWorkerStopped(const TEvInternal::TEvWorkerStopped& ev) {
-        MutableWorkersPool(ev.WorkersPoolId).OnWorkerStopped(ev);
-        TryFinalizeRemoval(ev.WorkersPoolId);
+    bool OnTaskProcessedResult(const ui64 workersPoolId, const ui64 workerIdx) {
+        if (!MutableWorkersPool(workersPoolId).ReleaseWorker(workerIdx)) {
+            return false;
+        }
+        TryFinalizeRemoval(workersPoolId);
         return !HasWorkersUpdateInProgress();
     }
 

@@ -75,16 +75,6 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
     }
 
     auto desiredConfig = configConclusion.DetachResult();
-    auto validation = Manager->ValidateConfigUpdate(desiredConfig);
-    if (validation.IsFail()) {
-        YDB_LOG_ERROR("",
-            {"name", ConveyorName},
-            {"action", "composite_conveyor_config_update_rejected"},
-            {"error", validation.GetErrorMessage()});
-        ReplyConfigNotification(ev);
-        return;
-    }
-
     if (PendingConfigNotification) {
         YDB_LOG_INFO("",
             {"name", ConveyorName},
@@ -92,8 +82,19 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
         QueuedConfigNotification = std::move(ev);
         return;
     }
+
+    auto updateConclusion = Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters);
+    if (updateConclusion.IsFail()) {
+        YDB_LOG_ERROR("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_config_update_rejected"},
+            {"error", updateConclusion.GetErrorMessage()});
+        ReplyConfigNotification(ev);
+        return;
+    }
+
     PendingConfigNotification = std::move(ev);
-    if (Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters)) {
+    if (updateConclusion.DetachResult()) {
         CompleteConfigUpdate();
     }
     Y_UNUSED(Manager->DrainTasks());
@@ -105,8 +106,8 @@ void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfig
 }
 
 void TDistributor::CompleteConfigUpdate() {
-    AFL_VERIFY(PendingConfigNotification);
-    AFL_VERIFY(!Manager->HasWorkersUpdateInProgress());
+    Y_ENSURE(PendingConfigNotification, "config update completion without a pending notification");
+    Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update completion while workers update is still in progress");
 
     if (QueuedConfigNotification) {
         PendingConfigNotification.Reset();
@@ -149,20 +150,6 @@ void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*e
     SubscribeToCompositeConveyorConfig();
 }
 
-void TDistributor::HandleMain(TEvInternal::TEvWorkerCPULimitUpdated::TPtr& ev) {
-    if (Manager->OnWorkerCPULimitUpdated(*ev->Get())) {
-        CompleteConfigUpdate();
-    }
-    Y_UNUSED(Manager->DrainTasks());
-}
-
-void TDistributor::HandleMain(TEvInternal::TEvWorkerStopped::TPtr& ev) {
-    if (Manager->OnWorkerStopped(*ev->Get())) {
-        CompleteConfigUpdate();
-    }
-    Y_UNUSED(Manager->DrainTasks());
-}
-
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
     auto& ev = *evExt->Get();
     const TDuration backSendDuration = (TMonotonic::Now() - ev.GetConstructInstant());
@@ -185,7 +172,9 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 
     workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
     workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
-    workersPool.ReleaseWorker(ev.GetWorkerIdx());
+    if (Manager->OnTaskProcessedResult(ev.GetWorkersPoolId(), ev.GetWorkerIdx())) {
+        CompleteConfigUpdate();
+    }
     Y_UNUSED(Manager->DrainTasks());
 }
 

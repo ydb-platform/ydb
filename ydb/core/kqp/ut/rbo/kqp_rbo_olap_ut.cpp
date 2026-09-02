@@ -10,12 +10,14 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <util/system/env.h>
+#include <util/stream/str.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <ctime>
@@ -2500,6 +2502,540 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
+
+    TString BuildOneDaySchema(ui32 columnCount) {
+        static constexpr std::array<const char*, 54> baseColumnNames = {
+            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+            "aa", "ab", "ac", "ad", "ae", "af", "ag", "ah", "ai", "aj", "ak", "al", "am", "an", "ao", "ap", "aq", "ar",
+            "as", "at", "au", "av", "aw", "ax", "ay", "az", "ba", "bb",
+        };
+        UNIT_ASSERT_C(columnCount >= baseColumnNames.size(), "schema must contain all base columns");
+
+        TStringBuilder schema;
+        schema << "CREATE TABLE `/Root/t1` (\n";
+        for (ui32 index = 0; index < columnCount; ++index) {
+            const TString columnName = index < baseColumnNames.size()
+                ? TString(baseColumnNames[index])
+                : TString(TStringBuilder() << "column_" << index);
+            schema << "`" << columnName << "` ";
+            if (index == 0) {
+                schema << "Timestamp NOT NULL";
+            } else if (index < 3) {
+                schema << "Utf8 NOT NULL";
+            } else {
+                schema << "Utf8";
+            }
+            schema << ",\n";
+        }
+        schema << "PRIMARY KEY (`a`, `b`, `c`)\n"
+               << ") WITH (STORE = COLUMN);";
+        return schema;
+    }
+
+    const std::vector<std::pair<ui32, TString>>& GetOneDayQueries() {
+        // The source corpus contains the same query in files 12, 13, and 14, so it is
+        // compiled once here under its first id.
+        static const std::vector<std::pair<ui32, TString>> queries = {
+            {1, R"(
+                SELECT `a`, `c`,
+                    `av`, `ax`,
+                    `aw`, `bb`, `ba`,
+                    `ay`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND af = "value01"
+                    AND bb = "value02"
+                    AND az = "value03"
+                LIMIT 10;
+            )"},
+            {2, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `o`, `p`, `q`,
+                    `s`, `t`,
+                    `v`, `w`, `y`,
+                    `aa`, `aq`, `ar`,
+                    `as`, `au`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND c = "value04"
+                    AND af = "value05"
+                    AND b = "value06"
+                    AND `o` = "value07"
+                    AND `q` = "value08"
+                LIMIT 10;
+            )"},
+            {3, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `o`, `p`, `q`,
+                    `s`, `t`,
+                    `v`, `w`, `y`,
+                    `aa`, `aq`, `ar`,
+                    `as`, `au`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND af = "value05"
+                    AND j = "value09"
+                    AND b = "value10"
+                    AND `o` = "value11"
+                    AND `q` = "value07"
+                LIMIT 10;
+            )"},
+            {4, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `o`, `p`, `q`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND af = "value05"
+                    AND `l` = "value12"
+                LIMIT 10;
+            )"},
+            {5, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `at`, `o`, `p`, `q`,
+                    `w`, `z`, `r`,
+                    `u`, `ao`,
+                    `an`, `ap`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND af = "value13"
+                    AND b = "value06"
+                    AND `o` = "value07"
+                    AND `p` = "value07"
+                    AND `q` = "value08"
+                LIMIT 10;
+            )"},
+            {6, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `ag`, `ah`, `ai`,
+                    `aj`, `ak`, `al`,
+                    `am`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND `af` = "value14"
+                    AND `q` = "value08"
+                LIMIT 10;
+            )"},
+            {7, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND `af` = "value05"
+                    AND `o` = "value08"
+                    AND `c` = "value15"
+                LIMIT 10;
+            )"},
+            {8, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `m`, `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND `af` = "value16"
+                    AND `o` = "value08"
+                LIMIT 10;
+            )"},
+            {9, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND `af` = "value05"
+                    AND `n` = "value17"
+                LIMIT 10;
+            )"},
+            {10, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND `af` = "value05"
+                    AND `ae` = "value05"
+                LIMIT 10;
+            )"},
+            {11, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND (`i` = "value18.example"
+                        OR `ac` LIKE "%value18.example%")
+                    AND `b` = "value19"
+                LIMIT 10;
+            )"},
+            {12, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND (`i` = "value18.example"
+                        OR `ac` LIKE "%value18.example%")
+                    AND `b` = "value19"
+                    AND `x` = "value20"
+                LIMIT 10;
+            )"},
+            {15, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND (`i` = "value18.example"
+                        OR `ac` LIKE "%value18.example%")
+                    AND `b` = "value19"
+                    AND `x` = "value20"
+                    AND (`at` = "value21" OR `au` = "value21")
+                LIMIT 10;
+            )"},
+            {16, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND (`i` = "value18.example"
+                        OR `ac` LIKE "%value18.example%")
+                    AND `b` = "value10"
+                    AND (`at` = "value21" OR `au` = "value21")
+                    AND `o` = "value11"
+                LIMIT 10;
+            )"},
+            {17, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND (`i` = "value18.example"
+                        OR `ac` LIKE "%value18.example%")
+                    AND `b` = "value10"
+                    AND (`at` = "value21" OR `au` = "value21")
+                    AND `o` = "value11"
+                    AND `g` REGEXP "/value22/.*"
+                LIMIT 10;
+            )"},
+            {18, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND (`i` = "value18.example"
+                        OR `ac` LIKE "%value18.example%")
+                    AND `b` = "value10"
+                    AND (`at` = "value21" OR `au` = "value21")
+                    AND `o` = "value11"
+                    AND `g` REGEXP "/value22/.*"
+                    AND `g` REGEXP ".*value23.*"
+                LIMIT 10;
+            )"},
+            {19, R"(
+                SELECT `a`, `c`, `h`, `k`, `i`,
+                    `au`, `o`, `q`,
+                    `y`, `ab`, `af`, `aa`
+                FROM `/Root/t1`
+                WHERE `a` >= CurrentUtcDatetime() - Interval("P1D")
+                    AND (`i` = "value18.example"
+                        OR `ac` LIKE "%value18.example%")
+                    AND `b` = "value10"
+                    AND (`at` = "value21" OR `au` = "value21")
+                    AND `o` = "value07"
+                    AND `y` REGEXP ".*/value24$"
+                LIMIT 10;
+            )"},
+            {20, R"(
+                $start_time = CurrentUtcDatetime() - Interval("P1D");
+                $end_time = CurrentUtcDatetime();
+
+                SELECT count(*) AS cnt, d, k
+                FROM `/Root/t1`
+                WHERE a >= $start_time AND a <= $end_time
+                    AND c = "value25"
+                GROUP BY d, k
+                ORDER BY cnt DESC;
+            )"},
+            {21, R"(
+                PRAGMA Kikimr.OptEnableOlapPushdown = "false";
+                $start_time = CurrentUtcDatetime() - Interval("P1D");
+                $end_time = CurrentUtcDatetime();
+
+                SELECT count(*) AS cnt, d, k
+                FROM `/Root/t1`
+                WHERE a >= $start_time AND a <= $end_time
+                    AND c = "value25"
+                GROUP BY d, k
+                ORDER BY cnt DESC;
+            )"},
+            {22, R"(
+                SELECT c, i, `au`
+                FROM `/Root/t1`
+                WHERE 1 = 1
+                    AND a BETWEEN CurrentUtcDatetime() - Interval("P1D") AND CurrentUtcDatetime()
+                    AND `au` IS DISTINCT FROM NULL
+                    AND i IS DISTINCT FROM NULL
+                LIMIT 100;
+            )"},
+            // The Geobase module used by the source query is not linked into this UT;
+            // keep its projection/subquery/filter shape with a local expression for isp.
+            {23, R"(
+                $input = SELECT
+                    a,
+                    CAST(`ad` AS String) AS r_a,
+                    e,
+                    f,
+                    COALESCE(CAST(`ad` AS String), "value26") AS isp
+                FROM `/Root/t1`
+                WHERE a BETWEEN CurrentUtcDatetime() - Interval("P1D") AND CurrentUtcDatetime();
+
+                SELECT * FROM $input
+                WHERE isp IN ("value27", "value28", "value29", "value30")
+                LIMIT 10;
+            )"},
+        };
+        return queries;
+    }
+
+    Y_UNIT_TEST(OneDayQueries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        const TString schema = BuildOneDaySchema(54);
+        const auto schemeResult = tableSession.ExecuteSchemeQuery(schema).GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        const TInstant dataTime = TInstant::Now() - TDuration::Hours(1);
+        const std::vector<TString> optionalColumns = {
+            "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+            "aa", "ab", "ac", "ad", "ae", "af", "ag", "ah", "ai", "aj", "ak", "al", "am", "an", "ao", "ap", "aq", "ar",
+            "as", "at", "au", "av", "aw", "ax", "ay", "az", "ba", "bb",
+        };
+
+        struct TSeedRow {
+            TString B;
+            TString C;
+            std::map<TString, TString> Values;
+        };
+        const std::vector<TSeedRow> seedRows = {
+            {"key01", "key01", {{"af", "value01"}, {"bb", "value02"}, {"az", "value03"}}},
+            {"value06", "value04", {{"af", "value05"}, {"o", "value07"}, {"q", "value08"}}},
+            {"value10", "key03", {{"af", "value05"}, {"j", "value09"}, {"o", "value11"}, {"q", "value07"}}},
+            {"key04", "key04", {{"af", "value05"}, {"l", "value12"}, {"n", "value17"}, {"ae", "value05"}}},
+            {"value06", "key05", {{"af", "value13"}, {"o", "value07"}, {"p", "value07"}, {"q", "value08"}}},
+            {"key06", "key06", {{"af", "value14"}, {"q", "value08"}}},
+            {"key07", "value15", {{"af", "value05"}, {"o", "value08"}}},
+            {"key08", "key08", {{"af", "value16"}, {"o", "value08"}}},
+            {"value19", "value31", {{"i", "value18.example"}, {"x", "value20"}, {"at", "value21"}, {"au", "value21"}}},
+            {"value10", "value31", {{"g", "/value22/value23"}, {"i", "value18.example"}, {"o", "value11"}, {"at", "value21"}, {"au", "value21"}}},
+            {"value10", "value31", {{"i", "value18.example"}, {"o", "value07"}, {"y", "/bin/value24"}, {"at", "value21"}, {"au", "value21"}}},
+            {"key12", "value25", {{"d", "value32"}, {"k", "value33"}}},
+            {"key13", "value25", {{"d", "value32"}, {"k", "value33"}}},
+            {"key14", "key14", {{"ad", "value27"}}},
+        };
+
+        const auto seedData = [&](NYdb::NTable::TTableClient& client) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (size_t index = 0; index < seedRows.size(); ++index) {
+                const auto& seed = seedRows[index];
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("a").Timestamp(dataTime + TDuration::Seconds(index + 1))
+                    .AddMember("b").Utf8(seed.B)
+                    .AddMember("c").Utf8(seed.C);
+                for (const auto& column : optionalColumns) {
+                    rows.AddMember(column);
+                    if (const auto value = seed.Values.find(column); value != seed.Values.end()) {
+                        rows.BeginOptional().Utf8(value->second).EndOptional();
+                    } else {
+                        rows.EmptyOptional(NYdb::EPrimitiveType::Utf8);
+                    }
+                }
+                rows.EndStruct();
+            }
+            rows.EndList();
+
+            const auto result = client.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        seedData(tableClient);
+
+        const auto& queries = GetOneDayQueries();
+
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        TKikimrRunner oldKikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto oldTableClient = oldKikimr.GetTableClient();
+        auto oldTableSession = oldTableClient.CreateSession().GetValueSync().GetSession();
+        const auto oldSchemeResult = oldTableSession.ExecuteSchemeQuery(schema).GetValueSync();
+        UNIT_ASSERT_C(oldSchemeResult.IsSuccess(), oldSchemeResult.GetIssues().ToString());
+        seedData(oldTableClient);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySessionResult = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(querySessionResult.IsSuccess(), querySessionResult.GetIssues().ToString());
+        auto querySession = querySessionResult.GetSession();
+
+        auto oldQueryClient = oldKikimr.GetQueryClient();
+        auto oldQuerySessionResult = oldQueryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(oldQuerySessionResult.IsSuccess(), oldQuerySessionResult.GetIssues().ToString());
+        auto oldQuerySession = oldQuerySessionResult.GetSession();
+
+        for (const auto& [queryId, query] : queries) {
+            const TString queryBody = queryId >= 1 && queryId <= 19
+                ? TString(TStringBuilder() << "$filter_query = " << query << "\nSELECT * FROM $filter_query;")
+                : query;
+            const TString queryWithPragma = TStringBuilder()
+                << "PRAGMA ydb.DqChannelVersion = \"1\";\n"
+                << "PRAGMA OrderedColumns;\n"
+                << queryBody;
+            auto explainResult = querySession.ExecuteQuery(
+                queryWithPragma,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(),
+                "YAEM one-day query " << queryId << " failed to explain: " << explainResult.GetIssues().ToString());
+
+            auto result = querySession.ExecuteQuery(
+                queryWithPragma,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "one-day query " << queryId << " failed with new RBO: " << result.GetIssues().ToString());
+
+            auto oldResult = oldQuerySession.ExecuteQuery(
+                queryWithPragma,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(oldResult.IsSuccess(),
+                "one-day query " << queryId << " failed with old optimizer: " << oldResult.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1, "Unexpected result-set count for query " << queryId);
+            UNIT_ASSERT_VALUES_EQUAL_C(oldResult.GetResultSets().size(), 1, "Unexpected old-optimizer result-set count for query " << queryId);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                FormatResultSetYson(result.GetResultSet(0)),
+                FormatResultSetYson(oldResult.GetResultSet(0)),
+                "Result mismatch for one-day query " << queryId);
+        }
+    }
+
+    Y_UNIT_TEST(OneDayWideSchemaCompilationTime) {
+        const TString schema = BuildOneDaySchema(3500);
+        const auto& queries = GetOneDayQueries();
+        std::map<TString, ui64> appliedRuleCounts;
+
+        const auto measureCompilationTime = [&](bool enableNewRbo) {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableNewRBO(enableNewRbo);
+            appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+            appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+            appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+            appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+            TStringStream rboLog;
+            auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+            if (enableNewRbo) {
+                kikimrSettings.SetLogStream(&rboLog);
+                kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(
+                    NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
+                kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+            }
+
+            TKikimrRunner kikimr(kikimrSettings);
+            auto tableClient = kikimr.GetTableClient();
+            auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto schemeResult = tableSession.ExecuteSchemeQuery(schema).GetValueSync();
+            UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+            auto queryClient = kikimr.GetQueryClient();
+            auto querySessionResult = queryClient.GetSession().GetValueSync();
+            UNIT_ASSERT_C(querySessionResult.IsSuccess(), querySessionResult.GetIssues().ToString());
+            auto querySession = querySessionResult.GetSession();
+
+            std::vector<ui64> compilationTimes;
+            compilationTimes.reserve(queries.size());
+            for (const auto& [queryId, query] : queries) {
+                const TString queryBody = queryId >= 1 && queryId <= 19
+                    ? TString(TStringBuilder() << "$filter_query = " << query << "\nSELECT * FROM $filter_query;")
+                    : query;
+                const TString queryWithPragma = TStringBuilder()
+                    << "PRAGMA ydb.DqChannelVersion = \"1\";\n"
+                    << "PRAGMA OrderedColumns;\n"
+                    << queryBody;
+                const TInstant start = TInstant::Now();
+                auto explainResult = querySession.ExecuteQuery(
+                    queryWithPragma,
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+                const TDuration elapsed = TInstant::Now() - start;
+
+                UNIT_ASSERT_C(explainResult.IsSuccess(),
+                    (enableNewRbo ? "New RBO" : "Old optimizer")
+                        << " failed to explain 3500-column query " << queryId << ": "
+                        << explainResult.GetIssues().ToString());
+                compilationTimes.push_back(elapsed.MicroSeconds());
+            }
+
+            if (enableNewRbo) {
+                const TString logStorage = rboLog.Str();
+                const TStringBuf log = logStorage;
+                const TStringBuf marker = "Applied rule:";
+                size_t position = 0;
+                while ((position = log.find(marker, position)) != TStringBuf::npos) {
+                    const size_t ruleStart = position + marker.size();
+                    size_t ruleEnd = log.find('\n', ruleStart);
+                    if (ruleEnd == TStringBuf::npos) {
+                        ruleEnd = log.size();
+                    }
+                    if (ruleEnd > ruleStart && log[ruleEnd - 1] == '\r') {
+                        --ruleEnd;
+                    }
+                    ++appliedRuleCounts[TString(log.SubStr(ruleStart, ruleEnd - ruleStart))];
+                    position = ruleEnd;
+                }
+            }
+            return compilationTimes;
+        };
+
+        const auto oldOptimizerTimes = measureCompilationTime(false);
+        const auto newOptimizerTimes = measureCompilationTime(true);
+        ui64 totalAppliedRules = 0;
+        Cerr << "3500-column new RBO applied-rule counts:" << Endl;
+        for (const auto& [ruleName, count] : appliedRuleCounts) {
+            totalAppliedRules += count;
+            Cerr << "  " << ruleName << ": " << count << Endl;
+        }
+        Cerr << "3500-column new RBO total rule applications: " << totalAppliedRules << Endl;
+
+        ui64 oldOptimizerTotal = 0;
+        ui64 newOptimizerTotal = 0;
+        for (ui32 index = 0; index < queries.size(); ++index) {
+            oldOptimizerTotal += oldOptimizerTimes[index];
+            newOptimizerTotal += newOptimizerTimes[index];
+            Cerr << "3500-column EXPLAIN query " << queries[index].first
+                 << ": old optimizer=" << oldOptimizerTimes[index]
+                 << " us, new optimizer=" << newOptimizerTimes[index] << " us" << Endl;
+        }
+        Cerr << "YAEM 3500-column EXPLAIN total: old optimizer=" << oldOptimizerTotal
+             << " us, new optimizer=" << newOptimizerTotal << " us" << Endl;
+    }
+
 }
 } // namespace NKqp
 } // namespace NKikimr

@@ -4013,6 +4013,7 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
     if (!taskCountHint) {
         taskCountHint = scheduledTaskCount;
     }
+
     ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
     if (taskCountHint) {
         taskCount = std::min<ui32>(taskCount, taskCountHint);

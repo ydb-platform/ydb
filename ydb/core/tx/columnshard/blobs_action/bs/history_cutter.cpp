@@ -499,7 +499,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
 }
 
-void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok) {
+void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok, TInstant now) {
     auto* state = CutState.FindPtr(key);
     if (!state) {
         return;
@@ -510,6 +510,15 @@ void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok) {
         NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
     } else {
         *state = ECutState::None;
+        // Without this a failed barrier retried every nomination cadence against the
+        // same obstacle: ~190 wasted sweep+barrier rounds/min measured on a drained
+        // pool. A failure re-enters the disproval cooldown instead. Attempts restarts
+        // at 1 because nomination erased the record right before SentBarrier, so
+        // consecutive failures plateau at cooldown(1) rather than escalating.
+        auto& disproval = DisprovedAt[key];
+        disproval.At = now;
+        ++disproval.Attempts;
+        PublishLevels();
     }
 }
 

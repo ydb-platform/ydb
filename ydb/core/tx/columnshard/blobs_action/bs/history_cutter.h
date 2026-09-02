@@ -138,7 +138,7 @@ public:
 
     void OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx);
 
-    void OnBarrierResult(const TEntryKey& key, bool ok);
+    void OnBarrierResult(const TEntryKey& key, bool ok, TInstant now);
 
     bool IsEnabled() const;
 

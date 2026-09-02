@@ -548,7 +548,7 @@ static bool TypedBoundAllows(const NKqpProto::TKqpPhySystemColumnBound& bound, c
     }
     NScheme::TTypeInfoMod typeMod;
     TString err;
-    if (!NScheme::TypeInfoFromProto(literal->GetType(), typeMod, err)) {
+    if (!NScheme::TypeInfoFromProto(literal->type(), typeMod, err)) {
         return true;
     }
     if (typeMod.TypeInfo.GetTypeId() != type.GetTypeId()) {
@@ -556,7 +556,7 @@ static bool TypedBoundAllows(const NKqpProto::TKqpPhySystemColumnBound& bound, c
     }
     TMemoryPool pool(256);
     TCell boundCell;
-    if (!CellFromProtoVal(typeMod.TypeInfo, 0, &literal->GetValue(), false, boundCell, err, pool)) {
+    if (!CellFromProtoVal(typeMod.TypeInfo, 0, &literal->value(), false, boundCell, err, pool)) {
         return true;
     }
     TString owned;

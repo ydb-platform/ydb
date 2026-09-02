@@ -221,8 +221,8 @@ public:
 
     virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
-                                << " " << (SystemColumnsFilter ? SystemColumnsFilter->DebugString() : "system_columns_no_initialized")
-                                << " " << Sorting << " sorted";
+                                << " " << (SystemColumnsFilter ? SystemColumnsFilter->DebugString() : "system_columns_no_initialized") << " "
+                                << Sorting << " sorted";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {

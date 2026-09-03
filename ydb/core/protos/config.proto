@@ -2790,6 +2790,8 @@ message THiveConfig {
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
     optional uint64 DataCenterChangeReactionPeriod = 91 [default = 300]; // seconds
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
+    optional double TabletImpactToPin = 93 [default = 0.3, (ParamDescription) = "Usage impact at which a tablet is treated as high-impact and is potentially isolated on a node"];
+    optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
 }
 
 message THealthCheckConfig {

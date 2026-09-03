@@ -351,6 +351,24 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
     }
 
+    TString CurrentMaterializedIndexSchemeKey() const {
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        return MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
+            IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix);
+    }
+
+    TString CurrentChangefeedDescriptionKey() const {
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
+        return ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx,
+            ChangefeedsPrefixes[IndexDownloadedChangefeed]);
+    }
+
+    TString CurrentTopicDescriptionKey() const {
+        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
+        return TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx,
+            ChangefeedsPrefixes[IndexDownloadedChangefeed]);
+    }
+
     static bool IsView(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
     }
@@ -513,9 +531,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
-        GetObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-            IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), result.GetResult().GetContentLength());
+        GetObject(CurrentMaterializedIndexSchemeKey(), result.GetResult().GetContentLength());
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -529,8 +545,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
-        GetObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
+        GetObject(CurrentChangefeedDescriptionKey(), result.GetResult().GetContentLength());
     }
 
     void HandleTopic(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -544,8 +559,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
-        GetObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
+        GetObject(CurrentTopicDescriptionKey(), result.GetResult().GetContentLength());
     }
 
     void HandleMetadata(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -732,9 +746,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Ydb::Table::CreateTableRequest request;
         if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix)
-                    << ": cannot parse index");
+                TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": cannot parse index");
         }
 
         Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
@@ -746,14 +758,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 StartDownloadingChangefeeds();
             } else {
                 Become(&TThis::StateCheckIndexes);
-                HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
+                HeadObject(CurrentMaterializedIndexSchemeKey());
             }
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), content, nextStep);
+            StartValidatingChecksum(CurrentMaterializedIndexSchemeKey(), content, nextStep);
         } else {
             nextStep();
         }
@@ -786,19 +796,18 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Ydb::Table::ChangefeedDescription changefeed;
         if (!google::protobuf::TextFormat::ParseFromString(content, &changefeed)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx,
-                    ChangefeedsPrefixes[IndexDownloadedChangefeed]) << ": cannot parse changefeed");
+                TStringBuilder() << CurrentChangefeedDescriptionKey() << ": cannot parse changefeed");
         }
 
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableChangefeed() = std::move(changefeed);
 
         auto nextStep = [this]() {
             Become(&TThis::StateDownloadTopics);
-            HeadObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]));
+            HeadObject(CurrentTopicDescriptionKey());
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), content, nextStep);
+            StartValidatingChecksum(CurrentChangefeedDescriptionKey(), content, nextStep);
         } else {
             nextStep();
         }
@@ -831,8 +840,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Ydb::Topic::DescribeTopicResult topic;
         if (!google::protobuf::TextFormat::ParseFromString(content, &topic)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx,
-                    ChangefeedsPrefixes[IndexDownloadedChangefeed]) << ": cannot parse topic");
+                TStringBuilder() << CurrentTopicDescriptionKey() << ": cannot parse topic");
         }
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
 
@@ -841,12 +849,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
-                HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]));
+                HeadObject(CurrentChangefeedDescriptionKey());
             }
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]), content, nextStep);
+            StartValidatingChecksum(CurrentTopicDescriptionKey(), content, nextStep);
         } else {
             nextStep();
         }
@@ -967,9 +975,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void DownloadMaterializedIndexes() {
         if (!IndexImplTablePrefixes.empty()) {
-            Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
-            HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
-                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
+            HeadObject(CurrentMaterializedIndexSchemeKey());
         } else {
             StartDownloadingChangefeeds();
         }
@@ -1000,8 +1006,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             auto& item = ImportInfo->Items.at(ItemIdx);
             Resize(item.Changefeeds.MutableChangefeeds(), ChangefeedsPrefixes.size());
 
-            Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsPrefixes.size());
-            HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsPrefixes[IndexDownloadedChangefeed]));
+            HeadObject(CurrentChangefeedDescriptionKey());
         } else {
             Reply();
         }

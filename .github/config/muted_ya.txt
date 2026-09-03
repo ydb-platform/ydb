@@ -4,29 +4,27 @@ ydb/core/blobstorage/ut_blobstorage/ut_race GroupReconfigurationRace.Test_block4
 ydb/core/blobstorage/ut_blobstorage/ut_race unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/kafka_proxy/ut TTopicLocationActor.MissingTopicIsSchemeError
 ydb/core/kafka_proxy/ut TTopicLocationActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicLocationActor.SuccessReturnsLivePartitions
 ydb/core/kafka_proxy/ut TTopicLocationActor.UnauthorizedStaysUnauthorized
+ydb/core/kafka_proxy/ut TTopicOffsetsActor.FiltersRequestedPartitions
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingPartitionIsSchemeError
+ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingPartitionSkippedWhenFetchingConsumers
+ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingTopicIsSchemeError
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.ParsesConsumerOffsetsAndSkipsErrors
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnDeliveryProblem
 ydb/core/kafka_proxy/ut TTopicOffsetsActor.RetriesOnEmptyStatusResponse
 ydb/core/kafka_proxy/ut unittest.sole chunk
-ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeStrings
 ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
-ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdleSessions
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
-ydb/library/actors/interconnect/ut InterconnectSessionV2.FallbackWithoutBufRing
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
-ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
-ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/public/tools/local_ydb/ut test_local_ydb.py.test_deploy_stop_start_update_and_cleanup_preserve_data
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-lax]
@@ -39,21 +37,9 @@ ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_restart_idempotency
 ydb/tests/fq/streaming py3test.[*/*] chunk
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-False]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[hop-True]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[mr-True]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[multi_output-False]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_join_and_other_ops[multi_output-True]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[hop-True]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[join-False]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-False]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_precompute_and_other_ops[mr-True]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
-ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/config test_distconf_static_group.py.TestStaticGroupSelfHealPlacementPolicy.test_local_policy_relocates_to_spare_pdisk_on_same_node
 ydb/tests/functional/nbs/F2_fault_injection F2_03_one_dbg_host_down.py.TestF2_03OneDbgHostDown.test_one_dbg_host_down
 ydb/tests/functional/nbs/F2_fault_injection F2_04_two_dbg_hosts_down.py.TestF2_04TwoDbgHostsDown.test_two_dbg_hosts_down

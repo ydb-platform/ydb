@@ -50,6 +50,10 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         LockMode = TDataShardUserDb::ELockMode(record.GetLockMode());
     }
 
+    if (record.HasCollectAffectedRows()) {
+        CollectAffectedRows = record.GetCollectAffectedRows();
+    }
+
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
@@ -838,3 +842,7 @@ void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWr
 Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TWriteOperation, stream, tx) {
     stream << '[' << tx.GetStep() << ':' << tx.GetTxId() << ']';
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

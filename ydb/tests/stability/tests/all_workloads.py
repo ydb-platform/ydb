@@ -109,14 +109,13 @@ def _init_stress_utils():
             'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard',
             'nodes_percentage': 1
         },
-        # Disabled due to high scheme paths consumption, see https://github.com/ydb-platform/ydb/issues/50500
-        # 'IncrementalBackup': {
-        #     'args': [
-        #         "--endpoint", "grpc://{node_host}:2135",
-        #         "--backup-interval", "20"
-        #     ],
-        #     'local_path': 'ydb/tests/stress/backup/backup_stress'
-        # },
+        'IncrementalBackup': {
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--backup-interval", "200"
+            ],
+            'local_path': 'ydb/tests/stress/backup/backup_stress'
+        },
         'Streaming': {
             'args': [
                 "--endpoint", "{node_host}:2135",
@@ -142,11 +141,12 @@ def _init_stress_utils():
                      "--path", "result_set_format_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/result_set_format/result_set_format'
         },
-        'SystemTabletBackup': {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--mon-endpoint", "http://{node_host}:8765"],
-            'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
-        },
+        # Disabled due to https://st.yandex-team.ru/YDBBUGS-765
+        # 'SystemTabletBackup': {
+        #     'args': ["--endpoint", "grpc://{node_host}:2135",
+        #              "--mon-endpoint", "http://{node_host}:8765"],
+        #     'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
+        # },
         'Tpcc': {
             'pre_nemesis_args': [
                 "--endpoint", "grpc://{node_host}:2135",

@@ -76,7 +76,7 @@ JOIN_SRCS(
     assign_stages.cpp
     build_initial_cbo_tree.cpp
     constant_folding_stage.cpp
-    correlated_filter_pullup.cpp
+    decorrelation/dependent_join_pushdown.cpp
     disable_blocks_on_columns_limit.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp

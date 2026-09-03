@@ -3392,6 +3392,15 @@ message TStatisticsConfig {
     // Column tables smaller than or equal to this size are scanned as a whole table
     // rather than per shard. 0 disables the optimization (always per-shard).
     optional uint64 AnalyzeWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
+
+    // Auto-collect PK equi-height histogram on ANALYZE. Declared stats ignore this.
+    optional bool AnalyzeCollectPrimaryKeyHistogram = 10 [default = false];
+
+    // Extra samples per histogram bucket. Clamped to [1, 256].
+    optional uint32 AnalyzeHistogramOversampleFactor = 11 [default = 8];
+
+    // Intermediate-state byte budget. Clamped to MaxStatisticSize (8 MB).
+    optional uint64 AnalyzeHistogramMaxStateBytes = 12 [default = 4194304];
 };
 
 message TSystemTabletBackupConfig {

@@ -267,7 +267,7 @@ public:
 
     [[nodiscard]]
     bool Empty() const override {
-        return Batches.empty() || IsPaused() && BeforeBarrier.BatchesCount == 0;
+        return Batches.empty() || (IsPaused() && BeforeBarrier.BatchesCount == 0);
     }
 
 private:
@@ -293,8 +293,8 @@ public:
     }
 
     void ResumeByCheckpoint() override {
+        // Note: resume may be called on non empty channel after of task finishing
         Y_ENSURE(IsPausedByCheckpoint());
-        Y_ENSURE(Empty());
         BeforeBarrier = PendingBarriers.front();
         PendingBarriers.pop_front();
     }

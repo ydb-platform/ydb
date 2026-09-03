@@ -90,6 +90,21 @@ void TMetricHistory::Load(std::vector<ui64>& times, const NJson::TJsonValue& nod
 }
 
 void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime) {
+    // Time must increase monotonously; drop the tail otherwise, as the
+    // interleaved parser above already does. Only that parser filtered - a time
+    // array taken verbatim from the JSON did not - and the bucket arithmetic
+    // below divides by time intervals, so a decreasing series that revisits a
+    // timestamp was a division by zero.
+    size_t monotonic = std::min(times.size(), values.size());
+    for (size_t i = 1; i < monotonic; i++) {
+        if (times[i] <= times[i - 1]) {
+            monotonic = i;
+            break;
+        }
+    }
+    times.resize(monotonic);
+    values.resize(monotonic);
+
     if (times.size() < 2) {
         return;
     }
@@ -98,6 +113,11 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
 
     MinTime = explicitMinTime ? explicitMinTime : *itt;
     MaxTime = explicitMaxTime ? explicitMaxTime : times.back();
+
+    if (MaxTime < MinTime) {
+        // An inverted explicit window; every difference below would wrap.
+        return;
+    }
 
     ui64 prevValue = *itv++;
     ui64 prevTime = *itt++;
@@ -116,7 +136,8 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
         ui64 timeRight = MinTime + (MaxTime - MinTime) * i / TIME_SERIES_RANGES;
         Deriv[i].first = timeRight;
         while (itt != times.end() && *itt <= timeRight) {
-            ui64 delta = (*itv - prevValue);
+            // A history that goes down - memory being released - would wrap around here.
+            ui64 delta = (*itv > prevValue) ? (*itv - prevValue) : 0;
             if (prevTime >= timeLeft) {
                 Deriv[i].second += delta;
             } else {
@@ -133,8 +154,12 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
         timeLeft = timeRight;
     }
 
-    if (itt != times.end()) {
-        Deriv[TIME_SERIES_RANGES].second += (*itv - prevValue) * (*itt - MaxTime) / (*itt - prevTime);
+    if (itt != times.end() && prevTime < MaxTime) {
+        // The interval straddles the window end: the last bucket gets the share
+        // of the increment that falls inside the window, mirroring the in-loop
+        // split above.
+        ui64 delta = (*itv > prevValue) ? (*itv - prevValue) : 0;
+        Deriv[TIME_SERIES_RANGES].second += delta * (MaxTime - prevTime) / (*itt - prevTime);
     }
     for (ui32 i = 1; i <= TIME_SERIES_RANGES; i++) {
         MaxDeriv = std::max(MaxDeriv, Deriv[i].second);

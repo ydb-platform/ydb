@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/compute/events/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
@@ -279,6 +280,7 @@ public:
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
         NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
+        IDqSchedulerContextPtr SchedulerContext;
     };
 
     struct TLookupSourceArguments {

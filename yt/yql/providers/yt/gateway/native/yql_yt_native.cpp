@@ -1146,6 +1146,10 @@ public:
         return Clusters_->TryGetServer(cluster);
     }
 
+    TString GetClusterYtName(const TString& cluster) const final {
+        return Clusters_->TryGetYtName(cluster);
+    }
+
     NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         auto richYPath = NYT::TRichYPath(table);
         if (TSession::TPtr session = GetSession(sessionId, true)) {
@@ -6054,7 +6058,11 @@ private:
                 }
 
                 if (!auth && Services_.YtTokenResolver) {
-                    if (auto token = Services_.YtTokenResolver->ResolveClusterToken(options.Cluster())) {
+                    auto ytName = Clusters_->TryGetYtName(options.Cluster());
+                    if (!ytName) {
+                        ythrow yexception() << "Unknown cluster name: " << options.Cluster();
+                    }
+                    if (auto token = Services_.YtTokenResolver->ResolveClusterToken(ytName)) {
                         auth = *token;
                     }
                 }

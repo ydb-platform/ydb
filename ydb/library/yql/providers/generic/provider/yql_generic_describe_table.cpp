@@ -122,7 +122,7 @@ NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> TGenericDescribeTab
     }
     return providersIt->second->GetAuthInfoAsync()
         .Apply([request=std::move(request)](const NThreading::TFuture<std::string>& future) mutable {
-            auto iamToken = future.GetValue(); // don't Extract*
+            auto iamToken = future.GetValue(); // GetAuthInfoAsync may return shared future; destructive extraction (e.g. ExtractFromConstFuture) must not be used
             auto dsi = request.mutable_data_source_instance();
             Y_ENSURE(!iamToken.empty(), "empty IAM token");
             *dsi->mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);

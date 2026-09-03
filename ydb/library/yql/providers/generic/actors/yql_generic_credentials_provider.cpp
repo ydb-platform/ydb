@@ -38,7 +38,7 @@ namespace NYql::NDq {
         Y_ENSURE(CredentialsProvider_);
         return CredentialsProvider_->GetAuthInfoAsync()
             .Apply([](const NThreading::TFuture<std::string>& future) {
-                auto iamToken = future.GetValue(); // don't Extract*
+                auto iamToken = future.GetValue(); // GetAuthInfoAsync may return shared future; destructive extraction (e.g. ExtractFromConstFuture) must not be used
                 TGenericCredentials credentials;
                 auto& token = *credentials.mutable_token();
                 *token.mutable_type() = "IAM";

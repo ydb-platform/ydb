@@ -378,5 +378,8 @@ message TFeatureFlags {
     optional bool EnableS3Scheduling = 321 [default = false];
     optional bool EnableInsecureMirrorFactory = 322 [default = false];
     optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
-    optional bool EnableSysViewOrderByLimitPushdown = 324 [default = false];
+    // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
+    // size-class slots. Reads of the stripe format work even when this flag is off.
+    optional bool EnableVDiskHeapAllocator = 324 [default = false];
+    optional bool EnableSysViewOrderByLimitPushdown = 325 [default = false];
 }

@@ -7,7 +7,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
-#include <ydb/library/yql/dq/comp_nodes/dq_operator_memory_quota.h>
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <numeric>
 #include <vector>
-#include <ydb/library/yql/dq/comp_nodes/dq_operator_memory_quota.h>
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/spilled_storage.h>

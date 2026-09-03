@@ -5,7 +5,7 @@
 #include "type_utils.h"
 #include "coro_tasks.h"
 #include "dq_accounting_spiller.h"
-#include "dq_operator_memory_quota.h"
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
 
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/util.h>

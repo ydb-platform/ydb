@@ -4,7 +4,7 @@
 
 using namespace NKikimr::NComputationGraph;
 
-// GroupByHop fixture — meta + Plan only; Stats absent.
+// pq source→stage→stage→sink plan (fq streaming canondata); no Stats.
 static const TString PlanWithoutStats = R"({
     "meta": {"version": "0.2", "type": "query"},
     "Plan": {
@@ -179,20 +179,15 @@ Y_UNIT_TEST(NoStatsMeansPending) {
         }
         UNIT_ASSERT_EQUAL(n.State, ENodeState::Pending);
         UNIT_ASSERT_EQUAL(n.Tasks, 0u);
-        UNIT_ASSERT_EQUAL(n.Stats.IngressRows, 0u);
-        UNIT_ASSERT_EQUAL(n.Stats.OutputRows, 0u);
-        UNIT_ASSERT_EQUAL(n.Stats.CpuTimeUs, 0u);
     }
 }
 
-Y_UNIT_TEST(StatsAreAggregatedPerStage) {
+Y_UNIT_TEST(StateFollowsTaskCounters) {
     TGraph g = Build(PlanWithStats);
     const TNode& sink = g.Nodes[0];
     UNIT_ASSERT_EQUAL(sink.State, ENodeState::Finished);
     UNIT_ASSERT_EQUAL(sink.Tasks, 1u);
     UNIT_ASSERT_EQUAL(sink.FinishedTasks, 1u);
-    UNIT_ASSERT_EQUAL(sink.Stats.EgressRows, 100u);
-    UNIT_ASSERT_EQUAL(sink.Stats.EgressBytes, 1000u);
 
     UNIT_ASSERT_EQUAL(g.Nodes[2].State, ENodeState::Pending);
     UNIT_ASSERT_EQUAL(g.Nodes[2].Tasks, 0u);
@@ -200,13 +195,10 @@ Y_UNIT_TEST(StatsAreAggregatedPerStage) {
     const TNode& midStage = g.Nodes[3];
     UNIT_ASSERT_EQUAL(midStage.State, ENodeState::Running);
     UNIT_ASSERT_EQUAL(midStage.Tasks, 2u);
-    UNIT_ASSERT_EQUAL(midStage.Stats.OutputRows, 100u);
-    UNIT_ASSERT_EQUAL(midStage.Stats.CpuTimeUs, 4000u);
 
     const TNode& src = g.Nodes[4];
     UNIT_ASSERT_EQUAL(src.State, ENodeState::Running);
-    UNIT_ASSERT_EQUAL(src.Stats.IngressRows, 100u);
-    UNIT_ASSERT_EQUAL(src.Stats.IngressBytes, 1000u);
+    UNIT_ASSERT_EQUAL(src.Tasks, 2u);
 }
 
 Y_UNIT_TEST(ConnectionFanIn) {

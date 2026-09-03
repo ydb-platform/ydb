@@ -7,17 +7,6 @@ namespace NKikimr::NComputationGraph {
 
 namespace {
 
-ui64 AggrSum(const NJson::TJsonValue& stats, TStringBuf key) {
-    if (!stats.Has(key)) {
-        return 0;
-    }
-    const auto& v = stats[key];
-    if (!v.IsMap() || !v.Has("Sum")) {
-        return 0;
-    }
-    return v["Sum"].GetUInteger();
-}
-
 struct TBuilder {
     TGraph Graph;
 
@@ -53,15 +42,6 @@ struct TBuilder {
         node.State = (tasks == 0) ? ENodeState::Pending
                    : (finished == tasks) ? ENodeState::Finished
                    : ENodeState::Running;
-        node.Stats.IngressRows = AggrSum(stats, "IngressRows");
-        node.Stats.IngressBytes = AggrSum(stats, "IngressBytes");
-        node.Stats.EgressRows = AggrSum(stats, "EgressRows");
-        node.Stats.EgressBytes = AggrSum(stats, "EgressBytes");
-        node.Stats.InputRows = AggrSum(stats, "InputRows");
-        node.Stats.InputBytes = AggrSum(stats, "InputBytes");
-        node.Stats.OutputRows = AggrSum(stats, "OutputRows");
-        node.Stats.OutputBytes = AggrSum(stats, "OutputBytes");
-        node.Stats.CpuTimeUs = AggrSum(stats, "CpuTimeUs");
     }
 
     ui32 Visit(const NJson::TJsonValue& planNode, ui32 parentId) {
@@ -169,15 +149,15 @@ constexpr int FontSizeTask  = 22;
 constexpr int FontSizeBadge = 14;
 constexpr int FontSizeLabel = 16;
 
-constexpr TStringBuf ColBackground  = "#222222";
-constexpr TStringBuf ColEdge        = "#9a9a9a";
-constexpr TStringBuf ColIoFill      = "#3a3a3a";
-constexpr TStringBuf ColIoBorder    = "#6b6b6b";
-constexpr TStringBuf ColPendingFill = "#4a4a4a";
-constexpr TStringBuf ColPendingStr  = "#7a7a7a";
-constexpr TStringBuf ColDoneFill    = "#3f6b3f";
-constexpr TStringBuf ColDoneStr     = "#9ccc9c";
-constexpr TStringBuf ColText        = "#ffffff";
+constexpr TStringBuf ColBackground    = "#222222";
+constexpr TStringBuf ColEdge          = "#9a9a9a";
+constexpr TStringBuf ColIoFill        = "#3a3a3a";
+constexpr TStringBuf ColIoBorder      = "#6b6b6b";
+constexpr TStringBuf ColPendingFill   = "#4a4a4a";
+constexpr TStringBuf ColPendingStr    = "#7a7a7a";
+constexpr TStringBuf ColOpActiveFill  = "#3f6b3f";
+constexpr TStringBuf ColOpActiveStr   = "#9ccc9c";
+constexpr TStringBuf ColText          = "#ffffff";
 
 TString XmlEscape(TStringBuf s) {
     TStringBuilder b;
@@ -289,8 +269,8 @@ TString ToSvg(const TGraph& graph) {
               << " M" << x << "," << (y - 11) << " v22\""
               << " fill=\"none\" stroke=\"" << ColIoBorder << "\" stroke-width=\"1.5\"/>\n";
         } else {
-            TStringBuf fill   = (n.State == ENodeState::Pending) ? ColPendingFill : ColDoneFill;
-            TStringBuf stroke = (n.State == ENodeState::Pending) ? ColPendingStr  : ColDoneStr;
+            TStringBuf fill   = (n.State == ENodeState::Pending) ? ColPendingFill : ColOpActiveFill;
+            TStringBuf stroke = (n.State == ENodeState::Pending) ? ColPendingStr  : ColOpActiveStr;
             b << "<circle cx=\"" << x << "\" cy=\"" << y << "\" r=\"" << NodeRadius
               << "\" fill=\"" << fill << "\" stroke=\"" << stroke << "\" stroke-width=\"2\"/>\n";
             if (n.Tasks > 0) {
@@ -302,12 +282,12 @@ TString ToSvg(const TGraph& graph) {
             int by = y - BadgeOffset;
             if (n.State == ENodeState::Finished) {
                 b << "<circle cx=\"" << bx << "\" cy=\"" << by << "\" r=\"" << BadgeRadius
-                  << "\" fill=\"" << ColBackground << "\" stroke=\"" << ColDoneStr << "\" stroke-width=\"2\"/>\n";
+                  << "\" fill=\"" << ColBackground << "\" stroke=\"" << ColOpActiveStr << "\" stroke-width=\"2\"/>\n";
                 b << "<text x=\"" << bx << "\" y=\"" << (by + 5)
-                  << "\" text-anchor=\"middle\" font-size=\"" << FontSizeBadge << "\" fill=\"" << ColDoneStr << "\">&#x2713;</text>\n";
+                  << "\" text-anchor=\"middle\" font-size=\"" << FontSizeBadge << "\" fill=\"" << ColOpActiveStr << "\">&#x2713;</text>\n";
             } else if (n.State == ENodeState::Running) {
                 b << "<circle cx=\"" << bx << "\" cy=\"" << by << "\" r=\"" << BadgeRadius
-                  << "\" fill=\"" << ColDoneStr << "\"/>\n";
+                  << "\" fill=\"" << ColOpActiveStr << "\"/>\n";
             }
         }
         b << "<text x=\"" << x << "\" y=\"" << (y + LabelOffset)

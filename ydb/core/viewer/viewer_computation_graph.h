@@ -84,6 +84,9 @@ public:
             if (ydbStatus == Ydb::StatusIds::UNAUTHORIZED) {
                 return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", msg));
             }
+            if (ydbStatus == Ydb::StatusIds::INTERNAL_ERROR) {
+                return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", msg));
+            }
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", msg));
         }
         const auto& response = ev->Get()->Record.GetResponse();

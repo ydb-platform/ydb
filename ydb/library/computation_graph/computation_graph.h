@@ -18,18 +18,6 @@ enum class ENodeState {
     Finished,
 };
 
-struct TNodeStats {
-    ui64 IngressRows = 0;
-    ui64 IngressBytes = 0;
-    ui64 EgressRows = 0;
-    ui64 EgressBytes = 0;
-    ui64 InputRows = 0;
-    ui64 InputBytes = 0;
-    ui64 OutputRows = 0;
-    ui64 OutputBytes = 0;
-    ui64 CpuTimeUs = 0;
-};
-
 struct TNode {
     ui32 Id = 0;
     ui32 Level = 0;
@@ -38,7 +26,6 @@ struct TNode {
     ENodeState State = ENodeState::Pending;
     ui32 Tasks = 0;
     ui32 FinishedTasks = 0;
-    TNodeStats Stats;
 };
 
 struct TLink {

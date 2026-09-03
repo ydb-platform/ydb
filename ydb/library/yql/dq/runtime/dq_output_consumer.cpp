@@ -701,13 +701,8 @@ public:
     {
         TTypeInfoHelper helper;
 
-        TVector<const NMiniKQL::TType*> blockTypes;
         for (auto& columnType : OutputType_->GetElements()) {
             YQL_ENSURE(columnType->IsBlock());
-            auto blockType = static_cast<const NMiniKQL::TBlockType*>(columnType);
-            if (blockType->GetShape() == NMiniKQL::TBlockType::EShape::Many) {
-                blockTypes.emplace_back(blockType->GetItemType());
-            }
         }
 
         for (auto& column : KeyColumns_) {
@@ -775,6 +770,8 @@ private:
             outputBlockIndexes[idx].push_back(i);
         }
 
+        EnsureBuilders(inputBlockLen);
+
         TVector<std::unique_ptr<TArgsDechunker>> outputData;
         for (size_t i = 0; i < Outputs_.size(); ++i) {
             ui64 outputBlockLen = outputBlockIndexes[i].size();
@@ -782,7 +779,6 @@ private:
                 outputData.emplace_back();
                 continue;
             }
-            MakeBuilders(outputBlockLen);
             const ui64* indexes = outputBlockIndexes[i].data();
 
             std::vector<arrow::Datum> output;
@@ -796,7 +792,7 @@ private:
                         .StartOffset = 0,
                     };
                     Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
-                    output.emplace_back(Builders_[j]->Build(true));
+                    output.emplace_back(Builders_[j]->Build(false));
                 }
             }
             outputData.emplace_back(std::make_unique<TArgsDechunker>(std::move(output)));
@@ -881,7 +877,11 @@ private:
         return HashFunc.Finish(Outputs_.size());
     }
 
-    void MakeBuilders(ui64 maxBlockLen) {
+    void EnsureBuilders(ui64 maxBlockLen) {
+        if (maxBlockLen <= BuildersMaxBlockLen_) {
+            return;
+        }
+
         Builders_.clear();
         TTypeInfoHelper helper;
         for (auto& columnType : OutputType_->GetElements()) {
@@ -894,6 +894,7 @@ private:
                 Builders_.emplace_back();
             }
         }
+        BuildersMaxBlockLen_ = maxBlockLen;
     }
 
 private:
@@ -909,6 +910,7 @@ private:
 
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
+    ui64 BuildersMaxBlockLen_ = 0;
 
     NUdf::IPgBuilder* PgBuilder_;
     THashFunc HashFunc;

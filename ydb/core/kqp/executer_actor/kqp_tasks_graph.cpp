@@ -732,10 +732,6 @@ void TKqpTasksGraph::FillStages() {
                             meta.IndexMetas.back().TablePath = indexSettings.GetDocsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                             meta.IndexMetas.emplace_back();
-                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDictTable());
-                            meta.IndexMetas.back().TablePath = indexSettings.GetDictTable().GetPath();
-                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-                            meta.IndexMetas.emplace_back();
                             meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetStatsTable());
                             meta.IndexMetas.back().TablePath = indexSettings.GetStatsTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
@@ -2529,6 +2525,27 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     settings->MutableIndexDescription()->CopyFrom(fullTextSource.GetIndexDescription());
 
     auto guard = TxAlloc->TypeEnv.BindAllocator();
+    auto extractFloatingPointSetting = [&](const NKqpProto::TKqpPhyValue& protoValue) -> std::optional<double> {
+        NMiniKQL::TType* valueType = nullptr;
+        auto value = ExtractPhyValue(
+            stageInfo, protoValue,
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod(), &valueType);
+        if (!value.HasValue()) {
+            return std::nullopt;
+        }
+
+        YQL_ENSURE(valueType && valueType->GetKind() == NMiniKQL::TType::EKind::Data,
+            "Unexpected fulltext floating-point setting type");
+        const auto schemeType = static_cast<NMiniKQL::TDataType*>(valueType)->GetSchemeType();
+        if (schemeType == NUdf::TDataType<float>::Id) {
+            return static_cast<double>(value.Get<float>());
+        }
+
+        YQL_ENSURE(schemeType == NUdf::TDataType<double>::Id,
+            "Unexpected fulltext floating-point setting scheme type: " << schemeType);
+        return value.Get<double>();
+    };
+
     {
         TStringBuilder queryBuilder;
         for (const auto& query : fullTextSource.GetQuerySettings().GetQueryValue()) {
@@ -2570,12 +2587,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasBFactor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetBFactor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-
-        if (value.HasValue()) {
-            settings->SetBFactor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetBFactor())) {
+            settings->SetBFactor(*value);
         }
     }
 
@@ -2598,11 +2611,8 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     }
 
     if (fullTextSource.HasK1Factor()) {
-        auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetK1Factor(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-        if (value.HasValue()) {
-            settings->SetK1Factor(value.Get<double>());
+        if (const auto value = extractFloatingPointSetting(fullTextSource.GetK1Factor())) {
+            settings->SetK1Factor(*value);
         }
     }
 

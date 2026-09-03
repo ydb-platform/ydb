@@ -2,6 +2,8 @@
 
 #include "http_req.h"
 
+#include <ydb/core/base/path.h>
+
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
@@ -134,6 +136,10 @@ TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext) {
     const auto& request = *httpContext.Request;
     const bool tlsSecure = request.Endpoint && request.Endpoint->Secure;
     return MakeSqsRequestEndpoint(request.Host, request.Headers, tlsSecure);
+}
+
+TString ParseDatabasePathFromRequestUrl(TStringBuf url) {
+    return CanonizePath(TString{url.Before('?')});
 }
 
 } // namespace NKikimr::NHttpProxy

@@ -22,6 +22,7 @@ Main materials:
 - [{#T}](cms.md)
 - [{#T}](change_actorsystem_configs.md)
 - [{#T}](cluster-expansion.md)
+- [{#T}](state-storage-reconfiguration.md)
 - [{#T}](state-storage-move.md)
 - [{#T}](static-group-move.md)
 - [{#T}](replacing-nodes.md)

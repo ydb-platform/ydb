@@ -498,10 +498,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
 
+                auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames());
                 result.push_back(createIndexImplTable(CalcFulltextCompactImplTableDesc(
                     baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
-                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()), false),
+                    userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType, prefixColumns, false),
                     THashSet<TString>{NTableIndex::NFulltext::GenSequence}));
 
                 // Create the sequence
@@ -520,8 +520,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
                     const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                     result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
-                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
-                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc, prefixColumns)));
                 }
                 break;
             }
@@ -546,12 +545,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames());
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
-                    NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType, prefixColumns)));
                 result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
-                result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc, prefixColumns)));
                 break;
             }
             default:

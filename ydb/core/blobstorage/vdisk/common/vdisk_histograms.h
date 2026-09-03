@@ -17,6 +17,7 @@ namespace NKikimr {
                 NPDisk::EDeviceType type);
             const NVDiskMon::TLtcHistoPtr &GetHistogram(NKikimrBlobStorage::EGetHandleClass handleClass) const;
             const NVDiskMon::TLtcHistoPtr &GetHistogram(NKikimrBlobStorage::EPutHandleClass handleClass) const;
+            void UpdateCounters(TInstant now);
 
             NVDiskMon::TLtcHistoPtr VGetDiscoverLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VGetFastLatencyHistogram;
@@ -29,4 +30,3 @@ namespace NKikimr {
 
     } // NVDiskMon
 } // NKikimr
-

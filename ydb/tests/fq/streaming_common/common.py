@@ -392,13 +392,17 @@ class StreamingTestBase(TestYdsBase):
                 result_sets = kikimr.ydb_client.query(
                     f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
                 )
-                diagnostics = "\n".join(
-                    "Status: {status}\nIssues:\n{issues}".format(
-                        status=row["Status"],
-                        issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                diagnostics = (
+                    "\n".join(
+                        "Status: {status}\nIssues:\n{issues}".format(
+                            status=row["Status"],
+                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                        )
+                        for row in result_sets[0].rows
                     )
-                    for row in result_sets[0].rows
-                ) if result_sets else []
+                    if result_sets
+                    else []
+                )
             except Exception as diagnostics_error:
                 diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
             raise AssertionError(f"{error}\n{diagnostics}") from error

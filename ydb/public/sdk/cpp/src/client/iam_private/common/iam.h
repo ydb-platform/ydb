@@ -47,10 +47,10 @@ public:
             GetClientIdentity(),
             [this] {
                 auto authProvider = NCredentials::NDetail::GetOrCreateCachedProvider(
-                    "async:" + Params_.SystemServiceAccountCredentials->GetClientIdentity(), [this] {
+                    Params_.SystemServiceAccountCredentials->GetClientIdentity(), [this] {
                         auto facility = CreateSimpleCoreFacility();
                         return std::make_shared<TOwningFacilityCredentialsProvider>(facility,
-                            Params_.SystemServiceAccountCredentials->CreateProvider(facility), true);
+                            Params_.SystemServiceAccountCredentials->CreateProvider(facility));
                     });
                 auto facility = CreateSimpleCoreFacility();
                 auto serviceProvider = std::make_shared<TCredentialsProvider>(

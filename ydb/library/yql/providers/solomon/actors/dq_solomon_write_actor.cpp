@@ -356,7 +356,7 @@ private:
         return httpRequest;
     }
 
-    static void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest, auto clusterType, const std::string& authToken) {
+    static void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest, auto clusterType, const auto& authToken) {
         const TString authorizationHeader = "Authorization";
 
         switch (clusterType) {
@@ -410,10 +410,9 @@ private:
                 url = Url,
                 data = metricsToSend.Data,
                 clusterType = WriteParams.Shard.GetClusterType(),
-                httpSenderId](const NThreading::TFuture<std::string>& f1) mutable {
+                httpSenderId](const NThreading::TFuture<std::string>& future) mutable {
                     try {
-                        auto f2 = f1; // destructively extract const future value
-                        auto authToken = f2.ExtractValue();
+                        const auto& authToken = future.GetValue();
                         auto httpRequest = BuildSolomonRequest(data, url, clusterType, authToken);
                         actorSystem->Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, cookie);
                     } catch(std::exception& ex) {

@@ -1120,7 +1120,7 @@ public:
             NKikimrConfig::THiveConfig defaultConfig;
             bool localOverrided = reflection->HasField(Self->DatabaseConfig, field);
 
-            TString descriptionIcon = BuildDescriptionIcon(field);
+            const TString descriptionIcon = BuildDescriptionIcon(field);
             out << "<div class='row'>";
             if (localOverrided) {
                 out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "'>" << param << "</label>" << descriptionIcon << ":</div>";
@@ -1230,16 +1230,18 @@ public:
         auto clusterDefault = makeListString(Self->ClusterConfig);
         auto currentValue = makeListString(Self->CurrentConfig);
 
-        bool localOverrided = (currentValue != clusterDefault);
+        bool localOverridden = (currentValue != clusterDefault);
+        const auto* field = Self->DatabaseConfig.GetDescriptor()->FindFieldByName(param);
+        const TString descriptionIcon = field ? BuildDescriptionIcon(field) : TString();
 
         out << "<div class='row'>";
         {
             // mark if value is changed locally
             out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'>"
                 << "<label for='" << param << "'"
-                << (localOverrided ? "" : "' style='font-weight:normal'")
+                << (localOverridden ? "" : "' style='font-weight:normal'")
                 << ">" << param << ":</label>"
-                << "</div>";
+                 << descriptionIcon << ":</div>";
             // editable current value
             out << "<div class='col-sm-2' style='padding-top:5px'>"
                 << "<input id='" << param << "' style='max-width:170px;margin-top:7px' onkeydown='edit(this);' onchange='edit(this);'"
@@ -1248,7 +1250,7 @@ public:
             // apply button
             out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='applyVal(this, \"" << param << "\");' disabled='true'>Apply</button></div>";
             // reset button
-            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='resetVal(this, \"" << param << "\");' " << (localOverrided ? "" : "disabled='true'") << ">Reset</button></div>";
+            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='resetVal(this, \"" << param << "\");' " << (localOverridden ? "" : "disabled='true'") << ">Reset</button></div>";
             // show cluster default
             out << "<div id='CMS" << param << "' class='col-sm-2' style='padding-top:12px'>"
                 << clusterDefault

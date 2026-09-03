@@ -94,7 +94,7 @@ std::optional<TGraph> TryBuild(TStringBuf json) {
 
 TGraph Build(TStringBuf json) {
     auto g = TryBuild(json);
-    UNIT_ASSERT(g);
+    UNIT_ASSERT(!!g);
     return *g;
 }
 

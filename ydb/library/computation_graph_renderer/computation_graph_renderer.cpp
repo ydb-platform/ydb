@@ -148,9 +148,18 @@ constexpr int BadgeOffset   = 25;
 constexpr int FontSizeTask  = 22;
 constexpr int FontSizeBadge = 14;
 constexpr int FontSizeLabel = 16;
+constexpr int TextBaselineTask  = 7;
+constexpr int TextBaselineBadge = 5;
+constexpr int CornerRadius  = 8;
+constexpr int ArrowSize     = 10;
+constexpr int GlyphHalfW    = 13;
+constexpr int GlyphHalfH    = 11;
+constexpr int GlyphHeaderH  = 8;
 
 using namespace std::string_view_literals;
 
+constexpr TStringBuf StrokeThin       = "1.5"sv;
+constexpr TStringBuf StrokeThick      = "2"sv;
 constexpr TStringBuf ColBackground    = "#222222"sv;
 constexpr TStringBuf ColEdge          = "#9a9a9a"sv;
 constexpr TStringBuf ColIoFill        = "#3a3a3a"sv;
@@ -240,9 +249,10 @@ TString ToSvg(const TGraph& graph) {
     TStringBuilder b;
     b << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << W << "\" height=\"" << H
       << "\" viewBox=\"0 0 " << W << " " << H << "\" font-family=\"sans-serif\">\n";
-    b << "<defs><marker id=\"arrow\" markerWidth=\"10\" markerHeight=\"10\""
-      << " refX=\"10\" refY=\"5\" orient=\"auto\">"
-      << "<path d=\"M0,0 L10,5 L0,10 z\" fill=\"" << ColEdge << "\"/></marker></defs>\n";
+    b << "<defs><marker id=\"arrow\" markerWidth=\"" << ArrowSize << "\" markerHeight=\"" << ArrowSize
+      << "\" refX=\"" << ArrowSize << "\" refY=\"" << (ArrowSize / 2) << "\" orient=\"auto\">"
+      << "<path d=\"M0,0 L" << ArrowSize << "," << (ArrowSize / 2) << " L0," << ArrowSize << " z\" fill=\""
+      << ColEdge << "\"/></marker></defs>\n";
     b << "<rect width=\"100%\" height=\"100%\" fill=\"" << ColBackground << "\"/>\n";
 
     for (const auto& lnk : graph.Links) {
@@ -257,7 +267,7 @@ TString ToSvg(const TGraph& graph) {
         int y2 = nodeY(*tgt);
         b << "<line x1=\"" << x1 << "\" y1=\"" << y1
           << "\" x2=\"" << x2 << "\" y2=\"" << y2
-          << "\" stroke=\"" << ColEdge << "\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/>\n";
+          << "\" stroke=\"" << ColEdge << "\" stroke-width=\"" << StrokeThin << "\" marker-end=\"url(#arrow)\"/>\n";
     }
 
     for (const auto& n : graph.Nodes) {
@@ -265,18 +275,20 @@ TString ToSvg(const TGraph& graph) {
         if (n.Type == ENodeType::Input || n.Type == ENodeType::Output) {
             b << "<rect x=\"" << (x - NodeRadius) << "\" y=\"" << (y - NodeRadius)
               << "\" width=\"" << (2 * NodeRadius) << "\" height=\"" << (2 * NodeRadius)
-              << "\" rx=\"8\" fill=\"" << ColIoFill << "\" stroke=\"" << ColIoBorder << "\" stroke-width=\"2\"/>\n";
-            b << "<path d=\"M" << (x - 13) << "," << (y - 11) << " h26 v22 h-26 z"
-              << " M" << (x - 13) << "," << (y - 3) << " h26"
-              << " M" << x << "," << (y - 11) << " v22\""
-              << " fill=\"none\" stroke=\"" << ColIoBorder << "\" stroke-width=\"1.5\"/>\n";
+              << "\" rx=\"" << CornerRadius << "\" fill=\"" << ColIoFill << "\" stroke=\"" << ColIoBorder
+              << "\" stroke-width=\"" << StrokeThick << "\"/>\n";
+            b << "<path d=\"M" << (x - GlyphHalfW) << "," << (y - GlyphHalfH)
+              << " h" << (2 * GlyphHalfW) << " v" << (2 * GlyphHalfH) << " h-" << (2 * GlyphHalfW) << " z"
+              << " M" << (x - GlyphHalfW) << "," << (y - GlyphHalfH + GlyphHeaderH) << " h" << (2 * GlyphHalfW)
+              << " M" << x << "," << (y - GlyphHalfH) << " v" << (2 * GlyphHalfH) << "\""
+              << " fill=\"none\" stroke=\"" << ColIoBorder << "\" stroke-width=\"" << StrokeThin << "\"/>\n";
         } else {
             TStringBuf fill   = (n.State == ENodeState::Pending) ? ColPendingFill : ColOpActiveFill;
             TStringBuf stroke = (n.State == ENodeState::Pending) ? ColPendingStr  : ColOpActiveStr;
             b << "<circle cx=\"" << x << "\" cy=\"" << y << "\" r=\"" << NodeRadius
-              << "\" fill=\"" << fill << "\" stroke=\"" << stroke << "\" stroke-width=\"2\"/>\n";
+              << "\" fill=\"" << fill << "\" stroke=\"" << stroke << "\" stroke-width=\"" << StrokeThick << "\"/>\n";
             if (n.Tasks > 0) {
-                b << "<text x=\"" << x << "\" y=\"" << (y + 7)
+                b << "<text x=\"" << x << "\" y=\"" << (y + TextBaselineTask)
                   << "\" text-anchor=\"middle\" font-size=\"" << FontSizeTask << "\" fill=\"" << ColText << "\">"
                   << n.Tasks << "</text>\n";
             }
@@ -284,8 +296,8 @@ TString ToSvg(const TGraph& graph) {
             int by = y - BadgeOffset;
             if (n.State == ENodeState::Finished) {
                 b << "<circle cx=\"" << bx << "\" cy=\"" << by << "\" r=\"" << BadgeRadius
-                  << "\" fill=\"" << ColBackground << "\" stroke=\"" << ColOpActiveStr << "\" stroke-width=\"2\"/>\n";
-                b << "<text x=\"" << bx << "\" y=\"" << (by + 5)
+                  << "\" fill=\"" << ColBackground << "\" stroke=\"" << ColOpActiveStr << "\" stroke-width=\"" << StrokeThick << "\"/>\n";
+                b << "<text x=\"" << bx << "\" y=\"" << (by + TextBaselineBadge)
                   << "\" text-anchor=\"middle\" font-size=\"" << FontSizeBadge << "\" fill=\"" << ColOpActiveStr << "\">&#x2713;</text>\n";
             } else if (n.State == ENodeState::Running) {
                 b << "<circle cx=\"" << bx << "\" cy=\"" << by << "\" r=\"" << BadgeRadius

@@ -169,7 +169,7 @@ TConsumerActor::TConsumerActor(
     , Config(config)
     , RetentionPeriod(retentionPeriod)
     , PartitionEndOffset(partitionEndOffset)
-    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider(), StorageSettingsFromConfig(Config, GetPartitionConfig())))
+    , Storage(std::make_unique<TStorage>(TAppData::TimeProvider, StorageSettingsFromConfig(Config, GetPartitionConfig())))
     , DetailedMetricsRoot(detailedMetricsRoot) {
 }
 
@@ -508,9 +508,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
     InitializeDetailedMetrics();
     UpdateLockedGroupsIdInChildPartitions(false);
 
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
@@ -600,7 +598,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
-        hFunc(TEvents::TEvWakeup, HandleOnWork);
+        hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateWork", ev));
@@ -644,8 +642,12 @@ void TConsumerActor::Restart(TString&& error) {
     PassAway();
 }
 
+bool TConsumerActor::InStateWork() const {
+    return CurrentStateFunc() == &TConsumerActor::StateWork;
+}
+
 void TConsumerActor::ScheduleProcessing() {
-    if (ProcessingScheduled) {
+    if (ProcessingScheduled || !InStateWork()) {
         return;
     }
 
@@ -1000,15 +1002,14 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         LastTimeWithMessages = TInstant::Now();
         NotifyPQRB();
     }
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
     Restart(TStringBuilder() << "Received error: " << ev->Get()->Error);
 }
 
+<<<<<<< HEAD
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
     LOG_D("HandleOnWork TEvents::TEvWakeup " << ev->Get()->Tag);
     switch (ev->Get()->Tag) {
@@ -1035,6 +1036,8 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
     }
 }
 
+=======
+>>>>>>> dc495ca5e5c (fixed mlp request queue stop (#52112))
 void TConsumerActor::MoveToDLQIfPossible() {
     if (DLQMoverActorId) {
         return;
@@ -1085,20 +1088,46 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
         AFL_ENSURE(result)("o", offset)("s", seqNo);
     }
 
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
+<<<<<<< HEAD
     LOG_D("Handle TEvents::TEvWakeup " << ev->Get()->Tag);
     if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;
+=======
+    YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"tag", ev->Get()->Tag});
+    switch (ev->Get()->Tag) {
+        case EWakeUpTag::UpdateChildPartitions:
+            UpdateLockedGroupsIdInChildPartitions(false);
+            return;
+        case EWakeUpTag::Processing:
+            // The flag is reset in any state: the scheduled wakeup is consumed here, so
+            // ScheduleProcessing() must be able to schedule a new one for later requests.
+            ProcessingScheduled = false;
+            if (!InStateWork()) {
+                return;
+            }
+            ProcessEventQueue();
+            return;
+        case EWakeUpTag::Regular:
+            if (InStateWork()) {
+                FetchMessagesIfNeeded();
+                if (!ProcessingScheduled) {
+                    ProcessEventQueue();
+                }
+                ScheduleProcessing();
+            }
+            UpdateMetrics();
+            NotifyPQRB(true);
+            Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
+            return;
+>>>>>>> dc495ca5e5c (fixed mlp request queue stop (#52112))
     }
-    UpdateMetrics();
-    NotifyPQRB(true);
-    Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
 void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {

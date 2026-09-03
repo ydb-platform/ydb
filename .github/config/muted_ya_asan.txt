@@ -1,3 +1,4 @@
+ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_PDiskFallback
 ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotLogUnknownSync
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_16Segments
@@ -466,6 +467,47 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming/generic py3test.sole chunk
+ydb/tests/fq/streaming_optimize py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part0 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part0 test.py.test[aggregate-group_by_gs_and_having-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part1 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part1 test.py.test[aggregate-group_by_expr_mul_col-]
+ydb/tests/fq/yt/kqp_yt_file/part10 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part10 test.py.test[action-eval_skip_take-]
+ydb/tests/fq/yt/kqp_yt_file/part11 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part11 test.py.test[aggregate-group_by_expr_alias_on_subexp-]
+ydb/tests/fq/yt/kqp_yt_file/part12 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part12 test.py.test[action-eval_for_over_subquery-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part13 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part13 test.py.test[aggregate-compare_by_nulls-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part14 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part14 test.py.test[aggregate-aggregate_with_default_yson_options-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part15 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part15 test.py.test[aggregate-aggregation_and_order-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part16 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part16 test.py.test[aggregate-GroupByOneField-]
+ydb/tests/fq/yt/kqp_yt_file/part17 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part17 test.py.test[action-eval_pragma-]
+ydb/tests/fq/yt/kqp_yt_file/part18 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[action-empty_do-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part19 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part19 test.py.test[action-evaluate_pure-]
+ydb/tests/fq/yt/kqp_yt_file/part2 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part2 test.py.test[aggregate-compare_tuple-]
+ydb/tests/fq/yt/kqp_yt_file/part3 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part3 test.py.test[action-eval_column-]
+ydb/tests/fq/yt/kqp_yt_file/part4 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part4 test.py.test[aggregate-aggregate_with_deep_aggregated_column-]
+ydb/tests/fq/yt/kqp_yt_file/part5 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part5 test.py.test[action-action_nested_query-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part6 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part6 test.py.test[action-dep_world_action_quote-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part7 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part7 test.py.test[action-eval_if-default.txt]
+ydb/tests/fq/yt/kqp_yt_file/part8 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part8 test.py.test[aggregate-agg_filter_pushdown-]
+ydb/tests/fq/yt/kqp_yt_file/part9 py3test.sole chunk
+ydb/tests/fq/yt/kqp_yt_file/part9 test.py.test[aggregate-aggregate_distinct_expr_with_udf-]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add

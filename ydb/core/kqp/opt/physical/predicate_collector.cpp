@@ -127,7 +127,7 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
 
         "String.Contains",
         "String._yql_AsciiContainsIgnoreCase",
-        "StringFast._yql_AsciiContainsIgnoreCase",
+        "OlapKernels._yql_AsciiContainsIgnoreCase",
         "String.StartsWith",
         "String._yql_AsciiStartsWithIgnoreCase",
         "String.EndsWith",

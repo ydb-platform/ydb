@@ -38,6 +38,6 @@ BEGIN_SIMPLE_STRICT_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, bool(TOptional<char
 
 END_SIMPLE_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, TAsciiContainsIgnoreCaseKernelExec::Do);
 
-SIMPLE_MODULE(TStringFastModule, T_yql_AsciiContainsIgnoreCase)
+SIMPLE_MODULE(TOlapKernelsModule, T_yql_AsciiContainsIgnoreCase)
 
-REGISTER_MODULES(TStringFastModule)
+REGISTER_MODULES(TOlapKernelsModule)

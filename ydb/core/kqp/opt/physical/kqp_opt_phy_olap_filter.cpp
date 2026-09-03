@@ -537,11 +537,11 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
             .Done();
     }
 
-    // Opt-in Memchr-based UDF (StringFast._yql_AsciiContainsIgnoreCase) via YQL_KERNEL ScalarApply.
+    // Opt-in Memchr-based UDF (OlapKernels._yql_AsciiContainsIgnoreCase) via YQL_KERNEL ScalarApply.
     // Default remains TKqpOlapApply + String._yql_AsciiContainsIgnoreCase.
     TString udfName;
     if (pushdownOptions.FastAsciiIgnoreCaseContains && predicate.CallableName() == "StringContainsIgnoreCase") {
-        udfName = "StringFast._yql_AsciiContainsIgnoreCase";
+        udfName = "OlapKernels._yql_AsciiContainsIgnoreCase";
     } else if (const auto* stringUdfFunction = IgnoreCaseSubstringMatchFunctions.FindPtr(predicate.CallableName())) {
         udfName = *stringUdfFunction;
     }

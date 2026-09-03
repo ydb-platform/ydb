@@ -1,4 +1,4 @@
-YQL_UDF_YDB(string_fast_udf)
+YQL_UDF_YDB(olap_kernels_udf)
 
 YQL_ABI_VERSION(
     2
@@ -7,7 +7,7 @@ YQL_ABI_VERSION(
 )
 
 SRCS(
-    string_fast_udf.cpp
+    olap_kernels_udf.cpp
 )
 
 PEERDIR(

@@ -1780,13 +1780,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
                     TStringBuilder() << "ILIKE contains not pushed down. Query: " << query);
                 if (expectFastKernel) {
-                    UNIT_ASSERT_C(ast->find("StringFast._yql_AsciiContainsIgnoreCase") != std::string::npos,
-                        TStringBuilder() << "StringFast UDF not used. Query: " << query << " AST: " << *ast);
+                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") != std::string::npos,
+                        TStringBuilder() << "OlapKernels UDF not used. Query: " << query << " AST: " << *ast);
                     UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") == std::string::npos,
                         TStringBuilder() << "String UDF path still used with pragma on. Query: " << query);
                 } else {
-                    UNIT_ASSERT_C(ast->find("StringFast._yql_AsciiContainsIgnoreCase") == std::string::npos,
-                        TStringBuilder() << "StringFast UDF used with pragma off. Query: " << query);
+                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") == std::string::npos,
+                        TStringBuilder() << "OlapKernels UDF used with pragma off. Query: " << query);
                     UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") != std::string::npos,
                         TStringBuilder() << "UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
                 }

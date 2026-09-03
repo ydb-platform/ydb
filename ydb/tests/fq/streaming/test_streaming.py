@@ -8,7 +8,7 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, max_json_depth
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, get_sensors, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
@@ -2445,10 +2445,17 @@ FROM `{table_name}`"""
         )
         self.wait_completed_checkpoints(kikimr, path)
 
-        def pq_source_actor_count():
-            return sum(self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR") for node_id in kikimr.cluster.nodes)
-        assert wait_for(lambda: pq_source_actor_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (
-            f"Expected {expected_actor_count} DQ_PQ_READ_ACTOR actors, got {pq_source_actor_count()}"
+        def streaming_query_tasks_count():
+            return sum(
+                get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+                    {"path": path, "subsystem": "streaming_queries", "sensor": "streaming.query.tasks.count"}
+                )
+                or 0
+                for node_id in kikimr.cluster.nodes
+            )
+
+        assert wait_for(lambda: streaming_query_tasks_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (
+            f"Expected {expected_actor_count} streaming query tasks, got {streaming_query_tasks_count()}"
         )
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

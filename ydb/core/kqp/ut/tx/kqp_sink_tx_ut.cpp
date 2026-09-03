@@ -739,7 +739,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     req->SetUserRequestContext(std::move(userCtx));
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
-                // Hold TEvWrite events so we can ALTER TABLE before the write lands.
                 if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
                     ++evWriteCount;
                     held.emplace_back(ev.Release());
@@ -751,8 +750,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             auto savedObserver = runtime.SetObserverFunc(grab);
             Y_DEFER { runtime.SetObserverFunc(savedObserver); };
 
-            // Start the write in the background; it will block once TEvWrite
-            // is intercepted.
             auto future = Kikimr->RunInThreadPool([&] {
                 return session1.ExecuteQuery(
                     Q_(R"(UPSERT INTO `/Root/KV` (Key, Value) VALUES (42u, "test");)"),
@@ -760,7 +757,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 ).ExtractValueSync();
             });
 
-            // Wait until at least one TEvWrite is in our hands.
             {
                 TDispatchOptions opts;
                 opts.FinalEvents.emplace_back([&](IEventHandle&) {
@@ -770,8 +766,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 UNIT_ASSERT_C(evWriteCount > 0, "TEvWrite was not intercepted");
             }
 
-            // Alter the table while the write is held.  This bumps the schema
-            // version on the datashard so the stale write will get SCHEME_CHANGED.
             auto alterResult = Kikimr->RunCall([&] {
                 return session2.ExecuteQuery(
                     Q_(R"(ALTER TABLE `/Root/KV` ADD COLUMN Extra String;)"),
@@ -782,16 +776,11 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 alterResult.GetStatus(), EStatus::SUCCESS,
                 alterResult.GetIssues().ToString());
 
-            // Release all held writes.  The datashard sees a stale schema version
-            // and returns STATUS_SCHEME_CHANGED.
             for (auto& ev : held) {
                 runtime.Send(ev.release());
             }
             held.clear();
 
-            // After the fix: RuntimeError(SCHEME_ERROR, KIKIMR_SCHEME_MISMATCH)
-            // is called; session actor converts it to ABORTED.
-            // Before the fix: RetryResolve() → infinite loop → test would hang.
             auto result = runtime.WaitFuture(future, TDuration::Seconds(30));
             UNIT_ASSERT_VALUES_EQUAL_C(
                 result.GetStatus(), EStatus::ABORTED,

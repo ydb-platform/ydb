@@ -121,7 +121,6 @@ namespace NTabletFlatExecutor {
     XX(GC_FORGOTTEN, "GcBlobsForgotten") \
     XX(GC_KEEPSET, "GcKeepFlagsSet") \
     XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \
-    XX(GC_SENTINEL_DROPPED_MARKS, "GcSentinelDroppedMarks") \
     XX(CONSUMED_CPU, "ConsumedCPU") \
     XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \
     XX(COMPACTION_READ_CACHE_HITS, "CompactionReadCacheHits") \
@@ -134,6 +133,7 @@ namespace NTabletFlatExecutor {
     XX(BACKUP_CHANGELOG_ERRORS, "BackupChangelogErrors") \
     XX(BACKUP_SNAPSHOT_BYTES_WRITTEN, "BackupSnapshotBytesWritten") \
     XX(BACKUP_CHANGELOG_BYTES_WRITTEN, "BackupChangelogBytesWritten") \
+    XX(GC_SENTINEL_DROPPED_MARKS, "GcSentinelDroppedMarks") \
 
 // don't change order!
 #define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \

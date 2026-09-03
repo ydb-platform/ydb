@@ -504,12 +504,8 @@ ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                     affectedGroups[xit->GroupID];
             }
 
-            // Below the first surviving entry GroupForGeneration returns Max<ui32>(): the entry
-            // was cut only after the barrier into its group had been advanced, so a flag sent
-            // there now would be addressed to a nonexistent group and fail forever (BS error ->
-            // TEvPoison -> boot loop). Dropping the mark is safe: live blobs in the old group
-            // are already covered by the Keep marks recorded there before the cut. A Delete for a
-            // blob deleted after the cut is lost, so the blob lingers until the group is released.
+            // GroupForGeneration returns Max<ui32>() below the first surviving history entry.
+            // Dropping such a mark is safe: those blobs have already been deleted with the cut entry.
             ui32 activeGen = Max<ui32>();
             ui32 activeGroup = Max<ui32>();
             TVector<TLogoBlobID> *vec = nullptr;

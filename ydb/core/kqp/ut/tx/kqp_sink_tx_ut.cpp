@@ -728,10 +728,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             bool queryRequestPatched = false;
 
             auto grab = [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
-                // Patch the first TEvQueryRequest to inject IsStreamingQuery=true.
-                // This causes the optimizer to emit AllowInconsistentWrites in the
-                // write sink settings, which maps to InconsistentTx=true in the
-                // write actor — the exact path where the bug lived.
+                // IsStreamingQuery=true makes the sink compile with InconsistentTx=true.
                 if (!queryRequestPatched &&
                     ev->GetTypeRewrite() == TEvKqp::TEvQueryRequest::EventType)
                 {

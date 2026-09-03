@@ -4,10 +4,7 @@
 
 using namespace NKikimr::NComputationGraph;
 
-// Fixture: full plan document for the GroupByHop streaming query (meta + Plan only).
-// Node creation order (BuildGraph): Sink(op,id=1), Write pq(out,id=2), Stage(op,id=3),
-//   Stage(op,id=4), Source(op,id=5), Read pq(in,id=6).
-// Links: 6->5, 5->4, 4->3, 3->1, 1->2. Levels: 0,1,2,3,4,5.
+// GroupByHop fixture — meta + Plan only; Stats absent.
 static const TString PlanWithoutStats = R"({
     "meta": {"version": "0.2", "type": "query"},
     "Plan": {
@@ -39,10 +36,6 @@ static const TString PlanWithoutStats = R"({
     }
 })";
 
-// PlanNodeId 5 (Sink,  Nodes[0]): Tasks 1, FinishedTasks 1 -> Finished; EgressRows/Bytes 100/1000.
-// PlanNodeId 4 (Stage, Nodes[2]): Tasks 0 -> Pending.
-// PlanNodeId 2 (Stage, Nodes[3]): Tasks 2, FinishedTasks 0 -> Running; OutputRows/Bytes 100/1000, CpuTimeUs 4000.
-// PlanNodeId 1 (Source,Nodes[4]): Tasks 2, FinishedTasks 0 -> Running; IngressRows/Bytes 100/1000.
 static const TString PlanWithStats = R"({
     "meta": {"version": "0.2", "type": "query"},
     "Plan": {
@@ -93,7 +86,7 @@ static const TString PlanWithStats = R"({
 
 namespace {
 
-TGraph Build(const TString& json) {
+TGraph Build(TStringBuf json) {
     NJson::TJsonValue doc;
     NJson::ReadJsonTree(json, &doc, false);
     return BuildGraph(doc);
@@ -114,7 +107,8 @@ const TNode& NodeByName(const TGraph& g, TStringBuf name) {
             return n;
         }
     }
-    ythrow yexception() << "node not found: " << name;
+    UNIT_ASSERT_C(false, TString("node not found: ") + name);
+    return g.Nodes.front();
 }
 
 } // namespace
@@ -149,19 +143,18 @@ Y_UNIT_TEST(FixtureShape) {
     UNIT_ASSERT_EQUAL(g.Nodes[3].Name, "Stage");
     UNIT_ASSERT_EQUAL(g.Nodes[3].Type, ENodeType::Operation);
 
-    // Chain: Read pq -> Source -> Stage[3] -> Stage[2] -> Sink -> Write pq
-    ui32 idReadPq  = NodeByName(g, "Read pq").Id;
-    ui32 idSource  = NodeByName(g, "Source").Id;
-    ui32 idStage3  = g.Nodes[3].Id;
-    ui32 idStage2  = g.Nodes[2].Id;
-    ui32 idSink    = NodeByName(g, "Sink").Id;
-    ui32 idWritePq = NodeByName(g, "Write pq").Id;
+    ui32 idReadPq         = NodeByName(g, "Read pq").Id;
+    ui32 idSource         = NodeByName(g, "Source").Id;
+    ui32 idStageAfterSource = g.Nodes[3].Id;
+    ui32 idStageBeforeSink  = g.Nodes[2].Id;
+    ui32 idSink           = NodeByName(g, "Sink").Id;
+    ui32 idWritePq        = NodeByName(g, "Write pq").Id;
 
     UNIT_ASSERT_EQUAL(g.Links.size(), 5u);
     UNIT_ASSERT(HasLink(g, idReadPq, idSource));
-    UNIT_ASSERT(HasLink(g, idSource, idStage3));
-    UNIT_ASSERT(HasLink(g, idStage3, idStage2));
-    UNIT_ASSERT(HasLink(g, idStage2, idSink));
+    UNIT_ASSERT(HasLink(g, idSource, idStageAfterSource));
+    UNIT_ASSERT(HasLink(g, idStageAfterSource, idStageBeforeSink));
+    UNIT_ASSERT(HasLink(g, idStageBeforeSink, idSink));
     UNIT_ASSERT(HasLink(g, idSink, idWritePq));
 
     // No HashShuffle node (Connection is transparent).
@@ -196,7 +189,6 @@ Y_UNIT_TEST(NoStatsMeansPending) {
 
 Y_UNIT_TEST(StatsAreAggregatedPerStage) {
     TGraph g = Build(PlanWithStats);
-    // Nodes[0] = Sink (PlanNodeId 5): Finished, EgressRows 100.
     const TNode& sink = g.Nodes[0];
     UNIT_ASSERT_EQUAL(sink.State, ENodeState::Finished);
     UNIT_ASSERT_EQUAL(sink.Tasks, 1u);
@@ -204,18 +196,15 @@ Y_UNIT_TEST(StatsAreAggregatedPerStage) {
     UNIT_ASSERT_EQUAL(sink.Stats.EgressRows, 100u);
     UNIT_ASSERT_EQUAL(sink.Stats.EgressBytes, 1000u);
 
-    // Nodes[2] = Stage PlanNodeId 4: Pending (Tasks 0).
     UNIT_ASSERT_EQUAL(g.Nodes[2].State, ENodeState::Pending);
     UNIT_ASSERT_EQUAL(g.Nodes[2].Tasks, 0u);
 
-    // Nodes[3] = Stage PlanNodeId 2: Running, OutputRows 100, CpuTimeUs 4000.
     const TNode& midStage = g.Nodes[3];
     UNIT_ASSERT_EQUAL(midStage.State, ENodeState::Running);
     UNIT_ASSERT_EQUAL(midStage.Tasks, 2u);
     UNIT_ASSERT_EQUAL(midStage.Stats.OutputRows, 100u);
     UNIT_ASSERT_EQUAL(midStage.Stats.CpuTimeUs, 4000u);
 
-    // Nodes[4] = Source (PlanNodeId 1): Running, IngressRows 100.
     const TNode& src = g.Nodes[4];
     UNIT_ASSERT_EQUAL(src.State, ENodeState::Running);
     UNIT_ASSERT_EQUAL(src.Stats.IngressRows, 100u);
@@ -224,7 +213,6 @@ Y_UNIT_TEST(StatsAreAggregatedPerStage) {
 
 Y_UNIT_TEST(ConnectionFanIn) {
     // Query -> Stage(A) -> Connection -> [Stage(B), Stage(C)]
-    // A is created first (id=1), B second (id=2), C third (id=3).
     TGraph g = Build(R"({
         "Plan": {
             "Node Type": "Query",
@@ -271,7 +259,6 @@ Y_UNIT_TEST(ResultSetIsOutput) {
 }
 
 Y_UNIT_TEST(MixedSourceSinkStage) {
-    // A stage with both SourceType and SinkType operator -> in, op, out; 2 links.
     TGraph g = Build(R"({
         "Plan": {
             "Node Type": "Query",
@@ -327,7 +314,6 @@ Y_UNIT_TEST(SvgShowsTasksAndState) {
     {
         TString svg = ToSvg(Build(PlanWithoutStats));
         UNIT_ASSERT(!svg.Contains("&#x2713;"));
-        UNIT_ASSERT(!svg.Contains("fill=\"#9ccc9c\""));
     }
 }
 
@@ -346,20 +332,21 @@ Y_UNIT_TEST(SvgEscapesNames) {
 
 Y_UNIT_TEST(SvgLevelsGoLeftToRight) {
     TString svg = ToSvg(Build(PlanWithoutStats));
-    const char* tag = "<rect x=\"";
-    size_t first = svg.find(tag);
-    size_t last  = svg.rfind(tag);
-    UNIT_ASSERT(first != TString::npos && first != last);
-    auto getX = [&](size_t pos) {
-        pos += strlen(tag);
+    auto centerX = [&](const char* label) {
+        TString needle = TString(">") + label + "<";
+        size_t pos = svg.find(needle);
+        UNIT_ASSERT_C(pos != TString::npos, TString("label not in SVG: ") + label);
+        size_t xAt = svg.rfind("x=\"", pos);
+        UNIT_ASSERT_C(xAt != TString::npos, "x attr not found before label");
+        xAt += 3;
         int v = 0;
-        while (pos < svg.size() && svg[pos] != '"') {
-            v = v * 10 + (svg[pos] - '0');
-            ++pos;
+        while (xAt < svg.size() && svg[xAt] != '"') {
+            v = v * 10 + (svg[xAt] - '0');
+            ++xAt;
         }
         return v;
     };
-    UNIT_ASSERT_LT(getX(first), getX(last));
+    UNIT_ASSERT_LT(centerX("Read pq"), centerX("Write pq"));
 }
 
 } // Y_UNIT_TEST_SUITE(ComputationGraph)

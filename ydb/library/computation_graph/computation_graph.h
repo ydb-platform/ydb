@@ -38,8 +38,6 @@ struct TNode {
     ENodeState State = ENodeState::Pending;
     ui32 Tasks = 0;
     ui32 FinishedTasks = 0;
-    ui32 PhysicalStageId = 0;
-    ui64 UpdateTimeMs = 0;
     TNodeStats Stats;
 };
 

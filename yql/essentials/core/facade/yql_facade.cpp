@@ -553,6 +553,16 @@ void TProgram::SetBridgeBinaryPath(const TString& path) {
     BridgeBinaryPath_ = path;
 }
 
+void TProgram::SetOperationTitle(const TString& title) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    if (title.Contains("YQL")) {
+        OperationOptions_.Title = title;
+        return;
+    }
+
+    OperationOptions_.Title = (title.empty() ? "" : title + " ") + "[Powered by YQL]";
+}
+
 TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
     Y_ENSURE(TypeCtx_, "TypeCtx_ is not created");
     return TypeCtx_;

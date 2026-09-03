@@ -482,7 +482,7 @@ struct TPersistentBufferFormat {
     ui32 ListPersistentBufferRetryPeriodMilliseconds = 20;
     // Controls persistent-buffer on-disk integrity format. When enabled, every data
     // sector and its header use salted checksums. When disabled, a data sector starts
-    // with its physical, globally unique sector index; its original first eight bytes
+    // with its record header's unique ID; its original first eight bytes
     // are saved in the header. Existing checksum-formatted records remain readable.
     // Kept last to preserve existing positional aggregate initialization.
     bool EnableChecksums = true;

@@ -248,24 +248,6 @@ namespace NKikimr::NDDisk {
     {
         TRope fullData(std::move(payloadWithHeader));
 
-        auto* header = reinterpret_cast<TPersistentBufferHeader*>(fullData.Begin().UnsafeContiguousDataMut());
-
-        memset(header, 0, SectorSize);
-        memcpy(
-            header->Signature,
-            TPersistentBufferHeader::PersistentBufferHeaderSignature,
-            sizeof(TPersistentBufferHeader::PersistentBufferHeaderSignature));
-        header->PersistentBufferUniqueId = PersistentBufferUniqueId;
-        header->NodeId = BaseInfo.PDiskActorID.NodeId();
-        header->PDiskId = BaseInfo.PDiskId;
-        header->SlotId = BaseInfo.VDiskSlotId;
-        header->RecordLsn = 0;
-        header->RecordIdx = 0;
-        header->Flags = PersistentBufferFormat.EnableChecksums ? TPersistentBufferHeader::NONE
-            : TPersistentBufferHeader::CHECKSUMS_DISABLED;
-        header->BatchSize = 1;
-        header->HeaderUniqueId = headerUniqueId;
-        
         // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
         // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
         // it via HasSignatureCorrection (JoinData restores the original byte on disk read-back). This mutates
@@ -285,7 +267,6 @@ namespace NKikimr::NDDisk {
                 ui64 originalPrefix;
                 memcpy(&originalPrefix, it.ContiguousData(), sizeof(originalPrefix));
                 sector.ChecksumOrData = originalPrefix;
-                const ui64 headerUniqueId = header->HeaderUniqueId;
                 memcpy(it.ContiguousDataMut(), &headerUniqueId, sizeof(ui64));
             }
             if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
@@ -297,6 +278,23 @@ namespace NKikimr::NDDisk {
         // Phase 2: fullData's backend is now final (private if Phase 1 copied it), so this header pointer stays
         // valid for every write below. The header sector occupies reserved headroom that is not part of any
         // payload view, so writing it through UnsafeContiguousDataMut() never needs (or triggers) a copy.
+        auto* header = reinterpret_cast<TPersistentBufferHeader*>(fullData.Begin().UnsafeContiguousDataMut());
+        memset(header, 0, SectorSize);
+        memcpy(
+            header->Signature,
+            TPersistentBufferHeader::PersistentBufferHeaderSignature,
+            sizeof(TPersistentBufferHeader::PersistentBufferHeaderSignature));
+        header->PersistentBufferUniqueId = PersistentBufferUniqueId;
+        header->NodeId = BaseInfo.PDiskActorID.NodeId();
+        header->PDiskId = BaseInfo.PDiskId;
+        header->SlotId = BaseInfo.VDiskSlotId;
+        header->RecordLsn = 0;
+        header->RecordIdx = 0;
+        header->Flags = PersistentBufferFormat.EnableChecksums ? TPersistentBufferHeader::NONE
+            : TPersistentBufferHeader::CHECKSUMS_DISABLED;
+        header->BatchSize = 1;
+        header->HeaderUniqueId = headerUniqueId;
+
         auto* lsnRecordHeader = reinterpret_cast<TPersistentBufferLsnRecordHeader*>(fullData.Begin().UnsafeContiguousDataMut() + sizeof(TPersistentBufferHeader));
 
         lsnRecordHeader->TabletId = tabletId;
@@ -438,6 +436,11 @@ namespace NKikimr::NDDisk {
 
         auto checkIsSameRequest = [&](auto &data) {
             bool dataEqual = data.Size == selector.Size;
+            if (dataEqual && data.ChecksumsDisabled && !data.PayloadChecksums.empty()) {
+                const auto& checksums = record.GetChecksums();
+                dataEqual = data.PayloadChecksums.size() == static_cast<size_t>(checksums.size())
+                    && std::equal(data.PayloadChecksums.begin(), data.PayloadChecksums.end(), checksums.begin());
+            }
             if (dataEqual) {
                 const TWriteInstruction instr(record.GetInstruction());
                 Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
@@ -1193,9 +1196,9 @@ namespace NKikimr::NDDisk {
             .Attribute("lsn", static_cast<i64>(lsn));
 
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
-        ui64 headerUniqueId = inflight.Records.size() 
-            ? inflight.Records.back().HeaderUniqueId
-            : NextPersistentBufferHeaderUniqueId++; 
+        ui64 headerUniqueId = PersistentBufferFormat.EnableChecksums ? 0
+            : inflight.Records.size() ? inflight.Records.back().HeaderUniqueId
+            : NextPersistentBufferHeaderUniqueId++;
         inflight.Records.push_back({
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,

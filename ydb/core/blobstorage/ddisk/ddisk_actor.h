@@ -1124,7 +1124,7 @@ namespace NKikimr::NDDisk {
                 // at existing call sites that only name fields up to PayloadChecksums.
                 ui8 DirectBlockGroupIndex = 0;
                 bool ChecksumsDisabled = false;
-                ui64 HeaderUniqueId;
+                ui64 HeaderUniqueId = 0;
                 TRope JoinData(ui32 sectorSize);
             };
 

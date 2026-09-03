@@ -3992,7 +3992,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     TDiskHandle CreateDDiskWithRestoredChunkData(TTestContext& ctx, ui32 pdiskId, ui32 slotId,
             const std::vector<ui32>& preExistingChunkIds, ui64 persistentBufferUniqueId,
             const std::unordered_map<ui32, TString>& chunkData,
-            NDDisk::TPersistentBufferFormat pbFormat = {}) {
+            NDDisk::TPersistentBufferFormat pbFormat = {256, 4, BlockSize * 128, 8, 5000, 512 * 1024}) {
         const TActorId pdiskEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
         const TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
         ctx.Runtime.RegisterService(pdiskServiceId, pdiskEdge);

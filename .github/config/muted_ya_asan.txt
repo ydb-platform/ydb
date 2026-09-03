@@ -48,6 +48,7 @@ ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/formats/arrow/accessor/sub_columns/ut SubColumnsSparsedBuilder.BinaryJsonMatchesPlain
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthLower
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthLower
+ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine7
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStream
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumer
@@ -64,6 +65,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsEmptyFields
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsExclusiveStartShardId
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsTimestamp
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsToken
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_ExplicitHashKey
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithLongExplicitHashKey
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestConsumersEmptyNames
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestCounters
@@ -133,6 +135,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestPurgeQueue_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessageWithAttributes_TableImplementation
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_Fifo_Compatibility
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_Fifo_Compatibility_SkipMessageGroups_TablesFormat1
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageBatch
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageBatch_TableImplementation
@@ -259,6 +262,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestGetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestListQueues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestReceiveMessage
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestSetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityBatchInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestChangeMessageVisibilityExtendTimeout
@@ -327,6 +331,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttribu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesRetentionPeriod
 ydb/core/kafka_proxy/ut KafkaProtocol.BalanceScenarioCdc
 ydb/core/kafka_proxy/ut KafkaProtocol.NativeKafkaBalanceScenario
+ydb/core/kqp/executer_actor/ut KqpExecuter.OversizedTaskReturnsLimitExceeded
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithLocalYdbJoin
@@ -386,6 +391,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.CheckAccess
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
+ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_OnePartition
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_TwoPartition
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
@@ -394,6 +400,7 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
+ydb/core/tx/columnshard/backup/async_jobs/ut unittest.sole chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKDatetime
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
@@ -427,6 +434,7 @@ ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHidd
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/dq/actors/compute/ut/large TSyncComputeActorTest.MapJoinTaskWithExhaustedQuotaManager
+ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle

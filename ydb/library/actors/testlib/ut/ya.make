@@ -10,6 +10,7 @@ PEERDIR(
 
 SRCS(
     decorator_ut.cpp
+    mailbox_processing_finished_ut.cpp
 )
 
 END()

@@ -33,10 +33,10 @@ namespace NKikimr {
             return;
         }
 
-        if (StopGetBatchingEvent) {
-            TActivationContext::Send(StopGetBatchingEvent.Release());
+        if (!BatchedGetRequestCount && !BatchedPutRequestCount) {
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
         }
-        BatchedGetRequestCount++;
+        ++BatchedGetRequestCount;
 
         EnsureMonitoring(true);
         LWTRACK(DSProxyGetHandle, ev->Get()->Orbit);
@@ -191,10 +191,10 @@ namespace NKikimr {
             return;
         }
 
-        if (StopPutBatchingEvent) {
-            TActivationContext::Send(StopPutBatchingEvent.Release());
+        if (!BatchedGetRequestCount && !BatchedPutRequestCount) {
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
         }
-        BatchedPutRequestCount++;
+        ++BatchedPutRequestCount;
 
         Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
@@ -684,27 +684,33 @@ namespace NKikimr {
         batchedPuts.Bytes = 0;
     }
 
-    void TBlobStorageGroupProxy::Handle(TEvStopBatchingPutRequests::TPtr& ev) {
-        StopPutBatchingEvent = ev;
-        for (auto &bucket : PutBatchedBucketQueue) {
-            auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic][bucket.ReduceInterpileTraffic];
-            Y_ABORT_UNLESS(!batchedPuts.Queue.empty());
-            *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
-            ++*Mon->PutBatchesSent;
-            ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic, bucket.ReduceInterpileTraffic);
+    void TBlobStorageGroupProxy::Handle(TEvents::TEvMailboxProcessingFinished::TPtr&) {
+        if (BatchedPutRequestCount) {
+            // This direct callback intentionally performs the flush here. In StateWork each batch is capped at
+            // MaxBatchedPutRequests, and flushing only walks these small queues and registers request actors; their
+            // actual work remains subject to normal mailbox scheduling. A self-event would add queue traffic and
+            // another activation for this bounded bookkeeping.
+            for (auto &bucket : PutBatchedBucketQueue) {
+                auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic][bucket.ReduceInterpileTraffic];
+                Y_ABORT_UNLESS(!batchedPuts.Queue.empty());
+                *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
+                ++*Mon->PutBatchesSent;
+                ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic, bucket.ReduceInterpileTraffic);
+            }
+            PutBatchedBucketQueue.clear();
+            ++*Mon->EventStopPutBatching;
+            LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId.GetRawId());
+            BatchedPutRequestCount = 0;
+            Controls.EnablePutBatching.Update(TActivationContext::Now());
         }
-        PutBatchedBucketQueue.clear();
-        ++*Mon->EventStopPutBatching;
-        LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId.GetRawId());
-        BatchedPutRequestCount = 0;
-        Controls.EnablePutBatching.Update(TActivationContext::Now());
-    }
 
-    void TBlobStorageGroupProxy::Handle(TEvStopBatchingGetRequests::TPtr& ev) {
-        StopGetBatchingEvent = ev;
-        ++*Mon->EventStopGetBatching;
-        LWPROBE(DSProxyBatchedGetRequest, BatchedGetRequestCount, GroupId.GetRawId());
-        BatchedGetRequestCount = 0;
+        if (BatchedGetRequestCount) {
+            ++*Mon->EventStopGetBatching;
+            LWPROBE(DSProxyBatchedGetRequest, BatchedGetRequestCount, GroupId.GetRawId());
+            BatchedGetRequestCount = 0;
+        }
+
+        ClearSystemFlag(ESystemFlag::MailboxProcessingFinished);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

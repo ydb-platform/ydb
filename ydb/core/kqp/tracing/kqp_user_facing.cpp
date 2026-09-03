@@ -1,4 +1,4 @@
-#include "user_facing.h"
+#include "kqp_user_facing.h"
 
 #include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
@@ -14,7 +14,7 @@ TProxyUserFacingTraceContext::TProxyUserFacingTraceContext(
         NPrivateEvents::TEvQueryRequest& request)
     : ParentTraceId(request.GetUserFacingWilsonTraceId())
     , Action(request.GetAction())
-    , Origin(request.Record.ProxyRequestHopsSize() == 0) {
+    , Origin(request.Record.GetUserFacingTrace().ProxyRequestHopsSize() == 0) {
     if (const auto& seed = request.GetProxyTraceSeed()) {
         StartedAt = seed->StartTime;
         MonotonicStartedAt = seed->StartedAt;
@@ -22,7 +22,7 @@ TProxyUserFacingTraceContext::TProxyUserFacingTraceContext(
     }
     if (Origin) {
         RootTraceId = ParentTraceId.Span(ParentTraceId.GetVerbosity());
-        RootTraceId.Serialize(request.Record.MutableUserFacingTraceId());
+        RootTraceId.Serialize(request.Record.MutableUserFacingTrace()->MutableTraceId());
     } else {
         RootTraceId = NWilson::TTraceId(ParentTraceId);
     }
@@ -34,10 +34,11 @@ void TProxyUserFacingTraceContext::MarkSent(ui32 sourceNodeId, ui32 targetNodeId
     const TDuration hopDuration = NActors::TMonotonic::Now() - MonotonicStartedAt;
     SentAt = StartedAt + hopDuration;
     TargetNodeId = targetNodeId;
-    if (!request.Record.HasUserFacingTraceOriginSentAtUs()) {
-        request.Record.SetUserFacingTraceOriginSentAtUs(SentAt.MicroSeconds());
+    auto* trace = request.Record.MutableUserFacingTrace();
+    if (!trace->HasOriginSentAtUs()) {
+        trace->SetOriginSentAtUs(SentAt.MicroSeconds());
     }
-    auto* hop = request.Record.AddProxyRequestHops();
+    auto* hop = trace->AddProxyRequestHops();
     hop->SetNodeId(sourceNodeId);
     hop->SetTargetNodeId(targetNodeId);
     hop->SetDurationUs(hopDuration.MicroSeconds());
@@ -95,11 +96,12 @@ NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
     if (request.GetQuerySize() <= MaxUserFacingQueryTextSize) {
         snapshot.QueryText = request.GetQuery();
     }
-    snapshot.ProxyRequestHops.assign(request.Record.GetProxyRequestHops().begin(),
-        request.Record.GetProxyRequestHops().end());
+    const auto& trace = request.Record.GetUserFacingTrace();
+    snapshot.ProxyRequestHops.assign(trace.GetProxyRequestHops().begin(),
+        trace.GetProxyRequestHops().end());
     snapshot.RejectedAt = MapUserFacingSessionStart(TInstant::Now(),
-        TInstant::MicroSeconds(request.Record.GetUserFacingTraceOriginSentAtUs()),
-        request.Record.GetProxyRequestHops());
+        TInstant::MicroSeconds(trace.GetOriginSentAtUs()),
+        trace.GetProxyRequestHops());
     snapshot.Status = status;
     return CreateRejectedUserFacingTraceRendererActor(std::move(snapshot));
 }

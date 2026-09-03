@@ -1,4 +1,4 @@
-#include "user_facing.h"
+#include "kqp_user_facing.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
@@ -282,7 +282,7 @@ void EmitShardReadSpans(const NWilson::TTraceId& parent,
         span.Attribute("ydb.shard_id", static_cast<i64>(shard.GetShardId()));
         span.Attribute("ydb.code.component", TString("KqpShardRead"));
         span.Attribute("ydb.peer.actor.type", TString("DataShard"));
-        span.Attribute("ydb.rows", static_cast<i64>(shard.GetRows()));
+        span.Attribute("ydb.rows", static_cast<i64>(shard.GetRowCount()));
         if (!measured || shard.GetStartTimeMs() == shard.GetFinishTimeMs()) {
             span.Attribute("ydb.duration.measured", false);
         }
@@ -290,13 +290,14 @@ void EmitShardReadSpans(const NWilson::TTraceId& parent,
             span.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(status));
             span.Attribute("ydb.finished", shard.GetFinished());
         }
-        if (shard.GetRetries() > 0) {
-            span.Attribute("ydb.read_retries", static_cast<i64>(shard.GetRetries()));
+        if (shard.GetRetryCount() > 0) {
+            span.Attribute("ydb.read_retries", static_cast<i64>(shard.GetRetryCount()));
         }
         if (shard.GetNodeId()) {
             span.Attribute("ydb.node_id", static_cast<i64>(shard.GetNodeId()));
         }
-        if (shard.GetTiming() == NKqpProto::TKqpShardReadStats::FIRST_TO_LAST_MESSAGE) {
+        if (shard.GetTimingBoundary()
+                == NKqpProto::TKqpShardReadStats::FIRST_MESSAGE_TO_LAST_MESSAGE) {
             span.Attribute("ydb.timing_boundary", TString("first_to_last_message"));
         }
         span.End();

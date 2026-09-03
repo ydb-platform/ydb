@@ -33,7 +33,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
-#include <ydb/core/kqp/tracing/user_facing.h>
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -730,7 +730,8 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        const bool collectUserFacingTrace = ev->Get()->Record.HasUserFacingTraceId();
+        const bool collectUserFacingTrace = ev->Get()->Record.HasUserFacingTrace()
+            && ev->Get()->Record.GetUserFacingTrace().HasTraceId();
         if (collectUserFacingTrace) {
             ev->Get()->EnsureProxyTraceSeed();
         }
@@ -1055,10 +1056,10 @@ public:
         if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
             if (proxyRequest->UserFacingTrace) {
                 const auto& record = ev->Get()->Record;
+                const auto& trace = record.GetUserFacingTrace();
                 if (auto snapshot = proxyRequest->UserFacingTrace->Detach(
-                        record.GetYdbStatus(), SelfId().NodeId(),
-                        record.GetUserFacingTraceName(), record.GetUserFacingTraceOperation(),
-                        record.GetUserFacingTraceCoverage())) {
+                        record.GetYdbStatus(), SelfId().NodeId(), trace.GetName(),
+                        trace.GetOperation(), trace.GetCoverage())) {
                     userFacingRenderer = CreateProxyUserFacingTraceRendererActor(
                         std::move(*snapshot));
                 }
@@ -1103,9 +1104,10 @@ public:
         IActor* renderer = nullptr;
         if (proxyRequest->UserFacingTrace) {
             const auto& record = ev->Get()->Record;
+            const auto& trace = record.GetUserFacingTrace();
             if (auto snapshot = proxyRequest->UserFacingTrace->Detach(
                     record.GetYdbStatus(), SelfId().NodeId(),
-                    record.GetName(), record.GetOperation(), record.GetCoverage())) {
+                    trace.GetName(), trace.GetOperation(), trace.GetCoverage())) {
                 renderer = CreateProxyUserFacingTraceRendererActor(std::move(*snapshot));
             }
         }
@@ -1830,7 +1832,8 @@ private:
         switch (requestType) {
             case EDelayedRequestType::QueryRequest: {
                 auto* request = static_cast<TEvKqp::TEvQueryRequest*>(requestEvent->GetBase());
-                if (request && request->Record.HasUserFacingTraceId()) {
+                if (request && request->Record.HasUserFacingTrace()
+                        && request->Record.GetUserFacingTrace().HasTraceId()) {
                     TProxyUserFacingTraceContext trace(*request);
                     if (auto snapshot = trace.Detach(status, SelfId().NodeId())) {
                         Register(CreateProxyUserFacingTraceRendererActor(std::move(*snapshot)),

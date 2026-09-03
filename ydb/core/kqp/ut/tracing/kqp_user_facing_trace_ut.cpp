@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
-#include <ydb/core/kqp/tracing/user_facing.h>
+#include <ydb/core/kqp/common/compilation/kqp_compile_diagnostics.h>
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -83,7 +83,8 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             configure(*request->Record.MutableRequest());
         }
         if (userTracing) {
-            NWilson::TTraceId::NewTraceId(userVerbosity, 4095).Serialize(request->Record.MutableUserFacingTraceId());
+            NWilson::TTraceId::NewTraceId(userVerbosity, 4095).Serialize(
+                request->Record.MutableUserFacingTrace()->MutableTraceId());
         }
         NWilson::TTraceId devTrace;
         if (devTracing) {
@@ -431,7 +432,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         auto rejected = MakeSQLRequest("SELECT 2;", true);
         rejected->Record.MutableRequest()->SetSessionId(sessionId);
         NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
-            rejected->Record.MutableUserFacingTraceId());
+            rejected->Record.MutableUserFacingTrace()->MutableTraceId());
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), rejectedSender,
             rejected.Release()));
         auto rejectedResponse = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(rejectedSender);
@@ -462,7 +463,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         auto request = MakeSQLRequest("SELECT 1;", true);
         request->Record.MutableRequest()->SetSessionId("ydb://session/3?node_id=1&id=missing");
         NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
-            request->Record.MutableUserFacingTraceId());
+            request->Record.MutableUserFacingTrace()->MutableTraceId());
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
             request.Release()));
 
@@ -507,7 +508,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         auto request = MakeSQLRequest("SELECT 1;", true);
         request->Record.MutableRequest()->SetTimeoutMs(1);
         NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
-            request->Record.MutableUserFacingTraceId());
+            request->Record.MutableUserFacingTrace()->MutableTraceId());
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
             request.Release()));
 
@@ -739,7 +740,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         request->Record.MutableRequest()->SetSessionId(
             createSession->Get()->Record.GetResponse().GetSessionId());
         NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
-            request->Record.MutableUserFacingTraceId());
+            request->Record.MutableUserFacingTrace()->MutableTraceId());
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
             request.Release()));
         TDispatchOptions compileBlocked;
@@ -907,7 +908,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             auto request = MakeSQLRequest(query, true);
             if (userTracing) {
                 NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
-                    request->Record.MutableUserFacingTraceId());
+                    request->Record.MutableUserFacingTrace()->MutableTraceId());
             }
             runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), replyTo,
                 request.Release()));
@@ -1075,14 +1076,16 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         NKqpProto::TKqpTaskExtraStats stats;
         collector.Export(stats, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.ShardReadsSize(), NKqp::MaxShardReadDiagnostics);
-        UNIT_ASSERT_VALUES_EQUAL(stats.GetShardReadsTruncated(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetShardReadsDroppedCount(), 2u);
         bool slowFound = false;
         bool errorFound = false;
         for (const auto& shard : stats.GetShardReads()) {
+            UNIT_ASSERT_VALUES_EQUAL(shard.GetTimingBoundary(),
+                NKqpProto::TKqpShardReadStats::REQUEST_SENT_TO_LAST_MESSAGE);
             slowFound = slowFound || shard.GetShardId() == slowShard;
             if (shard.GetShardId() == failedShard) {
                 UNIT_ASSERT_VALUES_EQUAL(shard.GetStatus(), Ydb::StatusIds::ABORTED);
-                UNIT_ASSERT_VALUES_EQUAL(shard.GetRetries(), 2u);
+                UNIT_ASSERT_VALUES_EQUAL(shard.GetRetryCount(), 2u);
                 UNIT_ASSERT(shard.GetFinished());
                 errorFound = true;
             }

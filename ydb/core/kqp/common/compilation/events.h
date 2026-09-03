@@ -10,7 +10,7 @@
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include "compile_diagnostics.h"
+#include "kqp_compile_diagnostics.h"
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 

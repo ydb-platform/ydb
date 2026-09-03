@@ -162,22 +162,21 @@ public:
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
-        ResponseStatsMode = Request.StatsMode;
-        CollectionStatsMode = ResponseStatsMode;
+        auto collectionStatsMode = Request.StatsMode;
         if (Request.DiagnosticsPolicy) {
             const auto& policy = *Request.DiagnosticsPolicy;
             if (policy.CollectShardSamples) {
-                CollectionStatsMode = Max(CollectionStatsMode,
+                collectionStatsMode = Max(collectionStatsMode,
                     Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
             } else if (policy.CollectStageAggregates || policy.CollectTaskSamples) {
-                CollectionStatsMode = Max(CollectionStatsMode,
+                collectionStatsMode = Max(collectionStatsMode,
                     Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
             }
             TasksGraph.GetMeta().CollectShardDiagnostics = policy.CollectShardSamples;
             TasksGraph.GetMeta().CollectBufferLookupDiagnostics = policy.CollectBufferLookup;
             TasksGraph.GetMeta().CollectTimeline = policy.CollectTimeline;
         }
-        TasksGraph.GetMeta().StatsMode = CollectionStatsMode;
+        TasksGraph.GetMeta().StatsMode = collectionStatsMode;
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
             TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
@@ -187,7 +186,7 @@ public:
         }
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
-        Stats = std::make_unique<TQueryExecutionStats>(CollectionStatsMode, &TasksGraph,
+        Stats = std::make_unique<TQueryExecutionStats>(collectionStatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
 
         StartTime = TAppData::TimeProvider->Now();
@@ -625,7 +624,7 @@ protected:
                     if (!channel.DstTask) {
                         Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
                         auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
-                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(CollectionStatsMode))), nullptr);
+                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Stats->StatsMode))), nullptr);
                         ReadResultFromInputBuffer(channelId, inputBuffer);
                         ResultInputBuffers.emplace(channelId, inputBuffer);
                     }
@@ -923,7 +922,7 @@ protected:
             Stats->UpdateTaskStats(computeActor.NodeId(), taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
                 TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
-            if (CollectBasicStats(ResponseStatsMode)) {
+            if (CollectBasicStats(Request.StatsMode)) {
                 ui64 cycleCount = GetCycleCountFast();
 
                 if (Stats->DeadlockedStageId) {
@@ -938,7 +937,7 @@ protected:
                     if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
                         auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
                         auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
-                        Stats->ExportExecStats(execStats, ResponseStatsMode);
+                        Stats->ExportExecStats(execStats, Request.StatsMode);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                             const auto& tx = Request.Transactions[txId].Body;
                             auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
@@ -1034,7 +1033,7 @@ protected:
     }
 
     void HandleNodeState(NYql::NDq::TEvDqCompute::TEvNodeState::TPtr& ev) {
-        if (CollectProfileStats(CollectionStatsMode)) {
+        if (CollectProfileStats(Stats->StatsMode)) {
             Stats->UpdateNodeStats(ev->Sender.NodeId(), ev->Get()->Record);
         }
     }
@@ -1047,7 +1046,7 @@ protected:
         auto view = cgi.Get("view");
         if (view == "plan") {
             NYql::NDqProto::TDqExecutionStats execStats;
-            Stats->ExportExecStats(execStats, CollectionStatsMode);
+            Stats->ExportExecStats(execStats, Stats->StatsMode);
 
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
@@ -1617,7 +1616,7 @@ protected:
             .Database = Database,
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
-            .StatsMode = CollectionStatsMode,
+            .StatsMode = Stats->StatsMode,
             .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
             .ExecuterSpan =  ExecuterSpan,
@@ -1648,7 +1647,7 @@ protected:
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
                 auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0,
-                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(CollectionStatsMode))), nullptr);
+                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Stats->StatsMode))), nullptr);
                 ReadResultFromInputBuffer(channelId, inputBuffer);
                 ResultInputBuffers.emplace(channelId, inputBuffer);
             }
@@ -1973,9 +1972,9 @@ protected:
             {
                 ui64 cycleCount = GetCycleCountFast();
                 ExportExecutionDiagnostics();
-                Stats->ExportExecStats(*response.MutableResult()->MutableStats(), ResponseStatsMode);
+                Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
 
-                if (CollectFullStats(ResponseStatsMode)) {
+                if (CollectFullStats(Request.StatsMode)) {
                     ui64 jsonSize = 0;
 
                     response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
@@ -2232,8 +2231,6 @@ protected:
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
     std::unique_ptr<TExecutionDiagnosticsCapture> ExecutionDiagnostics;
-    Ydb::Table::QueryStatsCollection::Mode ResponseStatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
-    Ydb::Table::QueryStatsCollection::Mode CollectionStatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     struct TResultChannelFlowState {

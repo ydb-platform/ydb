@@ -35,7 +35,7 @@ inline auto ShardReadDiagnosticsRank(const NKqpProto::TKqpShardReadStats& shard)
     const ui64 durationMs = shard.GetStartTimeMs()
             && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
         ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
-    return std::tuple(failed, shard.GetRetries() > 0, durationMs);
+    return std::tuple(failed, shard.GetRetryCount() > 0, durationMs);
 }
 
 class TShardReadDiagnosticsCollector {
@@ -73,8 +73,10 @@ public:
             candidate.SetShardId(shardId);
             candidate.SetStartTimeMs(startTimeMs);
             candidate.SetFinishTimeMs(now.MilliSeconds());
-            candidate.SetRows(rows);
-            candidate.SetRetries(retries);
+            candidate.SetRowCount(rows);
+            candidate.SetRetryCount(retries);
+            candidate.SetTimingBoundary(
+                NKqpProto::TKqpShardReadStats::REQUEST_SENT_TO_LAST_MESSAGE);
             candidate.SetStatus(status);
             candidate.SetFinished(terminal);
             if (nodeId) {
@@ -105,8 +107,8 @@ public:
             shard.SetStartTimeMs(startTimeMs);
         }
         shard.SetFinishTimeMs(now.MilliSeconds());
-        shard.SetRows(shard.GetRows() + rows);
-        shard.SetRetries(Max(shard.GetRetries(), retries));
+        shard.SetRowCount(shard.GetRowCount() + rows);
+        shard.SetRetryCount(Max(shard.GetRetryCount(), retries));
         // Status is the final outcome; retries preserve transient failures separately.
         shard.SetStatus(status);
         shard.SetFinished(terminal);
@@ -135,7 +137,7 @@ public:
             *extraStats.AddShardReads() = shard;
         }
         if (Dropped_ > 0) {
-            extraStats.SetShardReadsTruncated(extraStats.GetShardReadsTruncated() + Dropped_);
+            extraStats.SetShardReadsDroppedCount(extraStats.GetShardReadsDroppedCount() + Dropped_);
         }
     }
 

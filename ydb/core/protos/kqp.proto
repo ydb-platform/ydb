@@ -258,6 +258,18 @@ message TProxyRequestHop {
     optional uint64 DurationUs = 3;
 }
 
+message TUserFacingTraceRequest {
+    optional NActorsProto.TTraceId TraceId = 1;
+    repeated TProxyRequestHop ProxyRequestHops = 2;
+    optional uint64 OriginSentAtUs = 3;
+}
+
+message TUserFacingTraceResult {
+    optional string Name = 1;
+    optional string Operation = 2;
+    optional string Coverage = 3;
+}
+
 message TEvQueryRequest {
     optional TQueryRequest Request = 1;
     optional string TraceId = 2;
@@ -269,9 +281,7 @@ message TEvQueryRequest {
     repeated Ydb.Issue.IssueMessage QueryIssues = 7;
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
     optional NActorsProto.TActorId CancelationActor = 9;
-    optional NActorsProto.TTraceId UserFacingTraceId = 10;
-    repeated TProxyRequestHop ProxyRequestHops = 11;
-    optional uint64 UserFacingTraceOriginSentAtUs = 12;
+    optional TUserFacingTraceRequest UserFacingTrace = 10;
 }
 
 message TParameterBinding {
@@ -344,16 +354,12 @@ message TEvQueryResponse {
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
-    optional string UserFacingTraceName = 8;
-    optional string UserFacingTraceOperation = 9;
-    optional string UserFacingTraceCoverage = 10;
+    optional TUserFacingTraceResult UserFacingTrace = 8;
 }
 
 message TEvUserFacingTraceCompletion {
     optional Ydb.StatusIds.StatusCode YdbStatus = 1;
-    optional string Name = 2;
-    optional string Operation = 3;
-    optional string Coverage = 4;
+    optional TUserFacingTraceResult UserFacingTrace = 2;
 }
 
 message TCloseSessionRequest {

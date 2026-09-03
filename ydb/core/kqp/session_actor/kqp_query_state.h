@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kqp_query_stats.h"
-#include <ydb/core/kqp/tracing/user_facing.h>
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -111,9 +111,10 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
 
         if (NWilson::TTraceId traceId = RequestEv->GetUserFacingWilsonTraceId()) {
+            const auto& userFacingTrace = RequestEv->Record.GetUserFacingTrace();
             UserFacingTrace = std::make_unique<TUserFacingTraceContext>(std::move(traceId),
-                StartTime, RequestEv->Record.GetProxyRequestHops(),
-                TInstant::MicroSeconds(RequestEv->Record.GetUserFacingTraceOriginSentAtUs()));
+                StartTime, userFacingTrace.GetProxyRequestHops(),
+                TInstant::MicroSeconds(userFacingTrace.GetOriginSentAtUs()));
         }
 
         KqpSessionSpan = NWilson::TSpan(

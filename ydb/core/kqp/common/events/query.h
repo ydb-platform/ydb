@@ -257,14 +257,15 @@ public:
     }
 
     NWilson::TTraceId GetUserFacingWilsonTraceId() const {
-        if (Record.HasUserFacingTraceId()) {
-            return NWilson::TTraceId(Record.GetUserFacingTraceId());
+        if (Record.HasUserFacingTrace() && Record.GetUserFacingTrace().HasTraceId()) {
+            return NWilson::TTraceId(Record.GetUserFacingTrace().GetTraceId());
         }
         return {};
     }
 
     void EnsureProxyTraceSeed() {
-        if (Record.HasUserFacingTraceId() && !ProxyTraceSeed) {
+        if (Record.HasUserFacingTrace() && Record.GetUserFacingTrace().HasTraceId()
+                && !ProxyTraceSeed) {
             ProxyTraceSeed.emplace(TProxyTraceSeed{
                 .StartTime = TInstant::Now(),
                 .StartedAt = NActors::TMonotonic::Now(),

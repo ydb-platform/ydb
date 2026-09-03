@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
-#include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
+#include <ydb/core/kqp/common/compilation/kqp_compile_diagnostics.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>

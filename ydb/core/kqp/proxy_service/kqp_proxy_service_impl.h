@@ -3,7 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/tracing/user_facing.h>
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/services/workload_manager/query_classifier.h>
@@ -54,7 +54,8 @@ struct TKqpProxyRequest {
     }
 
     void SetUserFacingTrace(NPrivateEvents::TEvQueryRequest& request) {
-        if (request.Record.HasUserFacingTraceId()) {
+        if (request.Record.HasUserFacingTrace()
+                && request.Record.GetUserFacingTrace().HasTraceId()) {
             UserFacingTrace = std::make_unique<TProxyUserFacingTraceContext>(request);
         }
     }

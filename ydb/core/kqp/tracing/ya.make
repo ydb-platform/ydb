@@ -1,9 +1,9 @@
 LIBRARY()
 
 SRCS(
-    query_description.cpp
-    user_facing.cpp
-    user_facing_renderer.cpp
+    kqp_user_facing.cpp
+    kqp_user_facing_query_description.cpp
+    kqp_user_facing_renderer.cpp
 )
 
 PEERDIR(

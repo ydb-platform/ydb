@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
+#include <ydb/core/kqp/common/compilation/kqp_compile_diagnostics.h>
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>

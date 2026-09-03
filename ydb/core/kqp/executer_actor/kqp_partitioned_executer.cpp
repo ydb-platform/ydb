@@ -316,7 +316,7 @@ public:
     }
 
     void HandleExecute(TEvKqpBuffer::TEvError::TPtr& ev) {
-        auto& msg = *ev->Get();
+        const auto& msg = *ev->Get();
 
         auto it = BufferToPartition.find(ev->Sender);
         if (it == BufferToPartition.end()) {
@@ -339,11 +339,40 @@ public:
             {"partitionIndex", partInfo->PartitionIndex},
             {"status", NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)});
 
-        Send(partInfo->ExecuterId, new TEvKqpBuffer::TEvError{
-            msg.StatusCode,
-            std::move(msg.Issues),
-            std::move(msg.Stats),
-            std::move(msg.CommitDiagnostics)});
+        AbortExecuter(partInfo->ExecuterId, "got error from KqpBufferWriteActor");
+        ForgetExecuterAndBuffer(partInfo);
+
+        switch (msg.StatusCode) {
+            case NYql::NDqProto::StatusIds::SUCCESS:
+                ForgetPartition(partInfo);
+                YQL_ENSURE(false, "Buffer should not return success in TEvError");
+                break;
+            case NYql::NDqProto::StatusIds::UNSPECIFIED:
+            case NYql::NDqProto::StatusIds::ABORTED:
+            case NYql::NDqProto::StatusIds::UNAVAILABLE:
+            case NYql::NDqProto::StatusIds::OVERLOADED:
+            case NYql::NDqProto::StatusIds::UNDETERMINED:
+                YDB_LOG_DEBUG("Buffer retriable error, will retry",
+                    {"marker", "KQPPEA"},
+                    {"logPrefix", LogPrefix()},
+                    {"partitionIndex", partInfo->PartitionIndex},
+                    {"status", NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)},
+                    {"issues", msg.Issues.ToOneLineString()});
+
+                return ScheduleRetryWithNewLimit(partInfo);
+            default:
+                break;
+        }
+
+        YDB_LOG_ERROR("Buffer unretriable error",
+            {"marker", "KQPPEA"},
+            {"logPrefix", LogPrefix()},
+            {"partitionIndex", partInfo->PartitionIndex},
+            {"status", NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)},
+            {"issues", msg.Issues.ToOneLineString()});
+
+        ForgetPartition(partInfo);
+        AbortWithError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), msg.Issues);
     }
 
     STFUNC(AbortState) {

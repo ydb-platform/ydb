@@ -68,7 +68,7 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
         NKqpProto::TKqpTaskExtraStats extra;
         if (task.GetExtra().UnpackTo(&extra)) {
             snapshot.ReadRetries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
-            snapshot.ShardsTruncated = extra.GetShardReadsTruncated();
+            snapshot.ShardsTruncated = extra.GetShardReadsDroppedCount();
             for (const auto& shard : extra.GetShardReads()) {
                 KeepInterestingShard(snapshot, NKqpProto::TKqpShardReadStats(shard));
             }
@@ -84,8 +84,9 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
             shard.SetShardId(shardId);
             shard.SetStartTimeMs(partition.GetFirstMessageMs());
             shard.SetFinishTimeMs(partition.GetLastMessageMs());
-            shard.SetRows(partition.GetExternalRows());
-            shard.SetTiming(NKqpProto::TKqpShardReadStats::FIRST_TO_LAST_MESSAGE);
+            shard.SetRowCount(partition.GetExternalRows());
+            shard.SetTimingBoundary(
+                NKqpProto::TKqpShardReadStats::FIRST_MESSAGE_TO_LAST_MESSAGE);
             KeepInterestingShard(snapshot, std::move(shard));
         }
     }
@@ -1226,7 +1227,7 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
                 }
                 BufferLookupDiagnostics.Shards.push_back(shard);
             }
-            BufferLookupDiagnostics.ShardsTruncated += extraStats.GetShardReadsTruncated();
+            BufferLookupDiagnostics.ShardsTruncated += extraStats.GetShardReadsDroppedCount();
         }
         CollectLockStats(extraStats.GetLockStats());
     }

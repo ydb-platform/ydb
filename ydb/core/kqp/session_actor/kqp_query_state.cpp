@@ -1,5 +1,5 @@
 #include "kqp_query_state.h"
-#include <ydb/core/kqp/tracing/user_facing.h>
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

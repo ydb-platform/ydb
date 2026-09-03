@@ -3,7 +3,7 @@
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
-#include <ydb/core/kqp/tracing/user_facing.h>
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
@@ -156,10 +156,11 @@ IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
 
     auto snapshot = context->DetachSnapshot(std::move(completion));
     if (response) {
-        response->SetUserFacingTraceName(snapshot.RootName);
-        response->SetUserFacingTraceOperation(snapshot.Operation);
+        auto* trace = response->MutableUserFacingTrace();
+        trace->SetName(snapshot.RootName);
+        trace->SetOperation(snapshot.Operation);
         if (snapshot.ExecutionDelegated) {
-            response->SetUserFacingTraceCoverage("routing_session_only");
+            trace->SetCoverage("routing_session_only");
         }
     }
     return CreateUserFacingTraceRendererActor(std::move(snapshot));
@@ -3507,15 +3508,17 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
-        if (request->Get()->Record.HasUserFacingTraceId()) {
+        if (request->Get()->Record.HasUserFacingTrace()
+                && request->Get()->Record.GetUserFacingTrace().HasTraceId()) {
             TString traceName = NKikimrKqp::EQueryAction_Name(request->Get()->GetAction());
             constexpr TStringBuf actionPrefix = "QUERY_ACTION_";
             if (traceName.StartsWith(actionPrefix)) {
                 traceName = traceName.substr(actionPrefix.size());
             }
-            response->Record.SetUserFacingTraceName(traceName);
-            response->Record.SetUserFacingTraceOperation(traceName);
-            response->Record.SetUserFacingTraceCoverage("rejected_before_query_state");
+            auto* trace = response->Record.MutableUserFacingTrace();
+            trace->SetName(traceName);
+            trace->SetOperation(traceName);
+            trace->SetCoverage("rejected_before_query_state");
         }
 
         IActor* userFacingRenderer = CreateRejectedUserFacingTraceRendererActor(
@@ -3947,9 +3950,8 @@ public:
 
                 auto completion = MakeHolder<TEvKqp::TEvUserFacingTraceCompletion>();
                 completion->Record.SetYdbStatus(Ydb::StatusIds::CANCELLED);
-                completion->Record.SetName(traceSummary.GetUserFacingTraceName());
-                completion->Record.SetOperation(traceSummary.GetUserFacingTraceOperation());
-                completion->Record.SetCoverage(traceSummary.GetUserFacingTraceCoverage());
+                completion->Record.MutableUserFacingTrace()->CopyFrom(
+                    traceSummary.GetUserFacingTrace());
                 Send(QueryState->Sender, completion.Release(), 0, QueryState->ProxyRequestId);
             }
         }

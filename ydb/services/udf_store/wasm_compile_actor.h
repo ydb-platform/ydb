@@ -27,7 +27,7 @@ private:
     };
 
     NActors::TActorId ReplyTo_;
-    TString Md5_;
+    TString Name_;
     TString Manifest_;
     TString CpuSpec_;
     TString ModulesTablePath_;
@@ -63,7 +63,7 @@ private:
 public:
     TWasmCompileActor(
         const NActors::TActorId& replyTo,
-        const TString& md5,
+        const TString& name,
         const TString& manifest,
         const TString& cpuSpec,
         const TString& modulesTablePath,
@@ -71,7 +71,7 @@ public:
         const TString& artifactTablePath,
         const TString& artifactChunksTablePath)
         : ReplyTo_(replyTo)
-        , Md5_(md5)
+        , Name_(name)
         , Manifest_(manifest)
         , CpuSpec_(cpuSpec)
         , ModulesTablePath_(modulesTablePath)

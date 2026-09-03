@@ -30,12 +30,15 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
 
     switch (Step_) {
         case EStep::ReadLibrarySource:
-            NTableQuery::SetSelectModuleByNameParams(request, LibraryName_);
+            NTableQuery::SetSelectModuleByNameParams(
+                request,
+                LibraryName_,
+                TUdfModule::TypeToString(EUdfType::LIBRARY));
             break;
         case EStep::MarkCompiling:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                LibrarySource_.Uid,
+                LibraryName_,
                 TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
                 "");
             break;
@@ -63,14 +66,14 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
         case EStep::UpdateMetaReady:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                LibrarySource_.Uid,
+                LibraryName_,
                 TUdfModule::CompileStatusToString(ECompileStatus::Ready),
                 "");
             break;
         case EStep::UpdateMetaFailed:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                LibrarySource_.Uid,
+                LibraryName_,
                 TUdfModule::CompileStatusToString(ECompileStatus::Failed),
                 ErrorMessage_);
             break;
@@ -116,17 +119,17 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                         << "Failed to read library source chunks for '" << LibraryName_ << "'");
                     return;
                 }
-                if (chunks.size() != LibrarySource_.ChunkCount) {
+                TString joinError;
+                if (!JoinAndVerifyBlobs(
+                        chunks,
+                        LibrarySource_.ChunkCount,
+                        LibrarySource_.Size,
+                        LibrarySource_.Md5,
+                        LibrarySource_.Body,
+                        joinError))
+                {
                     ReplyError(TStringBuilder()
-                        << "Library '" << LibraryName_ << "' chunk_count mismatch: meta="
-                        << LibrarySource_.ChunkCount << " actual=" << chunks.size());
-                    return;
-                }
-                LibrarySource_.Body = JoinBlobs(chunks);
-                if (LibrarySource_.Size != 0 && LibrarySource_.Body.size() != LibrarySource_.Size) {
-                    ReplyError(TStringBuilder()
-                        << "Library '" << LibraryName_ << "' size mismatch: meta="
-                        << LibrarySource_.Size << " actual=" << LibrarySource_.Body.size());
+                        << "Library '" << LibraryName_ << "' source is corrupted: " << joinError);
                     return;
                 }
                 CompileLibrary();

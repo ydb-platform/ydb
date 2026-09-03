@@ -15,7 +15,11 @@ namespace NKikimr::NUdfStore {
 
 void TKvBodyReadActor::Bootstrap() {
     if (ExpectedSize == 0) {
-        ReplyError(TStringBuilder() << "UDF '" << Md5Key << "' has zero size in metadata");
+        ReplyError(TStringBuilder() << "UDF '" << Name << "' has zero size in metadata");
+        return;
+    }
+    if (!IsSafeUdfFileName(Name)) {
+        ReplyError(TStringBuilder() << "UDF name '" << Name << "' is not usable as a file name");
         return;
     }
     Become(&TKvBodyReadActor::StateResolve);
@@ -75,7 +79,7 @@ void TKvBodyReadActor::CreatePipeAndSendRead() {
         NFs::MakeDirectoryRecursive(OutputDir);
     }
 
-    TFsPath finalPath = TFsPath(OutputDir) / Md5Key;
+    TFsPath finalPath = TFsPath(OutputDir) / Name;
     TmpFilePath = finalPath.GetPath() + ".tmp";
 
     try {
@@ -100,12 +104,12 @@ void TKvBodyReadActor::CreatePipeAndSendRead() {
 void TKvBodyReadActor::SendNextChunkRead() {
     auto req = std::make_unique<TEvKeyValue::TEvRead>();
     req->Record.set_tablet_id(KVTabletId);
-    req->Record.set_key(Md5Key);
+    req->Record.set_key(Name);
     req->Record.set_offset(CurrentOffset);
     req->Record.set_size(ReadChunkSize);
     NTabletPipe::SendData(SelfId(), PipeClient, req.release());
     ALS_DEBUG(NKikimrServices::METADATA_PROVIDER)
-        << "TKvBodyReadActor: sending read for key='" << Md5Key
+        << "TKvBodyReadActor: sending read for key='" << Name
         << "' offset=" << CurrentOffset << " size=" << ReadChunkSize;
 }
 
@@ -174,10 +178,10 @@ void TKvBodyReadActor::FinalizeAndSave() {
 
     if (CurrentOffset != ExpectedSize) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-            << "TKvBodyReadActor: size mismatch for UDF '" << Md5Key
+            << "TKvBodyReadActor: size mismatch for UDF '" << Name
             << "': expected=" << ExpectedSize << ", actual=" << CurrentOffset;
         NFs::Remove(TmpFilePath);
-        Send(ReplyTo, new TEvReadBodyResponse(false, Md5Key,
+        Send(ReplyTo, new TEvReadBodyResponse(false, Name,
             TStringBuilder() << "Size mismatch: expected=" << ExpectedSize
             << ", actual=" << CurrentOffset));
         PassAway();
@@ -188,23 +192,23 @@ void TKvBodyReadActor::FinalizeAndSave() {
     char md5Buf[33];
     TString computedMd5 = Md5Ctx.End(md5Buf);
 
-    if (!Md5Key.empty() && computedMd5 != Md5Key) {
+    if (!Md5.empty() && computedMd5 != Md5) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-            << "TKvBodyReadActor: MD5 mismatch for UDF '" << Md5Key
-            << "': stored=" << Md5Key << ", computed=" << computedMd5;
+            << "TKvBodyReadActor: MD5 mismatch for UDF '" << Name
+            << "': stored=" << Md5 << ", computed=" << computedMd5;
         NFs::Remove(TmpFilePath);
-        Send(ReplyTo, new TEvReadBodyResponse(false, Md5Key,
-            TStringBuilder() << "MD5 mismatch: stored=" << Md5Key << ", computed=" << computedMd5));
+        Send(ReplyTo, new TEvReadBodyResponse(false, Name,
+            TStringBuilder() << "MD5 mismatch: stored=" << Md5 << ", computed=" << computedMd5));
         PassAway();
         return;
     }
 
-    TString finalPath = TFsPath(OutputDir) / Md5Key;
+    TString finalPath = TFsPath(OutputDir) / Name;
     if (!NFs::Rename(TmpFilePath, finalPath)) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-            << "TKvBodyReadActor: failed to rename tmp file for UDF '" << Md5Key << "'";
+            << "TKvBodyReadActor: failed to rename tmp file for UDF '" << Name << "'";
         NFs::Remove(TmpFilePath);
-        Send(ReplyTo, new TEvReadBodyResponse(false, Md5Key,
+        Send(ReplyTo, new TEvReadBodyResponse(false, Name,
             TStringBuilder() << "Failed to rename tmp file to '" << finalPath << "'"));
         PassAway();
         return;
@@ -212,24 +216,24 @@ void TKvBodyReadActor::FinalizeAndSave() {
 
     if (!LoadUdfIntoRegistry(finalPath)) {
         NFs::Remove(finalPath);
-        Send(ReplyTo, new TEvReadBodyResponse(false, Md5Key,
-            TStringBuilder() << "Failed to load UDF '" << Md5Key << "' into function registry"));
+        Send(ReplyTo, new TEvReadBodyResponse(false, Name,
+            TStringBuilder() << "Failed to load UDF '" << Name << "' into function registry"));
         PassAway();
         return;
     }
 
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TKvBodyReadActor: saved UDF '" << Md5Key
+        << "TKvBodyReadActor: saved UDF '" << Name
         << "' (" << CurrentOffset << " bytes) to " << finalPath;
 
-    Send(ReplyTo, new TEvReadBodyResponse(true, Md5Key));
+    Send(ReplyTo, new TEvReadBodyResponse(true, Name));
     PassAway();
 }
 
 bool TKvBodyReadActor::LoadUdfIntoRegistry(const TString& finalPath) const {
     if (!FunctionRegistry) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-            << "TKvBodyReadActor: function registry is not available for UDF '" << Md5Key << "'";
+            << "TKvBodyReadActor: function registry is not available for UDF '" << Name << "'";
         return false;
     }
 
@@ -239,7 +243,7 @@ bool TKvBodyReadActor::LoadUdfIntoRegistry(const TString& finalPath) const {
         FunctionRegistry->LoadUdfs(finalPath, remappings, 0, {}, &modules);
     } catch (const std::exception& e) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-            << "TKvBodyReadActor: failed to load UDF '" << Md5Key
+            << "TKvBodyReadActor: failed to load UDF '" << Name
             << "' into function registry: " << e.what();
         return false;
     }
@@ -251,7 +255,7 @@ bool TKvBodyReadActor::LoadUdfIntoRegistry(const TString& finalPath) const {
     }
 
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TKvBodyReadActor: loaded UDF '" << Md5Key
+        << "TKvBodyReadActor: loaded UDF '" << Name
         << "' into function registry from " << finalPath;
     return true;
 }
@@ -280,7 +284,7 @@ void TKvBodyReadActor::HandlePipeDestroyed(TEvTabletPipe::TEvClientDestroyed::TP
 
 void TKvBodyReadActor::ReplyError(const TString& message) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TKvBodyReadActor: " << message;
-    Send(ReplyTo, new TEvReadBodyResponse(false, Md5Key, message));
+    Send(ReplyTo, new TEvReadBodyResponse(false, Name, message));
     PassAway();
 }
 

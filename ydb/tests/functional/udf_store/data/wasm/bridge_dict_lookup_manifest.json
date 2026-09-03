@@ -1,0 +1,26 @@
+{
+  "module_name": "BridgeDict",
+  "calling_convention": "bridge",
+  "module_extension": "wat",
+  "required_libraries": ["sdk"],
+  "functions": [
+    {
+      "name": "Lookup",
+      "export": "dict_lookup",
+      "argument_types": [
+        {
+          "value": "dict",
+          "tag": "concrete_type",
+          "key": {"value": "string", "tag": "concrete_type"},
+          "payload": {"value": "int64", "tag": "concrete_type"}
+        },
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {
+        "value": "optional",
+        "tag": "concrete_type",
+        "item": {"value": "int64", "tag": "concrete_type"}
+      }
+    }
+  ]
+}

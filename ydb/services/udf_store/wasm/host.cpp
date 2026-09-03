@@ -1,13 +1,12 @@
 #include "call_stack.h"
+#include "host.h"
+#include "host_intrinsic.h"
 #include "invocation_context.h"
 
 #include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/pointer.h>
-#include <ydb/library/wasm/api/type_builder.h>
-#include <ydb/library/wasm/engine/intrinsics.h>
-#include <ydb/library/wasm/engine/wavm_private_imports.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/utility.h>
@@ -75,24 +74,6 @@ namespace {
 
 using namespace NYdb::NWasm;
 
-template <class TSignature>
-struct TMakeUdfHostIntrinsic;
-
-template <class TResult, class... TArgs>
-struct TMakeUdfHostIntrinsic<TResult(TArgs...)>
-{
-    template <TResult(*FunctionPtr)(TArgs...)>
-    static TResult Wrapper(WAVM::Runtime::ContextRuntimeData*, TArgs... args)
-    {
-        auto* compartmentBeforeCall = GetCurrentCompartment();
-        Y_DEFER {
-            auto* compartmentAfterCall = GetCurrentCompartment();
-            YT_VERIFY(compartmentBeforeCall == compartmentAfterCall);
-        };
-        return FunctionPtr(args...);
-    }
-};
-
 char* AllocateBytesHost(void* context, ui64 byteCount)
 {
     return ::AllocateBytes(
@@ -105,33 +86,24 @@ void ThrowExceptionHost(const char* error)
     ::ThrowException(error);
 }
 
-constexpr auto IntrinsicAllocateBytes =
-    &TMakeUdfHostIntrinsic<decltype(AllocateBytesHost)>::Wrapper<&AllocateBytesHost>;
-[[gnu::used]] static WAVM::Intrinsics::Function IntrinsicFunctionAllocateBytes(
-    getIntrinsicModule_standard(),
-    "AllocateBytes",
-    reinterpret_cast<void*>(IntrinsicAllocateBytes),
-    WAVM::IR::FunctionType(WAVM::IR::FunctionType::Encoding{
-        std::bit_cast<WAVM::Uptr>(TFunctionTypeBuilder<true, decltype(AllocateBytesHost)>::Get())
-    }));
+WASM_INTRINSIC(AllocateBytes, AllocateBytesHost, decltype(AllocateBytesHost))
+WASM_INTRINSIC(ThrowException, ThrowExceptionHost, decltype(ThrowExceptionHost))
 
-constexpr auto IntrinsicThrowException =
-    &TMakeUdfHostIntrinsic<decltype(ThrowExceptionHost)>::Wrapper<&ThrowExceptionHost>;
-[[gnu::used]] static WAVM::Intrinsics::Function IntrinsicFunctionThrowException(
-    getIntrinsicModule_standard(),
-    "ThrowException",
-    reinterpret_cast<void*>(IntrinsicThrowException),
-    WAVM::IR::FunctionType(WAVM::IR::FunctionType::Encoding{
-        std::bit_cast<WAVM::Uptr>(TFunctionTypeBuilder<true, decltype(ThrowExceptionHost)>::Get())
-    }));
+WAVM::Intrinsics::Function* const HostIntrinsicAnchors[] = {
+    &IntrinsicFunctionAllocateBytes,
+    &IntrinsicFunctionThrowException,
+};
 
 } // namespace
 
 void EnsureUdfHostIntrinsicsRegistered()
 {
-    // Keep host.o and intrinsic statics linked into ydbd.
-    Y_UNUSED(IntrinsicFunctionAllocateBytes);
-    Y_UNUSED(IntrinsicFunctionThrowException);
+    // The intrinsics register themselves from static initializers, which only
+    // run if the linker keeps host.o and bridge_host.o. Being called from
+    // outside is what makes that happen; the volatile read is here so the
+    // anchor array survives optimization.
+    [[maybe_unused]] WAVM::Intrinsics::Function* volatile anchor = HostIntrinsicAnchors[0];
+    KeepBridgeHostIntrinsicsLinked();
 }
 
 } // namespace NKikimr::NUdfStore::NWasm

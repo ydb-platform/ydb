@@ -11,11 +11,11 @@ namespace NKikimr::NUdfStore::NWasm {
 TWasmModuleStatePtr BuildModuleStateFromManifest(const TWasmLoadParams& params) {
     if (params.ModuleObjectCode.empty()) {
         ythrow yexception()
-            << "Precompiled object code is required for WASM UDF '" << params.Md5 << "'";
+            << "Precompiled object code is required for WASM UDF '"
+            << params.Manifest.ModuleName << "'";
     }
 
     auto artifact = std::make_shared<TWasmModuleArtifact>();
-    artifact->Md5 = params.Md5;
     artifact->ModuleName = params.Manifest.ModuleName;
     artifact->Manifest = params.Manifest;
     artifact->ModuleBytecode = MakeModuleBytecode(
@@ -26,7 +26,6 @@ TWasmModuleStatePtr BuildModuleStateFromManifest(const TWasmLoadParams& params) 
     GetWasmModuleCatalog().Register(artifact);
 
     auto state = std::make_shared<TWasmModuleState>();
-    state->Md5 = params.Md5;
     state->ModuleName = params.Manifest.ModuleName;
     for (const auto& descriptor : params.Manifest.Functions) {
         state->Functions[descriptor.Name] = descriptor;

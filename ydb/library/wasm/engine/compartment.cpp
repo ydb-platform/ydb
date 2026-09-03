@@ -559,6 +559,74 @@ public:
         return result.u64;
     }
 
+    uintptr_t AllocateDetachedBytes(size_t length) override
+    {
+        if (length == 0) {
+            return 0;
+        }
+        THROW_ERROR_EXCEPTION_IF(
+            !MemoryLayoutData_.LinearMemory,
+            "WebAssembly AllocateDetachedBytes failed: no linear memory");
+        const Uptr pageBytes = IR::numBytesPerPage;
+        const Uptr pagesToGrow = (static_cast<Uptr>(length) + pageBytes - 1) / pageBytes;
+        Uptr oldPages = 0;
+        const auto growResult = Runtime::growMemory(
+            MemoryLayoutData_.LinearMemory,
+            pagesToGrow,
+            &oldPages);
+        THROW_ERROR_EXCEPTION_IF(
+            growResult != Runtime::GrowResult::success,
+            "WebAssembly AllocateDetachedBytes failed: growMemory result %v, length %v",
+            static_cast<int>(growResult),
+            length);
+        return static_cast<uintptr_t>(oldPages * pageBytes);
+    }
+
+    //! This is the one place the host calls into the guest outside a UDF
+    //! invocation, so the contract is worth spelling out: "sbrk" is a pure
+    //! pointer bump over memory AllocateDetachedBytes has already grown. It
+    //! touches no guest data structures, takes no lock, allocates nothing and
+    //! has no reason to grow memory, so it cannot trap or re-enter the host.
+    //! That is what makes it safe to run while a UDF frame is live, where
+    //! calling "malloc" would not be.
+    bool ReserveGuestHeapBelow(uintptr_t offset) override
+    {
+        static const auto signature = IR::FunctionType(/*inResults*/ {IR::ValueType::i64}, /*inParams*/ {IR::ValueType::i64});
+        if (!RuntimeLibraryInstance_) {
+            return false;
+        }
+        auto* sbrkFunction = Runtime::getTypedInstanceExport(RuntimeLibraryInstance_, "sbrk", signature);
+        if (!sbrkFunction) {
+            return false;
+        }
+        const auto callSbrk = [&] (i64 increment) -> uintptr_t {
+            auto arguments = std::array<IR::UntaggedValue, 1>{std::bit_cast<Uptr>(increment)};
+            auto result = IR::UntaggedValue{};
+            SaveAndRestoreCompartment(this, [&] {
+                try {
+                    Runtime::invokeFunction(Context_, sbrkFunction, signature, arguments.data(), &result);
+                } catch (WAVM::Runtime::Exception* ex) {
+                    const auto description = WAVM::Runtime::describeException(ex);
+                    WAVM::Runtime::destroyException(ex);
+                    THROW_ERROR_EXCEPTION("WebAssembly ReserveGuestHeapBelow failed: %Qv", description);
+                }
+            });
+            return static_cast<uintptr_t>(result.u64);
+        };
+
+        constexpr auto sbrkFailure = static_cast<uintptr_t>(-1);
+        const auto currentBreak = callSbrk(0);
+        if (currentBreak == sbrkFailure) {
+            return false;
+        }
+        if (currentBreak >= offset) {
+            return true;
+        }
+        // The gap below |offset| is unallocated slack: handing it to the guest
+        // break costs at most one page and keeps the invariant simple.
+        return callSbrk(static_cast<i64>(offset - currentBreak)) != sbrkFailure;
+    }
+
     void FreeBytes(uintptr_t offset) override
     {
         static const auto signature = IR::FunctionType(/*inResults*/ {}, /*inParams*/ {IR::ValueType::i64});

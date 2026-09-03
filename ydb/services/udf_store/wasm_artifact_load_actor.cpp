@@ -27,6 +27,15 @@ void TWasmArtifactLoadActor::Bootstrap() {
         ReplyError(TStringBuilder() << "Invalid manifest: " << ex.what());
         return;
     }
+    // The artifact is stored under the module name, so a manifest declaring a
+    // different name would have us read one module's artifact and register it
+    // under another's name.
+    if (ParsedManifest_.ModuleName != Name_) {
+        ReplyError(TStringBuilder()
+            << "Module name=" << Name_
+            << " does not match manifest module_name=" << ParsedManifest_.ModuleName);
+        return;
+    }
     ExecuteQuery(NTableQuery::BuildSelectArtifactQuery(ArtifactTablePath_), true);
 }
 
@@ -45,20 +54,20 @@ void TWasmArtifactLoadActor::ExecuteQuery(const TString& yql, bool readOnly) {
         case EStep::ReadModuleArtifact:
             NTableQuery::SetSelectArtifactParams(
                 request,
-                Md5_,
+                Name_,
                 WasmArtifactKindToString(EWasmArtifactKind::Module));
             break;
         case EStep::ReadModuleWasmChunks:
             NTableQuery::SetSelectArtifactChunksParams(
                 request,
-                Md5_,
+                Name_,
                 WasmArtifactKindToString(EWasmArtifactKind::Module),
                 BlobKindWasmData());
             break;
         case EStep::ReadModuleObjectChunks:
             NTableQuery::SetSelectArtifactChunksParams(
                 request,
-                Md5_,
+                Name_,
                 WasmArtifactKindToString(EWasmArtifactKind::Module),
                 BlobKindObjectCode());
             break;
@@ -108,7 +117,7 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
             if (!NTableQuery::ParseArtifactResponse(response, ModuleArtifact_)
                 || ModuleArtifact_.ObjectCodeChunkCount == 0)
             {
-                ReplyError(TStringBuilder() << "Compiled module artifact not found for md5=" << Md5_);
+                ReplyError(TStringBuilder() << "Compiled module artifact not found for name=" << Name_);
                 return;
             }
             Step_ = EStep::ReadModuleWasmChunks;
@@ -117,12 +126,12 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
         }
         case EStep::ReadModuleWasmChunks: {
             if (!NTableQuery::ParseArtifactChunksResponse(response, PendingWasmChunks_)) {
-                ReplyError(TStringBuilder() << "Failed to read module wasm_data chunks for md5=" << Md5_);
+                ReplyError(TStringBuilder() << "Failed to read module wasm_data chunks for name=" << Name_);
                 return;
             }
             if (PendingWasmChunks_.size() != ModuleArtifact_.WasmDataChunkCount) {
                 ReplyError(TStringBuilder()
-                    << "Module wasm_data chunk_count mismatch for md5=" << Md5_);
+                    << "Module wasm_data chunk_count mismatch for name=" << Name_);
                 return;
             }
             Step_ = EStep::ReadModuleObjectChunks;
@@ -132,12 +141,12 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
         case EStep::ReadModuleObjectChunks: {
             TVector<TString> objectChunks;
             if (!NTableQuery::ParseArtifactChunksResponse(response, objectChunks)) {
-                ReplyError(TStringBuilder() << "Failed to read module object_code chunks for md5=" << Md5_);
+                ReplyError(TStringBuilder() << "Failed to read module object_code chunks for name=" << Name_);
                 return;
             }
             if (objectChunks.size() != ModuleArtifact_.ObjectCodeChunkCount) {
                 ReplyError(TStringBuilder()
-                    << "Module object_code chunk_count mismatch for md5=" << Md5_);
+                    << "Module object_code chunk_count mismatch for name=" << Name_);
                 return;
             }
             ModuleArtifact_.WasmData = JoinBlobs(PendingWasmChunks_);
@@ -233,13 +242,12 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
             if (!found) {
                 ReplyError(TStringBuilder()
                     << "Required library '" << required
-                    << "' was not loaded before registering WASM UDF '" << Md5_ << "'");
+                    << "' was not loaded before registering WASM UDF '" << Name_ << "'");
                 return;
             }
         }
 
         NWasm::TWasmLoadParams params{
-            .Md5 = Md5_,
             .Manifest = ParsedManifest_,
             .ModuleWasmData = ModuleArtifact_.WasmData,
             .ModuleObjectCode = ModuleArtifact_.ObjectCode,
@@ -253,19 +261,19 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
             return;
         }
         // Unique path so multiple WASM modules can be registered in one registry.
-        // Replace any leftover module with the same YQL name (e.g. after delete+reupload).
+        // Drop the previous body first: re-uploading a module keeps its name, so
+        // AddModule would otherwise collide with the copy already registered.
         if (auto* dynamicRegistry = NKqp::AsDynamicFunctionRegistry(FunctionRegistry_.Get())) {
-            dynamicRegistry->RemoveModule(ParsedManifest_.ModuleName);
+            dynamicRegistry->RemoveModule(Name_);
         }
         FunctionRegistry_->AddModule(
-            TStringBuilder() << "wasm:" << Md5_,
-            ParsedManifest_.ModuleName,
+            TStringBuilder() << "wasm:" << Name_,
+            Name_,
             std::move(module));
         ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmArtifactLoadActor: registered wasm UDF '" << Md5_
-            << "' module '" << ParsedManifest_.ModuleName
+            << "TWasmArtifactLoadActor: registered wasm UDF '" << Name_
             << "' with libraries=[" << JoinSeq(",", ParsedManifest_.RequiredLibraries) << "]";
-        Send(ReplyTo_, new TEvReadBodyResponse(true, Md5_));
+        Send(ReplyTo_, new TEvReadBodyResponse(true, Name_));
         PassAway();
     } catch (const std::exception& ex) {
         ReplyError(ex.what());
@@ -275,7 +283,7 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
 void TWasmArtifactLoadActor::ReplyError(const TString& message) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
         << "TWasmArtifactLoadActor: " << message;
-    Send(ReplyTo_, new TEvReadBodyResponse(false, Md5_, message));
+    Send(ReplyTo_, new TEvReadBodyResponse(false, Name_, message));
     PassAway();
 }
 

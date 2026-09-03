@@ -142,28 +142,22 @@ bool ExtractQueryResult(
     return result.result_sets_size() > 0;
 }
 
-TString BuildSelectModuleByMd5Query(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $md5 AS Utf8; "
-        << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error FROM `"
-        << EscapeTablePath(tablePath)
-        << "` WHERE md5 = $md5 AND type = 'WASM';";
-}
-
-void SetSelectModuleByMd5Params(Ydb::Table::ExecuteDataQueryRequest& request, const TString& md5) {
-    (*request.mutable_parameters())["$md5"] = MakeUtf8Param(md5);
-}
-
 TString BuildSelectModuleByNameQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
+        << "DECLARE $type AS Utf8; "
         << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error FROM `"
         << EscapeTablePath(tablePath)
-        << "` WHERE name = $name AND type = 'LIBRARY';";
+        << "` WHERE name = $name AND type = $type;";
 }
 
-void SetSelectModuleByNameParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name) {
+void SetSelectModuleByNameParams(
+    Ydb::Table::ExecuteDataQueryRequest& request,
+    const TString& name,
+    const TString& type)
+{
     (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
+    (*request.mutable_parameters())["$type"] = MakeUtf8Param(type);
 }
 
 bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModuleSourceRow& row) {
@@ -365,7 +359,7 @@ void SetUpsertArtifactChunkParams(
 
 TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
     return TStringBuilder()
-        << "DECLARE $uid AS Utf8; "
+        << "DECLARE $name AS Utf8; "
         << "DECLARE $compile_status AS Utf8; "
         << "DECLARE $compile_error AS Utf8; "
         << "UPDATE `"
@@ -375,16 +369,16 @@ TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
         << "compile_started_at = IF($compile_status = 'compiling', CurrentUtcTimestamp(), compile_started_at), "
         << "compile_finished_at = IF($compile_status = 'ready' OR $compile_status = 'failed', "
         << "CurrentUtcTimestamp(), compile_finished_at) "
-        << "WHERE uid = $uid;";
+        << "WHERE name = $name;";
 }
 
 void SetUpdateCompileStatusParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& uid,
+    const TString& name,
     const TString& status,
     const TString& errorMessage)
 {
-    (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
+    (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
     (*request.mutable_parameters())["$compile_status"] = MakeUtf8Param(status);
     (*request.mutable_parameters())["$compile_error"] = MakeUtf8Param(errorMessage);
 }

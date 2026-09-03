@@ -2226,8 +2226,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         {
             auto query = std::format(R"(
+                {}
                 CREATE TABLE `/Root/TestTable2` (PRIMARY KEY (Group, Name)) WITH (STORE={}) AS SELECT * FROM `/Root/TestTable`;
-            )", isOlap ? "COLUMN" : "ROW");
+            )", isOlap ? "PRAGMA ydb.EnableCsWriteAffinity = \"true\";\n" : "", isOlap ? "COLUMN" : "ROW");
 
             auto txControl = NYdb::NQuery::TTxControl::NoTx();
 
@@ -2267,6 +2268,12 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(true);
         TKikimrSettings settings(appConfig);
         settings.SetUseRealThreads(false);
+        if (isOlap) {
+            NKikimrKqp::TKqpSetting kqpSetting;
+            kqpSetting.SetName("EnableCsWriteAffinity");
+            kqpSetting.SetValue("true");
+            settings.SetKqpSettings({kqpSetting});
+        }
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });

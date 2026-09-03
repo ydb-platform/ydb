@@ -749,6 +749,7 @@ message TKqpPhyTx {
     bool EnableShuffleElimination = 10;
     uint32 DqChannelVersion = 11;
     bool HasPqSources = 12; // at least one stage has an external source of type "PqSource"
+    bool EnableCsWriteAffinity = 13;
 }
 
 message TKqpTableInfo {

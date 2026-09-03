@@ -460,6 +460,7 @@ public:
         const ui64 lockNodeId,
         const bool inconsistentTx,
         const bool isOlap,
+        const std::optional<THashSet<ui64>>& targetShardIds,
         TVector<NScheme::TTypeInfo> keyColumnTypes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
@@ -499,6 +500,7 @@ public:
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .ColumnShardMaxOperationBytes = MessageSettings.ColumnShardMaxOperationBytes,
                 .Inconsistent = InconsistentTx,
+                .TargetShardIds = std::move(targetShardIds),
             },
             Alloc);
 
@@ -2588,6 +2590,7 @@ private:
     void FlushFulltextRelevanceAuxTables(TPathWriteInfo& actorInfo,
             IFulltextTokenizeProjection* ft, bool isDelete) {
         auto& docs = PathWriteInfo.at(actorInfo.FulltextDocsTableId);
+        auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
         auto& stats = PathWriteInfo.at(actorInfo.FulltextStatsTableId);
         if (isDelete) {
             docs.WriteActor->Write(DeleteCookie, ft->FlushDocs());
@@ -2596,13 +2599,10 @@ private:
             docs.WriteActor->Write(Cookie, ft->FlushDocs());
             docs.WriteActor->FlushBuffer(Cookie);
         }
+        dict.WriteActor->Write(Cookie, ft->FlushDict());
+        dict.WriteActor->FlushBuffer(Cookie);
         stats.WriteActor->Write(Cookie, ft->FlushStats());
         stats.WriteActor->FlushBuffer(Cookie);
-        if (actorInfo.FulltextDictTableId != TPathId()) {
-            auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
-            dict.WriteActor->Write(Cookie, ft->FlushDict());
-            dict.WriteActor->FlushBuffer(Cookie);
-        }
     }
 
     IDataBatchProjectionPtr CreateWriteProjection(TPathWriteInfo& info, bool added,
@@ -2934,6 +2934,17 @@ private:
     i64 FirstUnknownPriority = 0;
 };
 
+namespace {
+
+static std::optional<THashSet<ui64>> TargetShardIdsFromSettings(const NKikimrKqp::TKqpTableSinkSettings& settings) {
+    if (settings.GetTargetShardIds().size() > 0) {
+        return THashSet<ui64>(settings.GetTargetShardIds().begin(), settings.GetTargetShardIds().end());
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {
     using TBase = TActorBootstrapped<TKqpDirectWriteActor>;
 
@@ -2997,6 +3008,7 @@ public:
                 Settings.GetLockNodeId(),
                 Settings.GetInconsistentTx(),
                 Settings.GetIsOlap(),
+                TargetShardIdsFromSettings(Settings),
                 std::move(keyColumnTypes),
                 Alloc,
                 (Settings.GetLockMode() == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION
@@ -3354,6 +3366,7 @@ struct TWriteSettings {
     TTransactionSettings TransactionSettings;
     i64 Priority = 0;
     bool IsOlap = false;
+    std::optional<THashSet<ui64>> TargetShardIds;
     THashSet<TStringBuf> DefaultColumns;
     bool SkipMissingRows = false;
     enum class EInputRowFormat { Flat, StructOfRows };
@@ -3682,6 +3695,7 @@ public:
             LockNodeId,
             InconsistentTx,
             settings.IsOlap,
+            settings.TargetShardIds,
             std::move(keyColumnTypes),
             Alloc,
             (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION
@@ -3863,16 +3877,14 @@ public:
                     indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
                     return false;
                 }
-                if (indexSettings.DictTableId.PathId != TPathId()) {
-                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
-                            return false;
-                        }
-                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
                         return false;
                     }
+                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
+                    indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                    return false;
                 }
                 if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
                     if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
@@ -6633,6 +6645,7 @@ private:
                 },
                 .Priority = Settings.GetPriority(),
                 .IsOlap = Settings.GetIsOlap(),
+                .TargetShardIds = TargetShardIdsFromSettings(Settings),
                 .DefaultColumns = std::move(defaultColumns),
                 .SkipMissingRows = Settings.GetSkipMissingRows(),
                 .InputRowFormat = Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS
@@ -6681,16 +6694,14 @@ private:
                     idx.DocsTablePath = indexSettings.GetDocsTable().GetPath();
                     idx.DocsColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
                         indexSettings.GetDocsColumns().begin(),
-                        indexSettings.GetDocsColumns().end());
-                    if (indexSettings.HasDictTable()) {
-                        idx.DictTableId = TTableId(indexSettings.GetDictTable().GetOwnerId(),
-                            indexSettings.GetDictTable().GetTableId(),
-                            indexSettings.GetDictTable().GetVersion());
-                        idx.DictTablePath = indexSettings.GetDictTable().GetPath();
-                        idx.DictColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
-                            indexSettings.GetDictColumns().begin(),
-                            indexSettings.GetDictColumns().end());
-                    }
+                        indexSettings.GetDocsColumns().end()),
+                    idx.DictTableId = TTableId(indexSettings.GetDictTable().GetOwnerId(),
+                        indexSettings.GetDictTable().GetTableId(),
+                        indexSettings.GetDictTable().GetVersion());
+                    idx.DictTablePath = indexSettings.GetDictTable().GetPath();
+                    idx.DictColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
+                        indexSettings.GetDictColumns().begin(),
+                        indexSettings.GetDictColumns().end()),
                     idx.StatsTableId = TTableId(indexSettings.GetStatsTable().GetOwnerId(),
                         indexSettings.GetStatsTable().GetTableId(),
                         indexSettings.GetStatsTable().GetVersion());

@@ -1,8 +1,12 @@
 UNITTEST_FOR(ydb/core/kafka_proxy)
 
 ADDINCL(
+    ydb/core/kafka_proxy/ut
     ydb/public/sdk/cpp
 )
+
+FORK_SUBTESTS()
+SPLIT_FACTOR(4)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -12,16 +16,12 @@ ELSE()
 ENDIF()
 
 SRCS(
-    actors_ut.cpp
-    metarequest_ut.cpp
-    topic_location_actor_ut.cpp
-    topic_offsets_actor_ut.cpp
-    ut_consumer_protocol.cpp
-    ut_kafka_functions.cpp
-    ut_produce_actor.cpp
-    ut_serialization.cpp
-    ut_transaction_actor.cpp
-    ut_transaction_coordinator.cpp
+    ../kafka_test_client.cpp
+    ../kafka_test_client.h
+    ../test_server.cpp
+    ../ut_auth.cpp
+    ../ut_authz.cpp
+    ../ut_protocol.cpp
 )
 
 PEERDIR(
@@ -42,7 +42,3 @@ YQL_LAST_ABI_VERSION()
 ENV(INSIDE_YDB="1")
 
 END()
-
-RECURSE_FOR_TESTS(
-    protocol
-)

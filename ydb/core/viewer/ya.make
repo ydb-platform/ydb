@@ -871,7 +871,7 @@ PEERDIR(
     ydb/core/viewer/json
     ydb/core/viewer/yaml
     ydb/core/viewer/protos
-    ydb/library/computation_graph
+    ydb/library/computation_graph_renderer
     ydb/library/persqueue/topic_parser
     ydb/library/yaml_config
     ydb/public/api/protos

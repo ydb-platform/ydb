@@ -4,7 +4,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-namespace NKikimr::NComputationGraph {
+namespace NKikimr::NComputationGraphRenderer {
 
 enum class ENodeType {
     Input,
@@ -43,4 +43,4 @@ TGraph BuildGraph(const NJson::TJsonValue& doc);
 
 TString ToSvg(const TGraph& graph);
 
-} // namespace NKikimr::NComputationGraph
+} // namespace NKikimr::NComputationGraphRenderer

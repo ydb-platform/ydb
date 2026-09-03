@@ -1,8 +1,8 @@
-#include <ydb/library/computation_graph/computation_graph.h>
+#include <ydb/library/computation_graph_renderer/computation_graph_renderer.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NKikimr::NComputationGraph;
+using namespace NKikimr::NComputationGraphRenderer;
 
 // pq source→stage→stage→sink plan (fq streaming canondata); no Stats.
 static const TString PlanWithoutStats = R"({
@@ -113,7 +113,7 @@ const TNode& NodeByName(const TGraph& g, TStringBuf name) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(ComputationGraph) {
+Y_UNIT_TEST_SUITE(ComputationGraphRenderer) {
 
 Y_UNIT_TEST(EmptyPlanGivesEmptyGraph) {
     {
@@ -338,4 +338,4 @@ Y_UNIT_TEST(SvgLevelsGoLeftToRight) {
     UNIT_ASSERT_LT(centerX("Read pq"), centerX("Write pq"));
 }
 
-} // Y_UNIT_TEST_SUITE(ComputationGraph)
+} // Y_UNIT_TEST_SUITE(ComputationGraphRenderer)

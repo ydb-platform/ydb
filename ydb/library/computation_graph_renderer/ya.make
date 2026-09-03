@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    computation_graph.cpp
+    computation_graph_renderer.cpp
 )
 
 PEERDIR(

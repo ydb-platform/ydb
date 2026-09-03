@@ -2,7 +2,7 @@
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/library/computation_graph/computation_graph.h>
+#include <ydb/library/computation_graph_renderer/computation_graph_renderer.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
@@ -32,7 +32,7 @@ public:
                 return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "invalid plan json"));
             }
             return ReplyAndPassAway(GetHTTPOK("image/svg+xml",
-                NComputationGraph::ToSvg(NComputationGraph::BuildGraph(plan))));
+                NComputationGraphRenderer::ToSvg(NComputationGraphRenderer::BuildGraph(plan))));
         }
         const TString path = Params.Get("path");
         if (!path) {
@@ -117,7 +117,7 @@ public:
         }
 
         ReplyAndPassAway(GetHTTPOK("image/svg+xml",
-            NComputationGraph::ToSvg(NComputationGraph::BuildGraph(plan))));
+            NComputationGraphRenderer::ToSvg(NComputationGraphRenderer::BuildGraph(plan))));
     }
 
     static YAML::Node GetSwagger() {

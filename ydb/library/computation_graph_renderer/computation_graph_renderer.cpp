@@ -1,9 +1,9 @@
-#include "computation_graph.h"
+#include "computation_graph_renderer.h"
 
 #include <algorithm>
 #include <util/string/builder.h>
 
-namespace NKikimr::NComputationGraph {
+namespace NKikimr::NComputationGraphRenderer {
 
 namespace {
 
@@ -299,4 +299,4 @@ TString ToSvg(const TGraph& graph) {
     return b;
 }
 
-} // namespace NKikimr::NComputationGraph
+} // namespace NKikimr::NComputationGraphRenderer

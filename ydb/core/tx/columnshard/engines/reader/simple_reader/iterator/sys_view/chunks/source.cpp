@@ -260,102 +260,63 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
-        const auto& order = GetChunksPKOrder();
-        // this is the heaviest column: when the scan is unsorted the permutation is empty and every value
-        // streams straight into the builder. Only the sorted case buffers into details (filled in
-        // records-then-indexes order) so GetChunksPKOrder() can reorder it below.
-        std::vector<TString> details;
-        const auto emit = [&](const TString& data) {
-            if (order.empty()) {
-                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
-            } else {
-                details.emplace_back(data);
+        // an entity's records are consecutive in PK order (TChunkAddress = (EntityId, ChunkIdx)), so the
+        // accessor is extracted once per entity and only one is held at a time
+        std::optional<ui32> currentEntityId;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> currentAccessor;
+        const auto recordDetail = [&](const TColumnRecord& record) -> TString {
+            if (!currentEntityId || *currentEntityId != record.GetEntityId()) {
+                currentEntityId = record.GetEntityId();
+                currentAccessor = OriginalData ? OriginalData->ExtractAccessorOptional(record.GetEntityId()) : nullptr;
             }
+            if (!currentAccessor) {
+                return record.GetMeta().HasAdditionalAccessorData() ? record.GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust()
+                                                                    : TString();
+            }
+            const NArrow::NAccessor::IChunkedArray* chunk = currentAccessor.get();
+            if (currentAccessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+                const auto* composite = static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(currentAccessor.get());
+                AFL_VERIFY(record.GetChunkIdx() < composite->GetChunks().size());
+                chunk = composite->GetChunks()[record.GetChunkIdx()].get();
+            } else {
+                AFL_VERIFY(record.GetChunkIdx() == 0);
+            }
+            AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
+            return static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk)->GetHeader().DebugJson().GetStringRobust();
         };
-        const auto& records = GetPortionAccessor().GetRecordsVerified();
-        for (auto it = records.begin(); it != records.end();) {
-            auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(it->GetEntityId()) : nullptr;
-            const ui32 entityId = it->GetEntityId();
-            if (!accessor) {
-                while (it != records.end() && it->GetEntityId() == entityId) {
-                    TString data;
-                    if (it->GetMeta().HasAdditionalAccessorData()) {
-                        data = it->GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust();
-                    }
-                    emit(data);
-                    ++it;
-                }
-            } else {
-                const auto addChunkInfo = [&emit](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
-                    AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
-                    const NArrow::NAccessor::TSubColumnsPartialArray* arr =
-                        static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
-                    const TString data = arr->GetHeader().DebugJson().GetStringRobust();
-                    emit(data);
-                };
-
-                AFL_VERIFY(it->GetChunkIdx() == 0);
-                if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
-                    const NArrow::NAccessor::TCompositeChunkedArray* composite =
-                        static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(accessor.get());
-                    for (auto&& i : composite->GetChunks()) {
-                        AFL_VERIFY(it != records.end());
-                        AFL_VERIFY(it->GetChunkIdx() < composite->GetChunks().size());
-                        AFL_VERIFY(it->GetEntityId() == entityId);
-                        addChunkInfo(i);
-                        ++it;
-                    }
-
-                } else {
-                    AFL_VERIFY(it->GetChunkIdx() == 0);
-                    addChunkInfo(accessor);
-                    ++it;
-                }
-                AFL_VERIFY(it == records.end() || it->GetEntityId() != entityId)("it", it->GetEntityId())("from", entityId);
+        const auto indexDetail = [&](const TIndexChunk& index) -> TString {
+            const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(index.GetEntityId());
+            if (indexMeta->GetClassName() != NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
+                return TString();
             }
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            TString data;
-            if (auto* stringData = i.GetBlobDataOptional()) {
-                const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
-                if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
-                    const auto json = indexMeta->SerializeDataToJson(*stringData, Schema->GetIndexInfo());
-                    if (json.Has("data")) {
-                        NJsonWriter::TBuf buf;
-                        buf.BeginObject();
-                        buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
-                        buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
-                        buf.EndObject();
-                        data = buf.Str();
-                    }
-                }
-            } else {
-                const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
-                if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
-                    if (const auto* indexData = GetStageData().GetIndexes()->GetIndexDataOptional(i.GetEntityId())) {
-                        if (const auto* blobData = indexData->GetChunkDataOptional(i.GetChunkIdx(), std::nullopt)) {
-                            const auto json = indexMeta->SerializeDataToJson(*blobData, Schema->GetIndexInfo());
-                            if (json.Has("data")) {
-                                NJsonWriter::TBuf buf;
-                                buf.BeginObject();
-                                buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
-                                buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
-                                buf.EndObject();
-                                data = buf.Str();
-                            }
-                        }
-                    }
+            const TString* stringData = index.GetBlobDataOptional();
+            NJson::TJsonValue json;
+            if (stringData) {
+                json = indexMeta->SerializeDataToJson(*stringData, Schema->GetIndexInfo());
+            } else if (const auto* indexData = GetStageData().GetIndexes()->GetIndexDataOptional(index.GetEntityId())) {
+                if (const auto* blobData = indexData->GetChunkDataOptional(index.GetChunkIdx(), std::nullopt)) {
+                    json = indexMeta->SerializeDataToJson(*blobData, Schema->GetIndexInfo());
                 }
             }
-            emit(data);
-        }
-        if (!order.empty()) {
-            AFL_VERIFY(order.size() == details.size())("order", order.size())("details", details.size());
-            for (ui32 idx = 0; idx < details.size(); ++idx) {
-                const TString& value = details[order[idx]];
-                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(value.data(), value.size()));
+            if (!json.Has("data")) {
+                return TString();
             }
-        }
+            NJsonWriter::TBuf buf;
+            buf.BeginObject();
+            buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
+            buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
+            buf.EndObject();
+            return buf.Str();
+        };
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                const TString data = recordDetail(record);
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+            },
+            [&](const TIndexChunk& index) {
+                const TString data = indexDetail(index);
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     AFL_VERIFY(false)("column_id", columnId);

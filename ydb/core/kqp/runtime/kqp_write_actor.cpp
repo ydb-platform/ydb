@@ -1100,19 +1100,24 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            if (InconsistentTx) {
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-                RetryResolve();
-            } else {
+            // For InconsistentTx the schema version is baked into every
+            // TEvWrite at Open() time and is NOT refreshed by a successful
+            // TEvResolveKeySet round-trip.  Retrying only causes the
+            // datashard to return SCHEME_CHANGED again on the very next write,
+            // producing an infinite loop.  Surface the error so the session
+            // actor invalidates the compiled query and re-plans with the new
+            // schema.  The same RuntimeError path is already taken for the
+            // non-InconsistentTx case; unify both branches here.
+            if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
-                    NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-                    TStringBuilder() << "Scheme changed. Table: `"
-                        << TablePath << "`.",
-                    getIssues());
             }
+            RuntimeError(
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                TStringBuilder() << "Scheme changed. Table: `"
+                    << TablePath << "`.",
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {

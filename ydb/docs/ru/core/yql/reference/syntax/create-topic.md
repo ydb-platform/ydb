@@ -23,7 +23,7 @@ CREATE TOPIC topic_path (
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — список [кодеков](../../../../concepts/topic#message-codec), поддерживаемых читателем.
+* `supported_codecs` — список [кодеков](../../../../concepts/topic.md#message-codec), поддерживаемых читателем.
 
 {% endif %}
 
@@ -43,11 +43,7 @@ CREATE TOPIC topic_path (
 
 {% if feature_topic_codecs %}
 
-<<<<<<< HEAD
-* `supported_codecs` — список [кодеков](../../../../concepts/topic#message-codec), поддерживаемых топиком. Тип значения — `String`.
-=======
-* `supported_codecs` — список [кодеков](../../../concepts/datamodel/topic.md#message-codec), поддерживаемых топиком. Тип значения — `String`.
->>>>>>> e719c475d0b (YDBDOCS: enable topic codecs (#49486))
+* `supported_codecs` — список [кодеков](../../../../concepts/topic.md#message-codec), поддерживаемых топиком. Тип значения — `String`.
 
 {% endif %}
 
@@ -59,15 +55,6 @@ CREATE TOPIC topic_path (
 CREATE TOPIC `my_topic`;
 ```
 
-<<<<<<< HEAD
-{% if feature_topic_codecs %}
-
-* `supported_codecs` - список [кодеков](../../../../concepts/topic#message-codec), поддерживаемых топиком. Тип значения - `String`.
-
-{% endif %}
-
-=======
->>>>>>> e719c475d0b (YDBDOCS: enable topic codecs (#49486))
 Чтобы создать топик с важным читателем и временем хранения данных 1 сутки, выполните команду:
 
 ```yql

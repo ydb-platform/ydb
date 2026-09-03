@@ -245,6 +245,14 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
             continue;
         }
 
+        if (HasOlderUnflushedOverlap(pBufferKey, item->Range)) {
+            // If overlapping records with different TPBufferKey are
+            // queued for flush, they must be flushed in ascending
+            // order.
+            ReadyToFlush.insert(pBufferKey);
+            continue;
+        }
+
         for (THostIndex destination: DesiredDDisks.Exclude(DisabledHosts)) {
             const THostIndex source = val.RequestFlush(destination);
             if (source != InvalidHostIndex) {
@@ -996,6 +1004,29 @@ void TBlocksDirtyMap::AddToAheadAndBehindOnFlushCompleted(
             ddisks.Get(host) ? TDDiskState::EFlushCompletion::Completed
                              : TDDiskState::EFlushCompletion::Missed);
     }
+}
+
+bool TBlocksDirtyMap::HasOlderUnflushedOverlap(
+    TPBufferKey pBufferKey,
+    TBlockRange64 range)
+{
+    bool found = false;
+    Inflight.EnumerateOverlapping(
+        range,
+        [&](TInflightMap::TFindItem& overlap)
+        {
+            const auto state = overlap.Value.GetState();
+            const bool onDDisk =
+                state == TInflightInfo::EState::PBufferFlushed ||
+                state == TInflightInfo::EState::PBufferErasing ||
+                state == TInflightInfo::EState::PBufferErased;
+            if (overlap.Key < pBufferKey && !onDDisk) {
+                found = true;
+                return TInflightMap::EEnumerateContinuation::Stop;
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+    return found;
 }
 
 bool TBlocksDirtyMap::HasInflightFlush(THostIndex host, TBlockRange64 range)

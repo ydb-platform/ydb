@@ -947,15 +947,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto newSeqNo = CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
         UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // No checkpoints due to checkpointing interval
 
-        const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> ::NMonitoring::TDynamicCounters::TCounterPtr {
+        const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> std::function<ui64()> {
             const NMonitoring::TDynamicCounterPtr kqpCounters = GetCounters("kqp", nodeIndex);
             const auto sourceTracker = kqpCounters->GetSubgroup("subsystem", "DqSinkTracker");
             const auto sourceCounters = sourceTracker->GetSubgroup("sink", "PqSink");
             const auto inflyData = sourceCounters->GetCounter("InFlyData");
             const auto inFlyCheckpoints = sourceCounters->GetCounter("InFlyCheckpoints");
+            const auto inFlyPendingAckCheckpoints = sourceCounters->GetCounter("InFlyPendingAckCheckpoints");
 
             if (inflyData->Val() != 0) {
-                return inFlyCheckpoints;
+                return [inFlyCheckpoints, inFlyPendingAckCheckpoints]() {
+                    return inFlyCheckpoints->Val() + inFlyPendingAckCheckpoints->Val();
+                };
             }
 
             return nullptr;
@@ -966,7 +969,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             counters = pqCountersExtractor(/* nodeIndex */ 1);
         }
         UNIT_ASSERT_C(counters, "Counters not found for PQ sink");
-        UNIT_ASSERT_VALUES_EQUAL(counters->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters(), 0);
 
         WaitFor(CHECKPOINT_INTERVAL, "checkpoint propagation", [&](TString& error) {
             if (GetLastCheckpointSeqNo(checkpointId) == seqNo) {
@@ -974,7 +977,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 return false;
             }
 
-            return counters->Val() == 1;
+            return counters() == 1;
         });
 
         newSeqNo = GetLastCheckpointSeqNo(checkpointId);

@@ -1100,14 +1100,9 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            // For InconsistentTx the schema version is baked into every
-            // TEvWrite at Open() time and is NOT refreshed by a successful
-            // TEvResolveKeySet round-trip.  Retrying only causes the
-            // datashard to return SCHEME_CHANGED again on the very next write,
-            // producing an infinite loop.  Surface the error so the session
-            // actor invalidates the compiled query and re-plans with the new
-            // schema.  The same RuntimeError path is already taken for the
-            // non-InconsistentTx case; unify both branches here.
+            // Schema version is baked into TEvWrite at Open() time and is not
+            // refreshed by resolve, so retrying InconsistentTx writes loops forever.
+            // Surface the error so the session actor recompiles.
             if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());

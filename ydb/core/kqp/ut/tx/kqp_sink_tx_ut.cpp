@@ -708,27 +708,11 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-    // Regression test for the SCHEME_CHANGED infinite-retry bug (InconsistentTx path).
-    //
-    // Streaming/YQ writes use InconsistentTx=true, set when the optimizer sees
-    // IsStreamingQuery=true in the user request context.  With the bug, a
-    // concurrent ALTER TABLE caused an infinite loop:
-    //
-    //   datashard returns STATUS_SCHEME_CHANGED
-    //   → InconsistentTx branch calls RetryResolve()
-    //   → TEvResolveKeySetResult SUCCESS: Prepare() resets ResolveAttempts=0
-    //   → next TEvWrite carries the same stale schema version (baked at Open()
-    //     time, not refreshed by resolve)
-    //   → datashard returns SCHEME_CHANGED again → …
-    //
-    // The fix unifies both branches so that SCHEME_CHANGED always calls
-    // RuntimeError(SCHEME_ERROR, KIKIMR_SCHEME_MISMATCH), letting the session
-    // actor invalidate and re-plan with the new schema.
-    //
-    // To drive InconsistentTx=true through the standard KQP stack we inject
-    // IsStreamingQuery=true into the TUserRequestContext of the query request
-    // inside the observer.  The optimizer then adds AllowInconsistentWrites to
-    // the write sink, which maps to InconsistentTx=true in the write actor.
+    // Regression test: InconsistentTx (streaming) writes looped forever on
+    // STATUS_SCHEME_CHANGED after a concurrent ALTER TABLE, because the stale
+    // schema version baked into TEvWrite is never refreshed by resolve.
+    // IsStreamingQuery=true is injected into the request context so the sink
+    // compiles with InconsistentTx=true.
     class TSchemeChangedDuringInconsistentWrite : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

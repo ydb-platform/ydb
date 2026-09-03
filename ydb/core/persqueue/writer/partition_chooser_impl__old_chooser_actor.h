@@ -5,19 +5,15 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
-#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
+#if defined(LOG_PREFIX)
+#error "Already defined LOG_PREFIX"
 #endif
 
 
-#define LOG_PREFIX "TPartitionChooser " << SelfId()                         \
+#define LOG_PREFIX TStringBuilder() << "TPartitionChooser " << SelfId()                         \
                     << " (SourceId=" << TThis::SourceId                     \
                     << ", PreferedPartition=" << TThis::PreferedPartition   \
                     << ") "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 
 template<typename TPipeCreator>
 class TPartitionChooserActor: public TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator> {
@@ -64,7 +60,8 @@ public:
 
 private:
     void RequestPQRB(const NActors::TActorContext& ctx) {
-        DEBUG("RequestPQRB")
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "RequestPQRB",
+            {"logPrefix", LOG_PREFIX});
         TThis::Become(&TThis::StatePQRB);
 
         if (PQRBHelper.PartitionId()) {
@@ -77,7 +74,10 @@ private:
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
         PartitionId = PQRBHelper.Handle(ev, ctx);
-        DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << TThis::SourceId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Received partition from PQRB",
+            {"logPrefix", LOG_PREFIX},
+            {"partitionId", PartitionId},
+            {"sourceId", TThis::SourceId});
         TThis::Partition = TThis::Chooser->GetPartition(PQRBHelper.PartitionId().value());
 
         PQRBHelper.Close(ctx);
@@ -110,7 +110,8 @@ private:
 
 private:
     void OnPartitionChosen(const TActorContext& ctx) {
-        TRACE("OnPartitionChosen");
+        YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "OnPartitionChosen",
+            {"logPrefix", LOG_PREFIX});
 
         if (!TThis::Partition && TThis::PreferedPartition) {
             return TThis::ReplyError(ErrorCode::BAD_REQUEST,
@@ -154,9 +155,5 @@ private:
 };
 
 #undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

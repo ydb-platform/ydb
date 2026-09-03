@@ -309,6 +309,36 @@ NJson::TJsonValue GetSimplifiedPlan(const TString& plan) {
     return simplifiedPlan->second;
 }
 
+NJson::TJsonValue GetRboAnalyzeSimplifiedPlan(const TString& txPlan) {
+    NKqpProto::TKqpStatsQuery queryStats;
+    return GetSimplifiedPlan(SerializeRBOAnalyzePlan(TVector<const TString>{txPlan}, queryStats));
+}
+
+const NJson::TJsonValue& FindRequiredOperatorByStringField(
+    const NJson::TJsonValue& plan,
+    const TString& fieldName,
+    const TString& fieldValue)
+{
+    const auto* op = FindOperatorByStringField(plan, fieldName, fieldValue);
+    UNIT_ASSERT_C(op, plan);
+    return *op;
+}
+
+void AssertRboCpuValues(
+    const NJson::TJsonValue& op,
+    double expectedSelfCpu,
+    double expectedCpu,
+    const NJson::TJsonValue& plan)
+{
+    UNIT_ASSERT_VALUES_EQUAL_C(op.GetMapSafe().at("A-SelfCpu").GetDoubleSafe(), expectedSelfCpu, plan);
+    UNIT_ASSERT_VALUES_EQUAL_C(op.GetMapSafe().at("A-Cpu").GetDoubleSafe(), expectedCpu, plan);
+}
+
+void AssertNoRboCpuValues(const NJson::TJsonValue& op, const NJson::TJsonValue& plan) {
+    UNIT_ASSERT_C(!op.GetMapSafe().contains("A-SelfCpu"), plan);
+    UNIT_ASSERT_C(!op.GetMapSafe().contains("A-Cpu"), plan);
+}
+
 TIntrusivePtr<TOpRead> MakeTestRead(const TVector<TInfoUnit>& outputIUs, TPositionHandle pos) {
     TVector<TString> columns;
     columns.reserve(outputIUs.size());
@@ -890,6 +920,145 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "b"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("Predicate"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), disjointPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeSimplifiedPlanCpuWithActualRows) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "TableFullScan", "StageGuid": "stage-1",
+                "Operators": [{"Name": "TableFullScan", "OperatorId": 1}],
+                "Stats": {
+                    "Table": [{"Path": "/Root/t1", "ReadRows": {"Sum": 6}, "ReadBytes": {"Sum": 64}}],
+                    "CpuTimeUs": {"Max": 7000}
+                }
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "TableFullScan",
+                "Operators": [{"Name": "TableFullScan", "OperatorId": 1, "Table": "/Root/t1"}]
+            }
+        })";
+
+        const auto simplifiedPlan = GetRboAnalyzeSimplifiedPlan(txPlan);
+        const auto& fullScan = FindRequiredOperatorByStringField(simplifiedPlan, "Name", "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+        AssertRboCpuValues(fullScan, 7, 7, simplifiedPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeDuplicateOperatorIdUsesFirstMatch) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "FirstExec", "StageGuid": "stage-first",
+                "Operators": [{"Name": "FirstExec", "OperatorId": 7}],
+                "Stats": {"OutputRows": {"Sum": 6}, "OutputBytes": {"Sum": 60}, "CpuTimeUs": {"Max": 7000}},
+                "Plans": [{
+                    "Node Type": "SecondExec", "StageGuid": "stage-second",
+                    "Operators": [{"Name": "SecondExec", "OperatorId": 7}],
+                    "Stats": {"OutputRows": {"Sum": 11}, "OutputBytes": {"Sum": 110}, "CpuTimeUs": {"Max": 11000}}
+                }]
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "First", "Operators": [{"Name": "First", "OperatorId": 7}],
+                "Plans": [{
+                    "Node Type": "Second", "Operators": [{"Name": "Second", "OperatorId": 7}]
+                }]
+            }
+        })";
+
+        const auto simplifiedPlan = GetRboAnalyzeSimplifiedPlan(txPlan);
+        const auto& first = FindRequiredOperatorByStringField(simplifiedPlan, "Name", "First");
+        const auto& second = FindRequiredOperatorByStringField(simplifiedPlan, "Name", "Second");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetMapSafe().at("A-Size").GetDoubleSafe(), 60, simplifiedPlan);
+        AssertRboCpuValues(first, 7, 7, simplifiedPlan);
+        UNIT_ASSERT_C(!second.GetMapSafe().contains("A-Rows"), simplifiedPlan);
+        UNIT_ASSERT_C(!second.GetMapSafe().contains("A-Size"), simplifiedPlan);
+        AssertNoRboCpuValues(second, simplifiedPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeMissingExecutionOperatorIdFails) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Exec", "StageGuid": "stage-1",
+                "Operators": [{"Name": "Exec", "OperatorId": 1}]
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Missing", "Operators": [{"Name": "Missing", "OperatorId": 2}]
+            }
+        })";
+
+        NKqpProto::TKqpStatsQuery queryStats;
+        const TVector<const TString> txPlans = {txPlan};
+        UNIT_ASSERT_EXCEPTION(SerializeRBOAnalyzePlan(txPlans, queryStats), yexception);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeBroadcastStatsUseParentTaskCount) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Broadcast", "PlanNodeType": "Connection",
+                "Stats": {"Tasks": 4},
+                "Plans": [{
+                    "Node Type": "Scan", "StageGuid": "stage-1",
+                    "Operators": [{"Name": "Scan", "OperatorId": 1}],
+                    "Stats": {"OutputRows": {"Sum": 8}, "OutputBytes": {"Sum": 80}, "CpuTimeUs": {"Max": 7000}}
+                }]
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Scan", "Operators": [{"Name": "Scan", "OperatorId": 1}]
+            }
+        })";
+
+        const auto simplifiedPlan = GetRboAnalyzeSimplifiedPlan(txPlan);
+        const auto& scan = FindRequiredOperatorByStringField(simplifiedPlan, "Name", "Scan");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(scan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 2, simplifiedPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(scan.GetMapSafe().at("A-Size").GetDoubleSafe(), 20, simplifiedPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(scan.GetMapSafe().at("A-SelfCpu").GetDoubleSafe(), 7, simplifiedPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeMultiOperatorCpuUsesTopOperator) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Stage", "StageGuid": "stage-1",
+                "Operators": [
+                    {"Name": "Top", "OperatorId": 1},
+                    {"Name": "Inner", "OperatorId": 2}
+                ],
+                "Stats": {"CpuTimeUs": {"Max": 7000}}
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Top", "Operators": [{"Name": "Top", "OperatorId": 1}],
+                "Plans": [{
+                    "Node Type": "Inner", "Operators": [{"Name": "Inner", "OperatorId": 2}]
+                }]
+            }
+        })";
+
+        const auto simplifiedPlan = GetRboAnalyzeSimplifiedPlan(txPlan);
+        const auto& top = FindRequiredOperatorByStringField(simplifiedPlan, "Name", "Top");
+        const auto& inner = FindRequiredOperatorByStringField(simplifiedPlan, "Name", "Inner");
+
+        AssertRboCpuValues(top, 7, 7, simplifiedPlan);
+        AssertNoRboCpuValues(inner, simplifiedPlan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeCpuAbsentDoesNotAddCpuFields) {
+        const TString txPlan = R"({
+            "Plans": [{
+                "Node Type": "Scan", "StageGuid": "stage-1",
+                "Operators": [{"Name": "Scan", "OperatorId": 1}],
+                "Stats": {"OutputRows": {"Sum": 6}}
+            }],
+            "SimplifiedPlan": {
+                "Node Type": "Scan", "Operators": [{"Name": "Scan", "OperatorId": 1}]
+            }
+        })";
+
+        const auto simplifiedPlan = GetRboAnalyzeSimplifiedPlan(txPlan);
+        const auto& scan = FindRequiredOperatorByStringField(simplifiedPlan, "Name", "Scan");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(scan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, simplifiedPlan);
+        AssertNoRboCpuValues(scan, simplifiedPlan);
     }
 
     Y_UNIT_TEST(ExplainAnalyzeRangePushdown) {

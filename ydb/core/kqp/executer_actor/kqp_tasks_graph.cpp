@@ -2095,6 +2095,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
         }
+
+        GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
     }
 }
 

@@ -10,6 +10,8 @@
 ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
 ```
 
+При добавлении колонки с ограничением `NOT NULL` необходимо также указать `DEFAULT`. Значение по умолчанию используется для существующих строк.
+
 ## Параметры запроса
 
 ### table_name
@@ -46,7 +48,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 Изменяет свойства существующей колонки в указанной таблице. Изменение свойства происходит без пересоздания колонки. Некоторые свойства применяются только к свежим записанным данным или в процессе компакшена (детали можно найти в описании конкретного свойства)
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
 ```
 
 ### Параметры запроса
@@ -65,17 +67,11 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 #### DROP
 
-Удалить параметр колонки. На текущий момент поддерживается только удаление `NOT NULL`.
+Удалить параметр колонки.
 
-{% include [column_option_list.md](../_includes/column_option_list.md) %}
+{% include [column_option_list_alter.md](../_includes/column_option_list_alter.md) %}
 
 ### Примеры
-
-Приведённый ниже код запретит пустые значения в колонке `title` из таблицы `episodes`.
-
-```yql
-ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
-```
 
 {% if oss == true and backend_name == "YDB" %}
 

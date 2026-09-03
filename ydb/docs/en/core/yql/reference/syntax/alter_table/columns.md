@@ -10,6 +10,8 @@ Builds a new column with the specified name, type, and options for the specified
 ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
 ```
 
+When adding a column with the `NOT NULL` constraint, you must also specify `DEFAULT`. The default value is used for existing rows.
+
 ## Request parameters
 
 ### table_name
@@ -46,7 +48,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- alternat
 Modifies properties of an existing column in the specified table. Property changes are applied without recreating the column. Some properties apply only to newly written data or during compaction (see the description of each property for details).
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
 ```
 
 ### Request parameters
@@ -65,17 +67,11 @@ Set a column option.
 
 #### DROP
 
-Remove a column option. Currently only `NOT NULL` can be removed.
+Remove a column option.
 
-{% include [column_option_list.md](../_includes/column_option_list.md) %}
+{% include [column_option_list_alter.md](../_includes/column_option_list_alter.md) %}
 
 ### Examples
-
-The code below will disallow `NULL` values in the `title` column of the `episodes` table.
-
-```yql
-ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
-```
 
 {% if oss == true and backend_name == "YDB" %}
 

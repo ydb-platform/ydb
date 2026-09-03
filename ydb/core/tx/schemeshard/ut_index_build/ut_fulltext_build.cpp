@@ -84,10 +84,17 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         env.TestWaitNotification(runtime, buildIndexTx);
     }
 
+    bool IsCompactFulltextIndex(TTestBasicRuntime& runtime, const TString& index) {
+        const auto description = DescribePrivatePath(runtime, index);
+        const auto type = description.GetPathDescription().GetTableIndex().GetType();
+        return type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance;
+    }
+
     void DoCheckPlainIndexTable(TTestBasicRuntime& runtime, const TString& index) {
         auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplTable").at(0);
         Cerr << index << "/indexImplTable rows: " << rows << "\n";
-        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+        if (IsCompactFulltextIndex(runtime, index)) {
             UNIT_ASSERT_VALUES_EQUAL("[[[["
                 R"([%true;"18446744073709551615";"2";"\2";"and"];)"
                 R"([%true;"18446744073709551615";"3";"\1\1\1";"apple"];)"
@@ -116,7 +123,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     void DoCheckRelevanceIndexTables(TTestBasicRuntime& runtime, const TString& index) {
         auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplTable").at(0);
         Cerr << index << "/indexImplTable rows: " << rows << "\n";
-        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+        if (IsCompactFulltextIndex(runtime, index)) {
             UNIT_ASSERT_VALUES_EQUAL("[[[["
                 R"([%true;"18446744073709551615";"2";"\2";"and"];)"
                 R"([%true;"18446744073709551615";"3";"\1A\2\1";"apple"];)"

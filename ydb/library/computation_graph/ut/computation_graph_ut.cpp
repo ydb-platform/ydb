@@ -137,7 +137,6 @@ Y_UNIT_TEST(FixtureShape) {
     UNIT_ASSERT_EQUAL(NodeByName(g, "Sink").Type,     ENodeType::Operation);
     UNIT_ASSERT_EQUAL(NodeByName(g, "Write pq").Type, ENodeType::Output);
 
-    // Two Stage op nodes by creation index.
     UNIT_ASSERT_EQUAL(g.Nodes[2].Name, "Stage");
     UNIT_ASSERT_EQUAL(g.Nodes[2].Type, ENodeType::Operation);
     UNIT_ASSERT_EQUAL(g.Nodes[3].Name, "Stage");
@@ -157,7 +156,6 @@ Y_UNIT_TEST(FixtureShape) {
     UNIT_ASSERT(HasLink(g, idStageBeforeSink, idSink));
     UNIT_ASSERT(HasLink(g, idSink, idWritePq));
 
-    // No HashShuffle node (Connection is transparent).
     for (const auto& n : g.Nodes) {
         UNIT_ASSERT_UNEQUAL(n.Name, "HashShuffle");
     }
@@ -212,7 +210,6 @@ Y_UNIT_TEST(StatsAreAggregatedPerStage) {
 }
 
 Y_UNIT_TEST(ConnectionFanIn) {
-    // Query -> Stage(A) -> Connection -> [Stage(B), Stage(C)]
     TGraph g = Build(R"({
         "Plan": {
             "Node Type": "Query",

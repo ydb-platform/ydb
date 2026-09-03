@@ -63,6 +63,7 @@ SRCS(
     viewer_check_access.h
     viewer_cluster.h
     viewer_commit_offset.h
+    viewer_computation_graph.h
     viewer_compute.h
     viewer_config.h
     viewer_content.h
@@ -96,7 +97,6 @@ SRCS(
     viewer_request.h
     viewer_storage.h
     viewer_storage_stats.h
-    viewer_computation_graph.h
     viewer_storage_usage.h
     viewer_sysinfo.h
     viewer_tabletcounters.h
@@ -880,6 +880,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
     ydb/public/api/grpc
     ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/types
     ydb/services/lib/auth
     contrib/libs/yaml-cpp

@@ -25,8 +25,8 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        TStringBuf body = Event->Get()->Request.GetPostContent();
-        if (!body.empty()) {
+        if (Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
+            TStringBuf body = Event->Get()->Request.GetPostContent();
             NJson::TJsonValue plan;
             if (!NJson::ReadJsonTree(body, &plan)) {
                 return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "invalid plan json"));
@@ -68,7 +68,7 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        PassAway();
+        TBase::ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -98,11 +98,12 @@ public:
         const TString issuesText = parser.ColumnParser("Issues").GetOptionalUtf8().value_or("");
         const TString planText = parser.ColumnParser("Plan").GetOptionalUtf8().value_or("");
 
+        NJson::TJsonValue plan(NJson::JSON_MAP);
+        if (!planText.empty() && !NJson::ReadJsonTree(planText, &plan)) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "invalid plan json"));
+        }
+
         if (Json) {
-            NJson::TJsonValue plan;
-            if (!planText.empty() && !NJson::ReadJsonTree(planText, &plan)) {
-                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "invalid plan json"));
-            }
             NJson::TJsonValue json(NJson::JSON_MAP);
             json["status"] = status;
             if (!issuesText.empty()) {
@@ -112,10 +113,6 @@ public:
             return ReplyAndPassAway(GetHTTPOKJSON(json));
         }
 
-        NJson::TJsonValue plan;
-        if (!planText.empty() && !NJson::ReadJsonTree(planText, &plan)) {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "invalid plan json"));
-        }
         ReplyAndPassAway(GetHTTPOK("image/svg+xml",
             NComputationGraph::ToSvg(NComputationGraph::BuildGraph(plan))));
     }
@@ -137,11 +134,13 @@ public:
                     in: query
                     description: streaming query path
                     type: string
-                    required: false
+                    required: true
                   - name: format
                     in: query
-                    description: svg (default) or json
+                    description: output format
                     type: string
+                    enum: [svg, json]
+                    default: svg
                     required: false
                   - name: timeout
                     in: query
@@ -153,6 +152,8 @@ public:
                         description: OK
                     400:
                         description: Bad Request
+                    403:
+                        description: Forbidden
                     404:
                         description: Not Found
                     504:
@@ -162,6 +163,15 @@ public:
                   - viewer
                 summary: Computation graph from plan
                 description: Renders computation graph SVG from a plan JSON document in the request body
+                consumes:
+                  - application/json
+                parameters:
+                  - name: body
+                    in: body
+                    description: plan JSON document
+                    required: true
+                    schema:
+                        type: object
                 responses:
                     200:
                         description: OK

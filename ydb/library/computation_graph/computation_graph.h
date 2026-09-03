@@ -51,8 +51,7 @@ struct TGraph {
     TVector<TLink> Links;
 };
 
-// `doc` is {"meta","Plan","SimplifiedPlan"} or a bare plan node.
-// An empty / "{}" document yields an empty graph. Never throws on malformed input.
+// Empty or malformed input yields an empty graph.
 TGraph BuildGraph(const NJson::TJsonValue& doc);
 
 TString ToSvg(const TGraph& graph);

@@ -164,17 +164,17 @@ public:
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiContainsIgnoreCase>(GetClassNameStatic());
 };
 
-class TLogicMatchStringFastAsciiContainsIgnoreCase: public TLogicMatchString {
+class TLogicMatchOlapKernelsAsciiContainsIgnoreCase: public TLogicMatchString {
 private:
     static TString GetClassNameStatic() {
-        return "StringFast._yql_AsciiContainsIgnoreCase";
+        return "OlapKernels._yql_AsciiContainsIgnoreCase";
     }
 
 public:
-    TLogicMatchStringFastAsciiContainsIgnoreCase()
+    TLogicMatchOlapKernelsAsciiContainsIgnoreCase()
         : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
     }
-    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchStringFastAsciiContainsIgnoreCase>(GetClassNameStatic());
+    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchOlapKernelsAsciiContainsIgnoreCase>(GetClassNameStatic());
 };
 
 class TLogicMatchAsciiStartsWithIgnoreCase: public TLogicMatchString {

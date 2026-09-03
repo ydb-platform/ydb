@@ -20,7 +20,7 @@ PEERDIR(
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
-    ydb/core/formats/arrow/program/string_fast
+    ydb/core/formats/arrow/program/olap_kernels
     yql/essentials/udfs/common/unicode_base
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value

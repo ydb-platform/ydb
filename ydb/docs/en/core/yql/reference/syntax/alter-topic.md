@@ -33,11 +33,7 @@ ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = false);
 
 {% if feature_topic_codecs %}
 
-<<<<<<< HEAD
-* `supported_codecs`: List of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the consumer.
-=======
-* `supported_codecs` — a list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. Value type: `String`.
->>>>>>> e719c475d0b (YDBDOCS: enable topic codecs (#49486))
+* `supported_codecs`: List of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the consumer.
 
 {% endif %}
 
@@ -142,7 +138,7 @@ ALTER TOPIC `my_topic` RESET (
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs`: List of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the topic. Value type: `String`.
+* `supported_codecs`: List of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. Value type: `String`.
 
 {% endif %}
 

@@ -38,12 +38,12 @@ namespace NYql::NDq {
             , ActorSystem(actorSystem) {
 
             auto memoryLimit = initialMkqlMemoryLimit;
-            if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit)) {
+            if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit, false)) {
                 // we don't have API call to discover current limit available in MemoryQuotaManager
                 // but at this point it'll match GetMaxMemorySize(), so we can use it as guranteed limit
                 // and allocation should never fail anymore
                 memoryLimit = std::min(InitialMkqlMemoryLimit, MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
-                if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit)) {
+                if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit, false)) {
                     CAMQ_LOG_W("[Mem] initial memory allocation of " << memoryLimit << " failed, starting with 0");
                     return;
                 }
@@ -60,7 +60,7 @@ namespace NYql::NDq {
 
         void TrySetIncreaseMemoryLimitCallback(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
-                RequestExtraMemory(required - limit, alloc);
+                RequestExtraMemory(required - limit, false, alloc);
             });
         }
 
@@ -71,7 +71,7 @@ namespace NYql::NDq {
             const ui64 criticalRSSValue = limitRSS / 100 * 80;
 
             alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
-                RequestExtraMemory(required - limit, alloc);
+                RequestExtraMemory(required - limit, false, alloc);
 
                 ui64 currentRSS = NMemInfo::GetMemInfo().RSS;
                 if (currentRSS > criticalRSSValue) {
@@ -136,15 +136,18 @@ namespace NYql::NDq {
             return MemoryLimits.MkqlProgramHardMemoryLimit;
         }
 
-    private:
-        void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+        i64 GetMemoryAvailability() const {
+            return MemoryLimits.MemoryQuotaManager->GetMemoryAvailability();
+        }
+
+        void RequestExtraMemory(ui64 memory, bool isOptional, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
 
             if (MemoryLimits.MkqlProgramHardMemoryLimit && MkqlMemoryLimit + memory > MemoryLimits.MkqlProgramHardMemoryLimit) {
                 throw THardMemoryLimitException();
             }
 
-            if (MemoryLimits.MemoryQuotaManager->AllocateQuota(memory)) {
+            if (MemoryLimits.MemoryQuotaManager->AllocateQuota(memory, isOptional)) {
                 MkqlMemoryLimit += memory;
                 if (MkqlMemoryQuota) {
                     MkqlMemoryQuota->Add(memory);
@@ -157,7 +160,7 @@ namespace NYql::NDq {
                 //                << ", requested: " << memory << ", host: " << HostName();
             }
 
-            if (MemoryLimits.MemoryQuotaManager->IsReasonableToUseSpilling()) {
+            if (MemoryLimits.MemoryQuotaManager->GetMemoryAvailability() <= 0) {
                 alloc->SetMaximumLimitValueReached(true);
             } else {
                 alloc->SetMaximumLimitValueReached(false);
@@ -169,6 +172,7 @@ namespace NYql::NDq {
             }
         }
 
+    private:
         ui64 AlignMemorySizeToMbBoundary(ui64 memory) {
             // allocate memory in 1_MB (2^20B) chunks, so requested value is rounded up to MB boundary
             constexpr ui64 alignMask = 1_MB - 1;

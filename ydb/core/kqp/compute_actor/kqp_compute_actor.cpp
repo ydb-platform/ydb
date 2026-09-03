@@ -73,15 +73,15 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
             }
 
             if (name == "DqBlockHashJoin"sv) {
-                return WrapDqBlockHashJoin(callable, ctx);
+                return WrapDqBlockHashJoin(callable, ctx, *computeCtx);
             }
 
             if (name == "DqHashCombine"sv) {
-                return WrapDqHashCombine(callable, ctx);
+                return WrapDqHashCombine(callable, ctx, *computeCtx);
             }
 
             if (name == "DqHashAggregate"sv) {
-                return WrapDqHashAggregate(callable, ctx);
+                return WrapDqHashAggregate(callable, ctx, *computeCtx);
             }
 
             if (name == "FulltextAnalyze"sv) {

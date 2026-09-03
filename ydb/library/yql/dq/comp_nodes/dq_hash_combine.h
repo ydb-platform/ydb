@@ -2,6 +2,8 @@
 
 #include <functional>
 
+#include <ydb/library/yql/dq/runtime/dq_compute.h>
+
 namespace NKikimr::NMiniKQL {
 
 class IComputationNode;
@@ -21,7 +23,7 @@ public:
     virtual void SetTestStateCallback(const TTestStateCallback& callback) = 0;
 };
 
-IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx, NYql::NDq::TDqComputeContextBase& computeCtx);
+IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx, NYql::NDq::TDqComputeContextBase& computeCtx);
 
 } // namespace NKikimr::NMiniKQL

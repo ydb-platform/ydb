@@ -260,29 +260,35 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
-        // an entity's records are consecutive in PK order (TChunkAddress = (EntityId, ChunkIdx)), so the
-        // accessor is extracted once per entity and only one is held at a time
-        std::optional<ui32> currentEntityId;
-        std::shared_ptr<NArrow::NAccessor::IChunkedArray> currentAccessor;
-        const auto recordDetail = [&](const TColumnRecord& record) -> TString {
-            if (!currentEntityId || *currentEntityId != record.GetEntityId()) {
-                currentEntityId = record.GetEntityId();
-                currentAccessor = OriginalData ? OriginalData->ExtractAccessorOptional(record.GetEntityId()) : nullptr;
+        const auto& records = GetPortionAccessor().GetRecordsVerified();
+        // one chunk per record, collected up front (accessor extracted once per entity); an empty slot means
+        // the record carries its own AdditionalAccessorData
+        std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunkByRecord(records.size());
+        for (ui32 idx = 0; idx < records.size();) {
+            const ui32 entityId = records[idx].GetEntityId();
+            auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(entityId) : nullptr;
+            for (; idx < records.size() && records[idx].GetEntityId() == entityId; ++idx) {
+                if (!accessor) {
+                    continue;
+                }
+                if (accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
+                    const auto* composite = static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(accessor.get());
+                    AFL_VERIFY(records[idx].GetChunkIdx() < composite->GetChunks().size());
+                    chunkByRecord[idx] = composite->GetChunks()[records[idx].GetChunkIdx()];
+                } else {
+                    AFL_VERIFY(records[idx].GetChunkIdx() == 0);
+                    chunkByRecord[idx] = accessor;
+                }
             }
-            if (!currentAccessor) {
+        }
+        const auto recordDetail = [&](const TColumnRecord& record) -> TString {
+            const auto& chunk = chunkByRecord[&record - records.data()];
+            if (!chunk) {
                 return record.GetMeta().HasAdditionalAccessorData() ? record.GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust()
                                                                     : TString();
             }
-            const NArrow::NAccessor::IChunkedArray* chunk = currentAccessor.get();
-            if (currentAccessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray) {
-                const auto* composite = static_cast<const NArrow::NAccessor::TCompositeChunkedArray*>(currentAccessor.get());
-                AFL_VERIFY(record.GetChunkIdx() < composite->GetChunks().size());
-                chunk = composite->GetChunks()[record.GetChunkIdx()].get();
-            } else {
-                AFL_VERIFY(record.GetChunkIdx() == 0);
-            }
             AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
-            return static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk)->GetHeader().DebugJson().GetStringRobust();
+            return static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get())->GetHeader().DebugJson().GetStringRobust();
         };
         const auto indexDetail = [&](const TIndexChunk& index) -> TString {
             const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(index.GetEntityId());

@@ -172,7 +172,7 @@ TConsumerActor::TConsumerActor(
     , Config(config)
     , RetentionPeriod(retentionPeriod)
     , PartitionEndOffset(partitionEndOffset)
-    , Storage(std::make_unique<TStorage>(AppData()->TimeProvider, StorageSettingsFromConfig(Config, GetPartitionConfig())))
+    , Storage(std::make_unique<TStorage>(TAppData::TimeProvider, StorageSettingsFromConfig(Config, GetPartitionConfig())))
     , DetailedMetricsRoot(detailedMetricsRoot) {
 }
 
@@ -1194,6 +1194,8 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
             UpdateLockedGroupsIdInChildPartitions(false);
             return;
         case EWakeUpTag::Processing:
+            // The flag is reset in any state: the scheduled wakeup is consumed here, so
+            // ScheduleProcessing() must be able to schedule a new one for later requests.
             ProcessingScheduled = false;
             if (!InStateWork()) {
                 return;
@@ -1203,8 +1205,9 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
         case EWakeUpTag::Regular:
             if (InStateWork()) {
                 FetchMessagesIfNeeded();
-                ProcessingScheduled = false;
-                ProcessEventQueue();
+                if (!ProcessingScheduled) {
+                    ProcessEventQueue();
+                }
                 ScheduleProcessing();
             }
             UpdateMetrics();

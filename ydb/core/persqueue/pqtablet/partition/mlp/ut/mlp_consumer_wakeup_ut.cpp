@@ -23,7 +23,7 @@ constexpr ui64 kTabletId = 100;
 constexpr const char* kConsumer = "mlp-consumer";
 constexpr const char* kTopic = "topic";
 
-// Must match TConsumerActor::EWakeUpTag in mlp_consumer.cpp.
+// Must match EWakeUpTag in mlp_consumer.cpp.
 constexpr ui64 kWakeupRegular = 1;
 constexpr ui64 kWakeupProcessing = 2;
 
@@ -315,8 +315,9 @@ Y_UNIT_TEST(RegularPersistDoesNotStickProcessingScheduled) {
     env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
     env.Pump();
 
-    // Storage uses wall-clock CreateDefaultTimeProvider(); wait for vacuum + visibility.
-    Sleep(TDuration::Seconds(3));
+    // Wait for the visibility timeout of the locked message and for the storage vacuum
+    // interval. Storage takes time from AppData, so simulated time is enough.
+    env.Runtime.SimulateSleep(TDuration::Seconds(3));
 
     env.RegularWakeupsAllowed = 1;
     env.DropProcessingWakeups = true;
@@ -348,19 +349,29 @@ Y_UNIT_TEST(RegularPersistDoesNotStickProcessingScheduled) {
         "queue must still lock a later message after the stuck ProcessingScheduled race");
 }
 
-Y_UNIT_TEST(RegularDrainsQueueWhenProcessingWakeupIsDropped) {
+Y_UNIT_TEST(RegularServesQueuedReadAfterVisibilityTimeout) {
     TConsumerEnv env;
-    env.FetchMessages(2);
+    env.FetchOneMessage();
 
-    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(1));
     env.ReplyKvWrite();
 
-    env.DropProcessingWakeups = true;
-    env.SendCommit(0);
+    // The message is locked, so the second read stays in ReadRequestsQueue. Nothing
+    // schedules a wakeup for the visibility timeout, so the Regular tick is the only
+    // event that unlocks the message and serves the waiting read.
+    env.SendRead(TDuration::Seconds(60), TDuration::Seconds(30));
+    env.Pump();
+
+    env.Runtime.SimulateSleep(TDuration::Seconds(3));
+
     env.RegularWakeupsAllowed = 1;
     env.SendWakeup(kWakeupRegular);
 
-    env.AssertQueueStillProcessesAfterCommit(0, 1);
+    env.AssertPersisted(0, TStorage::EMessageStatus::Locked,
+        "Regular wakeup must unlock the expired message and serve the queued read");
+
+    env.SendUnlock(0);
+    env.AssertQueueStillProcessesAfterUnlock(0);
 }
 
 Y_UNIT_TEST(DelayedProcessingAfterKvReplyPersistsQueuedCommit) {

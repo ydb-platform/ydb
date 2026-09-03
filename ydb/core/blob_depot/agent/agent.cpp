@@ -37,8 +37,9 @@ namespace NKikimr::NBlobDepot {
 
         SetupCounters();
 
+        CurrentMaxS3GetsInFlight = MaxS3GetsInFlight();
         if (S3GetsMaxInFlightCounter) {
-            *S3GetsMaxInFlightCounter = EffectiveMaxS3GetsInFlight();
+            *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
         }
 
         if (TabletId && TabletId != Max<ui64>()) {

@@ -647,9 +647,12 @@ namespace NKikimr::NBlobDepot {
         static constexpr ui32 MaxS3GetSlowDownRetries = 100;
 
         TControlWrapper S3MaxGetsInFlight = 32;
-        ui32 MaxS3GetsInFlight() const { return Max<ui32>(1, S3MaxGetsInFlight); }
-        ui32 EffectiveMaxS3GetsInFlight() const {
-            return EffectiveS3InFlightLimit(CurrentMaxS3GetsInFlight, MaxS3GetsInFlight());
+        ui32 MaxS3GetsInFlight() const { return S3ControlLimit(S3MaxGetsInFlight); }
+
+        void ApplyMaxS3GetsInFlight() {
+            if (ClampToS3ControlLimit(CurrentMaxS3GetsInFlight, S3MaxGetsInFlight) && S3GetsMaxInFlightCounter) {
+                *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
+            }
         }
 
         struct TPendingS3Read {
@@ -677,7 +680,7 @@ namespace NKikimr::NBlobDepot {
         TBackoff S3GetBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic S3GetThrottleUntil;
         bool S3GetWakeupScheduled = false;
-        ui32 CurrentMaxS3GetsInFlight = Max<ui32>();
+        ui32 CurrentMaxS3GetsInFlight = 32;
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
         ui32 S3PutsInFlight = 0;

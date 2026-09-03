@@ -10,18 +10,6 @@ namespace NKikimr::NBlobDepot {
 
     TS3Manager::~TS3Manager() = default;
 
-    ui32 TS3Manager::MaxWritesInFlight() const {
-        return Max<ui32>(1, Self->S3MaxWritesInFlight);
-    }
-
-    ui32 TS3Manager::MaxDeletesInFlight() const {
-        return Max<ui32>(1, Self->S3MaxDeletesInFlight);
-    }
-
-    size_t TS3Manager::MaxObjectsToDeleteAtOnce() const {
-        return Max<size_t>(1, Self->S3MaxObjectsToDeleteAtOnce);
-    }
-
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         if (settings) {
             Y_ABORT("S3 is not supported on Windows");

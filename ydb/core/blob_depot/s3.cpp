@@ -16,18 +16,6 @@ namespace NKikimr::NBlobDepot {
 
     TS3Manager::~TS3Manager() = default;
 
-    ui32 TS3Manager::MaxWritesInFlight() const {
-        return Max<ui32>(1, Self->S3MaxWritesInFlight);
-    }
-
-    ui32 TS3Manager::MaxDeletesInFlight() const {
-        return Max<ui32>(1, Self->S3MaxDeletesInFlight);
-    }
-
-    size_t TS3Manager::MaxObjectsToDeleteAtOnce() const {
-        return Max<size_t>(1, Self->S3MaxObjectsToDeleteAtOnce);
-    }
-
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         YDB_LOG_DEBUG("Init",
             {"marker", "BDTS05"},
@@ -45,8 +33,10 @@ namespace NKikimr::NBlobDepot {
             AsyncMode = settings->HasAsyncMode();
             Enabled = true;
 
-            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = EffectiveMaxDeletesInFlight();
-            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = EffectiveMaxWritesInFlight();
+            CurrentMaxWritesInFlight = MaxWritesInFlight();
+            CurrentMaxDeletesInFlight = MaxDeletesInFlight();
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
         } else {
             SyncMode = false;
             AsyncMode = false;

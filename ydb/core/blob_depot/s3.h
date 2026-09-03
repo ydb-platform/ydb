@@ -59,14 +59,18 @@ namespace NKikimr::NBlobDepot {
         TBackoff PutBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic PutThrottleUntil;
         bool PutWakeupScheduled = false;
-        ui32 CurrentMaxWritesInFlight = Max<ui32>();
+        ui32 CurrentMaxWritesInFlight = 32;
         ui32 ConsecutiveSuccessfulWriteBatches = 0;
         ui32 S3WritesInFlight = 0;
         std::deque<TEvBlobDepot::TEvPrepareWriteS3::TPtr> PendingPrepareWrites;
 
-        ui32 MaxWritesInFlight() const;
-        ui32 EffectiveMaxWritesInFlight() const {
-            return EffectiveS3InFlightLimit(CurrentMaxWritesInFlight, MaxWritesInFlight());
+        ui32 MaxWritesInFlight() const { return S3ControlLimit(Self->S3MaxWritesInFlight); }
+
+        void ApplyMaxWritesInFlight() {
+            if (ClampToS3ControlLimit(CurrentMaxWritesInFlight, Self->S3MaxWritesInFlight)) {
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] =
+                    CurrentMaxWritesInFlight;
+            }
         }
 
         void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
@@ -108,14 +112,18 @@ namespace NKikimr::NBlobDepot {
         TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic DeleteThrottleUntil;
         bool DeleteWakeupScheduled = false;
-        ui32 CurrentMaxDeletesInFlight = Max<ui32>();
+        ui32 CurrentMaxDeletesInFlight = 3;
         ui32 ConsecutiveSuccessfulDeleteBatches = 0;
 
-        ui32 MaxDeletesInFlight() const;
-        ui32 EffectiveMaxDeletesInFlight() const {
-            return EffectiveS3InFlightLimit(CurrentMaxDeletesInFlight, MaxDeletesInFlight());
+        ui32 MaxDeletesInFlight() const { return S3ControlLimit(Self->S3MaxDeletesInFlight); }
+        ui32 MaxObjectsToDeleteAtOnce() const { return S3ControlLimit(Self->S3MaxObjectsToDeleteAtOnce); }
+
+        void ApplyMaxDeletesInFlight() {
+            if (ClampToS3ControlLimit(CurrentMaxDeletesInFlight, Self->S3MaxDeletesInFlight)) {
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] =
+                    CurrentMaxDeletesInFlight;
+            }
         }
-        size_t MaxObjectsToDeleteAtOnce() const;
 
         void RunDeletersIfNeeded();
         void HandleDeleter(TAutoPtr<IEventHandle> ev);

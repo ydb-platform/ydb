@@ -4,7 +4,6 @@
 
 using namespace NKikimr::NComputationGraphRenderer;
 
-// pq source→stage→stage→sink plan (fq streaming canondata); no Stats.
 static const TString PlanWithoutStats = R"({
     "meta": {"version": "0.2", "type": "query"},
     "Plan": {
@@ -170,8 +169,8 @@ Y_UNIT_TEST(LevelsFollowDataFlow) {
     TGraph g = Build(PlanWithoutStats);
     UNIT_ASSERT_EQUAL(NodeByName(g, "Read pq").Level,  0u);
     UNIT_ASSERT_EQUAL(NodeByName(g, "Source").Level,   1u);
-    UNIT_ASSERT_EQUAL(g.Nodes[3].Level,                2u); // Stage PlanNodeId 2
-    UNIT_ASSERT_EQUAL(g.Nodes[2].Level,                3u); // Stage PlanNodeId 4
+    UNIT_ASSERT_EQUAL(g.Nodes[3].Level,                2u);
+    UNIT_ASSERT_EQUAL(g.Nodes[2].Level,                3u);
     UNIT_ASSERT_EQUAL(NodeByName(g, "Sink").Level,     4u);
     UNIT_ASSERT_EQUAL(NodeByName(g, "Write pq").Level, 5u);
 }

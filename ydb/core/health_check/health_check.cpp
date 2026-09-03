@@ -3573,10 +3573,12 @@ public:
             }
             ui32 disabledRings = 0;
             ui32 badRings = 0;
-            auto statusBefore = currentContext->OverallStatus;
+            TSelfCheckResult ringGroupContext; // collects issues of this ring group only, without propagating their status upwards
+            ringGroupContext.Location.CopyFrom(currentContext->Location);
+            ringGroupContext.Level = currentContext->Level;
             for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
                 const auto& ring = ringGroup.Rings[ringIdx];
-                TSelfCheckContext ringContext(currentContext, TStringBuilder() << type << "_RING");
+                TSelfCheckContext ringContext(&ringGroupContext, TStringBuilder() << type << "_RING");
                 ringContext.Location.mutable_compute()->mutable_state_storage()->set_ring(ringIdx + 1);
                 if (ring.IsDisabled) {
                     ++disabledRings;
@@ -3595,14 +3597,14 @@ public:
                     ++badRings;
                 }
             }
-            currentContext->OverallStatus = statusBefore;
             if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage, {ETags::StateStorageRing}, ringGroupContext.IssueRecords);
             } else if (badRings > 1) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Multiple rings have unavailable replicas", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Multiple rings have unavailable replicas", ETags::StateStorage, {ETags::StateStorageRing}, ringGroupContext.IssueRecords);
             } else if (badRings > 0) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "One ring has unavailable replicas", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "One ring has unavailable replicas", ETags::StateStorage, {ETags::StateStorageRing}, ringGroupContext.IssueRecords);
             }
+            currentContext->IssueRecords.splice(currentContext->IssueRecords.end(), ringGroupContext.IssueRecords);
         }
         MergeRecords(ssContext.IssueRecords);
         context.UpdateMaxStatus(ssContext.GetOverallStatus());

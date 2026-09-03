@@ -26,6 +26,7 @@ default:
   feature_transfer: true
   feature_batch_operations: true
   feature_tablesample: false
+  feature_topic_codecs: true
   ydb: YDB
   ydb-name: YDB
   ydb-full-name: YDB

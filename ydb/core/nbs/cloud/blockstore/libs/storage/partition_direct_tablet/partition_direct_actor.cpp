@@ -359,6 +359,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             nbsService->StorageConfig,
             executors[dbgIndex],
             DiskDescription,
+            VolumeConfig.GetBlockSize(),
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
@@ -709,6 +710,21 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 
     const auto& volumeConfig = msg->Record.GetVolumeConfig();
     Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
+
+    if (!IsSupportedBlockSize(volumeConfig.GetBlockSize())) {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Unsupported block size: %u",
+            LogTitle.GetWithTime().c_str(),
+            volumeConfig.GetBlockSize());
+
+        auto response = std::make_unique<
+            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
+        response->Record.SetStatus(NKikimrBlockStore::ERROR);
+        ctx.Send(ev->Sender, response.release());
+        return;
+    }
 
     LOG_INFO(
         ctx,

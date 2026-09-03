@@ -1,6 +1,5 @@
 #include "load_actor_adapter.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
 
@@ -44,16 +43,18 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     const ui64 startIndex = msg->Record.GetStartIndex();
     const auto& blocks = msg->Record.GetBlocks();
+    const auto volumeConfig = FastPathService->GetVolumeConfig();
+    const ui32 blockSize = volumeConfig->BlockSize;
 
-    ui32 totalSize = 0;
+    ui64 totalSize = 0;
     for (const auto& buffer: blocks.GetBuffers()) {
         totalSize += buffer.size();
     }
 
-    totalSize = AlignUp(totalSize, DefaultBlockSize);
+    totalSize = AlignUp(totalSize, static_cast<ui64>(blockSize));
 
     Y_ABORT_UNLESS(totalSize > 0);
-    Y_ABORT_UNLESS(totalSize % DefaultBlockSize == 0);
+    Y_ABORT_UNLESS(totalSize % blockSize == 0);
 
     auto data = std::make_shared<TString>(TString::Uninitialized(totalSize));
     char* ptr = data->Detach();
@@ -66,10 +67,8 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
     TSgList sglist = {TBlockDataRef(data->data(), data->size())};
 
     auto request = std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
-        .VolumeConfig = FastPathService->GetVolumeConfig(),
-        .Range = TBlockRange64::WithLength(
-            startIndex,
-            totalSize / DefaultBlockSize)});
+        .VolumeConfig = volumeConfig,
+        .Range = TBlockRange64::WithLength(startIndex, totalSize / blockSize)});
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->WriteBlocksLocal(
@@ -108,12 +107,14 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
     const ui32 blocksCount = msg->Record.GetBlocksCount();
     Y_ABORT_UNLESS(blocksCount > 0);
 
+    const auto volumeConfig = FastPathService->GetVolumeConfig();
+    const ui32 blockSize = volumeConfig->BlockSize;
     auto buffer = std::make_shared<TString>(
-        TString::Uninitialized(blocksCount * DefaultBlockSize));
+        TString::Uninitialized(static_cast<size_t>(blocksCount) * blockSize));
     TSgList sglist = {TBlockDataRef(buffer->data(), buffer->size())};
 
     auto request = std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
-        .VolumeConfig = FastPathService->GetVolumeConfig(),
+        .VolumeConfig = volumeConfig,
         .Range = TBlockRange64::WithLength(
             msg->Record.GetStartIndex(),
             blocksCount)});

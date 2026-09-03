@@ -89,6 +89,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -176,6 +177,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -253,6 +255,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -301,6 +304,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -405,6 +409,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -473,6 +478,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -530,6 +536,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
         DrainExecutor(DirectBlockGroup->GetExecutor());
@@ -616,6 +623,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -786,6 +794,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -890,6 +899,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
 
@@ -960,6 +970,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
         DrainExecutor(DirectBlockGroup->GetExecutor());
@@ -1035,6 +1046,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
         DrainExecutor(DirectBlockGroup->GetExecutor());
@@ -1081,6 +1093,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
+            DefaultBlockSize,
             DefaultVChunkSize);
         vchunk->Start();
         DrainExecutor(DirectBlockGroup->GetExecutor());

@@ -1324,6 +1324,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             TDirtyMapStateProto(),
             dbg,
             3,
+            DefaultBlockSize,
             vChunkSize);
 
         TString oracleDump;

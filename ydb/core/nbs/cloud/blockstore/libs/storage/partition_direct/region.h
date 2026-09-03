@@ -30,6 +30,8 @@ public:
         const TVChunkConfigs& vChunkConfigs,
         const TDirtyMapStateProtos& dirtyMapStates,
         ui32 syncRequestsBatchSize,
+        // Volume block size, distinct from the 4 KiB DDisk integrity unit.
+        ui32 blockSize,
         ui64 vChunkSize);
 
     void Run();

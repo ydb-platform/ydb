@@ -50,6 +50,10 @@ public:
             TYtMapReduce::CallableName(),
             TYtFill::CallableName()}), HNDL(RemoveTrivialWithWorldFromOperationLambdas));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
+        if (State_->Configuration->_ReplaceEmptyOpWithTouch.Get().GetOrElse(false)) {
+            AddHandler(0, &TYtTransientOpBase::Match, HNDL(ReplaceEmptyOpWithTouch));
+            AddHandler(0, &TYtTouch::Match, HNDL(FuseNestedTouches));
+        }
         AddHandler(1, &TCoRight::Match, HNDL(RightOverPersist));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(CalcOverWindow));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(CalcOverWindow));
@@ -854,6 +858,48 @@ protected:
         }
 
         return TExprBase(worlds.size() == 1 ? worlds.front() : ctx.NewCallable(node.Pos(), TCoSync::CallableName(), std::move(worlds)));
+    }
+
+    TMaybeNode<TExprBase> ReplaceEmptyOpWithTouch(TExprBase node, TExprContext& ctx) const {
+        auto op = node.Cast<TYtTransientOpBase>();
+        if (op.Ref().StartsExecution() || op.Input().Size() != 1) {
+            return node;
+        }
+
+        auto input = op.Input().Item(0);
+        if (!input.Ref().GetConstraint<TEmptyConstraintNode>()) {
+            return node;
+        }
+
+        TSyncMap syncList;
+        for (const auto path : input.Paths()) {
+            if (auto output = path.Table().Maybe<TYtOutput>()) {
+                syncList.emplace(output.Cast().Operation().Ptr(), syncList.size());
+            }
+        }
+
+        return Build<TYtTouch>(ctx, node.Pos())
+            .World(ApplySyncListToWorld(op.World().Ptr(), syncList, ctx))
+            .DataSink(op.DataSink())
+            .Output(op.Output())
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> FuseNestedTouches(TExprBase node, TExprContext& ctx) const {
+        auto touch = node.Cast<TYtTouch>();
+        if (touch.Ref().StartsExecution()) {
+            return node;
+        }
+
+        auto innerTouch = touch.World().Maybe<TCoLeft>().Input().Maybe<TYtTouch>();
+        if (!innerTouch || innerTouch.Cast().Ref().StartsExecution()) {
+            return node;
+        }
+
+        return Build<TYtTouch>(ctx, node.Pos())
+            .InitFrom(touch)
+            .World(innerTouch.Cast().World())
+            .Done();
     }
 
     TMaybeNode<TExprBase> TrimResPullWorld(TExprBase node, TExprContext& ctx) const {

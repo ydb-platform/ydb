@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_part.h"
@@ -371,6 +372,24 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpAlterSubDomain = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterSubDomain>(
+    TAffectedESchemeOpAlterSubDomain,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // No pathId field; both TAlterSubDomain::Propose (this file) and the
+    // CreateCompatibleSubdomainAlter dispatcher resolve by Name only.
+    const auto& settings = tx.GetSubDomain();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), settings.GetName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterSubDomain>(id, tx);

@@ -142,6 +142,13 @@ public:
     static TPath ResolveWithInactive(TOperationId opId, const TString path, TSchemeShard* ss);
 
     static TPath Init(const TPathId pathId, TSchemeShard* ss);
+
+    // The one place the id-over-name precedence is expressed. Suboperations used to open
+    // code this and the affected-paths declaration re-derived it independently, so the two
+    // could name different objects for a request carrying both an id and a name.
+    static TPath ResolveTarget(const TPathId& pathId, const TString& parentPathStr,
+        const TString& name, TSchemeShard* ss);
+
     TChecker Check(const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) const;
     bool IsEmpty() const;
     bool IsResolved() const;

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -167,9 +168,9 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TPath::ResolveTarget(
+            drop.HasId() ? context.SS->MakeLocalId(drop.GetId()) : TPathId(),
+            parentPathStr, name, context.SS);
 
         {
             TPath::TChecker checks = path.Check();
@@ -258,6 +259,40 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpForceDropUnsafe = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropUnsafe>(
+    TAffectedESchemeOpForceDropUnsafe,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpForceDropSubDomain = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpForceDropSubDomain>(
+    TAffectedESchemeOpForceDropSubDomain,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropForceUnsafe>(id, tx, TPathElement::EPathType::EPathTypeInvalid);

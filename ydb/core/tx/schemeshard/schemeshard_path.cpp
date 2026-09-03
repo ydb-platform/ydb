@@ -1539,6 +1539,15 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
     return Resolve(nullPrefix, std::move(pathParts));
 }
 
+TPath TPath::ResolveTarget(const TPathId& pathId, const TString& parentPathStr,
+        const TString& name, TSchemeShard* ss)
+{
+    if (pathId) {
+        return TPath::Init(pathId, ss);
+    }
+    return TPath::Resolve(parentPathStr, ss).Dive(name);
+}
+
 TPath TPath::Init(const TPathId pathId, TSchemeShard* ss) {
     Y_ABORT_UNLESS(ss);
 

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -334,6 +335,22 @@ bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
 }
 
 }
+
+using TAffectedESchemeOpCreateSecret = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateSecret>(
+    TAffectedESchemeOpCreateSecret,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateSecret().GetName());
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     const auto& createSecretProto = tx.GetCreateSecret();

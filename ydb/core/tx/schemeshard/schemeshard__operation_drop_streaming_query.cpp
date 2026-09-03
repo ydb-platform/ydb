@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
@@ -192,9 +193,9 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& dstPath = dropDescription.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        const TPath dstPath = TPath::ResolveTarget(
+            dropDescription.HasId() ? context.SS->MakeLocalId(dropDescription.GetId()) : TPathId(),
+            parentPathStr, name, context.SS);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, context));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
 
@@ -224,6 +225,23 @@ public:
 }  // anonymous namespace
 
 }  // namespace NStreamingQuery
+
+using TAffectedESchemeOpDropStreamingQuery = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropStreamingQuery>(
+    TAffectedESchemeOpDropStreamingQuery,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<NStreamingQuery::TDropStreamingQuery>(id, tx);

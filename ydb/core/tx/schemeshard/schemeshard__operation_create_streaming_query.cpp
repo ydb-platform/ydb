@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
@@ -287,6 +288,22 @@ template <>
 bool SetName<NStreamingQuery::TTag>(NStreamingQuery::TTag, TTxTransaction& tx, const TString& name) {
     tx.MutableCreateStreamingQuery()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateStreamingQuery = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateStreamingQuery>(
+    TAffectedESchemeOpCreateStreamingQuery,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateStreamingQuery().GetName());
 }
 
 } // namespace NOperation

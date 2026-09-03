@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
@@ -169,6 +170,37 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpModifyACL = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpModifyACL>(
+    TAffectedESchemeOpModifyACL,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // No pathId field on TModifyACL; TModifyACL::Propose (this file) resolves by name only.
+    const auto& op = tx.GetModifyACL();
+    TAffectedPaths result =
+        DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(), 0);
+
+    // Setting an owner on a table rewrites the owner and DirAlterVersion of every path in
+    // its subtree, which Propose gets from ListSubTree at :96 -- a walk of live children, so
+    // the set depends on state rather than on the request. The ACL branch only republishes
+    // the subtree; it persists a row for the named path alone, so it stays exact.
+    if (!result.Unresolved && !op.GetNewOwner().empty()) {
+        const TPath target = TPath::Resolve(
+            JoinPath({tx.GetWorkingDir(), op.GetName()}), context.SS);
+        if (target.IsResolved() && target.Base()->IsTable()) {
+            result.Incomplete = true;
+        }
+    }
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TModifyACL>(id, tx);

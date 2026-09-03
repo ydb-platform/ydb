@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -416,6 +417,26 @@ public:
 } // anonymous namespace
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpInitiateBuildIndexMainTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpInitiateBuildIndexMainTable>(
+    TAffectedESchemeOpInitiateBuildIndexMainTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Synthesized by CreateBuildColumn and CreateBuildIndex (operation_create_build_index.cpp)
+    // with WorkingDir == the table's parent and snapshot.SetTableName(table.LeafName()).
+    // TInitializeBuildIndex::Propose (above) resolves WorkingDir + GetTableName() the same way,
+    // altering the existing table to start the snapshot/build.
+    const auto& schema = tx.GetInitiateBuildIndexMainTable();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), schema.GetTableName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TInitializeBuildIndex>(id, tx);

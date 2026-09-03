@@ -1,5 +1,6 @@
 #include "schemeshard__operation_rotate_cdc_stream.h"
 
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
@@ -700,6 +701,67 @@ void DoRotateStream(
 } // namespace NCdc
 
 using namespace NCdc;
+
+using TAffectedESchemeOpRotateCdcStreamImpl = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRotateCdcStreamImpl>(
+    TAffectedESchemeOpRotateCdcStreamImpl,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // DoRotateStream (this file) synthesizes this part with WorkingDir == the table path and
+    // CopyFrom(op). TRotateCdcStream::Propose (above) writes two path rows under WorkingDir:
+    // it alters the old stream (Dive(oldStreamName)) and creates the new one
+    // (tablePath.Child(newStreamName)).
+    const auto& op = tx.GetRotateCdcStream();
+
+    TAffectedPaths oldStream = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+        op.GetOldStreamName(), 0);
+    if (oldStream.Unresolved) {
+        return oldStream;
+    }
+
+    TAffectedPaths newStream = DeclareChildOfWorkingDir(tx.GetWorkingDir(),
+        op.GetNewStream().GetStreamDescription().GetName());
+
+    TAffectedPaths result = std::move(oldStream);
+    std::move(newStream.Paths.begin(), newStream.Paths.end(), std::back_inserter(result.Paths));
+    result.Incomplete = result.Incomplete || newStream.Incomplete;
+    return result;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpRotateCdcStreamAtTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpRotateCdcStreamAtTable>(
+    TAffectedESchemeOpRotateCdcStreamAtTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // DoRotateStream (this file) synthesizes this part with WorkingDir == the table's parent
+    // and CopyFrom(op). TRotateCdcStreamAtTable::Propose (above) only PersistPath's the table
+    // itself (tablePath, resolved as workingDirPath.Child(tableName)); the old/new streams it
+    // validates are already declared by the sibling RotateCdcStreamImpl part.
+    const auto& op = tx.GetRotateCdcStream();
+    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
+    // TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp), shared by
+    // every CdcStreamAtTable op, also walks path->GetChildren() to sync AlterVersion/
+    // DirAlterVersion on any table-index children -- discovered at execution time, not
+    // enumerable from this request.
+    if (!result.Unresolved) {
+        result.Incomplete = true;
+    }
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateRotateCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TRotateCdcStream>(id, tx);

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_drop_cdc_stream.h"
 #include "schemeshard__operation_part.h"
@@ -7,6 +8,25 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropContinuousBackup = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropContinuousBackup>(
+    TAffectedESchemeOpDropContinuousBackup,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // The request names only the source table (TDropContinuousBackup has no id field); the
+    // "_continuousBackupImpl" streams under it are discovered as children at execution time
+    // and cascaded via NCdc::DoDropStream, so the table is a cascade root, not a plain target.
+    const auto& op = tx.GetDropContinuousBackup();
+    return DeclareCascadeTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
+}
+
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup);

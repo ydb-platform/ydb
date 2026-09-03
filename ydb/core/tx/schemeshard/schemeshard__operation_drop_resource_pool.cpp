@@ -1,9 +1,27 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
 
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropResourcePool = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropResourcePool>(
+    TAffectedESchemeOpDropResourcePool,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 namespace {
 
@@ -170,9 +188,9 @@ public:
                                                    static_cast<ui64>(OperationId.GetTxId()),
                                                    static_cast<ui64>(context.SS->SelfTabletId()));
 
-        const TPath& dstPath = dropDescription.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        const TPath dstPath = TPath::ResolveTarget(
+            dropDescription.HasId() ? context.SS->MakeLocalId(dropDescription.GetId()) : TPathId(),
+            parentPathStr, name, context.SS);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
         RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
 

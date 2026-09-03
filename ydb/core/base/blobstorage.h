@@ -415,6 +415,9 @@ struct TEvBlobStorage {
         EvSyncLogDiskOutOfSpace,
         EvRecoveryLogCutDone,
         EvFreshCompactionStarted,
+        // Keep main's event IDs; the preceding acknowledgement event is not backported.
+        EvHugeQueryStripeChunks = EvFreshCompactionStarted + 2,
+        EvHugeStripeChunks,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

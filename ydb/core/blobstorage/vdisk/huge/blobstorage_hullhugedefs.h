@@ -190,12 +190,16 @@ namespace NKikimr {
             TLogoBlobID LogoBlobID;
             TIngress Ingress;
             TDiskPart DiskAddr;
+            bool IsStripe = false;
+
+            TPutRecoveryLogRec() = default;
 
             TPutRecoveryLogRec(const TLogoBlobID &logoBlobID, const TIngress &ingress,
-                               const TDiskPart &diskAddr)
+                               const TDiskPart &diskAddr, bool isStripe = false)
                 : LogoBlobID(logoBlobID)
                 , Ingress(ingress)
                 , DiskAddr(diskAddr)
+                , IsStripe(isStripe)
             {}
 
             TString Serialize() const;

@@ -33,6 +33,7 @@ SRCS(
     get.cpp
     get_block.cpp
     group_mapping.cpp
+    heap_allocator.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp

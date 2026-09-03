@@ -979,7 +979,7 @@ namespace NKikimr {
                 msg->Ingress);
 #endif
             // prepare message to recovery
-            NHuge::TPutRecoveryLogRec logRec(msg->LogoBlobID, msg->Ingress, msg->HugeBlob);
+            NHuge::TPutRecoveryLogRec logRec(msg->LogoBlobID, msg->Ingress, msg->HugeBlob, msg->IsStripe);
             auto dataToWrite = logRec.Serialize();
             UpdatePDiskWriteBytes(dataToWrite.size());
             // prepare TLoggedRecVPutHuge
@@ -2229,6 +2229,7 @@ namespace NKikimr {
             auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(VCtx, PDiskCtx, Db->LsnMngr,
                     ctx.SelfID, (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID),
                     localRecovInfoStr, Config->BaseInfo.ReadOnly);
+            hugeKeeperCtx->HugeBlobCtx = HugeBlobCtx;
             auto hugeKeeper = CreateHullHugeBlobKeeper(hugeKeeperCtx, ev->Get()->RepairedHuge);
             Db->HugeKeeperID.Set(ctx.Register(hugeKeeper));
             ActiveActors.Insert(Db->HugeKeeperID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever

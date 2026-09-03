@@ -54,6 +54,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <library/cpp/html/pcdata/pcdata.h>
+
 
 LWTRACE_USING(KQP_PROVIDER);
 
@@ -1026,17 +1028,27 @@ protected:
 
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
-                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
                 NPlan2Svg::TPlanVisualizer viz;
 
-                NJson::TJsonReaderConfig jsonConfig;
-                NJson::TJsonValue jsonNode;
-                if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
-                    viz.LoadPlans(jsonNode);
+                // Nothing here may throw out of the handler: an exception
+                // escaping Receive terminates the process. AddExecStatsToTxPlan
+                // parses the tx plan with throwing accessors, and the loader
+                // rejects plans it does not understand.
+                try {
+                    auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
+
+                    NJson::TJsonReaderConfig jsonConfig;
+                    NJson::TJsonValue jsonNode;
+                    if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
+                        viz.LoadPlansSafe(jsonNode);
+                    }
+                } catch (...) {
+                    str << "Failed to convert plan of tx " << txId << ": "
+                        << EncodeHtmlPcdata(CurrentExceptionMessage()) << Endl;
+                    continue;
                 }
 
-                auto svg = viz.PrintSvgSafe();
-                str << svg << Endl;
+                str << viz.PrintSvgSafe() << Endl;
             }
 
             this->Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
@@ -2006,6 +2018,25 @@ protected:
 
         if (Planner) {
             Planner->Unsubscribe();
+
+            if (CheckpointCoordinatorId) {
+                // For streaming queries compute actors persist after finish, so we should abort them
+                for (const auto& computeActorId : Planner->GetAllComputeActors()) {
+                    this->Send(computeActorId, NYql::NDq::TEvDq::TEvAbortExecution::Aborted("Query execution finished."));
+                }
+            }
+        }
+
+        if (CheckpointCoordinatorId) {
+            this->Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
+            CheckpointCoordinatorId = TActorId{};
+
+            const auto context = TasksGraph.GetMeta().UserRequestContext;
+            if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && context && !context->StreamingQueryPath.empty()) {
+                auto counters = Counters->Counters->GetKqpCounters();
+                counters = counters->GetSubgroup("host", "");
+                counters->RemoveSubgroup("path", context->StreamingQueryPath);
+            }
         }
 
         if (KqpTableResolverId) {

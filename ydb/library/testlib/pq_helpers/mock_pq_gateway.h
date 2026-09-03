@@ -62,7 +62,7 @@ public:
 
     virtual void AddCloseSessionEvent(NYdb::EStatus status, NYdb::NIssue::TIssues issues = {}) = 0;
 
-    virtual void ExpectSessionClosed() = 0;
+    virtual void ExpectSessionClosed(std::optional<TDuration> timeout = std::nullopt) = 0;
 };
 
 class IMockPqWriteSession {
@@ -125,6 +125,7 @@ public:
     virtual IMockPqReadSession::TPtr ExtractReadSession(const TString& topic) = 0;
 
     // Get read session for a specific partition (multi-partition topics). Returns nullptr if not created.
+    // Topics with multiple partitions must be registered in TMockPqGatewaySettings.
     virtual IMockPqReadSession::TPtr GetReadSession(const TString& topic, ui64 partitionId) = 0;
 
     // Wait for read session creation
@@ -140,10 +141,15 @@ public:
 };
 
 struct TMockPqGatewaySettings {
+    struct TTopicInfo {
+        ui32  PartitionCount = 1;
+    };
+
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
     NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
+    std::unordered_map<TString, TTopicInfo> Topics;
 };
 
 TIntrusivePtr<IMockPqGateway> CreateMockPqGateway(const TMockPqGatewaySettings& settings = {});

@@ -3709,6 +3709,7 @@ public:
             .Counters = Counters,
 
             .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+            .Database = settings.Database,
         });
 
         TActorId id = RegisterWithSameMailbox(actor);
@@ -3742,6 +3743,7 @@ public:
 
             .TableId = tableId,
             .TablePath = tablePath,
+            .Database = settings.Database,
 
             .LockTxId = LockTxId,
             .LockNodeId = LockNodeId,

@@ -45,6 +45,13 @@ void TConfigClusters::AddCluster(const TYtClusterConfig& cluster, bool checkDupl
     }
 }
 
+TString TConfigClusters::TryResolveServerByYtName(const TString& ytName) const {
+    const auto name = ytName == "current"
+        ? GetDefaultClusterName()
+        : GetNameByYtName(ytName);
+    return TryGetServer(name);
+}
+
 const TString& TConfigClusters::GetServer(const TString& name) const {
     if (const TClusterInfo* info = Clusters_.FindPtr(name)) {
         return info->RealName;
@@ -67,6 +74,14 @@ const TString& TConfigClusters::GetYtName(const TString& name) const {
     } else {
         ythrow yexception() << "Unknown cluster name: " << name;
     }
+}
+
+TString TConfigClusters::TryGetYtName(const TString& name) const {
+    if (const TClusterInfo* info = Clusters_.FindPtr(name)) {
+        return info->YtName;
+    }
+
+    return {};
 }
 
 TString TConfigClusters::GetNameByYtName(const TString& ytName) const {

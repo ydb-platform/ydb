@@ -310,14 +310,7 @@ public:
         OperationOptions_.SharedId = id;
     }
 
-    void SetOperationTitle(const TString& title) {
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-        if (!title.Contains("YQL")) {
-            ythrow yexception() << "Please mention YQL in the title '" << title << "'";
-        }
-
-        OperationOptions_.Title = title;
-    }
+    void SetOperationTitle(const TString& title);
 
     void SetOperationUrl(const TString& url) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");

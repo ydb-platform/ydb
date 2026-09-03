@@ -762,9 +762,6 @@
   <rect class='timepath' data-groups='g11,g12,g13' x='1208' y='5' width='65' height='10' stroke-width='0' fill='var(--stage-grid, #B2B2B2)'/>
   <text class='timepath' data-groups='g11,g12,g13' text-anchor='end' font-family='Verdana' font-size='8px' fill='var(--text-inv, #FFFFFF)' x='1271' y='13'>0:01.87</text>
 </g>
-<g><title>Max CPU 31.05</title>
-<path d='M716,24c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,0,18,0c5,0,11,0,17,0c5,0,11,0,17,0c6,0,12,-9,18,-9c6,0,12,9,18,9c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
-</g>
 <svg data-stage='outer 1' data-height='138' width='1280' height='138' x='0' y='27'>
 <svg class='slimable' data-stage='inner 1' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g11' class='selectable'><title>Stage 1</title>
@@ -848,6 +845,7 @@
 </g>
 <g><title>Input, Duration: 0:00.00 (0:01.87 | 0:01.87 | 0:01.87 - 0:01.87 | 0:01.87 | 0:01.87)</title><rect x='1272' y='50' width='1' height='14' stroke-width='0' fill='var(--input-medium, #5A8183)'/>
 </g>
+<path d='M1272,63c0,0,0,-13,0,-13c0,0,0,13,0,13z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
 </g>
 </svg>
@@ -930,8 +928,6 @@
 </g>
 <g><title>Ingress, Duration: 0:00.00 (0:00.17 | 0:00.17 | 0:00.17 - 0:00.17 | 0:00.17 | 0:00.17)</title><rect x='660' y='50' width='1' height='14' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
 </g>
-<polygon points='660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,63 660,50 660,63 ' stroke='none' fill='var(--ingress-light, #5A8183)' />
-<path d='M660,63c0,0,0,-13,0,-13c0,0,0,13,0,13z' stroke-width='1' stroke='var(--ingress-dark, #384F50)' fill='none' />
 </g>
 </g>
 </svg>
@@ -1104,5 +1100,4 @@
 
 <line x1='600' y1='0' x2='600' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
 <line x1='958' y1='0' x2='958' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
-
 </svg>

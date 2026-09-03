@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
 
@@ -8167,6 +8168,11 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
 
     for (const auto& col : alterData->Columns) {
         const TTableInfo::TColumn& colInfo = col.second;
+        // A VIRTUAL generated column never reached the datashards, so neither its addition nor
+        // its drop may be sent there (the datashard verifies that a dropped column exists locally)
+        if (IsVirtualGeneratedColumn(colInfo)) {
+            continue;
+        }
         if (colInfo.IsDropped()) {
             auto descr = proto->AddDropColumns();
             descr->SetName(colInfo.Name);

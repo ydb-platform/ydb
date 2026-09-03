@@ -132,11 +132,6 @@ Y_UNIT_TEST(EmptyPlanGivesEmptyGraph) {
         UNIT_ASSERT(g.Nodes.empty());
         UNIT_ASSERT(g.Links.empty());
     }
-    {
-        NJson::TJsonValue j = ToJson(Build("{}"));
-        UNIT_ASSERT_EQUAL(j["nodes"].GetArray().size(), 0u);
-        UNIT_ASSERT_EQUAL(j["links"].GetArray().size(), 0u);
-    }
 }
 
 Y_UNIT_TEST(FixtureShape) {
@@ -301,28 +296,70 @@ Y_UNIT_TEST(MixedSourceSinkStage) {
     UNIT_ASSERT(HasLink(g, op.Id, out.Id));
 }
 
-Y_UNIT_TEST(JsonShape) {
-    TGraph g = Build(PlanWithStats);
-    NJson::TJsonValue j = ToJson(g);
-    UNIT_ASSERT(j["nodes"].IsArray());
-    UNIT_ASSERT(j["links"].IsArray());
-    UNIT_ASSERT_EQUAL(j["nodes"].GetArray().size(), 6u);
-    UNIT_ASSERT_EQUAL(j["links"].GetArray().size(), 5u);
-    for (const auto& jn : j["nodes"].GetArray()) {
-        TString t = jn["type"].GetString();
-        UNIT_ASSERT(t == "in" || t == "op" || t == "out");
-        if (t == "op") {
-            UNIT_ASSERT(jn.Has("state"));
-            UNIT_ASSERT(jn.Has("tasks"));
-            UNIT_ASSERT(jn.Has("finishedTasks"));
-            UNIT_ASSERT(jn["stats"].IsMap());
-            UNIT_ASSERT(jn["stats"].Has("ingressRows"));
-        } else {
-            UNIT_ASSERT(!jn.Has("state"));
+Y_UNIT_TEST(SvgOfEmptyGraphIsValid) {
+    TString svg = ToSvg(TGraph{});
+    UNIT_ASSERT(svg.StartsWith("<svg"));
+    UNIT_ASSERT(svg.EndsWith("</svg>"));
+    UNIT_ASSERT(!svg.Contains("<circle"));
+}
+
+Y_UNIT_TEST(SvgHasOneShapePerNode) {
+    TString svg = ToSvg(Build(PlanWithStats));
+    auto countOf = [&](const char* sub) {
+        int n = 0;
+        size_t len = strlen(sub);
+        for (size_t p = 0; (p = svg.find(sub, p)) != TString::npos; p += len) {
+            ++n;
         }
+        return n;
+    };
+    UNIT_ASSERT_EQUAL(countOf("<rect x="), 2);
+    UNIT_ASSERT_GE(countOf("<text"), 6);
+    UNIT_ASSERT_EQUAL(countOf("<line x1="), 5);
+}
+
+Y_UNIT_TEST(SvgShowsTasksAndState) {
+    {
+        TString svg = ToSvg(Build(PlanWithStats));
+        UNIT_ASSERT(svg.Contains(">2<"));
+        UNIT_ASSERT(svg.Contains("&#x2713;"));
     }
-    UNIT_ASSERT(j["links"][0].Has("source"));
-    UNIT_ASSERT(j["links"][0].Has("target"));
+    {
+        TString svg = ToSvg(Build(PlanWithoutStats));
+        UNIT_ASSERT(!svg.Contains("&#x2713;"));
+        UNIT_ASSERT(!svg.Contains("fill=\"#9ccc9c\""));
+    }
+}
+
+Y_UNIT_TEST(SvgEscapesNames) {
+    TGraph g = Build(R"({
+        "Plan": {
+            "Node Type": "Query",
+            "PlanNodeType": "Query",
+            "Plans": [{"Node Type": "A<B&C"}]
+        }
+    })");
+    TString svg = ToSvg(g);
+    UNIT_ASSERT(svg.Contains("A&lt;B&amp;C"));
+    UNIT_ASSERT(!svg.Contains("A<B"));
+}
+
+Y_UNIT_TEST(SvgLevelsGoLeftToRight) {
+    TString svg = ToSvg(Build(PlanWithoutStats));
+    const char* tag = "<rect x=\"";
+    size_t first = svg.find(tag);
+    size_t last  = svg.rfind(tag);
+    UNIT_ASSERT(first != TString::npos && first != last);
+    auto getX = [&](size_t pos) {
+        pos += strlen(tag);
+        int v = 0;
+        while (pos < svg.size() && svg[pos] != '"') {
+            v = v * 10 + (svg[pos] - '0');
+            ++pos;
+        }
+        return v;
+    };
+    UNIT_ASSERT_LT(getX(first), getX(last));
 }
 
 } // Y_UNIT_TEST_SUITE(ComputationGraph)

@@ -1,5 +1,8 @@
 #include "computation_graph.h"
 
+#include <algorithm>
+#include <util/string/builder.h>
+
 namespace NKikimr::NComputationGraph {
 
 namespace {
@@ -63,7 +66,6 @@ struct TBuilder {
         node.Stats.CpuTimeUs = AggrSum(stats, "CpuTimeUs");
     }
 
-    // Returns created op-node id (0 for transparent nodes).
     ui32 Visit(const NJson::TJsonValue& planNode, ui32 parentId) {
         if (!planNode.IsMap()) {
             return 0;
@@ -157,22 +159,26 @@ struct TBuilder {
     }
 };
 
-static TStringBuf NodeTypeStr(ENodeType t) {
-    switch (t) {
-        case ENodeType::Input:     return "in";
-        case ENodeType::Output:    return "out";
-        case ENodeType::Operation: return "op";
-    }
-    return "op";
-}
+constexpr int NodeRadius  = 36;
+constexpr int ColumnStep  = 200;
+constexpr int RowStep     = 140;
+constexpr int MarginX     = 60;
+constexpr int MarginY     = 40;
+constexpr int LabelOffset = 60;
+constexpr int BadgeRadius = 11;
 
-static TStringBuf NodeStateStr(ENodeState s) {
-    switch (s) {
-        case ENodeState::Pending:  return "Pending";
-        case ENodeState::Running:  return "Running";
-        case ENodeState::Finished: return "Finished";
+static TString XmlEscape(const TString& s) {
+    TStringBuilder b;
+    for (char c : s) {
+        switch (c) {
+            case '&': b << "&amp;";  break;
+            case '<': b << "&lt;";   break;
+            case '>': b << "&gt;";   break;
+            case '"': b << "&quot;"; break;
+            default:  b << c;        break;
+        }
     }
-    return "Pending";
+    return b;
 }
 
 } // namespace
@@ -200,45 +206,111 @@ TGraph BuildGraph(const NJson::TJsonValue& doc) {
     return b.Graph;
 }
 
-NJson::TJsonValue ToJson(const TGraph& graph) {
-    NJson::TJsonValue result(NJson::JSON_MAP);
-    NJson::TJsonValue nodes(NJson::JSON_ARRAY);
-    NJson::TJsonValue links(NJson::JSON_ARRAY);
-    for (const auto& node : graph.Nodes) {
-        NJson::TJsonValue jn(NJson::JSON_MAP);
-        jn["id"] = node.Id;
-        jn["level"] = node.Level;
-        jn["name"] = node.Name;
-        jn["type"] = TString(NodeTypeStr(node.Type));
-        if (node.Type == ENodeType::Operation) {
-            jn["state"] = TString(NodeStateStr(node.State));
-            jn["tasks"] = node.Tasks;
-            jn["finishedTasks"] = node.FinishedTasks;
-            jn["physicalStageId"] = node.PhysicalStageId;
-            jn["updateTimeMs"] = node.UpdateTimeMs;
-            NJson::TJsonValue stats(NJson::JSON_MAP);
-            stats["ingressRows"] = node.Stats.IngressRows;
-            stats["ingressBytes"] = node.Stats.IngressBytes;
-            stats["egressRows"] = node.Stats.EgressRows;
-            stats["egressBytes"] = node.Stats.EgressBytes;
-            stats["inputRows"] = node.Stats.InputRows;
-            stats["inputBytes"] = node.Stats.InputBytes;
-            stats["outputRows"] = node.Stats.OutputRows;
-            stats["outputBytes"] = node.Stats.OutputBytes;
-            stats["cpuTimeUs"] = node.Stats.CpuTimeUs;
-            jn["stats"] = std::move(stats);
+TString ToSvg(const TGraph& graph) {
+    if (graph.Nodes.empty()) {
+        return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>";
+    }
+
+    ui32 maxLevel = 0;
+    for (const auto& n : graph.Nodes) {
+        if (n.Level > maxLevel) {
+            maxLevel = n.Level;
         }
-        nodes.AppendValue(std::move(jn));
     }
+
+    TVector<ui32> levelCnt(maxLevel + 1, 0);
+    TVector<ui32> nodeRow(graph.Nodes.size() + 1, 0);
+    for (const auto& n : graph.Nodes) {
+        nodeRow[n.Id] = levelCnt[n.Level]++;
+    }
+    ui32 maxRows = *std::max_element(levelCnt.begin(), levelCnt.end());
+
+    int W = MarginX * 2 + (int)maxLevel * ColumnStep + 2 * NodeRadius;
+    int H = MarginY * 2 + (int)maxRows * RowStep + LabelOffset;
+
+    auto nodeX = [&](const TNode& n) { return MarginX + NodeRadius + (int)n.Level * ColumnStep; };
+    auto nodeY = [&](const TNode& n) { return MarginY + NodeRadius + (int)nodeRow[n.Id] * RowStep; };
+
+    TVector<const TNode*> byId(graph.Nodes.size() + 1, nullptr);
+    for (const auto& n : graph.Nodes) {
+        byId[n.Id] = &n;
+    }
+
+    TVector<const TNode*> sorted;
+    sorted.reserve(graph.Nodes.size());
+    for (const auto& n : graph.Nodes) {
+        sorted.push_back(&n);
+    }
+    std::sort(sorted.begin(), sorted.end(), [&](const TNode* a, const TNode* b) {
+        if (a->Level != b->Level) {
+            return a->Level < b->Level;
+        }
+        return nodeRow[a->Id] < nodeRow[b->Id];
+    });
+
+    TStringBuilder b;
+    b << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << W << "\" height=\"" << H
+      << "\" viewBox=\"0 0 " << W << " " << H << "\" font-family=\"sans-serif\">\n";
+    b << "<defs><marker id=\"arrow\" markerWidth=\"10\" markerHeight=\"10\""
+      << " refX=\"10\" refY=\"5\" orient=\"auto\">"
+      << "<path d=\"M0,0 L10,5 L0,10 z\" fill=\"#9a9a9a\"/></marker></defs>\n";
+    b << "<rect width=\"100%\" height=\"100%\" fill=\"#222222\"/>\n";
+
     for (const auto& lnk : graph.Links) {
-        NJson::TJsonValue jl(NJson::JSON_MAP);
-        jl["source"] = lnk.Source;
-        jl["target"] = lnk.Target;
-        links.AppendValue(std::move(jl));
+        const TNode* src = byId[lnk.Source];
+        const TNode* tgt = byId[lnk.Target];
+        if (!src || !tgt) {
+            continue;
+        }
+        int x1 = nodeX(*src) + NodeRadius;
+        int y1 = nodeY(*src);
+        int x2 = nodeX(*tgt) - NodeRadius;
+        int y2 = nodeY(*tgt);
+        b << "<line x1=\"" << x1 << "\" y1=\"" << y1
+          << "\" x2=\"" << x2 << "\" y2=\"" << y2
+          << "\" stroke=\"#9a9a9a\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/>\n";
     }
-    result["nodes"] = std::move(nodes);
-    result["links"] = std::move(links);
-    return result;
+
+    for (const TNode* np : sorted) {
+        const TNode& n = *np;
+        int x = nodeX(n), y = nodeY(n);
+        if (n.Type == ENodeType::Input || n.Type == ENodeType::Output) {
+            b << "<rect x=\"" << (x - NodeRadius) << "\" y=\"" << (y - NodeRadius)
+              << "\" width=\"" << (2 * NodeRadius) << "\" height=\"" << (2 * NodeRadius)
+              << "\" rx=\"8\" fill=\"#3a3a3a\" stroke=\"#6b6b6b\" stroke-width=\"2\"/>\n";
+            b << "<path d=\"M" << (x - 13) << "," << (y - 11) << " h26 v22 h-26 z"
+              << " M" << (x - 13) << "," << (y - 3) << " h26"
+              << " M" << x << "," << (y - 11) << " v22\""
+              << " fill=\"none\" stroke=\"#6b6b6b\" stroke-width=\"1.5\"/>\n";
+        } else {
+            TStringBuf fill   = (n.State == ENodeState::Pending) ? "#4a4a4a" : "#3f6b3f";
+            TStringBuf stroke = (n.State == ENodeState::Pending) ? "#7a7a7a" : "#9ccc9c";
+            b << "<circle cx=\"" << x << "\" cy=\"" << y << "\" r=\"" << NodeRadius
+              << "\" fill=\"" << fill << "\" stroke=\"" << stroke << "\" stroke-width=\"2\"/>\n";
+            if (n.Tasks > 0) {
+                b << "<text x=\"" << x << "\" y=\"" << (y + 7)
+                  << "\" text-anchor=\"middle\" font-size=\"22\" fill=\"#ffffff\">"
+                  << n.Tasks << "</text>\n";
+            }
+            int bx = x + (int)(NodeRadius * 0.7);
+            int by = y - (int)(NodeRadius * 0.7);
+            if (n.State == ENodeState::Finished) {
+                b << "<circle cx=\"" << bx << "\" cy=\"" << by << "\" r=\"" << BadgeRadius
+                  << "\" fill=\"#222222\" stroke=\"#9ccc9c\" stroke-width=\"2\"/>\n";
+                b << "<text x=\"" << bx << "\" y=\"" << (by + 5)
+                  << "\" text-anchor=\"middle\" font-size=\"14\" fill=\"#9ccc9c\">&#x2713;</text>\n";
+            } else if (n.State == ENodeState::Running) {
+                b << "<circle cx=\"" << bx << "\" cy=\"" << by << "\" r=\"" << BadgeRadius
+                  << "\" fill=\"#9ccc9c\"/>\n";
+            }
+        }
+        b << "<text x=\"" << x << "\" y=\"" << (y + LabelOffset)
+          << "\" text-anchor=\"middle\" font-size=\"16\" fill=\"#ffffff\">"
+          << XmlEscape(n.Name) << "</text>\n";
+    }
+
+    b << "</svg>";
+    return b;
 }
 
 } // namespace NKikimr::NComputationGraph

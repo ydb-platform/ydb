@@ -57,7 +57,6 @@ struct TGraph {
 // An empty / "{}" document yields an empty graph. Never throws on malformed input.
 TGraph BuildGraph(const NJson::TJsonValue& doc);
 
-// {"nodes":[{id, level, name, type, state?, tasks?, finishedTasks?, stats?}], "links":[{source, target}]}
-NJson::TJsonValue ToJson(const TGraph& graph);
+TString ToSvg(const TGraph& graph);
 
 } // namespace NKikimr::NComputationGraph

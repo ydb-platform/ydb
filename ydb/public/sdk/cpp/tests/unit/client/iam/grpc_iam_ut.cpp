@@ -130,9 +130,8 @@ TEST(GrpcIamCredentialsProviderFactory, NoArgProvidersAreCachedAcrossFactoryInst
 }
 
 TEST(GrpcIamCredentialsProviderFactory, ReadyCallbackCanReleaseNoArgProvider) {
-    TIamTokenServiceStub iamStub;
-    iamStub.SetResponseToken("unit-test-iam-token");
-    TIamGrpcServer server(&iamStub);
+    TBlockingIamTokenService iamService;
+    TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 
     auto provider = std::make_shared<TIamOAuthCredentialsProviderFactory<
@@ -140,12 +139,13 @@ TEST(GrpcIamCredentialsProviderFactory, ReadyCallbackCanReleaseNoArgProvider) {
             MakeOAuthParams(server.Endpoint()))->CreateProvider();
     auto released = std::make_shared<std::promise<void>>();
     auto authInfo = provider->GetAuthInfoAsync();
-    ASSERT_TRUE(authInfo.IsReady());
+    ASSERT_FALSE(authInfo.IsReady());
     authInfo.Subscribe(
         [provider = std::move(provider), released](const auto&) mutable {
             provider.reset();
             released->set_value();
         });
+    iamService.Release();
 
     ASSERT_EQ(released->get_future().wait_for(std::chrono::seconds(10)), std::future_status::ready);
     server.Stop();
